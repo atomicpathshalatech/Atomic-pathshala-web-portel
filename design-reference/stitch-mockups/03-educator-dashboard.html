@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Educator Dashboard | Atomic Pathshala</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://cdn.jsdelivr.net/npm/geist@1.3.0/dist/fonts/geist.min.css" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(0, 102, 255, 0.08);
+        }
+        .sidebar-item-active {
+            background: linear-gradient(90deg, rgba(0, 80, 203, 0.1) 0%, rgba(0, 80, 203, 0) 100%);
+            border-right: 3px solid #0050cb;
+        }
+        @keyframes pulse-soft {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        .live-indicator {
+            animation: pulse-soft 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+    </style>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface-tint": "#0054d6",
+                    "text-light": "#0F172A",
+                    "primary-container": "#0066ff",
+                    "text-dark": "#F1F5F9",
+                    "primary-fixed-dim": "#b3c5ff",
+                    "surface-container-low": "#f2f3ff",
+                    "on-tertiary-container": "#e1ffeb",
+                    "inverse-primary": "#b3c5ff",
+                    "inverse-surface": "#283044",
+                    "bg-light": "#FFFFFF",
+                    "on-secondary-fixed-variant": "#004e60",
+                    "primary-fixed": "#dae1ff",
+                    "surface": "#faf8ff",
+                    "on-primary-fixed-variant": "#003fa4",
+                    "on-background": "#131b2e",
+                    "outline-variant": "#c2c6d8",
+                    "error-container": "#ffdad6",
+                    "surface-container-high": "#e2e7ff",
+                    "surface-container": "#eaedff",
+                    "on-error-container": "#93000a",
+                    "on-primary-container": "#f8f7ff",
+                    "primary": "#0050cb",
+                    "secondary-fixed-dim": "#4cd6ff",
+                    "outline": "#727687",
+                    "on-tertiary-fixed-variant": "#005235",
+                    "on-primary": "#ffffff",
+                    "surface-bright": "#faf8ff",
+                    "tertiary-fixed": "#6afcb9",
+                    "on-tertiary-fixed": "#002113",
+                    "on-error": "#ffffff",
+                    "on-secondary-container": "#005266",
+                    "on-primary-fixed": "#001849",
+                    "tertiary": "#006643",
+                    "error": "#ba1a1a",
+                    "surface-light": "#F8FAFC",
+                    "tertiary-container": "#008256",
+                    "on-tertiary": "#ffffff",
+                    "bg-dark": "#0B0E14",
+                    "secondary-fixed": "#b7eaff",
+                    "surface-dim": "#d2d9f4",
+                    "on-secondary-fixed": "#001f28",
+                    "on-secondary": "#ffffff",
+                    "surface-dark": "#161B22",
+                    "on-surface": "#131b2e",
+                    "border-subtle": "rgba(0, 102, 255, 0.1)",
+                    "surface-variant": "#dae2fd",
+                    "inverse-on-surface": "#eef0ff",
+                    "tertiary-fixed-dim": "#49df9f",
+                    "secondary": "#00677f",
+                    "on-surface-variant": "#424656",
+                    "secondary-container": "#00ccf9",
+                    "surface-container-lowest": "#ffffff",
+                    "background": "#faf8ff",
+                    "surface-container-highest": "#dae2fd"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "stack-md": "16px",
+                    "gutter": "24px",
+                    "container-max": "1280px",
+                    "stack-lg": "32px",
+                    "margin-mobile": "20px",
+                    "margin-desktop": "64px",
+                    "stack-sm": "8px"
+            },
+            "fontFamily": {
+                    "body-lg": ["Geist", "Inter"],
+                    "label-md": ["Geist", "Inter"],
+                    "body-md": ["Geist", "Inter"],
+                    "label-sm": ["Geist", "Inter"],
+                    "headline-lg": ["Geist"],
+                    "headline-md": ["Geist"],
+                    "display-lg-mobile": ["Geist"],
+                    "display-lg": ["Geist"]
+            },
+            "fontSize": {
+                    "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                    "label-md": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "500"}],
+                    "headline-lg": ["32px", {"lineHeight": "40px", "fontWeight": "600"}],
+                    "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                    "display-lg-mobile": ["36px", {"lineHeight": "42px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}]
+            }
+          },
+        },
+      }
+    </script>
+</head>
+<body class="bg-background text-on-surface font-body-md overflow-x-hidden selection:bg-primary/20">
+<!-- Shell Container -->
+<div class="flex min-h-screen">
+<!-- Sidebar Navigation -->
+<aside class="hidden md:flex flex-col w-64 bg-surface border-r border-outline-variant/20 sticky top-0 h-screen z-40">
+<div class="p-stack-lg">
+<img alt="Atomic Pathshala Logo" class="h-10 w-auto object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDh8VC3_CWEnB5xhrc2A9TDoE3qWGe8AWtxp8pCs_ZK-eYhLcrhYlAhFQ9_rsr2pNU_fh9V5FIl1vMV9FBSwfhlvPUiD5TeIyYoYtwb1GdBkCwVFm8bNTxJS39R_ZBJE3MCXA75vjOIgTqR3nnbKefbkjzUn8Ud5XWcZMt4HrTEUmXzO79jgEOmDUrVvWlfE6zrLgkBAoWWcpNYuSCKScXqJnZ3LyPvs_9hWuVE7APhzg8MOwo4_6wOZsmXacGd9PnOQOwmJGvlVnA"/>
+</div>
+<nav class="flex-1 px-4 space-y-2 mt-4">
+<a class="flex items-center gap-3 px-4 py-3 sidebar-item-active text-primary font-bold rounded-lg transition-all" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-md text-label-md">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container-low rounded-lg transition-all" href="#">
+<span class="material-symbols-outlined">video_library</span>
+<span class="font-label-md text-label-md">Explore Courses</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container-low rounded-lg transition-all" href="#">
+<span class="material-symbols-outlined">groups</span>
+<span class="font-label-md text-label-md">Batches</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container-low rounded-lg transition-all" href="#">
+<span class="material-symbols-outlined">school</span>
+<span class="font-label-md text-label-md">Faculty</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container-low rounded-lg transition-all" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<span class="font-label-md text-label-md">Results</span>
+</a>
+</nav>
+<div class="p-4 mt-auto">
+<div class="p-4 bg-primary-container/10 rounded-xl flex items-center gap-3 border border-primary/20">
+<div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white font-bold">JD</div>
+<div>
+<p class="font-label-md text-label-md text-primary">Dr. John Doe</p>
+<p class="font-label-sm text-label-sm text-on-surface-variant">Lead Physics Faculty</p>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 relative">
+<!-- Top App Bar -->
+<header class="fixed top-0 right-0 left-0 md:left-64 bg-surface/80 backdrop-blur-md z-30 border-b border-outline-variant/20 h-16 flex items-center justify-between px-margin-mobile md:px-margin-desktop">
+<div class="flex items-center gap-4">
+<button class="md:hidden p-2 text-on-surface-variant">
+<span class="material-symbols-outlined">menu</span>
+</button>
+<h1 class="font-headline-md text-headline-md hidden md:block">Welcome back, Dr. Doe</h1>
+<img alt="Atomic Pathshala Logo" class="h-8 w-auto object-contain md:hidden" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDh8VC3_CWEnB5xhrc2A9TDoE3qWGe8AWtxp8pCs_ZK-eYhLcrhYlAhFQ9_rsr2pNU_fh9V5FIl1vMV9FBSwfhlvPUiD5TeIyYoYtwb1GdBkCwVFm8bNTxJS39R_ZBJE3MCXA75vjOIgTqR3nnbKefbkjzUn8Ud5XWcZMt4HrTEUmXzO79jgEOmDUrVvWlfE6zrLgkBAoWWcpNYuSCKScXqJnZ3LyPvs_9hWuVE7APhzg8MOwo4_6wOZsmXacGd9PnOQOwmJGvlVnA"/>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 text-on-surface-variant hover:bg-surface-container-high rounded-full transition-colors relative">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 bg-error rounded-full"></span>
+</button>
+<button class="px-4 py-2 bg-primary text-on-primary font-label-md text-label-md rounded-lg shadow-sm hover:opacity-90 transition-all flex items-center gap-2">
+<span class="material-symbols-outlined">bolt</span>
+                        Start Learning
+                    </button>
+</div>
+</header>
+<!-- Dashboard Content Scrollable -->
+<div class="pt-24 pb-stack-lg px-margin-mobile md:px-margin-desktop max-w-container-max mx-auto space-y-gutter">
+<!-- Bento Grid Layout for Stats and Quick Actions -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-gutter">
+<!-- Stats Section (Left 9 columns) -->
+<div class="lg:col-span-9 grid grid-cols-1 md:grid-cols-3 gap-gutter">
+<!-- Stat Card 1 -->
+<div class="glass-card p-6 rounded-2xl flex flex-col justify-between group hover:border-primary/40 transition-all">
+<div class="flex justify-between items-start mb-4">
+<div class="p-3 bg-primary/10 rounded-xl text-primary">
+<span class="material-symbols-outlined">person_add</span>
+</div>
+<span class="text-tertiary font-label-sm text-label-sm flex items-center gap-1 bg-tertiary/10 px-2 py-1 rounded-full">
+<span class="material-symbols-outlined text-[14px]">trending_up</span> +12%
+                                </span>
+</div>
+<div>
+<p class="text-on-surface-variant font-label-md text-label-md mb-1">Total Students Reached</p>
+<h3 class="font-display-lg text-display-lg-mobile md:text-[32px] font-bold text-primary">12,482</h3>
+</div>
+</div>
+<!-- Stat Card 2 -->
+<div class="glass-card p-6 rounded-2xl flex flex-col justify-between group hover:border-primary/40 transition-all">
+<div class="flex justify-between items-start mb-4">
+<div class="p-3 bg-secondary-container/20 text-secondary">
+<span class="material-symbols-outlined">timer</span>
+</div>
+<span class="text-on-surface-variant font-label-sm text-label-sm">Total Avg</span>
+</div>
+<div>
+<p class="text-on-surface-variant font-label-md text-label-md mb-1">Live Hours Taught</p>
+<h3 class="font-display-lg text-display-lg-mobile md:text-[32px] font-bold text-primary">142.5h</h3>
+</div>
+</div>
+<!-- Stat Card 3 -->
+<div class="glass-card p-6 rounded-2xl flex flex-col justify-between group hover:border-primary/40 transition-all">
+<div class="flex justify-between items-start mb-4">
+<div class="p-3 bg-error-container text-error rounded-xl">
+<span class="material-symbols-outlined">help_center</span>
+</div>
+<span class="text-error font-label-sm text-label-sm font-bold bg-error/10 px-2 py-1 rounded-full">Priority</span>
+</div>
+<div>
+<p class="text-on-surface-variant font-label-md text-label-md mb-1">Pending Doubts</p>
+<h3 class="font-display-lg text-display-lg-mobile md:text-[32px] font-bold text-error">24</h3>
+</div>
+</div>
+</div>
+<!-- Quick Actions Sidebar (Right 3 columns) -->
+<div class="lg:col-span-3 space-y-4">
+<h2 class="font-headline-md text-label-md text-on-surface-variant uppercase tracking-widest px-2">Quick Actions</h2>
+<button class="w-full flex items-center justify-between p-4 bg-primary text-white rounded-xl shadow-lg hover:translate-y-[-2px] active:scale-95 transition-all">
+<span class="font-label-md text-label-md">Start Live Class</span>
+<span class="material-symbols-outlined">sensors</span>
+</button>
+<button class="w-full flex items-center justify-between p-4 glass-card text-on-surface rounded-xl hover:bg-surface-container-high transition-all">
+<span class="font-label-md text-label-md">Create Assignment</span>
+<span class="material-symbols-outlined">assignment_add</span>
+</button>
+<button class="w-full flex items-center justify-between p-4 glass-card text-on-surface rounded-xl hover:bg-surface-container-high transition-all">
+<span class="font-label-md text-label-md">Open Whiteboard</span>
+<span class="material-symbols-outlined">draw</span>
+</button>
+</div>
+</div>
+<!-- Timeline & Engagement Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-gutter">
+<!-- Today's Schedule (7 columns) -->
+<div class="lg:col-span-7 glass-card rounded-2xl p-6 overflow-hidden">
+<div class="flex justify-between items-center mb-8">
+<h2 class="font-headline-md text-headline-md flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">calendar_today</span>
+                                Today's Schedule
+                            </h2>
+<div class="text-primary font-label-md text-label-md px-3 py-1 bg-primary/10 rounded-full">October 24, 2023</div>
+</div>
+<div class="space-y-6 relative before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-outline-variant/30">
+<!-- Timeline Item: Active -->
+<div class="relative pl-10 flex items-center group">
+<div class="absolute left-0 w-6 h-6 rounded-full bg-primary-container border-4 border-white shadow-sm z-10 live-indicator"></div>
+<div class="flex-1 glass-card p-4 rounded-xl border-l-4 border-l-primary flex justify-between items-center">
+<div>
+<div class="flex items-center gap-2 mb-1">
+<span class="font-label-sm text-label-sm text-primary uppercase font-bold tracking-tighter">Live Now</span>
+<span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+</div>
+<h4 class="font-body-lg text-body-lg font-bold">Advanced Electromagnetics - Batch A1</h4>
+<p class="text-on-surface-variant font-label-md text-label-md">09:00 AM - 10:30 AM</p>
+</div>
+<div class="text-right">
+<p class="font-label-sm text-label-sm text-on-surface-variant">Students</p>
+<p class="font-bold text-primary">842 Joined</p>
+</div>
+</div>
+</div>
+<!-- Timeline Item: Upcoming -->
+<div class="relative pl-10 flex items-center group">
+<div class="absolute left-0 w-6 h-6 rounded-full bg-surface-container-high border-4 border-white shadow-sm z-10"></div>
+<div class="flex-1 p-4 rounded-xl border border-dashed border-outline-variant hover:border-primary transition-colors flex justify-between items-center bg-surface-container-low/30">
+<div>
+<h4 class="font-body-lg text-body-lg font-medium text-on-surface">Weekly Revision: Thermodynamics</h4>
+<p class="text-on-surface-variant font-label-md text-label-md">02:00 PM - 03:30 PM</p>
+</div>
+<div class="text-right">
+<button class="px-3 py-1 text-primary font-label-sm text-label-sm border border-primary/20 rounded hover:bg-primary/5 transition-all">Prepare</button>
+</div>
+</div>
+</div>
+<!-- Timeline Item: Upcoming 2 -->
+<div class="relative pl-10 flex items-center group">
+<div class="absolute left-0 w-6 h-6 rounded-full bg-surface-container-high border-4 border-white shadow-sm z-10"></div>
+<div class="flex-1 p-4 rounded-xl border border-dashed border-outline-variant hover:border-primary transition-colors flex justify-between items-center bg-surface-container-low/30">
+<div>
+<h4 class="font-body-lg text-body-lg font-medium text-on-surface">Doubt Clearing Session</h4>
+<p class="text-on-surface-variant font-label-md text-label-md">05:00 PM - 06:00 PM</p>
+</div>
+<div class="text-right">
+<span class="text-on-surface-variant font-label-sm text-label-sm">84 Doubts Posted</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Student Engagement (5 columns) -->
+<div class="lg:col-span-5 glass-card rounded-2xl p-6">
+<div class="flex justify-between items-center mb-6">
+<h2 class="font-headline-md text-headline-md">Engagement</h2>
+<button class="text-primary font-label-md text-label-md hover:underline">Full Analytics</button>
+</div>
+<div class="space-y-gutter">
+<!-- Engagement Metric 1 -->
+<div>
+<div class="flex justify-between items-end mb-2">
+<div>
+<p class="text-on-surface-variant font-label-sm text-label-sm">Active Participation</p>
+<h4 class="text-headline-md font-bold text-primary">88%</h4>
+</div>
+<div class="flex items-end gap-1 h-12 pb-1">
+<!-- Micro Sparkline -->
+<div class="w-2 bg-primary/20 h-[40%] rounded-full"></div>
+<div class="w-2 bg-primary/30 h-[60%] rounded-full"></div>
+<div class="w-2 bg-primary/40 h-[50%] rounded-full"></div>
+<div class="w-2 bg-primary/60 h-[80%] rounded-full"></div>
+<div class="w-2 bg-primary/80 h-[70%] rounded-full"></div>
+<div class="w-2 bg-primary h-[90%] rounded-full"></div>
+</div>
+</div>
+<div class="w-full h-1.5 bg-surface-container-high rounded-full overflow-hidden">
+<div class="h-full bg-primary rounded-full transition-all duration-1000" style="width: 88%"></div>
+</div>
+</div>
+<!-- Engagement Metric 2 -->
+<div>
+<div class="flex justify-between items-end mb-2">
+<div>
+<p class="text-on-surface-variant font-label-sm text-label-sm">Avg. Watch Duration</p>
+<h4 class="text-headline-md font-bold text-secondary">42m</h4>
+</div>
+<div class="flex items-end gap-1 h-12 pb-1">
+<!-- Micro Sparkline -->
+<div class="w-2 bg-secondary/20 h-[30%] rounded-full"></div>
+<div class="w-2 bg-secondary/30 h-[50%] rounded-full"></div>
+<div class="w-2 bg-secondary/40 h-[70%] rounded-full"></div>
+<div class="w-2 bg-secondary/60 h-[40%] rounded-full"></div>
+<div class="w-2 bg-secondary/80 h-[60%] rounded-full"></div>
+<div class="w-2 bg-secondary h-[80%] rounded-full"></div>
+</div>
+</div>
+<div class="w-full h-1.5 bg-surface-container-high rounded-full overflow-hidden">
+<div class="h-full bg-secondary rounded-full transition-all duration-1000" style="width: 74%"></div>
+</div>
+</div>
+<!-- Performance Widget -->
+<div class="mt-8 p-4 bg-surface-container-low rounded-xl border border-outline-variant/10">
+<p class="font-label-sm text-label-sm text-on-surface-variant mb-3">Quiz Performance Trend</p>
+<div class="flex items-center justify-between gap-4">
+<div class="flex-1">
+<div class="text-[20px] font-bold text-on-surface">Top 10% Average</div>
+<div class="text-label-sm font-label-sm text-tertiary">92% Accuracy</div>
+</div>
+<div class="w-16 h-16 rounded-full border-4 border-tertiary/20 flex items-center justify-center relative">
+<span class="text-tertiary font-bold">A+</span>
+<svg class="absolute -inset-1 transform -rotate-90">
+<circle class="text-tertiary" cx="36" cy="36" fill="transparent" r="32" stroke="currentColor" stroke-dasharray="201" stroke-dashoffset="40" stroke-width="4"></circle>
+</svg>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Footer Section -->
+<footer class="mt-stack-lg glass-card rounded-2xl p-8 overflow-hidden relative">
+<div class="absolute -right-20 -bottom-20 w-64 h-64 bg-primary/5 blur-[100px] rounded-full"></div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-center relative z-10">
+<div>
+<h3 class="font-headline-md text-headline-md mb-2">Educator Support</h3>
+<p class="text-on-surface-variant text-body-md max-w-md">Need help with your upcoming live stream or technical setup? Our dedicated educator support team is available 24/7.</p>
+<div class="flex gap-4 mt-6">
+<a class="px-6 py-2 bg-surface-container-high text-primary font-label-md text-label-md rounded-lg hover:bg-primary/5 transition-all" href="#">Knowledge Base</a>
+<a class="px-6 py-2 border border-primary/20 text-primary font-label-md text-label-md rounded-lg hover:bg-primary/5 transition-all" href="#">Chat Support</a>
+</div>
+</div>
+<div class="flex justify-end gap-12">
+<div class="text-center">
+<p class="text-[32px] font-bold text-primary">2.4k</p>
+<p class="text-on-surface-variant font-label-sm text-label-sm">Test Papers Made</p>
+</div>
+<div class="text-center">
+<p class="text-[32px] font-bold text-primary">4.9</p>
+<p class="text-on-surface-variant font-label-sm text-label-sm">Student Rating</p>
+</div>
+<div class="text-center">
+<p class="text-[32px] font-bold text-primary">120k</p>
+<p class="text-on-surface-variant font-label-sm text-label-sm">Minutes Taught</p>
+</div>
+</div>
+</div>
+<div class="mt-8 pt-8 border-t border-outline-variant/10 flex flex-col md:flex-row justify-between items-center text-label-sm font-label-sm text-on-surface-variant/70 gap-4">
+<p>© 2024 Atomic Pathshala. Accelerating Excellence.</p>
+<div class="flex gap-6">
+<a class="hover:text-primary transition-colors" href="#">Privacy Policy</a>
+<a class="hover:text-primary transition-colors" href="#">Terms of Service</a>
+<a class="hover:text-primary transition-colors" href="#">Community Guidelines</a>
+</div>
+</div>
+</footer>
+</div>
+</main>
+</div>
+<!-- Mobile Bottom Navigation (Visible only on small screens) -->
+<nav class="md:hidden fixed bottom-0 left-0 right-0 bg-surface border-t border-outline-variant/20 px-4 py-2 flex justify-between items-center z-50">
+<a class="flex flex-col items-center p-2 text-primary" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="text-[10px] font-label-sm">Home</span>
+</a>
+<a class="flex flex-col items-center p-2 text-on-surface-variant" href="#">
+<span class="material-symbols-outlined">calendar_month</span>
+<span class="text-[10px] font-label-sm">Schedule</span>
+</a>
+<button class="flex flex-col items-center -mt-8 p-4 bg-primary text-white rounded-full shadow-lg border-4 border-background">
+<span class="material-symbols-outlined">add</span>
+</button>
+<a class="flex flex-col items-center p-2 text-on-surface-variant" href="#">
+<span class="material-symbols-outlined">forum</span>
+<span class="text-[10px] font-label-sm">Doubts</span>
+</a>
+<a class="flex flex-col items-center p-2 text-on-surface-variant" href="#">
+<span class="material-symbols-outlined">account_circle</span>
+<span class="text-[10px] font-label-sm">Profile</span>
+</a>
+</nav>
+<!-- Interactive Layer for charts/hover effects -->
+<script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Placeholder for future charting or micro-interaction logic
+            const cards = document.querySelectorAll('.glass-card');
+            cards.forEach(card => {
+                card.addEventListener('mouseenter', () => {
+                    card.classList.add('shadow-xl', 'shadow-primary/5');
+                });
+                card.addEventListener('mouseleave', () => {
+                    card.classList.remove('shadow-xl', 'shadow-primary/5');
+                });
+            });
+        });
+    </script>
+</body></html>

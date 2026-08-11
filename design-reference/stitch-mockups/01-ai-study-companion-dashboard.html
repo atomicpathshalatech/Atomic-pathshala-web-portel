@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Atomic Pathshala | AI Study Companion</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Geist:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "error": "#ba1a1a",
+                        "surface-container-low": "#f2f3ff",
+                        "on-primary-container": "#f8f7ff",
+                        "text-light": "#0F172A",
+                        "on-error-container": "#93000a",
+                        "surface-container-high": "#e2e7ff",
+                        "secondary-fixed-dim": "#4cd6ff",
+                        "on-tertiary-fixed": "#002113",
+                        "on-error": "#ffffff",
+                        "surface-tint": "#0054d6",
+                        "surface-bright": "#faf8ff",
+                        "surface-dim": "#d2d9f4",
+                        "on-secondary-fixed-variant": "#004e60",
+                        "surface-variant": "#dae2fd",
+                        "primary-container": "#0066ff",
+                        "on-tertiary-fixed-variant": "#005235",
+                        "background": "#faf8ff",
+                        "surface-container-lowest": "#ffffff",
+                        "on-primary-fixed": "#001849",
+                        "on-background": "#131b2e",
+                        "tertiary": "#006643",
+                        "secondary": "#00677f",
+                        "border-subtle": "rgba(0, 102, 255, 0.1)",
+                        "surface-light": "#F8FAFC",
+                        "on-primary-fixed-variant": "#003fa4",
+                        "on-secondary": "#ffffff",
+                        "on-surface-variant": "#424656",
+                        "surface-container": "#eaedff",
+                        "secondary-container": "#00ccf9",
+                        "on-tertiary": "#ffffff",
+                        "inverse-primary": "#b3c5ff",
+                        "on-secondary-fixed": "#001f28",
+                        "error-container": "#ffdad6",
+                        "outline-variant": "#c2c6d8",
+                        "tertiary-fixed": "#6afcb9",
+                        "primary": "#0050cb",
+                        "inverse-on-surface": "#eef0ff",
+                        "bg-dark": "#0B0E14",
+                        "tertiary-container": "#008256",
+                        "secondary-fixed": "#b7eaff",
+                        "on-surface": "#131b2e",
+                        "tertiary-fixed-dim": "#49df9f",
+                        "on-secondary-container": "#005266",
+                        "primary-fixed": "#dae1ff",
+                        "surface-container-highest": "#dae2fd",
+                        "on-primary": "#ffffff",
+                        "inverse-surface": "#283044",
+                        "surface-dark": "#161B22",
+                        "text-dark": "#F1F5F9",
+                        "outline": "#727687",
+                        "primary-fixed-dim": "#b3c5ff",
+                        "surface": "#faf8ff",
+                        "on-tertiary-container": "#e1ffeb",
+                        "bg-light": "#FFFFFF"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "margin-desktop": "64px",
+                        "gutter": "24px",
+                        "container-max": "1280px",
+                        "stack-lg": "32px",
+                        "stack-md": "16px",
+                        "margin-mobile": "20px",
+                        "stack-sm": "8px"
+                    },
+                    "fontFamily": {
+                        "headline-lg": ["Geist"],
+                        "display-lg": ["Geist"],
+                        "body-md": ["Inter"],
+                        "headline-md": ["Geist"],
+                        "label-md": ["Inter"],
+                        "label-sm": ["Inter"],
+                        "display-lg-mobile": ["Geist"],
+                        "body-lg": ["Inter"]
+                    },
+                    "fontSize": {
+                        "headline-lg": ["32px", {"lineHeight": "40px", "fontWeight": "600"}],
+                        "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                        "label-md": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600"}],
+                        "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "500"}],
+                        "display-lg-mobile": ["36px", {"lineHeight": "42px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .font-geist { font-family: 'Geist', sans-serif; }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(0, 102, 255, 0.1);
+        }
+        .radar-grid {
+            stroke: rgba(0, 80, 203, 0.1);
+            stroke-dasharray: 4;
+        }
+        .shimmer {
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+            background-size: 200% 100%;
+            animation: shimmer 2s infinite;
+        }
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-background text-on-background min-h-screen">
+<!-- TopNavBar -->
+<nav class="sticky top-0 z-50 flex justify-between items-center px-margin-desktop w-full h-16 bg-surface/80 backdrop-blur-xl border-b border-border-subtle shadow-sm">
+<div class="flex items-center gap-stack-lg">
+<div class="h-10">
+<img alt="Atomic Pathshala Logo" class="h-full w-auto object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCFbqjZdGFE_6F0u_fvtwKFk0ueVSg8pzbUp4wmldNonTV6Hp_cpG2suNzRs1d9cOofXBT5JLa5NjtDWwQeIU3Yf8nPeTPrsO-ASzkgFCaA2QrPwl-3nJfhHz-CLNDG3g9yoifhGaKIhum1C6oR3gihiWl91LgZ4rVaLQRcGMTvXb1UKz-gbZw4qsQk-ok8RBs1b_ZP1x25ySq6bWE-iJHEfolAzFh6rbjEjAhP4pidvERSKO6gytq9KYg5PWihAgIZXmPBL5qdXMg"/>
+</div>
+<div class="hidden md:flex items-center gap-6">
+<a class="font-label-md text-label-md text-on-surface-variant hover:text-primary transition-colors" href="#">Dashboard</a>
+<a class="font-label-md text-label-md text-on-surface-variant hover:text-primary transition-colors" href="#">Courses</a>
+<a class="font-label-md text-label-md text-on-surface-variant hover:text-primary transition-colors" href="#">Practice</a>
+<a class="font-label-md text-label-md text-on-surface-variant hover:text-primary transition-colors" href="#">Tests</a>
+</div>
+</div>
+<div class="flex items-center gap-stack-md">
+<div class="relative hidden sm:block">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[20px]">search</span>
+<input class="pl-10 pr-4 py-2 rounded-full bg-surface-container border-none focus:ring-2 focus:ring-primary text-label-md w-64 transition-all" placeholder="Search resources..." type="text"/>
+</div>
+<div class="flex items-center gap-2">
+<button class="p-2 hover:bg-surface-container-high rounded-full transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant">notifications</span>
+</button>
+<button class="p-2 hover:bg-surface-container-high rounded-full transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant">settings</span>
+</button>
+<div class="h-8 w-8 rounded-full overflow-hidden border border-primary ml-2">
+<img class="w-full h-full object-cover" data-alt="A close-up studio portrait of a serious young Indian male student with glasses, looking directly into the camera with a confident expression. The lighting is soft and professional, set against a clean, minimalist blue gradient background that matches a premium corporate EdTech brand aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDHgHOdLq_c4jPiuMPPliIP8q4vDYbieeNp5kPPIbMULUv1CLxcD6qRQ0ckv5PCAv-a5t39Zjc8wryDnX8UbvlbAsy-gMQQG1GR3_TfE6lN2J4Lnc13uWfliE5rRdEL2Mykc6QnVNY7PfkOaIKXdMr2lgX0ZUE91tYzMp2iKXxw6tIHTUg8Qoeis7fNdnp0Nn9WxAA9FCs0B6zSnHoUqGFJvu748wwlouNx-RZOWtaxdSUBl_8_DK1paenfnZjNpQm5gIx2qQctRO4"/>
+</div>
+</div>
+</div>
+</nav>
+<div class="flex">
+<!-- SideNavBar -->
+<aside class="hidden lg:flex flex-col h-[calc(100vh-64px)] w-64 fixed left-0 top-16 bg-surface-container-lowest border-r border-border-subtle py-stack-md z-40">
+<div class="px-4 mb-stack-lg">
+<img alt="Atomic Pathshala Logo" class="w-full h-auto object-contain max-h-12" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCFbqjZdGFE_6F0u_fvtwKFk0ueVSg8pzbUp4wmldNonTV6Hp_cpG2suNzRs1d9cOofXBT5JLa5NjtDWwQeIU3Yf8nPeTPrsO-ASzkgFCaA2QrPwl-3nJfhHz-CLNDG3g9yoifhGaKIhum1C6oR3gihiWl91LgZ4rVaLQRcGMTvXb1UKz-gbZw4qsQk-ok8RBs1b_ZP1x25ySq6bWE-iJHEfolAzFh6rbjEjAhP4pidvERSKO6gytq9KYg5PWihAgIZXmPBL5qdXMg"/>
+</div>
+<div class="flex-1 px-4 space-y-1">
+<div class="bg-primary-container/20 text-primary border-r-4 border-primary font-bold flex items-center gap-3 px-4 py-3 rounded-lg cursor-pointer">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">dashboard</span>
+<span class="font-label-md text-label-md">Dashboard</span>
+</div>
+<div class="text-on-surface-variant hover:bg-surface-container-high flex items-center gap-3 px-4 py-3 rounded-lg cursor-pointer transition-all">
+<span class="material-symbols-outlined">psychology</span>
+<span class="font-label-md text-label-md">AI Mentor</span>
+</div>
+<div class="text-on-surface-variant hover:bg-surface-container-high flex items-center gap-3 px-4 py-3 rounded-lg cursor-pointer transition-all">
+<span class="material-symbols-outlined">calendar_today</span>
+<span class="font-label-md text-label-md">Study Plan</span>
+</div>
+<div class="text-on-surface-variant hover:bg-surface-container-high flex items-center gap-3 px-4 py-3 rounded-lg cursor-pointer transition-all">
+<span class="material-symbols-outlined">query_stats</span>
+<span class="font-label-md text-label-md">Rank Predictor</span>
+</div>
+<div class="text-on-surface-variant hover:bg-surface-container-high flex items-center gap-3 px-4 py-3 rounded-lg cursor-pointer transition-all">
+<span class="material-symbols-outlined">auto_graph</span>
+<span class="font-label-md text-label-md">Weak Areas</span>
+</div>
+<div class="text-on-surface-variant hover:bg-surface-container-high flex items-center gap-3 px-4 py-3 rounded-lg cursor-pointer transition-all">
+<span class="material-symbols-outlined">quiz</span>
+<span class="font-label-md text-label-md">Mock Tests</span>
+</div>
+</div>
+<div class="px-4 py-4 mt-auto border-t border-border-subtle">
+<button class="w-full bg-primary text-on-primary py-3 rounded-xl font-label-md text-label-md flex items-center justify-center gap-2 shadow-md hover:scale-[1.02] active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-[18px]">bolt</span>
+                    Upgrade Pro
+                </button>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="flex-1 lg:ml-64 p-margin-mobile md:p-stack-lg max-w-container-max mx-auto w-full">
+<!-- AI Welcome Section -->
+<section class="mb-stack-lg animate-in fade-in slide-in-from-bottom-4 duration-700">
+<div class="glass-card rounded-[2rem] p-stack-lg relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6">
+<div class="absolute -right-20 -top-20 w-64 h-64 bg-primary/10 blur-[80px] rounded-full"></div>
+<div class="absolute -left-20 -bottom-20 w-64 h-64 bg-secondary-container/10 blur-[80px] rounded-full"></div>
+<div class="flex items-center gap-6 z-10">
+<div class="relative">
+<div class="w-20 h-20 rounded-full bg-gradient-to-tr from-primary to-secondary p-1 flex items-center justify-center animate-pulse">
+<div class="w-full h-full rounded-full bg-surface-container-lowest flex items-center justify-center overflow-hidden">
+<img class="w-14 h-14 object-contain" data-alt="A stylized, 3D futuristic AI robotic avatar with friendly glowing blue eyes and a smooth, white ceramic finish. The background is a clean, corporate dark slate with subtle circuitry patterns, creating a high-end technological and supportive persona for an AI learning mentor." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBqNz08xPSqked5qpscHbDDK5rIxOAzgdGfZYjm7pMkXkvqpmyi2uiiKdEo3mGsLK3ToVm4z-7qyi0fqkTPRLhzTfEixrKAb0LJuptFo2E2fsra7YKmU3e5--D1oiTyBhX0QAGRGSOfGiQan6TmkOISoglqbDTU65YDBHP-6tWwabitnzBjjChsP88d2GvaXbzv5T7mx-P2NWC3hnrPVn_rDkOp7SzvYJwsnFxeTPu0Z3b9vYN1xTmQ_mfygK9oMD-nE-y7zlALRek"/>
+</div>
+</div>
+<div class="absolute -bottom-1 -right-1 w-6 h-6 bg-tertiary rounded-full border-4 border-surface-container-lowest flex items-center justify-center">
+<div class="w-2 h-2 bg-white rounded-full animate-ping"></div>
+</div>
+</div>
+<div>
+<h1 class="font-display-lg text-display-lg-mobile md:text-display-lg font-bold tracking-tight text-on-surface">Good morning, Aryan.</h1>
+<p class="font-body-lg text-body-lg text-on-surface-variant max-w-xl">Your NEET 2025 readiness is currently at <span class="text-primary font-bold">84%</span>. You've outpaced 92% of your peers this week.</p>
+</div>
+</div>
+<div class="flex gap-4 z-10 w-full md:w-auto">
+<div class="bg-primary-container text-on-primary-container px-6 py-4 rounded-2xl flex-1 md:flex-none text-center">
+<p class="font-label-sm text-label-sm opacity-80 uppercase tracking-wider">Study Streak</p>
+<p class="font-headline-md text-headline-md font-bold">14 Days</p>
+</div>
+<div class="bg-tertiary-container text-on-tertiary-container px-6 py-4 rounded-2xl flex-1 md:flex-none text-center">
+<p class="font-label-sm text-label-sm opacity-80 uppercase tracking-wider">Goal Progress</p>
+<p class="font-headline-md text-headline-md font-bold">+2.4%</p>
+</div>
+</div>
+</div>
+</section>
+<!-- Bento Grid - Predictive Modeling & Radar -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-stack-lg mb-stack-lg">
+<!-- Predictive Score Modeling -->
+<div class="lg:col-span-5 glass-card rounded-[2rem] p-stack-lg flex flex-col justify-between">
+<div class="flex justify-between items-start">
+<div>
+<h3 class="font-headline-md text-headline-md font-bold text-on-surface">Projected NEET Score</h3>
+<p class="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">info</span>
+                                Based on last 5 Mock Tests
+                            </p>
+</div>
+<div class="bg-tertiary/10 text-tertiary px-3 py-1 rounded-full flex items-center gap-1 animate-bounce">
+<span class="material-symbols-outlined text-[18px]">trending_up</span>
+<span class="font-label-sm font-bold">+15</span>
+</div>
+</div>
+<div class="my-stack-lg text-center">
+<div class="inline-block relative">
+<span class="font-geist text-[84px] leading-none font-extrabold text-primary tracking-tighter">645</span>
+<span class="text-outline text-headline-md font-bold">/720</span>
+</div>
+<div class="mt-4 flex items-center justify-center gap-4">
+<div class="w-full h-3 bg-surface-container rounded-full overflow-hidden">
+<div class="w-[89%] h-full bg-gradient-to-r from-primary to-secondary-container"></div>
+</div>
+</div>
+<p class="mt-4 font-label-md text-label-md text-on-surface-variant">95% Confidence Interval: <span class="text-on-surface font-bold">630 — 660</span></p>
+</div>
+<div class="grid grid-cols-3 gap-2">
+<div class="bg-surface-container/50 p-3 rounded-xl text-center border border-border-subtle">
+<p class="font-label-sm text-label-sm text-outline uppercase tracking-tight">Physics</p>
+<p class="font-label-md text-label-md font-bold">145</p>
+</div>
+<div class="bg-surface-container/50 p-3 rounded-xl text-center border border-border-subtle">
+<p class="font-label-sm text-label-sm text-outline uppercase tracking-tight">Chemistry</p>
+<p class="font-label-md text-label-md font-bold">160</p>
+</div>
+<div class="bg-surface-container/50 p-3 rounded-xl text-center border border-border-subtle">
+<p class="font-label-sm text-label-sm text-outline uppercase tracking-tight">Biology</p>
+<p class="font-label-md text-label-md font-bold">340</p>
+</div>
+</div>
+</div>
+<!-- Subject Mastery Radar Chart -->
+<div class="lg:col-span-7 glass-card rounded-[2rem] p-stack-lg overflow-hidden relative">
+<div class="flex justify-between items-center mb-6">
+<h3 class="font-headline-md text-headline-md font-bold text-on-surface">Subject Mastery</h3>
+<div class="flex gap-2">
+<span class="flex items-center gap-1 font-label-sm text-label-sm text-on-surface-variant">
+<span class="w-3 h-3 rounded-full bg-primary"></span> You
+                            </span>
+<span class="flex items-center gap-1 font-label-sm text-label-sm text-on-surface-variant">
+<span class="w-3 h-3 rounded-full bg-outline/40"></span> Average
+                            </span>
+</div>
+</div>
+<div class="relative h-64 md:h-80 w-full flex items-center justify-center">
+<!-- Simulated Radar Chart using SVG -->
+<svg class="w-full h-full drop-shadow-xl" viewbox="0 0 400 400">
+<!-- Background Circles -->
+<circle class="text-border-subtle" cx="200" cy="200" fill="none" r="180" stroke="currentColor" stroke-width="1"></circle>
+<circle class="text-border-subtle" cx="200" cy="200" fill="none" r="135" stroke="currentColor" stroke-width="1"></circle>
+<circle class="text-border-subtle" cx="200" cy="200" fill="none" r="90" stroke="currentColor" stroke-width="1"></circle>
+<circle class="text-border-subtle" cx="200" cy="200" fill="none" r="45" stroke="currentColor" stroke-width="1"></circle>
+<!-- Axis Lines -->
+<line class="text-border-subtle" stroke="currentColor" stroke-width="1" x1="200" x2="200" y1="20" y2="380"></line>
+<line class="text-border-subtle" stroke="currentColor" stroke-width="1" x1="20" x2="380" y1="200" y2="200"></line>
+<!-- Data Shape (You) -->
+<polygon fill="rgba(0, 80, 203, 0.2)" points="200,50 350,200 200,320 80,200" stroke="#0050cb" stroke-width="3"></polygon>
+<!-- Data Shape (Average) -->
+<polygon fill="none" points="200,100 280,200 200,280 120,200" stroke="rgba(114, 118, 135, 0.4)" stroke-dasharray="4" stroke-width="2"></polygon>
+<!-- Labels -->
+<text class="font-label-md text-label-md font-bold fill-primary" text-anchor="middle" x="200" y="15">Physics</text>
+<text class="font-label-md text-label-md font-bold fill-secondary" text-anchor="start" x="385" y="205">Chemistry</text>
+<text class="font-label-md text-label-md font-bold fill-tertiary" text-anchor="middle" x="200" y="395">Botany</text>
+<text class="font-label-md text-label-md font-bold fill-secondary-fixed-dim" text-anchor="end" x="15" y="205">Zoology</text>
+</svg>
+<div class="absolute top-[20%] right-[15%] bg-surface-container-highest px-2 py-1 rounded-md shadow-sm border border-border-subtle">
+<p class="font-label-sm text-label-sm font-bold">88%</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Recommendation Engine & Timeline -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-stack-lg">
+<!-- AI 'Next Steps' Recommendations -->
+<div class="lg:col-span-4 space-y-stack-md">
+<div class="flex items-center justify-between">
+<h3 class="font-headline-md text-headline-md font-bold text-on-surface">Highest Impact Tasks</h3>
+<span class="bg-primary/10 text-primary px-3 py-1 rounded-full text-label-sm font-bold">AI Recommended</span>
+</div>
+<div class="group glass-card hover:bg-primary-container hover:text-on-primary-container p-stack-md rounded-2xl cursor-pointer transition-all duration-300 transform hover:-translate-y-1">
+<div class="flex items-start gap-4">
+<div class="p-3 rounded-xl bg-surface-container-high group-hover:bg-white/20">
+<span class="material-symbols-outlined text-primary group-hover:text-white">cyclone</span>
+</div>
+<div class="flex-1">
+<h4 class="font-label-md text-label-md font-bold mb-1">Rotational Dynamics</h4>
+<p class="font-label-sm text-label-sm opacity-80 mb-2">Master 12 key concepts to potentially gain <span class="font-bold">+8 points</span></p>
+<div class="flex items-center gap-2">
+<span class="text-xs px-2 py-0.5 rounded-full bg-primary/20 group-hover:bg-white/30">Physics</span>
+<span class="text-xs px-2 py-0.5 rounded-full bg-primary/20 group-hover:bg-white/30">1.5h</span>
+</div>
+</div>
+</div>
+</div>
+<div class="group glass-card hover:bg-secondary-container hover:text-on-secondary-container p-stack-md rounded-2xl cursor-pointer transition-all duration-300 transform hover:-translate-y-1">
+<div class="flex items-start gap-4">
+<div class="p-3 rounded-xl bg-surface-container-high group-hover:bg-white/20">
+<span class="material-symbols-outlined text-secondary group-hover:text-white">visibility</span>
+</div>
+<div class="flex-1">
+<h4 class="font-label-md text-label-md font-bold mb-1">Optics PYQs</h4>
+<p class="font-label-sm text-label-sm opacity-80 mb-2">Solve 15 targeted questions to improve accuracy by <span class="font-bold">12%</span></p>
+<div class="flex items-center gap-2">
+<span class="text-xs px-2 py-0.5 rounded-full bg-secondary/20 group-hover:bg-white/30">Physics</span>
+<span class="text-xs px-2 py-0.5 rounded-full bg-secondary/20 group-hover:bg-white/30">45m</span>
+</div>
+</div>
+</div>
+</div>
+<div class="group glass-card hover:bg-tertiary-container hover:text-on-tertiary-container p-stack-md rounded-2xl cursor-pointer transition-all duration-300 transform hover:-translate-y-1">
+<div class="flex items-start gap-4">
+<div class="p-3 rounded-xl bg-surface-container-high group-hover:bg-white/20">
+<span class="material-symbols-outlined text-tertiary group-hover:text-white">science</span>
+</div>
+<div class="flex-1">
+<h4 class="font-label-md text-label-md font-bold mb-1">Mole Concept</h4>
+<p class="font-label-sm text-label-sm opacity-80 mb-2">3 specific formula gaps identified. Quick revision recommended.</p>
+<div class="flex items-center gap-2">
+<span class="text-xs px-2 py-0.5 rounded-full bg-tertiary/20 group-hover:bg-white/30">Chemistry</span>
+<span class="text-xs px-2 py-0.5 rounded-full bg-tertiary/20 group-hover:bg-white/30">20m</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Learning Velocity Timeline -->
+<div class="lg:col-span-8 glass-card rounded-[2rem] p-stack-lg">
+<div class="flex justify-between items-center mb-10">
+<div>
+<h3 class="font-headline-md text-headline-md font-bold text-on-surface">Target Path: 700 Club</h3>
+<p class="font-label-sm text-label-sm text-on-surface-variant">Your journey to a Top 500 AIR</p>
+</div>
+<div class="flex flex-col items-end">
+<span class="text-headline-md font-bold text-primary">60 Days</span>
+<span class="text-label-sm text-outline uppercase">to Exam</span>
+</div>
+</div>
+<!-- Horizontal Timeline -->
+<div class="relative pt-12 pb-8 px-4 overflow-x-auto no-scrollbar">
+<div class="absolute top-[3.75rem] left-0 w-full h-1 bg-surface-container-high rounded-full overflow-hidden">
+<div class="h-full bg-primary w-[65%] rounded-full shadow-[0_0_10px_rgba(0,80,203,0.5)]"></div>
+</div>
+<div class="flex justify-between min-w-[600px] relative z-10">
+<!-- Milestone 1 -->
+<div class="flex flex-col items-center text-center w-32 relative">
+<div class="absolute -top-10 bg-primary/10 text-primary p-2 rounded-full border border-primary/20">
+<span class="material-symbols-outlined text-[18px]">verified</span>
+</div>
+<div class="w-4 h-4 bg-primary border-4 border-white rounded-full shadow-md mb-4"></div>
+<h5 class="font-label-md font-bold text-on-surface">Base Camp</h5>
+<p class="text-[10px] text-outline uppercase font-bold">Score: 550+</p>
+<p class="font-label-sm text-on-surface-variant mt-2 leading-tight">Cleared 2 weeks ago</p>
+</div>
+<!-- Milestone 2 -->
+<div class="flex flex-col items-center text-center w-32 relative">
+<div class="absolute -top-10 bg-primary/10 text-primary p-2 rounded-full border border-primary/20">
+<span class="material-symbols-outlined text-[18px]">trending_up</span>
+</div>
+<div class="w-4 h-4 bg-primary border-4 border-white rounded-full shadow-md mb-4"></div>
+<h5 class="font-label-md font-bold text-on-surface">The Ascent</h5>
+<p class="text-[10px] text-outline uppercase font-bold">Score: 620+</p>
+<p class="font-label-sm text-on-surface-variant mt-2 leading-tight">Current Zone</p>
+</div>
+<!-- Milestone 3 (Target) -->
+<div class="flex flex-col items-center text-center w-32 relative">
+<div class="absolute -top-10 bg-surface-container p-2 rounded-full border border-border-subtle group hover:bg-secondary-container transition-colors">
+<span class="material-symbols-outlined text-[18px] text-outline group-hover:text-white">rocket_launch</span>
+</div>
+<div class="w-4 h-4 bg-surface-container border-4 border-white rounded-full shadow-md mb-4"></div>
+<h5 class="font-label-md font-bold text-outline">The Peak</h5>
+<p class="text-[10px] text-outline uppercase font-bold">Score: 680+</p>
+<p class="font-label-sm text-on-surface-variant mt-2 leading-tight">ETA: Apr 25</p>
+</div>
+<!-- Milestone 4 (Mastery) -->
+<div class="flex flex-col items-center text-center w-32 relative">
+<div class="absolute -top-10 bg-surface-container p-2 rounded-full border border-border-subtle">
+<span class="material-symbols-outlined text-[18px] text-outline">emoji_events</span>
+</div>
+<div class="w-4 h-4 bg-surface-container border-4 border-white rounded-full shadow-md mb-4"></div>
+<h5 class="font-label-md font-bold text-outline">NEET 2025</h5>
+<p class="text-[10px] text-outline uppercase font-bold">Score: 700+</p>
+<p class="font-label-sm text-on-surface-variant mt-2 leading-tight">Final Goal</p>
+</div>
+</div>
+</div>
+<div class="mt-8 bg-surface-container/30 rounded-2xl p-4 flex items-center gap-4 border border-border-subtle">
+<div class="flex -space-x-2">
+<img class="w-8 h-8 rounded-full border-2 border-surface-container-lowest" data-alt="Avatar of a female student with a smiling face, professional lighting, digital art style, high-end UI design aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAJOFpWFHA2_vqdTgtsqp8bFPaH1M_wMqMHK2KfbGIukqjTReHWoWuaPpwFXULhb43JA180fhSMIDGkL_Wir8-h1TF5cisOtS5OR7yn0t_HF_BzHAsYQt6rQ3J6I4srnlDmNC6uaXR3hRSxnvrAe8zmxnKM7UdSghtN3a07VH374EhKQd81xc8VSYJvJHctk3qEZlnmXfGSUYgyTCN4G_ZB9WyiwoRtzy0lxfd8Tvh1AzrbGkdm7fsEcfW_78GyDBznaFmnr3wTfM8"/>
+<img class="w-8 h-8 rounded-full border-2 border-surface-container-lowest" data-alt="Avatar of a male student wearing a hoodie, minimalist digital art style, high-end UI design aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBgZBOuYa7z5LuvUg6oBXYx4YmOvgxvRyUHABWPudhKhQCjY9Ugn8WA0jUwhsoZM7KS074tnvd87U7sNjOyGpYD3bx23AnvttXGE7BwELOj6wYDf5ymO2527TfKSNIO_tiSlxNYIAGTSPLi0uLZcFagoX56R34Suj_LfQXsn0UgBqYMjNVBydBTTxhmgrDATAZSDKnZH6F1rOp_10hbKB9iS0dX6g8AeFywaRXjiqBahJIwifOPQH8KQSc6GVQTETZU6CA7QbVqz7o"/>
+<div class="w-8 h-8 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center text-[10px] font-bold border-2 border-surface-container-lowest">+24</div>
+</div>
+<p class="font-label-sm text-label-sm text-on-surface-variant">
+<span class="font-bold text-on-surface">26 people</span> from your target college goal are also at this stage. Keep going!
+                        </p>
+</div>
+</div>
+</div>
+</main>
+</div>
+<!-- AI Mentor Chat Trigger (FAB) -->
+<div class="fixed bottom-8 right-8 z-[60]" id="ai-mentor-fab">
+<button class="bg-primary text-on-primary flex items-center gap-3 px-6 py-4 rounded-full shadow-2xl hover:scale-110 active:scale-95 transition-all group overflow-hidden relative">
+<div class="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<span class="material-symbols-outlined text-[24px]">psychology</span>
+<span class="font-label-md font-bold whitespace-nowrap">Ask AI Mentor</span>
+<!-- Shimmer effect -->
+<div class="shimmer absolute inset-0 opacity-20 pointer-events-none"></div>
+</button>
+<!-- Small bubble for notification -->
+<div class="absolute -top-2 -right-1 bg-error text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full border-2 border-white">
+            1
+        </div>
+</div>
+<!-- Quick Footer -->
+<footer class="lg:ml-64 py-stack-lg px-margin-desktop border-t border-border-subtle flex flex-col md:flex-row justify-between items-center gap-6 opacity-60">
+<p class="font-label-sm text-label-sm">© 2024 Atomic Pathshala. All AI predictions are based on historical mock data.</p>
+<div class="flex gap-stack-md">
+<a class="font-label-sm text-label-sm hover:text-primary" href="#">Privacy Policy</a>
+<a class="font-label-sm text-label-sm hover:text-primary" href="#">Terms of Service</a>
+<a class="font-label-sm text-label-sm hover:text-primary" href="#">Contact Support</a>
+</div>
+</footer>
+<script>
+        // Micro-interaction: FAB subtle movement on scroll
+        window.addEventListener('scroll', () => {
+            const fab = document.getElementById('ai-mentor-fab');
+            const scrollPos = window.scrollY;
+            if(scrollPos > 100) {
+                fab.classList.add('translate-y-0');
+            } else {
+                fab.classList.remove('translate-y-2');
+            }
+        });
+
+        // Toggle mobile search focus effect
+        const searchInput = document.querySelector('input[type="text"]');
+        if(searchInput) {
+            searchInput.addEventListener('focus', () => {
+                searchInput.classList.add('w-80');
+            });
+            searchInput.addEventListener('blur', () => {
+                searchInput.classList.remove('w-80');
+            });
+        }
+    </script>
+</body></html>

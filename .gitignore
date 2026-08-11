@@ -1,0 +1,9 @@
+﻿node_modules/
+.next/
+.env
+.env.local
+.env.production
+.env.development
+*.log
+
+project_dump.txt
