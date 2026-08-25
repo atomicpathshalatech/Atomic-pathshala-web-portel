@@ -130,13 +130,78 @@ model Student {
   status           StudentAcademicStatus @default(ACTIVE)
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
+
+  // --- Gamification (XP / Level / Streak / Leaderboard) -------------------
+  // `xp` is a denormalized running total — always written in the same
+  // transaction as the XPEvent row that justifies it (see
+  // src/lib/gamification/xp.ts:awardXp), so it never drifts from
+  // sum(xpEvents.amount). Kept alongside the event log purely so "my XP" /
+  // "my level" reads (header chip, profile) don't need to aggregate the
+  // whole event history on every page load — the leaderboard, which DOES
+  // need windowed sums ("Last 7 days" vs "All time"), queries XPEvent
+  // directly instead of trusting this field.
+  xp                 Int       @default(0)
+  level               Int       @default(1)
+  currentStreakDays   Int       @default(0)
+  longestStreakDays   Int       @default(0)
+  // Date-only (time truncated to midnight UTC) of the last day XP was
+  // awarded — lets awardXp tell "already active today" (no streak change)
+  // apart from "active yesterday" (streak++) apart from "gap of 2+ days"
+  // (streak resets to 1) without a separate activity-log scan.
+  lastActivityDate    DateTime?
+
   doubts           Doubt[]
   subscription Subscription?
+  whiteboardBoards StudentWhiteboardBoard[]
+  batchEnrollments BatchEnrollment[]
+  handRaises       HandRaiseEvent[]
+  quizResponses    QuizResponse[]
+  pollResponses    PollResponse[]
+  liveClassAttendances LiveClassAttendance[]
+  testAttempts     TestAttempt[]
+  lectureIssueReports LectureIssueReport[]
+  xpEvents         XPEvent[]
   user             User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([city, state])
   @@index([targetExam])
+  @@index([xp])
   @@map("students")
+}
+
+// Append-only XP ledger — the real source of truth for gamification.
+// Student.xp/level are a denormalized cache of this table (see the comment
+// there); the leaderboard's "Last 7 days" view sums this table filtered by
+// createdAt rather than trusting the cache, since the cache has no
+// time-window information. Every row is written by awardXp() — never insert
+// directly from a route, so the Student.xp/level/streak side-effects always
+// happen together with the event.
+model XPEvent {
+  id        String   @id @default(cuid())
+  studentId String
+  amount    Int
+  reason    XPReason
+  // Free-form context for debugging/audit — e.g. { testAttemptId } or
+  // { whiteboardSessionId } — never something the leaderboard/API trusts
+  // for scoring, just provenance.
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, createdAt])
+  @@index([createdAt])
+  @@map("xp_events")
+}
+
+enum XPReason {
+  TEST_COMPLETED
+  DPP_COMPLETED
+  QUIZ_CORRECT_ANSWER
+  LIVE_CLASS_ATTENDANCE
+  DAILY_LOGIN_STREAK
+  DOUBT_RESOLVED
+  OTHER
 }
 
 model Teacher {
@@ -153,11 +218,540 @@ model Teacher {
   contracts        Contract[]
   penaltyRecords   PenaltyRecord[]
   documents        TeacherDocument[]
+  whiteboardBoards WhiteboardBoard[]
+  batchAssignments BatchTeacher[]
+  scheduleSessions BatchSchedule[]
+  liveWhiteboardSessions WhiteboardSession[]
+  lectures         Lecture[]
   user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([department])
   @@index([onboardingStatus])
   @@map("teachers")
+}
+
+// ----------------------------------------------------------------------------
+// BATCH SYSTEM — a Batch groups a cohort of students under one or more
+// Teachers for a target exam/course, with its own enrollment list and class
+// timetable. This is the "batch-first" structure the rest of the platform
+// (Subscription, Course, Test, Live Classes) is meant to hang off of — until
+// now the codebase had no first-class Batch entity at all, only marketing
+// copy on the landing page.
+// ----------------------------------------------------------------------------
+
+model Batch {
+  id          String      @id @default(cuid())
+  name        String
+  code        String      @unique
+  description String?
+  targetExam  String?
+  courseId    String?
+  status      BatchStatus @default(UPCOMING)
+  startDate   DateTime?
+  endDate     DateTime?
+  capacity    Int?
+  createdById String
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  course      Course?           @relation(fields: [courseId], references: [id])
+  teachers    BatchTeacher[]
+  enrollments BatchEnrollment[]
+  schedules   BatchSchedule[]
+
+  @@index([status])
+  @@index([targetExam])
+  @@map("batches")
+}
+
+model BatchTeacher {
+  id        String   @id @default(cuid())
+  batchId   String
+  teacherId String
+  subject   String?
+  createdAt DateTime @default(now())
+
+  batch   Batch   @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  teacher Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@unique([batchId, teacherId, subject])
+  @@index([teacherId])
+  @@map("batch_teachers")
+}
+
+model BatchEnrollment {
+  id           String                @id @default(cuid())
+  batchId      String
+  studentId    String
+  status       BatchEnrollmentStatus @default(ACTIVE)
+  enrolledById String?
+  enrolledAt   DateTime              @default(now())
+  droppedAt    DateTime?
+
+  batch   Batch   @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([batchId, studentId])
+  @@index([studentId])
+  @@index([status])
+  @@map("batch_enrollments")
+}
+
+model BatchSchedule {
+  id          String                @id @default(cuid())
+  batchId     String
+  title       String
+  subject     String?
+  type        ScheduleSessionType   @default(LIVE_CLASS)
+  status      ScheduleSessionStatus @default(SCHEDULED)
+  teacherId   String?
+  startsAt    DateTime
+  endsAt      DateTime
+  notes       String?
+  createdById String
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  batch   Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  teacher Teacher? @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+
+  liveWhiteboardSession WhiteboardSession?
+  test                  Test?
+
+  @@index([batchId])
+  @@index([startsAt])
+  @@map("batch_schedules")
+}
+
+// ----------------------------------------------------------------------------
+// TEST ENGINE — a Test is delivered through a BatchSchedule entry the same
+// way a live whiteboard session is: `ScheduleSessionType.TEST` was already a
+// value in the enum above before this update (a hook the original schema
+// clearly anticipated but never wired up), so a Test binds 1:1 to that
+// schedule entry — reusing its startsAt/endsAt as the test's open/close
+// window instead of inventing a parallel scheduling concept. This mirrors
+// WhiteboardSession's relationship to BatchSchedule exactly.
+// ----------------------------------------------------------------------------
+
+model Test {
+  id              String     @id @default(cuid())
+  batchScheduleId String     @unique
+  title           String
+  instructions    String?
+  durationMin     Int
+  status          TestStatus @default(DRAFT)
+  createdById     String
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  batchSchedule BatchSchedule  @relation(fields: [batchScheduleId], references: [id], onDelete: Cascade)
+  questions     TestQuestion[]
+  attempts      TestAttempt[]
+
+  @@index([status])
+  @@map("tests")
+}
+
+model TestQuestion {
+  id         String @id @default(cuid())
+  testId     String
+  questionId String
+  order      Int
+
+  test     Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id])
+
+  @@unique([testId, questionId])
+  @@unique([testId, order])
+  @@index([testId])
+  @@map("test_questions")
+}
+
+model TestAttempt {
+  id               String            @id @default(cuid())
+  testId           String
+  studentId        String
+  status           TestAttemptStatus @default(IN_PROGRESS)
+  startedAt        DateTime          @default(now())
+  submittedAt      DateTime?
+  score            Float?
+  correctCount     Int?
+  incorrectCount   Int?
+  unattemptedCount Int?
+
+  test    Test                 @relation(fields: [testId], references: [id], onDelete: Cascade)
+  student Student              @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  answers TestAttemptAnswer[]
+
+  @@unique([testId, studentId])
+  @@index([testId])
+  @@index([studentId])
+  @@map("test_attempts")
+}
+
+model TestAttemptAnswer {
+  id             String   @id @default(cuid())
+  attemptId      String
+  questionId     String
+  selectedOption String?
+  isCorrect      Boolean?
+  marksAwarded   Float?
+  answeredAt     DateTime @default(now())
+
+  attempt  TestAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question Question    @relation(fields: [questionId], references: [id])
+
+  @@unique([attemptId, questionId])
+  @@index([attemptId])
+  @@map("test_attempt_answers")
+}
+
+// ----------------------------------------------------------------------------
+// LIVE TEACHING WHITEBOARD — a real-time teaching session bound to one
+// scheduled class (BatchSchedule). This is distinct from WhiteboardBoard/
+// StudentWhiteboardBoard above, which are personal/async practice boards —
+// this one is the "teacher is live right now" session, with hand-raise and
+// live quiz attached. This intentionally still binds to BatchSchedule, not
+// to the `Lecture` model added below: a live class and an on-demand
+// recorded lecture are different things (chat is live-only, for one — see
+// LecturePlayer's disabled chat panel), so they stay separate entities
+// rather than being forced into one.
+// ----------------------------------------------------------------------------
+
+model WhiteboardSession {
+  id              String                  @id @default(cuid())
+  batchScheduleId String                  @unique
+  teacherId       String
+  title           String
+  status          WhiteboardSessionStatus @default(ACTIVE)
+  activePageNumber Int                    @default(1)
+  // Teacher-controlled from Class Settings → Chat & Poll. Teacher can always
+  // send regardless of this flag; it only gates student sends (checked in
+  // the messages route, not here — this column is just the on/off state).
+  chatEnabled     Boolean                 @default(true)
+  // Same pattern as chatEnabled, for the "Questions" (hand raise) feature.
+  // Teacher can always raise/lower via the hand-raise route being teacher-
+  // exempt there too; this only gates student POSTs.
+  handRaiseEnabled Boolean                @default(true)
+  startedAt       DateTime                @default(now())
+  endedAt         DateTime?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  // --- Live Classroom v2 (YouTube Live / attendance / polls) -------------
+  // `status` above (ACTIVE/ENDED) stays exactly as-is — every existing
+  // route (messages, hand-raise, quiz, pages) already gates on it and
+  // rewriting those isn't in scope. `livePhase` is the new, finer-grained
+  // state machine used specifically by the class-start/broadcast lifecycle
+  // and the teacher/student UI that reflects it; ACTIVE roughly spans
+  // PREPARING..ENDING, ENDED spans ENDED/RECORDED/CANCELLED/FAILED. Two
+  // fields tracking related-but-different things, not two sources of truth
+  // for the same thing.
+  livePhase      LiveClassPhase @default(SCHEDULED)
+  // Which video path this class actually uses. Defaults to the existing,
+  // already-working two-way LiveKit video — every current and future class
+  // stays on LiveKit unless a teacher explicitly opts into YouTube (or
+  // both) when scheduling. Never flips on its own.
+  videoTransport VideoTransport @default(LIVEKIT)
+
+  // YouTube linkage — all null until videoTransport includes YOUTUBE and
+  // Phase 2 (YouTubeLiveService) actually creates the broadcast/stream.
+  // Deliberately no stream-key column: YouTube's API returns the stream key
+  // on demand from youtubeStreamId (see YouTubeLiveService.getStreamKey),
+  // so there's nothing secret to persist or encrypt here.
+  youtubeBroadcastId String?
+  youtubeStreamId    String?
+  youtubeVideoId     String?
+  youtubeLiveChatId  String?
+  // Raw YouTube lifecycle status string (e.g. broadcast.status.lifeCycleStatus)
+  // kept verbatim for debugging/audit — livePhase is the value everything
+  // else in this app should actually branch on.
+  youtubeStatus       String?
+  recordingVideoId    String?
+  peakViewers         Int      @default(0)
+
+  batchSchedule BatchSchedule        @relation(fields: [batchScheduleId], references: [id], onDelete: Cascade)
+  teacher       Teacher              @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  pages         WhiteboardPage[]
+  quizzes       QuizSession[]
+  polls         PollSession[]
+  handRaises    HandRaiseEvent[]
+  messages      WhiteboardMessage[]
+  attendances   LiveClassAttendance[]
+  doubts        Doubt[]
+
+  @@index([teacherId])
+  @@index([status])
+  @@index([livePhase])
+  @@map("whiteboard_sessions")
+}
+
+// The class-start/broadcast lifecycle state machine (spec: LIVE must never
+// be inferred purely from a teacher button click — it has to be confirmed
+// by actual stream state once videoTransport includes YOUTUBE; for a pure
+// LIVEKIT class there's no external stream to poll, so that class moves
+// PREPARING → LIVE immediately, same as today).
+enum LiveClassPhase {
+  SCHEDULED
+  PREPARING
+  WAITING_FOR_STREAM
+  LIVE
+  ENDING
+  ENDED
+  PROCESSING_RECORDING
+  RECORDED
+  CANCELLED
+  FAILED
+}
+
+enum VideoTransport {
+  LIVEKIT
+  YOUTUBE
+  BOTH
+}
+
+model WhiteboardPage {
+  id         String   @id @default(cuid())
+  sessionId  String
+  pageNumber Int
+  background String   @default("blank")
+  objects    Json
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  session WhiteboardSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, pageNumber])
+  @@index([sessionId])
+  @@map("whiteboard_pages")
+}
+
+model QuizSession {
+  id                   String            @id @default(cuid())
+  whiteboardSessionId  String
+  questionText         String?           @db.Text
+  isQuickQuiz          Boolean           @default(false)
+  options              Json
+  correctOption        String?
+  timeLimitSec         Int               @default(30)
+  status               QuizSessionStatus @default(ACTIVE)
+  createdById          String
+  startedAt            DateTime          @default(now())
+  revealedAt           DateTime?
+
+  whiteboardSession WhiteboardSession @relation(fields: [whiteboardSessionId], references: [id], onDelete: Cascade)
+  responses         QuizResponse[]
+
+  @@index([whiteboardSessionId])
+  @@index([status])
+  @@map("quiz_sessions")
+}
+
+model QuizResponse {
+  id             String   @id @default(cuid())
+  quizSessionId  String
+  studentId      String
+  selectedOption String
+  responseTimeMs Int
+  isCorrect      Boolean?
+  submittedAt    DateTime @default(now())
+
+  quizSession QuizSession @relation(fields: [quizSessionId], references: [id], onDelete: Cascade)
+  student     Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([quizSessionId, studentId])
+  @@index([quizSessionId])
+  @@map("quiz_responses")
+}
+
+model HandRaiseEvent {
+  id                  String          @id @default(cuid())
+  whiteboardSessionId String
+  studentId           String
+  status              HandRaiseStatus @default(PENDING)
+  raisedAt            DateTime        @default(now())
+  resolvedAt          DateTime?
+
+  whiteboardSession WhiteboardSession @relation(fields: [whiteboardSessionId], references: [id], onDelete: Cascade)
+  student           Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([whiteboardSessionId, status])
+  @@map("hand_raise_events")
+}
+
+// Live class chat — the real implementation of what LecturePlayer's chat
+// panel has been telling students ("Chats will only be visible in a live
+// class") since before this model existed. authorRole/authorUserId/
+// authorName are denormalized (not a User relation) on purpose: this mirrors
+// how AuditLog stores actor identity, keeps the messages route from needing
+// an extra join on every send, and survives the author's Teacher/Student
+// profile changing later without rewriting chat history.
+model WhiteboardMessage {
+  id                   String   @id @default(cuid())
+  whiteboardSessionId  String
+  authorRole           String
+  authorUserId         String
+  authorName           String
+  body                 String   @db.Text
+  createdAt            DateTime @default(now())
+
+  // --- Moderation / structure (Live Classroom v2) -------------------------
+  // Soft delete: moderation history (who deleted what) stays intact instead
+  // of vanishing, and "deleted by teacher" vs "deleted by author" can still
+  // be told apart later if that's ever needed. Routes must filter
+  // deletedAt: null on every read.
+  deletedAt       DateTime?
+  pinnedAt        DateTime?
+  isSystemMessage Boolean   @default(false)
+  isAnnouncement  Boolean   @default(false)
+  // Student-settable "mark as question" checkbox at send time — not an AI
+  // classification (the spec explicitly rules that out for v1). Powers the
+  // teacher's QUESTIONS chat filter deterministically.
+  flaggedAsQuestion Boolean @default(false)
+  parentMessageId   String?
+
+  whiteboardSession WhiteboardSession   @relation(fields: [whiteboardSessionId], references: [id], onDelete: Cascade)
+  parentMessage     WhiteboardMessage?  @relation("MessageReplies", fields: [parentMessageId], references: [id], onDelete: SetNull)
+  replies           WhiteboardMessage[] @relation("MessageReplies")
+  reactions         ChatReaction[]
+  doubts            Doubt[]
+
+  @@index([whiteboardSessionId, createdAt])
+  @@index([whiteboardSessionId, pinnedAt])
+  @@map("whiteboard_messages")
+}
+
+// One row per (message, user, emoji) — a user can react with several
+// different emoji on the same message, but not stack the same one twice
+// (that's a UI toggle, not a counter to spam).
+model ChatReaction {
+  id        String   @id @default(cuid())
+  messageId String
+  userId    String
+  emoji     String
+  createdAt DateTime @default(now())
+
+  message WhiteboardMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
+  @@map("chat_reactions")
+}
+
+// Attendance is derived from a heartbeat the client sends while the live
+// class tab is open and focused, not merely "the tab was open" — joinedAt/
+// leftAt/lastSeenAt/activeDurationSec are all written server-side from
+// those heartbeats. One row per student per class: a reconnect updates the
+// SAME row (reconnectCount++) rather than creating a new one, which is what
+// makes rejoining idempotent (spec: never duplicate an active session).
+model LiveClassAttendance {
+  id                  String    @id @default(cuid())
+  whiteboardSessionId String
+  studentId           String
+  joinedAt            DateTime  @default(now())
+  lastSeenAt          DateTime  @default(now())
+  leftAt              DateTime?
+  reconnectCount      Int       @default(0)
+  activeDurationSec   Int       @default(0)
+  // Incremented server-side on real interactions this student made in this
+  // class (chat send, quiz/poll response, hand raise) — never client-
+  // reported, so it can't be inflated by an idle open tab.
+  interactionCount    Int       @default(0)
+  quizParticipated    Boolean   @default(false)
+
+  whiteboardSession WhiteboardSession @relation(fields: [whiteboardSessionId], references: [id], onDelete: Cascade)
+  student           Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([whiteboardSessionId, studentId])
+  @@index([whiteboardSessionId])
+  @@map("live_class_attendances")
+}
+
+// Poll — deliberately separate from QuizSession/QuizResponse (spec item 20):
+// no correctOption/isCorrect scoring, and an `anonymous` flag. Even an
+// anonymous poll still records studentId server-side (that's what makes the
+// anti-duplicate-vote constraint below possible, and what attendance
+// interaction-counting needs) — "anonymous" means the teacher-facing API
+// never returns studentId back out, not that it was never stored.
+model PollSession {
+  id                  String            @id @default(cuid())
+  whiteboardSessionId String
+  questionText        String            @db.Text
+  options             Json
+  anonymous           Boolean           @default(true)
+  status              PollSessionStatus @default(ACTIVE)
+  createdById         String
+  startedAt           DateTime          @default(now())
+  closedAt            DateTime?
+
+  whiteboardSession WhiteboardSession @relation(fields: [whiteboardSessionId], references: [id], onDelete: Cascade)
+  responses         PollResponse[]
+
+  @@index([whiteboardSessionId])
+  @@index([status])
+  @@map("poll_sessions")
+}
+
+model PollResponse {
+  id             String   @id @default(cuid())
+  pollSessionId  String
+  studentId      String
+  selectedOption String
+  submittedAt    DateTime @default(now())
+
+  pollSession PollSession @relation(fields: [pollSessionId], references: [id], onDelete: Cascade)
+  student     Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([pollSessionId, studentId])
+  @@index([pollSessionId])
+  @@map("poll_responses")
+}
+
+enum PollSessionStatus {
+  ACTIVE
+  CLOSED
+}
+
+// ----------------------------------------------------------------------------
+// WHITEBOARD — teacher-side (session/practice board) and student-side
+// (personal practice board) are separate models, matching how Student/
+// Teacher are already modeled separately everywhere else in this schema.
+// `strokes` is untyped Json: either a plain array of stroke objects, or
+// (when a PDF deck is loaded) an object tagged `__type: "pdf-deck"` holding
+// per-slide annotations. `thumbnailDataUrl` is a flattened PNG snapshot used
+// for the saved-boards list preview.
+// ----------------------------------------------------------------------------
+
+model WhiteboardBoard {
+  id        String  @id @default(cuid())
+  teacherId String
+  teacher   Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  title            String
+  strokes          Json
+  thumbnailDataUrl String  @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([teacherId])
+  @@map("whiteboard_boards")
+}
+
+model StudentWhiteboardBoard {
+  id        String  @id @default(cuid())
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  title            String
+  strokes          Json
+  thumbnailDataUrl String  @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([studentId])
+  @@map("student_whiteboard_boards")
 }
 
 model TeacherDocument {
@@ -240,6 +834,7 @@ model Course {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   subjects    Subject[]
+  batches     Batch[]
 
   @@map("courses")
 }
@@ -262,6 +857,7 @@ model Chapter {
   subjectId String
   subject   Subject    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
   questions Question[]
+  lectures  Lecture[]
 
   @@index([subjectId])
   @@map("chapters")
@@ -293,6 +889,8 @@ model Question {
   createdBy      User            @relation("QuestionCreatedBy", fields: [createdById], references: [id])
   subject        Subject?        @relation(fields: [subjectId], references: [id])
   verifiedBy     User?           @relation("QuestionVerifiedBy", fields: [verifiedById], references: [id])
+  testQuestions  TestQuestion[]
+  attemptAnswers TestAttemptAnswer[]
 
   @@index([subjectId])
   @@index([chapterId])
@@ -306,6 +904,11 @@ model Doubt {
   studentId         String
   subject           String?
   body              String
+  // Student-attached photo of their notebook/textbook page, question
+  // screenshot, etc. — uploaded through the same object storage as the
+  // profile photo feature (src/lib/storage), just a different key prefix
+  // ("doubt-attachments/"). Optional: the form works fine without one.
+  attachmentUrl     String?
   priority          DoubtPriority @default(NORMAL)
   status            DoubtStatus   @default(OPEN)
   expertExplanation String?
@@ -314,11 +917,21 @@ model Doubt {
   resolvedAt        DateTime?
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
-  resolvedBy        User?         @relation("DoubtResolvedBy", fields: [resolvedById], references: [id])
-  student           Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  // Both null for the pre-existing general async doubt inbox — a doubt
+  // raised outside any live class. Populated only when a teacher converts
+  // a live-class chat message into a doubt (Live Classroom v2): this reuses
+  // the exact same model/queue/resolution flow rather than building a
+  // second, parallel doubt system just for the in-class case.
+  whiteboardSessionId String?
+  sourceMessageId     String?
+  resolvedBy          User?              @relation("DoubtResolvedBy", fields: [resolvedById], references: [id])
+  student             Student            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  whiteboardSession   WhiteboardSession? @relation(fields: [whiteboardSessionId], references: [id], onDelete: SetNull)
+  sourceMessage       WhiteboardMessage? @relation(fields: [sourceMessageId], references: [id], onDelete: SetNull)
 
   @@index([status])
   @@index([studentId])
+  @@index([whiteboardSessionId])
   @@map("doubts")
 }
 
@@ -445,6 +1058,7 @@ enum QuestionStatus {
 
 enum DoubtStatus {
   OPEN
+  ASSIGNED
   RESOLVED
   FLAGGED
 }
@@ -460,8 +1074,61 @@ enum NotificationChannel {
   WHATSAPP
 }
 
-
+enum BatchStatus {
+  UPCOMING
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
 
+enum BatchEnrollmentStatus {
+  ACTIVE
+  COMPLETED
+  DROPPED
+}
+
+enum ScheduleSessionType {
+  LIVE_CLASS
+  TEST
+  DPP
+  DOUBT_SESSION
+  OTHER
+}
+
+enum ScheduleSessionStatus {
+  SCHEDULED
+  LIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum WhiteboardSessionStatus {
+  ACTIVE
+  ENDED
+}
+
+enum QuizSessionStatus {
+  ACTIVE
+  REVEALED
+  CLOSED
+}
+
+enum HandRaiseStatus {
+  PENDING
+  RESOLVED
+}
+
+enum TestStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum TestAttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  AUTO_SUBMITTED
+}
 
 enum SubscriptionPlan {
   BASIC
@@ -563,4 +1230,58 @@ model PlanPricing {
 
   @@unique([plan, billingCycle])
   @@map("plan_pricing")
+}
+
+enum LectureStatus {
+  DRAFT
+  PUBLISHED
+}
+
+// ----------------------------------------------------------------------------
+// LECTURE LIBRARY — recorded video lectures, chapter-wise. A Chapter can have
+// several Lecture "parts" (a mini-series, e.g. "Cell I Chapterwise"), ordered
+// by `order` for the player's prev/next navigation. Deliberately NOT storing
+// video duration: it's read client-side from the <video> element's real
+// `duration` once loaded, so it can never drift from the actual file.
+// Deliberately NOT storing multiple quality renditions: only one `videoUrl`
+// per lecture — the player's "quality" menu is honest about this (see
+// LecturePlayer.tsx) rather than faking a selector with no real alternate
+// sources behind it.
+// ----------------------------------------------------------------------------
+
+model Lecture {
+  id               String        @id @default(cuid())
+  chapterId        String
+  title            String
+  language         String        @default("English")
+  order            Int           @default(0)
+  videoUrl         String
+  educatorVideoUrl String?
+  slidesUrl        String?
+  status           LectureStatus @default(DRAFT)
+  teacherId        String
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  chapter      Chapter              @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  teacher      Teacher              @relation(fields: [teacherId], references: [id])
+  issueReports LectureIssueReport[]
+
+  @@index([chapterId])
+  @@index([status])
+  @@map("lectures")
+}
+
+model LectureIssueReport {
+  id        String   @id @default(cuid())
+  lectureId String
+  studentId String
+  note      String
+  createdAt DateTime @default(now())
+
+  lecture Lecture @relation(fields: [lectureId], references: [id], onDelete: Cascade)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([lectureId])
+  @@map("lecture_issue_reports")
 }

@@ -1,231 +1,241 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import { requireStudentSession } from "@/lib/auth/session";
+import { prisma } from "@/lib/db";
+import type { BatchSchedule, Teacher, User } from "@prisma/client";
 
 export const metadata: Metadata = {
   title: "Batch Schedule",
 };
 
-const CALENDAR_DAYS = [
-  ["29", "30", "1", "2", "3", "4", "5"],
-  ["6", "7", "8", "9", "10", "11", "12"],
-  ["13", "14", "15", "16", "17", "18", "19"],
-  ["20", "21", "22", "23", "24", "25", "26"],
-  ["27", "28", "29", "30", "31", "1", "2"],
-];
-const TODAY = "14";
-const MARKED = ["17", "23"];
-const OUTSIDE_MONTH = new Set(["29", "30", "31", "1", "2"]);
+type ScheduleWithTeacher = BatchSchedule & { teacher: (Teacher & { user: User }) | null };
 
-export default function SchedulePage() {
+const TYPE_LABELS: Record<string, string> = {
+  LIVE_CLASS: "Live Class",
+  TEST: "Test",
+  DPP: "DPP",
+  DOUBT_SESSION: "Doubt Session",
+  OTHER: "Special Class",
+};
+
+const TYPE_BORDER: Record<string, string> = {
+  LIVE_CLASS: "border-l-primary",
+  TEST: "border-l-secondary",
+  DPP: "border-l-outline-variant",
+  DOUBT_SESSION: "border-l-outline-variant",
+  OTHER: "border-l-outline-variant",
+};
+
+// A student can enter a live class up to 15 minutes before its scheduled
+// start — same window the teacher side uses (see (team)/team/my-schedule/
+// page.tsx) so both sides of the same class agree on when "Join" unlocks.
+const JOIN_WINDOW_MS = 15 * 60 * 1000;
+
+function formatDay(date: Date) {
+  const today = new Date();
+  const isToday = date.toDateString() === today.toDateString();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(today.getDate() + 1);
+  const isTomorrow = date.toDateString() === tomorrow.toDateString();
+  if (isToday) return "Today";
+  if (isTomorrow) return "Tomorrow";
+  return date.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+}
+
+export default async function SchedulePage() {
+  const { student } = await requireStudentSession();
+
+  const enrollment = await prisma.batchEnrollment.findFirst({
+    where: { studentId: student.id, status: "ACTIVE" },
+    include: {
+      batch: {
+        include: {
+          course: { select: { title: true } },
+          teachers: { include: { teacher: { include: { user: true } } } },
+          schedules: {
+            orderBy: { startsAt: "asc" },
+            include: { teacher: { include: { user: true } } },
+          },
+        },
+      },
+    },
+    orderBy: { enrolledAt: "desc" },
+  });
+
+  if (!enrollment) {
+    return (
+      <div className="space-y-stack-lg max-w-6xl">
+        <header>
+          <h1 className="font-display-lg text-display-lg-mobile md:text-display-lg text-on-surface">
+            Batch Roadmap &amp; Schedule
+          </h1>
+          <p className="text-body-lg text-on-surface-variant mt-2">
+            Track your learning journey and upcoming milestones.
+          </p>
+        </header>
+        <div className="glass-card rounded-2xl p-12 text-center text-on-surface-variant font-body-md">
+          You&apos;re not enrolled in a batch yet — once the team enrolls you into one, your real
+          class and test schedule will show up here.
+        </div>
+      </div>
+    );
+  }
+
+  const now = new Date();
+  const schedules = enrollment.batch.schedules as ScheduleWithTeacher[];
+  const upcoming = schedules.filter((s) => s.endsAt >= now);
+  const past = schedules.filter((s) => s.endsAt < now);
+
+  const grouped = upcoming.reduce<Record<string, ScheduleWithTeacher[]>>((acc, s) => {
+    const key = s.startsAt.toDateString();
+    (acc[key] ??= []).push(s);
+    return acc;
+  }, {});
+
   return (
     <div className="space-y-stack-lg max-w-6xl">
-      <div className="rounded-xl bg-primary-container/10 border border-primary/20 px-4 py-3 text-label-sm font-label-sm text-on-surface-variant">
-        Sample layout — real class/test schedules will populate here once Academic Planning
-        (Phase 3+) is wired up.
-      </div>
-
       <header>
         <p className="flex items-center gap-2 text-label-sm text-on-surface-variant mb-2">
-          <span>My Courses</span>
+          <span>My Batch</span>
           <span className="material-symbols-outlined text-sm">chevron_right</span>
-          <span className="text-primary">Target NEET 2025</span>
+          <span className="text-primary">{enrollment.batch.name}</span>
         </p>
         <h1 className="font-display-lg text-display-lg-mobile md:text-display-lg text-on-surface">
           Batch Roadmap &amp; Schedule
         </h1>
         <p className="text-body-lg text-on-surface-variant mt-2">
-          Track your learning journey and upcoming milestones.
+          {enrollment.batch.code}
+          {enrollment.batch.targetExam ? ` · ${enrollment.batch.targetExam}` : ""}
+          {enrollment.batch.course ? ` · ${enrollment.batch.course.title}` : ""}
         </p>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-stack-lg">
-        {/* Sidebar: calendar + stats */}
         <aside className="lg:col-span-4 space-y-stack-lg">
-          <div className="glass-card rounded-xl p-stack-md shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-headline-md text-headline-md text-on-surface">October 2024</h2>
-            </div>
-            <div className="grid grid-cols-7 text-center text-label-sm text-on-surface-variant font-bold mb-2">
-              {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((d) => (
-                <div key={d}>{d}</div>
-              ))}
-            </div>
-            <div className="grid grid-cols-7 gap-y-2 text-center text-sm sm:text-body-md">
-              {CALENDAR_DAYS.flat().map((day, i) => (
-                <div
-                  key={i}
-                  className={`py-2 relative ${OUTSIDE_MONTH.has(day) ? "text-outline" : ""} ${
-                    day === TODAY ? "bg-primary/10 rounded-full font-bold text-primary ring-1 ring-primary/30" : ""
-                  }`}
-                >
-                  {day}
-                  {MARKED.includes(day) && !OUTSIDE_MONTH.has(day) && (
-                    <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-secondary rounded-full" />
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
           <div className="glass-card rounded-xl p-stack-md">
             <h3 className="font-headline-md text-headline-md mb-4 flex items-center gap-2">
               <span className="material-symbols-outlined text-secondary">analytics</span>
               Batch Stats
             </h3>
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-on-surface-variant">Course Progress</span>
-                <span className="font-bold">42%</span>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-surface-container/50 p-3 rounded-lg">
+                <span className="text-label-sm block text-on-surface-variant">Sessions Held</span>
+                <span className="font-headline-md text-headline-md">{past.length}</span>
               </div>
-              <div className="w-full h-2 bg-surface-container rounded-full overflow-hidden">
-                <div className="h-full bg-primary" style={{ width: "42%" }} />
-              </div>
-              <div className="grid grid-cols-2 gap-4 mt-4">
-                <div className="bg-surface-container/50 p-3 rounded-lg">
-                  <span className="text-label-sm block text-on-surface-variant">Classes Taken</span>
-                  <span className="font-headline-md text-headline-md">128</span>
-                </div>
-                <div className="bg-surface-container/50 p-3 rounded-lg">
-                  <span className="text-label-sm block text-on-surface-variant">Tests Completed</span>
-                  <span className="font-headline-md text-headline-md">15</span>
-                </div>
+              <div className="bg-surface-container/50 p-3 rounded-lg">
+                <span className="text-label-sm block text-on-surface-variant">Upcoming</span>
+                <span className="font-headline-md text-headline-md">{upcoming.length}</span>
               </div>
             </div>
           </div>
+
+          {enrollment.batch.teachers.length > 0 && (
+            <div className="glass-card rounded-xl p-stack-md">
+              <h3 className="font-headline-md text-headline-md mb-4 flex items-center gap-2">
+                <span className="material-symbols-outlined text-secondary">school</span>
+                Faculty
+              </h3>
+              <ul className="space-y-2">
+                {enrollment.batch.teachers.map((t) => (
+                  <li key={t.id} className="text-label-md text-on-surface-variant">
+                    {t.teacher.user.name}
+                    {t.subject ? ` — ${t.subject}` : ""}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </aside>
 
-        {/* Timeline */}
         <section className="lg:col-span-8">
-          <div className="relative pl-8 md:pl-12 space-y-stack-lg pb-4">
-            <div className="absolute left-4 md:left-6 top-0 bottom-0 w-1 bg-gradient-to-b from-primary to-secondary-container rounded-full opacity-20" />
-
-            <div className="space-y-stack-md">
-              <div className="relative">
-                <div className="absolute -left-[22px] md:-left-[30px] top-1/2 -translate-y-1/2 w-4 h-4 bg-primary rounded-full ring-4 ring-primary-container/20 z-10" />
-                <span className="text-label-sm font-bold text-primary uppercase tracking-wider">
-                  Today, 14 Oct
-                </span>
-              </div>
-
-              <div className="glass-card rounded-xl p-stack-md hover:shadow-lg transition-all border-l-4 border-l-error">
-                <div className="flex flex-col md:flex-row justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="px-2 py-0.5 bg-error/10 text-error text-[10px] font-bold rounded uppercase">
-                        Live Now
-                      </span>
-                      <span className="text-label-sm text-on-surface-variant">Biology • Unit 4</span>
-                    </div>
-                    <h3 className="font-headline-md text-headline-md text-on-surface mb-2">
-                      Genetics and Evolution: The Molecular Basis of Inheritance
-                    </h3>
-                    <div className="flex flex-wrap gap-4 text-label-md text-on-surface-variant">
-                      <span className="flex items-center gap-1">
-                        <span className="material-symbols-outlined text-lg">person</span>
-                        Dr. S. K. Singh
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <span className="material-symbols-outlined text-lg">schedule</span>
-                        90 Mins
-                      </span>
-                    </div>
-                  </div>
-                  <div className="shrink-0 w-full md:w-auto">
-                    <button disabled className="w-full md:w-auto px-6 py-2 bg-primary text-on-primary font-label-md rounded-lg opacity-70 cursor-not-allowed">
-                      Join Class
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="glass-card rounded-xl p-stack-md hover:shadow-md transition-all">
-                <div className="flex flex-col md:flex-row justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="px-2 py-0.5 bg-surface-container text-on-surface-variant text-[10px] font-bold rounded uppercase">
-                        Starts at 4:00 PM
-                      </span>
-                      <span className="text-label-sm text-on-surface-variant">Chemistry • Physical</span>
-                    </div>
-                    <h3 className="font-headline-md text-headline-md text-on-surface mb-2">
-                      Chemical Kinetics: Rate Laws &amp; Collision Theory
-                    </h3>
-                    <div className="flex flex-wrap gap-4 text-label-md text-on-surface-variant">
-                      <span className="flex items-center gap-1">
-                        <span className="material-symbols-outlined text-lg">person</span>
-                        Prof. Alok Gupta
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <span className="material-symbols-outlined text-lg">schedule</span>
-                        120 Mins
-                      </span>
-                    </div>
-                  </div>
-                  <div className="shrink-0 w-full md:w-auto">
-                    <button disabled className="w-full md:w-auto px-6 py-2 bg-surface-container-high text-on-surface font-label-md rounded-lg opacity-70 cursor-not-allowed">
-                      Remind Me
-                    </button>
-                  </div>
-                </div>
-              </div>
+          {upcoming.length === 0 ? (
+            <div className="glass-card rounded-xl p-8 text-center text-on-surface-variant font-body-md">
+              No upcoming sessions scheduled yet. Check back once your batch&apos;s timetable is
+              published.
             </div>
-
-            <div className="space-y-stack-md pt-4">
-              <div className="relative">
-                <div className="absolute -left-[22px] md:-left-[30px] top-1/2 -translate-y-1/2 w-4 h-4 bg-outline-variant rounded-full z-10" />
-                <span className="text-label-sm font-bold text-on-surface-variant uppercase tracking-wider">
-                  Tomorrow, 15 Oct
-                </span>
-              </div>
-
-              <div className="glass-card rounded-xl p-stack-md hover:shadow-md transition-all border-l-4 border-l-secondary">
-                <div className="flex flex-col md:flex-row justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="px-2 py-0.5 bg-secondary/10 text-secondary text-[10px] font-bold rounded uppercase">
-                        Upcoming Test
-                      </span>
-                      <span className="text-label-sm text-on-surface-variant">Fortnightly Assessment</span>
-                    </div>
-                    <h3 className="font-headline-md text-headline-md text-on-surface mb-2">
-                      NEET Pattern Major Test - Physics &amp; Chemistry
-                    </h3>
-                    <div className="flex flex-wrap gap-4 text-label-md text-on-surface-variant">
-                      <span className="flex items-center gap-1">
-                        <span className="material-symbols-outlined text-lg">assignment</span>
-                        180 Questions
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <span className="material-symbols-outlined text-lg">timer</span>
-                        3 Hours
-                      </span>
-                    </div>
+          ) : (
+            <div className="relative pl-8 md:pl-12 space-y-stack-lg pb-4">
+              <div className="absolute left-4 md:left-6 top-0 bottom-0 w-1 bg-gradient-to-b from-primary to-secondary-container rounded-full opacity-20" />
+              {Object.entries(grouped).map(([dayKey, entries]) => (
+                <div key={dayKey} className="space-y-stack-md">
+                  <div className="relative">
+                    <div className="absolute -left-[22px] md:-left-[30px] top-1/2 -translate-y-1/2 w-4 h-4 bg-primary rounded-full ring-4 ring-primary-container/20 z-10" />
+                    <span className="text-label-sm font-bold text-primary uppercase tracking-wider">
+                      {formatDay(new Date(dayKey))}
+                    </span>
                   </div>
-                  <div className="shrink-0 w-full md:w-auto">
-                    <button disabled className="w-full md:w-auto px-6 py-2 border-2 border-secondary text-secondary font-label-md rounded-lg opacity-70 cursor-not-allowed">
-                      View Syllabus
-                    </button>
-                  </div>
+                  {entries.map((s) => {
+                    const isLiveNow = s.status === "LIVE" || (s.startsAt <= now && s.endsAt >= now);
+                    const joinOpensAt = new Date(s.startsAt.getTime() - JOIN_WINDOW_MS);
+                    const canEnter = s.type === "LIVE_CLASS" && now >= joinOpensAt && now <= s.endsAt;
+                    return (
+                      <div
+                        key={s.id}
+                        className={`glass-card rounded-xl p-stack-md hover:shadow-md transition-all border-l-4 ${
+                          TYPE_BORDER[s.type] ?? "border-l-outline-variant"
+                        }`}
+                      >
+                        <div className="flex flex-col md:flex-row justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <span
+                                className={`px-2 py-0.5 text-[10px] font-bold rounded uppercase ${
+                                  isLiveNow
+                                    ? "bg-error/10 text-error"
+                                    : "bg-surface-container text-on-surface-variant"
+                                }`}
+                              >
+                                {isLiveNow ? "Live Now" : TYPE_LABELS[s.type] ?? s.type}
+                              </span>
+                              {s.subject && (
+                                <span className="text-label-sm text-on-surface-variant">{s.subject}</span>
+                              )}
+                            </div>
+                            <h3 className="font-headline-md text-headline-md text-on-surface mb-2">
+                              {s.title}
+                            </h3>
+                            <div className="flex flex-wrap gap-4 text-label-md text-on-surface-variant">
+                              {s.teacher && (
+                                <span className="flex items-center gap-1">
+                                  <span className="material-symbols-outlined text-lg">person</span>
+                                  {s.teacher.user.name}
+                                </span>
+                              )}
+                              <span className="flex items-center gap-1">
+                                <span className="material-symbols-outlined text-lg">schedule</span>
+                                {s.startsAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} –{" "}
+                                {s.endsAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                            </div>
+                          </div>
+                          {s.type === "LIVE_CLASS" && (
+                            <div className="shrink-0 w-full md:w-auto">
+                              {canEnter ? (
+                                <Link
+                                  href={`/live-class/${s.id}`}
+                                  className="block text-center w-full md:w-auto px-6 py-2 bg-primary text-on-primary font-label-md rounded-lg hover:opacity-90"
+                                >
+                                  {isLiveNow ? "Join Class" : "Enter Class"}
+                                </Link>
+                              ) : (
+                                <button
+                                  disabled
+                                  title="Opens 15 minutes before the scheduled start"
+                                  className="w-full md:w-auto px-6 py-2 bg-primary text-on-primary font-label-md rounded-lg opacity-70 cursor-not-allowed"
+                                >
+                                  Opens 15 min before
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              </div>
+              ))}
             </div>
-
-            <div className="relative py-6">
-              <div className="absolute -left-[22px] md:-left-[30px] top-1/2 -translate-y-1/2 w-4 h-4 bg-primary-container rounded-full flex items-center justify-center z-10">
-                <span className="w-2 h-2 bg-white rounded-full" />
-              </div>
-              <div className="p-4 bg-primary-container/10 rounded-xl border border-primary/20 flex items-center gap-4">
-                <div className="w-12 h-12 bg-primary/20 rounded-full flex items-center justify-center text-primary shrink-0">
-                  <span className="material-symbols-outlined">flag</span>
-                </div>
-                <div>
-                  <h4 className="font-bold text-on-surface">End of Part-1 Syllabus</h4>
-                  <p className="text-label-md text-on-surface-variant">
-                    Review sessions and doubt clearing will begin after this milestone.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
+          )}
         </section>
       </div>
     </div>

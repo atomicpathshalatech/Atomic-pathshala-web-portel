@@ -1,7 +1,7 @@
 ﻿import { PrismaClient, GlobalRole } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { PERMISSIONS, ROLE_PERMISSION_DEFAULTS } from "../src/lib/rbac/permissions";
-import { DEFAULT_PLAN_PRICING } from "../src/lib/subscription/pricing";
+import { DEFAULT_PLAN_PRICING } from "../src/lib/subscription/plan-pricing-defaults";
 
 const prisma = new PrismaClient();
 

@@ -248,6 +248,69 @@ storage, e-signature, and payment infrastructure this build doesn't have.
 Resume/portfolio are plain URL fields for now (candidate pastes a Google
 Drive/LinkedIn link, say) rather than uploads.
 
+## Whiteboard ✅ (Teacher session board + Student practice board)
+
+Both portals get a full drawing/diagramming tool, sharing one component
+(`src/components/shared/WhiteboardCanvas.tsx`) so there's no duplicated logic
+between them:
+
+- [x] **Teacher**: `/team/whiteboard`, gated by a new `WHITEBOARD_ACCESS`
+      permission (added to `TEACHER`'s defaults in
+      `ROLE_PERMISSION_DEFAULTS` — **run `npm run db:seed` again** after
+      migrating so existing teacher accounts actually get the permission
+      row). Follows the same `hasPermission()` in-page check pattern as
+      `/team/questions`.
+- [x] **Student**: `/practice-board`, gated the normal way — `STUDENT` role
+      via `requireStudentSession()`, matching every other student route.
+- [x] **Draw tools**: Pen, Eraser (proper `destination-out` compositing —
+      works correctly whether the background is solid, ruled, or a PDF slide
+      image), Line, Rectangle, Circle, Triangle, Arrow, Text.
+- [x] **One-click templates**: Coordinate Plane, Number Line, Benzene Ring,
+      Free-Body-Diagram point, Resistor, Battery, Spring, simplified Cell
+      Diagram — click the canvas to stamp, no drag needed.
+- [x] **Math symbols palette**: α β θ λ μ π Σ Δ ∫ √ ± ≤ ≥ ≠ ∞ ° → Ω — Unicode
+      glyphs via the text-rendering path, **not** real LaTeX typesetting (no
+      stacked fractions, no properly-sized integral bounds). A true formula
+      editor needs KaTeX/MathJax, not wired in — flagging rather than
+      guessing at it blind since it can't be tested in this environment.
+- [x] **Page backgrounds**: Plain/Lined × Light/Dark, selectable per session.
+- [x] **PDF slide import**: upload a PDF (export your deck to PDF first —
+      direct `.pptx` needs a server-side conversion step this build doesn't
+      have) via `pdfjs-dist` (new dependency, MIT-licensed, renders
+      client-side — **no paid service, no new backend**). Prev/next
+      navigation, each slide keeps its own annotations.
+- [x] **Save/Load**, including full PDF decks — saving while a deck is
+      loaded stores `{ pdfFileName, pdfPages, slideAnnotations, activeSlide }`
+      in the `strokes` JSON column (tagged `__type: "pdf-deck"`); loading
+      detects the tag and restores every slide. Plain boards still save as a
+      bare stroke array — fully backward compatible.
+- [x] **New Prisma models**: `WhiteboardBoard` (→ `Teacher`) and
+      `StudentWhiteboardBoard` (→ `Student`) — separate tables, matching how
+      Student/Teacher are modeled separately everywhere else here.
+- [x] **New API routes**: `src/app/api/team/whiteboard/` (permission +
+      owner checked) and `src/app/api/student-whiteboard/` (role + owner
+      checked) — list/create + get/update/delete, same shape as the rest of
+      this project's API routes (`apiSuccess`/`apiError`/`handleApiError`).
+
+**Run after pulling this:**
+```bash
+npm install              # new dependency: pdfjs-dist
+npm run db:migrate       # new tables: whiteboard_boards, student_whiteboard_boards
+npm run db:seed          # attaches WHITEBOARD_ACCESS to the TEACHER role
+```
+
+**Caveats, stated plainly:**
+- A multi-page PDF deck (each page a full-canvas PNG) can produce a
+  multi-megabyte save payload. No size limit in this project's own API
+  routes, but if this ever runs behind a platform with a request-body cap
+  (Vercel serverless functions ≈4.5MB), saving a long deck could fail there.
+  Not an issue self-hosted.
+- Live video, real-time shared-whiteboard sync, and live chat (teacher
+  broadcasting to students watching in real time) were **not** attempted —
+  that needs paid, provisioned infrastructure (LiveKit/Daily.co for video,
+  Liveblocks/Yjs or a WebSocket backend for sync) that only the founder can
+  set up. This build covers the async/personal-practice use case only.
+
 ## Setup
 
 ```bash

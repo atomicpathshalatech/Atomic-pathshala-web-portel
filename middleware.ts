@@ -12,6 +12,9 @@ const STUDENT_PATHS = [
   "/schedule",
   "/doubts",
   "/subscription",
+  "/practice-board",
+  "/live-class",
+  "/settings",
 ];
 const NON_TEAM_ROLES = new Set(["STUDENT", "PARENT", "GUEST"]);
 
@@ -21,6 +24,12 @@ const NON_TEAM_ROLES = new Set(["STUDENT", "PARENT", "GUEST"]);
  * This is a coarse, edge-safe check (JWT role claim only — middleware can't
  * query Postgres). The real, DB-backed RBAC permission check happens in
  * `requireStudentSession()` / `requireTeamSession()` on the page itself.
+ *
+ * Added `/live-class` and `/settings` to STUDENT_PATHS — both already had
+ * (or now have) real pages under `(student)/*` but were missing from this
+ * list, so they weren't edge-protected (page-level `requireStudentSession()`
+ * still protected them either way, but an unauthenticated request wouldn't
+ * get redirected until the page itself ran).
  */
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -57,6 +66,9 @@ export const config = {
     "/schedule/:path*",
     "/doubts/:path*",
     "/subscription/:path*",
+    "/practice-board/:path*",
+    "/live-class/:path*",
+    "/settings/:path*",
     "/team/:path*",
   ],
 };

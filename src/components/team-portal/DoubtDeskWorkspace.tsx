@@ -11,6 +11,7 @@ type Doubt = {
   status: "OPEN" | "RESOLVED" | "FLAGGED";
   expertExplanation: string | null;
   videoUrl: string | null;
+  attachmentUrl: string | null;
   createdAt: string;
   resolvedAt: string | null;
   student: {
@@ -138,7 +139,14 @@ export function DoubtDeskWorkspace({ canResolve }: { canResolve: boolean }) {
                 </div>
                 <p className="text-body-md text-on-surface line-clamp-2 mb-2">{d.body}</p>
                 <div className="flex justify-between items-center text-[11px] text-on-surface-variant">
-                  <span>{new Date(d.createdAt).toLocaleString()}</span>
+                  <span className="flex items-center gap-1">
+                    {new Date(d.createdAt).toLocaleString()}
+                    {d.attachmentUrl && (
+                      <span className="material-symbols-outlined text-sm" title="Has an attached photo">
+                        photo
+                      </span>
+                    )}
+                  </span>
                   {d.subject && <span className="font-bold text-primary">{d.subject}</span>}
                 </div>
               </button>
@@ -175,8 +183,18 @@ export function DoubtDeskWorkspace({ canResolve }: { canResolve: boolean }) {
                 </span>
               </div>
 
-              <div className="glass-card p-gutter rounded-2xl bg-surface-container-low/50">
+              <div className="glass-card p-gutter rounded-2xl bg-surface-container-low/50 space-y-3">
                 <p className="text-body-lg text-on-surface leading-relaxed">{selected.body}</p>
+                {selected.attachmentUrl && (
+                  <a href={selected.attachmentUrl} target="_blank" rel="noopener noreferrer">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- uploaded to external object storage, not a next.config image domain */}
+                    <img
+                      src={selected.attachmentUrl}
+                      alt="Attached by the student"
+                      className="max-w-xs rounded-lg border border-outline-variant/40 hover:opacity-90 transition-opacity"
+                    />
+                  </a>
+                )}
               </div>
 
               {selected.status === "OPEN" && canResolve ? (

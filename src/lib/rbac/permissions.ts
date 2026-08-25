@@ -66,6 +66,34 @@ export const PERMISSIONS = {
   // separate from any specific module permission above.
   TEAM_PORTAL_ACCESS: "team.portal.access",
 
+  // Whiteboard (teacher-side session/practice board)
+  WHITEBOARD_ACCESS: "whiteboard.access",
+
+  // Batch System
+  BATCH_READ: "batch.read",
+  BATCH_CREATE: "batch.create",
+  BATCH_UPDATE: "batch.update",
+  BATCH_DELETE: "batch.delete",
+  BATCH_ENROLLMENT_MANAGE: "batch.enrollment.manage",
+  BATCH_SCHEDULE_MANAGE: "batch.schedule.manage",
+
+  // Test Engine
+  TEST_READ: "test.read",
+  TEST_CREATE: "test.create",
+  TEST_UPDATE: "test.update",
+  TEST_PUBLISH: "test.publish",
+  TEST_DELETE: "test.delete",
+
+  // Lecture Library — recorded, on-demand video lectures (separate from
+  // live classes / WhiteboardSession). Same 5-way CRUD+publish split as
+  // the Test Engine: a teacher can upload/edit their own draft, only an
+  // admin tier can publish it live to students.
+  LECTURE_READ: "lecture.read",
+  LECTURE_CREATE: "lecture.create",
+  LECTURE_UPDATE: "lecture.update",
+  LECTURE_PUBLISH: "lecture.publish",
+  LECTURE_DELETE: "lecture.delete",
+
   // ID / KYC Document Management
   DOCUMENT_READ_SELF: "document.read.self",
   DOCUMENT_UPLOAD_SELF: "document.upload.self",
@@ -119,6 +147,14 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PermissionCode[]> = {
     PERMISSIONS.CONTRACT_SIGN_SELF,
     PERMISSIONS.PENALTY_READ_SELF,
     PERMISSIONS.LEADERBOARD_READ,
+    PERMISSIONS.WHITEBOARD_ACCESS,
+    PERMISSIONS.BATCH_READ,
+    PERMISSIONS.TEST_READ,
+    PERMISSIONS.TEST_CREATE,
+    PERMISSIONS.TEST_UPDATE,
+    PERMISSIONS.LECTURE_READ,
+    PERMISSIONS.LECTURE_CREATE,
+    PERMISSIONS.LECTURE_UPDATE,
   ],
   ACADEMIC_HEAD: [
     PERMISSIONS.TEAM_PORTAL_ACCESS,
@@ -141,6 +177,22 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PermissionCode[]> = {
     PERMISSIONS.PENALTY_RECORD_CREATE,
     PERMISSIONS.PENALTY_READ_ANY,
     PERMISSIONS.LEADERBOARD_READ,
+    PERMISSIONS.BATCH_READ,
+    PERMISSIONS.BATCH_CREATE,
+    PERMISSIONS.BATCH_UPDATE,
+    PERMISSIONS.BATCH_DELETE,
+    PERMISSIONS.BATCH_ENROLLMENT_MANAGE,
+    PERMISSIONS.BATCH_SCHEDULE_MANAGE,
+    PERMISSIONS.TEST_READ,
+    PERMISSIONS.TEST_CREATE,
+    PERMISSIONS.TEST_UPDATE,
+    PERMISSIONS.TEST_PUBLISH,
+    PERMISSIONS.TEST_DELETE,
+    PERMISSIONS.LECTURE_READ,
+    PERMISSIONS.LECTURE_CREATE,
+    PERMISSIONS.LECTURE_UPDATE,
+    PERMISSIONS.LECTURE_PUBLISH,
+    PERMISSIONS.LECTURE_DELETE,
   ],
   QUESTION_TEAM: [
     PERMISSIONS.TEAM_PORTAL_ACCESS,
@@ -204,6 +256,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PermissionCode[]> = {
     PERMISSIONS.ANALYTICS_VIEW,
     PERMISSIONS.STUDENT_READ_ANY,
     PERMISSIONS.TEACHER_READ,
+    PERMISSIONS.BATCH_READ,
   ],
   SUPER_ADMIN: [PERMISSIONS.TEAM_PORTAL_ACCESS, ...Object.values(PERMISSIONS)],
   FOUNDER: [PERMISSIONS.TEAM_PORTAL_ACCESS, ...Object.values(PERMISSIONS)],

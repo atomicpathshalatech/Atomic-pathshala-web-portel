@@ -1,25 +1,27 @@
-import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { doubtCreateSchema } from "@/lib/validation/doubt";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { UnauthorizedError } from "@/lib/rbac/guard";
+import { doubtCreateSchema } from "@/lib/validation/doubt";
 
-async function getStudentOrThrow(userId: string) {
-  const student = await prisma.student.findUnique({ where: { userId } });
-  if (!student) throw new Error("No student record for this account");
-  return student;
-}
-
+/**
+ * A student's own doubts — ownership-scoped, not RBAC-gated, same pattern
+ * as `/api/batches/my` (a basic student action, not a team-portal
+ * permission check).
+ */
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.id) return apiError("Unauthorized", 401);
+    if (!session?.user?.id) throw new UnauthorizedError();
 
-    const student = await getStudentOrThrow(session.user.id);
+    const student = await prisma.student.findUnique({ where: { userId: session.user.id } });
+    if (!student) return apiError("No student profile found for this account.", 404);
+
     const doubts = await prisma.doubt.findMany({
       where: { studentId: student.id },
       orderBy: { createdAt: "desc" },
+      include: { resolvedBy: { select: { name: true } } },
     });
 
     return apiSuccess({ doubts });
@@ -28,19 +30,23 @@ export async function GET() {
   }
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.id) return apiError("Unauthorized", 401);
+    if (!session?.user?.id) throw new UnauthorizedError();
 
-    const student = await getStudentOrThrow(session.user.id);
-    const data = doubtCreateSchema.parse(await request.json());
+    const student = await prisma.student.findUnique({ where: { userId: session.user.id } });
+    if (!student) return apiError("No student profile found for this account.", 404);
+
+    const body = doubtCreateSchema.parse(await request.json());
 
     const doubt = await prisma.doubt.create({
       data: {
         studentId: student.id,
-        subject: data.subject,
-        body: data.body,
+        subject: body.subject,
+        body: body.body,
+        priority: body.priority,
+        attachmentUrl: body.attachmentUrl || null,
       },
     });
 
