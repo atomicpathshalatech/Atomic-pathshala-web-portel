@@ -19,6 +19,11 @@ type Props = {
 
 const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const;
 
+// Debounce delay before an edited note autosaves — long enough that normal
+// typing doesn't fire a PUT per keystroke, short enough that switching
+// lectures or closing the tab rarely loses more than a sentence.
+const NOTE_AUTOSAVE_DELAY_MS = 1000;
+
 function formatTime(totalSeconds: number): string {
   if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return "00:00:00";
   const hours = Math.floor(totalSeconds / 3600);
@@ -61,11 +66,67 @@ export function LecturePlayer({
   const [reportError, setReportError] = useState<string | null>(null);
   const [reportSuccess, setReportSuccess] = useState(false);
 
+  // Personal lecture notes — the side panel's default tab. Autosaved (see
+  // handleNoteChange) against GET/PUT /api/lectures/[id]/notes; never
+  // shared with the teacher or other students.
+  const [sidePanelTab, setSidePanelTab] = useState<"notes" | "chat">("notes");
+  const [noteBody, setNoteBody] = useState("");
+  const [noteLoaded, setNoteLoaded] = useState(false);
+  const [noteSaving, setNoteSaving] = useState(false);
+  const [noteSavedAt, setNoteSavedAt] = useState<Date | null>(null);
+  const noteSaveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     const handleFullscreenChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
     document.addEventListener("fullscreenchange", handleFullscreenChange);
     return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setNoteLoaded(false);
+    fetch(`/api/lectures/${lectureId}/notes`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (cancelled || !json.success) return;
+        setNoteBody(json.data.body ?? "");
+        setNoteSavedAt(json.data.updatedAt ? new Date(json.data.updatedAt) : null);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setNoteLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+      if (noteSaveTimeout.current) clearTimeout(noteSaveTimeout.current);
+    };
+  }, [lectureId]);
+
+  async function saveNote(value: string) {
+    setNoteSaving(true);
+    try {
+      const res = await fetch(`/api/lectures/${lectureId}/notes`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body: value }),
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setNoteSavedAt(json.data.updatedAt ? new Date(json.data.updatedAt) : new Date());
+      }
+    } catch {
+      // Silent — the next autosave (or a manual re-edit) will catch up;
+      // no need to interrupt the student mid-note over a network blip.
+    } finally {
+      setNoteSaving(false);
+    }
+  }
+
+  function handleNoteChange(value: string) {
+    setNoteBody(value);
+    if (noteSaveTimeout.current) clearTimeout(noteSaveTimeout.current);
+    noteSaveTimeout.current = setTimeout(() => saveNote(value), NOTE_AUTOSAVE_DELAY_MS);
+  }
 
   function togglePlay() {
     const video = videoRef.current;
@@ -400,20 +461,61 @@ export function LecturePlayer({
           )}
         </div>
 
-        {/* Chat panel — honest about not being available for recorded content;
-            this mirrors the disabled state shown for live classes rather than
-            hiding the panel entirely, so students know chat isn't broken. */}
+        {/* Side panel — Notes (real, autosaved, personal to this student) and
+            Chat (honestly disabled for recorded content, same as before). */}
         <div className="w-full lg:w-72 shrink-0 glass-card rounded-2xl p-4 flex flex-col">
-          <h2 className="font-label-md text-label-md text-on-surface mb-2 flex items-center gap-2">
-            <span className="material-symbols-outlined text-lg text-on-surface-variant">chat_bubble</span>
-            Chat
-          </h2>
-          <div className="flex-1 flex flex-col items-center justify-center text-center gap-2 py-8 px-2">
-            <span className="material-symbols-outlined text-3xl text-on-surface-variant/40">forum</span>
-            <p className="text-label-sm text-on-surface-variant">
-              Chat is disabled for recorded lectures. Chats will only be visible in a live class.
-            </p>
+          <div className="flex items-center gap-1 mb-3 bg-surface-container-lowest rounded-full p-1 shrink-0">
+            <button
+              type="button"
+              onClick={() => setSidePanelTab("notes")}
+              className={`flex-1 text-label-sm font-label-sm py-1.5 rounded-full transition-colors ${
+                sidePanelTab === "notes"
+                  ? "bg-primary text-on-primary"
+                  : "text-on-surface-variant hover:text-on-surface"
+              }`}
+            >
+              Notes
+            </button>
+            <button
+              type="button"
+              onClick={() => setSidePanelTab("chat")}
+              className={`flex-1 text-label-sm font-label-sm py-1.5 rounded-full transition-colors ${
+                sidePanelTab === "chat"
+                  ? "bg-primary text-on-primary"
+                  : "text-on-surface-variant hover:text-on-surface"
+              }`}
+            >
+              Chat
+            </button>
           </div>
+
+          {sidePanelTab === "notes" ? (
+            <div className="flex-1 flex flex-col min-h-0">
+              <textarea
+                value={noteBody}
+                onChange={(e) => handleNoteChange(e.target.value)}
+                placeholder={noteLoaded ? "Jot down notes while you watch..." : "Loading your notes..."}
+                disabled={!noteLoaded}
+                className="flex-1 min-h-[240px] w-full rounded-lg border border-outline-variant/40 bg-surface-container-lowest p-3 text-body-sm text-on-surface outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary resize-none disabled:opacity-60"
+              />
+              <p className="text-label-sm text-on-surface-variant mt-2 text-right">
+                {noteSaving
+                  ? "Saving..."
+                  : noteSavedAt
+                    ? `Saved ${noteSavedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                    : noteLoaded
+                      ? "Not saved yet"
+                      : ""}
+              </p>
+            </div>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center text-center gap-2 py-8 px-2">
+              <span className="material-symbols-outlined text-3xl text-on-surface-variant/40">forum</span>
+              <p className="text-label-sm text-on-surface-variant">
+                Chat is disabled for recorded lectures. Chats will only be visible in a live class.
+              </p>
+            </div>
+          )}
         </div>
       </div>
 

@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import type { BatchSchedule, Teacher, User } from "@prisma/client";
 
 export const metadata: Metadata = {
-  title: "Batch Schedule",
+  title: "My Schedule",
 };
 
 type ScheduleWithTeacher = BatchSchedule & { teacher: (Teacher & { user: User }) | null };
@@ -18,12 +18,16 @@ const TYPE_LABELS: Record<string, string> = {
   OTHER: "Special Class",
 };
 
+// Dark "Prime"-style palette — the same hardcoded hex values already used
+// by the whiteboard/live-class dark theme (TeacherLiveClassRoom.tsx,
+// MessagesPanel.tsx), reused here rather than inventing a second dark
+// palette: base #1a1b23, deeper panel #10131b, border #2d2e3b, accent blue.
 const TYPE_BORDER: Record<string, string> = {
-  LIVE_CLASS: "border-l-primary",
-  TEST: "border-l-secondary",
-  DPP: "border-l-outline-variant",
-  DOUBT_SESSION: "border-l-outline-variant",
-  OTHER: "border-l-outline-variant",
+  LIVE_CLASS: "border-l-blue-500",
+  TEST: "border-l-amber-500",
+  DPP: "border-l-[#2d2e3b]",
+  DOUBT_SESSION: "border-l-[#2d2e3b]",
+  OTHER: "border-l-[#2d2e3b]",
 };
 
 // A student can enter a live class up to 15 minutes before its scheduled
@@ -64,16 +68,12 @@ export default async function SchedulePage() {
 
   if (!enrollment) {
     return (
-      <div className="space-y-stack-lg max-w-6xl">
+      <div className="max-w-6xl mx-auto rounded-3xl bg-[#0d0e15] border border-[#2d2e3b] p-6 md:p-10">
         <header>
-          <h1 className="font-display-lg text-display-lg-mobile md:text-display-lg text-on-surface">
-            Batch Roadmap &amp; Schedule
-          </h1>
-          <p className="text-body-lg text-on-surface-variant mt-2">
-            Track your learning journey and upcoming milestones.
-          </p>
+          <h1 className="text-2xl md:text-3xl font-bold text-white">My Schedule</h1>
+          <p className="text-gray-400 mt-2">Track your learning journey and upcoming milestones.</p>
         </header>
-        <div className="glass-card rounded-2xl p-12 text-center text-on-surface-variant font-body-md">
+        <div className="mt-6 rounded-2xl border border-[#2d2e3b] bg-[#1a1b23] p-12 text-center text-gray-400">
           You&apos;re not enrolled in a batch yet — once the team enrolls you into one, your real
           class and test schedule will show up here.
         </div>
@@ -93,53 +93,51 @@ export default async function SchedulePage() {
   }, {});
 
   return (
-    <div className="space-y-stack-lg max-w-6xl">
+    <div className="max-w-6xl mx-auto rounded-3xl bg-[#0d0e15] border border-[#2d2e3b] p-6 md:p-10">
       <header>
-        <p className="flex items-center gap-2 text-label-sm text-on-surface-variant mb-2">
+        <p className="flex items-center gap-2 text-xs text-gray-500 mb-2">
           <span>My Batch</span>
           <span className="material-symbols-outlined text-sm">chevron_right</span>
-          <span className="text-primary">{enrollment.batch.name}</span>
+          <span className="text-blue-400">{enrollment.batch.name}</span>
         </p>
-        <h1 className="font-display-lg text-display-lg-mobile md:text-display-lg text-on-surface">
-          Batch Roadmap &amp; Schedule
-        </h1>
-        <p className="text-body-lg text-on-surface-variant mt-2">
+        <h1 className="text-2xl md:text-3xl font-bold text-white">My Schedule</h1>
+        <p className="text-gray-400 mt-2">
           {enrollment.batch.code}
           {enrollment.batch.targetExam ? ` · ${enrollment.batch.targetExam}` : ""}
           {enrollment.batch.course ? ` · ${enrollment.batch.course.title}` : ""}
         </p>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-stack-lg">
-        <aside className="lg:col-span-4 space-y-stack-lg">
-          <div className="glass-card rounded-xl p-stack-md">
-            <h3 className="font-headline-md text-headline-md mb-4 flex items-center gap-2">
-              <span className="material-symbols-outlined text-secondary">analytics</span>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-8">
+        <aside className="lg:col-span-4 space-y-6">
+          <div className="rounded-2xl border border-[#2d2e3b] bg-[#1a1b23] p-5">
+            <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
+              <span className="material-symbols-outlined text-blue-400 text-xl">analytics</span>
               Batch Stats
             </h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-surface-container/50 p-3 rounded-lg">
-                <span className="text-label-sm block text-on-surface-variant">Sessions Held</span>
-                <span className="font-headline-md text-headline-md">{past.length}</span>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-[#10131b] border border-[#2d2e3b] p-3 rounded-xl">
+                <span className="text-xs block text-gray-500">Sessions Held</span>
+                <span className="text-2xl font-bold text-white">{past.length}</span>
               </div>
-              <div className="bg-surface-container/50 p-3 rounded-lg">
-                <span className="text-label-sm block text-on-surface-variant">Upcoming</span>
-                <span className="font-headline-md text-headline-md">{upcoming.length}</span>
+              <div className="bg-[#10131b] border border-[#2d2e3b] p-3 rounded-xl">
+                <span className="text-xs block text-gray-500">Upcoming</span>
+                <span className="text-2xl font-bold text-white">{upcoming.length}</span>
               </div>
             </div>
           </div>
 
           {enrollment.batch.teachers.length > 0 && (
-            <div className="glass-card rounded-xl p-stack-md">
-              <h3 className="font-headline-md text-headline-md mb-4 flex items-center gap-2">
-                <span className="material-symbols-outlined text-secondary">school</span>
+            <div className="rounded-2xl border border-[#2d2e3b] bg-[#1a1b23] p-5">
+              <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
+                <span className="material-symbols-outlined text-blue-400 text-xl">school</span>
                 Faculty
               </h3>
               <ul className="space-y-2">
                 {enrollment.batch.teachers.map((t) => (
-                  <li key={t.id} className="text-label-md text-on-surface-variant">
+                  <li key={t.id} className="text-sm text-gray-300">
                     {t.teacher.user.name}
-                    {t.subject ? ` — ${t.subject}` : ""}
+                    {t.subject ? <span className="text-gray-500"> — {t.subject}</span> : null}
                   </li>
                 ))}
               </ul>
@@ -149,18 +147,18 @@ export default async function SchedulePage() {
 
         <section className="lg:col-span-8">
           {upcoming.length === 0 ? (
-            <div className="glass-card rounded-xl p-8 text-center text-on-surface-variant font-body-md">
+            <div className="rounded-2xl border border-[#2d2e3b] bg-[#1a1b23] p-8 text-center text-gray-400">
               No upcoming sessions scheduled yet. Check back once your batch&apos;s timetable is
               published.
             </div>
           ) : (
-            <div className="relative pl-8 md:pl-12 space-y-stack-lg pb-4">
-              <div className="absolute left-4 md:left-6 top-0 bottom-0 w-1 bg-gradient-to-b from-primary to-secondary-container rounded-full opacity-20" />
+            <div className="relative pl-8 md:pl-12 space-y-8 pb-4">
+              <div className="absolute left-4 md:left-6 top-0 bottom-0 w-px bg-[#2d2e3b]" />
               {Object.entries(grouped).map(([dayKey, entries]) => (
-                <div key={dayKey} className="space-y-stack-md">
+                <div key={dayKey} className="space-y-4">
                   <div className="relative">
-                    <div className="absolute -left-[22px] md:-left-[30px] top-1/2 -translate-y-1/2 w-4 h-4 bg-primary rounded-full ring-4 ring-primary-container/20 z-10" />
-                    <span className="text-label-sm font-bold text-primary uppercase tracking-wider">
+                    <div className="absolute -left-[22px] md:-left-[30px] top-1/2 -translate-y-1/2 w-3 h-3 bg-blue-500 rounded-full ring-4 ring-blue-900/30 z-10" />
+                    <span className="text-xs font-bold text-blue-400 uppercase tracking-wider">
                       {formatDay(new Date(dayKey))}
                     </span>
                   </div>
@@ -171,8 +169,8 @@ export default async function SchedulePage() {
                     return (
                       <div
                         key={s.id}
-                        className={`glass-card rounded-xl p-stack-md hover:shadow-md transition-all border-l-4 ${
-                          TYPE_BORDER[s.type] ?? "border-l-outline-variant"
+                        className={`rounded-2xl border border-[#2d2e3b] bg-[#1a1b23] p-5 hover:border-blue-800/50 transition-colors border-l-4 ${
+                          TYPE_BORDER[s.type] ?? "border-l-[#2d2e3b]"
                         }`}
                       >
                         <div className="flex flex-col md:flex-row justify-between gap-4">
@@ -180,21 +178,15 @@ export default async function SchedulePage() {
                             <div className="flex items-center gap-2 mb-2">
                               <span
                                 className={`px-2 py-0.5 text-[10px] font-bold rounded uppercase ${
-                                  isLiveNow
-                                    ? "bg-error/10 text-error"
-                                    : "bg-surface-container text-on-surface-variant"
+                                  isLiveNow ? "bg-red-500/15 text-red-400" : "bg-[#10131b] text-gray-400"
                                 }`}
                               >
                                 {isLiveNow ? "Live Now" : TYPE_LABELS[s.type] ?? s.type}
                               </span>
-                              {s.subject && (
-                                <span className="text-label-sm text-on-surface-variant">{s.subject}</span>
-                              )}
+                              {s.subject && <span className="text-sm text-gray-500">{s.subject}</span>}
                             </div>
-                            <h3 className="font-headline-md text-headline-md text-on-surface mb-2">
-                              {s.title}
-                            </h3>
-                            <div className="flex flex-wrap gap-4 text-label-md text-on-surface-variant">
+                            <h3 className="text-lg font-semibold text-white mb-2">{s.title}</h3>
+                            <div className="flex flex-wrap gap-4 text-sm text-gray-400">
                               {s.teacher && (
                                 <span className="flex items-center gap-1">
                                   <span className="material-symbols-outlined text-lg">person</span>
@@ -213,7 +205,7 @@ export default async function SchedulePage() {
                               {canEnter ? (
                                 <Link
                                   href={`/live-class/${s.id}`}
-                                  className="block text-center w-full md:w-auto px-6 py-2 bg-primary text-on-primary font-label-md rounded-lg hover:opacity-90"
+                                  className="block text-center w-full md:w-auto px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors"
                                 >
                                   {isLiveNow ? "Join Class" : "Enter Class"}
                                 </Link>
@@ -221,7 +213,7 @@ export default async function SchedulePage() {
                                 <button
                                   disabled
                                   title="Opens 15 minutes before the scheduled start"
-                                  className="w-full md:w-auto px-6 py-2 bg-primary text-on-primary font-label-md rounded-lg opacity-70 cursor-not-allowed"
+                                  className="w-full md:w-auto px-6 py-2 bg-gray-700 text-gray-400 text-sm font-medium rounded-lg cursor-not-allowed"
                                 >
                                   Opens 15 min before
                                 </button>

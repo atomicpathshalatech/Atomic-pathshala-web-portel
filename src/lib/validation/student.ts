@@ -39,6 +39,11 @@ export const studentRegistrationSchema = z.object({
   // Security question (used later for password reset, per locked policy)
   securityQuestion: z.string().min(4).optional(),
   securityAnswer: z.string().min(2).optional(),
+
+  // Present only when arriving from an outreach-CRM "Convert to LMS" link
+  // (see src/lib/integrations/lead-invite.ts) — signed, so it can't be
+  // forged into an arbitrary free batch enrollment.
+  inviteToken: z.string().optional(),
 });
 
 export type StudentRegistrationInput = z.infer<typeof studentRegistrationSchema>;

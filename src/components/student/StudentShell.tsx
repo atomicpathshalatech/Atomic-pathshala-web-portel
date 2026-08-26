@@ -76,6 +76,14 @@ function AccountMenu({ studentName, studentIdCode }: { studentName: string; stud
             Profile &amp; ID Card
           </Link>
           <Link
+            href="/leaderboard"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-3 px-4 py-2 text-label-md text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
+          >
+            <span className="material-symbols-outlined text-lg">leaderboard</span>
+            Leaderboard
+          </Link>
+          <Link
             href="/notifications"
             onClick={() => setOpen(false)}
             className="flex items-center gap-3 px-4 py-2 text-label-md text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"

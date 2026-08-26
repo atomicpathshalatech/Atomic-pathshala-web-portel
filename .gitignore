@@ -12,3 +12,6 @@ project_dump.txt
 # scripts/copy-pdf-worker.js) — always regenerated to match whatever
 # pdfjs-dist version is actually installed, never hand-edited or committed.
 public/pdf.worker.min.mjs
+
+.vercel
+.env*

@@ -14,9 +14,9 @@ export async function POST(request: NextRequest) {
     const student = await prisma.student.findUnique({ where: { userId: session.user.id } });
     if (!student) return apiError("No student record for this account", 404);
 
-    const { plan, billingCycle } = checkoutSchema.parse(await request.json());
+    const { plan, billingCycle, couponCode } = checkoutSchema.parse(await request.json());
 
-    const result = await createCheckout(student.id, plan, billingCycle);
+    const result = await createCheckout(student.id, plan, billingCycle, couponCode);
     return apiSuccess(result, 201);
   } catch (error) {
     return handleApiError(error);

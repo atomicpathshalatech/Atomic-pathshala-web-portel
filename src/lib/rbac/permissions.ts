@@ -122,6 +122,20 @@ export const PERMISSIONS = {
   ROLE_MANAGE: "admin.role.manage",
   PERMISSION_MANAGE: "admin.permission.manage",
   AUDIT_LOG_VIEW: "admin.audit.view",
+
+  // Home Page CMS / Page Builder
+  HOME_VIEW: "cms.home.view",
+  HOME_CREATE: "cms.home.create",
+  HOME_EDIT: "cms.home.edit",
+  HOME_DELETE: "cms.home.delete",
+  HOME_PUBLISH: "cms.home.publish",
+  HOME_REORDER: "cms.home.reorder",
+  BANNER_MANAGE: "cms.banner.manage",
+  MEDIA_MANAGE: "cms.media.manage",
+  FOOTER_MANAGE: "cms.footer.manage",
+  FAQ_MANAGE: "cms.faq.manage",
+  TESTIMONIAL_MANAGE: "cms.testimonial.manage",
+  SEO_MANAGE: "cms.seo.manage",
 } as const;
 
 export type PermissionCode = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -208,6 +222,10 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PermissionCode[]> = {
     PERMISSIONS.COURSE_READ,
     PERMISSIONS.COURSE_CREATE,
     PERMISSIONS.COURSE_UPDATE,
+    PERMISSIONS.HOME_VIEW,
+    PERMISSIONS.MEDIA_MANAGE,
+    PERMISSIONS.FAQ_MANAGE,
+    PERMISSIONS.TESTIMONIAL_MANAGE,
   ],
   SALES: [
     PERMISSIONS.TEAM_PORTAL_ACCESS,
@@ -250,6 +268,16 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PermissionCode[]> = {
     PERMISSIONS.COUPON_DELETE,
     PERMISSIONS.NOTIFICATION_SEND,
     PERMISSIONS.NOTIFICATION_READ,
+    PERMISSIONS.HOME_VIEW,
+    PERMISSIONS.HOME_CREATE,
+    PERMISSIONS.HOME_EDIT,
+    PERMISSIONS.HOME_DELETE,
+    PERMISSIONS.HOME_PUBLISH,
+    PERMISSIONS.HOME_REORDER,
+    PERMISSIONS.BANNER_MANAGE,
+    PERMISSIONS.FOOTER_MANAGE,
+    PERMISSIONS.SEO_MANAGE,
+    PERMISSIONS.MEDIA_MANAGE,
   ],
   DEPARTMENT_HEAD: [
     PERMISSIONS.TEAM_PORTAL_ACCESS,

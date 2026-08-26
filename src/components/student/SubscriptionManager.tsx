@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 type BillingCycle = "MONTHLY" | "QUARTERLY" | "HALF_YEARLY" | "ANNUAL";
 type Plan = "BASIC" | "PRO";
@@ -73,6 +74,11 @@ export function SubscriptionManager({
   const [subscription, setSubscription] = useState(initialSubscription);
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("MONTHLY");
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
+  // Coupons only apply to one-time (non-MONTHLY) checkouts — see the
+  // Coupon model's doc comment in schema.prisma for why. The field is
+  // simply hidden for MONTHLY rather than shown-but-disabled, so there's
+  // nothing to explain until it's actually usable.
+  const [couponCode, setCouponCode] = useState("");
 
   const isEntitled = Boolean(
     subscription &&
@@ -140,10 +146,15 @@ export function SubscriptionManager({
   async function subscribeToPlan(plan: Plan, cycle: BillingCycle) {
     setLoadingAction(`checkout-${plan}-${cycle}`);
     try {
+      const trimmedCoupon = cycle !== "MONTHLY" ? couponCode.trim() : "";
       const res = await fetch("/api/subscriptions/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan, billingCycle: cycle }),
+        body: JSON.stringify({
+          plan,
+          billingCycle: cycle,
+          ...(trimmedCoupon ? { couponCode: trimmedCoupon } : {}),
+        }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Could not start checkout");
@@ -257,15 +268,34 @@ export function SubscriptionManager({
               {subscription.cancelAtPeriodEnd && " — cancels then"}
             </p>
           </div>
-          {!subscription.cancelAtPeriodEnd && subscription.status !== "TRIAL" && (
-            <button
-              onClick={cancel}
-              disabled={loadingAction === "cancel"}
-              className="font-label-md text-label-md text-error hover:underline disabled:opacity-50"
+          <div className="flex items-center gap-4">
+            <Link
+              href="/subscription/billing"
+              className="font-label-md text-label-md text-primary hover:underline"
             >
-              {loadingAction === "cancel" ? "Cancelling…" : "Cancel subscription"}
-            </button>
-          )}
+              Billing history
+            </Link>
+            {!subscription.cancelAtPeriodEnd && subscription.status !== "TRIAL" && (
+              <button
+                onClick={cancel}
+                disabled={loadingAction === "cancel"}
+                className="font-label-md text-label-md text-error hover:underline disabled:opacity-50"
+              >
+                {loadingAction === "cancel" ? "Cancelling…" : "Cancel subscription"}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {!isEntitled && (
+        <div className="flex justify-end">
+          <Link
+            href="/subscription/billing"
+            className="font-label-md text-label-md text-primary hover:underline"
+          >
+            Billing history
+          </Link>
         </div>
       )}
 
@@ -285,6 +315,19 @@ export function SubscriptionManager({
           </button>
         ))}
       </div>
+
+      {/* Coupon code — one-time (non-MONTHLY) checkouts only */}
+      {billingCycle !== "MONTHLY" && !isEntitled && (
+        <div className="flex items-center gap-2 max-w-sm">
+          <input
+            type="text"
+            value={couponCode}
+            onChange={(e) => setCouponCode(e.target.value)}
+            placeholder="Have a coupon code?"
+            className="flex-1 rounded-xl border border-outline-variant/40 bg-surface px-4 py-2.5 font-body-md text-body-md text-on-surface focus:outline-none focus:ring-2 focus:ring-primary uppercase placeholder:normal-case"
+          />
+        </div>
+      )}
 
       {/* Plan cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-gutter">

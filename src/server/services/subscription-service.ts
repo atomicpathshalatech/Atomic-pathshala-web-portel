@@ -11,7 +11,7 @@ import {
   RECURRING_BILLING_CYCLES,
 } from "@/lib/subscription/config";
 import { getPlanPrice } from "@/lib/subscription/pricing";
-import type { BillingCycle, Subscription, SubscriptionPlan } from "@prisma/client";
+import type { BillingCycle, Coupon, CouponType, Subscription, SubscriptionPlan } from "@prisma/client";
 
 export class SubscriptionError extends Error {}
 
@@ -150,6 +150,79 @@ async function getOrCreateRazorpayPlanId(plan: SubscriptionPlan, cycle: BillingC
 }
 
 /**
+ * A generated, gapless-per-year receipt number — assigned once, the
+ * moment a SubscriptionPayment reaches SUCCESS (never on PENDING/FAILED),
+ * by every path that can flip a payment to SUCCESS: order verification,
+ * the recurring-charge webhook, and a manually-granted offline payment.
+ * Counts existing invoice numbers within the same calendar year, so a
+ * fresh year always restarts at 000001. Not wrapped in the same
+ * transaction as the count-then-assign — a theoretical race could produce
+ * a duplicate number under heavy concurrent traffic, acceptable at this
+ * app's current scale (same tradeoff already made for the leaderboard's
+ * O(n) scoring query).
+ */
+async function generateInvoiceNumber(): Promise<string> {
+  const year = new Date().getFullYear();
+  const yearStart = new Date(Date.UTC(year, 0, 1));
+  const yearEnd = new Date(Date.UTC(year + 1, 0, 1));
+  const count = await prisma.subscriptionPayment.count({
+    where: { invoiceNumber: { not: null }, createdAt: { gte: yearStart, lt: yearEnd } },
+  });
+  return `INV-${year}-${String(count + 1).padStart(6, "0")}`;
+}
+
+/**
+ * Validates a coupon code against a specific checkout attempt: active,
+ * not expired, plan-eligible, under its redemption cap, and not already
+ * used by this student. Coupons only apply to one-time (Order) checkouts
+ * — see the Coupon model's doc comment in schema.prisma for why MONTHLY
+ * is out of scope.
+ */
+export async function validateCoupon(
+  code: string,
+  plan: SubscriptionPlan,
+  billingCycle: BillingCycle,
+  studentId: string
+): Promise<Coupon> {
+  if (isRecurring(billingCycle)) {
+    throw new SubscriptionError(
+      "Coupons can only be applied to one-time plans (Quarterly, Half-Yearly, or Annual) right now."
+    );
+  }
+
+  const coupon = await prisma.coupon.findUnique({ where: { code: code.toUpperCase() } });
+  if (!coupon || !coupon.isActive) {
+    throw new SubscriptionError("This coupon code isn't valid.");
+  }
+  if (coupon.expiresAt && coupon.expiresAt < new Date()) {
+    throw new SubscriptionError("This coupon has expired.");
+  }
+  if (coupon.plan && coupon.plan !== plan) {
+    throw new SubscriptionError(`This coupon only applies to the ${coupon.plan} plan.`);
+  }
+  if (coupon.maxRedemptions !== null && coupon.redeemedCount >= coupon.maxRedemptions) {
+    throw new SubscriptionError("This coupon has reached its redemption limit.");
+  }
+
+  const alreadyUsed = await prisma.subscriptionPayment.findFirst({
+    where: { couponId: coupon.id, status: "SUCCESS", subscription: { studentId } },
+  });
+  if (alreadyUsed) {
+    throw new SubscriptionError("You've already used this coupon.");
+  }
+
+  return coupon;
+}
+
+/** PERCENT (0-100) or FLAT (rupees) off, never below zero. Rounded to
+ *  paise (2 decimal places) since that's what actually reaches Razorpay. */
+function applyCouponDiscount(baseAmount: number, coupon: { type: CouponType; value: number }): number {
+  const raw =
+    coupon.type === "PERCENT" ? baseAmount - (baseAmount * coupon.value) / 100 : baseAmount - coupon.value;
+  return Math.max(0, Math.round(raw * 100) / 100);
+}
+
+/**
  * Creates the Razorpay object the client-side Checkout widget needs:
  * a Subscription (recurring, MONTHLY) or an Order (one-time, fixed
  * duration). Also writes a PENDING Subscription + SubscriptionPayment row
@@ -158,12 +231,19 @@ async function getOrCreateRazorpayPlanId(plan: SubscriptionPlan, cycle: BillingC
 export async function createCheckout(
   studentId: string,
   plan: SubscriptionPlan,
-  billingCycle: BillingCycle
+  billingCycle: BillingCycle,
+  couponCode?: string
 ) {
-  const amount = await getPlanPrice(plan, billingCycle);
+  const baseAmount = await getPlanPrice(plan, billingCycle);
   const now = new Date();
 
   if (isRecurring(billingCycle)) {
+    if (couponCode) {
+      throw new SubscriptionError(
+        "Coupons can only be applied to one-time plans (Quarterly, Half-Yearly, or Annual) right now."
+      );
+    }
+
     const razorpayPlanId = await getOrCreateRazorpayPlanId(plan, billingCycle);
     const razorpaySub = await razorpay.subscriptions.create({
       plan_id: razorpayPlanId,
@@ -174,17 +254,24 @@ export async function createCheckout(
     const subscription = await upsertSubscriptionShell(studentId, {
       plan,
       billingCycle,
-      amount,
+      amount: baseAmount,
       razorpaySubscriptionId: razorpaySub.id,
     });
 
     return { type: "subscription" as const, razorpaySubscriptionId: razorpaySub.id, subscription };
   }
 
+  let coupon: Coupon | null = null;
+  let amount = baseAmount;
+  if (couponCode) {
+    coupon = await validateCoupon(couponCode, plan, billingCycle, studentId);
+    amount = applyCouponDiscount(baseAmount, coupon);
+  }
+
   const order = await razorpay.orders.create({
     amount: Math.round(amount * 100),
     currency: "INR",
-    notes: { studentId, plan, billingCycle },
+    notes: { studentId, plan, billingCycle, ...(coupon ? { couponCode: coupon.code } : {}) },
   });
 
   const subscription = await upsertSubscriptionShell(studentId, {
@@ -202,6 +289,7 @@ export async function createCheckout(
       razorpayOrderId: order.id,
       periodStart: now,
       periodEnd: addDays(now, getCycleDays(billingCycle)),
+      couponId: coupon?.id,
     },
   });
 
@@ -264,8 +352,15 @@ export async function verifyAndActivateOrderPayment(
     throw new SubscriptionError("No matching order for this student.");
   }
 
+  const payment = await prisma.subscriptionPayment.findFirst({
+    where: { subscriptionId: subscription.id, razorpayOrderId: payload.razorpay_order_id },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!payment) throw new SubscriptionError("No matching payment record for this order.");
+
   const now = new Date();
   const periodEnd = addDays(now, getCycleDays(subscription.billingCycle));
+  const invoiceNumber = await generateInvoiceNumber();
 
   const [updatedSub] = await prisma.$transaction([
     prisma.subscription.update({
@@ -277,14 +372,18 @@ export async function verifyAndActivateOrderPayment(
         cancelAtPeriodEnd: false,
       },
     }),
-    prisma.subscriptionPayment.updateMany({
-      where: { subscriptionId: subscription.id, razorpayOrderId: payload.razorpay_order_id },
+    prisma.subscriptionPayment.update({
+      where: { id: payment.id },
       data: {
         status: "SUCCESS",
         razorpayPaymentId: payload.razorpay_payment_id,
         razorpaySignature: payload.razorpay_signature,
+        invoiceNumber,
       },
     }),
+    ...(payment.couponId
+      ? [prisma.coupon.update({ where: { id: payment.couponId }, data: { redeemedCount: { increment: 1 } } })]
+      : []),
   ]);
 
   return updatedSub;
@@ -364,6 +463,7 @@ async function onSubscriptionCharged(payload: any) {
     },
   });
 
+  const invoiceNumber = await generateInvoiceNumber();
   await prisma.subscriptionPayment.create({
     data: {
       subscriptionId: subscription.id,
@@ -372,6 +472,7 @@ async function onSubscriptionCharged(payload: any) {
       razorpayPaymentId: payload?.payment?.entity?.id,
       periodStart: now,
       periodEnd,
+      invoiceNumber,
     },
   });
 
@@ -438,6 +539,7 @@ export async function grantSubscriptionManually(params: {
     },
   });
 
+  const invoiceNumber = await generateInvoiceNumber();
   await prisma.subscriptionPayment.create({
     data: {
       subscriptionId: subscription.id,
@@ -447,6 +549,7 @@ export async function grantSubscriptionManually(params: {
       failureReason: params.note ? `Note: ${params.note}` : undefined,
       periodStart: now,
       periodEnd,
+      invoiceNumber,
     },
   });
 
@@ -463,5 +566,79 @@ export async function revokeSubscription(studentId: string) {
   return prisma.subscription.update({
     where: { id: subscription.id },
     data: { status: "EXPIRED", cancelAtPeriodEnd: true },
+  });
+}
+
+/**
+ * Refunds a SUCCESS payment. A real Razorpay-gateway payment (method
+ * RAZORPAY, with a razorpayPaymentId) gets an actual refund through
+ * Razorpay's API; anything else (OFFLINE cash/UPI payments) has no
+ * gateway counterpart, so this just records a manual refund — same
+ * "was this really paid through the gateway or by hand" distinction
+ * grantSubscriptionManually() draws on the payment side.
+ *
+ * Does NOT revoke the subscription itself — Finance may refund a payment
+ * for reasons unrelated to access (a duplicate charge, a goodwill partial
+ * refund). Call revokeSubscription() separately if access should also be
+ * cut.
+ */
+export async function createRefund(
+  paymentId: string,
+  amount: number,
+  reason: string | undefined,
+  processedById: string
+) {
+  const payment = await prisma.subscriptionPayment.findUnique({ where: { id: paymentId } });
+  if (!payment) throw new SubscriptionError("Payment not found.");
+  if (payment.status !== "SUCCESS") {
+    throw new SubscriptionError("Only a successful payment can be refunded.");
+  }
+  if (amount > payment.amount) {
+    throw new SubscriptionError("Refund amount can't exceed the original payment amount.");
+  }
+
+  if (payment.method === "RAZORPAY" && payment.razorpayPaymentId) {
+    try {
+      const razorpayRefund = await razorpay.payments.refund(payment.razorpayPaymentId, {
+        amount: Math.round(amount * 100),
+        notes: reason ? { reason } : undefined,
+      });
+      return prisma.refund.create({
+        data: {
+          subscriptionPaymentId: payment.id,
+          amount,
+          reason,
+          status: "SUCCESS",
+          razorpayRefundId: razorpayRefund.id,
+          processedById,
+        },
+      });
+    } catch (err) {
+      await prisma.refund.create({
+        data: {
+          subscriptionPaymentId: payment.id,
+          amount,
+          reason,
+          status: "FAILED",
+          processedById,
+        },
+      });
+      throw new SubscriptionError(
+        err instanceof Error ? `Razorpay refund failed: ${err.message}` : "Razorpay refund failed."
+      );
+    }
+  }
+
+  // OFFLINE payment, or a RAZORPAY-method row with no captured payment id
+  // (shouldn't normally happen, but fail safe by recording a manual
+  // refund rather than crashing) — either way, no gateway call to make.
+  return prisma.refund.create({
+    data: {
+      subscriptionPaymentId: payment.id,
+      amount,
+      reason,
+      status: "SUCCESS",
+      processedById,
+    },
   });
 }

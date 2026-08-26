@@ -34,6 +34,20 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     const answerByQuestion = new Map(attempt.answers.map((a) => [a.questionId, a]));
     const totalMarks = test.questions.reduce((sum, tq) => sum + tq.question.marksCorrect, 0);
 
+    // Rank among every other finalized attempt on this test — same real,
+    // computed-fresh approach as the student-facing result page.
+    const finalizedAttempts = await prisma.testAttempt.findMany({
+      where: { testId: test.id, status: { in: ["SUBMITTED", "AUTO_SUBMITTED"] } },
+      select: { score: true },
+    });
+    const myScore = attempt.score ?? 0;
+    const totalParticipants = finalizedAttempts.length;
+    const rank = finalizedAttempts.filter((a) => (a.score ?? 0) > myScore).length + 1;
+    const percentile =
+      totalParticipants <= 1
+        ? 100
+        : Math.round(((totalParticipants - rank) / (totalParticipants - 1)) * 100);
+
     return apiSuccess({
       attempt: {
         status: attempt.status,
@@ -44,6 +58,9 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
         submittedAt: attempt.submittedAt,
       },
       totalMarks,
+      rank,
+      totalParticipants,
+      percentile,
       questions: test.questions.map((tq) => {
         const ans = answerByQuestion.get(tq.question.id);
         return {

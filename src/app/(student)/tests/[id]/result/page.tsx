@@ -33,6 +33,24 @@ export default async function TestResultPage({ params }: { params: { id: string 
   const answerByQuestion = new Map(attempt.answers.map((a) => [a.questionId, a]));
   const totalMarks = test.questions.reduce((sum, tq) => sum + tq.question.marksCorrect, 0);
 
+  // Rank among every other finalized attempt on this same test — real
+  // data, computed fresh per view rather than cached, since scores can
+  // still change while a batch-mate's attempt is being graded/re-graded.
+  // IN_PROGRESS attempts don't have a final score yet, so they're excluded
+  // from the pool entirely (this page itself only renders once the
+  // viewer's own attempt is no longer IN_PROGRESS, per the redirect above).
+  const finalizedAttempts = await prisma.testAttempt.findMany({
+    where: { testId: test.id, status: { in: ["SUBMITTED", "AUTO_SUBMITTED"] } },
+    select: { score: true },
+  });
+  const myScore = attempt.score ?? 0;
+  const totalParticipants = finalizedAttempts.length;
+  const rank = finalizedAttempts.filter((a) => (a.score ?? 0) > myScore).length + 1;
+  const percentile =
+    totalParticipants <= 1
+      ? 100
+      : Math.round(((totalParticipants - rank) / (totalParticipants - 1)) * 100);
+
   return (
     <div className="space-y-stack-lg max-w-4xl">
       <div>
@@ -66,6 +84,20 @@ export default async function TestResultPage({ params }: { params: { id: string 
           <p className="font-headline-lg text-headline-lg text-on-surface-variant">{attempt.unattemptedCount ?? 0}</p>
           <p className="text-label-sm text-on-surface-variant mt-1">Unattempted</p>
         </div>
+      </div>
+
+      <div className="glass-card rounded-2xl p-5 flex items-center justify-between gap-4">
+        <div>
+          <p className="text-label-sm text-on-surface-variant uppercase tracking-wide">Your Rank</p>
+          <p className="font-headline-md text-headline-md text-on-surface mt-0.5">
+            #{rank} <span className="text-on-surface-variant font-body-sm text-body-sm">of {totalParticipants}</span>
+          </p>
+        </div>
+        <p className="text-body-sm text-on-surface-variant text-right">
+          Better than <span className="font-bold text-primary">{percentile}%</span>
+          <br />
+          of test-takers
+        </p>
       </div>
 
       {attempt.status === "AUTO_SUBMITTED" && (

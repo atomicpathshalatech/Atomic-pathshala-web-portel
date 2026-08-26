@@ -16,11 +16,12 @@ const MODULE_CARDS = [
   { href: "/team/questions", label: "Question Bank", icon: "database", description: "Create, verify, and organize NEET/JEE question papers.", permission: PERMISSIONS.QUESTION_READ, available: true },
   { href: "/team/doubts", label: "Doubt Desk", icon: "live_help", description: "Resolve student doubts flagged from live classes and DPPs.", permission: PERMISSIONS.DOUBT_READ, available: true },
   { href: "/team/faculty", label: "Faculty", icon: "school", description: "Onboard educators and manage faculty profiles.", permission: PERMISSIONS.TEACHER_READ, available: true },
-  { href: "/team/coupons", label: "Coupon Management", icon: "confirmation_number", description: "Create and track discount codes and campaign performance.", permission: PERMISSIONS.COUPON_READ, available: false },
-  { href: "/team/notifications", label: "Bulk Notifications", icon: "campaign", description: "Compose and schedule broadcasts to student segments.", permission: PERMISSIONS.NOTIFICATION_READ, available: false },
+  { href: "/team/coupons", label: "Coupon Management", icon: "confirmation_number", description: "Create and track discount codes and campaign performance.", permission: PERMISSIONS.COUPON_READ, available: true },
+  { href: "/team/notifications", label: "Bulk Notifications", icon: "campaign", description: "Compose and schedule broadcasts to student segments.", permission: PERMISSIONS.NOTIFICATION_READ, available: true },
   { href: "/team/leads", label: "CRM / Leads", icon: "person_search", description: "Track and assign prospective-student leads.", permission: PERMISSIONS.LEAD_READ, available: false },
-  { href: "/team/finance", label: "Finance", icon: "payments", description: "Invoices, refunds, and payment reconciliation.", permission: PERMISSIONS.FINANCE_READ, available: false },
-  { href: "/team/analytics", label: "Analytics", icon: "analytics", description: "Cross-portal performance and enrollment analytics.", permission: PERMISSIONS.ANALYTICS_VIEW, available: false },
+  { href: "/team/finance", label: "Finance", icon: "payments", description: "Invoices, refunds, and payment reconciliation.", permission: PERMISSIONS.FINANCE_READ, available: true },
+  { href: "/team/analytics", label: "Analytics", icon: "analytics", description: "Cross-portal performance and enrollment analytics.", permission: PERMISSIONS.ANALYTICS_VIEW, available: true },
+  { href: "/team/website", label: "Website Builder", icon: "web", description: "Build the public homepage, banners, testimonials, FAQs, footer and SEO.", permission: PERMISSIONS.HOME_VIEW, available: true },
 ];
 
 const SCHEDULE_TYPE_LABEL: Record<string, string> = {

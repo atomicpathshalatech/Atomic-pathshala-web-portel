@@ -71,6 +71,13 @@ model User {
   teacher                Teacher?
   role                   Role           @relation(fields: [roleId], references: [id])
   teacherApplicationsReviewed TeacherApplication[] @relation("TeacherApplicationReviewer")
+  notificationBroadcasts NotificationBroadcast[]
+  homeSectionsCreated    HomePageSection[] @relation("HomeSectionCreatedBy")
+  homeSectionsUpdated    HomePageSection[] @relation("HomeSectionUpdatedBy")
+  homeVersionsPublished  HomePageVersion[]
+  bannersCreated         Banner[]
+  mediaUploaded          MediaAsset[]
+  testimonialsCreated    Testimonial[]
 
   @@index([roleId])
   @@index([status])
@@ -160,6 +167,7 @@ model Student {
   liveClassAttendances LiveClassAttendance[]
   testAttempts     TestAttempt[]
   lectureIssueReports LectureIssueReport[]
+  lectureNotes        LectureNote[]
   xpEvents         XPEvent[]
   user             User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -1210,6 +1218,23 @@ model SubscriptionPayment {
   periodEnd              DateTime?
   failureReason          String?
 
+  // Set once, when this payment is created at checkout (Order path only —
+  // see SubscriptionError thrown in createCheckout() for recurring
+  // MONTHLY). Redemption itself (bumping Coupon.redeemedCount) only
+  // happens once the payment actually reaches SUCCESS, so an abandoned
+  // checkout never consumes a limited-use code.
+  couponId               String?
+  coupon                 Coupon?                    @relation(fields: [couponId], references: [id])
+
+  // Human-readable receipt number, assigned once (in
+  // verifyAndActivateOrderPayment / grantSubscriptionManually / the
+  // subscription.charged webhook handler) the moment a payment reaches
+  // SUCCESS — never on PENDING/FAILED, so invoice numbers stay a gapless
+  // record of money actually received. See generateInvoiceNumber().
+  invoiceNumber          String?                    @unique
+
+  refunds                Refund[]
+
   createdAt              DateTime                   @default(now())
   updatedAt              DateTime                   @updatedAt
 
@@ -1230,6 +1255,77 @@ model PlanPricing {
 
   @@unique([plan, billingCycle])
   @@map("plan_pricing")
+}
+
+enum CouponType {
+  PERCENT
+  FLAT
+}
+
+// Discount codes, applied at checkout for one-time (non-recurring) plans
+// only — QUARTERLY / HALF_YEARLY / ANNUAL, whose full amount is computed
+// upfront as a Razorpay Order. Recurring MONTHLY checkouts go through
+// Razorpay Subscriptions instead, charged independently every cycle by
+// Razorpay's own scheduler; discounting those correctly would mean either
+// re-deriving the coupon on every future `subscription.charged` webhook
+// or minting a separate discounted Razorpay Plan per coupon+student, both
+// more machinery than this feature is worth right now — createCheckout()
+// throws a clear, honest error rather than silently ignoring a coupon
+// code on a MONTHLY checkout.
+model Coupon {
+  id             String    @id @default(cuid())
+  code           String    @unique
+  type           CouponType
+  // PERCENT: 0-100. FLAT: a rupee amount, capped to the plan price so a
+  // discount can never push the payable amount below zero.
+  value          Float
+  // null = valid against either plan.
+  plan           SubscriptionPlan?
+  // null = unlimited uses.
+  maxRedemptions Int?
+  redeemedCount  Int       @default(0)
+  expiresAt      DateTime?
+  isActive       Boolean   @default(true)
+  createdById    String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  payments SubscriptionPayment[]
+
+  @@index([isActive])
+  @@map("coupons")
+}
+
+enum RefundStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+// One row per refund attempt on a SubscriptionPayment. Deliberately
+// allows more than one Refund per payment (no unique constraint) rather
+// than assuming full-refund-only — the Finance team's own judgment on
+// whether a payment is "already refunded" reads the existing rows rather
+// than this schema enforcing a single-refund rule that may not hold.
+model Refund {
+  id                    String       @id @default(cuid())
+  subscriptionPaymentId String
+  amount                Float
+  reason                String?
+  status                RefundStatus @default(PENDING)
+  // Set only when actually processed through Razorpay's refund API
+  // (method RAZORPAY on the original payment). A refund against an
+  // OFFLINE payment has no gateway counterpart — it's a manual record of
+  // money returned outside Razorpay (cash/UPI), same spirit as
+  // grantSubscriptionManually() on the payment side.
+  razorpayRefundId      String?
+  processedById         String
+  createdAt             DateTime     @default(now())
+
+  payment SubscriptionPayment @relation(fields: [subscriptionPaymentId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionPaymentId])
+  @@map("refunds")
 }
 
 enum LectureStatus {
@@ -1266,6 +1362,7 @@ model Lecture {
   chapter      Chapter              @relation(fields: [chapterId], references: [id], onDelete: Cascade)
   teacher      Teacher              @relation(fields: [teacherId], references: [id])
   issueReports LectureIssueReport[]
+  notes        LectureNote[]
 
   @@index([chapterId])
   @@index([status])
@@ -1284,4 +1381,300 @@ model LectureIssueReport {
 
   @@index([lectureId])
   @@map("lecture_issue_reports")
+}
+
+// Personal notes a student writes while watching a lecture — one doc per
+// (student, lecture), upserted from the notes panel in LecturePlayer.tsx.
+// Not shared with anyone (not the teacher, not other students) — purely a
+// personal study aid, same spirit as the whiteboard's practice-board.
+model LectureNote {
+  id        String   @id @default(cuid())
+  lectureId String
+  studentId String
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lecture Lecture @relation(fields: [lectureId], references: [id], onDelete: Cascade)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, lectureId])
+  @@index([lectureId])
+  @@map("lecture_notes")
+}
+
+enum BroadcastSegmentType {
+  ALL
+  BATCH
+  CLASS
+  TARGET_EXAM
+}
+
+// One row per "Bulk Notifications" send from the Team Portal — an audit
+// trail of who broadcast what to which segment, and how many students it
+// actually reached (Notification rows are created individually per
+// recipient at send time; this is the summary, not a join table).
+model NotificationBroadcast {
+  id             String               @id @default(cuid())
+  title          String
+  body           String
+  segmentType    BroadcastSegmentType
+  segmentValue   String?
+  recipientCount Int
+  sentById       String
+  createdAt      DateTime             @default(now())
+
+  sentBy User @relation(fields: [sentById], references: [id])
+
+  @@index([createdAt])
+  @@map("notification_broadcasts")
+}
+
+// ==========================================================================
+// HOME PAGE CMS / PAGE BUILDER
+// ==========================================================================
+// Design: HomePageSection rows are the live DRAFT — admins edit these
+// directly (create/edit/delete/reorder), and nothing here is ever public.
+// Publishing snapshots the current draft into a new HomePageVersion (a JSON
+// copy, not a reference) — the public site only ever reads the latest
+// HomePageVersion, never the draft table. This is what makes "save draft
+// without affecting the live site" and "restore an old version" both just
+// work: restoring copies an old snapshot back into both the draft table
+// (so editing continues from there) and creates a fresh version row (so
+// the public site picks it up) — nothing is ever destroyed.
+
+enum HomeSectionType {
+  HERO
+  IMAGE_BANNER
+  TEXT_IMAGE
+  FEATURES
+  COURSE_GRID
+  BATCH_GRID
+  TEACHER_GRID
+  CATEGORY_GRID
+  STATISTICS
+  TESTIMONIALS
+  ANNOUNCEMENT
+  VIDEO
+  APP_DOWNLOAD
+  BLOG
+  FAQ
+  LOGO_PARTNERS
+  CTA
+  CONTACT
+  SOCIAL_LINKS
+  CUSTOM_HTML
+}
+
+model HomePageSection {
+  id             String          @id @default(cuid())
+  type           HomeSectionType
+  title          String?
+  subtitle       String?
+  order          Int
+  visible        Boolean         @default(true)
+  visibleDesktop Boolean         @default(true)
+  visibleMobile  Boolean         @default(true)
+  // Type-specific fields live here (e.g. hero heading/CTA/images for HERO,
+  // { mode: "FEATURED"|"LATEST"|"MANUAL", courseIds, limit } for
+  // COURSE_GRID). Deliberately not modeled as separate tables per type —
+  // 20 section types with their own tables would be a much larger surface
+  // for very little real benefit over one validated JSON column per row.
+  config         Json            @default("{}")
+  background     String?
+  padding        String?
+  createdById    String
+  updatedById    String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  createdBy User  @relation("HomeSectionCreatedBy", fields: [createdById], references: [id])
+  updatedBy User? @relation("HomeSectionUpdatedBy", fields: [updatedById], references: [id])
+
+  @@index([order])
+  @@map("home_page_sections")
+}
+
+model HomePageVersion {
+  id               String    @id @default(cuid())
+  versionNumber    Int
+  sectionsSnapshot Json
+  note             String?
+  publishedById    String
+  publishedAt      DateTime  @default(now())
+  // Set when an admin unpublishes — the public site then shows the
+  // fallback homepage instead of this (or falls back to an even older
+  // version only if a NEW publish happens; unpublish is a hard "go dark"
+  // action on whatever is currently live, matching the spec's distinct
+  // Publish/Unpublish buttons rather than silently reverting).
+  unpublishedAt    DateTime?
+
+  publishedBy User @relation(fields: [publishedById], references: [id])
+
+  @@index([publishedAt])
+  @@map("home_page_versions")
+}
+
+enum BannerStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+model Banner {
+  id             String       @id @default(cuid())
+  title          String
+  subtitle       String?
+  imageUrl       String
+  mobileImageUrl String?
+  ctaText        String?
+  ctaUrl         String?
+  startAt        DateTime?
+  endAt          DateTime?
+  priority       Int          @default(0)
+  status         BannerStatus @default(DRAFT)
+  // Free-text description of intended audience (e.g. "NEET droppers") —
+  // there's no real audience-segmentation engine in this build, so this
+  // is documentation for the counselor/admin, not an enforced filter.
+  targetAudience String?
+  openInNewTab   Boolean      @default(false)
+  order          Int          @default(0)
+  createdById    String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  createdBy User @relation(fields: [createdById], references: [id])
+
+  @@index([status])
+  @@index([order])
+  @@map("banners")
+}
+
+model MediaAsset {
+  id           String   @id @default(cuid())
+  url          String
+  storageKey   String
+  fileName     String
+  mimeType     String
+  sizeBytes    Int
+  width        Int?
+  height       Int?
+  altText      String?
+  uploadedById String
+  createdAt    DateTime @default(now())
+
+  uploadedBy User @relation(fields: [uploadedById], references: [id])
+
+  @@index([createdAt])
+  @@map("media_assets")
+}
+
+model Testimonial {
+  id           String   @id @default(cuid())
+  studentName  String
+  photoUrl     String?
+  studentClass String?
+  targetExam   String?
+  quote        String
+  rating       Int?
+  videoUrl     String?
+  order        Int      @default(0)
+  isApproved   Boolean  @default(false)
+  createdById  String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  createdBy User @relation(fields: [createdById], references: [id])
+
+  @@index([isApproved])
+  @@map("testimonials")
+}
+
+model FaqCategory {
+  id    String @id @default(cuid())
+  name  String @unique
+  order Int    @default(0)
+
+  faqs Faq[]
+
+  @@map("faq_categories")
+}
+
+model Faq {
+  id          String   @id @default(cuid())
+  categoryId  String?
+  question    String
+  answer      String
+  order       Int      @default(0)
+  isPublished Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  category FaqCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@index([isPublished])
+  @@index([categoryId])
+  @@map("faqs")
+}
+
+model FooterColumn {
+  id    String @id @default(cuid())
+  title String
+  order Int    @default(0)
+
+  links FooterLink[]
+
+  @@map("footer_columns")
+}
+
+model FooterLink {
+  id         String  @id @default(cuid())
+  columnId   String
+  label      String
+  url        String
+  icon       String?
+  openNewTab Boolean @default(false)
+  order      Int     @default(0)
+
+  column FooterColumn @relation(fields: [columnId], references: [id], onDelete: Cascade)
+
+  @@index([columnId])
+  @@map("footer_links")
+}
+
+// Singleton (always exactly one row, fetched with findFirst) for the parts
+// of the footer that aren't columns of links — logo, blurb, contact info,
+// social icons, app download buttons.
+model FooterSettings {
+  id               String   @id @default(cuid())
+  logoUrl          String?
+  description      String?
+  copyrightText    String?
+  contactPhone     String?
+  contactEmail     String?
+  address          String?
+  socialLinks      Json?
+  appDownloadLinks Json?
+  updatedAt        DateTime @updatedAt
+
+  @@map("footer_settings")
+}
+
+// Generic per-page SEO row, keyed by a human-readable page identifier.
+// Only "home" is used today; the shape extends to future static pages
+// without a schema change.
+model PageSeo {
+  id              String   @id @default(cuid())
+  pageKey         String   @unique
+  metaTitle       String?
+  metaDescription String?
+  keywords        String?
+  ogTitle         String?
+  ogDescription   String?
+  ogImageUrl      String?
+  canonicalUrl    String?
+  robotsDirective String?  @default("index,follow")
+  updatedAt       DateTime @updatedAt
+
+  @@map("page_seo")
 }

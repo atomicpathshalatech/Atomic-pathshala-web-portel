@@ -6,6 +6,9 @@ export const subscriptionPlanSchema = z.enum(["BASIC", "PRO"]);
 export const checkoutSchema = z.object({
   plan: subscriptionPlanSchema,
   billingCycle: billingCycleSchema,
+  // One-time (non-recurring) plans only — see the Coupon model's doc
+  // comment in schema.prisma for why MONTHLY doesn't support this yet.
+  couponCode: z.string().trim().min(1).max(40).optional(),
 });
 
 export const verifyPaymentSchema = z.object({

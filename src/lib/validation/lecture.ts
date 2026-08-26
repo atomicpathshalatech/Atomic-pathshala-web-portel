@@ -37,4 +37,14 @@ export const lectureIssueReportSchema = z.object({
 });
 export type LectureIssueReportInput = z.infer<typeof lectureIssueReportSchema>;
 
+/**
+ * Personal lecture notes — deliberately allows an empty string (autosave
+ * clearing the textarea shouldn't be a validation error), just caps length
+ * so no one accidentally autosaves a multi-megabyte paste.
+ */
+export const lectureNoteSchema = z.object({
+  body: z.string().max(20000, "Notes are limited to 20,000 characters"),
+});
+export type LectureNoteInput = z.infer<typeof lectureNoteSchema>;
+
 export const LECTURE_STATUS_OPTIONS = ["DRAFT", "PUBLISHED"] as const;

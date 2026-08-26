@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
@@ -48,19 +48,62 @@ type RegisteredResult = {
   studentIdCode: string;
 };
 
+type InvitePrefill = {
+  name: string;
+  email: string;
+  mobile: string;
+  courseTitle: string;
+  batchName: string;
+};
+
 export function RegisterForm() {
   const [submitting, setSubmitting] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [registered, setRegistered] = useState<RegisteredResult | null>(null);
 
+  // Populated when this page was opened from an outreach-CRM "Convert to
+  // LMS" link (?invite=<signed token>) — prefills known fields and, on
+  // successful registration, auto-enrolls into the batch the counselor
+  // picked. An invalid/expired token just falls back to a normal blank
+  // form rather than blocking anything.
+  const [inviteToken, setInviteToken] = useState<string | null>(null);
+  const [invitePrefill, setInvitePrefill] = useState<InvitePrefill | null>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+
   const {
     register,
     handleSubmit,
+    setValue,
     setError,
     formState: { errors },
   } = useForm<RegisterFormInput>({
     resolver: zodResolver(registerFormSchema),
   });
+
+  useEffect(() => {
+    const token = new URLSearchParams(window.location.search).get("invite");
+    if (!token) return;
+    setInviteToken(token);
+
+    (async () => {
+      try {
+        const res = await fetch(`/api/integrations/invite/${encodeURIComponent(token)}`);
+        const body = await res.json();
+        if (!res.ok || !body.success) {
+          setInviteError(body.error ?? "This invite link is invalid or has expired.");
+          return;
+        }
+        const data = body.data as InvitePrefill;
+        setInvitePrefill(data);
+        setValue("fullName", data.name);
+        setValue("email", data.email);
+        setValue("mobile", data.mobile);
+      } catch {
+        setInviteError("Could not load this invite link. You can still register manually.");
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function onSubmit(values: RegisterFormInput) {
     setSubmitting(true);
@@ -70,7 +113,7 @@ export function RegisterForm() {
       const res = await fetch("/api/students/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(inviteToken ? { ...payload, inviteToken } : payload),
       });
       const body = await res.json();
 
@@ -154,6 +197,22 @@ export function RegisterForm() {
           Join thousands of students preparing for NEET &amp; JEE
         </p>
       </div>
+
+      {invitePrefill && (
+        <div className="bg-primary-container/10 border border-primary/20 rounded-xl px-4 py-3 flex items-center gap-3">
+          <span className="material-symbols-outlined text-primary">redeem</span>
+          <p className="text-label-sm font-label-sm text-on-surface">
+            You&apos;re joining <span className="font-bold">{invitePrefill.batchName}</span> —{" "}
+            {invitePrefill.courseTitle}. We&apos;ve pre-filled what your counselor already told us;
+            just finish the rest below.
+          </p>
+        </div>
+      )}
+      {inviteError && (
+        <div className="bg-secondary-container/10 border border-secondary/20 rounded-xl px-4 py-3">
+          <p className="text-label-sm font-label-sm text-on-surface-variant">{inviteError}</p>
+        </div>
+      )}
 
       {serverError && (
         <div className="bg-error-container/40 border border-error/20 rounded-xl px-4 py-3">

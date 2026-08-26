@@ -4,6 +4,8 @@ import { prisma } from "@/lib/db";
 import { studentRegistrationSchema } from "@/lib/validation/student";
 import { apiSuccess, handleApiError } from "@/lib/api/response";
 import { generateEnrollmentNumber, generateStudentIdCode } from "@/lib/utils/id-generator";
+import { verifyLeadInviteToken } from "@/lib/integrations/lead-invite";
+import { notifyOutreachConversion } from "@/lib/integrations/outreach-webhook";
 
 export const runtime = "nodejs";
 
@@ -31,6 +33,13 @@ export async function POST(req: NextRequest) {
     if (!studentRole) {
       throw new Error("STUDENT role is not seeded. Run `npm run db:seed` first.");
     }
+
+    // An invite token (present only when this registration came from the
+    // outreach CRM's "Convert to LMS" link) carries a signed batchId to
+    // auto-enroll into. An invalid/expired token doesn't block signup —
+    // the person still gets a real account, they just don't get the
+    // automatic enrollment and a team member can enroll them manually.
+    const invitePayload = input.inviteToken ? verifyLeadInviteToken(input.inviteToken) : null;
 
     const enrollmentNumber = generateEnrollmentNumber();
     const studentIdCode = generateStudentIdCode();
@@ -70,18 +79,49 @@ export async function POST(req: NextRequest) {
         },
       });
 
+      let enrolledBatchId: string | null = null;
+      if (invitePayload) {
+        const batch = await tx.batch.findUnique({ where: { id: invitePayload.batchId } });
+        if (batch) {
+          await tx.batchEnrollment.create({
+            data: { batchId: batch.id, studentId: student.id, status: "ACTIVE" },
+          });
+          enrolledBatchId = batch.id;
+        }
+      }
+
       await tx.auditLog.create({
         data: {
           userId: user.id,
           action: "STUDENT_REGISTERED",
           entityType: "Student",
           entityId: student.id,
-          metadata: { enrollmentNumber, studentIdCode },
+          metadata: {
+            enrollmentNumber,
+            studentIdCode,
+            source: invitePayload ? "CRM_LEAD" : "SELF_REGISTER",
+            ...(invitePayload
+              ? {
+                  invitedBatchId: invitePayload.batchId,
+                  enrolledBatchId,
+                  counselorNotes: invitePayload.counselorNotes ?? null,
+                }
+              : {}),
+          },
         },
       });
 
       return { user, student };
     });
+
+    // Best-effort: tell the outreach CRM this lead actually finished
+    // registering, so it can mark the Lead truly CONVERTED. Fire-and-forget
+    // — never lets a slow/offline CRM affect the registration response.
+    if (invitePayload) {
+      notifyOutreachConversion(created.user.email, created.student.enrollmentNumber).catch((error) => {
+        console.error("[outreach_webhook_error]", error);
+      });
+    }
 
     return apiSuccess(
       {

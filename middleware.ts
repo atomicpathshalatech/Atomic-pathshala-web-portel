@@ -15,6 +15,7 @@ const STUDENT_PATHS = [
   "/practice-board",
   "/live-class",
   "/settings",
+  "/leaderboard",
 ];
 const NON_TEAM_ROLES = new Set(["STUDENT", "PARENT", "GUEST"]);
 
@@ -30,6 +31,8 @@ const NON_TEAM_ROLES = new Set(["STUDENT", "PARENT", "GUEST"]);
  * list, so they weren't edge-protected (page-level `requireStudentSession()`
  * still protected them either way, but an unauthenticated request wouldn't
  * get redirected until the page itself ran).
+ *
+ * Added `/leaderboard` for the new student leaderboard page (gamification).
  */
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -69,6 +72,7 @@ export const config = {
     "/practice-board/:path*",
     "/live-class/:path*",
     "/settings/:path*",
+    "/leaderboard/:path*",
     "/team/:path*",
   ],
 };
