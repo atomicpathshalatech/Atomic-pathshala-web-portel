@@ -7,3 +7,8 @@
 *.log
 
 project_dump.txt
+
+# Copied from node_modules/pdfjs-dist at postinstall time (see
+# scripts/copy-pdf-worker.js) — always regenerated to match whatever
+# pdfjs-dist version is actually installed, never hand-edited or committed.
+public/pdf.worker.min.mjs

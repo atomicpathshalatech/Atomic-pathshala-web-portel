@@ -676,10 +676,15 @@ export function WhiteboardCanvas({
     setPdfError(null);
     try {
       const pdfjsLib = await import("pdfjs-dist");
-      pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-        "pdfjs-dist/build/pdf.worker.min.mjs",
-        import.meta.url
-      ).toString();
+      // A plain /public path, deliberately NOT `new URL("pdfjs-dist/build/
+      // pdf.worker.min.mjs", import.meta.url)` — that pattern makes Next's
+      // production webpack build bundle the worker as a JS asset and run
+      // Terser over it, which fails because the worker is a real ES module
+      // (top-level import/export) Terser can't parse outside module
+      // context. The file is copied into public/ at install time (see
+      // scripts/copy-pdf-worker.js) so the browser just fetches it as a
+      // static asset, untouched by webpack/Terser.
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
       const arrayBuffer = await file.arrayBuffer();
       const doc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;

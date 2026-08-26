@@ -15,7 +15,7 @@
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
     "create-team-user": "tsx prisma/create-team-user.ts",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate && node scripts/copy-pdf-worker.js"
   },
   "dependencies": {
     "@auth/prisma-adapter": "2.4.2",
