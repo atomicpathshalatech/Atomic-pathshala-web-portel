@@ -66,7 +66,7 @@ model User {
   doubtsResolved         Doubt[]        @relation("DoubtResolvedBy")
   notifications          Notification[]
   questionsCreated       Question[]     @relation("QuestionCreatedBy")
-  questionsVerified      Question[]     @relation("QuestionVerifiedBy")
+  questionsPublished     Question[]     @relation("QuestionPublishedBy")
   student                Student?
   teacher                Teacher?
   role                   Role           @relation(fields: [roleId], references: [id])
@@ -78,6 +78,17 @@ model User {
   bannersCreated         Banner[]
   mediaUploaded          MediaAsset[]
   testimonialsCreated    Testimonial[]
+
+  // --- Test Portal integration (imported from Atomic Test Portal) --------
+  createdTests           Test[]            @relation("TestCreatedBy")
+  createdTestTemplates   TestTemplate[]    @relation("TestTemplateCreatedBy")
+  createdDpps            Dpp[]             @relation("DppCreatedBy")
+  questionVersionsEdited QuestionVersion[] @relation("QuestionVersionEditedBy")
+  reportsFiled           QuestionReport[]  @relation("ReportFiledBy")
+  reportsClaimed         QuestionReport[]  @relation("ReportClaimedBy")
+  deviceSessions         DeviceSession[]
+  modulesCreated         Module[]          @relation("ModuleCreatedBy")
+  brandProfilesCreated   BrandProfile[]    @relation("BrandProfileCreatedBy")
 
   @@index([roleId])
   @@index([status])
@@ -165,11 +176,17 @@ model Student {
   quizResponses    QuizResponse[]
   pollResponses    PollResponse[]
   liveClassAttendances LiveClassAttendance[]
-  testAttempts     TestAttempt[]
   lectureIssueReports LectureIssueReport[]
   lectureNotes        LectureNote[]
   xpEvents         XPEvent[]
   user             User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // --- Test Portal integration (imported from Atomic Test Portal) --------
+  // Attempt covers both a batch-scheduled class test (Attempt.testId, Test
+  // bound to a BatchSchedule) and a standalone TestSeries/Dpp attempt — see
+  // the Test / Dpp models below for why one Attempt model spans both.
+  attempts  Attempt[]
+  bookmarks Bookmark[]
 
   @@index([city, state])
   @@index([targetExam])
@@ -332,86 +349,371 @@ model BatchSchedule {
 }
 
 // ----------------------------------------------------------------------------
-// TEST ENGINE — a Test is delivered through a BatchSchedule entry the same
-// way a live whiteboard session is: `ScheduleSessionType.TEST` was already a
-// value in the enum above before this update (a hook the original schema
-// clearly anticipated but never wired up), so a Test binds 1:1 to that
-// schedule entry — reusing its startsAt/endsAt as the test's open/close
-// window instead of inventing a parallel scheduling concept. This mirrors
-// WhiteboardSession's relationship to BatchSchedule exactly.
+// TEST ENGINE — imported from the standalone "Atomic Test Portal" project
+// (NEET/JEE mock-test platform: TestSeries → Test → Section → Question,
+// bilingual, AIR/rank, security/integrity tracking) and merged with the
+// batch-scheduling system already live here, rather than kept as a second,
+// parallel Test model. Two deliberate bridging decisions versus a literal
+// copy of the source schema:
+//   1. Test.batchScheduleId (nullable, unique) is new — it's what lets a
+//      Test still bind 1:1 to a BatchSchedule entry the way the old,
+//      simpler Test model did (ScheduleSessionType.TEST, "class test for
+//      this scheduled session"). testSeriesId is nullable for the same
+//      reason: a quick class test doesn't have to belong to a named
+//      TestSeries. A standalone practice/mock test (no batchScheduleId)
+//      normally does have a testSeriesId, enforced at the application layer.
+//   2. Attempt.studentId references Student.id, not User.id (the source
+//      schema's Attempt→User). Every other student-activity table in this
+//      app (XPEvent, BatchEnrollment, TestAttempt before it...) keys off
+//      Student, not User directly, and gamification (awardXp on test
+//      completion) needs the Student row anyway — so this is adapted for
+//      consistency rather than imported literally.
+// A Test with no Sections (the common case for a simple batch class test)
+// gets one implicit "General" Section created alongside it — Section is
+// still the only path from Test to Questions, but a teacher scheduling a
+// quick class test never has to think about sections.
 // ----------------------------------------------------------------------------
 
-model Test {
-  id              String     @id @default(cuid())
-  batchScheduleId String     @unique
-  title           String
-  instructions    String?
-  durationMin     Int
-  status          TestStatus @default(DRAFT)
-  createdById     String
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
+model TestSeries {
+  id           String    @id @default(cuid())
+  name         String
+  code         String    @unique
+  description  String?
+  targetBatch  String?
+  className    String?
+  course       String?
+  examType     String?
+  tags         String?
+  thumbnailUrl String?
+  visibility   String    @default("PRIVATE")
+  startDate    DateTime?
+  endDate      DateTime?
+  createdAt    DateTime  @default(now())
 
-  batchSchedule BatchSchedule  @relation(fields: [batchScheduleId], references: [id], onDelete: Cascade)
-  questions     TestQuestion[]
-  attempts      TestAttempt[]
+  tests Test[]
+
+  @@map("test_series")
+}
+
+model Test {
+  id                     String       @id @default(cuid())
+  testSeriesId           String?
+  batchScheduleId        String?      @unique
+  name                   String
+  code                   String?      @unique
+  languageMode           LanguageMode @default(BOTH)
+  durationMin            Int
+  openTime               DateTime?
+  closeTime              DateTime?
+  correctMarks           Float        @default(4)
+  incorrectMarks         Float        @default(-1)
+  negativeMarkingEnabled Boolean      @default(true)
+  questionFormat         String       @default("OBJECTIVE")
+  testType               String?
+  examType               String?
+  description            String?
+  instructions           String?
+  status                 TestStatus   @default(DRAFT)
+  archived               Boolean      @default(false)
+  createdById            String?
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+
+  testSeries    TestSeries?    @relation(fields: [testSeriesId], references: [id])
+  batchSchedule BatchSchedule? @relation(fields: [batchScheduleId], references: [id], onDelete: Cascade)
+  createdBy     User?          @relation("TestCreatedBy", fields: [createdById], references: [id])
+  sections      Section[]
+  attempts      Attempt[]
 
   @@index([status])
+  @@index([testSeriesId])
   @@map("tests")
 }
 
-model TestQuestion {
-  id         String @id @default(cuid())
-  testId     String
-  questionId String
-  order      Int
-
-  test     Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
-  question Question @relation(fields: [questionId], references: [id])
-
-  @@unique([testId, questionId])
-  @@unique([testId, order])
-  @@index([testId])
-  @@map("test_questions")
-}
-
-model TestAttempt {
+model Section {
   id               String            @id @default(cuid())
   testId           String
-  studentId        String
-  status           TestAttemptStatus @default(IN_PROGRESS)
-  startedAt        DateTime          @default(now())
-  submittedAt      DateTime?
-  score            Float?
-  correctCount     Int?
-  incorrectCount   Int?
-  unattemptedCount Int?
+  name             String
+  order            Int               @default(0)
+  subject          String
+  targetCount      Int               @default(0)
+  marksPerQuestion Float?
+  negativeMarks    Float?
 
-  test    Test                 @relation(fields: [testId], references: [id], onDelete: Cascade)
-  student Student              @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  answers TestAttemptAnswer[]
+  test      Test              @relation(fields: [testId], references: [id], onDelete: Cascade)
+  questions SectionQuestion[]
 
-  @@unique([testId, studentId])
   @@index([testId])
-  @@index([studentId])
-  @@map("test_attempts")
+  @@map("sections")
 }
 
-model TestAttemptAnswer {
-  id             String   @id @default(cuid())
-  attemptId      String
-  questionId     String
-  selectedOption String?
-  isCorrect      Boolean?
-  marksAwarded   Float?
-  answeredAt     DateTime @default(now())
+model SectionQuestion {
+  id                    String   @id @default(cuid())
+  sectionId             String
+  questionId            String
+  order                 Int      @default(0)
+  marksOverride         Float?
+  negativeMarksOverride Float?
+  reviewStatus          String   @default("PENDING")
 
-  attempt  TestAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
-  question Question    @relation(fields: [questionId], references: [id])
+  section  Section  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id])
+
+  @@unique([sectionId, questionId])
+  @@unique([sectionId, order])
+  @@index([sectionId])
+  @@map("section_questions")
+}
+
+model Attempt {
+  id             String        @id @default(cuid())
+  testId         String?
+  dppId          String?
+  studentId      String
+  status         AttemptStatus @default(IN_PROGRESS)
+  startedAt      DateTime      @default(now())
+  submittedAt    DateTime?
+  score          Float?
+  rank           Int?
+  integrityScore Int           @default(100)
+
+  test       Test?              @relation(fields: [testId], references: [id], onDelete: Restrict)
+  dpp        Dpp?               @relation(fields: [dppId], references: [id])
+  student    Student            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  answers    AttemptAnswer[]
+  violations AttemptViolation[]
+
+  @@unique([testId, studentId])
+  @@unique([dppId, studentId])
+  @@index([testId])
+  @@index([studentId])
+  @@map("attempts")
+}
+
+model AttemptAnswer {
+  id                String   @id @default(cuid())
+  attemptId         String
+  questionId        String
+  selectedOptionIds Json     @default("[]")
+  isCorrect         Boolean?
+  timeTakenSec      Int      @default(0)
+  updatedAt         DateTime @updatedAt
+
+  attempt  Attempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id])
 
   @@unique([attemptId, questionId])
   @@index([attemptId])
-  @@map("test_attempt_answers")
+  @@map("attempt_answers")
+}
+
+model AttemptViolation {
+  id        String   @id @default(cuid())
+  attemptId String
+  type      String
+  timestamp DateTime @default(now())
+
+  attempt Attempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  @@index([attemptId])
+  @@map("attempt_violations")
+}
+
+model QuestionVersion {
+  id            String   @id @default(cuid())
+  questionId    String
+  versionNumber Int
+  editedById    String
+  editedAt      DateTime @default(now())
+  reason        String?
+  changeType    String   @default("EDIT")
+  snapshot      Json
+
+  editedBy User     @relation("QuestionVersionEditedBy", fields: [editedById], references: [id])
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, versionNumber])
+  @@map("question_versions")
+}
+
+model QuestionReport {
+  id            String    @id @default(cuid())
+  questionId    String
+  testId        String?
+  reasonTags    String
+  comment       String?
+  screenshotUrl String?
+  priority      String    @default("MEDIUM")
+  status        String    @default("NEW")
+  reportedById  String
+  claimedById   String?
+  claimedAt     DateTime?
+  teacherNotes  String?
+  createdAt     DateTime  @default(now())
+  resolvedAt    DateTime?
+
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  reportedBy User     @relation("ReportFiledBy", fields: [reportedById], references: [id])
+  claimedBy  User?    @relation("ReportClaimedBy", fields: [claimedById], references: [id])
+
+  @@index([questionId])
+  @@index([status])
+  @@map("question_reports")
+}
+
+model TestTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  createdBy User?                 @relation("TestTemplateCreatedBy", fields: [createdById], references: [id])
+  sections  TestTemplateSection[]
+
+  @@map("test_templates")
+}
+
+model TestTemplateSection {
+  id               String       @id @default(cuid())
+  templateId       String
+  name             String
+  subject          String
+  targetCount      Int
+  marksPerQuestion Float?
+  negativeMarks    Float?
+  order            Int          @default(0)
+
+  template TestTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
+  @@map("test_template_sections")
+}
+
+model Dpp {
+  id                     String       @id @default(cuid())
+  code                   String       @unique
+  name                   String
+  subject                String
+  chapter                String
+  facultyName            String?
+  difficulty             String       @default("MEDIUM")
+  languageMode           LanguageMode @default(BOTH)
+  description            String?
+  tags                   String?
+  instructions           String?
+  estimatedTimeMin       Int          @default(30)
+  correctMarks           Float        @default(4)
+  incorrectMarks         Float        @default(-1)
+  negativeMarkingEnabled Boolean      @default(true)
+  questionTargetCount    Int          @default(0)
+  status                 String       @default("DRAFT")
+  level                  Int?
+  topics                 String[]     @default([])
+  createdById            String?
+  createdAt              DateTime     @default(now())
+
+  createdBy User?         @relation("DppCreatedBy", fields: [createdById], references: [id])
+  questions DppQuestion[]
+  attempts  Attempt[]
+
+  @@map("dpps")
+}
+
+model DppQuestion {
+  id         String @id @default(cuid())
+  dppId      String
+  questionId String
+  order      Int    @default(0)
+
+  dpp      Dpp      @relation(fields: [dppId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id])
+
+  @@index([dppId])
+  @@map("dpp_questions")
+}
+
+model Bookmark {
+  id         String   @id @default(cuid())
+  studentId  String
+  questionId String
+  createdAt  DateTime @default(now())
+
+  student  Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, questionId])
+  @@map("bookmarks")
+}
+
+// Rank Predictor reference data — category-wise marks → expected-AIR trend,
+// refreshed per admission cycle (`year`). No FK to a live Test/Attempt: this
+// is published reference data, not derived from this app's own results.
+model RankTrendPoint {
+  id           String   @id @default(cuid())
+  category     String
+  marks        Int
+  expectedRank Int
+  year         Int      @default(2026)
+  confidence   String?
+  source       String?
+  createdAt    DateTime @default(now())
+
+  @@unique([category, marks, year])
+  @@map("rank_trend_points")
+}
+
+// College Predictor reference data — one row per (year, round, institute,
+// course, category) counselling seat allotment record.
+model CollegeAllotment {
+  id                String   @id @default(cuid())
+  year              Int
+  round             String   @default("Round 1")
+  rank              Int
+  quota             String
+  instituteName     String
+  course            String
+  allottedCategory  String
+  candidateCategory String
+  remarks           String?
+  createdAt         DateTime @default(now())
+
+  @@index([year, rank])
+  @@index([year, course, allottedCategory])
+  @@map("college_allotments")
+}
+
+// Security Center — device fingerprint + multi-login control. One row per
+// device a user has logged in from; `revokedAt` set when an admin or the
+// user themselves signs it out remotely.
+model DeviceSession {
+  id            String    @id @default(cuid())
+  userId        String
+  deviceHash    String
+  deviceType    String
+  browser       String?
+  os            String?
+  timezone      String?
+  screenRes     String?
+  ipAddress     String?
+  revokedAt     DateTime?
+  revokedReason String?
+  createdAt     DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("device_sessions")
+}
+
+// Singleton — one row, id "singleton", read with findUnique. Global
+// multi-login policy (e.g. "SINGLE_SESSION" forces new login to revoke
+// older DeviceSessions) toggled by a Super Admin in Security Center.
+model SecurityConfig {
+  id     String @id @default("singleton")
+  policy String @default("SINGLE_SESSION")
+
+  @@map("security_config")
 }
 
 // ----------------------------------------------------------------------------
@@ -848,63 +1150,89 @@ model Course {
 }
 
 model Subject {
-  id        String     @id @default(cuid())
+  id        String    @id @default(cuid())
   title     String
   courseId  String
   chapters  Chapter[]
-  questions Question[]
-  course    Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  course    Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
 
   @@index([courseId])
   @@map("subjects")
 }
 
 model Chapter {
-  id        String     @id @default(cuid())
+  id        String    @id @default(cuid())
   title     String
   subjectId String
-  subject   Subject    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-  questions Question[]
+  subject   Subject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
   lectures  Lecture[]
 
   @@index([subjectId])
   @@map("chapters")
 }
 
+// Question Bank — replaced with the Atomic Test Portal's richer, bilingual
+// question model (imported): subject/chapter/topic are free text here, not
+// Subject/Chapter model FKs (Subject/Chapter above stay, used only by the
+// Lecture Library now) — this matches the source schema and is what makes
+// PYQ categorization (pyqSource/questionCode) and per-language translations
+// possible without forcing every question into the Course/Subject/Chapter
+// tree. `isPublished`/`publishedById`/`publishedAt` replaces the old
+// `status: PENDING|VERIFIED|FLAGGED` verification workflow — same idea
+// (draft vs. live), source schema's naming kept as-is.
 model Question {
-  id             String          @id @default(cuid())
-  body           String
-  type           QuestionType    @default(MCQ)
-  optionA        String?
-  optionB        String?
-  optionC        String?
-  optionD        String?
-  correctOption  String
-  explanation    String?
-  marksCorrect   Int             @default(4)
-  marksIncorrect Int             @default(-1)
-  difficulty     DifficultyLevel @default(MEDIUM)
-  status         QuestionStatus  @default(PENDING)
-  tags           String[]        @default([])
-  subjectId      String?
-  chapterId      String?
-  createdById    String
-  verifiedById   String?
-  verifiedAt     DateTime?
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  chapter        Chapter?        @relation(fields: [chapterId], references: [id])
-  createdBy      User            @relation("QuestionCreatedBy", fields: [createdById], references: [id])
-  subject        Subject?        @relation(fields: [subjectId], references: [id])
-  verifiedBy     User?           @relation("QuestionVerifiedBy", fields: [verifiedById], references: [id])
-  testQuestions  TestQuestion[]
-  attemptAnswers TestAttemptAnswer[]
+  id            String       @id @default(cuid())
+  subject       String
+  chapter       String?
+  topic         String?
+  subTopic      String?
+  type          QuestionType @default(SINGLE_CORRECT)
+  difficulty    Difficulty   @default(MEDIUM)
+  imageUrl      String?
+  category      String?
+  pyqSource     String?
+  questionCode  String?      @unique
+  solution      String?
+  tags          String?
+  usageCount    Int          @default(0)
+  isPublished   Boolean      @default(false)
+  publishedAt   DateTime?
+  publishedById String?
+  createdById   String?
+  createdAt     DateTime     @default(now())
 
-  @@index([subjectId])
-  @@index([chapterId])
-  @@index([status])
+  createdBy    User?                 @relation("QuestionCreatedBy", fields: [createdById], references: [id])
+  publishedBy  User?                 @relation("QuestionPublishedBy", fields: [publishedById], references: [id])
+  translations QuestionTranslation[]
+  versions     QuestionVersion[]
+  reports      QuestionReport[]
+  sectionLinks SectionQuestion[]
+  dppLinks     DppQuestion[]
+  bookmarks    Bookmark[]
+  answers      AttemptAnswer[]
+
+  @@index([subject])
   @@index([difficulty])
+  @@index([isPublished])
   @@map("questions")
+}
+
+// One row per language a question is authored in (Hindi/English/etc.) —
+// statement, options and the correct-option set are all per-language so a
+// bilingual question never has to force one canonical wording.
+model QuestionTranslation {
+  id               String   @id @default(cuid())
+  questionId       String
+  language         String
+  statement        String
+  options          Json
+  correctOptionIds Json
+  solution         String?
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, language])
+  @@map("question_translations")
 }
 
 model Doubt {
@@ -987,6 +1315,13 @@ enum GlobalRole {
   HR
   MARKETING
   DEPARTMENT_HEAD
+  // Imported from Atomic Test Portal's 4-tier RBAC (SUPER_ADMIN → SUB_ADMIN
+  // → TEACHER → STUDENT). Sits directly under SUPER_ADMIN in the seed's
+  // ROLE_PERMISSION_DEFAULTS — everything SUPER_ADMIN can do inside the Test
+  // Portal modules (TestSeries/Question Bank/DPP admin, Security Center,
+  // Rank/College Predictor data), minus RBAC/system-settings and user
+  // account management, which stay SUPER_ADMIN-only.
+  SUB_ADMIN
   SUPER_ADMIN
   FOUNDER
 }
@@ -1047,21 +1382,25 @@ enum PenaltyDeductionType {
 }
 
 enum QuestionType {
-  MCQ
+  SINGLE_CORRECT
+  MULTIPLE_CORRECT
   INTEGER
+  NUMERICAL
+  STATEMENT_BASED
+  MATCH_COLUMN
+  ASSERTION_REASON
 }
 
-enum DifficultyLevel {
+enum Difficulty {
   EASY
   MEDIUM
   HARD
-  ADVANCED
 }
 
-enum QuestionStatus {
-  PENDING
-  VERIFIED
-  FLAGGED
+enum LanguageMode {
+  HINDI
+  ENGLISH
+  BOTH
 }
 
 enum DoubtStatus {
@@ -1128,11 +1467,14 @@ enum HandRaiseStatus {
 
 enum TestStatus {
   DRAFT
+  PENDING_APPROVAL
+  UNDER_REVIEW
+  APPROVED
   PUBLISHED
   ARCHIVED
 }
 
-enum TestAttemptStatus {
+enum AttemptStatus {
   IN_PROGRESS
   SUBMITTED
   AUTO_SUBMITTED
@@ -1677,4 +2019,218 @@ model PageSeo {
   updatedAt       DateTime @updatedAt
 
   @@map("page_seo")
+}
+
+// ==========================================================================
+// MODULE STUDIO — imported as-is from Atomic Test Portal (PDF/brand-asset
+// generation tool: upload a source PDF/module, OCR + layout-reconstruct it
+// into editable elements, apply a BrandProfile, export a re-branded PDF).
+// Genuinely unrelated to DPP/Question Bank/Test Series/AIR — kept fully
+// separate from the Test Engine models above; nothing here is referenced
+// by Test/Question/Dpp and nothing there is referenced by Module.
+// ==========================================================================
+
+model Module {
+  id           String        @id @default(cuid())
+  code         String        @unique
+  title        String
+  subject      String?
+  class        String?
+  batch        String?
+  chapter      String?
+  facultyName  String?
+  academicYear String?
+  status       ModuleStatus  @default(DRAFT)
+  pdfType      ModulePdfType @default(UNKNOWN)
+
+  originalFileUrl  String
+  originalFileName String
+  originalFileSize Int
+  pageCount        Int?
+
+  rightsConfirmedById String?
+  rightsConfirmedAt   DateTime?
+  reviewedById        String?
+  reviewedAt          DateTime?
+
+  brandProfileId String?
+  brandProfile   BrandProfile? @relation(fields: [brandProfileId], references: [id])
+
+  createdById String?
+  createdBy   User?    @relation("ModuleCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  pages          ModulePage[]
+  assets         ModuleAsset[]
+  versions       ModuleVersion[]
+  processingJobs ProcessingJob[]
+  exportHistory  ModuleExport[]
+
+  @@map("modules")
+}
+
+model ModulePage {
+  id                String        @id @default(cuid())
+  moduleId          String
+  pageNumber        Int
+  width             Float
+  height            Float
+  pdfType           ModulePdfType @default(UNKNOWN)
+  referenceImageUrl String?
+  elements          Json          @default("[]")
+  ocrConfidence     Float?
+  needsReview       Boolean       @default(false)
+  warnings          Json          @default("[]")
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@unique([moduleId, pageNumber])
+  @@map("module_pages")
+}
+
+model ModuleAsset {
+  id         String   @id @default(cuid())
+  moduleId   String
+  storageUrl String
+  mimeType   String
+  width      Int?
+  height     Int?
+  sourcePage Int?
+  createdAt  DateTime @default(now())
+
+  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@index([moduleId])
+  @@map("module_assets")
+}
+
+model ModuleVersion {
+  id          String   @id @default(cuid())
+  moduleId    String
+  label       String
+  snapshot    Json
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@index([moduleId])
+  @@map("module_versions")
+}
+
+model BrandProfile {
+  id              String   @id @default(cuid())
+  name            String
+  logoUrl         String?
+  primaryColor    String?
+  secondaryColor  String?
+  fontFamily      String?
+  websiteUrl      String?
+  tagline         String?
+  headerConfig    Json     @default("{}")
+  footerConfig    Json     @default("{}")
+  watermarkConfig Json     @default("{}")
+  isDefault       Boolean  @default(false)
+  createdById     String?
+  createdAt       DateTime @default(now())
+
+  createdBy User?    @relation("BrandProfileCreatedBy", fields: [createdById], references: [id])
+  modules   Module[]
+
+  @@map("brand_profiles")
+}
+
+model ProcessingJob {
+  id           String          @id @default(cuid())
+  moduleId     String
+  stage        ProcessingStage @default(UPLOADING)
+  progress     Int             @default(0)
+  errorMessage String?
+  startedAt    DateTime        @default(now())
+  finishedAt   DateTime?
+
+  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@index([moduleId])
+  @@map("processing_jobs")
+}
+
+model ModuleExport {
+  id                String   @id @default(cuid())
+  moduleId          String
+  versionId         String?
+  fileUrl           String
+  fileName          String
+  fileSize          Int
+  quality           String   @default("STANDARD")
+  includedFrontPage Boolean  @default(true)
+  includedWatermark Boolean  @default(false)
+  createdById       String?
+  createdAt         DateTime @default(now())
+
+  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@index([moduleId])
+  @@map("module_exports")
+}
+
+enum ModuleStatus {
+  DRAFT
+  PROCESSING
+  REVIEW_REQUIRED
+  READY
+  PUBLISHED
+  ARCHIVED
+  FAILED
+}
+
+enum ModulePdfType {
+  DIGITAL
+  SCANNED
+  HYBRID
+  UNKNOWN
+}
+
+// Not referenced directly by any column (elements Json on ModulePage holds
+// these tagged by "type"), kept as the canonical list the Module Studio UI
+// and OCR/layout pipeline validate against.
+enum ModuleElementType {
+  TEXT
+  HEADING
+  SUBHEADING
+  PARAGRAPH
+  QUESTION
+  OPTION
+  SOLUTION
+  IMAGE
+  DIAGRAM
+  EQUATION
+  CHEMICAL_EQUATION
+  CHEMICAL_STRUCTURE
+  TABLE
+  SHAPE
+  LINE
+  RECTANGLE
+  CIRCLE
+  ARROW
+  TEXT_BOX
+  PAGE_BACKGROUND
+  HEADER
+  FOOTER
+  WATERMARK
+  PAGE_NUMBER
+}
+
+enum ProcessingStage {
+  UPLOADING
+  ANALYZING
+  EXTRACTING
+  OCR_PROCESSING
+  RECONSTRUCTING_LAYOUT
+  GENERATING_PREVIEW
+  READY_FOR_REVIEW
+  FAILED
 }
