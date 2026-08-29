@@ -136,6 +136,18 @@ export const PERMISSIONS = {
   FAQ_MANAGE: "cms.faq.manage",
   TESTIMONIAL_MANAGE: "cms.testimonial.manage",
   SEO_MANAGE: "cms.seo.manage",
+
+  // AI Chat / Atomic Guru — imported from _import_atomic-ai-chat. Its own
+  // ADMIN/FACULTY role checks were replaced with these permission codes
+  // (auth itself now runs on the existing User/RBAC, not a parallel role
+  // field). AICHAT_ADMIN_ACCESS covers everything the source app gated
+  // behind requireAdmin() (batch/access-grant/analytics/student-performance/
+  // user management + question-bank admin writes); AICHAT_SCHEDULE_MANAGE
+  // and AICHAT_QUESTION_BANK_VIEW cover requireScheduleManager()/
+  // requireQuestionBankViewer() (source: ADMIN or FACULTY).
+  AICHAT_ADMIN_ACCESS: "aichat.admin.access",
+  AICHAT_SCHEDULE_MANAGE: "aichat.schedule.manage",
+  AICHAT_QUESTION_BANK_VIEW: "aichat.questionbank.view",
 } as const;
 
 export type PermissionCode = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -169,6 +181,8 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PermissionCode[]> = {
     PERMISSIONS.LECTURE_READ,
     PERMISSIONS.LECTURE_CREATE,
     PERMISSIONS.LECTURE_UPDATE,
+    PERMISSIONS.AICHAT_SCHEDULE_MANAGE,
+    PERMISSIONS.AICHAT_QUESTION_BANK_VIEW,
   ],
   ACADEMIC_HEAD: [
     PERMISSIONS.TEAM_PORTAL_ACCESS,
@@ -207,6 +221,9 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PermissionCode[]> = {
     PERMISSIONS.LECTURE_UPDATE,
     PERMISSIONS.LECTURE_PUBLISH,
     PERMISSIONS.LECTURE_DELETE,
+    PERMISSIONS.AICHAT_ADMIN_ACCESS,
+    PERMISSIONS.AICHAT_SCHEDULE_MANAGE,
+    PERMISSIONS.AICHAT_QUESTION_BANK_VIEW,
   ],
   QUESTION_TEAM: [
     PERMISSIONS.TEAM_PORTAL_ACCESS,
