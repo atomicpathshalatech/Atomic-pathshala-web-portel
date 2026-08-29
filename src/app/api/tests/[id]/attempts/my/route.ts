@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { UnauthorizedError, ForbiddenError } from "@/lib/rbac/guard";
 import { resolveStudentForSchedule } from "@/lib/batch/access";
 import { computeDeadlineMs, finalizeAttempt } from "@/lib/test-engine/scoring";
+import { toLegacyQuestion } from "@/lib/questions/legacy";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 
 /**
@@ -22,30 +23,48 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
 
     const test = await prisma.test.findUnique({
       where: { id: params.id },
-      include: { batchSchedule: true, questions: { orderBy: { order: "asc" }, include: { question: true } } },
+      include: {
+        batchSchedule: true,
+        sections: {
+          orderBy: { order: "asc" },
+          include: {
+            questions: {
+              orderBy: { order: "asc" },
+              include: { question: { include: { translations: true } } },
+            },
+          },
+        },
+      },
     });
     if (!test) return apiError("Test not found", 404);
 
     const { student } = await resolveStudentForSchedule(session.user.id, test.batchScheduleId);
     if (!student) throw new ForbiddenError();
 
-    let attempt = await prisma.testAttempt.findUnique({
+    let attempt = await prisma.attempt.findUnique({
       where: { testId_studentId: { testId: test.id, studentId: student.id } },
       include: { answers: true },
     });
     if (!attempt) return apiError("You haven't started this test yet.", 404);
 
-    const deadlineMs = computeDeadlineMs(attempt.startedAt, test.durationMin, test.batchSchedule.endsAt);
+    const deadlineMs = computeDeadlineMs(attempt.startedAt, test.durationMin, test.batchSchedule?.endsAt);
     if (attempt.status === "IN_PROGRESS" && Date.now() > deadlineMs) {
       await finalizeAttempt(attempt.id, true);
-      attempt = await prisma.testAttempt.findUnique({
+      attempt = await prisma.attempt.findUnique({
         where: { id: attempt.id },
         include: { answers: true },
       });
     }
     if (!attempt) return apiError("Attempt not found", 404);
 
-    const answerByQuestion = new Map(attempt.answers.map((a) => [a.questionId, a.selectedOption]));
+    const answerByQuestion = new Map(
+      attempt.answers.map((a) => [
+        a.questionId,
+        Array.isArray(a.selectedOptionIds) ? (a.selectedOptionIds as string[])[0] ?? null : null,
+      ])
+    );
+
+    const sectionQuestions = test.sections.flatMap((s) => s.questions);
 
     return apiSuccess({
       attempt: {
@@ -54,18 +73,21 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
         startedAt: attempt.startedAt,
         deadlineAt: new Date(deadlineMs).toISOString(),
       },
-      test: { id: test.id, title: test.title, instructions: test.instructions, durationMin: test.durationMin },
-      questions: test.questions.map((tq) => ({
-        id: tq.question.id,
-        order: tq.order,
-        body: tq.question.body,
-        type: tq.question.type,
-        optionA: tq.question.optionA,
-        optionB: tq.question.optionB,
-        optionC: tq.question.optionC,
-        optionD: tq.question.optionD,
-        mySelection: answerByQuestion.get(tq.question.id) ?? null,
-      })),
+      test: { id: test.id, title: test.name, instructions: test.instructions, durationMin: test.durationMin },
+      questions: sectionQuestions.map((sq) => {
+        const legacy = toLegacyQuestion(sq.question);
+        return {
+          id: sq.question.id,
+          order: sq.order,
+          body: legacy.body,
+          type: legacy.type,
+          optionA: legacy.optionA,
+          optionB: legacy.optionB,
+          optionC: legacy.optionC,
+          optionD: legacy.optionD,
+          mySelection: answerByQuestion.get(sq.question.id) ?? null,
+        };
+      }),
     });
   } catch (error) {
     return handleApiError(error);

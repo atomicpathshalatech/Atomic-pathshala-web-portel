@@ -7,6 +7,12 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { questionSchema } from "@/lib/validation/question";
 import { apiSuccess, handleApiError } from "@/lib/api/response";
 import { UnauthorizedError } from "@/lib/rbac/guard";
+import {
+  legacyToTranslationCreate,
+  legacyTypeToQuestionType,
+  legacyTagsToString,
+  resolveSubjectChapterNames,
+} from "@/lib/questions/legacy";
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,29 +23,30 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get("search")?.trim();
     const status = searchParams.get("status");
     const difficulty = searchParams.get("difficulty");
-    const subjectId = searchParams.get("subjectId");
+    // Question.subject is now a plain string (not a Subject relation), so
+    // the old subjectId filter no longer applies here directly — dropped.
     const page = Math.max(1, Number(searchParams.get("page") ?? 1));
     const pageSize = 20;
 
     const where = {
-      ...(search ? { body: { contains: search, mode: "insensitive" as const } } : {}),
-      ...(status ? { status: status as "PENDING" | "VERIFIED" | "FLAGGED" } : {}),
-      ...(difficulty
-        ? { difficulty: difficulty as "EASY" | "MEDIUM" | "HARD" | "ADVANCED" }
+      ...(search
+        ? { translations: { some: { statement: { contains: search, mode: "insensitive" as const } } } }
         : {}),
-      ...(subjectId ? { subjectId } : {}),
+      ...(status === "PUBLISHED" ? { isPublished: true } : {}),
+      ...(status === "PENDING" ? { isPublished: false } : {}),
+      ...(difficulty ? { difficulty: difficulty as "EASY" | "MEDIUM" | "HARD" } : {}),
     };
 
     const [questions, total, statusCounts, difficultyCounts] = await Promise.all([
       prisma.question.findMany({
         where,
-        include: { subject: true, chapter: true },
+        include: { translations: true },
         orderBy: { createdAt: "desc" },
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
       prisma.question.count({ where }),
-      prisma.question.groupBy({ by: ["status"], _count: true }),
+      prisma.question.groupBy({ by: ["isPublished"], _count: true }),
       prisma.question.groupBy({ by: ["difficulty"], _count: true }),
     ]);
 
@@ -65,24 +72,21 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const data = questionSchema.parse(body);
 
+    const { subject, chapter } = await resolveSubjectChapterNames(prisma, data.subjectId, data.chapterId);
+
     const question = await prisma.question.create({
       data: {
-        body: data.body,
-        type: data.type,
-        optionA: data.optionA || null,
-        optionB: data.optionB || null,
-        optionC: data.optionC || null,
-        optionD: data.optionD || null,
-        correctOption: data.correctOption,
-        explanation: data.explanation || null,
-        marksCorrect: data.marksCorrect,
-        marksIncorrect: data.marksIncorrect,
+        subject,
+        chapter,
+        type: legacyTypeToQuestionType(data.type),
         difficulty: data.difficulty,
-        tags: data.tags,
-        subjectId: data.subjectId || null,
-        chapterId: data.chapterId || null,
+        tags: legacyTagsToString(data.tags),
         createdById: session.user.id,
+        translations: {
+          create: legacyToTranslationCreate(data),
+        },
       },
+      include: { translations: true },
     });
 
     await prisma.auditLog.create({

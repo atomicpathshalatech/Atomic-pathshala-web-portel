@@ -6,6 +6,12 @@ import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { questionSchema } from "@/lib/validation/question";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import {
+  legacyToTranslationCreate,
+  legacyTypeToQuestionType,
+  legacyTagsToString,
+  resolveSubjectChapterNames,
+} from "@/lib/questions/legacy";
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -14,7 +20,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
 
     const question = await prisma.question.findUnique({
       where: { id: params.id },
-      include: { subject: true, chapter: true },
+      include: { translations: true },
     });
     if (!question) return apiError("Question not found", 404);
 
@@ -36,24 +42,26 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     const body = await request.json();
     const data = questionSchema.parse(body);
 
+    const { subject, chapter } = await resolveSubjectChapterNames(prisma, data.subjectId, data.chapterId);
+    const translation = legacyToTranslationCreate(data);
+
     const question = await prisma.question.update({
       where: { id: params.id },
       data: {
-        body: data.body,
-        type: data.type,
-        optionA: data.optionA || null,
-        optionB: data.optionB || null,
-        optionC: data.optionC || null,
-        optionD: data.optionD || null,
-        correctOption: data.correctOption,
-        explanation: data.explanation || null,
-        marksCorrect: data.marksCorrect,
-        marksIncorrect: data.marksIncorrect,
+        subject,
+        chapter,
+        type: legacyTypeToQuestionType(data.type),
         difficulty: data.difficulty,
-        tags: data.tags,
-        subjectId: data.subjectId || null,
-        chapterId: data.chapterId || null,
+        tags: legacyTagsToString(data.tags),
+        translations: {
+          upsert: {
+            where: { questionId_language: { questionId: params.id, language: "ENGLISH" } },
+            create: translation,
+            update: translation,
+          },
+        },
       },
+      include: { translations: true },
     });
 
     await prisma.auditLog.create({

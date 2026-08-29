@@ -21,8 +21,11 @@ export async function DELETE(
     if (!(await canManageTest(session.user.id, test.batchScheduleId))) throw new ForbiddenError();
     if (test.status !== "DRAFT") return apiError("Only draft tests can have questions removed.", 409);
 
-    const deleted = await prisma.testQuestion.deleteMany({
-      where: { id: params.testQuestionId, testId: params.id },
+    // params.testQuestionId is now a SectionQuestion id — scope the delete
+    // through the section's testId so a stray id from another test can't
+    // remove a question here.
+    const deleted = await prisma.sectionQuestion.deleteMany({
+      where: { id: params.testQuestionId, section: { testId: params.id } },
     });
     if (deleted.count === 0) return apiError("Question not found on this test", 404);
 

@@ -7,12 +7,6 @@ import { resolveStudentForSchedule } from "@/lib/batch/access";
 import { computeDeadlineMs, finalizeAttempt } from "@/lib/test-engine/scoring";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 
-/**
- * Finalizes the student's own attempt. Whether it's recorded as SUBMITTED
- * vs AUTO_SUBMITTED is decided purely by the server clock against the
- * server-computed deadline — a client-side timer running out just triggers
- * this same call, it doesn't get to claim which one it is.
- */
 export async function POST(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions);
@@ -23,11 +17,12 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
       include: { batchSchedule: true },
     });
     if (!test) return apiError("Test not found", 404);
+    if (!test.batchScheduleId) return apiError("This test isn't linked to a scheduled session.", 400);
 
     const { student } = await resolveStudentForSchedule(session.user.id, test.batchScheduleId);
     if (!student) throw new ForbiddenError();
 
-    const attempt = await prisma.testAttempt.findUnique({
+    const attempt = await prisma.attempt.findUnique({
       where: { testId_studentId: { testId: test.id, studentId: student.id } },
     });
     if (!attempt) return apiError("You haven't started this test yet.", 404);
@@ -36,7 +31,7 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
       return apiSuccess({ attempt }); // already finalized — idempotent
     }
 
-    const deadlineMs = computeDeadlineMs(attempt.startedAt, test.durationMin, test.batchSchedule.endsAt);
+    const deadlineMs = computeDeadlineMs(attempt.startedAt, test.durationMin, test.batchSchedule?.endsAt);
     const isLate = Date.now() > deadlineMs;
 
     const finalized = await finalizeAttempt(attempt.id, isLate);

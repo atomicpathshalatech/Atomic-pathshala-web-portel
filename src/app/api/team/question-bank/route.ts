@@ -5,12 +5,12 @@ import { prisma } from "@/lib/db";
 import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, handleApiError } from "@/lib/api/response";
-import type { DifficultyLevel } from "@prisma/client";
+import type { Difficulty } from "@prisma/client";
 
-const DIFFICULTY_LEVELS: DifficultyLevel[] = ["EASY", "MEDIUM", "HARD", "ADVANCED"];
+const DIFFICULTY_LEVELS: Difficulty[] = ["EASY", "MEDIUM", "HARD"];
 
 /**
- * TODO(question-bank): Read-only search over VERIFIED questions, for the
+ * TODO(question-bank): Read-only search over published questions, for the
  * Test Engine's question-picker. Note: this project's existing Question
  * Bank module
  * (full CRUD, verification workflow) wasn't in the file set available when
@@ -28,31 +28,40 @@ export async function GET(request: NextRequest) {
     await requirePermission(session.user.id, PERMISSIONS.QUESTION_READ);
 
     const search = request.nextUrl.searchParams.get("search")?.trim();
-    const subjectId = request.nextUrl.searchParams.get("subjectId") ?? undefined;
     const difficultyParam = request.nextUrl.searchParams.get("difficulty") ?? undefined;
     const difficulty = DIFFICULTY_LEVELS.find((d) => d === difficultyParam);
 
     const questions = await prisma.question.findMany({
       where: {
-        status: "VERIFIED",
-        ...(subjectId && { subjectId }),
+        isPublished: true,
         ...(difficulty && { difficulty }),
-        ...(search && { body: { contains: search, mode: "insensitive" } }),
+        ...(search && {
+          translations: { some: { statement: { contains: search, mode: "insensitive" as const } } },
+        }),
       },
       select: {
         id: true,
-        body: true,
         type: true,
         difficulty: true,
-        marksCorrect: true,
-        marksIncorrect: true,
-        subject: { select: { title: true } },
+        subject: true,
+        translations: {
+          where: { language: "ENGLISH" },
+          select: { statement: true },
+        },
       },
       orderBy: { createdAt: "desc" },
       take: 50,
     });
 
-    return apiSuccess({ questions });
+    const results = questions.map((q) => ({
+      id: q.id,
+      type: q.type,
+      difficulty: q.difficulty,
+      subject: q.subject,
+      statement: q.translations[0]?.statement ?? "",
+    }));
+
+    return apiSuccess({ questions: results });
   } catch (error) {
     return handleApiError(error);
   }

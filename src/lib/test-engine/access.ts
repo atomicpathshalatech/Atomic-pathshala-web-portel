@@ -11,9 +11,12 @@ import { resolveTeacherForSchedule } from "@/lib/batch/access";
  * schedule entry belongs to — same ownership rule the live whiteboard uses,
  * checked fresh against the DB every call.
  */
-export async function canManageTest(userId: string, batchScheduleId: string): Promise<boolean> {
+export async function canManageTest(userId: string, batchScheduleId: string | null): Promise<boolean> {
   const isAdmin = await hasPermission(userId, PERMISSIONS.TEST_PUBLISH);
   if (isAdmin) return true;
+  // Standalone TestSeries tests (no batchScheduleId) aren't teacher-owned —
+  // only admin-tier TEST_PUBLISH can manage them, for now.
+  if (!batchScheduleId) return false;
 
   const { teacher } = await resolveTeacherForSchedule(userId, batchScheduleId);
   return Boolean(teacher);

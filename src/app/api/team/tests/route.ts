@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
     const test = await prisma.test.create({
       data: {
         batchScheduleId: schedule.id,
-        title: input.title,
+        name: input.title,
         instructions: input.instructions || null,
         durationMin: input.durationMin,
         createdById: session.user.id,

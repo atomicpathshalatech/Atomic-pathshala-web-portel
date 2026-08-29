@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { requirePermission, UnauthorizedError, ForbiddenError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { canManageTest, getTestOr404 } from "@/lib/test-engine/access";
+import { countTestQuestions } from "@/lib/test-engine/sections";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 
 /** Publishing is gated behind TEST_PUBLISH — admin tier only, even though a
@@ -22,7 +23,7 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
     if (!(await canManageTest(session.user.id, test.batchScheduleId))) throw new ForbiddenError();
     if (test.status !== "DRAFT") return apiError("This test has already been published.", 409);
 
-    const questionCount = await prisma.testQuestion.count({ where: { testId: params.id } });
+    const questionCount = await countTestQuestions(params.id);
     if (questionCount === 0) {
       return apiError("Add at least one question before publishing.", 400);
     }

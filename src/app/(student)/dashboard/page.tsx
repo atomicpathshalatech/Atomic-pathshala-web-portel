@@ -4,29 +4,13 @@ import { requireStudentSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import type { BatchSchedule, Teacher, User } from "@prisma/client";
 import { NextClassCountdown } from "@/components/student/NextClassCountdown";
+import { FeatureCard } from "@/components/student/FeatureCard";
 
 export const metadata: Metadata = {
-  title: "Home",
+  title: "Student Hub — Home",
 };
 
 type ScheduleWithTeacher = BatchSchedule & { teacher: (Teacher & { user: User }) | null };
-
-const TYPE_LABELS: Record<string, string> = {
-  LIVE_CLASS: "Live Class",
-  TEST: "Test",
-  DPP: "DPP",
-  DOUBT_SESSION: "Doubt Session",
-  OTHER: "Session",
-};
-
-// Rotating accent so batch cards without a cover image don't all look identical —
-// deterministic by index, not random (avoids Math.random() flicker between renders).
-const CARD_ACCENTS = [
-  "from-primary/25 via-primary/10 to-transparent",
-  "from-secondary/25 via-secondary/10 to-transparent",
-  "from-error/20 via-error/5 to-transparent",
-  "from-primary/15 via-secondary/15 to-transparent",
-];
 
 function isToday(date: Date) {
   const now = new Date();
@@ -37,6 +21,7 @@ export default async function StudentDashboardPage() {
   const { student } = await requireStudentSession();
   const now = new Date();
 
+  // 1. Fetch active batch enrollments and schedules
   const enrollments = await prisma.batchEnrollment.findMany({
     where: { studentId: student.id, status: "ACTIVE" },
     include: {
@@ -62,312 +47,325 @@ export default async function StudentDashboardPage() {
     .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
 
   const nextClass = allUpcoming[0] ?? null;
-  const todaysSchedule = allUpcoming.filter((s) => isToday(s.startsAt)).slice(0, 5);
+  const isClassLive = nextClass
+    ? nextClass.status === "LIVE" || (nextClass.startsAt <= now && nextClass.endsAt >= now)
+    : false;
 
-  const [openDoubtsCount, recentDoubts, popularBatches] = await Promise.all([
-    prisma.doubt.count({ where: { studentId: student.id, status: "OPEN" } }),
-    prisma.doubt.findMany({
-      where: { studentId: student.id },
-      orderBy: { createdAt: "desc" },
-      take: 3,
-    }),
-    prisma.batch.findMany({
+  // 2. Fetch real counts for feature badges (Zero fake data)
+  const [
+    dppCount,
+    testsCount,
+    mistakesCount,
+    studentTestAttempts,
+  ] = await Promise.all([
+    // Today's or active DPP count
+    prisma.batchSchedule.count({
       where: {
-        status: { in: ["ACTIVE", "UPCOMING"] },
-        id: { notIn: enrolledBatchIds },
+        batchId: { in: enrolledBatchIds },
+        type: "DPP",
+        endsAt: { gte: now },
       },
-      include: {
-        course: { select: { title: true } },
-        _count: { select: { enrollments: true } },
+    }),
+    // Available published tests in enrolled batches
+    prisma.test.count({
+      where: {
+        batchSchedule: { batchId: { in: enrolledBatchIds } },
       },
-      orderBy: { enrollments: { _count: "desc" } },
-      take: 6,
+    }),
+    // Incorrect answers across all submitted attempts (Mistake Book)
+    prisma.attemptAnswer.count({
+      where: {
+        attempt: {
+          studentId: student.id,
+          status: { in: ["SUBMITTED", "AUTO_SUBMITTED"] },
+        },
+        isCorrect: false,
+      },
+    }),
+    // Student test attempts for accuracy calculation
+    prisma.attempt.findMany({
+      where: {
+        studentId: student.id,
+        status: { in: ["SUBMITTED", "AUTO_SUBMITTED"] },
+      },
+      select: { answers: { select: { isCorrect: true } } },
     }),
   ]);
+
+  // Real overall accuracy
+  const totalCorrect = studentTestAttempts.reduce(
+    (sum, a) => sum + a.answers.filter((x) => x.isCorrect === true).length,
+    0
+  );
+  const totalAttempted = studentTestAttempts.reduce(
+    (sum, a) => sum + a.answers.filter((x) => x.isCorrect !== null).length,
+    0
+  );
+  const overallAccuracy = totalAttempted > 0 ? Math.round((totalCorrect / totalAttempted) * 100) : null;
 
   const firstName = student.user.name.split(" ")[0];
   const hour = now.getHours();
   const greeting = hour < 12 ? "Good Morning" : hour < 17 ? "Good Afternoon" : "Good Evening";
 
   return (
-    <div className="space-y-stack-lg max-w-7xl">
-      {/* Hero: greeting + real XP/streak (no invented numbers — same fields the
-          gamification API reads from Student.xp / .level / .currentStreakDays) */}
-      <section className="flex flex-col md:flex-row md:items-center justify-between gap-stack-md glass-card p-6 rounded-2xl relative overflow-hidden">
-        <div className="absolute -right-16 -top-16 w-56 h-56 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="z-10">
-          <h1 className="font-headline-lg text-headline-lg text-on-surface">
-            {greeting}, {firstName}
+    <div className="space-y-10 max-w-7xl">
+      {/* SECTION 1 — TODAY (Hero + Real-Time Overview) */}
+      <section className="glass-card rounded-3xl p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden bg-gradient-to-r from-primary/10 via-surface to-surface border border-outline-variant/30 shadow-sm">
+        <div className="z-10 space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="text-xs uppercase font-bold px-2.5 py-0.5 rounded-full bg-primary/10 text-primary">
+              Class {student.class} &middot; {student.targetExam}
+            </span>
+          </div>
+          <h1 className="font-display-lg text-display-lg-mobile md:text-display-lg font-bold text-on-surface">
+            {greeting}, {firstName}!
           </h1>
-          <p className="font-body-md text-body-md text-on-surface-variant mt-1">
+          <p className="text-xs md:text-sm text-on-surface-variant max-w-lg leading-relaxed">
             {enrollments.length > 0
-              ? `Enrolled in ${enrollments.length} batch${enrollments.length === 1 ? "" : "es"} — here's what's next.`
-              : "You're not enrolled in a batch yet."}
+              ? `You are active in ${enrollments.length} batch${enrollments.length === 1 ? "" : "es"}. Here is your structured learning plan.`
+              : "Welcome to Atomic Pathshala! Enroll in a batch to get started."}
           </p>
         </div>
-        <div className="flex items-center gap-3 z-10">
-          <div className="flex items-center gap-2 bg-surface-container-lowest border border-outline-variant/30 px-4 py-2 rounded-full shadow-sm">
+
+        <div className="flex items-center gap-3 z-10 self-start md:self-auto flex-wrap">
+          <div className="flex items-center gap-2 bg-surface-container-lowest border border-outline-variant/30 px-4 py-2 rounded-2xl shadow-sm">
             <span className="material-symbols-outlined text-error text-xl">local_fire_department</span>
-            <span className="font-label-lg text-label-lg text-on-surface">{student.currentStreakDays}</span>
-            <span className="text-label-sm text-on-surface-variant">day streak</span>
+            <div>
+              <span className="font-bold text-sm text-on-surface block leading-tight">
+                {student.currentStreakDays} Days
+              </span>
+              <span className="text-[10px] text-on-surface-variant">Daily Streak</span>
+            </div>
           </div>
           <Link
             href="/leaderboard"
-            className="flex items-center gap-2 bg-surface-container-lowest border border-outline-variant/30 px-4 py-2 rounded-full shadow-sm hover:border-primary/40 transition-colors"
+            className="flex items-center gap-2 bg-surface-container-lowest border border-outline-variant/30 px-4 py-2 rounded-2xl shadow-sm hover:border-primary/40 transition-colors"
           >
             <span className="material-symbols-outlined text-primary text-xl">military_tech</span>
-            <span className="font-label-lg text-label-lg text-on-surface">Lvl {student.level}</span>
-            <span className="text-label-sm text-on-surface-variant">· {student.xp} XP</span>
+            <div>
+              <span className="font-bold text-sm text-on-surface block leading-tight">
+                Level {student.level}
+              </span>
+              <span className="text-[10px] text-on-surface-variant">{student.xp} XP</span>
+            </div>
           </Link>
         </div>
       </section>
 
-      {enrollments.length === 0 && popularBatches.length === 0 ? (
-        <div className="glass-card rounded-2xl p-12 text-center text-on-surface-variant font-body-md">
-          Once the team enrolls you into a batch, your classes, schedule, and progress will show up
-          here. In the meantime, you can still raise a doubt from the{" "}
-          <Link href="/doubts" className="text-primary hover:underline">
-            Doubt Portal
-          </Link>
-          .
-        </div>
-      ) : (
-        <>
-          {/* Continue Learning spotlight — bigger promo treatment of the same
-              next-class data the old page showed in a small side card. */}
-          {nextClass && (
-            <section className="glass-card rounded-2xl p-6 relative overflow-hidden bg-gradient-to-br from-primary/15 via-surface-container-lowest to-surface-container-lowest">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                  <span className="font-label-sm text-label-sm text-primary uppercase tracking-wide">
-                    Continue Learning · {TYPE_LABELS[nextClass.type] ?? nextClass.type}
-                  </span>
-                  <h2 className="font-headline-md text-headline-md text-on-surface mt-1">{nextClass.title}</h2>
-                  {nextClass.teacher && (
-                    <p className="text-body-sm text-on-surface-variant mt-1">{nextClass.teacher.user.name}</p>
-                  )}
-                  <div className="mt-3">
-                    <NextClassCountdown startsAtIso={nextClass.startsAt.toISOString()} />
-                  </div>
-                </div>
-                {nextClass.type === "LIVE_CLASS" ? (
-                  <Link
-                    href={`/live-class/${nextClass.id}`}
-                    className="shrink-0 text-center bg-primary text-on-primary font-label-md text-label-md px-6 py-3 rounded-full hover:opacity-90 transition-opacity"
-                  >
-                    Go to Live Class
-                  </Link>
-                ) : (
-                  <Link
-                    href="/schedule"
-                    className="shrink-0 text-center border border-primary text-primary font-label-md text-label-md px-6 py-3 rounded-full hover:bg-primary/5 transition-colors"
-                  >
-                    View in Schedule
-                  </Link>
-                )}
+      {/* Up Next / Live Spotlight */}
+      {nextClass && (
+        <section className="glass-card rounded-2xl p-5 md:p-6 relative overflow-hidden bg-gradient-to-r from-blue-500/10 via-surface to-surface border border-blue-200/50 dark:border-blue-900/40">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping" />
+                <span className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
+                  Next Scheduled Session &middot; {nextClass.type.replace("_", " ")}
+                </span>
               </div>
-            </section>
-          )}
-
-          {/* Quick stats as a horizontal chip row instead of a fixed 4-box grid */}
-          <section className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1">
-            {[
-              { icon: "groups", value: enrollments.length, label: "My Batches", color: "text-primary" },
-              { icon: "today", value: todaysSchedule.length, label: "Today's Classes", color: "text-secondary" },
-              { icon: "live_help", value: openDoubtsCount, label: "Open Doubts", color: "text-error" },
-              { icon: "event_upcoming", value: allUpcoming.length, label: "Upcoming Sessions", color: "text-secondary" },
-            ].map((stat) => (
-              <div
-                key={stat.label}
-                className="glass-card px-4 py-3 rounded-xl flex items-center gap-3 shrink-0 min-w-[160px]"
-              >
-                <span className={`material-symbols-outlined text-2xl ${stat.color}`}>{stat.icon}</span>
-                <div>
-                  <span className="font-headline-sm text-headline-sm text-on-surface block leading-tight">
-                    {stat.value}
-                  </span>
-                  <span className="text-label-sm text-on-surface-variant">{stat.label}</span>
-                </div>
+              <h2 className="font-headline-md text-headline-md font-bold text-on-surface">
+                {nextClass.title}
+              </h2>
+              {nextClass.teacher && (
+                <p className="text-xs text-on-surface-variant">
+                  Instructor: <b>{nextClass.teacher.user.name}</b>
+                </p>
+              )}
+              <div className="pt-1">
+                <NextClassCountdown startsAtIso={nextClass.startsAt.toISOString()} />
               </div>
-            ))}
-          </section>
-
-          {/* My Batches — horizontal-scroll cards (real enrolled batches, no placeholders) */}
-          {enrollments.length > 0 && (
-            <section>
-              <div className="flex justify-between items-center mb-3 px-1">
-                <h2 className="font-headline-md text-headline-md text-on-surface">My Batches</h2>
-                <Link href="/courses" className="font-label-md text-label-md text-primary hover:underline">
-                  View all
-                </Link>
-              </div>
-              <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1">
-                {enrollments.map((e, i) => (
-                  <Link
-                    key={e.id}
-                    href={`/courses/${e.batch.id}`}
-                    className={`shrink-0 w-64 rounded-2xl p-5 border border-outline-variant/30 bg-gradient-to-br ${CARD_ACCENTS[i % CARD_ACCENTS.length]} bg-surface-container-lowest hover:border-primary/40 transition-colors`}
-                  >
-                    <span className="material-symbols-outlined text-on-surface text-2xl">science</span>
-                    <h3 className="font-label-lg text-label-lg text-on-surface mt-3 line-clamp-2">
-                      {e.batch.name}
-                    </h3>
-                    <p className="text-label-sm text-on-surface-variant mt-1 truncate">
-                      {e.batch.course?.title ?? "General"}
-                    </p>
-                    <p className="text-label-sm text-on-surface-variant mt-3">
-                      {e.batch.teachers.length} faculty · {e.batch.schedules.length} upcoming
-                    </p>
-                  </Link>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Popular Batches — real upsell data, ranked by actual enrollment count
-              (Batch._count.enrollments), excludes batches the student is already
-              in. No enroll flow exists yet, so these route to /subscription
-              (the existing plans/upgrade page) rather than a dead "Enroll" button. */}
-          {popularBatches.length > 0 && (
-            <section>
-              <div className="flex justify-between items-center mb-3 px-1">
-                <h2 className="font-headline-md text-headline-md text-on-surface">Popular Batches</h2>
-                <Link href="/subscription" className="font-label-md text-label-md text-primary hover:underline">
-                  See plans
-                </Link>
-              </div>
-              <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1">
-                {popularBatches.map((b, i) => (
-                  <Link
-                    key={b.id}
-                    href="/subscription"
-                    className={`shrink-0 w-64 rounded-2xl p-5 border border-outline-variant/30 bg-gradient-to-br ${CARD_ACCENTS[(i + 2) % CARD_ACCENTS.length]} bg-surface-container-lowest hover:border-primary/40 transition-colors`}
-                  >
-                    <span className="material-symbols-outlined text-on-surface text-2xl">auto_stories</span>
-                    <h3 className="font-label-lg text-label-lg text-on-surface mt-3 line-clamp-2">{b.name}</h3>
-                    <p className="text-label-sm text-on-surface-variant mt-1 truncate">
-                      {b.course?.title ?? b.targetExam ?? "General"}
-                    </p>
-                    <p className="text-label-sm text-on-surface-variant mt-3">
-                      {b._count.enrollments} student{b._count.enrollments === 1 ? "" : "s"} enrolled
-                    </p>
-                  </Link>
-                ))}
-              </div>
-            </section>
-          )}
-
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-stack-lg">
-            {/* Today's schedule */}
-            <div className="lg:col-span-8">
-              <section className="glass-card p-6 rounded-2xl">
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="font-headline-md text-headline-md text-on-surface">Today&apos;s Schedule</h2>
-                  <Link href="/schedule" className="font-label-md text-label-md text-primary hover:underline">
-                    View Full
-                  </Link>
-                </div>
-                {todaysSchedule.length === 0 ? (
-                  <p className="text-body-sm text-on-surface-variant py-6 text-center">
-                    Nothing scheduled for today.
-                  </p>
-                ) : (
-                  <div className="flex flex-col gap-3">
-                    {todaysSchedule.map((s) => (
-                      <div
-                        key={s.id}
-                        className="flex items-center gap-4 p-4 rounded-xl border border-outline-variant/30 bg-surface-container-lowest"
-                      >
-                        <div className="w-16 flex flex-col items-center justify-center border-r border-outline-variant/30 pr-4 shrink-0">
-                          <span className="font-label-md text-label-md text-on-surface">
-                            {s.startsAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                          </span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <span className="bg-surface-container px-2 py-0.5 rounded text-[10px] font-bold text-on-surface-variant uppercase tracking-wide">
-                            {TYPE_LABELS[s.type] ?? s.type}
-                          </span>
-                          <h3 className="font-label-md text-label-md text-on-surface mt-1 truncate">{s.title}</h3>
-                          {s.teacher && (
-                            <p className="text-label-sm text-on-surface-variant">{s.teacher.user.name}</p>
-                          )}
-                        </div>
-                        {s.type === "LIVE_CLASS" && (
-                          <Link
-                            href={`/live-class/${s.id}`}
-                            className="shrink-0 text-primary font-label-md text-label-md hover:underline"
-                          >
-                            Join
-                          </Link>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </section>
             </div>
 
-            {/* Right column — Doubt Portal shortcut + recent doubts */}
-            <div className="lg:col-span-4 space-y-stack-lg">
+            <Link
+              href={nextClass.type === "LIVE_CLASS" ? `/live-class/${nextClass.id}` : "/schedule"}
+              className="px-6 py-3 rounded-xl bg-primary text-on-primary font-semibold text-xs shadow-md hover:opacity-90 active:scale-95 transition-all text-center self-start sm:self-auto shrink-0"
+            >
+              {isClassLive ? "Join Live Class Now" : "View Classroom"}
+            </Link>
+          </div>
+        </section>
+      )}
+
+      {/* SECTION 2 — LEARN */}
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-headline-md text-headline-md font-bold text-on-surface">
+              1. Learn &amp; Understand
+            </h2>
+            <p className="text-xs text-on-surface-variant">
+              Live lectures, comprehensive recordings, and structured study material.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
+          <FeatureCard
+            title="Live Classes"
+            description="Join live classes and learn in real time"
+            icon="videocam"
+            theme="blue"
+            href="/live-class"
+            isLive={isClassLive}
+            contextText={allUpcoming.length > 0 ? `${allUpcoming.length} upcoming` : "Daily Schedule"}
+          />
+          <FeatureCard
+            title="Recorded Classes"
+            description="Watch lectures anytime, at your own pace"
+            icon="play_circle"
+            theme="teal"
+            href="/courses"
+            contextText={`${enrollments.length} Batches Active`}
+          />
+          <FeatureCard
+            title="Study Material"
+            description="Notes, PDFs and essential study resources"
+            icon="menu_book"
+            theme="cyan"
+            href="/rewards"
+            contextText="Handbooks &amp; Notes"
+          />
+        </div>
+      </section>
+
+      {/* SECTION 3 — PRACTICE */}
+      <section className="space-y-4">
+        <div>
+          <h2 className="font-headline-md text-headline-md font-bold text-on-surface">
+            2. Daily Practice &amp; Revision
+          </h2>
+          <p className="text-xs text-on-surface-variant">
+            Targeted question solving, previous year questions, daily practice problems, and error analysis.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5">
+          <FeatureCard
+            title="Question Practice"
+            description="Practice questions topic by topic"
+            icon="edit_note"
+            theme="orange"
+            href="/practice-board"
+            contextText="Interactive Canvas"
+          />
+          <FeatureCard
+            title="PYQ Practice"
+            description="Practice previous year questions"
+            icon="history_edu"
+            theme="rose"
+            href="/tests"
+            contextText="NEET &amp; JEE Archives"
+          />
+          <FeatureCard
+            title="Daily DPP"
+            description="Complete today's daily practice"
+            icon="assignment"
+            theme="red"
+            href="/dpp"
+            contextText={dppCount > 0 ? `${dppCount} Assigned` : "Daily Problems"}
+          />
+          <FeatureCard
+            title="Mistake Book"
+            description="Review questions you got wrong"
+            icon="auto_fix_high"
+            theme="amber"
+            href="/mistakes"
+            contextText={mistakesCount > 0 ? `${mistakesCount} to review` : "Mistakes Clean"}
+          />
+        </div>
+      </section>
+
+      {/* SECTION 4 — TEST & ANALYZE */}
+      <section className="space-y-4">
+        <div>
+          <h2 className="font-headline-md text-headline-md font-bold text-on-surface">
+            3. Test &amp; Analyze
+          </h2>
+          <p className="text-xs text-on-surface-variant">
+            Simulated test series, All India Rank diagnostics, and deep performance analysis.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-5">
+          <FeatureCard
+            title="Test Series"
+            description="Take tests and measure your preparation"
+            icon="quiz"
+            theme="green"
+            href="/tests"
+            contextText={testsCount > 0 ? `${testsCount} Mock Tests` : "Mock Tests"}
+          />
+          <FeatureCard
+            title="My Performance"
+            description="Track scores, accuracy and progress"
+            icon="analytics"
+            theme="indigo"
+            href="/leaderboard"
+            contextText={overallAccuracy !== null ? `${overallAccuracy}% Accuracy` : "AIR Leaderboard"}
+          />
+        </div>
+      </section>
+
+      {/* SECTION 5 — AI ASSISTANT (ATOMIC GURU) */}
+      <section className="space-y-4">
+        <div>
+          <h2 className="font-headline-md text-headline-md font-bold text-on-surface">
+            4. AI Concept &amp; Doubt Help
+          </h2>
+          <p className="text-xs text-on-surface-variant">
+            Instant step-by-step problem solver, conceptual explanation, and doubt escalation.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:gap-5">
+          <FeatureCard
+            title="Atomic Guru"
+            description="Ask doubts and understand concepts with AI"
+            icon="psychology"
+            theme="purple"
+            href="/doubts"
+            contextText="Instant 24/7 AI Helper"
+          />
+        </div>
+      </section>
+
+      {/* Enrolled Batches Section */}
+      {enrollments.length > 0 && (
+        <section className="space-y-4 pt-4 border-t border-outline-variant/20">
+          <div className="flex justify-between items-center">
+            <h2 className="font-headline-md text-headline-md font-bold text-on-surface">
+              My Enrolled Batches
+            </h2>
+            <Link href="/courses" className="text-xs font-semibold text-primary hover:underline">
+              View All Courses &rarr;
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {enrollments.map((e) => (
               <Link
-                href="/doubts"
-                className="glass-card rounded-2xl p-5 flex items-center gap-4 hover:border-primary/40 border border-transparent transition-colors block"
+                key={e.id}
+                href={`/courses/${e.batch.id}`}
+                className="glass-card rounded-2xl p-5 border border-outline-variant/30 hover:border-primary/50 transition-all hover:shadow-md block"
               >
-                <span className="material-symbols-outlined text-primary text-3xl">forum</span>
-                <div>
-                  <h3 className="font-label-lg text-label-lg text-on-surface">Doubt Portal</h3>
-                  <p className="text-label-sm text-on-surface-variant mt-0.5">
-                    {openDoubtsCount > 0
-                      ? `${openDoubtsCount} doubt${openDoubtsCount === 1 ? "" : "s"} awaiting an answer`
-                      : "Stuck on something? Ask now."}
-                  </p>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="material-symbols-outlined text-primary text-xl">science</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-primary/10 text-primary">
+                    {e.batch.code}
+                  </span>
+                </div>
+                <h3 className="font-bold text-sm text-on-surface line-clamp-1">{e.batch.name}</h3>
+                <p className="text-xs text-on-surface-variant mt-0.5 truncate">
+                  {e.batch.course?.title ?? "Standard Curriculum"}
+                </p>
+                <div className="mt-3 pt-3 border-t border-outline-variant/20 flex items-center justify-between text-xs text-on-surface-variant">
+                  <span>{e.batch.teachers.length} Faculty</span>
+                  <span className="text-primary font-semibold">Open Batch &rarr;</span>
                 </div>
               </Link>
-
-              <section className="glass-card p-4 rounded-2xl">
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="font-label-md text-label-md text-on-surface-variant uppercase tracking-wide">
-                    Recent Doubts
-                  </h2>
-                  <Link href="/doubts" className="text-primary">
-                    <span className="material-symbols-outlined text-lg">add_circle</span>
-                  </Link>
-                </div>
-                {recentDoubts.length === 0 ? (
-                  <p className="text-label-sm text-on-surface-variant py-4 text-center">
-                    No doubts submitted yet.
-                  </p>
-                ) : (
-                  <div className="flex flex-col gap-2">
-                    {recentDoubts.map((d) => (
-                      <Link
-                        key={d.id}
-                        href={`/doubts/${d.id}`}
-                        className="p-3 rounded-lg bg-surface-container-lowest border border-outline-variant/30 hover:border-primary/40 transition-colors"
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-label-sm text-on-surface-variant">{d.subject ?? "General"}</span>
-                          <span
-                            className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${
-                              d.status === "RESOLVED"
-                                ? "bg-primary/10 text-primary"
-                                : d.status === "FLAGGED"
-                                  ? "bg-error/10 text-error"
-                                  : "bg-surface-container text-on-surface-variant"
-                            }`}
-                          >
-                            {d.status === "OPEN" ? "Pending" : d.status === "RESOLVED" ? "Resolved" : "Flagged"}
-                          </span>
-                        </div>
-                        <p className="font-label-md text-label-md text-on-surface line-clamp-1">{d.body}</p>
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </section>
-            </div>
+            ))}
           </div>
-        </>
+        </section>
       )}
     </div>
   );

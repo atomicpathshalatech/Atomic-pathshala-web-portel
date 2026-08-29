@@ -1,9 +1,13 @@
 import { z } from "zod";
 
 export const questionTypeEnum = z.enum(["MCQ", "INTEGER"]);
-export const difficultyEnum = z.enum(["EASY", "MEDIUM", "HARD", "ADVANCED"]);
+export const difficultyEnum = z.enum(["EASY", "MEDIUM", "HARD"]);
 export const questionStatusEnum = z.enum(["PENDING", "VERIFIED", "FLAGGED"]);
 
+// marksCorrect/marksIncorrect used to live on Question itself. The Test
+// Portal schema moved marking to Test.correctMarks/incorrectMarks (with an
+// optional per-question SectionQuestion override), so a question no longer
+// carries its own marks — dropped from this schema accordingly.
 export const questionSchema = z
   .object({
     body: z.string().min(10, "Question text should be at least 10 characters"),
@@ -14,8 +18,6 @@ export const questionSchema = z
     optionD: z.string().optional(),
     correctOption: z.string().min(1, "Specify the correct answer"),
     explanation: z.string().optional(),
-    marksCorrect: z.coerce.number().int().default(4),
-    marksIncorrect: z.coerce.number().int().default(-1),
     difficulty: difficultyEnum.default("MEDIUM"),
     tags: z.array(z.string()).default([]),
     subjectId: z.string().optional().or(z.literal("")),

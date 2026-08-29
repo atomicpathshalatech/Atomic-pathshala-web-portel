@@ -19,6 +19,9 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
       include: { batchSchedule: true },
     });
     if (!test) return apiError("Test not found", 404);
+    if (!test.batchScheduleId || !test.batchSchedule) {
+      return apiError("This test isn't linked to a scheduled session.", 400);
+    }
     if (test.status !== "PUBLISHED") return apiError("This test isn't open yet.", 409);
 
     const { student } = await resolveStudentForSchedule(session.user.id, test.batchScheduleId);
@@ -32,7 +35,7 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
       return apiError("This test's window has closed.", 409);
     }
 
-    const existing = await prisma.testAttempt.findUnique({
+    const existing = await prisma.attempt.findUnique({
       where: { testId_studentId: { testId: test.id, studentId: student.id } },
     });
     if (existing) {
@@ -42,7 +45,7 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
       return apiSuccess({ attempt: existing, resumed: true });
     }
 
-    const attempt = await prisma.testAttempt.create({
+    const attempt = await prisma.attempt.create({
       data: { testId: test.id, studentId: student.id },
     });
 

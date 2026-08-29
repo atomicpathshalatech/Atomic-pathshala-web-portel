@@ -18,16 +18,20 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
       where: { id: params.id },
       include: {
         batchSchedule: { include: { batch: { select: { id: true, name: true } } } },
-        questions: {
+        sections: {
           orderBy: { order: "asc" },
-          include: { question: true },
+          include: { questions: { orderBy: { order: "asc" }, include: { question: true } } },
         },
       },
     });
     if (!test) return apiError("Test not found", 404);
     if (!(await canManageTest(session.user.id, test.batchScheduleId))) throw new ForbiddenError();
 
-    const totalMarks = test.questions.reduce((sum, tq) => sum + tq.question.marksCorrect, 0);
+    const totalMarks = test.sections.reduce(
+      (sum, s) =>
+        sum + s.questions.reduce((sSum, sq) => sSum + (sq.marksOverride ?? s.marksPerQuestion ?? test.correctMarks), 0),
+      0
+    );
     return apiSuccess({ test, totalMarks });
   } catch (error) {
     return handleApiError(error);
@@ -54,7 +58,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     const updated = await prisma.test.update({
       where: { id: params.id },
       data: {
-        ...(input.title !== undefined && { title: input.title }),
+        ...(input.title !== undefined && { name: input.title }),
         ...(input.instructions !== undefined && { instructions: input.instructions }),
         ...(input.durationMin !== undefined && { durationMin: input.durationMin }),
       },

@@ -8,7 +8,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 
 const statusSchema = z.object({
-  status: z.enum(["VERIFIED", "FLAGGED", "PENDING"]),
+  isPublished: z.boolean(),
 });
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
@@ -20,21 +20,21 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     const existing = await prisma.question.findUnique({ where: { id: params.id } });
     if (!existing) return apiError("Question not found", 404);
 
-    const { status } = statusSchema.parse(await request.json());
+    const { isPublished } = statusSchema.parse(await request.json());
 
     const question = await prisma.question.update({
       where: { id: params.id },
       data: {
-        status,
-        verifiedById: status === "PENDING" ? null : session.user.id,
-        verifiedAt: status === "PENDING" ? null : new Date(),
+        isPublished,
+        publishedById: isPublished ? session.user.id : null,
+        publishedAt: isPublished ? new Date() : null,
       },
     });
 
     await prisma.auditLog.create({
       data: {
         userId: session.user.id,
-        action: `QUESTION_${status}`,
+        action: isPublished ? "QUESTION_PUBLISHED" : "QUESTION_UNPUBLISHED",
         entityType: "Question",
         entityId: question.id,
       },

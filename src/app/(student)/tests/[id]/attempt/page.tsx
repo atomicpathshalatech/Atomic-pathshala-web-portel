@@ -3,10 +3,11 @@ import { notFound, redirect } from "next/navigation";
 import { requireStudentSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { resolveStudentForSchedule } from "@/lib/batch/access";
-import { TestAttemptRunner } from "@/components/student/TestAttemptRunner";
+import { toLegacyQuestion } from "@/lib/questions/legacy";
+import { ExamRunner } from "@/components/student/ExamRunner";
 
 export const metadata: Metadata = {
-  title: "Attempt Test",
+  title: "Live CBT Exam Room | Atomic Pathshala",
 };
 
 export default async function TestAttemptPage({ params }: { params: { id: string } }) {
@@ -14,10 +15,22 @@ export default async function TestAttemptPage({ params }: { params: { id: string
 
   const test = await prisma.test.findUnique({
     where: { id: params.id },
-    include: { batchSchedule: true },
+    include: {
+      batchSchedule: { include: { batch: true } },
+      sections: {
+        orderBy: { order: "asc" },
+        include: {
+          questions: {
+            orderBy: { order: "asc" },
+            include: { question: { include: { translations: true } } },
+          },
+        },
+      },
+    },
   });
   if (!test) notFound();
   if (test.status !== "PUBLISHED") redirect("/tests");
+  if (!test.batchScheduleId || !test.batchSchedule) redirect("/tests");
 
   const { student } = await resolveStudentForSchedule(session.user.id, test.batchScheduleId);
   if (!student) redirect("/tests");
@@ -25,17 +38,17 @@ export default async function TestAttemptPage({ params }: { params: { id: string
   const now = new Date();
   if (now < test.batchSchedule.startsAt) redirect("/tests");
 
-  let attempt = await prisma.testAttempt.findUnique({
+  let attempt = await prisma.attempt.findUnique({
     where: { testId_studentId: { testId: test.id, studentId: student.id } },
+    include: { answers: true },
   });
 
-  // First visit: start the attempt right here (same idempotent create as
-  // POST /api/tests/[id]/attempts) so the runner below can assume one
-  // already exists. A closed window with no existing attempt just means the
-  // student never opened it in time — nothing to resume.
   if (!attempt) {
     if (now > test.batchSchedule.endsAt) redirect("/tests");
-    attempt = await prisma.testAttempt.create({ data: { testId: test.id, studentId: student.id } });
+    attempt = await prisma.attempt.create({
+      data: { testId: test.id, studentId: student.id },
+      include: { answers: true },
+    });
     await prisma.auditLog.create({
       data: {
         userId: session.user.id,
@@ -49,5 +62,62 @@ export default async function TestAttemptPage({ params }: { params: { id: string
 
   if (attempt.status !== "IN_PROGRESS") redirect(`/tests/${test.id}/result`);
 
-  return <TestAttemptRunner testId={test.id} />;
+  // Calculate strict deadline based on duration or schedule close
+  const startMs = new Date(attempt.startedAt).getTime();
+  const durationMs = test.durationMin * 60 * 1000;
+  const scheduleCloseMs = new Date(test.batchSchedule.endsAt).getTime();
+  const deadlineMs = Math.min(startMs + durationMs, scheduleCloseMs);
+
+  const answersMap = new Map(
+    attempt.answers.map((a) => [
+      a.questionId,
+      Array.isArray(a.selectedOptionIds) ? (a.selectedOptionIds as string[])[0] ?? null : null,
+    ])
+  );
+
+  const sectionQuestions = test.sections.flatMap((s) => s.questions);
+
+  const questionsData = sectionQuestions.map((sq) => {
+    const legacy = toLegacyQuestion(sq.question);
+    return {
+      id: sq.question.id,
+      order: sq.order,
+      subject: test.batchSchedule!.subject || "General",
+      body: legacy.body,
+      type: legacy.type,
+      optionA: legacy.optionA,
+      optionB: legacy.optionB,
+      optionC: legacy.optionC,
+      optionD: legacy.optionD,
+      mySelection: answersMap.get(sq.question.id) ?? null,
+    };
+  });
+
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { name: true },
+  });
+
+  return (
+    <ExamRunner
+      testId={test.id}
+      initialData={{
+        attempt: {
+          id: attempt.id,
+          status: attempt.status,
+          startedAt: attempt.startedAt.toISOString(),
+          deadlineAt: new Date(deadlineMs).toISOString(),
+        },
+        test: {
+          id: test.id,
+          title: test.name,
+          instructions: test.instructions,
+          durationMin: test.durationMin,
+          targetExam: test.batchSchedule.batch.targetExam || "NEET UG",
+        },
+        questions: questionsData,
+        candidateName: user?.name || "Student",
+      }}
+    />
+  );
 }

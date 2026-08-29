@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { QuestionForm } from "@/components/team-portal/QuestionForm";
+import { toLegacyQuestion, reverseResolveSubjectChapterIds } from "@/lib/questions/legacy";
 
 export const metadata: Metadata = {
   title: "Edit Question",
@@ -19,7 +20,7 @@ export default async function EditQuestionPage({ params }: { params: { id: strin
   if (!canUpdate) redirect("/team/questions");
 
   const [question, subjects] = await Promise.all([
-    prisma.question.findUnique({ where: { id: params.id } }),
+    prisma.question.findUnique({ where: { id: params.id }, include: { translations: true } }),
     prisma.subject.findMany({
       include: { chapters: { select: { id: true, title: true } } },
       orderBy: { title: "asc" },
@@ -28,32 +29,37 @@ export default async function EditQuestionPage({ params }: { params: { id: strin
 
   if (!question) notFound();
 
+  const legacy = toLegacyQuestion(question);
+  const { subjectId, chapterId } = await reverseResolveSubjectChapterIds(
+    prisma,
+    legacy.subject,
+    legacy.chapter
+  );
+
   return (
     <div className="max-w-6xl space-y-6">
       <div>
         <h1 className="font-headline-lg text-headline-lg text-primary">Edit Question</h1>
         <p className="text-on-surface-variant font-body-md mt-1">
-          Editing will not change its verification status.
+          Editing will not change its publish status.
         </p>
       </div>
       <QuestionForm
         subjects={subjects}
         questionId={question.id}
         initialData={{
-          body: question.body,
-          type: question.type,
-          optionA: question.optionA ?? undefined,
-          optionB: question.optionB ?? undefined,
-          optionC: question.optionC ?? undefined,
-          optionD: question.optionD ?? undefined,
-          correctOption: question.correctOption,
-          explanation: question.explanation ?? undefined,
-          marksCorrect: question.marksCorrect,
-          marksIncorrect: question.marksIncorrect,
-          difficulty: question.difficulty,
-          tags: question.tags,
-          subjectId: question.subjectId ?? "",
-          chapterId: question.chapterId ?? "",
+          body: legacy.body,
+          type: legacy.type,
+          optionA: legacy.optionA || undefined,
+          optionB: legacy.optionB || undefined,
+          optionC: legacy.optionC || undefined,
+          optionD: legacy.optionD || undefined,
+          correctOption: legacy.correctOption,
+          explanation: legacy.explanation || undefined,
+          difficulty: legacy.difficulty as "EASY" | "MEDIUM" | "HARD",
+          tags: legacy.tags,
+          subjectId,
+          chapterId,
         }}
       />
     </div>

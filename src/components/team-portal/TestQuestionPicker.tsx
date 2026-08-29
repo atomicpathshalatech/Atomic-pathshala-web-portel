@@ -5,18 +5,16 @@ import { useRouter } from "next/navigation";
 
 type BankQuestion = {
   id: string;
-  body: string;
   type: string;
   difficulty: string;
-  marksCorrect: number;
-  marksIncorrect: number;
-  subject: { title: string } | null;
+  subject: string | null;
+  statement: string;
 };
 
 type CurrentQuestion = {
-  id: string; // TestQuestion id
+  id: string; // SectionQuestion id
   order: number;
-  question: { id: string; body: string; marksCorrect: number; marksIncorrect: number };
+  question: { id: string; statement: string };
 };
 
 const inputClass =
@@ -81,11 +79,13 @@ export function TestQuestionPicker({
     }
   }
 
-  async function removeQuestion(testQuestionId: string) {
-    setRemoving(testQuestionId);
+  async function removeQuestion(sectionQuestionId: string) {
+    setRemoving(sectionQuestionId);
     setError(null);
     try {
-      const res = await fetch(`/api/team/tests/${testId}/questions/${testQuestionId}`, { method: "DELETE" });
+      const res = await fetch(`/api/team/tests/${testId}/questions/${sectionQuestionId}`, {
+        method: "DELETE",
+      });
       const json = await res.json();
       if (!res.ok || !json.success) {
         setError(json.error ?? "Could not remove that question.");
@@ -125,10 +125,7 @@ export function TestQuestionPicker({
                 >
                   <div>
                     <span className="text-label-sm text-on-surface-variant mr-2">Q{c.order}</span>
-                    <span className="text-label-md text-on-surface">{c.question.body}</span>
-                    <span className="text-label-sm text-on-surface-variant ml-2">
-                      (+{c.question.marksCorrect} / {c.question.marksIncorrect})
-                    </span>
+                    <span className="text-label-md text-on-surface">{c.question.statement}</span>
                   </div>
                   {editable && (
                     <button
@@ -152,7 +149,7 @@ export function TestQuestionPicker({
           <div className="flex gap-2 mb-3">
             <input
               className={inputClass}
-              placeholder="Search verified questions..."
+              placeholder="Search published questions..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && search()}
@@ -181,8 +178,8 @@ export function TestQuestionPicker({
                     <span className="text-[10px] font-bold uppercase tracking-wide bg-secondary/10 text-secondary px-1.5 py-0.5 rounded mr-2">
                       {q.difficulty}
                     </span>
-                    {q.subject && <span className="text-label-sm text-on-surface-variant mr-2">{q.subject.title}</span>}
-                    <span className="text-label-md text-on-surface">{q.body}</span>
+                    {q.subject && <span className="text-label-sm text-on-surface-variant mr-2">{q.subject}</span>}
+                    <span className="text-label-md text-on-surface">{q.statement}</span>
                   </div>
                   <button
                     type="button"

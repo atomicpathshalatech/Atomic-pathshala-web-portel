@@ -19,6 +19,7 @@ const ROLE_LABELS: Record<GlobalRole, string> = {
   HR: "HR",
   MARKETING: "Marketing",
   DEPARTMENT_HEAD: "Department Head",
+  SUB_ADMIN: "Sub Admin",
   SUPER_ADMIN: "Super Admin",
   FOUNDER: "Founder",
 };

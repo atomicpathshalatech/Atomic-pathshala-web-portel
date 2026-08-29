@@ -32,7 +32,8 @@ export default async function TestsListPage() {
     tests = await prisma.test.findMany({
       include: {
         batchSchedule: { include: { batch: { select: { name: true } } } },
-        _count: { select: { questions: true, attempts: true } },
+        sections: { select: { _count: { select: { questions: true } } } },
+        _count: { select: { attempts: true } },
       },
       orderBy: { createdAt: "desc" },
     });
@@ -51,7 +52,8 @@ export default async function TestsListPage() {
       where: { batchSchedule: { batchId: { in: Array.from(assignedBatchIds) } } },
       include: {
         batchSchedule: { include: { batch: { select: { name: true } } } },
-        _count: { select: { questions: true, attempts: true } },
+        sections: { select: { _count: { select: { questions: true } } } },
+        _count: { select: { attempts: true } },
       },
       orderBy: { createdAt: "desc" },
     });
@@ -83,33 +85,38 @@ export default async function TestsListPage() {
         </div>
       ) : (
         <ul className="space-y-2">
-          {tests.map((t) => (
-            <li key={t.id}>
-              <Link
-                href={`/team/tests/${t.id}`}
-                className="glass-card rounded-xl p-4 flex flex-wrap items-center justify-between gap-3 hover:shadow-md transition-all block"
-              >
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span
-                      className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded ${
-                        STATUS_STYLES[t.status] ?? "bg-surface-container-high text-on-surface-variant"
-                      }`}
-                    >
-                      {t.status}
-                    </span>
-                    <span className="text-label-sm text-on-surface-variant">{t.batchSchedule.batch.name}</span>
+          {tests.map((t) => {
+            const questionCount = t.sections.reduce((sum, s) => sum + s._count.questions, 0);
+            return (
+              <li key={t.id}>
+                <Link
+                  href={`/team/tests/${t.id}`}
+                  className="glass-card rounded-xl p-4 flex flex-wrap items-center justify-between gap-3 hover:shadow-md transition-all block"
+                >
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span
+                        className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded ${
+                          STATUS_STYLES[t.status] ?? "bg-surface-container-high text-on-surface-variant"
+                        }`}
+                      >
+                        {t.status}
+                      </span>
+                      {t.batchSchedule && (
+                        <span className="text-label-sm text-on-surface-variant">{t.batchSchedule.batch.name}</span>
+                      )}
+                    </div>
+                    <p className="font-label-md text-label-md text-on-surface">{t.name}</p>
+                    <p className="text-label-sm text-on-surface-variant">
+                      {questionCount} question{questionCount === 1 ? "" : "s"} · {t.durationMin} min ·{" "}
+                      {t._count.attempts} attempt{t._count.attempts === 1 ? "" : "s"}
+                    </p>
                   </div>
-                  <p className="font-label-md text-label-md text-on-surface">{t.title}</p>
-                  <p className="text-label-sm text-on-surface-variant">
-                    {t._count.questions} question{t._count.questions === 1 ? "" : "s"} · {t.durationMin} min ·{" "}
-                    {t._count.attempts} attempt{t._count.attempts === 1 ? "" : "s"}
-                  </p>
-                </div>
-                <span className="material-symbols-outlined text-on-surface-variant">chevron_right</span>
-              </Link>
-            </li>
-          ))}
+                  <span className="material-symbols-outlined text-on-surface-variant">chevron_right</span>
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

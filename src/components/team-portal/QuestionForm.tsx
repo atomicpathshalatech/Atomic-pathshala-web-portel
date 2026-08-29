@@ -37,8 +37,6 @@ export function QuestionForm({
     defaultValues: {
       type: "MCQ",
       difficulty: "MEDIUM",
-      marksCorrect: 4,
-      marksIncorrect: -1,
       tags: [],
       ...initialData,
     },
@@ -195,23 +193,6 @@ export function QuestionForm({
       <aside className="space-y-stack-md">
         <div className="glass-card p-stack-md rounded-xl space-y-stack-md">
           <p className="font-label-md text-label-md text-on-surface-variant flex items-center gap-2">
-            <span className="material-symbols-outlined text-lg">grade</span>
-            Scoring
-          </p>
-          <div className="grid grid-cols-2 gap-stack-md">
-            <div>
-              <p className="text-label-sm font-label-sm text-outline mb-1">Correct</p>
-              <input type="number" className={inputClass + " text-center"} {...register("marksCorrect")} />
-            </div>
-            <div>
-              <p className="text-label-sm font-label-sm text-outline mb-1">Incorrect</p>
-              <input type="number" className={inputClass + " text-center"} {...register("marksIncorrect")} />
-            </div>
-          </div>
-        </div>
-
-        <div className="glass-card p-stack-md rounded-xl space-y-stack-md">
-          <p className="font-label-md text-label-md text-on-surface-variant flex items-center gap-2">
             <span className="material-symbols-outlined text-lg">category</span>
             Classification
           </p>
@@ -261,7 +242,7 @@ export function QuestionForm({
             Difficulty
           </p>
           <div className="flex flex-wrap gap-2">
-            {(["EASY", "MEDIUM", "HARD", "ADVANCED"] as const).map((d) => (
+            {(["EASY", "MEDIUM", "HARD"] as const).map((d) => (
               <button
                 type="button"
                 key={d}

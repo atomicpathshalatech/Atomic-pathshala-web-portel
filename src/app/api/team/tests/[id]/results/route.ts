@@ -5,6 +5,8 @@ import { prisma } from "@/lib/db";
 import { requirePermission, UnauthorizedError, ForbiddenError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { canManageTest, getTestOr404 } from "@/lib/test-engine/access";
+import { countTestQuestions } from "@/lib/test-engine/sections";
+import { computeAttemptCounts } from "@/lib/test-engine/scoring";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 
 /** Ranked results for a test — submitted/auto-submitted attempts only,
@@ -21,32 +23,37 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     if (!test) return apiError("Test not found", 404);
     if (!(await canManageTest(session.user.id, test.batchScheduleId))) throw new ForbiddenError();
 
-    const schedule = await prisma.batchSchedule.findUnique({ where: { id: test.batchScheduleId } });
+    const schedule = test.batchScheduleId
+      ? await prisma.batchSchedule.findUnique({ where: { id: test.batchScheduleId } })
+      : null;
     const [attempts, totalEnrolled, questionCount] = await Promise.all([
-      prisma.testAttempt.findMany({
+      prisma.attempt.findMany({
         where: { testId: params.id, status: { in: ["SUBMITTED", "AUTO_SUBMITTED"] } },
-        include: { student: { include: { user: true } } },
+        include: { student: { include: { user: true } }, answers: true },
         orderBy: [{ score: "desc" }, { submittedAt: "asc" }],
       }),
       schedule
         ? prisma.batchEnrollment.count({ where: { batchId: schedule.batchId, status: "ACTIVE" } })
         : Promise.resolve(0),
-      prisma.testQuestion.count({ where: { testId: params.id } }),
+      countTestQuestions(params.id),
     ]);
 
     return apiSuccess({
-      attempts: attempts.map((a, i) => ({
-        rank: i + 1,
-        studentId: a.studentId,
-        studentName: a.student.user.name,
-        enrollmentNumber: a.student.enrollmentNumber,
-        score: a.score,
-        correctCount: a.correctCount,
-        incorrectCount: a.incorrectCount,
-        unattemptedCount: a.unattemptedCount,
-        status: a.status,
-        submittedAt: a.submittedAt,
-      })),
+      attempts: attempts.map((a, i) => {
+        const counts = computeAttemptCounts(a.answers, questionCount);
+        return {
+          rank: i + 1,
+          studentId: a.studentId,
+          studentName: a.student.user.name,
+          enrollmentNumber: a.student.enrollmentNumber,
+          score: a.score,
+          correctCount: counts.correctCount,
+          incorrectCount: counts.incorrectCount,
+          unattemptedCount: counts.unattemptedCount,
+          status: a.status,
+          submittedAt: a.submittedAt,
+        };
+      }),
       attemptedCount: attempts.length,
       totalEnrolled,
       questionCount,

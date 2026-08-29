@@ -54,7 +54,7 @@ export default async function AnalyticsPage() {
       where: { enrolledAt: { gte: eightWeeksAgo } },
       select: { enrolledAt: true },
     }),
-    prisma.testAttempt.findMany({
+    prisma.attempt.findMany({
       where: { status: { in: ["SUBMITTED", "AUTO_SUBMITTED"] } },
       select: { testId: true, score: true },
     }),
@@ -102,20 +102,39 @@ export default async function AnalyticsPage() {
   const maxWeekCount = Math.max(1, ...weekBuckets.map((b) => b.count));
 
   // --- Average test score, normalized per test's real max marks --------------
-  const testIds = [...new Set(finalizedAttempts.map((a) => a.testId))];
+  // Test's max marks is no longer a per-question value summed up — it's the
+  // test's own correctMarks (or a per-question override) times how many
+  // questions it has, via sections/sectionQuestion.
+  const testIds = [...new Set(finalizedAttempts.map((a) => a.testId).filter((id): id is string => id !== null))];
   const testsWithMarks =
     testIds.length > 0
       ? await prisma.test.findMany({
           where: { id: { in: testIds } },
-          select: { id: true, questions: { select: { question: { select: { marksCorrect: true } } } } },
+          select: {
+            id: true,
+            correctMarks: true,
+            sections: {
+              select: {
+                marksPerQuestion: true,
+                questions: { select: { marksOverride: true } },
+              },
+            },
+          },
         })
       : [];
   const maxMarksByTest = new Map(
-    testsWithMarks.map((t) => [t.id, t.questions.reduce((sum, q) => sum + q.question.marksCorrect, 0)])
+    testsWithMarks.map((t) => [
+      t.id,
+      t.sections.reduce(
+        (sum, s) =>
+          sum + s.questions.reduce((sSum, sq) => sSum + (sq.marksOverride ?? s.marksPerQuestion ?? t.correctMarks), 0),
+        0
+      ),
+    ])
   );
   const percentages = finalizedAttempts
     .map((a) => {
-      const max = maxMarksByTest.get(a.testId) ?? 0;
+      const max = (a.testId && maxMarksByTest.get(a.testId)) ?? 0;
       if (max <= 0 || a.score == null) return null;
       return (a.score / max) * 100;
     })
