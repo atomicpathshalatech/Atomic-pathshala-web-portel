@@ -1,5 +1,11 @@
 import "server-only";
-import type { Question, QuestionTranslation } from "@prisma/client";
+import type { Question, QuestionTranslation, PrismaClient } from "@prisma/client";
+
+// Narrowed to just the two delegates these helpers use, reusing the real
+// generated Prisma types — a hand-rolled `(args: unknown) => ...` duck-type
+// doesn't structurally match Prisma's delegate methods (their `args`
+// parameter isn't `unknown`), so passing the real `prisma` client fails.
+type SubjectChapterClient = Pick<PrismaClient, "subject" | "chapter">;
 
 /**
  * Compatibility shim between the old flat Question shape (body/optionA-D/
@@ -117,7 +123,7 @@ export function toLegacyQuestion(
 
 /** Look up Subject/Chapter titles by id, for storing on Question as plain strings. */
 export async function resolveSubjectChapterNames(
-  prisma: { subject: { findUnique: (args: unknown) => Promise<{ title: string } | null> }; chapter: { findUnique: (args: unknown) => Promise<{ title: string } | null> } },
+  prisma: SubjectChapterClient,
   subjectId?: string,
   chapterId?: string
 ): Promise<{ subject: string; chapter: string | null }> {
@@ -138,10 +144,7 @@ export async function resolveSubjectChapterNames(
 
 /** Best-effort reverse lookup (title -> id) so the edit form can preselect Subject/Chapter dropdowns. */
 export async function reverseResolveSubjectChapterIds(
-  prisma: {
-    subject: { findFirst: (args: unknown) => Promise<{ id: string } | null> };
-    chapter: { findFirst: (args: unknown) => Promise<{ id: string } | null> };
-  },
+  prisma: SubjectChapterClient,
   subjectTitle: string | null,
   chapterTitle: string | null
 ): Promise<{ subjectId: string; chapterId: string }> {

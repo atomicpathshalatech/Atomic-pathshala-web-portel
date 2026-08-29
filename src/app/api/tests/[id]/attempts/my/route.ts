@@ -37,6 +37,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
       },
     });
     if (!test) return apiError("Test not found", 404);
+    if (!test.batchScheduleId) return apiError("This test isn't linked to a scheduled session.", 400);
 
     const { student } = await resolveStudentForSchedule(session.user.id, test.batchScheduleId);
     if (!student) throw new ForbiddenError();

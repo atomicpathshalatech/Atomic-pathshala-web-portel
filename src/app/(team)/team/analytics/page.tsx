@@ -134,7 +134,7 @@ export default async function AnalyticsPage() {
   );
   const percentages = finalizedAttempts
     .map((a) => {
-      const max = (a.testId && maxMarksByTest.get(a.testId)) ?? 0;
+      const max = a.testId ? maxMarksByTest.get(a.testId) ?? 0 : 0;
       if (max <= 0 || a.score == null) return null;
       return (a.score / max) * 100;
     })
