@@ -90,6 +90,34 @@ model User {
   modulesCreated         Module[]          @relation("ModuleCreatedBy")
   brandProfilesCreated   BrandProfile[]    @relation("BrandProfileCreatedBy")
 
+  // --- AI Chat / Atomic Guru integration (imported from _import_atomic-ai-chat) ---
+  // Reuses this existing User for login — the imported app's own User/Account/
+  // Session/role/gamification fields are deliberately NOT duplicated here:
+  // atomicId/role(UserRole)/isPro/isSuspended/currentStreak/longestStreak/
+  // totalXp/lastActivityDate/image were dropped since Student.xp/
+  // currentStreakDays/level, User.status, User.photoUrl, and the existing
+  // Role/GlobalRole RBAC already cover the same ground. Everything else below
+  // (chat, quiz, its own subscription/enrollment/course catalog, etc.) is
+  // imported as-is as parallel models per instruction — only renamed where a
+  // model name collided with an existing one (Course/Batch/Subscription).
+  aiChatProfile          UserProfile?
+  aiChatPreferences      UserPreference?
+  aiMemory               AiMemory?
+  oauthAccounts          Account[]
+  oauthSessions          Session[]
+  conversations          Conversation[]
+  storedFiles            StoredFile[]
+  aiChatSubscriptions    AiChatSubscription[]  @relation("AiChatSubscriptionUser")
+  aiChatSubscriptionsGranted AiChatSubscription[] @relation("AiChatSubscriptionGrantedBy")
+  aiChatAccess           UserAccess?
+  aiChatEnrollments      Enrollment[]
+  aiChatBatchMemberships BatchMembership[]
+  aiChatTestAttempts     TestAttempt[]
+  aiChatUsageEvents      UsageEvent[]
+  quizAttempts           QuizAttempt[]
+  answerReports          AnswerReport[]
+  aiChatPasswordResetTokens PasswordResetToken[]
+
   @@index([roleId])
   @@index([status])
   @@map("users")
@@ -2233,4 +2261,532 @@ enum ProcessingStage {
   GENERATING_PREVIEW
   READY_FOR_REVIEW
   FAILED
+}
+
+// =====================================================================
+// AI Chat / Atomic Guru integration (imported from _import_atomic-ai-chat)
+// =====================================================================
+// Brought in "as is" as a parallel feature set per instruction, wired onto
+// the EXISTING User above instead of the source app's own User/Account/
+// Session table (see the comment on User for what was deliberately not
+// duplicated). Three model names collided with existing atomic-ops models
+// and were renamed to coexist: Course -> AiChatCourse, Batch -> AiChatBatch,
+// Subscription -> AiChatSubscription (+ its SubscriptionStatus enum ->
+// AiChatSubscriptionStatus). AuditLog was NOT duplicated — this app's audit
+// events reuse the existing AuditLog model instead, same precedent as the
+// Test Portal merge. All ids switched to cuid() defaults and a few
+// createdAt/updatedAt fields gained DB-level defaults, matching the rest of
+// this schema (the source app set them manually in application code).
+
+enum AtomicBatch {
+  SELECTION_PRO
+  SELECTION_1_0
+  ARAMBH
+  MANZIL
+  UDAAN
+  NO_BATCH
+}
+
+enum AccessPlan {
+  FREE
+  BASIC
+  PRO
+  LIFETIME
+}
+
+enum AccessType {
+  FREE_TRIAL
+  BASIC_PLAN
+  PRO_PLAN
+  ATOMIC_BATCH_FREE
+  LIFETIME_ACCESS
+}
+
+enum AccessStatus {
+  ACTIVE
+  EXPIRED
+  SUSPENDED
+  REVOKED
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+}
+
+enum AttachmentKind {
+  IMAGE
+  PDF
+  AUDIO
+  DOCUMENT
+}
+
+enum StorageProvider {
+  LOCAL
+  SUPABASE
+  S3
+}
+
+enum QuestionSource {
+  AI_GENERATED
+  ATOMIC_TEST_PORTAL
+  MANUAL
+}
+
+enum AiChatSubscriptionStatus {
+  ACTIVE
+  TRIALING
+  PAST_DUE
+  CANCELED
+  EXPIRED
+}
+
+model UserProfile {
+  id                  String      @id @default(cuid())
+  userId              String      @unique
+  phone               String?
+  className           String?
+  atomicBatch         AtomicBatch @default(NO_BATCH)
+  target              String      @default("NEET")
+  board               String?
+  preferredLanguage   String      @default("hinglish")
+  preferredTeachers   String[]    @default([])
+  strongChapters      String[]    @default([])
+  weakChapters        String[]    @default([])
+  favoriteSubject     String?
+  xp                  Int         @default(0)
+  currentStreak       Int         @default(0)
+  longestStreak       Int         @default(0)
+  lastActiveDate      DateTime?
+  learningPreferences Json?
+  recentActivity      Json?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  user                User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("ai_chat_user_profiles")
+}
+
+model UserPreference {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  theme              String   @default("system")
+  language           String   @default("hinglish")
+  emailNotifications Boolean  @default(true)
+  pushNotifications  Boolean  @default(true)
+  privacyMode        Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("ai_chat_user_preferences")
+}
+
+model AiMemory {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  facts        Json     @default("[]")
+  studyContext Json?
+  updatedAt    DateTime @updatedAt
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("ai_memory")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("ai_chat_accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("ai_chat_sessions")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("ai_chat_password_reset_tokens")
+}
+
+model AtomicIdSequence {
+  id        String   @id
+  nextValue Int      @default(1)
+  updatedAt DateTime @updatedAt
+
+  @@map("ai_chat_atomic_id_sequence")
+}
+
+model Conversation {
+  id        String        @id @default(cuid())
+  userId    String
+  title     String
+  language  String        @default("hinglish")
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  deletedAt DateTime?
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  ChatMessage[]
+
+  @@index([userId, updatedAt])
+  @@index([userId, deletedAt])
+  @@map("ai_chat_conversations")
+}
+
+model ChatMessage {
+  id             String              @id @default(cuid())
+  conversationId String
+  role           MessageRole
+  content        String              @db.Text
+  createdAt      DateTime            @default(now())
+  editedAt       DateTime?
+  metadata       Json?
+  conversation   Conversation        @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  attachments    MessageAttachment[]
+
+  @@index([conversationId, createdAt])
+  @@map("ai_chat_messages")
+}
+
+model StoredFile {
+  id            String              @id @default(cuid())
+  ownerId       String
+  provider      StorageProvider     @default(LOCAL)
+  storageKey    String              @unique
+  publicUrl     String?
+  originalName  String
+  mimeType      String
+  size          Int
+  checksum      String?
+  extractedText String?             @db.Text
+  createdAt     DateTime            @default(now())
+  owner         User                @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  messageLinks  MessageAttachment[]
+
+  @@index([ownerId, createdAt])
+  @@map("ai_chat_stored_files")
+}
+
+model MessageAttachment {
+  id            String         @id @default(cuid())
+  messageId     String
+  storedFileId  String?
+  kind          AttachmentKind
+  name          String
+  mimeType      String
+  size          Int
+  url           String?
+  extractedText String?        @db.Text
+  message       ChatMessage    @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  storedFile    StoredFile?    @relation(fields: [storedFileId], references: [id], onDelete: SetNull)
+
+  @@index([messageId])
+  @@index([storedFileId])
+  @@map("ai_chat_message_attachments")
+}
+
+model AiChatSubscription {
+  id                   String                    @id @default(cuid())
+  userId               String
+  provider             String?
+  providerCustomerId   String?
+  providerPlanId       String?
+  status               AiChatSubscriptionStatus  @default(TRIALING)
+  plan                 AccessPlan                @default(BASIC)
+  accessType           AccessType                @default(BASIC_PLAN)
+  accessStatus         AccessStatus              @default(ACTIVE)
+  grantedByUserId      String?
+  grantedAt            DateTime                  @default(now())
+  reason               String?                   @db.Text
+  batchId              String?
+  courseId             String?
+  enrollmentId         String?
+  externalEnrollmentId String?
+  syncSource           String?
+  metadata             Json?
+  startsAt             DateTime                  @default(now())
+  endsAt               DateTime?
+  cancelAtPeriodEnd    Boolean                   @default(false)
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+  user                 User                      @relation("AiChatSubscriptionUser", fields: [userId], references: [id], onDelete: Cascade)
+  grantedBy            User?                     @relation("AiChatSubscriptionGrantedBy", fields: [grantedByUserId], references: [id], onDelete: SetNull)
+  batch                AiChatBatch?              @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  course               AiChatCourse?             @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  enrollment           Enrollment?               @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+  effectiveAccess      UserAccess?
+
+  @@unique([provider, providerCustomerId])
+  @@index([userId, status])
+  @@index([userId, accessStatus, endsAt])
+  @@index([batchId, accessStatus])
+  @@index([courseId, accessStatus])
+  @@index([externalEnrollmentId])
+  @@map("ai_chat_subscriptions")
+}
+
+model UserAccess {
+  id             String        @id @default(cuid())
+  userId         String        @unique
+  subscriptionId String?       @unique
+  plan           AccessPlan    @default(FREE)
+  accessType     AccessType    @default(FREE_TRIAL)
+  status         AccessStatus  @default(EXPIRED)
+  startsAt       DateTime?
+  expiresAt      DateTime?
+  batchId        String?
+  courseId       String?
+  updatedAt      DateTime      @updatedAt
+  createdAt      DateTime      @default(now())
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscription   AiChatSubscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  batch          AiChatBatch?  @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  course         AiChatCourse? @relation(fields: [courseId], references: [id], onDelete: SetNull)
+
+  @@index([status, plan, expiresAt])
+  @@index([batchId])
+  @@index([courseId])
+  @@map("ai_chat_user_access")
+}
+
+model AiChatCourse {
+  id                String            @id @default(cuid())
+  slug              String            @unique
+  title             String
+  description       String?           @db.Text
+  isPublished       Boolean           @default(false)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  batches           AiChatBatch[]
+  enrollments       Enrollment[]
+  batchMemberships  BatchMembership[]
+  testAttempts      TestAttempt[]
+  subscriptions     AiChatSubscription[]
+  accessRecords     UserAccess[]
+
+  @@map("ai_chat_courses")
+}
+
+model AiChatBatch {
+  id            String            @id @default(cuid())
+  courseId      String
+  title         String
+  schedule      Json?
+  startsAt      DateTime?
+  endsAt        DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  course        AiChatCourse      @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  enrollments   Enrollment[]
+  memberships   BatchMembership[]
+  subscriptions AiChatSubscription[]
+  accessRecords UserAccess[]
+
+  @@index([courseId])
+  @@map("ai_chat_batches")
+}
+
+model Enrollment {
+  id                   String            @id @default(cuid())
+  userId               String
+  courseId             String
+  batchId              String?
+  status               String            @default("ACTIVE")
+  externalEnrollmentId String?
+  syncSource           String            @default("manual")
+  syncedAt             DateTime?
+  enrolledAt           DateTime          @default(now())
+  user                 User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course               AiChatCourse      @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  batch                AiChatBatch?      @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  subscriptions        AiChatSubscription[]
+  batchMemberships     BatchMembership[]
+
+  @@unique([userId, courseId])
+  @@unique([syncSource, externalEnrollmentId])
+  @@index([batchId])
+  @@map("ai_chat_enrollments")
+}
+
+model BatchMembership {
+  id               String       @id @default(cuid())
+  userId           String
+  batchId          String
+  courseId         String?
+  enrollmentId     String?
+  status           String       @default("ACTIVE")
+  externalMemberId String?
+  syncSource       String       @default("manual")
+  syncedAt         DateTime?
+  joinedAt         DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  batch            AiChatBatch  @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  course           AiChatCourse? @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  enrollment       Enrollment?  @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, batchId])
+  @@unique([syncSource, externalMemberId])
+  @@index([batchId, status])
+  @@index([userId, status])
+  @@index([courseId])
+  @@map("ai_chat_batch_memberships")
+}
+
+// The AI Chat app's own lightweight per-user test log — separate from the
+// Test Portal's Test/Section/Attempt system merged earlier; not unified
+// with it to keep this import's own feature intact, per instruction.
+model TestAttempt {
+  id          String        @id @default(cuid())
+  userId      String
+  courseId    String?
+  testName    String
+  subject     String?
+  score       Float?
+  maxScore    Float?
+  answers     Json?
+  startedAt   DateTime      @default(now())
+  submittedAt DateTime?
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course      AiChatCourse? @relation(fields: [courseId], references: [id], onDelete: SetNull)
+
+  @@index([userId, startedAt])
+  @@index([courseId])
+  @@map("ai_chat_test_attempts")
+}
+
+model UsageEvent {
+  id        String   @id @default(cuid())
+  userId    String?
+  event     String
+  metadata  Json?
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([event, createdAt])
+  @@index([userId, createdAt])
+  @@map("ai_chat_usage_events")
+}
+
+model GuestUsage {
+  id          String   @id @default(cuid())
+  guestId     String   @unique
+  ip          String
+  count       Int      @default(0)
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @updatedAt
+
+  @@index([ip])
+  @@map("ai_chat_guest_usage")
+}
+
+model ClassSchedule {
+  id              String      @id @default(cuid())
+  batch           AtomicBatch
+  classDate       DateTime
+  startTime       String
+  endTime         String?
+  subject         String
+  teacherName     String?
+  teacherPhotoUrl String?
+  topic           String
+  youtubeLink     String?
+  notes           String?     @db.Text
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([batch, classDate])
+  @@map("ai_chat_class_schedules")
+}
+
+model QuizAttempt {
+  id             String   @id @default(cuid())
+  userId         String
+  subject        String
+  topic          String?
+  totalQuestions Int
+  correct        Int
+  wrong          Int
+  unattempted    Int
+  score          Int
+  accuracy       Int
+  timeTakenSec   Int?
+  breakdown      Json?
+  createdAt      DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, subject])
+  @@map("ai_chat_quiz_attempts")
+}
+
+model AnswerReport {
+  id             String        @id @default(cuid())
+  userId         String?
+  questionBankId String?
+  questionText   String        @db.Text
+  answerText     String        @db.Text
+  reason         String?       @db.Text
+  status         String        @default("OPEN")
+  createdAt      DateTime      @default(now())
+  user           User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  question       QuestionBank? @relation(fields: [questionBankId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([questionBankId])
+  @@index([status])
+  @@map("ai_chat_answer_reports")
+}
+
+model QuestionBank {
+  id            String         @id @default(cuid())
+  subject       String
+  chapter       String?
+  topic         String?
+  text          String         @db.Text
+  options       Json
+  correctIndex  Int
+  explanation   String         @db.Text
+  difficulty    String?
+  language      String         @default("english")
+  source        QuestionSource @default(AI_GENERATED)
+  contentHash   String         @unique
+  externalRefId String?        @unique
+  timesUsed     Int            @default(1)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  reports       AnswerReport[]
+
+  @@index([subject, chapter, topic])
+  @@index([source])
+  @@map("ai_chat_question_bank")
 }
