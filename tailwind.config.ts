@@ -75,6 +75,16 @@ const config: Config = {
         "tertiary-fixed-dim": "#49df9f",
         "secondary-fixed": "#b7eaff",
         "text-dark": "#F1F5F9",
+
+        // AI Chat / Atomic Guru palette (imported from _import_atomic-ai-chat).
+        // Namespaced under "atomic-*" so it sits alongside this project's own
+        // Material Design 3 token set above without colliding with it.
+        "atomic-orange": "#f97316",
+        "atomic-orange-dark": "#ea580c",
+        "atomic-blue": "#1e40af",
+        "atomic-blue-light": "#3b82f6",
+        "atomic-navy": "#0f172a",
+        "atomic-slate": "#1e293b",
       },
       borderRadius: {
         DEFAULT: "0.25rem",

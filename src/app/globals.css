@@ -1,3 +1,5 @@
+@import "katex/dist/katex.min.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -48,4 +50,164 @@
       transform: translateY(-16px);
     }
   }
+}
+
+/* ===========================================================
+   AI Chat / Atomic Guru (imported from _import_atomic-ai-chat)
+   Scoped under .ai-chat-scope (applied by src/app/guru/layout.tsx)
+   so this styling never leaks into the rest of atomic-ops. The
+   source's global `body { ... }` background/text rule is skipped
+   here since every ported AI Chat page already sets its own
+   bg-white/dark:bg-atomic-navy on its root element.
+   =========================================================== */
+
+.ai-chat-scope .font-hindi {
+  font-family: "Nirmala UI", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", sans-serif;
+}
+
+.ai-chat-scope ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.ai-chat-scope ::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+
+.ai-chat-scope ::-webkit-scrollbar-thumb {
+  @apply rounded-full bg-slate-300 dark:bg-slate-600;
+}
+
+.ai-chat-scope .chat-gradient {
+  background: linear-gradient(135deg, #f97316 0%, #ea580c 50%, #1e40af 100%);
+}
+
+.ai-chat-scope .message-assistant h1 {
+  font-size: 1.7rem;
+  font-weight: 700;
+  margin-top: 18px;
+  margin-bottom: 14px;
+  color: #ea580c;
+}
+
+.ai-chat-scope .message-assistant h2 {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin-top: 18px;
+  margin-bottom: 12px;
+  color: #f97316;
+}
+
+.ai-chat-scope .message-assistant h3 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin-top: 16px;
+  margin-bottom: 10px;
+}
+
+.ai-chat-scope .message-assistant p {
+  margin-bottom: 12px;
+  line-height: 1.85;
+}
+
+.ai-chat-scope .message-assistant ul,
+.ai-chat-scope .message-assistant ol {
+  margin: 12px 0;
+  padding-left: 24px;
+}
+
+.ai-chat-scope .message-assistant li {
+  margin-bottom: 8px;
+  line-height: 1.7;
+}
+
+.ai-chat-scope .message-assistant strong {
+  color: #ea580c;
+  font-weight: 700;
+}
+
+.ai-chat-scope .message-assistant code {
+  background: #f1f5f9;
+  color: #dc2626;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+.dark .ai-chat-scope .message-assistant code {
+  background: #1e293b;
+  color: #f87171;
+}
+
+.ai-chat-scope .message-assistant pre {
+  background: #0f172a;
+  color: white;
+  padding: 16px;
+  border-radius: 12px;
+  overflow-x: auto;
+  margin: 18px 0;
+}
+
+.ai-chat-scope .message-assistant table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 18px 0;
+}
+
+.ai-chat-scope .message-assistant th,
+.ai-chat-scope .message-assistant td {
+  border: 1px solid #cbd5e1;
+  padding: 10px;
+}
+
+.dark .ai-chat-scope .message-assistant th,
+.dark .ai-chat-scope .message-assistant td {
+  border-color: #334155;
+}
+
+.ai-chat-scope .message-assistant th {
+  background: #f8fafc;
+  font-weight: 600;
+}
+
+.dark .ai-chat-scope .message-assistant th {
+  background: #1e293b;
+}
+
+.ai-chat-scope .message-assistant blockquote {
+  border-left: 4px solid #f97316;
+  padding-left: 16px;
+  margin: 16px 0;
+  color: #64748b;
+  font-style: italic;
+}
+
+.ai-chat-scope .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 12px 0;
+}
+
+.ai-chat-scope .message-assistant img {
+  border-radius: 12px;
+  margin: 16px 0;
+  max-width: 100%;
+}
+
+.ai-chat-scope .message-assistant hr {
+  margin: 24px 0;
+  border: none;
+  border-top: 1px solid #cbd5e1;
+}
+
+.dark .ai-chat-scope .message-assistant hr {
+  border-top-color: #334155;
+}
+
+.ai-chat-scope .message-user {
+  @apply bg-atomic-orange text-white;
+}
+
+.ai-chat-scope .message-assistant {
+  @apply bg-slate-100 text-slate-800 dark:bg-atomic-slate dark:text-slate-100;
 }
