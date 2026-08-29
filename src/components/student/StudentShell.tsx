@@ -100,6 +100,14 @@ function AccountMenu({ studentName, studentIdCode }: { studentName: string; stud
             Settings
           </Link>
           <Link
+            href="/guru"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-3 px-4 py-2 text-label-md text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
+          >
+            <span className="material-symbols-outlined text-lg">psychology</span>
+            Atomic Guru
+          </Link>
+          <Link
             href="/"
             onClick={() => setOpen(false)}
             className="flex items-center gap-3 px-4 py-2 text-label-md text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
