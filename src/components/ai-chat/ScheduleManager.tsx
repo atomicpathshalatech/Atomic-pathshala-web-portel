@@ -424,7 +424,7 @@ export function ScheduleManager() {
           ) : (
             <div className="space-y-3">
               {groupedSchedules.map((group) => {
-                const entry = group[0];
+                const entry = group[0]!;
                 const batchLabels = group.map(
                   (item) => BATCHES.find((b) => b.value === item.batch)?.label ?? item.batch
                 );
