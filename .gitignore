@@ -15,3 +15,6 @@ public/pdf.worker.min.mjs
 
 .vercel
 .env*
+
+# AI Chat / Atomic Guru Google Sheets sync credential — never commit
+service-account.json
