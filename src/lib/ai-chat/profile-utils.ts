@@ -21,7 +21,10 @@ import type { StudentProfile } from "@/types/ai-chat";
 
 export function userToStudentProfile(
   user: Pick<User, "name">,
-  profile?: Pick<UserProfile, "className" | "target" | "board" | "preferredLanguage"> | null
+  profile?: Pick<
+    UserProfile,
+    "className" | "target" | "board" | "preferredLanguage" | "atomicBatch"
+  > | null
 ): StudentProfile {
   const language = profile?.preferredLanguage;
 
@@ -37,6 +40,7 @@ export function userToStudentProfile(
       language === "english" || language === "hindi" || language === "hinglish"
         ? language
         : "hinglish",
+    atomicBatch: profile?.atomicBatch ?? "NO_BATCH",
   };
 }
 

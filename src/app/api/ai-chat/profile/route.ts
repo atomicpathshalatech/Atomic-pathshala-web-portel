@@ -80,6 +80,7 @@ export async function PATCH(request: Request) {
     ...(profile.className !== undefined ? { className: profile.className } : {}),
     ...(profile.target !== undefined ? { target: profile.target } : {}),
     ...(profile.board !== undefined ? { board: profile.board } : {}),
+    ...(profile.atomicBatch !== undefined ? { atomicBatch: profile.atomicBatch } : {}),
     ...(profile.preferredLanguage !== undefined
       ? { preferredLanguage: profile.preferredLanguage }
       : {}),
@@ -107,6 +108,7 @@ export async function PATCH(request: Request) {
             className: profile.className ?? null,
             target: profile.target ?? "NEET",
             board: profile.board ?? null,
+            atomicBatch: profile.atomicBatch ?? "NO_BATCH",
             preferredLanguage: profile.preferredLanguage ?? "hinglish",
             preferredTeachers: profile.preferredTeachers ?? [],
             strongChapters: profile.strongChapters ?? [],
