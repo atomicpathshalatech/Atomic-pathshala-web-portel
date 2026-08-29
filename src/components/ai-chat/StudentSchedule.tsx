@@ -197,7 +197,7 @@ export function StudentSchedule() {
       ),
     }));
 
-    groups.sort((a, b) => a.entries[0].startTime.localeCompare(b.entries[0].startTime));
+    groups.sort((a, b) => a.entries[0]!.startTime.localeCompare(b.entries[0]!.startTime));
     return groups;
   }, [schedules, selectedDate, subjectFilter, liveOnly, now]);
 
