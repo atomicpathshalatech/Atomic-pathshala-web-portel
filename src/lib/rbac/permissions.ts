@@ -148,6 +148,35 @@ export const PERMISSIONS = {
   AICHAT_ADMIN_ACCESS: "aichat.admin.access",
   AICHAT_SCHEDULE_MANAGE: "aichat.schedule.manage",
   AICHAT_QUESTION_BANK_VIEW: "aichat.questionbank.view",
+
+  // DPP (Daily Practice Problems) — imported from Atomic Test Portal.
+  // TestSeries/Test/Section reuse the existing TEST_* codes above (same
+  // admin surface, same 5-way CRUD+publish split); QUESTION_* above already
+  // covers the bilingual Question Bank v2 these DPPs are built from.
+  DPP_READ: "dpp.read",
+  DPP_CREATE: "dpp.create",
+  DPP_UPDATE: "dpp.update",
+  DPP_PUBLISH: "dpp.publish",
+  DPP_DELETE: "dpp.delete",
+
+  // Rank/College Predictor — reference-data management (RankTrendPoint,
+  // CollegeAllotment). Reading the predictor itself is a student feature,
+  // gated by COURSE_READ-level access, not a separate permission.
+  PREDICTOR_DATA_MANAGE: "predictor.data.manage",
+
+  // Security Center — device fingerprinting / multi-login control,
+  // imported from Atomic Test Portal.
+  SECURITY_DEVICE_MANAGE: "security.device.manage",
+  SECURITY_CONFIG_MANAGE: "security.config.manage",
+
+  // Module Studio — PDF/brand-asset generation tool, imported alongside
+  // the Test Portal but a separate, unrelated subsystem.
+  MODULE_READ: "module.read",
+  MODULE_CREATE: "module.create",
+  MODULE_UPDATE: "module.update",
+  MODULE_PUBLISH: "module.publish",
+  MODULE_DELETE: "module.delete",
+  MODULE_BRAND_PROFILE_MANAGE: "module.brand.manage",
 } as const;
 
 export type PermissionCode = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -183,6 +212,9 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PermissionCode[]> = {
     PERMISSIONS.LECTURE_UPDATE,
     PERMISSIONS.AICHAT_SCHEDULE_MANAGE,
     PERMISSIONS.AICHAT_QUESTION_BANK_VIEW,
+    PERMISSIONS.DPP_READ,
+    PERMISSIONS.DPP_CREATE,
+    PERMISSIONS.DPP_UPDATE,
   ],
   ACADEMIC_HEAD: [
     PERMISSIONS.TEAM_PORTAL_ACCESS,
@@ -224,6 +256,20 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PermissionCode[]> = {
     PERMISSIONS.AICHAT_ADMIN_ACCESS,
     PERMISSIONS.AICHAT_SCHEDULE_MANAGE,
     PERMISSIONS.AICHAT_QUESTION_BANK_VIEW,
+    PERMISSIONS.DPP_READ,
+    PERMISSIONS.DPP_CREATE,
+    PERMISSIONS.DPP_UPDATE,
+    PERMISSIONS.DPP_PUBLISH,
+    PERMISSIONS.DPP_DELETE,
+    PERMISSIONS.PREDICTOR_DATA_MANAGE,
+    PERMISSIONS.SECURITY_DEVICE_MANAGE,
+    PERMISSIONS.SECURITY_CONFIG_MANAGE,
+    PERMISSIONS.MODULE_READ,
+    PERMISSIONS.MODULE_CREATE,
+    PERMISSIONS.MODULE_UPDATE,
+    PERMISSIONS.MODULE_PUBLISH,
+    PERMISSIONS.MODULE_DELETE,
+    PERMISSIONS.MODULE_BRAND_PROFILE_MANAGE,
   ],
   QUESTION_TEAM: [
     PERMISSIONS.TEAM_PORTAL_ACCESS,
@@ -233,6 +279,9 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PermissionCode[]> = {
     PERMISSIONS.QUESTION_VERIFY,
     PERMISSIONS.DOUBT_READ,
     PERMISSIONS.DOUBT_RESOLVE,
+    PERMISSIONS.DPP_READ,
+    PERMISSIONS.DPP_CREATE,
+    PERMISSIONS.DPP_UPDATE,
   ],
   CONTENT_TEAM: [
     PERMISSIONS.TEAM_PORTAL_ACCESS,
@@ -243,6 +292,10 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PermissionCode[]> = {
     PERMISSIONS.MEDIA_MANAGE,
     PERMISSIONS.FAQ_MANAGE,
     PERMISSIONS.TESTIMONIAL_MANAGE,
+    PERMISSIONS.MODULE_READ,
+    PERMISSIONS.MODULE_CREATE,
+    PERMISSIONS.MODULE_UPDATE,
+    PERMISSIONS.MODULE_BRAND_PROFILE_MANAGE,
   ],
   SALES: [
     PERMISSIONS.TEAM_PORTAL_ACCESS,
@@ -302,6 +355,39 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PermissionCode[]> = {
     PERMISSIONS.STUDENT_READ_ANY,
     PERMISSIONS.TEACHER_READ,
     PERMISSIONS.BATCH_READ,
+  ],
+  // Imported from Atomic Test Portal's 4-tier RBAC (SUPER_ADMIN → SUB_ADMIN
+  // → TEACHER → STUDENT) — see the GlobalRole enum comment. Everything
+  // SUPER_ADMIN can do inside the Test Portal's own modules (Question Bank,
+  // DPP, TestSeries/Test, Rank/College Predictor data, Security Center,
+  // Leaderboard), minus RBAC/system-settings and user account management,
+  // which stay SUPER_ADMIN-only. Module Studio (a separate, unrelated
+  // subsystem imported alongside the Test Portal) is deliberately NOT
+  // included here — it's gated to CONTENT_TEAM/ACADEMIC_HEAD instead.
+  SUB_ADMIN: [
+    PERMISSIONS.TEAM_PORTAL_ACCESS,
+    PERMISSIONS.QUESTION_READ,
+    PERMISSIONS.QUESTION_CREATE,
+    PERMISSIONS.QUESTION_UPDATE,
+    PERMISSIONS.QUESTION_DELETE,
+    PERMISSIONS.QUESTION_VERIFY,
+    PERMISSIONS.DPP_READ,
+    PERMISSIONS.DPP_CREATE,
+    PERMISSIONS.DPP_UPDATE,
+    PERMISSIONS.DPP_PUBLISH,
+    PERMISSIONS.DPP_DELETE,
+    PERMISSIONS.TEST_READ,
+    PERMISSIONS.TEST_CREATE,
+    PERMISSIONS.TEST_UPDATE,
+    PERMISSIONS.TEST_PUBLISH,
+    PERMISSIONS.TEST_DELETE,
+    PERMISSIONS.PREDICTOR_DATA_MANAGE,
+    PERMISSIONS.SECURITY_DEVICE_MANAGE,
+    PERMISSIONS.SECURITY_CONFIG_MANAGE,
+    PERMISSIONS.LEADERBOARD_READ,
+    PERMISSIONS.BATCH_READ,
+    PERMISSIONS.STUDENT_READ_ANY,
+    PERMISSIONS.ANALYTICS_VIEW,
   ],
   SUPER_ADMIN: [PERMISSIONS.TEAM_PORTAL_ACCESS, ...Object.values(PERMISSIONS)],
   FOUNDER: [PERMISSIONS.TEAM_PORTAL_ACCESS, ...Object.values(PERMISSIONS)],
