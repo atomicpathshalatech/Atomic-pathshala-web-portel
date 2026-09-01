@@ -1,0 +1,43 @@
+export const STORE_ITEMS = [
+  {
+    id: "item_streak_freeze",
+    title: "Streak Freeze Shield",
+    description: "Protects your active study streak automatically if you miss a day.",
+    costXp: 150,
+    icon: "ac_unit",
+    category: "BOOSTER",
+  },
+  {
+    id: "item_formula_pack",
+    title: "NEET/JEE Formula Handbook (PDF)",
+    description: "Exclusive curated handbook covering Physics, Chemistry, and Mathematics formulas.",
+    costXp: 200,
+    icon: "menu_book",
+    category: "STUDY_MATERIAL",
+    downloadUrl: "#",
+  },
+  {
+    id: "item_premium_mock",
+    title: "All India Super Mock Test Access",
+    description: "Unlocks an exclusive All India Rank test series paper with detailed video solutions.",
+    costXp: 300,
+    icon: "military_tech",
+    category: "ASSESSMENT",
+  },
+  {
+    id: "item_gold_badge",
+    title: "Golden Scholar Leaderboard Badge",
+    description: "Special golden border and VIP rank badge across leaderboard and live class chat.",
+    costXp: 500,
+    icon: "workspace_premium",
+    category: "COSMETIC",
+  },
+  {
+    id: "item_mentorship_pass",
+    title: "1-on-1 Faculty Mentorship Pass",
+    description: "Book a priority 15-minute 1-on-1 counseling session with your senior batch faculty.",
+    costXp: 1000,
+    icon: "support_agent",
+    category: "MENTORSHIP",
+  },
+];

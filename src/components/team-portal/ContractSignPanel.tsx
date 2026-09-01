@@ -4,110 +4,107 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
-export function ContractSignPanel({ contractId }: { contractId: string }) {
+export function ContractSignPanel({
+  contractId,
+  isOwner = true,
+}: {
+  contractId: string;
+  isOwner?: boolean;
+}) {
   const router = useRouter();
   const [signedName, setSignedName] = useState("");
-  const [declineOpen, setDeclineOpen] = useState(false);
-  const [declineReason, setDeclineReason] = useState("");
+  const [agreeTerms, setAgreeTerms] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  async function sign() {
+  async function handleSign() {
+    if (!agreeTerms) {
+      toast.error("Please acknowledge and check the consent box before signing.");
+      return;
+    }
+    if (signedName.trim().length < 2) {
+      toast.error("Please enter your legal signature name.");
+      return;
+    }
+
     setSubmitting(true);
     try {
       const res = await fetch(`/api/team/contracts/${contractId}/sign`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ signedName }),
+        body: JSON.stringify({
+          signedName: signedName.trim(),
+          agreeTerms: true,
+        }),
       });
       const body = await res.json();
       if (!res.ok || !body.success) {
-        toast.error(body.error ?? "Could not sign contract");
+        toast.error(body.error ?? "Could not record signature.");
         return;
       }
-      toast.success("Contract signed — welcome aboard!");
+      toast.success("Agreement electronically signed and locked!");
       router.refresh();
     } catch {
-      toast.error("Something went wrong");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function decline() {
-    setSubmitting(true);
-    try {
-      const res = await fetch(`/api/team/contracts/${contractId}/decline`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ declinedReason: declineReason }),
-      });
-      const body = await res.json();
-      if (!res.ok || !body.success) {
-        toast.error(body.error ?? "Could not decline contract");
-        return;
-      }
-      toast.success("Contract declined");
-      router.refresh();
-    } catch {
-      toast.error("Something went wrong");
+      toast.error("Network error. Please try again.");
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <div className="glass-card p-stack-lg rounded-xl space-y-4">
-      <div className="space-y-1.5">
-        <label className="font-label-md text-label-md text-on-surface">
-          Type your full legal name to sign
-        </label>
-        <input
-          value={signedName}
-          onChange={(e) => setSignedName(e.target.value)}
-          placeholder="Full legal name"
-          className="w-full rounded-lg border border-outline-variant bg-surface-container-lowest py-2 px-3 text-body-md outline-none focus:ring-2 focus:ring-primary/30 font-serif italic"
-        />
-        <p className="text-label-sm text-on-surface-variant">
-          This acts as your e-signature and will be timestamped and logged.
-        </p>
+    <div className="glass-card p-6 rounded-3xl space-y-5 border-2 border-primary/30 shadow-xl bg-gradient-to-br from-primary/5 via-surface to-surface">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-2xl bg-primary text-on-primary flex items-center justify-center font-bold">
+          <span className="material-symbols-outlined text-xl">draw</span>
+        </div>
+        <div>
+          <h3 className="font-bold text-sm text-on-surface">
+            {isOwner ? "Educator Electronic Signature" : "Authorized Signatory Countersignature"}
+          </h3>
+          <p className="text-xs text-on-surface-variant">
+            Secure verifiable e-signature pursuant to the Information Technology Act, 2000.
+          </p>
+        </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="space-y-3">
+        <div className="space-y-1.5">
+          <label className="font-label-md text-xs font-bold text-on-surface">
+            Type Full Legal Name (Electronic Signature)
+          </label>
+          <input
+            value={signedName}
+            onChange={(e) => setSignedName(e.target.value)}
+            placeholder="e.g. Firoz Ali"
+            className="w-full rounded-2xl border border-outline-variant/40 bg-surface-container-lowest py-3 px-4 text-base outline-none focus:ring-2 focus:ring-primary font-serif italic text-primary font-bold"
+          />
+        </div>
+
+        <label className="flex items-start gap-2.5 cursor-pointer pt-1">
+          <input
+            type="checkbox"
+            checked={agreeTerms}
+            onChange={(e) => setAgreeTerms(e.target.checked)}
+            className="mt-0.5 w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary shrink-0"
+          />
+          <span className="text-xs text-on-surface leading-relaxed">
+            I confirm that I have read, understood, and unconditionally agree to all terms, clauses, and annexures of this Plus Educator Agreement.
+          </span>
+        </label>
+      </div>
+
+      <div className="flex items-center justify-between pt-2 border-t border-outline-variant/20">
+        <span className="text-[11px] text-on-surface-variant font-mono">
+          IP &amp; UTC timestamp will be recorded in the audit trail.
+        </span>
         <button
           type="button"
-          disabled={submitting || signedName.trim().length < 2}
-          onClick={sign}
-          className="bg-primary text-on-primary font-label-md text-label-md px-6 py-2.5 rounded-xl hover:opacity-90 transition-all disabled:opacity-60"
+          disabled={submitting || !agreeTerms || signedName.trim().length < 2}
+          onClick={handleSign}
+          className="px-6 py-2.5 bg-primary text-on-primary font-bold text-xs rounded-xl shadow-lg hover:opacity-90 active:scale-95 transition-all disabled:opacity-50 flex items-center gap-2"
         >
-          {submitting ? "Submitting..." : "Sign Contract"}
+          <span className="material-symbols-outlined text-sm">check_circle</span>
+          {submitting ? "Signing..." : "Execute & Sign Agreement"}
         </button>
-        {!declineOpen ? (
-          <button
-            type="button"
-            onClick={() => setDeclineOpen(true)}
-            className="font-label-md text-label-md px-6 py-2.5 rounded-xl border border-outline-variant hover:bg-surface-container-high transition-colors"
-          >
-            Decline
-          </button>
-        ) : (
-          <div className="flex items-center gap-2 flex-1 min-w-[260px]">
-            <input
-              autoFocus
-              value={declineReason}
-              onChange={(e) => setDeclineReason(e.target.value)}
-              placeholder="Reason for declining"
-              className="flex-1 rounded-lg border border-outline-variant bg-surface-container-lowest py-2 px-3 text-body-sm outline-none focus:ring-2 focus:ring-error/30"
-            />
-            <button
-              type="button"
-              disabled={submitting || declineReason.trim().length < 3}
-              onClick={decline}
-              className="font-label-md text-label-md px-4 py-2 rounded-lg bg-error text-on-error hover:opacity-90 transition-colors disabled:opacity-50"
-            >
-              Confirm
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );

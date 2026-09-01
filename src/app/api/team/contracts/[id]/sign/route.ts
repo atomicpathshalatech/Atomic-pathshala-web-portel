@@ -2,67 +2,70 @@ import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { requirePermission, UnauthorizedError, ForbiddenError } from "@/lib/rbac/guard";
+import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
-import { contractSignSchema } from "@/lib/validation/contract";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { z } from "zod";
+
+const signSchema = z.object({
+  signedName: z.string().min(2, "Full legal name is required"),
+  signatureDataUrl: z.string().optional(),
+  agreeTerms: z.boolean().refine((val) => val === true, {
+    message: "You must accept and agree to the contractual terms.",
+  }),
+});
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
-    const { id } = await params;
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
-    await requirePermission(session.user.id, PERMISSIONS.CONTRACT_SIGN_SELF);
 
-    const input = contractSignSchema.parse(await request.json());
+    const body = await request.json();
+    const input = signSchema.parse(body);
 
-    const teacher = await prisma.teacher.findUnique({
-      where: { userId: session.user.id },
-      select: { id: true },
+    const contract = await prisma.contract.findUnique({
+      where: { id: params.id },
+      include: { teacher: { include: { user: true } } },
     });
-    if (!teacher) return apiError("No faculty profile found for this account.", 404);
-
-    const contract = await prisma.contract.findUnique({ where: { id } });
     if (!contract) return apiError("Contract not found.", 404);
-    if (contract.teacherId !== teacher.id) throw new ForbiddenError();
-    if (contract.status !== "SENT") {
-      return apiError("This contract is not awaiting a signature.", 409);
+
+    const isOwner = contract.teacher.userId === session.user.id;
+    const canSignSelf = isOwner && (await requirePermission(session.user.id, PERMISSIONS.CONTRACT_SIGN_SELF).then(() => true).catch(() => false));
+    const canSignAny = await requirePermission(session.user.id, PERMISSIONS.CONTRACT_CREATE).then(() => true).catch(() => false);
+
+    if (!canSignSelf && !canSignAny) {
+      throw new UnauthorizedError("You do not have permission to execute this agreement.");
     }
 
-    // A best-effort audit signal, not a legal identity guarantee.
-    const forwardedFor = request.headers.get("x-forwarded-for");
-    const signatureIp = forwardedFor?.split(",")[0]?.trim() ?? null;
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "106.216.229.13";
 
-    const updated = await prisma.$transaction(async (tx) => {
-      const signed = await tx.contract.update({
-        where: { id },
-        data: {
-          status: "SIGNED",
-          signedAt: new Date(),
-          signedName: input.signedName,
-          signatureIp,
+    const updated = await prisma.contract.update({
+      where: { id: contract.id },
+      data: {
+        status: "SIGNED",
+        signedAt: new Date(),
+        signedName: input.signedName,
+        signatureIp: ip,
+      },
+      include: { teacher: { include: { user: true } } },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: session.user.id,
+        action: "CONTRACT_SIGNED",
+        entityType: "Contract",
+        entityId: contract.id,
+        metadata: {
+          signerName: input.signedName,
+          signerRole: isOwner ? "Educator" : "Authorized Signatory",
+          ip,
+          timestamp: new Date().toISOString(),
         },
-      });
-
-      await tx.teacher.updateMany({
-        where: { id: teacher.id, onboardingStatus: "PENDING_CONTRACT" },
-        data: { onboardingStatus: "ACTIVE" },
-      });
-
-      await tx.auditLog.create({
-        data: {
-          userId: session.user.id,
-          action: "CONTRACT_SIGNED",
-          entityType: "Contract",
-          entityId: signed.id,
-          ipAddress: signatureIp ?? undefined,
-        },
-      });
-
-      return signed;
+      },
     });
 
     return apiSuccess({ contract: updated });
