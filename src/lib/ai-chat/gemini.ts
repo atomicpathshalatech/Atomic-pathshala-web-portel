@@ -257,7 +257,9 @@ export async function generateChatResponse(body: ChatRequestBody): Promise<strin
     const availableKeys = availableKeysForModel(modelName, apiKeys);
 
     for (let i = 0; i < availableKeys.length; i++) {
-      const apiKey = availableKeys[i];
+      // i < availableKeys.length by the loop bound, so this index is
+      // always in range — noUncheckedIndexedAccess just can't see that.
+      const apiKey = availableKeys[i]!;
       try {
         const { chat, lastParts } = buildChat(body, modelName, apiKey);
         const result = await chat.sendMessage(lastParts);
@@ -299,7 +301,9 @@ export async function* generateChatResponseStream(
     const availableKeys = availableKeysForModel(modelName, apiKeys);
 
     for (let i = 0; i < availableKeys.length; i++) {
-      const apiKey = availableKeys[i];
+      // i < availableKeys.length by the loop bound, so this index is
+      // always in range — noUncheckedIndexedAccess just can't see that.
+      const apiKey = availableKeys[i]!;
       let yieldedAnythingThisAttempt = false;
 
       try {
@@ -359,7 +363,9 @@ export async function generateQuizQuestions(promptText: string): Promise<string>
     const availableKeys = availableKeysForModel(modelName, apiKeys);
 
     for (let i = 0; i < availableKeys.length; i++) {
-      const apiKey = availableKeys[i];
+      // i < availableKeys.length by the loop bound, so this index is
+      // always in range — noUncheckedIndexedAccess just can't see that.
+      const apiKey = availableKeys[i]!;
       try {
         const genAI = new GoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({
@@ -407,7 +413,9 @@ export async function generateBoardExamContent(promptText: string): Promise<stri
     const availableKeys = availableKeysForModel(modelName, apiKeys);
 
     for (let i = 0; i < availableKeys.length; i++) {
-      const apiKey = availableKeys[i];
+      // i < availableKeys.length by the loop bound, so this index is
+      // always in range — noUncheckedIndexedAccess just can't see that.
+      const apiKey = availableKeys[i]!;
       try {
         const genAI = new GoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({
