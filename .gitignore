@@ -18,3 +18,4 @@ public/pdf.worker.min.mjs
 
 # AI Chat / Atomic Guru Google Sheets sync credential — never commit
 service-account.json
+scripts/.migration-state.json
