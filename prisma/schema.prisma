@@ -400,10 +400,14 @@ model BatchSchedule {
   batch   Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
   teacher Teacher? @relation(fields: [teacherId], references: [id], onDelete: SetNull)
 
+  chapterId         String?
+  chapter           Chapter?              @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+
   liveWhiteboardSession WhiteboardSession?
   test                  Test?
 
   @@index([batchId])
+  @@index([chapterId])
   @@index([startsAt])
   @@map("batch_schedules")
 }
@@ -1245,20 +1249,29 @@ model Chapter {
   chapterId String?   @unique
   title     String
   subjectId String
+  medium    Medium    @default(ENGLISH)
   status    ChapterStatus @default(DRAFT)
   order     Int       @default(0)
   createdById String?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  subject   Subject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-  lectures  Lecture[]
-  dpps      Dpp[]
-  tests     Test[]
+  subject        Subject         @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  lectures       Lecture[]
+  dpps           Dpp[]
+  tests          Test[]
+  batchSchedules BatchSchedule[]
 
   @@index([subjectId])
+  @@index([subjectId, title])
   @@index([status])
   @@map("chapters")
+}
+
+enum Medium {
+  HINDI
+  ENGLISH
+  HINGLISH
 }
 
 // State machine for the Chapter Management System — a chapter moves

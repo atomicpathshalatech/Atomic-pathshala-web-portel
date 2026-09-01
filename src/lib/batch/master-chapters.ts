@@ -131,28 +131,28 @@ export const MASTER_CHAPTER_LIBRARY: MasterChapter[] = [
 export async function searchMasterChapters(query: string = ""): Promise<MasterChapter[]> {
   const q = query.toLowerCase().trim();
 
-  // Combine database chapters if any with seed master chapters
+  // Query database chapters with complete relationships
   const dbChapters = await prisma.chapter.findMany({
     include: {
       subject: { include: { course: true } },
-      lectures: true,
+      lectures: { orderBy: { order: "asc" } },
+      dpps: true,
+      tests: true,
     },
-    take: 20,
+    orderBy: { createdAt: "desc" },
+    take: 50,
   });
 
   const formattedDbChapters: MasterChapter[] = dbChapters.map((ch, idx) => ({
     id: ch.id,
-    chapterCode: `CH-${ch.subject.title.slice(0, 3).toUpperCase()}-${String(idx + 10).padStart(3, "0")}`,
+    chapterCode: ch.chapterId || `CH-${ch.subject.title.slice(0, 3).toUpperCase()}-${String(idx + 10).padStart(3, "0")}`,
     title: ch.title,
     subject: ch.subject.title,
     courseTitle: ch.subject.course?.title || "Academic Program",
-    targetExam: "NEET / JEE",
+    targetExam: ch.subject.course?.title || "NEET / JEE",
     facultyName: "Atomic Pathshala Faculty",
-    // Question no longer relates directly to Chapter (Test Portal schema
-    // stores it as a plain string), so this heuristic can't count real
-    // questions per chapter anymore — a flat placeholder instead.
-    dppCount: 3,
-    testCount: 1,
+    dppCount: ch.dpps.length,
+    testCount: ch.tests.length,
     pdfNotesCount: 2,
     totalDurationMinutes: ch.lectures.length > 0 ? ch.lectures.length * 60 : 180,
     lectures:
@@ -172,7 +172,7 @@ export async function searchMasterChapters(query: string = ""): Promise<MasterCh
           ],
   }));
 
-  const all = [...MASTER_CHAPTER_LIBRARY, ...formattedDbChapters];
+  const all = [...formattedDbChapters, ...MASTER_CHAPTER_LIBRARY];
 
   if (!q) return all;
 

@@ -54,6 +54,18 @@ export async function POST(
 
     const createdSchedules = [];
 
+    // Check if masterChapter maps to a real DB Chapter
+    const dbChapter = await prisma.chapter.findFirst({
+      where: {
+        OR: [
+          { id: masterChapter.id },
+          { chapterId: masterChapter.chapterCode },
+          { title: masterChapter.title },
+        ],
+      },
+      select: { id: true },
+    });
+
     for (let i = 0; i < masterChapter.lectures.length; i++) {
       const lecture = masterChapter.lectures[i];
       if (!lecture) continue;
@@ -79,6 +91,7 @@ export async function POST(
           subject: masterChapter.subject,
           type: "LIVE_CLASS",
           teacherId: assignedTeacherId,
+          chapterId: dbChapter?.id || null,
           startsAt,
           endsAt,
           notes: `Imported from Master Chapter ${masterChapter.chapterCode} (${masterChapter.title})`,

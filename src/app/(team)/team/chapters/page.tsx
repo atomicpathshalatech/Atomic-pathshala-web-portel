@@ -24,7 +24,7 @@ const STATUS_TONE: Record<string, string> = {
 export default async function ChaptersListPage({
   searchParams,
 }: {
-  searchParams: { subjectId?: string };
+  searchParams: { subjectId?: string; courseId?: string; medium?: string };
 }) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) redirect("/login");
@@ -34,15 +34,32 @@ export default async function ChaptersListPage({
 
   const canCreate = await hasPermission(session.user.id, PERMISSIONS.CHAPTER_CREATE);
 
-  const [chapters, subjects, totalChapters] = await Promise.all([
+  const whereClause: {
+    subjectId?: string;
+    subject?: { courseId: string };
+    medium?: "HINDI" | "ENGLISH" | "HINGLISH";
+  } = {};
+
+  if (searchParams.subjectId) {
+    whereClause.subjectId = searchParams.subjectId;
+  }
+  if (searchParams.courseId) {
+    whereClause.subject = { courseId: searchParams.courseId };
+  }
+  if (searchParams.medium && ["HINDI", "ENGLISH", "HINGLISH"].includes(searchParams.medium)) {
+    whereClause.medium = searchParams.medium as "HINDI" | "ENGLISH" | "HINGLISH";
+  }
+
+  const [chapters, courses, subjects, totalChapters] = await Promise.all([
     prisma.chapter.findMany({
-      where: searchParams.subjectId ? { subjectId: searchParams.subjectId } : {},
+      where: whereClause,
       include: {
         subject: { include: { course: true } },
         _count: { select: { lectures: true, dpps: true, tests: true } },
       },
       orderBy: [{ subjectId: "asc" }, { order: "asc" }],
     }),
+    prisma.course.findMany({ orderBy: { title: "asc" } }),
     prisma.subject.findMany({ include: { course: true }, orderBy: { title: "asc" } }),
     prisma.chapter.count(),
   ]);
@@ -53,7 +70,7 @@ export default async function ChaptersListPage({
         <div>
           <h1 className="font-headline-lg text-headline-lg text-primary tracking-tight">Chapters</h1>
           <p className="text-on-surface-variant font-body-md mt-1">
-            {totalChapters} chapter{totalChapters === 1 ? "" : "s"} total.
+            {totalChapters} chapter{totalChapters === 1 ? "" : "s"} total across academic programs.
           </p>
         </div>
         {canCreate && (
@@ -67,7 +84,20 @@ export default async function ChaptersListPage({
         )}
       </div>
 
-      <form className="glass-card p-4 rounded-xl flex flex-wrap items-center gap-4" method="get">
+      <form className="glass-card p-4 rounded-xl flex flex-wrap items-center gap-3" method="get">
+        <select
+          name="courseId"
+          defaultValue={searchParams.courseId ?? ""}
+          className="bg-surface-container-low rounded-lg border border-outline-variant/30 px-3 py-2 text-label-md"
+        >
+          <option value="">All Courses / Exams</option>
+          {courses.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.title}
+            </option>
+          ))}
+        </select>
+
         <select
           name="subjectId"
           defaultValue={searchParams.subjectId ?? ""}
@@ -80,9 +110,27 @@ export default async function ChaptersListPage({
             </option>
           ))}
         </select>
-        <button type="submit" className="px-4 py-2 bg-primary text-on-primary rounded-lg font-label-md">
-          Apply
+
+        <select
+          name="medium"
+          defaultValue={searchParams.medium ?? ""}
+          className="bg-surface-container-low rounded-lg border border-outline-variant/30 px-3 py-2 text-label-md"
+        >
+          <option value="">All Mediums</option>
+          <option value="ENGLISH">English</option>
+          <option value="HINDI">Hindi (हिंदी)</option>
+          <option value="HINGLISH">Hinglish</option>
+        </select>
+
+        <button type="submit" className="px-5 py-2 bg-primary text-on-primary rounded-lg font-label-md hover:opacity-90 transition-opacity">
+          Filter
         </button>
+
+        {(searchParams.courseId || searchParams.subjectId || searchParams.medium) && (
+          <Link href="/team/chapters" className="px-3 py-2 text-label-md text-on-surface-variant hover:text-primary">
+            Reset
+          </Link>
+        )}
       </form>
 
       <div className="glass-card rounded-2xl overflow-hidden">
@@ -92,6 +140,7 @@ export default async function ChaptersListPage({
               <tr>
                 <th className="px-6 py-4 font-label-md text-on-surface-variant">Chapter</th>
                 <th className="px-6 py-4 font-label-md text-on-surface-variant">Subject / Course</th>
+                <th className="px-6 py-4 font-label-md text-on-surface-variant">Medium</th>
                 <th className="px-6 py-4 font-label-md text-on-surface-variant">Lectures / DPPs / Tests</th>
                 <th className="px-6 py-4 font-label-md text-on-surface-variant">Status</th>
               </tr>
@@ -103,13 +152,18 @@ export default async function ChaptersListPage({
                     <Link href={`/team/chapters/${c.id}`} className="font-label-md text-on-surface hover:text-primary">
                       {c.title}
                     </Link>
-                    <p className="text-label-sm text-outline-variant">{c.chapterId ?? "—"}</p>
+                    <p className="text-label-sm font-mono text-outline-variant">{c.chapterId ?? "—"}</p>
                   </td>
                   <td className="px-6 py-5">
                     <div className="flex flex-col">
                       <span className="font-label-md text-primary">{c.subject.title}</span>
                       <span className="text-label-sm text-on-surface-variant">{c.subject.course?.title}</span>
                     </div>
+                  </td>
+                  <td className="px-6 py-5 text-label-sm">
+                    <span className="px-2.5 py-0.5 rounded-full bg-surface-container-high text-on-surface text-xs font-medium">
+                      {c.medium === "HINDI" ? "Hindi" : c.medium === "HINGLISH" ? "Hinglish" : "English"}
+                    </span>
                   </td>
                   <td className="px-6 py-5 text-label-sm">
                     {c._count.lectures} / {c._count.dpps} / {c._count.tests}

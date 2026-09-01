@@ -30,7 +30,9 @@ export default async function ChapterPage({
       },
     },
   });
-  if (!chapter || chapter.subjectId !== params.subjectId) notFound();
+  if (!chapter || chapter.status !== "PUBLISHED" || chapter.subjectId !== params.subjectId) {
+    notFound();
+  }
 
   const enrolled = await isEnrolledInCourse(student.id, chapter.subject.courseId);
   if (!enrolled) redirect("/courses");

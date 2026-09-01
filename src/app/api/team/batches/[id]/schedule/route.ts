@@ -60,12 +60,35 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         subject: input.subject || null,
         type: input.type,
         teacherId: input.teacherId || null,
+        chapterId: input.chapterId || null,
         startsAt: input.startsAt,
         endsAt: input.endsAt,
         notes: input.notes || null,
         createdById: session.user.id,
       },
+      include: {
+        teacher: { include: { user: true } },
+        chapter: { include: { subject: { include: { course: true } } } },
+      },
     });
+
+    // If LIVE_CLASS with YouTube transport specified, initialize WhiteboardSession
+    if (input.type === "LIVE_CLASS" && input.teacherId && (input.videoTransport === "YOUTUBE" || input.videoTransport === "BOTH")) {
+      await prisma.whiteboardSession.upsert({
+        where: { batchScheduleId: schedule.id },
+        update: {
+          videoTransport: input.videoTransport,
+          youtubeVideoId: input.youtubeVideoId || null,
+        },
+        create: {
+          batchScheduleId: schedule.id,
+          teacherId: input.teacherId,
+          title: schedule.title,
+          videoTransport: input.videoTransport,
+          youtubeVideoId: input.youtubeVideoId || null,
+        },
+      });
+    }
 
     await prisma.auditLog.create({
       data: {

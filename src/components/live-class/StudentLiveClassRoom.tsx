@@ -7,6 +7,7 @@ import { sessionChannel, WB_EVENTS } from "@/lib/realtime/events";
 import { CanvasEngine, type StrokeObject } from "@/lib/canvas/canvas-engine";
 import { VideoStrip } from "@/components/live-class/VideoStrip";
 import { MessagesPanel } from "@/components/live-class/MessagesPanel";
+import { YouTubeLivePlayer } from "@/components/live-class/YouTubeLivePlayer";
 
 type QuizOption = { key: string; label: string };
 type LiveQuiz = {
@@ -53,6 +54,8 @@ export function StudentLiveClassRoom({
 }) {
   const [phase, setPhase] = useState<"waiting" | "lobby" | "live" | "ended">("waiting");
   const [wbSessionId, setWbSessionId] = useState<string | null>(null);
+  const [videoTransport, setVideoTransport] = useState<"LIVEKIT" | "YOUTUBE" | "BOTH">("LIVEKIT");
+  const [youtubeVideoId, setYoutubeVideoId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [handRaised, setHandRaised] = useState(false);
@@ -89,15 +92,12 @@ export function StudentLiveClassRoom({
         if (cancelled) return;
         if (wb && wb.status === "ACTIVE") {
           setWbSessionId(wb.id);
+          if (wb.videoTransport) setVideoTransport(wb.videoTransport);
+          if (wb.youtubeVideoId) setYoutubeVideoId(wb.youtubeVideoId);
           if (wb.livePhase === "LIVE") {
             setPhase("live");
             return; // stop polling once live
           }
-          // Session exists but the teacher hasn't clicked Start Class yet —
-          // the pre-class lobby: chat is already live, board/video aren't.
-          // Keep polling (fall through below) as the fallback path in case
-          // the LIVE_PHASE_CHANGED push (bound once wbSessionId is set) is
-          // missed.
           setPhase("lobby");
         }
         if (wb && wb.status === "ENDED") {
@@ -359,29 +359,42 @@ export function StudentLiveClassRoom({
         {wbSessionId && <VideoStrip whiteboardSessionId={wbSessionId} />}
       </header>
 
-      <div className="glass-card rounded-2xl overflow-hidden">
-        <div className="flex items-center gap-1.5 px-4 py-2 border-b border-outline-variant/20 text-label-sm text-on-surface-variant">
-          <span className="material-symbols-outlined text-lg text-primary">cast</span>
-          Live board — mirrors what your teacher is drawing right now
+      {/* YouTube Live Stream Player if transport includes YOUTUBE */}
+      {(videoTransport === "YOUTUBE" || videoTransport === "BOTH") && (
+        <YouTubeLivePlayer
+          youtubeVideoId={youtubeVideoId}
+          title={scheduleTitle}
+          subject={batchName}
+          livePhase={phase === "live" ? "LIVE" : phase === "ended" ? "ENDED" : "PREPARING"}
+        />
+      )}
+
+      {/* Interactive Whiteboard Canvas (for LIVEKIT or BOTH) */}
+      {videoTransport !== "YOUTUBE" && (
+        <div className="glass-card rounded-2xl overflow-hidden">
+          <div className="flex items-center gap-1.5 px-4 py-2 border-b border-outline-variant/20 text-label-sm text-on-surface-variant">
+            <span className="material-symbols-outlined text-lg text-primary">cast</span>
+            Live board — mirrors what your teacher is drawing right now
+          </div>
+          <div className={`relative aspect-[4/3] ${boardBackground === "dark" ? "bg-[#1a1f2e]" : "bg-white"}`}>
+            {isBackgroundImageUrl(boardBackground) && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={boardBackground}
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+              />
+            )}
+            <canvas ref={boardBaseRef} className="absolute inset-0 w-full h-full" />
+            <canvas ref={boardActiveRef} className="absolute inset-0 w-full h-full pointer-events-none" />
+            {boardEmpty && (
+              <div className="absolute inset-0 flex items-center justify-center text-label-sm text-on-surface-variant pointer-events-none">
+                Nothing on the board yet
+              </div>
+            )}
+          </div>
         </div>
-        <div className={`relative aspect-[4/3] ${boardBackground === "dark" ? "bg-[#1a1f2e]" : "bg-white"}`}>
-          {isBackgroundImageUrl(boardBackground) && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={boardBackground}
-              alt=""
-              className="absolute inset-0 w-full h-full object-cover pointer-events-none"
-            />
-          )}
-          <canvas ref={boardBaseRef} className="absolute inset-0 w-full h-full" />
-          <canvas ref={boardActiveRef} className="absolute inset-0 w-full h-full pointer-events-none" />
-          {boardEmpty && (
-            <div className="absolute inset-0 flex items-center justify-center text-label-sm text-on-surface-variant pointer-events-none">
-              Nothing on the board yet
-            </div>
-          )}
-        </div>
-      </div>
+      )}
 
       {quiz ? (
         <div className="glass-card rounded-2xl p-6 space-y-4">

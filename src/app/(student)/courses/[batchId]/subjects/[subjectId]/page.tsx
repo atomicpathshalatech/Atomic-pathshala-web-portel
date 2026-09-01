@@ -20,7 +20,11 @@ export default async function SubjectPage({
     where: { id: params.subjectId },
     include: {
       course: true,
-      chapters: { include: { _count: { select: { lectures: { where: { status: "PUBLISHED" } } } } } },
+      chapters: {
+        where: { status: "PUBLISHED" },
+        orderBy: { order: "asc" },
+        include: { _count: { select: { lectures: { where: { status: "PUBLISHED" } } } } },
+      },
     },
   });
   if (!subject) notFound();

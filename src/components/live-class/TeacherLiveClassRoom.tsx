@@ -156,7 +156,7 @@ async function deleteJson(url: string) {
   return json.data;
 }
 
-type SettingsTab = "audio" | "chatpoll" | "shortcuts";
+type SettingsTab = "audio" | "chatpoll" | "broadcast" | "shortcuts";
 type PopupId = "pen" | "highlight" | "eraser" | "shapes" | "pages" | "zoom" | "more" | null;
 
 export function TeacherLiveClassRoom({
@@ -1502,8 +1502,40 @@ function SettingsModal({
   const TABS: { id: SettingsTab; label: string }[] = [
     { id: "audio", label: "Audio & Video" },
     { id: "chatpoll", label: "Chat & Poll controls" },
+    { id: "broadcast", label: "YouTube Live Broadcast" },
     { id: "shortcuts", label: "Shortcuts" },
   ];
+
+  const [ytLink, setYtLink] = useState("");
+  const [ytSaving, setYtSaving] = useState(false);
+  const [ytMessage, setYtMessage] = useState<string | null>(null);
+
+  async function handleSaveYouTubeBroadcast() {
+    if (!ytLink.trim()) return;
+    setYtSaving(true);
+    setYtMessage(null);
+    try {
+      const res = await fetch(`/api/team/live-class/${wbSession.id}/broadcast`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          youtubeVideoId: ytLink.trim(),
+          videoTransport: "YOUTUBE",
+          livePhase: "LIVE",
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setYtMessage("YouTube stream configured & set to LIVE!");
+      } else {
+        setYtMessage(data.error || "Failed to update broadcast.");
+      }
+    } catch {
+      setYtMessage("Network error saving broadcast.");
+    } finally {
+      setYtSaving(false);
+    }
+  }
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
@@ -1564,6 +1596,49 @@ function SettingsModal({
                   onChange={onToggleHandRaise}
                   disabled={togglingHandRaise}
                 />
+              </div>
+            </div>
+          )}
+          {activeTab === "broadcast" && (
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-base font-semibold mb-1">YouTube Live Broadcast</h3>
+                <p className="text-xs text-gray-400 mb-3">
+                  Broadcast this class to students via an Unlisted YouTube live stream. Students will watch the stream embedded directly in the Atomic OPS classroom with synchronized chat &amp; polls.
+                </p>
+              </div>
+
+              <div className="space-y-2 bg-[#12131a] p-4 rounded-xl border border-[#2d2e3b]">
+                <label className="text-xs font-semibold text-gray-300 block">
+                  YouTube Video / Live Stream ID or URL
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="https://youtube.com/live/... or Video ID"
+                    value={ytLink}
+                    onChange={(e) => setYtLink(e.target.value)}
+                    className="flex-1 bg-[#1e1f2b] border border-[#2d2e3b] rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-blue-500"
+                  />
+                  <button
+                    type="button"
+                    disabled={ytSaving || !ytLink.trim()}
+                    onClick={handleSaveYouTubeBroadcast}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold disabled:opacity-50 transition-colors"
+                  >
+                    {ytSaving ? "Saving..." : "Go Live on YouTube"}
+                  </button>
+                </div>
+                {ytMessage && (
+                  <p className="text-xs text-blue-400 mt-1">{ytMessage}</p>
+                )}
+              </div>
+
+              <div className="text-xs text-gray-400 space-y-1 bg-[#10131b]/60 p-3 rounded-lg border border-[#2d2e3b]/50">
+                <p className="font-semibold text-gray-300">Streaming Instructions:</p>
+                <p>1. In YouTube Studio, create a new stream set to <strong>Unlisted</strong>.</p>
+                <p>2. Paste your live stream URL or video ID above and click <strong>Go Live on YouTube</strong>.</p>
+                <p>3. Start streaming from OBS or your encoder. Students will see the live video stream instantly.</p>
               </div>
             </div>
           )}

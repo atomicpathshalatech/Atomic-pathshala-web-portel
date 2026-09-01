@@ -40,12 +40,27 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
     const data = chapterSchema.partial().parse(await request.json());
 
+    if (data.subjectId) {
+      const subject = await prisma.subject.findUnique({
+        where: { id: data.subjectId },
+        include: { course: true },
+      });
+      if (!subject) return apiError("Subject not found", 404);
+      if (data.courseId && subject.courseId !== data.courseId) {
+        return apiError("The selected Subject does not belong to the selected Course/Exam", 400);
+      }
+    }
+
     const chapter = await prisma.chapter.update({
       where: { id: params.id },
       data: {
         ...(data.title !== undefined ? { title: data.title } : {}),
         ...(data.subjectId !== undefined ? { subjectId: data.subjectId } : {}),
+        ...(data.medium !== undefined ? { medium: data.medium } : {}),
         ...(data.order !== undefined ? { order: data.order } : {}),
+      },
+      include: {
+        subject: { include: { course: true } },
       },
     });
 

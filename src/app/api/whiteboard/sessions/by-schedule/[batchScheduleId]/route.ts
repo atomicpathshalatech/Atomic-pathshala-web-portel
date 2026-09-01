@@ -36,8 +36,16 @@ export async function GET(
       // livePhase lets the student client tell "session exists but teacher
       // hasn't hit Start Class yet" (PREPARING — show the lobby, chat is
       // already live) apart from "class is actually live" (LIVE — mount
-      // the board/video) without a second round-trip.
-      select: { id: true, title: true, status: true, livePhase: true, startedAt: true, endedAt: true },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        livePhase: true,
+        videoTransport: true,
+        youtubeVideoId: true,
+        startedAt: true,
+        endedAt: true,
+      },
     });
 
     return apiSuccess({ whiteboardSession: wbSession ?? null });

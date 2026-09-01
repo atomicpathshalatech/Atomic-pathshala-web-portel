@@ -18,8 +18,10 @@ export default async function NewChapterPage() {
   const canCreate = await hasPermission(session.user.id, PERMISSIONS.CHAPTER_CREATE);
   if (!canCreate) redirect("/team/chapters");
 
-  const subjects = await prisma.subject.findMany({
-    include: { course: true },
+  const courses = await prisma.course.findMany({
+    include: {
+      subjects: { orderBy: { title: "asc" } },
+    },
     orderBy: { title: "asc" },
   });
 
@@ -28,11 +30,15 @@ export default async function NewChapterPage() {
       <div>
         <h1 className="font-headline-lg text-headline-lg text-primary">Create Chapter</h1>
         <p className="text-on-surface-variant font-body-md mt-1">
-          A unique 6-digit Chapter ID (starting with 6) will be generated automatically.
+          Select the Course/Exam, choose the Subject, and enter the chapter details. A unique 6-digit Chapter ID (starting with 6) will be generated automatically.
         </p>
       </div>
       <ChapterForm
-        subjects={subjects.map((s) => ({ id: s.id, title: s.title, courseTitle: s.course.title }))}
+        courses={courses.map((c) => ({
+          id: c.id,
+          title: c.title,
+          subjects: c.subjects.map((s) => ({ id: s.id, title: s.title })),
+        }))}
       />
     </div>
   );

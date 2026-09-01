@@ -16,9 +16,19 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const subjectId = searchParams.get("subjectId");
+    const courseId = searchParams.get("courseId");
+    const medium = searchParams.get("medium");
+    const status = searchParams.get("status");
+
+    const where: Prisma.ChapterWhereInput = {
+      ...(subjectId ? { subjectId } : {}),
+      ...(courseId ? { subject: { courseId } } : {}),
+      ...(medium ? { medium: medium as Prisma.EnumMediumFilter } : {}),
+      ...(status ? { status: status as Prisma.EnumChapterStatusFilter } : {}),
+    };
 
     const chapters = await prisma.chapter.findMany({
-      where: subjectId ? { subjectId } : {},
+      where,
       include: {
         subject: { include: { course: true } },
         _count: { select: { lectures: true, dpps: true, tests: true } },
@@ -40,8 +50,15 @@ export async function POST(request: NextRequest) {
 
     const data = chapterSchema.parse(await request.json());
 
-    const subject = await prisma.subject.findUnique({ where: { id: data.subjectId } });
+    const subject = await prisma.subject.findUnique({
+      where: { id: data.subjectId },
+      include: { course: true },
+    });
     if (!subject) return apiError("Subject not found", 404);
+
+    if (data.courseId && subject.courseId !== data.courseId) {
+      return apiError("The selected Subject does not belong to the selected Course/Exam", 400);
+    }
 
     let chapter: Awaited<ReturnType<typeof prisma.chapter.create>> | null = null;
     let lastError: unknown = null;
@@ -54,8 +71,12 @@ export async function POST(request: NextRequest) {
             chapterId,
             title: data.title,
             subjectId: data.subjectId,
+            medium: data.medium,
             order: data.order,
             createdById: session.user.id,
+          },
+          include: {
+            subject: { include: { course: true } },
           },
         });
       } catch (err) {

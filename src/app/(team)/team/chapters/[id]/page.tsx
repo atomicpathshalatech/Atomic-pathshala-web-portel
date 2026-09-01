@@ -20,6 +20,8 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
   const canRead = await hasPermission(session.user.id, PERMISSIONS.CHAPTER_READ);
   if (!canRead) redirect("/team");
 
+  const canUpdate = await hasPermission(session.user.id, PERMISSIONS.CHAPTER_UPDATE);
+
   const chapter = await prisma.chapter.findUnique({
     where: { id: params.id },
     include: {
@@ -31,19 +33,40 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
   });
   if (!chapter) notFound();
 
+  const mediumLabel =
+    chapter.medium === "HINDI" ? "Hindi" : chapter.medium === "HINGLISH" ? "Hinglish" : "English";
+
   return (
     <div className="space-y-stack-lg max-w-4xl">
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
         <div>
-          <p className="text-label-sm text-outline-variant">{chapter.chapterId ?? "—"}</p>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-label-sm font-mono text-outline-variant bg-surface-container-high px-2 py-0.5 rounded">
+              {chapter.chapterId ?? "—"}
+            </span>
+            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-secondary-container text-on-secondary-container">
+              {mediumLabel}
+            </span>
+          </div>
           <h1 className="font-headline-lg text-headline-lg text-primary tracking-tight">{chapter.title}</h1>
           <p className="text-on-surface-variant font-body-md mt-1">
             {chapter.subject.title} · {chapter.subject.course?.title}
           </p>
         </div>
-        <span className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-primary-container text-on-primary-container">
-          {chapter.status.replaceAll("_", " ")}
-        </span>
+        <div className="flex items-center gap-3">
+          {canUpdate && (
+            <Link
+              href={`/team/chapters/${chapter.id}/edit`}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-outline-variant text-label-md hover:bg-surface-container-high transition-colors text-on-surface"
+            >
+              <span className="material-symbols-outlined text-base">edit</span>
+              Edit Chapter
+            </Link>
+          )}
+          <span className="px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-primary-container text-on-primary-container">
+            {chapter.status.replaceAll("_", " ")}
+          </span>
+        </div>
       </div>
 
       <div className="glass-card p-stack-lg rounded-xl space-y-3">
