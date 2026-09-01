@@ -86,7 +86,16 @@ export default async function TestDetailPage({ params }: { params: { id: string 
                 ).toLocaleString()}`}
             </p>
           </div>
-          {isDraft && canPublish && <PublishTestButton testId={test.id} />}
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/team/tests/${test.id}/author`}
+              className="px-4 py-2.5 rounded-xl bg-[#002f6c] hover:bg-[#001f4c] text-white font-extrabold text-xs shadow-md transition flex items-center gap-1.5"
+            >
+              <span className="material-symbols-outlined text-base">view_column</span>
+              <span>Open Dual-Column Studio</span>
+            </Link>
+            {isDraft && canPublish && <PublishTestButton testId={test.id} />}
+          </div>
         </div>
         {test.instructions && (
           <p className="text-body-md text-on-surface-variant mt-3 max-w-2xl">{test.instructions}</p>

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -48,6 +49,13 @@ export default async function DppDetailPage({ params }: { params: { id: string }
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <Link
+            href={`/team/dpp/${dpp.id}/author`}
+            className="px-4 py-2 rounded-xl bg-[#002f6c] hover:bg-[#001f4c] text-white font-extrabold text-xs shadow-md transition flex items-center gap-1.5"
+          >
+            <span className="material-symbols-outlined text-base">view_column</span>
+            <span>Open Dual-Column Studio</span>
+          </Link>
           <span
             className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
               dpp.status === "PUBLISHED"
