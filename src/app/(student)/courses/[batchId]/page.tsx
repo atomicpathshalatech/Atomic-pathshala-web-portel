@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { requireStudentSession } from "@/lib/auth/session";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { CourseDetailMasterView } from "@/components/course-platform/CourseDetailMasterView";
 import { SAMPLE_COURSES } from "@/components/course-platform/CourseListingMasterView";
@@ -9,18 +10,31 @@ export const metadata: Metadata = {
   title: "Batch & Course — Atomic Pathshala",
 };
 
-export default async function BatchCoursePage({ params }: { params: { batchId: string } }) {
+export default async function BatchCoursePage({
+  params,
+}: {
+  params: { batchId: string } | Promise<{ batchId: string }>;
+}) {
+  const resolvedParams = await Promise.resolve(params);
+  const batchId = resolvedParams?.batchId || "yodha-chemistry-neet-2027";
+
   // 1. Check if matches predefined sample store course
   const foundSample = SAMPLE_COURSES.find(
-    (c) => c.slug === params.batchId || c.id === params.batchId
+    (c) => c.slug === batchId || c.id === batchId
   );
 
   let studentId: string | null = null;
   try {
-    const session = await requireStudentSession();
-    studentId = session?.student?.id || null;
-  } catch {
-    // Guest or unauthenticated session
+    const session = await getServerSession(authOptions);
+    if (session?.user?.id) {
+      const student = await prisma.student.findUnique({
+        where: { userId: session.user.id },
+        select: { id: true },
+      });
+      studentId = student?.id || null;
+    }
+  } catch (err) {
+    console.error("Session lookup error in batch page:", err);
   }
 
   // 2. If student is logged in, check if active enrollment exists
@@ -28,7 +42,7 @@ export default async function BatchCoursePage({ params }: { params: { batchId: s
     try {
       const enrollment = await prisma.batchEnrollment.findFirst({
         where: {
-          batchId: params.batchId,
+          batchId: batchId,
           studentId: studentId,
           status: "ACTIVE",
         },
@@ -70,7 +84,7 @@ export default async function BatchCoursePage({ params }: { params: { batchId: s
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-extrabold uppercase tracking-wider">
-                      Enrolled & Active
+                      Enrolled &amp; Active
                     </span>
                     <span className="text-xs font-bold text-slate-400 font-mono">
                       Code: {enrollment.batch.code}
@@ -136,8 +150,8 @@ export default async function BatchCoursePage({ params }: { params: { batchId: s
           </div>
         );
       }
-    } catch {
-      // Fall through to course detail view
+    } catch (err) {
+      console.error("Enrollment check error in batch page:", err);
     }
   }
 
@@ -150,16 +164,16 @@ export default async function BatchCoursePage({ params }: { params: { batchId: s
   let batch = null;
   try {
     batch = await prisma.batch.findUnique({
-      where: { id: params.batchId },
+      where: { id: batchId },
       include: { course: true },
     });
-  } catch {
-    // Database query error ignored
+  } catch (err) {
+    console.error("Batch query error:", err);
   }
 
   const courseData = {
     id: batch?.id || "default-course",
-    slug: batch?.id || "course-details",
+    slug: batch?.id || batchId,
     title: batch?.name || "YODHA Chemistry Batch for NEET 2027",
     subtitle:
       batch?.course?.description ||
@@ -169,7 +183,7 @@ export default async function BatchCoursePage({ params }: { params: { batchId: s
     subject: "Chemistry",
     courseType: "Full Syllabus",
     language: "Hinglish",
-    educators: "By Sonu Bhaiya",
+    educators: "By Sonu Bhaiya & Dr. Priya Sharma",
     duration: "12 Months",
     classesCount: 128,
     testsCount: 21,

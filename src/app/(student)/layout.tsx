@@ -1,43 +1,53 @@
-import { requireStudentSession } from "@/lib/auth/session";
+import { getServerSession } from "next-auth";
+import { redirect } from "next/navigation";
+import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { StudentShell } from "@/components/student/StudentShell";
 
-/**
- * Student portal shell — sidebar + top bar on desktop, top bar + drawer +
- * bottom nav on mobile (StudentShell). Every page under `(student)/*`
- * (dashboard, courses, live-class, doubts, schedule, id-card, settings, and
- * the pre-existing tests/dpp/practice-board/subscription/notifications
- * routes) renders as `{children}` inside this layout automatically — no
- * per-page chrome needed.
- *
- * StudentShell now carries the goal/streak header + 5-tab nav (Home / My
- * Schedule / Practice / Tests / Batches) — targetExam and
- * currentStreakDays come straight off the Student row `requireStudentSession`
- * already fetches, no extra query needed.
- */
 export default async function StudentPortalLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { student } = await requireStudentSession();
+  const session = await getServerSession(authOptions);
 
-  // Drives whether the persistent "Upgrade" banner shows — a student on an
-  // ACTIVE plan doesn't need to be told to get one. TRIAL still counts as
-  // "not yet subscribed" (the banner is exactly the nudge a trial user
-  // should see), same as CANCELLED/PAST_DUE/EXPIRED.
-  const subscription = await prisma.subscription.findUnique({
-    where: { studentId: student.id },
-    select: { status: true },
-  });
-  const hasActiveSubscription = subscription?.status === "ACTIVE";
+  if (!session?.user?.id) {
+    redirect("/login");
+  }
+
+  // Look up student profile in database
+  let student = null;
+  let hasActiveSubscription = false;
+
+  try {
+    student = await prisma.student.findUnique({
+      where: { userId: session.user.id },
+      include: { user: true },
+    });
+
+    if (student) {
+      const subscription = await prisma.subscription.findUnique({
+        where: { studentId: student.id },
+        select: { status: true },
+      });
+      hasActiveSubscription = subscription?.status === "ACTIVE";
+    }
+  } catch (error) {
+    console.error("Error loading student profile in layout:", error);
+  }
+
+  // Fallback safe values for admin/teacher preview or newly registered users
+  const studentName = student?.user?.name || session.user.name || "Student";
+  const studentIdCode = student?.studentIdCode || "AP-STUDENT";
+  const targetExam = student?.targetExam || "NEET";
+  const currentStreakDays = student?.currentStreakDays || 1;
 
   return (
     <StudentShell
-      studentName={student.user.name}
-      studentIdCode={student.studentIdCode}
-      targetExam={student.targetExam}
-      currentStreakDays={student.currentStreakDays}
+      studentName={studentName}
+      studentIdCode={studentIdCode}
+      targetExam={targetExam}
+      currentStreakDays={currentStreakDays}
       hasActiveSubscription={hasActiveSubscription}
     >
       {children}
