@@ -115,7 +115,12 @@ export default async function DppDetailPage({ params }: { params: { id: string }
         </div>
       )}
 
-      <DppQuestionPicker dppId={dpp.id} linkedQuestionIds={linkedQuestionIds} />
+      <DppQuestionPicker
+        dppId={dpp.id}
+        linkedQuestionIds={linkedQuestionIds}
+        dppSubject={dpp.subject}
+        dppChapter={dpp.chapter}
+      />
     </div>
   );
 }
