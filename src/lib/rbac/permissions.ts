@@ -94,6 +94,17 @@ export const PERMISSIONS = {
   LECTURE_PUBLISH: "lecture.publish",
   LECTURE_DELETE: "lecture.delete",
 
+  // Chapter Management System — Course/Subject/Chapter/Lecture/DPP/
+  // ChapterTest hierarchy with a real Chapter state machine (DRAFT ->
+  // ... -> PUBLISHED). Same 5-way split as Lecture/DPP: a teacher can
+  // create/edit a chapter under their subject, only an admin/content tier
+  // can publish or delete it.
+  CHAPTER_READ: "chapter.read",
+  CHAPTER_CREATE: "chapter.create",
+  CHAPTER_UPDATE: "chapter.update",
+  CHAPTER_PUBLISH: "chapter.publish",
+  CHAPTER_DELETE: "chapter.delete",
+
   // ID / KYC Document Management
   DOCUMENT_READ_SELF: "document.read.self",
   DOCUMENT_UPLOAD_SELF: "document.upload.self",
@@ -210,6 +221,9 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PermissionCode[]> = {
     PERMISSIONS.LECTURE_READ,
     PERMISSIONS.LECTURE_CREATE,
     PERMISSIONS.LECTURE_UPDATE,
+    PERMISSIONS.CHAPTER_READ,
+    PERMISSIONS.CHAPTER_CREATE,
+    PERMISSIONS.CHAPTER_UPDATE,
     PERMISSIONS.AICHAT_SCHEDULE_MANAGE,
     PERMISSIONS.AICHAT_QUESTION_BANK_VIEW,
     PERMISSIONS.DPP_READ,
@@ -253,6 +267,11 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PermissionCode[]> = {
     PERMISSIONS.LECTURE_UPDATE,
     PERMISSIONS.LECTURE_PUBLISH,
     PERMISSIONS.LECTURE_DELETE,
+    PERMISSIONS.CHAPTER_READ,
+    PERMISSIONS.CHAPTER_CREATE,
+    PERMISSIONS.CHAPTER_UPDATE,
+    PERMISSIONS.CHAPTER_PUBLISH,
+    PERMISSIONS.CHAPTER_DELETE,
     PERMISSIONS.AICHAT_ADMIN_ACCESS,
     PERMISSIONS.AICHAT_SCHEDULE_MANAGE,
     PERMISSIONS.AICHAT_QUESTION_BANK_VIEW,
@@ -288,6 +307,10 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PermissionCode[]> = {
     PERMISSIONS.COURSE_READ,
     PERMISSIONS.COURSE_CREATE,
     PERMISSIONS.COURSE_UPDATE,
+    PERMISSIONS.CHAPTER_READ,
+    PERMISSIONS.CHAPTER_CREATE,
+    PERMISSIONS.CHAPTER_UPDATE,
+    PERMISSIONS.CHAPTER_PUBLISH,
     PERMISSIONS.HOME_VIEW,
     PERMISSIONS.MEDIA_MANAGE,
     PERMISSIONS.FAQ_MANAGE,

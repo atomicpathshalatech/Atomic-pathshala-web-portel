@@ -2,13 +2,16 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requireStudentSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
-import type { BatchSchedule, Teacher, User } from "@prisma/client";
+import type { BatchSchedule, Teacher, User, Batch } from "@prisma/client";
 
 export const metadata: Metadata = {
   title: "My Schedule",
 };
 
-type ScheduleWithTeacher = BatchSchedule & { teacher: (Teacher & { user: User }) | null };
+type ScheduleWithDetails = BatchSchedule & {
+  batch: Batch;
+  teacher: (Teacher & { user: User }) | null;
+};
 
 const TYPE_LABELS: Record<string, string> = {
   LIVE_CLASS: "Live Class",
@@ -18,21 +21,14 @@ const TYPE_LABELS: Record<string, string> = {
   OTHER: "Special Class",
 };
 
-// Dark "Prime"-style palette — the same hardcoded hex values already used
-// by the whiteboard/live-class dark theme (TeacherLiveClassRoom.tsx,
-// MessagesPanel.tsx), reused here rather than inventing a second dark
-// palette: base #1a1b23, deeper panel #10131b, border #2d2e3b, accent blue.
 const TYPE_BORDER: Record<string, string> = {
   LIVE_CLASS: "border-l-blue-500",
   TEST: "border-l-amber-500",
-  DPP: "border-l-[#2d2e3b]",
-  DOUBT_SESSION: "border-l-[#2d2e3b]",
+  DPP: "border-l-emerald-500",
+  DOUBT_SESSION: "border-l-purple-500",
   OTHER: "border-l-[#2d2e3b]",
 };
 
-// A student can enter a live class up to 15 minutes before its scheduled
-// start — same window the teacher side uses (see (team)/team/my-schedule/
-// page.tsx) so both sides of the same class agree on when "Join" unlocks.
 const JOIN_WINDOW_MS = 15 * 60 * 1000;
 
 function formatDay(date: Date) {
@@ -46,10 +42,15 @@ function formatDay(date: Date) {
   return date.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
 }
 
-export default async function SchedulePage() {
+export default async function SchedulePage({
+  searchParams,
+}: {
+  searchParams?: { batch?: string };
+}) {
   const { student } = await requireStudentSession();
+  const selectedBatchId = searchParams?.batch;
 
-  const enrollment = await prisma.batchEnrollment.findFirst({
+  const enrollments = await prisma.batchEnrollment.findMany({
     where: { studentId: student.id, status: "ACTIVE" },
     include: {
       batch: {
@@ -58,7 +59,10 @@ export default async function SchedulePage() {
           teachers: { include: { teacher: { include: { user: true } } } },
           schedules: {
             orderBy: { startsAt: "asc" },
-            include: { teacher: { include: { user: true } } },
+            include: {
+              batch: true,
+              teacher: { include: { user: true } },
+            },
           },
         },
       },
@@ -66,7 +70,7 @@ export default async function SchedulePage() {
     orderBy: { enrolledAt: "desc" },
   });
 
-  if (!enrollment) {
+  if (enrollments.length === 0) {
     return (
       <div className="max-w-6xl mx-auto rounded-3xl bg-[#0d0e15] border border-[#2d2e3b] p-6 md:p-10">
         <header>
@@ -82,30 +86,70 @@ export default async function SchedulePage() {
   }
 
   const now = new Date();
-  const schedules = enrollment.batch.schedules as ScheduleWithTeacher[];
-  const upcoming = schedules.filter((s) => s.endsAt >= now);
-  const past = schedules.filter((s) => s.endsAt < now);
+  const allSchedules: ScheduleWithDetails[] = enrollments
+    .flatMap((e) => e.batch.schedules as ScheduleWithDetails[])
+    .filter((s) => !selectedBatchId || s.batchId === selectedBatchId)
+    .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
 
-  const grouped = upcoming.reduce<Record<string, ScheduleWithTeacher[]>>((acc, s) => {
+  const upcoming = allSchedules.filter((s) => s.endsAt >= now);
+  const past = allSchedules.filter((s) => s.endsAt < now);
+
+  const grouped = upcoming.reduce<Record<string, ScheduleWithDetails[]>>((acc, s) => {
     const key = s.startsAt.toDateString();
     (acc[key] ??= []).push(s);
     return acc;
   }, {});
 
+  const allTeachers = Array.from(
+    new Map(
+      enrollments.flatMap((e) => e.batch.teachers).map((t) => [t.teacherId, t])
+    ).values()
+  );
+
   return (
     <div className="max-w-6xl mx-auto rounded-3xl bg-[#0d0e15] border border-[#2d2e3b] p-6 md:p-10">
       <header>
         <p className="flex items-center gap-2 text-xs text-gray-500 mb-2">
-          <span>My Batch</span>
+          <span>My Courses</span>
           <span className="material-symbols-outlined text-sm">chevron_right</span>
-          <span className="text-blue-400">{enrollment.batch.name}</span>
+          <span className="text-blue-400">Schedule</span>
         </p>
-        <h1 className="text-2xl md:text-3xl font-bold text-white">My Schedule</h1>
-        <p className="text-gray-400 mt-2">
-          {enrollment.batch.code}
-          {enrollment.batch.targetExam ? ` · ${enrollment.batch.targetExam}` : ""}
-          {enrollment.batch.course ? ` · ${enrollment.batch.course.title}` : ""}
-        </p>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold text-white">My Schedule</h1>
+            <p className="text-gray-400 mt-2">
+              {enrollments.length} Active Batch{enrollments.length === 1 ? "" : "es"}
+            </p>
+          </div>
+          {/* Batch Selector Tabs */}
+          {enrollments.length > 1 && (
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              <Link
+                href="/schedule"
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
+                  !selectedBatchId
+                    ? "bg-blue-600 text-white"
+                    : "bg-[#1a1b23] text-gray-400 hover:text-white border border-[#2d2e3b]"
+                }`}
+              >
+                All Batches ({allSchedules.length})
+              </Link>
+              {enrollments.map((e) => (
+                <Link
+                  key={e.batch.id}
+                  href={`/schedule?batch=${e.batch.id}`}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
+                    selectedBatchId === e.batch.id
+                      ? "bg-blue-600 text-white"
+                      : "bg-[#1a1b23] text-gray-400 hover:text-white border border-[#2d2e3b]"
+                  }`}
+                >
+                  {e.batch.name}
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-8">
@@ -113,7 +157,7 @@ export default async function SchedulePage() {
           <div className="rounded-2xl border border-[#2d2e3b] bg-[#1a1b23] p-5">
             <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
               <span className="material-symbols-outlined text-blue-400 text-xl">analytics</span>
-              Batch Stats
+              Overview
             </h3>
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-[#10131b] border border-[#2d2e3b] p-3 rounded-xl">
@@ -127,14 +171,14 @@ export default async function SchedulePage() {
             </div>
           </div>
 
-          {enrollment.batch.teachers.length > 0 && (
+          {allTeachers.length > 0 && (
             <div className="rounded-2xl border border-[#2d2e3b] bg-[#1a1b23] p-5">
               <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
                 <span className="material-symbols-outlined text-blue-400 text-xl">school</span>
                 Faculty
               </h3>
               <ul className="space-y-2">
-                {enrollment.batch.teachers.map((t) => (
+                {allTeachers.map((t) => (
                   <li key={t.id} className="text-sm text-gray-300">
                     {t.teacher.user.name}
                     {t.subject ? <span className="text-gray-500"> — {t.subject}</span> : null}
@@ -148,8 +192,7 @@ export default async function SchedulePage() {
         <section className="lg:col-span-8">
           {upcoming.length === 0 ? (
             <div className="rounded-2xl border border-[#2d2e3b] bg-[#1a1b23] p-8 text-center text-gray-400">
-              No upcoming sessions scheduled yet. Check back once your batch&apos;s timetable is
-              published.
+              No upcoming sessions scheduled yet. Check back once your batch timetable is updated.
             </div>
           ) : (
             <div className="relative pl-8 md:pl-12 space-y-8 pb-4">
@@ -175,13 +218,16 @@ export default async function SchedulePage() {
                       >
                         <div className="flex flex-col md:flex-row justify-between gap-4">
                           <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
+                            <div className="flex items-center gap-2 mb-2 flex-wrap">
                               <span
                                 className={`px-2 py-0.5 text-[10px] font-bold rounded uppercase ${
                                   isLiveNow ? "bg-red-500/15 text-red-400" : "bg-[#10131b] text-gray-400"
                                 }`}
                               >
                                 {isLiveNow ? "Live Now" : TYPE_LABELS[s.type] ?? s.type}
+                              </span>
+                              <span className="text-xs text-blue-400/80 bg-blue-950/40 px-2 py-0.5 rounded border border-blue-900/30">
+                                {s.batch.name}
                               </span>
                               {s.subject && <span className="text-sm text-gray-500">{s.subject}</span>}
                             </div>
@@ -200,9 +246,9 @@ export default async function SchedulePage() {
                               </span>
                             </div>
                           </div>
-                          {s.type === "LIVE_CLASS" && (
-                            <div className="shrink-0 w-full md:w-auto">
-                              {canEnter ? (
+                          <div className="shrink-0 w-full md:w-auto self-end md:self-center">
+                            {s.type === "LIVE_CLASS" ? (
+                              canEnter ? (
                                 <Link
                                   href={`/live-class/${s.id}`}
                                   className="block text-center w-full md:w-auto px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors"
@@ -217,9 +263,23 @@ export default async function SchedulePage() {
                                 >
                                   Opens 15 min before
                                 </button>
-                              )}
-                            </div>
-                          )}
+                              )
+                            ) : s.type === "TEST" ? (
+                              <Link
+                                href="/tests"
+                                className="block text-center w-full md:w-auto px-6 py-2 border border-amber-500/40 text-amber-400 hover:bg-amber-500/10 text-sm font-medium rounded-lg transition-colors"
+                              >
+                                View in Tests
+                              </Link>
+                            ) : s.type === "DPP" ? (
+                              <Link
+                                href="/dpp"
+                                className="block text-center w-full md:w-auto px-6 py-2 border border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10 text-sm font-medium rounded-lg transition-colors"
+                              >
+                                View in DPP
+                              </Link>
+                            ) : null}
+                          </div>
                         </div>
                       </div>
                     );

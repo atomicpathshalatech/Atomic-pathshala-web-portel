@@ -35,14 +35,13 @@ export default async function ProfilePage() {
                 <span className="font-display-lg text-display-lg text-primary">{initials}</span>
               )}
             </div>
-            <button
-              type="button"
-              disabled
-              title="Photo upload is coming soon"
-              className="absolute bottom-1 right-1 bg-primary/50 text-on-primary p-2.5 rounded-full shadow-lg cursor-not-allowed flex items-center justify-center"
+            <Link
+              href="/settings"
+              title="Change profile photo"
+              className="absolute bottom-1 right-1 bg-primary text-on-primary p-2.5 rounded-full shadow-lg hover:opacity-90 active:scale-95 transition-all flex items-center justify-center"
             >
               <span className="material-symbols-outlined text-[18px]">photo_camera</span>
-            </button>
+            </Link>
           </div>
 
           {/* Identity */}

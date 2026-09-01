@@ -10,8 +10,8 @@ type Enrollment = {
   enrolledAt: string;
   student: {
     enrollmentNumber: string;
-    class: string;
-    targetExam: string;
+    class: string | null;
+    targetExam: string | null;
     user: { name: string; email: string };
   };
 };
@@ -19,7 +19,7 @@ type Enrollment = {
 type StudentOption = {
   id: string;
   enrollmentNumber: string;
-  class: string;
+  class: string | null;
   user: { name: string; email: string };
 };
 

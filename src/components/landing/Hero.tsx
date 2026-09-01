@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { HeroShaderCanvas } from "./HeroShaderCanvas";
 
 export function Hero() {
@@ -20,13 +21,19 @@ export function Hero() {
         </p>
 
         <div className="flex flex-col sm:flex-row gap-4 pt-4">
-          <button className="bg-primary text-on-primary font-label-md text-label-md px-8 py-4 rounded-xl hover:opacity-90 transition-all flex items-center justify-center gap-2">
+          <Link
+            href="/register"
+            className="bg-primary text-on-primary font-label-md text-label-md px-8 py-4 rounded-xl hover:opacity-90 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-lg"
+          >
             Start Learning{" "}
             <span className="material-symbols-outlined">arrow_forward</span>
-          </button>
-          <button className="border-2 border-primary text-primary font-label-md text-label-md px-8 py-4 rounded-xl hover:bg-primary/5 transition-all flex items-center justify-center gap-2">
+          </Link>
+          <Link
+            href="#batches"
+            className="border-2 border-primary text-primary font-label-md text-label-md px-8 py-4 rounded-xl hover:bg-primary/5 active:scale-95 transition-all flex items-center justify-center gap-2"
+          >
             Explore Courses
-          </button>
+          </Link>
         </div>
 
         <div className="flex items-center gap-6 pt-8 border-t border-outline-variant/30">

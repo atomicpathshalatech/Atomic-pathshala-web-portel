@@ -27,5 +27,11 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    "_import-test-portal",
+    "_import_atomic-ai-chat",
+    "_import_white-board",
+    "atomic-ops"
+  ]
 }

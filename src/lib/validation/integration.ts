@@ -19,3 +19,14 @@ export const leadInviteCreateSchema = z.object({
 });
 
 export type LeadInviteCreateInput = z.infer<typeof leadInviteCreateSchema>;
+
+/** Body for PATCH /api/team/leads/[id] — forwarded to the CRM's own
+ * PATCH /api/integrations/lms/leads. Status/stage values mirror the
+ * literal strings atomic-outreach-system's Lead model uses (it stores
+ * them as plain String columns, not a DB enum). */
+export const leadUpdateSchema = z.object({
+  status: z.enum(["HOT", "WARM", "COLD", "QUALIFIED", "CONVERTED", "CLOSED_LOST"]).optional(),
+  stage: z.enum(["DISCOVERY", "DEMO_ATTENDED", "FEE_SHARED", "ADMISSION_CONFIRMED", "ENROLLED"]).optional(),
+  assignedUserId: z.string().nullable().optional(),
+});
+export type LeadUpdateInput = z.infer<typeof leadUpdateSchema>;

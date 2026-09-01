@@ -1,12 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   SCHEDULE_SESSION_TYPE_OPTIONS,
   SCHEDULE_SESSION_STATUS_OPTIONS,
 } from "@/lib/validation/batch";
+import {
+  COMMON_DURATIONS,
+  calculateEndTime,
+} from "@/lib/batch/schedule-conflict";
 
 type ScheduleEntry = {
   id: string;
@@ -48,7 +52,7 @@ function toDateTimeLocal(value: string) {
 }
 
 const inputClass =
-  "w-full rounded-lg border border-outline-variant bg-surface-container-lowest py-2 px-3 text-body-sm outline-none focus:ring-2 focus:ring-primary/30";
+  "w-full rounded-xl border border-outline-variant/40 bg-surface-container-lowest py-2.5 px-3.5 text-body-sm outline-none focus:ring-2 focus:ring-primary/30";
 
 export function BatchScheduleManager({
   batchId,
@@ -64,6 +68,7 @@ export function BatchScheduleManager({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
   const [form, setForm] = useState({
     title: "",
     subject: "",
@@ -71,9 +76,23 @@ export function BatchScheduleManager({
     status: "SCHEDULED" as ScheduleEntry["status"],
     teacherId: "",
     startsAt: "",
-    endsAt: "",
+    durationMinutes: 60,
+    isCustomDuration: false,
+    customDuration: 60,
     notes: "",
   });
+
+  // Calculate End Time automatically: End Time = Start Time + Duration
+  const calculatedEndTime = useMemo(() => {
+    if (!form.startsAt) return null;
+    const duration = form.isCustomDuration ? form.customDuration : form.durationMinutes;
+    if (!duration || duration <= 0) return null;
+    try {
+      return calculateEndTime(form.startsAt, duration);
+    } catch {
+      return null;
+    }
+  }, [form.startsAt, form.durationMinutes, form.isCustomDuration, form.customDuration]);
 
   function resetForm() {
     setForm({
@@ -83,14 +102,22 @@ export function BatchScheduleManager({
       status: "SCHEDULED",
       teacherId: "",
       startsAt: "",
-      endsAt: "",
+      durationMinutes: 60,
+      isCustomDuration: false,
+      customDuration: 60,
       notes: "",
     });
     setEditingId(null);
     setShowForm(false);
+    setError(null);
   }
 
   function startEdit(entry: ScheduleEntry) {
+    const start = new Date(entry.startsAt);
+    const end = new Date(entry.endsAt);
+    const diffMins = Math.max(15, Math.round((end.getTime() - start.getTime()) / (1000 * 60)));
+    const isCommon = COMMON_DURATIONS.some((d) => d.minutes === diffMins);
+
     setForm({
       title: entry.title,
       subject: entry.subject ?? "",
@@ -98,7 +125,9 @@ export function BatchScheduleManager({
       status: entry.status,
       teacherId: entry.teacherId ?? "",
       startsAt: toDateTimeLocal(entry.startsAt),
-      endsAt: toDateTimeLocal(entry.endsAt),
+      durationMinutes: isCommon ? diffMins : 60,
+      isCustomDuration: !isCommon,
+      customDuration: diffMins,
       notes: entry.notes ?? "",
     });
     setEditingId(entry.id);
@@ -106,26 +135,42 @@ export function BatchScheduleManager({
   }
 
   async function submit() {
-    if (!form.title.trim() || !form.startsAt || !form.endsAt) {
-      setError("Title, start time, and end time are required.");
+    if (!form.title.trim()) {
+      setError("Lecture title is required.");
       return;
     }
+    if (!form.startsAt) {
+      setError("Start date and time are required.");
+      return;
+    }
+    const duration = form.isCustomDuration ? form.customDuration : form.durationMinutes;
+    if (!duration || duration <= 0) {
+      setError("Duration must be a positive number of minutes.");
+      return;
+    }
+    if (!calculatedEndTime) {
+      setError("Invalid start time or duration provided.");
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
     try {
       const url = editingId
         ? `/api/team/batches/${batchId}/schedule/${editingId}`
         : `/api/team/batches/${batchId}/schedule`;
+
       const payload = {
-        title: form.title,
+        title: form.title.trim(),
         subject: form.subject.trim() || undefined,
         type: form.type,
         ...(editingId ? { status: form.status } : {}),
         teacherId: form.teacherId || undefined,
         startsAt: new Date(form.startsAt).toISOString(),
-        endsAt: new Date(form.endsAt).toISOString(),
+        endsAt: calculatedEndTime.toISOString(),
         notes: form.notes.trim() || undefined,
       };
+
       const res = await fetch(url, {
         method: editingId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
@@ -139,13 +184,14 @@ export function BatchScheduleManager({
       resetForm();
       router.refresh();
     } catch {
-      setError("Something went wrong. Please try again.");
+      setError("Network connection error. Please try again.");
     } finally {
       setSubmitting(false);
     }
   }
 
   async function remove(id: string) {
+    if (!confirm("Are you sure you want to delete this scheduled class?")) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -164,161 +210,261 @@ export function BatchScheduleManager({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      {/* Error Alert Box */}
       {error && (
-        <div className="bg-error-container/40 border border-error/20 rounded-xl px-4 py-2">
-          <p className="text-label-sm font-label-sm text-error">{error}</p>
+        <div className="bg-error/10 border border-error/20 rounded-2xl p-4 flex items-start gap-3">
+          <span className="material-symbols-outlined text-error text-xl shrink-0 mt-0.5">warning</span>
+          <div className="space-y-0.5">
+            <p className="font-bold text-xs text-error">Schedule Validation Error</p>
+            <p className="text-xs text-on-surface leading-relaxed">{error}</p>
+          </div>
         </div>
       )}
 
+      {/* Timetable Entries List */}
       {schedules.length === 0 ? (
-        <p className="text-label-sm text-on-surface-variant">No timetable entries yet.</p>
+        <div className="p-8 text-center border border-dashed border-outline-variant/30 rounded-2xl text-on-surface-variant text-xs">
+          No timetable entries yet for this batch.
+        </div>
       ) : (
-        <ul className="space-y-2">
+        <ul className="space-y-2.5">
           {schedules.map((s) => (
-            <li key={s.id} className="bg-surface-container-lowest rounded-lg px-3 py-2 space-y-1">
+            <li
+              key={s.id}
+              className="bg-surface-container-lowest border border-outline-variant/20 rounded-2xl p-4 hover:border-primary/40 transition-all space-y-2"
+            >
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <span className="text-[10px] font-bold uppercase tracking-wide bg-primary/10 text-primary px-2 py-0.5 rounded mr-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wide bg-primary/10 text-primary px-2.5 py-0.5 rounded-full">
                     {TYPE_LABELS[s.type]}
                   </span>
-                  <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded ${STATUS_STYLES[s.status]}`}>
+                  <span
+                    className={`text-[10px] font-bold uppercase tracking-wide px-2.5 py-0.5 rounded-full ${STATUS_STYLES[s.status]}`}
+                  >
                     {s.status}
                   </span>
                 </div>
-                <div className="flex items-center gap-3 text-label-sm">
+                <div className="flex items-center gap-3 text-xs">
                   {s.type === "LIVE_CLASS" && (
                     <Link
                       href={`/team/live-class/${s.id}`}
-                      className="flex items-center gap-1 text-primary font-label-sm hover:underline"
+                      className="flex items-center gap-1 text-primary font-bold hover:underline"
                     >
                       <span className="material-symbols-outlined text-base">cast</span>
-                      Start Live Class
+                      Start Class
                     </Link>
                   )}
-                  <button type="button" onClick={() => startEdit(s)} className="text-primary hover:underline">
+                  <button type="button" onClick={() => startEdit(s)} className="text-primary font-bold hover:underline">
                     Edit
                   </button>
                   <button
                     type="button"
                     disabled={submitting}
                     onClick={() => remove(s.id)}
-                    className="text-error hover:underline disabled:opacity-50"
+                    className="text-error font-bold hover:underline disabled:opacity-50"
                   >
                     Delete
                   </button>
                 </div>
               </div>
-              <p className="font-label-md text-label-md text-on-surface">{s.title}</p>
-              <p className="text-label-sm text-on-surface-variant">
-                {s.subject ? `${s.subject} · ` : ""}
-                {new Date(s.startsAt).toLocaleString()} — {new Date(s.endsAt).toLocaleString()}
-                {s.teacher ? ` · ${s.teacher.user.name}` : ""}
-              </p>
+              <p className="font-bold text-sm text-on-surface">{s.title}</p>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-on-surface-variant">
+                {s.subject && <span className="font-semibold text-primary">{s.subject} &middot;</span>}
+                <span>
+                  {new Date(s.startsAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })} &middot;{" "}
+                  {new Date(s.startsAt).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true })} →{" "}
+                  {new Date(s.endsAt).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true })}
+                </span>
+                {s.teacher && <span className="font-medium bg-surface-container-high px-2 py-0.5 rounded">Faculty: {s.teacher.user.name}</span>}
+              </div>
             </li>
           ))}
         </ul>
       )}
 
+      {/* Timetable Form & Duration Selector */}
       {!showForm ? (
         <button
           type="button"
           onClick={() => setShowForm(true)}
-          className="text-primary font-label-md text-label-md hover:underline"
+          className="px-5 py-2.5 bg-primary text-on-primary font-bold text-xs rounded-xl shadow hover:opacity-90 active:scale-95 transition-all flex items-center gap-1.5"
         >
-          + Add Timetable Entry
+          <span className="material-symbols-outlined text-base">add</span>
+          Schedule Lecture / Class
         </button>
       ) : (
-        <div className="border-t border-outline-variant/20 pt-4 space-y-3">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <input
-              className={inputClass}
-              placeholder="Title, e.g. Chemical Kinetics: Rate Laws"
-              value={form.title}
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
-            />
-            <input
-              className={inputClass}
-              placeholder="Subject (optional)"
-              value={form.subject}
-              onChange={(e) => setForm({ ...form, subject: e.target.value })}
-            />
-            <select
-              className={inputClass}
-              value={form.type}
-              onChange={(e) => setForm({ ...form, type: e.target.value as ScheduleEntry["type"] })}
-            >
-              {SCHEDULE_SESSION_TYPE_OPTIONS.map((t) => (
-                <option key={t} value={t}>
-                  {TYPE_LABELS[t]}
-                </option>
-              ))}
-            </select>
-            {editingId && (
+        <div className="border border-outline-variant/30 bg-surface-container-high/20 rounded-3xl p-6 space-y-5">
+          <div className="flex items-center justify-between border-b border-outline-variant/20 pb-3">
+            <h4 className="font-bold text-sm text-primary flex items-center gap-2">
+              <span className="material-symbols-outlined text-base">calendar_clock</span>
+              {editingId ? "Edit Lecture Timetable" : "Schedule New Lecture"}
+            </h4>
+            <span className="text-[11px] text-on-surface-variant font-mono">
+              Auto End-Time &amp; Overlap Detection Enabled
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-on-surface">Lecture Title *</label>
+              <input
+                className={inputClass}
+                placeholder="e.g. Chemical Kinetics: Integrated Rate Equations"
+                value={form.title}
+                onChange={(e) => setForm({ ...form, title: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-on-surface">Subject (optional)</label>
+              <input
+                className={inputClass}
+                placeholder="e.g. Chemistry / Physics"
+                value={form.subject}
+                onChange={(e) => setForm({ ...form, subject: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-on-surface">Session Type</label>
               <select
                 className={inputClass}
-                value={form.status}
-                onChange={(e) => setForm({ ...form, status: e.target.value as ScheduleEntry["status"] })}
+                value={form.type}
+                onChange={(e) => setForm({ ...form, type: e.target.value as ScheduleEntry["type"] })}
               >
-                {SCHEDULE_SESSION_STATUS_OPTIONS.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
+                {SCHEDULE_SESSION_TYPE_OPTIONS.map((t) => (
+                  <option key={t} value={t}>
+                    {TYPE_LABELS[t]}
                   </option>
                 ))}
               </select>
-            )}
-            <select
-              className={inputClass}
-              value={form.teacherId}
-              onChange={(e) => setForm({ ...form, teacherId: e.target.value })}
-            >
-              <option value="">No teacher assigned</option>
-              {teachers.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.user.name}
-                </option>
-              ))}
-            </select>
-            <div />
-            <label className="text-label-sm text-on-surface-variant space-y-1">
-              <span>Starts at</span>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-on-surface">Assigned Faculty (Teacher Overlap Checked)</label>
+              <select
+                className={inputClass}
+                value={form.teacherId}
+                onChange={(e) => setForm({ ...form, teacherId: e.target.value })}
+              >
+                <option value="">No faculty assigned</option>
+                {teachers.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.user.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Start Date & Time */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-on-surface">Start Date &amp; Time *</label>
               <input
                 type="datetime-local"
                 className={inputClass}
                 value={form.startsAt}
                 onChange={(e) => setForm({ ...form, startsAt: e.target.value })}
               />
-            </label>
-            <label className="text-label-sm text-on-surface-variant space-y-1">
-              <span>Ends at</span>
-              <input
-                type="datetime-local"
-                className={inputClass}
-                value={form.endsAt}
-                onChange={(e) => setForm({ ...form, endsAt: e.target.value })}
-              />
-            </label>
+            </div>
+
+            {/* Auto-Calculated End Time Display */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-on-surface">Calculated End Time (Automatic)</label>
+              <div className="w-full rounded-xl border border-primary/30 bg-primary/5 py-2.5 px-3.5 text-xs text-primary font-bold flex items-center justify-between">
+                <span>
+                  {calculatedEndTime
+                    ? calculatedEndTime.toLocaleTimeString("en-IN", {
+                        hour: "numeric",
+                        minute: "2-digit",
+                        hour12: true,
+                      }) +
+                      ` (${calculatedEndTime.toLocaleDateString("en-IN", { day: "numeric", month: "short" })})`
+                    : "Set Start Time & Duration"}
+                </span>
+                <span className="material-symbols-outlined text-sm text-primary">schedule</span>
+              </div>
+            </div>
           </div>
-          <textarea
-            rows={2}
-            className={inputClass}
-            placeholder="Notes (optional)"
-            value={form.notes}
-            onChange={(e) => setForm({ ...form, notes: e.target.value })}
-          />
-          <div className="flex gap-3">
+
+          {/* Flexible Duration Options */}
+          <div className="space-y-2 pt-1">
+            <label className="text-xs font-bold text-on-surface flex items-center justify-between">
+              <span>Lecture Duration (Required) *</span>
+              <span className="text-[11px] font-normal text-on-surface-variant">
+                Current: {form.isCustomDuration ? `${form.customDuration} Mins` : `${form.durationMinutes} Mins`}
+              </span>
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {COMMON_DURATIONS.map((d) => (
+                <button
+                  key={d.minutes}
+                  type="button"
+                  onClick={() => setForm({ ...form, durationMinutes: d.minutes, isCustomDuration: false })}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                    !form.isCustomDuration && form.durationMinutes === d.minutes
+                      ? "bg-primary text-on-primary shadow-sm"
+                      : "bg-surface-container-lowest border border-outline-variant/30 text-on-surface hover:border-primary/50"
+                  }`}
+                >
+                  {d.label}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, isCustomDuration: true })}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                  form.isCustomDuration
+                    ? "bg-primary text-on-primary shadow-sm"
+                    : "bg-surface-container-lowest border border-outline-variant/30 text-on-surface hover:border-primary/50"
+                }`}
+              >
+                Custom Mins
+              </button>
+            </div>
+
+            {form.isCustomDuration && (
+              <div className="flex items-center gap-2 max-w-xs pt-1">
+                <input
+                  type="number"
+                  min="1"
+                  max="480"
+                  placeholder="Enter minutes (e.g. 100)"
+                  value={form.customDuration}
+                  onChange={(e) => setForm({ ...form, customDuration: parseInt(e.target.value) || 0 })}
+                  className={inputClass}
+                />
+                <span className="text-xs text-on-surface-variant font-bold">Minutes</span>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-on-surface">Notes / Instructions (optional)</label>
+            <textarea
+              rows={2}
+              className={inputClass}
+              placeholder="e.g. Bring NCERT Chapter 4 notes and formula sheet"
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+            />
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex items-center gap-3 pt-2 border-t border-outline-variant/20">
             <button
               type="button"
               disabled={submitting}
               onClick={submit}
-              className="bg-primary text-on-primary font-label-md text-label-md px-5 py-2 rounded-lg hover:opacity-90 disabled:opacity-60"
+              className="px-6 py-2.5 bg-primary text-on-primary font-bold text-xs rounded-xl shadow hover:opacity-90 active:scale-95 transition-all disabled:opacity-50 flex items-center gap-2"
             >
-              {submitting ? "Saving..." : editingId ? "Save Changes" : "Add Entry"}
+              <span className="material-symbols-outlined text-sm">save</span>
+              {submitting ? "Validating & Saving..." : editingId ? "Save Changes" : "Confirm Schedule"}
             </button>
             <button
               type="button"
               onClick={resetForm}
-              className="text-on-surface-variant font-label-md text-label-md px-5 py-2 rounded-lg hover:bg-surface-container-high"
+              className="px-5 py-2.5 rounded-xl border border-outline-variant/40 bg-surface text-xs font-semibold text-on-surface hover:bg-surface-container-high transition-colors"
             >
               Cancel
             </button>

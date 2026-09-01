@@ -1,66 +1,114 @@
+import Link from "next/link";
 import { ScrollReveal } from "./ScrollReveal";
 
-const FACULTY = [
+const REAL_FACULTY = [
   {
-    name: "Dr. Aryan Sharma",
-    subject: "Physics Expert",
-    experience: "18+ Years Experience",
-    image:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuAHN-SoCQNLRaaimiWMjUruD5lMsduSBL1-RKTkXnMv2vJdzpt44q5gLyN34be3QaQFU-H7GEem3_1IBqjhJ18eeohV9B5wxPjSkGcZ9TJN7QAOHrecTbA_zJjY_AS4gKemz7x3H1Gw32zukEovCzFCjFLNf5dZ9dMIEwJtlziOWPx_ug4y2XZ0c1RqKNKTS1jVpk4Danq2UMOY7XuK2S0U-ehsv9z6Sl4P_cSpGN0RsT7nMPQ5iUNg8gkLQR8LJwTr3PqdOMg3zoE",
+    name: "Firoz Ali (Firoz Sir)",
+    slug: "firoz-ali",
+    subject: "Founder & Chemistry Lead",
+    experience: "5+ Years Exp (Ex-Unacademy / Doubtnut)",
+    qualification: "M.Sc. Chemistry",
+    avatarBg: "bg-amber-500/20 text-amber-600",
   },
   {
-    name: "Meera Singhania",
-    subject: "Chemistry Maven",
-    experience: "12+ Years Experience",
-    image:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuBJ6M0Z0wp1_Z2HrN0DBPynwrB9IuP7bbnzBWEF8vBn2rn0gbdg8uVSw0yjRP6wDTzXXEQAqN1zoRZ0T99I89tclDhzAUxqb8NuPolbzsoVSJTQObNZ-6L1iaGJ1WCLvX2CN8jQ9NlOGqAAARcbwYvoSsE6A4k4C_WrDRZAdVctFXNUpWIaM8CZSJiNPpS7ZBzyrrg71zI7uOb9SPtlu9FMNTFIWoofgIhbreVttZZ1sji8S4rGpd1olfSvNzdVw5h-s34tmudjcak",
+    name: "Sanu Yadav Sir",
+    slug: "sanu-yadav",
+    subject: "Physics Faculty",
+    experience: "6+ Years Experience",
+    qualification: "B.Tech Mechanical (NIT)",
+    avatarBg: "bg-blue-500/20 text-blue-600",
   },
   {
-    name: "Rajesh Khanna",
-    subject: "Math Wizard",
-    experience: "15+ Years Experience",
-    image:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuBHcA-fm4t8Pg4ekmaMb0BJEIsVlyiGzQ1dkF4DtERj0blYJQLu3Z_EvoWaDWgV8Rn14bmYalLJEoSXmFBYDnRfnbkmHytb_wnRhwkto8_aBYx_tdd9eYgEdnXaT5tekY9pAcSuHAbiTd1pNufiF8WiPHJJ2WmoF8V5TnLxmxpqb-6axRJdQGsf5vY4hPniY2iJOTaxvktiqAQQonN6dflktkXUVJ_8qtZc_YczAHlLAXzqKRyTOObL-Rl7XROUNLJMD4gA_moWt3Q",
+    name: "Yaman Khan Sir",
+    slug: "yaman-khan",
+    subject: "Biology & Zoology Expert",
+    experience: "5+ Years Experience",
+    qualification: "M.Sc. Embryology",
+    avatarBg: "bg-emerald-500/20 text-emerald-600",
   },
   {
-    name: "Dr. Sneha Patil",
-    subject: "Biology Guru",
-    experience: "20+ Years Experience",
-    image:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuB2I5S-OxHulh389ioAFyxX3ZC0ECModuP9GyUSqVYA_opcCybwUdBfpajTEVN5l94FuZjVKWAZz3FoLwCNmGMt5rNgwUt1SP9ARIBEG1pDLLE7dEvtIFz8sFirRaSVhU_r5cQ5SyxFR9cNFEiz6kY6THRBEMdiwgBAqEr0Yz2-_0t4nK_9x3lINUc9t4lyTOjYxOKe6wMRFW2TZyJP8q2WeE_wDP9NOJCGeAjT8SxNj2JOxLQD1TskLyHgHjyLI0Jx7FaDeSEf084",
+    name: "Mukul Kashyap Sir",
+    slug: "mukul-kashyap",
+    subject: "Physics Faculty",
+    experience: "7+ Years Experience",
+    qualification: "M.Sc. Physics (IIT Roorkee)",
+    avatarBg: "bg-purple-500/20 text-purple-600",
+  },
+  {
+    name: "Mohsin Ali Sir",
+    slug: "mohsin-ali",
+    subject: "Chemistry Educator",
+    experience: "4+ Years Experience",
+    qualification: "B.Tech Chemical",
+    avatarBg: "bg-rose-500/20 text-rose-600",
+  },
+  {
+    name: "Rehan Ali Sir",
+    slug: "rehan-ali",
+    subject: "Biology Doubt Expert",
+    experience: "4+ Years Experience",
+    qualification: "BAMS (Ayurvedic Medicine)",
+    avatarBg: "bg-teal-500/20 text-teal-600",
   },
 ] as const;
 
 export function FacultySection() {
   return (
-    <section id="faculty" className="py-stack-lg px-margin-mobile md:px-margin-desktop max-w-container-max mx-auto">
-      <ScrollReveal className="text-center mb-16">
-        <h2 className="font-display-lg text-display-lg">
-          Learn from the <span className="text-primary">Best</span>
+    <section id="faculty" className="py-stack-lg px-margin-mobile md:px-margin-desktop max-w-container-max mx-auto space-y-12">
+      <ScrollReveal className="text-center space-y-3">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-bold uppercase tracking-wider">
+          <span className="material-symbols-outlined text-sm">verified_user</span>
+          Expert Educator Faculty
+        </div>
+        <h2 className="font-display-lg text-display-lg text-on-surface">
+          Learn from <span className="text-primary">Top Academic Mentors</span>
         </h2>
         <p className="font-body-md text-body-md text-on-surface-variant max-w-2xl mx-auto">
-          Our educators are veteran mentors with 15+ years of experience in
-          producing top AIR ranks.
+          Our educators are veteran mentors with proven track records in producing top NEET and JEE ranks through concept-first learning.
         </p>
       </ScrollReveal>
 
-      <ScrollReveal className="grid grid-cols-2 md:grid-cols-4 gap-gutter">
-        {FACULTY.map((teacher) => (
-          <div key={teacher.name} className="text-center group">
-            <div className="w-48 h-48 mx-auto mb-6 relative">
-              <div className="absolute inset-0 bg-gradient-to-br from-primary to-secondary-container rounded-full opacity-10 group-hover:opacity-20 transition-opacity" />
-              <img
-                className="w-40 h-40 object-cover rounded-full mx-auto relative z-10 mt-4 border-4 border-white shadow-lg"
-                alt={teacher.name}
-                src={teacher.image}
-              />
+      <ScrollReveal className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {REAL_FACULTY.map((teacher) => (
+          <Link
+            key={teacher.slug}
+            href={`/teachers/${teacher.slug}`}
+            className="glass-card rounded-3xl p-6 border border-outline-variant/30 hover:border-primary/50 transition-all hover:-translate-y-1 hover:shadow-xl group flex flex-col justify-between"
+          >
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div
+                  className={`w-16 h-16 rounded-2xl flex items-center justify-center font-bold text-xl shadow-md ${teacher.avatarBg}`}
+                >
+                  {teacher.name
+                    .split(" ")
+                    .map((p) => p[0])
+                    .slice(0, 2)
+                    .join("")}
+                </div>
+                <span className="text-[10px] font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-full flex items-center gap-1 border border-primary/20">
+                  <span className="material-symbols-outlined text-xs">verified</span>
+                  Verified
+                </span>
+              </div>
+
+              <div>
+                <h4 className="font-bold text-base md:text-lg text-on-surface group-hover:text-primary transition-colors">
+                  {teacher.name}
+                </h4>
+                <p className="text-xs font-semibold text-primary mt-0.5">{teacher.subject}</p>
+                <p className="text-[11px] text-on-surface-variant mt-1 font-mono">{teacher.qualification}</p>
+                <p className="text-xs text-on-surface-variant mt-2">{teacher.experience}</p>
+              </div>
             </div>
-            <h4 className="font-headline-md text-headline-md">{teacher.name}</h4>
-            <p className="text-primary font-label-md text-label-md">{teacher.subject}</p>
-            <p className="text-label-sm font-label-sm text-on-surface-variant">
-              {teacher.experience}
-            </p>
-          </div>
+
+            <div className="mt-5 pt-4 border-t border-outline-variant/20 flex items-center justify-between text-xs font-semibold text-primary">
+              <span>View Full Profile</span>
+              <span className="material-symbols-outlined text-sm transition-transform group-hover:translate-x-1">
+                arrow_forward
+              </span>
+            </div>
+          </Link>
         ))}
       </ScrollReveal>
     </section>

@@ -164,13 +164,27 @@ export function TeacherForm(props: Props) {
         </div>
       </fieldset>
 
-      <button
-        type="submit"
-        disabled={submitting}
-        className="w-full sm:w-auto bg-primary text-on-primary font-label-md text-label-md px-8 py-3 rounded-xl hover:opacity-90 active:scale-[0.99] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-      >
-        {submitting ? "Saving..." : isCreate ? "Create Faculty Profile" : "Save Changes"}
-      </button>
+      <div className="flex items-center gap-4 flex-wrap">
+        <button
+          type="submit"
+          disabled={submitting}
+          className="w-full sm:w-auto bg-primary text-on-primary font-label-md text-label-md px-8 py-3 rounded-xl hover:opacity-90 active:scale-[0.99] transition-all disabled:opacity-60 disabled:cursor-not-allowed shadow-md"
+        >
+          {submitting ? "Saving..." : isCreate ? "Create Faculty Profile" : "Save Changes"}
+        </button>
+
+        {!isCreate && (
+          <a
+            href={`/teachers/${props.teacherId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full sm:w-auto border border-primary text-primary font-label-md text-label-md px-6 py-3 rounded-xl hover:bg-primary/5 transition-all text-center flex items-center justify-center gap-1.5"
+          >
+            <span className="material-symbols-outlined text-sm">visibility</span>
+            Preview Student Profile
+          </a>
+        )}
+      </div>
     </form>
   );
 }

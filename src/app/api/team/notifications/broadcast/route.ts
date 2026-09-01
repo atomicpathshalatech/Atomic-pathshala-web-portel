@@ -6,6 +6,7 @@ import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { broadcastCreateSchema } from "@/lib/validation/notification";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { dispatchNotification } from "@/lib/notifications/whatsapp";
 
 /** Past broadcasts — the audit trail, not the individual Notification rows. */
 export async function GET() {
@@ -28,10 +29,7 @@ export async function GET() {
 
 /**
  * Resolves a segment to the list of Student userIds it targets, then
- * writes one Notification row per recipient (IN_APP only — this build has
- * no EMAIL/WHATSAPP dispatch pipeline for notifications, same limitation
- * as everywhere else "channel" is more aspirational than wired up) plus a
- * NotificationBroadcast summary row for the history list.
+ * writes Notification rows and triggers multi-channel dispatch (In-App, WhatsApp, Email).
  */
 export async function POST(request: NextRequest) {
   try {
@@ -72,26 +70,26 @@ export async function POST(request: NextRequest) {
       return apiError("No students match this segment — nothing was sent.", 422);
     }
 
-    const [, broadcast] = await prisma.$transaction([
-      prisma.notification.createMany({
-        data: recipientUserIds.map((userId) => ({
-          userId,
-          title: input.title,
-          body: input.body,
-          channel: "IN_APP" as const,
-        })),
-      }),
-      prisma.notificationBroadcast.create({
-        data: {
-          title: input.title,
-          body: input.body,
-          segmentType: input.segmentType,
-          segmentValue: input.segmentValue ?? null,
-          recipientCount: recipientUserIds.length,
-          sentById: session.user.id,
-        },
-      }),
-    ]);
+    const broadcast = await prisma.notificationBroadcast.create({
+      data: {
+        title: input.title,
+        body: input.body,
+        segmentType: input.segmentType,
+        segmentValue: input.segmentValue ?? null,
+        recipientCount: recipientUserIds.length,
+        sentById: session.user.id,
+      },
+    });
+
+    // Multi-channel dispatch (In-app, WhatsApp, Email)
+    for (const userId of recipientUserIds) {
+      await dispatchNotification({
+        userId,
+        title: input.title,
+        body: input.body,
+        channel: input.channel,
+      });
+    }
 
     await prisma.auditLog.create({
       data: {
@@ -103,6 +101,7 @@ export async function POST(request: NextRequest) {
           segmentType: input.segmentType,
           segmentValue: input.segmentValue ?? null,
           recipientCount: recipientUserIds.length,
+          channel: input.channel,
         },
       },
     });

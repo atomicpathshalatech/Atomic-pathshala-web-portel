@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { requireStudentSession } from "@/lib/auth/session";
 import { LogoutButton } from "@/components/student/LogoutButton";
+import { DeviceSessionsPanel } from "@/components/student/DeviceSessionsPanel";
 import { ProfilePhotoUploader } from "@/components/student/ProfilePhotoUploader";
 
 export const metadata: Metadata = {
@@ -55,6 +56,8 @@ export default async function SettingsPage() {
           self-service editing isn&apos;t available for those yet. Your profile photo above can be changed anytime.
         </p>
       </div>
+
+      <DeviceSessionsPanel />
 
       <div className="glass-card rounded-2xl p-5 flex items-center justify-between gap-4">
         <div>

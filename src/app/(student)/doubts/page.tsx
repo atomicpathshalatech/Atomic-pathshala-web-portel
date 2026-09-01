@@ -3,6 +3,7 @@ import Link from "next/link";
 import { requireStudentSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { DoubtForm } from "@/components/student-portal/DoubtForm";
+import { AiDoubtSolver } from "@/components/student/AiDoubtSolver";
 
 export const metadata: Metadata = {
   title: "Doubts",
@@ -34,9 +35,11 @@ export default async function DoubtsPage() {
       <header>
         <h1 className="font-display-lg text-display-lg-mobile md:text-display-lg text-on-surface">Doubt Portal</h1>
         <p className="text-body-lg text-on-surface-variant mt-2">
-          Stuck on something? Ask an expert and track your doubts here.
+          Stuck on something? Use Atomic AI Tutor for instant step-by-step assistance or ask a faculty expert.
         </p>
       </header>
+
+      <AiDoubtSolver />
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_1.3fr] gap-gutter items-start">
         <DoubtForm />

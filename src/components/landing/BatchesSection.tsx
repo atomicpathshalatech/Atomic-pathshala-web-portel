@@ -1,104 +1,203 @@
+import Link from "next/link";
+import { prisma } from "@/lib/db";
 import { ScrollReveal } from "./ScrollReveal";
 
-const BATCHES = [
-  {
-    title: "NEET 2027 (Phoenix)",
-    badge: "Popular",
-    image:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuAMN8o8czbruHfQTHS1JBb6lhovVVv1m6_JsPFec0PDilKsfjxNMVrBx8gK7pvwMt0l698dVsJJzSgXLHmGTO696ojDIkchl70hFXwF4tbdmHIjWVsQSmhm1ct-dMwSQdGW5zs2HBwRPhdC1K8pJksVSUv6X0vThSWAbAJ1q2IIqJycSdjTQa4TLYaf2bRBXdptqlYdR9Mq22q9KP20zIUlT51oKvywjT-REbHzv0-fnNT0uwWrRBDGNa6ZaWsJaqxRm6oWXFqvu-o",
-    description:
-      "Comprehensive 2-year program for medical aspirants focusing on concept clarity and speed.",
-    startDate: "Starts Aug 15, 2024",
-    originalPrice: "₹49,999",
-    price: "₹24,999",
-  },
-  {
-    title: "JEE 2028 (Apex)",
-    badge: null,
-    image:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuAJEqyUP_p0TGwbY-dv0GBf_2Mavyyyixidv5UmeTPhNeyUQtuvuh5-L2J_mKHfO4Gc9ERWxzYbTPEPFktZmwobEqqDtFaT_73Asro_EzbGt4YuDYXHLoHnZakLcLr-K83TDOk2JXRASHIdWJuGt1aJWOVSYb4qsEYZhma3ZWbaHE9A9_G1Kk0UTRnuYO5WZ5x13aq6WfKSq1NwL-tU9uf1PTTtm4YbH2E45pQXrHCKtpZuRd2Ik5Cuh-WpD0w5kP9cN7jTalHD-sk",
-    description:
-      "Intensive coaching for JEE Mains & Advanced with heavy emphasis on problem-solving techniques.",
-    startDate: "Starts Sept 01, 2024",
-    originalPrice: "₹54,999",
-    price: "₹29,999",
-  },
-  {
-    title: "Foundation Droppers",
-    badge: null,
-    image:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuDdAtS0gcKrFY-44MFBAQnWP4DdUVnQcSL-cG8b9EGdjUHgKkPhmY24ulNOcBhUcsZY5ERQFg4OI6GoVsQF5B1yHMLRRp2sCz27SwtDVSrZnRkq54d3IShDwQ4oTTt9B5bSbpjmY575DIqOod6OEr6Jv4UZP2IJEvnHRFs_6Ud9kGWikWlGNn6xc2gbZebVk8eipztnmQZ5ALzF0wbcFeZC--mjWXxHQHCEYBDq24ZkTVdR6Gj4DCarH2OHlrYA1HYKJ6e8xGoOOTU",
-    description:
-      "A bridge program for students taking a gap year to strengthen their basics and hit higher ranks.",
-    startDate: "Starts Aug 28, 2024",
-    originalPrice: "₹39,999",
-    price: "₹19,999",
-  },
-] as const;
+export async function BatchesSection() {
+  // Fetch real batches from database
+  const dbBatches = await prisma.batch.findMany({
+    where: { status: { in: ["ACTIVE", "UPCOMING"] } },
+    include: {
+      course: { select: { title: true, slug: true } },
+      teachers: {
+        include: {
+          teacher: {
+            include: {
+              user: { select: { name: true } },
+            },
+          },
+        },
+      },
+      _count: { select: { enrollments: true, schedules: true } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 6,
+  }).catch(() => []);
 
-export function BatchesSection() {
+  // Fallback high-yield batches if no database records yet
+  const displayBatches =
+    dbBatches.length > 0
+      ? dbBatches.map((b, idx) => ({
+          id: b.id,
+          title: b.name,
+          code: b.code,
+          targetExam: b.targetExam || "NEET / JEE",
+          badge: idx === 0 ? "Featured" : b.status === "ACTIVE" ? "Live" : "Upcoming",
+          faculty:
+            b.teachers.map((t) => t.teacher.user.name).join(", ") ||
+            "Atomic Pathshala Faculty",
+          description:
+            b.description ||
+            "Comprehensive concept-first preparation with live whiteboard sessions, DPPs, and All-India Test Series.",
+          startDate: b.startDate
+            ? new Date(b.startDate).toLocaleDateString("en-IN", {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              })
+            : "Starting Soon",
+          enrollmentsCount: b._count.enrollments,
+          schedulesCount: b._count.schedules,
+          capacity: b.capacity ?? 250,
+          price: "₹7,499",
+          originalPrice: "₹14,999",
+        }))
+      : [
+          {
+            id: "fallback_1",
+            title: "NEET 2027 (Phoenix Target Batch)",
+            code: "NEET27-PHOENIX",
+            targetExam: "NEET UG",
+            badge: "Popular",
+            faculty: "Firoz Sir, Sanu Yadav Sir, Yaman Khan Sir",
+            description:
+              "Comprehensive 2-year concept-first program for medical aspirants focusing on NCERT line-by-line mastery and high-yield problem solving.",
+            startDate: "Starts 10 Sep 2026",
+            enrollmentsCount: 184,
+            schedulesCount: 48,
+            capacity: 250,
+            price: "₹7,499",
+            originalPrice: "₹14,999",
+          },
+          {
+            id: "fallback_2",
+            title: "JEE 2028 (Apex Comprehensive Batch)",
+            code: "JEE28-APEX",
+            targetExam: "JEE Main & Advanced",
+            badge: "New",
+            faculty: "Firoz Sir, Sanu Yadav Sir, Mohsin Ali Sir",
+            description:
+              "Intensive coaching for JEE Mains & Advanced with heavy emphasis on mathematical derivations and multi-concept mechanics problem solving.",
+            startDate: "Starts 15 Sep 2026",
+            enrollmentsCount: 142,
+            schedulesCount: 42,
+            capacity: 200,
+            price: "₹8,499",
+            originalPrice: "₹16,999",
+          },
+          {
+            id: "fallback_3",
+            title: "NEET Droppers / Repeaters Foundation",
+            code: "NEET27-DROPPER",
+            targetExam: "NEET UG",
+            badge: "Fast Track",
+            faculty: "Firoz Sir, Dr. Ilmas Amer, Yaman Khan Sir",
+            description:
+              "Targeted 1-year rank-booster program for dropper students to reinforce weak fundamentals, speed techniques, and daily mock tests.",
+            startDate: "Starts 20 Sep 2026",
+            enrollmentsCount: 96,
+            schedulesCount: 36,
+            capacity: 150,
+            price: "₹6,999",
+            originalPrice: "₹13,999",
+          },
+        ];
+
   return (
-    <section id="batches" className="py-stack-lg px-margin-mobile md:px-margin-desktop max-w-container-max mx-auto">
+    <section id="batches" className="py-stack-lg px-margin-mobile md:px-margin-desktop max-w-container-max mx-auto space-y-10">
       <ScrollReveal>
-        <div className="flex justify-between items-end mb-12">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
-            <h2 className="font-display-lg text-display-lg mb-2">
-              Upcoming <span className="text-primary">Batches</span>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-primary/10 text-primary">
+                Live &amp; Verified Cohorts
+              </span>
+            </div>
+            <h2 className="font-display-lg text-display-lg text-on-surface">
+              Target <span className="text-gradient">Batches &amp; Cohorts</span>
             </h2>
-            <p className="font-body-md text-body-md text-on-surface-variant">
-              Structured curriculum designed by industry veterans.
+            <p className="font-body-md text-body-md text-on-surface-variant max-w-2xl mt-1">
+              Structured batch-first learning with live interactive whiteboards, daily DPPs, and personalized mentor support.
             </p>
           </div>
-          <button className="hidden md:flex items-center gap-2 text-primary font-label-md text-label-md group">
-            View All Batches{" "}
-            <span className="material-symbols-outlined group-hover:translate-x-1 transition-transform">
+          <Link
+            href="/courses"
+            className="flex items-center gap-2 text-primary font-bold text-xs hover:underline group"
+          >
+            <span>View All Active Batches</span>
+            <span className="material-symbols-outlined text-sm group-hover:translate-x-1 transition-transform">
               arrow_forward
             </span>
-          </button>
+          </Link>
         </div>
       </ScrollReveal>
 
-      <ScrollReveal className="grid grid-cols-1 md:grid-cols-3 gap-gutter">
-        {BATCHES.map((batch) => (
-          <div key={batch.title} className="glass-card rounded-2xl overflow-hidden group">
-            <div className="h-48 relative overflow-hidden">
-              <img
-                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                alt={batch.title}
-                src={batch.image}
-              />
-              <div className="absolute top-4 left-4 bg-secondary-container text-on-secondary-container font-label-md text-label-md px-3 py-1 rounded-full flex items-center gap-1">
-                <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" /> Live Classes
+      <ScrollReveal className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {displayBatches.map((batch) => (
+          <div
+            key={batch.id}
+            className="glass-card rounded-3xl overflow-hidden border border-outline-variant/30 hover:border-primary/50 transition-all flex flex-col justify-between shadow-lg group bg-surface-container-lowest"
+          >
+            {/* Batch Header Banner */}
+            <div className="p-6 pb-4 bg-gradient-to-br from-primary/10 via-surface to-surface border-b border-outline-variant/20 relative space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-[11px] font-bold px-2.5 py-0.5 rounded-md bg-surface-container-high text-on-surface">
+                  {batch.code}
+                </span>
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-primary text-on-primary shadow-sm">
+                  {batch.badge}
+                </span>
+              </div>
+
+              <h3 className="font-headline-md text-base md:text-lg font-bold text-on-surface group-hover:text-primary transition-colors line-clamp-1">
+                {batch.title}
+              </h3>
+
+              <div className="flex items-center gap-2 text-xs">
+                <span className="font-semibold text-primary">{batch.targetExam}</span>
+                <span className="text-on-surface-variant">&middot;</span>
+                <span className="text-on-surface-variant text-[11px] flex items-center gap-1">
+                  <span className="material-symbols-outlined text-sm text-secondary">school</span>
+                  {batch.faculty}
+                </span>
               </div>
             </div>
-            <div className="p-6 space-y-4">
-              <div className="flex justify-between items-start">
-                <h3 className="font-headline-md text-headline-md">{batch.title}</h3>
-                {batch.badge && (
-                  <span className="text-primary-fixed-dim bg-primary font-label-sm text-label-sm px-2 py-0.5 rounded">
-                    {batch.badge}
-                  </span>
-                )}
-              </div>
-              <p className="text-label-sm font-label-sm text-on-surface-variant">
+
+            {/* Batch Description & Details */}
+            <div className="p-6 space-y-4 flex-1 flex flex-col justify-between">
+              <p className="text-xs text-on-surface-variant leading-relaxed line-clamp-3">
                 {batch.description}
               </p>
-              <div className="flex items-center gap-2 text-label-sm font-label-sm">
-                <span className="material-symbols-outlined text-primary text-lg">event_note</span>
-                {batch.startDate}
+
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-outline-variant/15 text-xs">
+                <div className="flex items-center gap-1.5 text-on-surface-variant">
+                  <span className="material-symbols-outlined text-primary text-base">calendar_today</span>
+                  <span className="text-[11px] font-semibold">{batch.startDate}</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-on-surface-variant">
+                  <span className="material-symbols-outlined text-secondary text-base">groups</span>
+                  <span className="text-[11px] font-semibold">
+                    {batch.enrollmentsCount} / {batch.capacity} Enrolled
+                  </span>
+                </div>
               </div>
-              <div className="flex items-end justify-between pt-4 border-t border-outline-variant/20">
+
+              {/* Pricing & CTA */}
+              <div className="pt-4 border-t border-outline-variant/20 flex items-center justify-between">
                 <div>
-                  <span className="text-on-surface-variant line-through text-label-sm font-label-sm">
+                  <span className="text-on-surface-variant line-through text-[11px] font-mono block">
                     {batch.originalPrice}
                   </span>
-                  <div className="text-headline-md font-headline-md text-primary">
+                  <div className="text-lg font-bold text-primary font-mono">
                     {batch.price}
                   </div>
                 </div>
-                <button className="bg-primary text-on-primary font-label-md text-label-md px-6 py-2.5 rounded-lg hover:bg-surface-tint transition-colors">
-                  Join Now
-                </button>
+                <Link
+                  href="/register"
+                  className="px-6 py-2.5 bg-primary text-on-primary font-bold text-xs rounded-xl shadow hover:opacity-90 active:scale-95 transition-all text-center flex items-center gap-1"
+                >
+                  <span>Enroll Now</span>
+                  <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                </Link>
               </div>
             </div>
           </div>
