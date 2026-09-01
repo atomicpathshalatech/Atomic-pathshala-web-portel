@@ -323,7 +323,7 @@ export default async function StudentDashboardPage() {
             description="Ask doubts and understand concepts with AI"
             icon="psychology"
             theme="purple"
-            href="/doubts"
+            href="/guru"
             contextText="Instant 24/7 AI Helper"
           />
         </div>

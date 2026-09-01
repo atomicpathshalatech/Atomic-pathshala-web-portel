@@ -55,36 +55,15 @@ export function Sidebar({
           New Doubt
         </button>
 
-        {onOpenQuiz && (
-          <button
-            onClick={onOpenQuiz}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-atomic-blue px-4 py-3 text-sm font-medium text-white transition-all hover:bg-blue-800"
-          >
-            <ClipboardList className="h-4 w-4" />
-            NEET Quiz
-          </button>
-        )}
-
-        {/* Board Exam Hub aur Class Schedule - vertical, alag colors */}
-        <div className="flex flex-col gap-2">
-          <Link
-            href="/guru/board-exam"
-            onClick={onClose}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-purple-50 border border-purple-200 px-4 py-3 text-sm font-medium text-purple-700 transition-all hover:bg-purple-100 dark:bg-purple-900/20 dark:border-purple-800 dark:text-purple-300 dark:hover:bg-purple-900/30"
-          >
-            <BookOpenCheck className="h-4 w-4" />
-            Board Exam Hub
-          </Link>
-
-          <Link
-            href="/guru/schedule"
-            onClick={onClose}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-50 border border-green-200 px-4 py-3 text-sm font-medium text-green-700 transition-all hover:bg-green-100 dark:bg-green-900/20 dark:border-green-800 dark:text-green-300 dark:hover:bg-green-900/30"
-          >
-            <CalendarDays className="h-4 w-4" />
-            Class Schedule
-          </Link>
-        </div>
+        {/* Class Schedule */}
+        <Link
+          href="/guru/schedule"
+          onClick={onClose}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-50 border border-green-200 px-4 py-3 text-sm font-medium text-green-700 transition-all hover:bg-green-100 dark:bg-green-900/20 dark:border-green-800 dark:text-green-300 dark:hover:bg-green-900/30"
+        >
+          <CalendarDays className="h-4 w-4" />
+          Class Schedule
+        </Link>
 
                 <Link
           href="/guru/dashboard"
