@@ -7,6 +7,7 @@ import { getPusherClient } from "@/lib/realtime/pusher-client";
 import { sessionChannel, teacherChannel, WB_EVENTS } from "@/lib/realtime/events";
 import { VideoStrip } from "@/components/live-class/VideoStrip";
 import { MessagesPanel } from "@/components/live-class/MessagesPanel";
+import { GRACE_PERIOD_MINUTES, END_WARNING_MINUTES } from "@/lib/whiteboard/constants";
 
 type WhiteboardPage = { id: string; pageNumber: number; objects: StrokeObject[]; background: string };
 // Only the values this component actually branches on are spelled out —
@@ -163,11 +164,13 @@ export function TeacherLiveClassRoom({
   scheduleTitle,
   batchName,
   currentUserId,
+  endsAt,
 }: {
   batchScheduleId: string;
   scheduleTitle: string;
   batchName: string;
   currentUserId: string;
+  endsAt: string;
 }) {
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -582,6 +585,33 @@ export function TeacherLiveClassRoom({
     }
   }
 
+  // ---- End-of-class countdown + backend-mirroring auto-end --------------
+  // No cron/worker exists in this app (see endWhiteboardSession's comment)
+  // — the backend force-ends a class lazily, on the next request that
+  // touches it. This timer is what makes that actually happen promptly
+  // for a teacher whose tab is still open, instead of waiting for some
+  // other request to stumble in; a teacher who navigates away is still
+  // covered server-side by resolveWhiteboardAccess's own grace check.
+  const [minutesRemaining, setMinutesRemaining] = useState<number | null>(null);
+  const autoEndTriggeredRef = useRef(false);
+
+  useEffect(() => {
+    const endsAtMs = new Date(endsAt).getTime();
+    const tick = () => {
+      const now = Date.now();
+      setMinutesRemaining(Math.ceil((endsAtMs - now) / 60_000));
+      const gracePeriodExpired = now > endsAtMs + GRACE_PERIOD_MINUTES * 60_000;
+      if (gracePeriodExpired && !autoEndTriggeredRef.current && wbSession?.status === "ACTIVE" && !ending) {
+        autoEndTriggeredRef.current = true;
+        endClass();
+      }
+    };
+    tick();
+    const interval = setInterval(tick, 15_000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [endsAt, wbSession?.status]);
+
   // ---- End class -------------------------------------------------------------
   async function endClass() {
     if (!wbSession) return;
@@ -782,6 +812,15 @@ export function TeacherLiveClassRoom({
         </div>
         <div className="flex items-center gap-4 shrink-0">
           <SaveIndicator state={saveState} />
+          {minutesRemaining !== null && minutesRemaining <= END_WARNING_MINUTES && wbSession?.status === "ACTIVE" && (
+            <span
+              className="flex items-center gap-1.5 text-xs font-semibold text-amber-400 border border-amber-900/50 bg-amber-950/30 px-2.5 py-1 rounded-md"
+              title="This class will auto-end shortly after its scheduled time if not ended manually."
+            >
+              <span className="material-symbols-outlined text-base">schedule</span>
+              {minutesRemaining > 0 ? `Ending in ${minutesRemaining}m` : "Past scheduled end — wrap up"}
+            </span>
+          )}
           <span className="flex items-center gap-1.5 text-xs text-gray-400">
             <span className="material-symbols-outlined text-base">groups</span>
             {studentCount} watching

@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db";
+import { isPastGracePeriod, endWhiteboardSession } from "@/lib/whiteboard/lifecycle";
 
 export { resolveTeacherForSchedule, resolveStudentForSchedule } from "@/lib/batch/access";
 
@@ -32,6 +33,20 @@ export async function resolveWhiteboardAccess(
     include: { teacher: { include: { user: true } }, batchSchedule: true },
   });
   if (!wbSession) return null;
+
+  // Backend-enforced auto-end: there is no cron/worker in this app, so a
+  // class that ran past its scheduled end (+ grace) is force-ended lazily,
+  // the next time ANYONE touches it — this function is the one choke point
+  // every whiteboard route and /api/pusher/auth already goes through, so
+  // it's the natural place for this rather than repeating the check in
+  // every route individually. Mutate the local object after ending so this
+  // same call returns fresh (ENDED) status instead of the now-stale ACTIVE
+  // row it fetched a moment ago.
+  if (wbSession.status === "ACTIVE" && isPastGracePeriod(wbSession.batchSchedule.endsAt)) {
+    await endWhiteboardSession(wbSession.id, { endedByUserId: null, reason: "auto_grace_expired" });
+    wbSession.status = "ENDED";
+    wbSession.livePhase = "ENDED";
+  }
 
   if (wbSession.teacher.userId === userId) {
     return {

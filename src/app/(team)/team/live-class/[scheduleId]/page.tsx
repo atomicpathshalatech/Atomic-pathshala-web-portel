@@ -61,6 +61,7 @@ export default async function TeacherLiveClassPage({
       scheduleTitle={schedule.title}
       batchName={schedule.batch.name}
       currentUserId={session.user.id}
+      endsAt={schedule.endsAt.toISOString()}
     />
   );
 }

@@ -6,6 +6,7 @@ import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { batchScheduleCreateSchema } from "@/lib/validation/batch";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { checkScheduleConflict } from "@/lib/batch/schedule-conflict";
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -40,6 +41,18 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       if (!teacher) return apiError("Teacher not found", 404);
     }
 
+    // Server-Side Conflict Check (Batch & Teacher Overlap)
+    const conflict = await checkScheduleConflict({
+      batchId: params.id,
+      teacherId: input.teacherId,
+      startsAt: input.startsAt,
+      endsAt: input.endsAt,
+    });
+
+    if (conflict.hasConflict) {
+      return apiError(conflict.message || "Schedule timing conflict detected.", 409);
+    }
+
     const schedule = await prisma.batchSchedule.create({
       data: {
         batchId: params.id,
@@ -60,7 +73,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         action: "BATCH_SCHEDULE_CREATED",
         entityType: "Batch",
         entityId: params.id,
-        metadata: { scheduleId: schedule.id, title: schedule.title },
+        metadata: {
+          scheduleId: schedule.id,
+          title: schedule.title,
+          startsAt: schedule.startsAt.toISOString(),
+          endsAt: schedule.endsAt.toISOString(),
+        },
       },
     });
 

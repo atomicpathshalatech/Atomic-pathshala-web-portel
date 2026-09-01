@@ -19,10 +19,10 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     if (access.role === "TEACHER") {
       const wbSession = await prisma.whiteboardSession.findUnique({
         where: { id: params.id },
-        include: { pages: { orderBy: { pageNumber: "asc" } } },
+        include: { pages: { orderBy: { pageNumber: "asc" } }, batchSchedule: { select: { endsAt: true } } },
       });
       if (!wbSession) return apiError("Whiteboard session not found", 404);
-      return apiSuccess({ whiteboardSession: wbSession, role: access.role });
+      return apiSuccess({ whiteboardSession: { ...wbSession, endsAt: wbSession.batchSchedule.endsAt }, role: access.role });
     }
 
     // This endpoint still only ever hands students session status, not
@@ -32,10 +32,19 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     // *active* page a viewer is meant to see (see TESTS_VIDEO_UPDATE_README.md).
     const wbSession = await prisma.whiteboardSession.findUnique({
       where: { id: params.id },
-      select: { id: true, title: true, status: true, livePhase: true, startedAt: true, endedAt: true },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        livePhase: true,
+        startedAt: true,
+        endedAt: true,
+        batchSchedule: { select: { endsAt: true } },
+      },
     });
     if (!wbSession) return apiError("Whiteboard session not found", 404);
-    return apiSuccess({ whiteboardSession: wbSession, role: access.role });
+    const { batchSchedule, ...rest } = wbSession;
+    return apiSuccess({ whiteboardSession: { ...rest, endsAt: batchSchedule.endsAt }, role: access.role });
   } catch (error) {
     return handleApiError(error);
   }
