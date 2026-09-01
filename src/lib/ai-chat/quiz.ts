@@ -348,7 +348,10 @@ function isValidQuestion(q: unknown): q is QuizQuestion {
 
 export function parseQuizJson(content: string): QuizQuestion[] | null {
   const match = content.match(QUIZ_JSON_BLOCK);
-  const raw = match ? match[1] : content;
+  // Same noUncheckedIndexedAccess quirk as parseBoardExamJson in
+  // boardExam.ts — match[1] types as string | undefined even though the
+  // capture group always matches something once `match` is non-null.
+  const raw = match?.[1] ?? content;
 
   try {
     const parsed = JSON.parse(raw.trim()) as { questions?: unknown[] };

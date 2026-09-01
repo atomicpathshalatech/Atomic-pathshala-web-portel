@@ -172,7 +172,11 @@ export function parseBoardExamJson(
   mode: BoardMode
 ): BoardPaper | null {
   const match = content.match(JSON_BLOCK);
-  const raw = match ? match[1] : content;
+  // match[1] is typed string | undefined under noUncheckedIndexedAccess
+  // even though the capture group always matches something when `match`
+  // is non-null (it's a plain (...), never optional) — ?? content is the
+  // same fallback as the original ternary, just typed correctly.
+  const raw = match?.[1] ?? content;
 
   try {
     const parsed = JSON.parse(raw.trim()) as {
