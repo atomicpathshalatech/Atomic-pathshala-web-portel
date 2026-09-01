@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Toaster } from "sonner";
 import "./globals.css";
 import { AuthSessionProvider } from "@/components/providers/AuthSessionProvider";
+import { FloatingGuruWidget } from "@/components/shared/FloatingGuruWidget";
 
 export const metadata: Metadata = {
   title: {
@@ -28,7 +29,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className="bg-background text-on-background font-body-md overflow-x-hidden antialiased">
-        <AuthSessionProvider>{children}</AuthSessionProvider>
+        <AuthSessionProvider>
+          {children}
+          <FloatingGuruWidget />
+        </AuthSessionProvider>
         <Toaster richColors position="top-center" />
       </body>
     </html>

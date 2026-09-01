@@ -172,16 +172,9 @@ export function StudentShell({
           <Link
             href="/subscription"
             className="p-2 rounded-full text-on-surface-variant hover:bg-surface-container-high hover:text-primary transition-colors"
-            title="Offers & plans"
+            title="Subscription & Payments"
           >
-            <span className="material-symbols-outlined">redeem</span>
-          </Link>
-          <Link
-            href="/doubts"
-            className="p-2 rounded-full text-on-surface-variant hover:bg-surface-container-high hover:text-primary transition-colors"
-            title="Get help"
-          >
-            <span className="material-symbols-outlined">support_agent</span>
+            <span className="material-symbols-outlined text-xl">account_balance_wallet</span>
           </Link>
           <AccountMenu studentName={studentName} studentIdCode={studentIdCode} />
         </div>
