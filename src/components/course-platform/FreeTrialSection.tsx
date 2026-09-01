@@ -1,6 +1,7 @@
-﻿"use client";
+"use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 
 export function FreeTrialSection() {
   const [playingVideo, setPlayingVideo] = useState<string | null>(null);
@@ -96,14 +97,13 @@ export function FreeTrialSection() {
             </div>
 
             <div className="p-4 pt-0">
-              <button
-                type="button"
-                onClick={() => setPlayingVideo(cls.id)}
+              <Link
+                href={`/watch/${cls.id}`}
                 className="w-full py-2 rounded-xl bg-white text-[#031635] font-extrabold text-xs hover:bg-slate-100 transition shadow flex items-center justify-center gap-1"
               >
                 <span className="material-symbols-outlined text-sm">play_circle</span>
                 <span>Watch Free Lecture</span>
-              </button>
+              </Link>
             </div>
           </div>
         ))}
