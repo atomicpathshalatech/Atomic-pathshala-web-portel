@@ -13,6 +13,7 @@ export const metadata: Metadata = {
 };
 
 const MODULE_CARDS = [
+  { href: "/team/live-studio", label: "Live Classroom (Whiteboard Studio)", icon: "videocam", description: "Start live whiteboard classes with webcam PiP, smart pen palette, slide themes, polls, and live doubt desk.", permission: PERMISSIONS.WHITEBOARD_ACCESS, available: true },
   { href: "/team/batches", label: "Batches", icon: "groups", description: "Create batches, assign teachers, enroll students, and build the class timetable.", permission: PERMISSIONS.BATCH_READ, available: true },
   { href: "/team/tests", label: "Tests", icon: "quiz", description: "Build timed mock tests from the Question Bank and publish them to a batch.", permission: PERMISSIONS.TEST_READ, available: true },
   { href: "/team/questions", label: "Question Bank", icon: "database", description: "Create, verify, and organize NEET/JEE question papers.", permission: PERMISSIONS.QUESTION_READ, available: true },
