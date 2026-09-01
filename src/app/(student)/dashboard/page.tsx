@@ -245,8 +245,8 @@ export default async function StudentDashboardPage() {
             description="Practice questions topic by topic"
             icon="edit_note"
             theme="orange"
-            href="/practice-board"
-            contextText="Interactive Canvas"
+            href="/practice"
+            contextText="NEET, JEE & NCERT Quiz"
           />
           <FeatureCard
             title="PYQ Practice"

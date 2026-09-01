@@ -3,11 +3,13 @@ import {
   AlertCircle,
   ArrowLeft,
   BookMarked,
+  BookOpen,
   ChevronLeft,
   ChevronRight,
   Clock3,
   ClipboardList,
   History,
+  Search,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MathText } from "@/components/ai-chat/MathText";
@@ -30,6 +32,7 @@ type QuizStage =
   | "subjectForm"
   | "topicForm"
   | "pyqForm"
+  | "ncertForm"
   | "loading"
   | "active"
   | "summary"
@@ -366,6 +369,13 @@ export function QuizMode({ onClose }: QuizModeProps) {
   const [pyqSubject, setPyqSubject] = useState<PyqSubjectOption>("Biology");
   const [pyqYear, setPyqYear] = useState<string>("all");
   const [pyqQuestionCount, setPyqQuestionCount] = useState(10);
+  const [ncertSubject, setNcertSubject] = useState<"Biology" | "Physics" | "Chemistry">("Biology");
+  const [ncertChapter, setNcertChapter] = useState<string>("");
+  const [ncertLanguage, setNcertLanguage] = useState<QuizLanguage>("english");
+  const [ncertLevel, setNcertLevel] = useState<QuizLevel>("Medium");
+  const [ncertFormat, setNcertFormat] = useState<QuestionType | "">("");
+  const [ncertQuestionCount, setNcertQuestionCount] = useState(15);
+  const [ncertSearchQuery, setNcertSearchQuery] = useState("");
   const [activeLevel, setActiveLevel] = useState<QuizLevel>("Medium");
   const [activeChapter, setActiveChapter] = useState<string | undefined>(undefined);
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
@@ -494,6 +504,35 @@ export function QuizMode({ onClose }: QuizModeProps) {
       questionCount: pyqQuestionCount,
     });
   }, [runQuizRequest, pyqSubject, pyqYear, pyqQuestionCount]);
+
+  const startNcertQuiz = useCallback(() => {
+    if (!ncertChapter.trim()) {
+      setError("Please select an NCERT chapter to practice.");
+      return;
+    }
+    resultSubmittedRef.current = false;
+    const testTitle = `NCERT Practice - ${ncertSubject}: ${ncertChapter}`;
+    setTestName(testTitle);
+    setQuizId(generateQuizId());
+    setActiveLevel(ncertLevel);
+    setActiveChapter(ncertChapter.trim());
+    void runQuizRequest("/api/ai-chat/quiz", {
+      subject: ncertSubject,
+      language: ncertLanguage,
+      topic: ncertChapter.trim(),
+      questionCount: ncertQuestionCount,
+      level: ncertLevel,
+      format: ncertFormat || undefined,
+    });
+  }, [
+    runQuizRequest,
+    ncertSubject,
+    ncertChapter,
+    ncertLanguage,
+    ncertQuestionCount,
+    ncertLevel,
+    ncertFormat,
+  ]);
 
   const saveAttempt = useCallback(
     async (finalAnswers: QuizAnswer[]) => {
@@ -1114,8 +1153,30 @@ export function QuizMode({ onClose }: QuizModeProps) {
                   <p className="text-sm font-semibold text-white">
                     PYQ Practice
                   </p>
-                                    <p className="text-xs text-white/80">
+                  <p className="text-xs text-white/80">
                     Real NEET previous year questions, by year and subject
+                  </p>
+                </div>
+              </button>
+
+              {/* 4. NCERT Chapterwise Question Practice Card */}
+              <button
+                type="button"
+                onClick={() => {
+                  setNcertChapter(NCERT_CHAPTERS[ncertSubject]?.[0] || "");
+                  setStage("ncertForm");
+                }}
+                className="flex w-full items-center gap-4 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 p-4 text-left shadow-md transition hover:brightness-105 active:scale-[0.99]"
+              >
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/20 text-white">
+                  <BookOpen className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-white">
+                    NCERT Chapterwise Question Practice
+                  </p>
+                  <p className="text-xs text-white/80">
+                    Line-by-line NCERT questions &amp; concept drill for Class 11 &amp; 12
                   </p>
                 </div>
               </button>
@@ -1421,6 +1482,193 @@ export function QuizMode({ onClose }: QuizModeProps) {
                 className="w-full rounded-xl bg-purple-600 px-4 py-3 text-sm font-semibold text-white shadow-md hover:bg-purple-700"
               >
                 Start PYQ Practice
+              </button>
+            </div>
+          </div>
+        )}
+
+        {stage === "ncertForm" && (
+          <div className="mx-auto w-full max-w-lg">
+            <button
+              type="button"
+              onClick={() => setStage("modeSelect")}
+              className="mb-4 flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 active:scale-95 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Back
+            </button>
+            <div className="mb-4">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full">
+                  NCERT Canonical Base
+                </span>
+              </div>
+              <h1 className="text-xl font-bold text-slate-900 dark:text-white">
+                NCERT Chapterwise Question Practice
+              </h1>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Practice line-by-line questions directly mapped to NCERT Class 11 &amp; 12 syllabus.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900 space-y-4">
+              {/* Subject Selector Tabs */}
+              <div>
+                <span className="mb-1.5 block text-xs font-bold text-slate-600 dark:text-slate-300">
+                  Select Subject
+                </span>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["Biology", "Chemistry", "Physics"] as const).map((sub) => {
+                    const isSelected = ncertSubject === sub;
+                    return (
+                      <button
+                        key={sub}
+                        type="button"
+                        onClick={() => {
+                          setNcertSubject(sub);
+                          setNcertChapter(NCERT_CHAPTERS[sub]?.[0] || "");
+                        }}
+                        className={`py-2 px-3 rounded-xl font-bold text-xs transition text-center ${
+                          isSelected
+                            ? "bg-emerald-600 text-white shadow-sm"
+                            : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
+                        }`}
+                      >
+                        {sub}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* NCERT Chapter Selection with Search */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                    Select NCERT Chapter
+                  </span>
+                  <span className="text-[11px] text-slate-400">
+                    {NCERT_CHAPTERS[ncertSubject]?.length || 0} Chapters
+                  </span>
+                </div>
+
+                <div className="relative mb-2">
+                  <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search chapter name..."
+                    value={ncertSearchQuery}
+                    onChange={(e) => setNcertSearchQuery(e.target.value)}
+                    className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  />
+                </div>
+
+                <div className="max-h-48 overflow-y-auto space-y-1 p-1 rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60 no-scrollbar">
+                  {NCERT_CHAPTERS[ncertSubject]
+                    ?.filter((ch) =>
+                      ch.toLowerCase().includes(ncertSearchQuery.toLowerCase())
+                    )
+                    .map((ch, idx) => {
+                      const isSelected = ncertChapter === ch;
+                      return (
+                        <button
+                          key={ch}
+                          type="button"
+                          onClick={() => setNcertChapter(ch)}
+                          className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition flex items-center justify-between ${
+                            isSelected
+                              ? "bg-emerald-600 text-white font-bold shadow-sm"
+                              : "hover:bg-slate-200/60 text-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                          }`}
+                        >
+                          <span className="truncate">
+                            {idx + 1}. {ch}
+                          </span>
+                          {isSelected && <span className="text-[10px]">✓ Selected</span>}
+                        </button>
+                      );
+                    })}
+                </div>
+              </div>
+
+              {/* Grid: Language, Count, Level, Format */}
+              <div className="grid grid-cols-2 gap-3 pt-1 border-t border-slate-100 dark:border-slate-800 text-xs">
+                <div>
+                  <span className="mb-1 block font-medium text-slate-500">Language</span>
+                  <select
+                    value={ncertLanguage}
+                    onChange={(e) => setNcertLanguage(e.target.value as QuizLanguage)}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs font-semibold outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  >
+                    {LANGUAGE_OPTIONS.map((item) => (
+                      <option key={item.value} value={item.value}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <span className="mb-1 block font-medium text-slate-500">Questions Count</span>
+                  <select
+                    value={ncertQuestionCount}
+                    onChange={(e) => setNcertQuestionCount(Number(e.target.value))}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs font-semibold outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  >
+                    <option value={10}>10 Questions</option>
+                    <option value={15}>15 Questions</option>
+                    <option value={20}>20 Questions</option>
+                    <option value={30}>30 Questions</option>
+                    <option value={45}>45 Questions (Full Test)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <span className="mb-1 block font-medium text-slate-500">Difficulty</span>
+                  <select
+                    value={ncertLevel}
+                    onChange={(e) => setNcertLevel(e.target.value as QuizLevel)}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs font-semibold outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  >
+                    {LEVEL_OPTIONS.map((item) => (
+                      <option key={item.value} value={item.value}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <span className="mb-1 block font-medium text-slate-500">Question Format</span>
+                  <select
+                    value={ncertFormat}
+                    onChange={(e) => setNcertFormat(e.target.value as QuestionType | "")}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs font-semibold outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  >
+                    {FORMAT_OPTIONS.map((item) => (
+                      <option key={item.value} value={item.value}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {error && (
+                <p className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-900 dark:bg-red-900/20 dark:text-red-300">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  {error}
+                </p>
+              )}
+
+              <button
+                type="button"
+                onClick={startNcertQuiz}
+                disabled={!ncertChapter}
+                className="w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-md hover:bg-emerald-700 disabled:opacity-50 transition flex items-center justify-center gap-2"
+              >
+                <BookOpen className="h-4 w-4" />
+                <span>Start NCERT Chapter Practice ({ncertQuestionCount} Q)</span>
               </button>
             </div>
           </div>
