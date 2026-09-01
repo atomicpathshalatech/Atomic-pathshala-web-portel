@@ -1,0 +1,516 @@
+{
+  "name": "Physics",
+  "nameHindi": "भौतिक विज्ञान",
+  "code": "PHY-12",
+  "books": [
+    {
+      "title": "Physics Part I",
+      "titleHindi": "भौतिकी भाग 1",
+      "partNumber": 1
+    },
+    {
+      "title": "Physics Part II",
+      "titleHindi": "भौतिकी भाग 2",
+      "partNumber": 2
+    }
+  ],
+  "chapters": [
+    {
+      "chapterNumber": 1,
+      "title": "Electric Charges and Fields",
+      "titleHindi": "वैद्युत आवेश तथा क्षेत्र",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "1.1",
+          "title": "Introduction and Electric Charges",
+          "titleHindi": "वैद्युत आवेश"
+        },
+        {
+          "topicNumber": "1.2",
+          "title": "Conductors and Insulators, Charging by Induction",
+          "titleHindi": "चालक तथा विद्युतरोधी"
+        },
+        {
+          "topicNumber": "1.3",
+          "title": "Basic Properties of Electric Charge and Coulomb Law",
+          "titleHindi": "कूलॉम का नियम"
+        },
+        {
+          "topicNumber": "1.4",
+          "title": "Forces between Multiple Charges and Electric Field",
+          "titleHindi": "वैद्युत क्षेत्र"
+        },
+        {
+          "topicNumber": "1.5",
+          "title": "Electric Field Lines, Electric Flux and Electric Dipole",
+          "titleHindi": "वैद्युत फ्लक्स एवं वैद्युत द्विध्रुव"
+        },
+        {
+          "topicNumber": "1.6",
+          "title": "Dipole in a Uniform External Field",
+          "titleHindi": "एकसमान बाह्य क्षेत्र में द्विध्रुव"
+        },
+        {
+          "topicNumber": "1.7",
+          "title": "Continuous Charge Distribution",
+          "titleHindi": "सतत आवेश वितरण"
+        },
+        {
+          "topicNumber": "1.8",
+          "title": "Gauss Law and Its Applications",
+          "titleHindi": "गाउस का नियम एवं इसके अनुप्रयोग"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 2,
+      "title": "Electrostatic Potential and Capacitance",
+      "titleHindi": "स्थिरवैद्युत विभव तथा धारिता",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "2.1",
+          "title": "Introduction and Electrostatic Potential",
+          "titleHindi": "स्थिरवैद्युत विभव"
+        },
+        {
+          "topicNumber": "2.2",
+          "title": "Potential due to a Point Charge and Electric Dipole",
+          "titleHindi": "बिंदु आवेश एवं द्विध्रुव के कारण विभव"
+        },
+        {
+          "topicNumber": "2.3",
+          "title": "Potential due to a System of Charges and Equipotential Surfaces",
+          "titleHindi": "समविभव पृष्ठ"
+        },
+        {
+          "topicNumber": "2.4",
+          "title": "Potential Energy of a System of Charges and in an External Field",
+          "titleHindi": "स्थिरवैद्युत स्थितिज ऊर्जा"
+        },
+        {
+          "topicNumber": "2.5",
+          "title": "Electrostatics of Conductors and Dielectrics and Polarisation",
+          "titleHindi": "परावैद्युत तथा ध्रुवण"
+        },
+        {
+          "topicNumber": "2.6",
+          "title": "Capacitors and Capacitance, Parallel Plate Capacitor",
+          "titleHindi": "संधारित्र तथा धारिता"
+        },
+        {
+          "topicNumber": "2.7",
+          "title": "Combination of Capacitors and Energy Stored in a Capacitor",
+          "titleHindi": "संधारित्रों का संयोजन एवं संचित ऊर्जा"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 3,
+      "title": "Current Electricity",
+      "titleHindi": "विद्युत धारा",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "3.1",
+          "title": "Introduction and Electric Current",
+          "titleHindi": "विद्युत धारा"
+        },
+        {
+          "topicNumber": "3.2",
+          "title": "Electric Currents in Conductors and Ohm Law",
+          "titleHindi": "ओम का नियम"
+        },
+        {
+          "topicNumber": "3.3",
+          "title": "Drift of Electrons and the Origin of Resistivity",
+          "titleHindi": "इलेक्ट्रॉनों का अपवाह एवं प्रतिरोधकता"
+        },
+        {
+          "topicNumber": "3.4",
+          "title": "Limitations of Ohm Law and Resistivity of Various Materials",
+          "titleHindi": "प्रतिरोधकता की ताप पर निर्भरता"
+        },
+        {
+          "topicNumber": "3.5",
+          "title": "Electrical Energy, Power",
+          "titleHindi": "विद्युत ऊर्जा एवं शक्ति"
+        },
+        {
+          "topicNumber": "3.6",
+          "title": "Cells, EMF, Internal Resistance, Cells in Series and in Parallel",
+          "titleHindi": "सेल, वि.वा.बल, आंतरिक प्रतिरोध एवं संयोजन"
+        },
+        {
+          "topicNumber": "3.7",
+          "title": "Kirchhoff Rules and Wheatstone Bridge",
+          "titleHindi": "किरचॉफ के नियम एवं व्हीटस्टोन सेतु"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 4,
+      "title": "Moving Charges and Magnetism",
+      "titleHindi": "गतिमान आवेश और चुंबकत्व",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "4.1",
+          "title": "Introduction and Magnetic Force (Lorentz Force)",
+          "titleHindi": "चुंबकीय बल (लॉरेंट्ज बल)"
+        },
+        {
+          "topicNumber": "4.2",
+          "title": "Motion in a Magnetic Field",
+          "titleHindi": "चुंबकीय क्षेत्र में गति"
+        },
+        {
+          "topicNumber": "4.3",
+          "title": "Magnetic Field due to a Current Element, Biot-Savart Law",
+          "titleHindi": "बायो-सावर्ट नियम"
+        },
+        {
+          "topicNumber": "4.4",
+          "title": "Magnetic Field on the Axis of a Circular Current Loop",
+          "titleHindi": "वृत्ताकार धारावाही पाश के अक्ष पर चुंबकीय क्षेत्र"
+        },
+        {
+          "topicNumber": "4.5",
+          "title": "Ampere Circuital Law and Solenoid",
+          "titleHindi": "ऐम्पियर का परिपथीय नियम एवं परिनालिका"
+        },
+        {
+          "topicNumber": "4.6",
+          "title": "Force between Two Parallel Currents, The Ampere",
+          "titleHindi": "दो समांतर धाराओं के बीच बल"
+        },
+        {
+          "topicNumber": "4.7",
+          "title": "Torque on Current Loop, Magnetic Dipole",
+          "titleHindi": "धारा पाश पर बल आघूर्ण"
+        },
+        {
+          "topicNumber": "4.8",
+          "title": "The Moving Coil Galvanometer and Conversion to Ammeter/Voltmeter",
+          "titleHindi": "चल कुंडली गैल्वेनोमीटर"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 5,
+      "title": "Magnetism and Matter",
+      "titleHindi": "चुंबकत्व एवं द्रव्य",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "5.1",
+          "title": "Introduction and The Bar Magnet (Magnetic Field Lines, Dipole)",
+          "titleHindi": "छड़ चुंबक"
+        },
+        {
+          "topicNumber": "5.2",
+          "title": "Magnetism and Gauss Law",
+          "titleHindi": "चुंबकत्व का गाउस नियम"
+        },
+        {
+          "topicNumber": "5.3",
+          "title": "Magnetisation and Magnetic Intensity",
+          "titleHindi": "चुंबकन एवं चुंबकीय तीव्रता"
+        },
+        {
+          "topicNumber": "5.4",
+          "title": "Magnetic Properties of Materials (Diamagnetism, Paramagnetism, Ferromagnetism)",
+          "titleHindi": "पदार्थों के चुंबकीय गुणधर्म"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 6,
+      "title": "Electromagnetic Induction",
+      "titleHindi": "वैद्युतचुंबकीय प्रेरण",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "6.1",
+          "title": "Introduction and The Experiments of Faraday and Henry",
+          "titleHindi": "फैराडे तथा हेनरी के प्रयोग"
+        },
+        {
+          "topicNumber": "6.2",
+          "title": "Magnetic Flux and Faraday Law of Induction",
+          "titleHindi": "चुंबकीय फ्लक्स एवं फैराडे का प्रेरण नियम"
+        },
+        {
+          "topicNumber": "6.3",
+          "title": "Lenz Law and Conservation of Energy",
+          "titleHindi": "लेंज का नियम एवं ऊर्जा संरक्षण"
+        },
+        {
+          "topicNumber": "6.4",
+          "title": "Motional Electromotive Force",
+          "titleHindi": "गतिक विद्युत वाहक बल"
+        },
+        {
+          "topicNumber": "6.5",
+          "title": "Inductance (Mutual Inductance and Self-Inductance)",
+          "titleHindi": "प्रेरकत्व (स्वप्रेरकत्व एवं अन्योन्य प्रेरकत्व)"
+        },
+        {
+          "topicNumber": "6.6",
+          "title": "AC Generator",
+          "titleHindi": "प्रत्यावर्ती धारा जनित्र (AC Generator)"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 7,
+      "title": "Alternating Current",
+      "titleHindi": "प्रत्यावर्ती धारा",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "7.1",
+          "title": "Introduction and AC Voltage Applied to a Resistor",
+          "titleHindi": "प्रतिरोधक पर AC वोल्टता"
+        },
+        {
+          "topicNumber": "7.2",
+          "title": "Representation of AC Current and Voltage by Rotating Vectors – Phasors",
+          "titleHindi": "फेजर आरेख"
+        },
+        {
+          "topicNumber": "7.3",
+          "title": "AC Voltage Applied to an Inductor and Capacitor",
+          "titleHindi": "प्रेरक एवं संधारित्र पर AC वोल्टता"
+        },
+        {
+          "topicNumber": "7.4",
+          "title": "AC Voltage Applied to a Series LCR Circuit and Resonance",
+          "titleHindi": "श्रेणी LCR परिपथ एवं अनुनाद"
+        },
+        {
+          "topicNumber": "7.5",
+          "title": "Power in AC Circuit: The Power Factor",
+          "titleHindi": "AC परिपथ में शक्ति एवं शक्ति गुणांक"
+        },
+        {
+          "topicNumber": "7.6",
+          "title": "Transformers",
+          "titleHindi": "ट्रांसफॉर्मर"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 8,
+      "title": "Electromagnetic Waves",
+      "titleHindi": "वैद्युतचुंबकीय तरंगें",
+      "bookPart": 2,
+      "topics": [
+        {
+          "topicNumber": "8.1",
+          "title": "Introduction and Displacement Current",
+          "titleHindi": "विस्थापन धारा"
+        },
+        {
+          "topicNumber": "8.2",
+          "title": "Electromagnetic Waves and Sources/Nature of EM Waves",
+          "titleHindi": "वैद्युतचुंबकीय तरंगों के स्रोत एवं प्रकृति"
+        },
+        {
+          "topicNumber": "8.3",
+          "title": "Electromagnetic Spectrum (Radio, Micro, Infrared, Visible, UV, X-rays, Gamma rays)",
+          "titleHindi": "वैद्युतचुंबकीय स्पेक्ट्रम"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 9,
+      "title": "Ray Optics and Optical Instruments",
+      "titleHindi": "किरण प्रकाशिकी एवं प्रकाशिक यंत्र",
+      "bookPart": 2,
+      "topics": [
+        {
+          "topicNumber": "9.1",
+          "title": "Introduction and Reflection of Light by Spherical Mirrors",
+          "titleHindi": "गोलीय दर्पणों द्वारा प्रकाश का परावर्तन"
+        },
+        {
+          "topicNumber": "9.2",
+          "title": "Refraction and Total Internal Reflection",
+          "titleHindi": "अपवर्तन एवं पूर्ण आंतरिक परावर्तन"
+        },
+        {
+          "topicNumber": "9.3",
+          "title": "Refraction at Spherical Surfaces and by Lenses (Lens Maker Formula)",
+          "titleHindi": "लेंस मेकर सूत्र"
+        },
+        {
+          "topicNumber": "9.4",
+          "title": "Refraction through a Prism",
+          "titleHindi": "प्रिज्म से अपवर्तन"
+        },
+        {
+          "topicNumber": "9.5",
+          "title": "Optical Instruments (Microscope, Telescope, Eye)",
+          "titleHindi": "प्रकाशिक यंत्र (सूक्ष्मदर्शी, दूरदर्शी)"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 10,
+      "title": "Wave Optics",
+      "titleHindi": "तरंग-प्रकाशिकी",
+      "bookPart": 2,
+      "topics": [
+        {
+          "topicNumber": "10.1",
+          "title": "Introduction and Huygens Principle",
+          "titleHindi": "हाइगेंस का सिद्धांत"
+        },
+        {
+          "topicNumber": "10.2",
+          "title": "Refraction and Reflection of Plane Waves using Huygens Principle",
+          "titleHindi": "समतल तरंगों का परावर्तन एवं अपवर्तन"
+        },
+        {
+          "topicNumber": "10.3",
+          "title": "Coherent and Incoherent Addition of Waves, Interference of Light Waves",
+          "titleHindi": "व्यतिकरण एवं यंग का द्वि-स्लिट प्रयोग"
+        },
+        {
+          "topicNumber": "10.4",
+          "title": "Diffraction (Single Slit Diffraction and Resolving Power)",
+          "titleHindi": "विवर्तन (एकल झिरी विवर्तन)"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 11,
+      "title": "Dual Nature of Radiation and Matter",
+      "titleHindi": "विकिरण तथा द्रव्य की द्वैत प्रकृति",
+      "bookPart": 2,
+      "topics": [
+        {
+          "topicNumber": "11.1",
+          "title": "Introduction and Electron Emission",
+          "titleHindi": "इलेक्ट्रॉन उत्सर्जन"
+        },
+        {
+          "topicNumber": "11.2",
+          "title": "Photoelectric Effect and Experimental Study",
+          "titleHindi": "प्रकाश-वैद्युत प्रभाव"
+        },
+        {
+          "topicNumber": "11.3",
+          "title": "Einstein Photoelectric Equation: Energy Quantum of Radiation",
+          "titleHindi": "आइंस्टीन का प्रकाश-वैद्युत समीकरण"
+        },
+        {
+          "topicNumber": "11.4",
+          "title": "Particle Nature of Light: The Photon",
+          "titleHindi": "फोटॉन"
+        },
+        {
+          "topicNumber": "11.5",
+          "title": "Wave Nature of Matter (de Broglie Relation)",
+          "titleHindi": "द्रव्य की तरंग प्रकृति (डी ब्रॉग्ली संबंध)"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 12,
+      "title": "Atoms",
+      "titleHindi": "परमाणु",
+      "bookPart": 2,
+      "topics": [
+        {
+          "topicNumber": "12.1",
+          "title": "Alpha-particle Scattering and Rutherford Nuclear Model of Atom",
+          "titleHindi": "रदरफोर्ड का परमाणु मॉडल"
+        },
+        {
+          "topicNumber": "12.2",
+          "title": "Atomic Spectra",
+          "titleHindi": "परमाण्वीय स्पेक्ट्रम"
+        },
+        {
+          "topicNumber": "12.3",
+          "title": "Bohr Model of the Hydrogen Atom and Energy Levels",
+          "titleHindi": "बोहर का परमाणु मॉडल एवं ऊर्जा स्तर"
+        },
+        {
+          "topicNumber": "12.4",
+          "title": "The Line Spectra of the Hydrogen Atom",
+          "titleHindi": "हाइड्रोजन परमाणु का रेखा स्पेक्ट्रम"
+        },
+        {
+          "topicNumber": "12.5",
+          "title": "DE Broglie Explanation of Bohr Second Postulate of Quantisation",
+          "titleHindi": "बोहर के अभिगृहीत का डी ब्रॉग्ली स्पष्टीकरण"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 13,
+      "title": "Nuclei",
+      "titleHindi": "नाभिक",
+      "bookPart": 2,
+      "topics": [
+        {
+          "topicNumber": "13.1",
+          "title": "Introduction and Atomic Masses and Composition of Nucleus",
+          "titleHindi": "नाभिक की संरचना"
+        },
+        {
+          "topicNumber": "13.2",
+          "title": "Size of the Nucleus",
+          "titleHindi": "नाभिक का आकार"
+        },
+        {
+          "topicNumber": "13.3",
+          "title": "Mass-Energy and Nuclear Binding Energy (Mass Defect)",
+          "titleHindi": "द्रव्यमान-ऊर्जा एवं नाभिकीय बंधन ऊर्जा"
+        },
+        {
+          "topicNumber": "13.4",
+          "title": "Nuclear Force",
+          "titleHindi": "नाभिकीय बल"
+        },
+        {
+          "topicNumber": "13.5",
+          "title": "Nuclear Energy: Fission and Fusion",
+          "titleHindi": "नाभिकीय विखंडन एवं संलयन"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 14,
+      "title": "Semiconductor Electronics: Materials, Devices and Simple Circuits",
+      "titleHindi": "अर्धचालक इलेक्ट्रॉनिकी: पदार्थ, युक्तियाँ तथा सरल परिपथ",
+      "bookPart": 2,
+      "topics": [
+        {
+          "topicNumber": "14.1",
+          "title": "Introduction and Classification of Metals, Conductors and Semiconductors",
+          "titleHindi": "चालक एवं अर्धचालक"
+        },
+        {
+          "topicNumber": "14.2",
+          "title": "Intrinsic Semiconductor and Extrinsic Semiconductor (n-type, p-type)",
+          "titleHindi": "निज एवं अपद्रव्यी अर्धचालक"
+        },
+        {
+          "topicNumber": "14.3",
+          "title": "p-n Junction (Forward and Reverse Bias)",
+          "titleHindi": "p-n संधि डायोड"
+        },
+        {
+          "topicNumber": "14.4",
+          "title": "Semiconductor Diode and Application as a Rectifier",
+          "titleHindi": "दिष्टकारी के रूप में डायोड"
+        }
+      ]
+    }
+  ]
+}

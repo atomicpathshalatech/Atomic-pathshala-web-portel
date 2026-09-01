@@ -2899,3 +2899,153 @@ model QuestionBank {
   @@index([source])
   @@map("ai_chat_question_bank")
 }
+
+// ============================================================
+// ACADEMIC FOUNDATION & NCERT MASTER DATA
+// ============================================================
+
+enum ProgramName {
+  NEET
+  JEE_MAIN
+  JEE_ADVANCED
+  CBSE_BOARD
+  FOUNDATION
+}
+
+model AcademicClass {
+  id           String            @id @default(cuid())
+  name         String            @unique // e.g. "Class 11", "Class 12"
+  numericValue Int               @unique // 11, 12
+  order        Int               @default(0)
+  isActive     Boolean           @default(true)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  subjects     AcademicSubject[]
+  programs     ProgramMapping[]
+
+  @@map("academic_classes")
+}
+
+model AcademicSubject {
+  id              String            @id @default(cuid())
+  classId         String
+  name            String // e.g. "Physics", "Chemistry", "Biology", "Mathematics"
+  nameHindi       String? // e.g. "भौतिक विज्ञान", "रसायन विज्ञान", "जीव विज्ञान", "गणित"
+  code            String? // e.g. "PHY-11", "CHE-11"
+  order           Int               @default(0)
+  isSystem        Boolean           @default(true) // true = Standard NCERT, false = Custom
+  isActive        Boolean           @default(true)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  academicClass   AcademicClass     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  books           AcademicBook[]
+  chapters        AcademicChapter[]
+  programMappings ProgramMapping[]
+
+  @@unique([classId, name])
+  @@index([classId])
+  @@map("academic_subjects")
+}
+
+model AcademicBook {
+  id          String            @id @default(cuid())
+  subjectId   String
+  title       String // e.g. "Physics Part I", "Chemistry Part I"
+  titleHindi  String? // e.g. "भौतिकी भाग 1"
+  partNumber  Int               @default(1)
+  editionYear String?           @default("2024-25 Rationalised")
+  isSystem    Boolean           @default(true)
+  order       Int               @default(0)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  subject     AcademicSubject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  chapters    AcademicChapter[]
+
+  @@index([subjectId])
+  @@map("academic_books")
+}
+
+model AcademicChapter {
+  id              String             @id @default(cuid())
+  subjectId       String
+  bookId          String?
+  chapterNumber   Int // e.g. 1, 2, 3 (NCERT chapter number)
+  title           String // English title: "Units and Measurements"
+  titleHindi      String? // Hindi title: "मात्रक और मापन"
+  displayOrder    Int                @default(0)
+  isSystem        Boolean            @default(true)
+  isRationalised  Boolean            @default(true) // Current rationalised NCERT
+  isActive        Boolean            @default(true)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  subject         AcademicSubject    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  book            AcademicBook?      @relation(fields: [bookId], references: [id], onDelete: SetNull)
+  topics          AcademicTopic[]
+  programMappings ProgramMapping[]
+
+  @@unique([subjectId, chapterNumber])
+  @@index([subjectId])
+  @@index([bookId])
+  @@map("academic_chapters")
+}
+
+model AcademicTopic {
+  id              String             @id @default(cuid())
+  chapterId       String
+  topicNumber     String // e.g. "1.1", "1.2", "2.1" (official NCERT section numbering)
+  title           String // English title
+  titleHindi      String? // Hindi title
+  displayOrder    Int                @default(0)
+  isSystem        Boolean            @default(true)
+  isActive        Boolean            @default(true)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  chapter         AcademicChapter    @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  subtopics       AcademicSubtopic[]
+  programMappings ProgramMapping[]
+
+  @@unique([chapterId, topicNumber, title])
+  @@index([chapterId])
+  @@map("academic_topics")
+}
+
+model AcademicSubtopic {
+  id             String        @id @default(cuid())
+  topicId        String
+  subtopicNumber String? // e.g. "1.1.1", "2.3.1"
+  title          String
+  titleHindi     String?
+  displayOrder   Int           @default(0)
+  isSystem       Boolean       @default(true)
+  isActive       Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  topic          AcademicTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@index([topicId])
+  @@map("academic_subtopics")
+}
+
+model ProgramMapping {
+  id          String           @id @default(cuid())
+  programName ProgramName
+  classId     String
+  subjectId   String
+  chapterId   String
+  topicId     String?
+  weightage   Float? // Estimated exam weightage percentage
+  isActive    Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  class       AcademicClass    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subject     AcademicSubject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  chapter     AcademicChapter  @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  topic       AcademicTopic?   @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@unique([programName, chapterId, topicId])
+  @@index([programName])
+  @@index([classId])
+  @@index([subjectId])
+  @@index([chapterId])
+  @@map("academic_program_mappings")
+}

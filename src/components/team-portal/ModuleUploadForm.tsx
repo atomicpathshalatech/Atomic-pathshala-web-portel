@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { AcademicSelector } from "@/components/academic/AcademicSelector";
 
 type BrandProfileOption = { id: string; name: string };
 
@@ -89,6 +90,19 @@ export function ModuleUploadForm({ brandProfiles }: { brandProfiles: BrandProfil
         />
       </div>
 
+      {/* Academic NCERT Canonical Selector */}
+      <div className="pt-2">
+        <AcademicSelector
+          onChange={(s) => {
+            if (s.classId) setClassLabel(s.classId.includes("11") ? "11" : "12");
+            if (s.subjectName) setSubject(s.subjectName);
+            if (s.chapterTitle) setChapter(s.chapterTitle);
+          }}
+          requireTopic={false}
+          showLanguageSwitch={true}
+        />
+      </div>
+
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="text-label-sm text-on-surface-variant block mb-1">Subject</label>
@@ -97,6 +111,7 @@ export function ModuleUploadForm({ brandProfiles }: { brandProfiles: BrandProfil
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
             className="w-full rounded-lg border border-outline-variant/40 px-3 py-2 text-label-md bg-surface-container-lowest"
+            placeholder="e.g. Physics"
           />
         </div>
         <div>
@@ -106,6 +121,7 @@ export function ModuleUploadForm({ brandProfiles }: { brandProfiles: BrandProfil
             value={chapter}
             onChange={(e) => setChapter(e.target.value)}
             className="w-full rounded-lg border border-outline-variant/40 px-3 py-2 text-label-md bg-surface-container-lowest"
+            placeholder="e.g. Electric Charges and Fields"
           />
         </div>
         <div>
@@ -115,6 +131,7 @@ export function ModuleUploadForm({ brandProfiles }: { brandProfiles: BrandProfil
             value={classLabel}
             onChange={(e) => setClassLabel(e.target.value)}
             className="w-full rounded-lg border border-outline-variant/40 px-3 py-2 text-label-md bg-surface-container-lowest"
+            placeholder="e.g. 11 or 12"
           />
         </div>
         <div>

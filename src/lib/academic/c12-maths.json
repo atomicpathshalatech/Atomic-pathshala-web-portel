@@ -1,0 +1,353 @@
+{
+  "name": "Mathematics",
+  "nameHindi": "गणित",
+  "code": "MATH-12",
+  "books": [
+    {
+      "title": "Mathematics Part I",
+      "titleHindi": "गणित भाग 1",
+      "partNumber": 1
+    },
+    {
+      "title": "Mathematics Part II",
+      "titleHindi": "गणित भाग 2",
+      "partNumber": 2
+    }
+  ],
+  "chapters": [
+    {
+      "chapterNumber": 1,
+      "title": "Relations and Functions",
+      "titleHindi": "संबंध एवं फलन",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "1.1",
+          "title": "Introduction and Types of Relations (Reflexive, Symmetric, Transitive, Equivalence)",
+          "titleHindi": "संबंधों के प्रकार"
+        },
+        {
+          "topicNumber": "1.2",
+          "title": "Types of Functions (One-One, Onto, Bijective)",
+          "titleHindi": "फलनों के प्रकार (एकैकी एवं आच्छादक)"
+        },
+        {
+          "topicNumber": "1.3",
+          "title": "Composition of Functions and Invertible Function",
+          "titleHindi": "फलनों का संयोजन तथा व्युत्क्रमणीय फलन"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 2,
+      "title": "Inverse Trigonometric Functions",
+      "titleHindi": "प्रतिलोम त्रिकोणमितीय फलन",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "2.1",
+          "title": "Introduction and Basic Concepts (Principal Value Branches)",
+          "titleHindi": "मूल संकल्पनाएं एवं मुख्य मान"
+        },
+        {
+          "topicNumber": "2.2",
+          "title": "Properties of Inverse Trigonometric Functions",
+          "titleHindi": "प्रतिलोम त्रिकोणमितीय फलनों के गुणधर्म"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 3,
+      "title": "Matrices",
+      "titleHindi": "आव्यूह",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "3.1",
+          "title": "Introduction and Matrix Concept",
+          "titleHindi": "आव्यूह की संकल्पना"
+        },
+        {
+          "topicNumber": "3.2",
+          "title": "Types of Matrices (Row, Column, Square, Diagonal, Scalar, Identity, Zero)",
+          "titleHindi": "आव्यूहों के प्रकार"
+        },
+        {
+          "topicNumber": "3.3",
+          "title": "Operations on Matrices (Addition, Scalar Multiplication, Matrix Multiplication)",
+          "titleHindi": "आव्यूहों पर संक्रियाएं"
+        },
+        {
+          "topicNumber": "3.4",
+          "title": "Transpose of a Matrix, Symmetric and Skew Symmetric Matrices",
+          "titleHindi": "आव्यूह का परिवर्त, सममित तथा विषम सममित आव्यूह"
+        },
+        {
+          "topicNumber": "3.5",
+          "title": "Invertible Matrices",
+          "titleHindi": "व्युत्क्रमणीय आव्यूह"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 4,
+      "title": "Determinants",
+      "titleHindi": "सारणिक",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "4.1",
+          "title": "Introduction and Determinant of a Matrix",
+          "titleHindi": "सारणिक का मान"
+        },
+        {
+          "topicNumber": "4.2",
+          "title": "Area of a Triangle using Determinants",
+          "titleHindi": "त्रिभुज का क्षेत्रफल"
+        },
+        {
+          "topicNumber": "4.3",
+          "title": "Minors and Cofactors",
+          "titleHindi": "उपसारणिक और सहखंड"
+        },
+        {
+          "topicNumber": "4.4",
+          "title": "Adjoint and Inverse of a Matrix",
+          "titleHindi": "आव्यूह का सहखंडज और व्युत्क्रम"
+        },
+        {
+          "topicNumber": "4.5",
+          "title": "Applications of Determinants and Matrices (Solving System of Linear Equations)",
+          "titleHindi": "रैखिक समीकरण निकाय का हल"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 5,
+      "title": "Continuity and Differentiability",
+      "titleHindi": "सांतत्य तथा अवकलनीयता",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "5.1",
+          "title": "Continuity of a Function at a Point and on an Interval",
+          "titleHindi": "फलन का सांतत्य"
+        },
+        {
+          "topicNumber": "5.2",
+          "title": "Differentiability, Derivatives of Composite Functions (Chain Rule)",
+          "titleHindi": "अवकलनीयता एवं श्रृंखला नियम"
+        },
+        {
+          "topicNumber": "5.3",
+          "title": "Derivatives of Implicit Functions and Inverse Trigonometric Functions",
+          "titleHindi": "अस्पष्ट फलनों एवं प्रतिलोम फलनों के अवकलज"
+        },
+        {
+          "topicNumber": "5.4",
+          "title": "Exponential and Logarithmic Functions and Logarithmic Differentiation",
+          "titleHindi": "चरघातांकी तथा लघुगणकीय अवकलन"
+        },
+        {
+          "topicNumber": "5.5",
+          "title": "Derivatives of Functions in Parametric Forms",
+          "titleHindi": "प्राचलिक फलनों के अवकलज"
+        },
+        {
+          "topicNumber": "5.6",
+          "title": "Second Order Derivative",
+          "titleHindi": "द्वितीय कोटि का अवकलज"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 6,
+      "title": "Application of Derivatives",
+      "titleHindi": "अवकलज के अनुप्रयोग",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "6.1",
+          "title": "Rate of Change of Quantities",
+          "titleHindi": "राशियों के परिवर्तन की दर"
+        },
+        {
+          "topicNumber": "6.2",
+          "title": "Increasing and Decreasing Functions",
+          "titleHindi": "वर्धमान और ह्रासमान फलन"
+        },
+        {
+          "topicNumber": "6.3",
+          "title": "Maxima and Minima (First and Second Derivative Tests, Applied Optimization Problems)",
+          "titleHindi": "उच्चिष्ठ और निम्निष्ठ"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 7,
+      "title": "Integrals",
+      "titleHindi": "समाकलन",
+      "bookPart": 2,
+      "topics": [
+        {
+          "topicNumber": "7.1",
+          "title": "Introduction and Integration as Inverse Process of Differentiation",
+          "titleHindi": "समाकलन की संकल्पना"
+        },
+        {
+          "topicNumber": "7.2",
+          "title": "Methods of Integration (Integration by Substitution, Partial Fractions, by Parts)",
+          "titleHindi": "समाकलन की विधियाँ"
+        },
+        {
+          "topicNumber": "7.3",
+          "title": "Integrals of Some Particular Functions",
+          "titleHindi": "कुछ विशिष्ट फलनों के समाकलन"
+        },
+        {
+          "topicNumber": "7.4",
+          "title": "Definite Integrals and Fundamental Theorem of Calculus",
+          "titleHindi": "निश्चित समाकलन"
+        },
+        {
+          "topicNumber": "7.5",
+          "title": "Evaluation of Definite Integrals by Substitution and Properties of Definite Integrals",
+          "titleHindi": "निश्चित समाकलनों के गुणधर्म"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 8,
+      "title": "Application of Integrals",
+      "titleHindi": "समाकलनों के अनुप्रयोग",
+      "bookPart": 2,
+      "topics": [
+        {
+          "topicNumber": "8.1",
+          "title": "Area under Simple Curves (Circles, Parabolas, Ellipses)",
+          "titleHindi": "साधारण वक्रों के अंतर्गत क्षेत्रफल"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 9,
+      "title": "Differential Equations",
+      "titleHindi": "अवकल समीकरण",
+      "bookPart": 2,
+      "topics": [
+        {
+          "topicNumber": "9.1",
+          "title": "Basic Concepts (Order and Degree of Differential Equations)",
+          "titleHindi": "कोटि एवं घात"
+        },
+        {
+          "topicNumber": "9.2",
+          "title": "General and Particular Solutions of a Differential Equation",
+          "titleHindi": "व्यापक एवं विशिष्ट हल"
+        },
+        {
+          "topicNumber": "9.3",
+          "title": "Methods of Solving First Order, First Degree Differential Equations (Separable Variables, Homogeneous, Linear Differential Equations)",
+          "titleHindi": "प्रथम कोटि एवं प्रथम घात के समीकरणों के हल"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 10,
+      "title": "Vector Algebra",
+      "titleHindi": "सदिश बीजगणित",
+      "bookPart": 2,
+      "topics": [
+        {
+          "topicNumber": "10.1",
+          "title": "Basic Concepts of Vectors, Position Vector, Direction Cosines and Direction Ratios",
+          "titleHindi": "सदिश, स्थिति सदिश एवं दिक्-कोसाइन"
+        },
+        {
+          "topicNumber": "10.2",
+          "title": "Types of Vectors (Zero, Unit, Coinitial, Collinear, Equal)",
+          "titleHindi": "सदिशों के प्रकार"
+        },
+        {
+          "topicNumber": "10.3",
+          "title": "Addition of Vectors and Multiplication of a Vector by a Scalar",
+          "titleHindi": "सदिशों का योग एवं अदिश गुणन"
+        },
+        {
+          "topicNumber": "10.4",
+          "title": "Section Formula and Components of a Vector",
+          "titleHindi": "सदिश के घटक"
+        },
+        {
+          "topicNumber": "10.5",
+          "title": "Product of Two Vectors (Scalar / Dot Product and Vector / Cross Product)",
+          "titleHindi": "दो सदिशों का अदिश एवं सदिश गुणनफल"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 11,
+      "title": "Three Dimensional Geometry",
+      "titleHindi": "त्रिविमीय ज्यामिति",
+      "bookPart": 2,
+      "topics": [
+        {
+          "topicNumber": "11.1",
+          "title": "Direction Cosines and Direction Ratios of a Line",
+          "titleHindi": "रेखा के दिक्-कोसाइन और दिक्-अनुपात"
+        },
+        {
+          "topicNumber": "11.2",
+          "title": "Equation of a Line in Space (Vector and Cartesian Forms)",
+          "titleHindi": "अंतरिक्ष में रेखा का समीकरण"
+        },
+        {
+          "topicNumber": "11.3",
+          "title": "Angle between Two Lines and Shortest Distance between Two Skew Lines",
+          "titleHindi": "दो रेखाओं के बीच की न्यूनतम दूरी"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 12,
+      "title": "Linear Programming",
+      "titleHindi": "रैखिक प्रोग्रामन",
+      "bookPart": 2,
+      "topics": [
+        {
+          "topicNumber": "12.1",
+          "title": "Linear Programming Problem and its Mathematical Formulation",
+          "titleHindi": "रैखिक प्रोग्रामन समस्या"
+        },
+        {
+          "topicNumber": "12.2",
+          "title": "Graphical Method of Solving Linear Programming Problems (Feasible/Infeasible Region, Corner Point Method)",
+          "titleHindi": "आलेखीय विधि एवं कोनीय बिंदु विधि"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 13,
+      "title": "Probability",
+      "titleHindi": "प्रायिकता",
+      "bookPart": 2,
+      "topics": [
+        {
+          "topicNumber": "13.1",
+          "title": "Conditional Probability and Properties",
+          "titleHindi": "सप्रतिबंध प्रायिकता"
+        },
+        {
+          "topicNumber": "13.2",
+          "title": "Multiplication Theorem on Probability and Independent Events",
+          "titleHindi": "प्रायिकता का गुणन नियम एवं स्वतंत्र घटनाएं"
+        },
+        {
+          "topicNumber": "13.3",
+          "title": "Bayes Theorem and Partition of a Sample Space",
+          "titleHindi": "बेज़ प्रमेय (Bayes Theorem)"
+        }
+      ]
+    }
+  ]
+}

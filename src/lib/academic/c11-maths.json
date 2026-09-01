@@ -1,0 +1,306 @@
+{
+  "name": "Mathematics",
+  "nameHindi": "गणित",
+  "code": "MATH-11",
+  "books": [
+    {
+      "title": "Mathematics Textbook for Class XI",
+      "titleHindi": "गणित कक्षा 11",
+      "partNumber": 1
+    }
+  ],
+  "chapters": [
+    {
+      "chapterNumber": 1,
+      "title": "Sets",
+      "titleHindi": "समुच्चय",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "1.1",
+          "title": "Sets and their Representations",
+          "titleHindi": "समुच्चय और उनका निरूपण"
+        },
+        {
+          "topicNumber": "1.2",
+          "title": "Empty, Finite and Infinite Sets",
+          "titleHindi": "रिक्त, परिमित और अपरिमित समुच्चय"
+        },
+        {
+          "topicNumber": "1.3",
+          "title": "Subsets, Power Set, Universal Set",
+          "titleHindi": "उपसमुच्चय एवं सार्वत्रिक समुच्चय"
+        },
+        {
+          "topicNumber": "1.4",
+          "title": "Venn Diagrams and Operations on Sets",
+          "titleHindi": "वेन आरेख और समुच्चयों पर संक्रियाएं"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 2,
+      "title": "Relations and Functions",
+      "titleHindi": "संबंध एवं फलन",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "2.1",
+          "title": "Cartesian Product of Sets",
+          "titleHindi": "समुच्चयों का कार्तीय गुणन"
+        },
+        {
+          "topicNumber": "2.2",
+          "title": "Relations",
+          "titleHindi": "संबंध"
+        },
+        {
+          "topicNumber": "2.3",
+          "title": "Functions and Types of Functions",
+          "titleHindi": "फलन और फलनों के प्रकार"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 3,
+      "title": "Trigonometric Functions",
+      "titleHindi": "त्रिकोणमितीय फलन",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "3.1",
+          "title": "Angles and Radian Measure",
+          "titleHindi": "कोण (डिग्री एवं रेडियन माप)"
+        },
+        {
+          "topicNumber": "3.2",
+          "title": "Trigonometric Functions and Signs",
+          "titleHindi": "त्रिकोणमितीय फलन, चिह्न एवं प्रांत/परिसर"
+        },
+        {
+          "topicNumber": "3.3",
+          "title": "Trigonometric Functions of Sum and Difference of Two Angles",
+          "titleHindi": "दो कोणों के योग और अंतर के त्रिकोणमितीय फलन"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 4,
+      "title": "Complex Numbers and Quadratic Equations",
+      "titleHindi": "सम्मिश्र संख्याएँ और द्विघातीय समीकरण",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "4.1",
+          "title": "Complex Numbers and Algebra of Complex Numbers",
+          "titleHindi": "सम्मिश्र संख्याएँ"
+        },
+        {
+          "topicNumber": "4.2",
+          "title": "Modulus and Conjugate of a Complex Number",
+          "titleHindi": "मापांक एवं संयुग्मी"
+        },
+        {
+          "topicNumber": "4.3",
+          "title": "Argand Plane and Quadratic Equations",
+          "titleHindi": "आर्गंड तल एवं द्विघात समीकरण"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 5,
+      "title": "Linear Inequalities",
+      "titleHindi": "रैखिक असमिकाएँ",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "5.1",
+          "title": "Inequalities and Algebraic Solutions in One Variable",
+          "titleHindi": "एक चर राशि के रैखिक असमिकाओं के बीजीय हल"
+        },
+        {
+          "topicNumber": "5.2",
+          "title": "Graphical Representation of Linear Inequalities",
+          "titleHindi": "रैखिक असमिकाओं का आलेखीय निरूपण"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 6,
+      "title": "Permutations and Combinations",
+      "titleHindi": "क्रमचय और संचय",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "6.1",
+          "title": "Fundamental Principle of Counting",
+          "titleHindi": "गणना का आधारभूत सिद्धांत"
+        },
+        {
+          "topicNumber": "6.2",
+          "title": "Permutations",
+          "titleHindi": "क्रमचय"
+        },
+        {
+          "topicNumber": "6.3",
+          "title": "Combinations",
+          "titleHindi": "संचय"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 7,
+      "title": "Binomial Theorem",
+      "titleHindi": "द्विपद प्रमेय",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "7.1",
+          "title": "Binomial Theorem for Positive Integral Indices",
+          "titleHindi": "धन पूर्णांकी घातांक के लिए द्विपद प्रमेय"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 8,
+      "title": "Sequences and Series",
+      "titleHindi": "अनुक्रम तथा श्रेणी",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "8.1",
+          "title": "Sequences and Geometric Progression (G.P.)",
+          "titleHindi": "गुणोत्तर श्रेणी (G.P.)"
+        },
+        {
+          "topicNumber": "8.2",
+          "title": "Relationship Between A.M. and G.M.",
+          "titleHindi": "समान्तर माध्य तथा गुणोत्तर माध्य में संबंध"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 9,
+      "title": "Straight Lines",
+      "titleHindi": "सरल रेखाएँ",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "9.1",
+          "title": "Slope of a Line",
+          "titleHindi": "रेखा की ढाल"
+        },
+        {
+          "topicNumber": "9.2",
+          "title": "Various Forms of Equation of a Line",
+          "titleHindi": "रेखा के समीकरण के विविध रूप"
+        },
+        {
+          "topicNumber": "9.3",
+          "title": "Distance of a Point From a Line",
+          "titleHindi": "एक बिंदु की रेखा से दूरी"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 10,
+      "title": "Conic Sections",
+      "titleHindi": "शंकु परिच्छेद",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "10.1",
+          "title": "Sections of a Cone and Circle",
+          "titleHindi": "वृत्त"
+        },
+        {
+          "topicNumber": "10.2",
+          "title": "Parabola",
+          "titleHindi": "परवलय"
+        },
+        {
+          "topicNumber": "10.3",
+          "title": "Ellipse",
+          "titleHindi": "दीर्घवृत्त"
+        },
+        {
+          "topicNumber": "10.4",
+          "title": "Hyperbola",
+          "titleHindi": "अतिपरवलय"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 11,
+      "title": "Introduction to Three Dimensional Geometry",
+      "titleHindi": "त्रिविमीय ज्यामिति का परिचय",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "11.1",
+          "title": "Coordinate Axes and Coordinate Planes in 3D",
+          "titleHindi": "त्रिविमीय अंतरिक्ष में निर्देशांक अक्ष"
+        },
+        {
+          "topicNumber": "11.2",
+          "title": "Coordinates of a Point and Distance Between Two Points",
+          "titleHindi": "दो बिंदुओं के बीच की दूरी"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 12,
+      "title": "Limits and Derivatives",
+      "titleHindi": "सीमा और अवकलज",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "12.1",
+          "title": "Intuitive Idea of Derivatives and Limits",
+          "titleHindi": "सीमा (Limits)"
+        },
+        {
+          "topicNumber": "12.2",
+          "title": "Derivatives of Polynomial and Trigonometric Functions",
+          "titleHindi": "अवकलज (Derivatives)"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 13,
+      "title": "Statistics",
+      "titleHindi": "सांख्यिकी",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "13.1",
+          "title": "Measures of Dispersion and Mean Deviation",
+          "titleHindi": "माध्य विचलन"
+        },
+        {
+          "topicNumber": "13.2",
+          "title": "Variance and Standard Deviation",
+          "titleHindi": "प्रसरण तथा मानक विचलन"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 14,
+      "title": "Probability",
+      "titleHindi": "प्रायिकता",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "14.1",
+          "title": "Events and Types of Events",
+          "titleHindi": "घटनाएँ एवं घटनाओं के प्रकार"
+        },
+        {
+          "topicNumber": "14.2",
+          "title": "Axiomatic Approach to Probability",
+          "titleHindi": "प्रायिकता का अभिगृहीतीय दृष्टिकोण"
+        }
+      ]
+    }
+  ]
+}

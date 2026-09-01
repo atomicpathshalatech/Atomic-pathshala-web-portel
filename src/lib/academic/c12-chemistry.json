@@ -1,0 +1,354 @@
+{
+  "name": "Chemistry",
+  "nameHindi": "रसायन विज्ञान",
+  "code": "CHE-12",
+  "books": [
+    {
+      "title": "Chemistry Part I",
+      "titleHindi": "रसायन विज्ञान भाग 1",
+      "partNumber": 1
+    },
+    {
+      "title": "Chemistry Part II",
+      "titleHindi": "रसायन विज्ञान भाग 2",
+      "partNumber": 2
+    }
+  ],
+  "chapters": [
+    {
+      "chapterNumber": 1,
+      "title": "Solutions",
+      "titleHindi": "विलयन",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "1.1",
+          "title": "Types of Solutions",
+          "titleHindi": "विलयनों के प्रकार"
+        },
+        {
+          "topicNumber": "1.2",
+          "title": "Expressing Concentration of Solutions (Molarity, Molality, Mole Fraction)",
+          "titleHindi": "विलयनों की सांद्रता व्यक्त करना"
+        },
+        {
+          "topicNumber": "1.3",
+          "title": "Solubility (Henry Law and Raoult Law)",
+          "titleHindi": "विलेयता एवं हेनरी का नियम"
+        },
+        {
+          "topicNumber": "1.4",
+          "title": "Vapour Pressure of Liquid Solutions and Ideal/Non-Ideal Solutions",
+          "titleHindi": "आदर्श एवं अनादर्श विलयन"
+        },
+        {
+          "topicNumber": "1.5",
+          "title": "Colligative Properties and Determination of Molar Mass (Relative Lowering, Elevation in BP, Depression in FP, Osmotic Pressure)",
+          "titleHindi": "अणुसंख्य गुणधर्म"
+        },
+        {
+          "topicNumber": "1.6",
+          "title": "Abnormal Molar Masses and Van't Hoff Factor",
+          "titleHindi": "असामान्य मोलर द्रव्यमान एवं वॉन्ट हॉफ कारक"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 2,
+      "title": "Electrochemistry",
+      "titleHindi": "विद्युतरसायन",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "2.1",
+          "title": "Electrochemical Cells and Galvanic Cells",
+          "titleHindi": "गैल्वैनी सेल"
+        },
+        {
+          "topicNumber": "2.2",
+          "title": "Nernst Equation and Applications",
+          "titleHindi": "नेर्नस्ट समीकरण"
+        },
+        {
+          "topicNumber": "2.3",
+          "title": "Conductance of Electrolytic Solutions (Molar Conductivity and Kohlrausch Law)",
+          "titleHindi": "कोलराउश का नियम एवं मोलर चालकता"
+        },
+        {
+          "topicNumber": "2.4",
+          "title": "Electrolytic Cells and Electrolysis (Faraday Laws of Electrolysis)",
+          "titleHindi": "फैराडे के विद्युत अपघटन के नियम"
+        },
+        {
+          "topicNumber": "2.5",
+          "title": "Batteries (Primary, Secondary), Fuel Cells and Corrosion",
+          "titleHindi": "बैटरी, ईंधन सेल एवं संक्षारण"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 3,
+      "title": "Chemical Kinetics",
+      "titleHindi": "रासायनिक बलगतिकी",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "3.1",
+          "title": "Rate of a Chemical Reaction",
+          "titleHindi": "रासायनिक अभिक्रिया का वेग"
+        },
+        {
+          "topicNumber": "3.2",
+          "title": "Factors Influencing Rate of a Reaction (Rate Law, Order and Molecularity)",
+          "titleHindi": "अभिक्रिया की कोटि एवं आण्विकता"
+        },
+        {
+          "topicNumber": "3.3",
+          "title": "Integrated Rate Equations (Zero Order and First Order Reactions, Half-life)",
+          "titleHindi": "समाकलित वेग समीकरण एवं अर्ध-आयु"
+        },
+        {
+          "topicNumber": "3.4",
+          "title": "Temperature Dependence of Rate of a Reaction (Arrhenius Equation, Activation Energy)",
+          "titleHindi": "आर्रेनियस समीकरण एवं सक्रियण ऊर्जा"
+        },
+        {
+          "topicNumber": "3.5",
+          "title": "Collision Theory of Chemical Reactions",
+          "titleHindi": "रासायनिक अभिक्रियाओं का संघट्ट सिद्धांत"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 4,
+      "title": "The d- and f-Block Elements",
+      "titleHindi": "d- एवं f- ब्लॉक के तत्व",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "4.1",
+          "title": "Position in the Periodic Table and Electronic Configurations",
+          "titleHindi": "आवर्त सारणी में स्थिति एवं इलेक्ट्रॉनिक विन्यास"
+        },
+        {
+          "topicNumber": "4.2",
+          "title": "General Properties of the Transition Elements (d-Block) (Atomic Sizes, Ionisation Enthalpies, Oxidation States, Magnetic Properties, Catalytic Properties)",
+          "titleHindi": "संक्रमण तत्वों के सामान्य गुणधर्म"
+        },
+        {
+          "topicNumber": "4.3",
+          "title": "Important Compounds of Transition Elements (KMnO4 and K2Cr2O7)",
+          "titleHindi": "पोटैशियम परमैंगनेट एवं डाइक्रोमेट"
+        },
+        {
+          "topicNumber": "4.4",
+          "title": "The Lanthanoids (Electronic Configuration, Lanthanoid Contraction, Oxidation States)",
+          "titleHindi": "लैन्थेनॉइड एवं लैन्थेनॉइड आकुंचन"
+        },
+        {
+          "topicNumber": "4.5",
+          "title": "The Actinoids and Comparison with Lanthanoids",
+          "titleHindi": "ऐक्टिनॉइड"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 5,
+      "title": "Coordination Compounds",
+      "titleHindi": "उपसहसंयोजन यौगिक",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "5.1",
+          "title": "Werner Theory of Coordination Compounds",
+          "titleHindi": "वार्नर का उपसहसंयोजन सिद्धांत"
+        },
+        {
+          "topicNumber": "5.2",
+          "title": "Definitions of Some Important Terms (Ligands, Coordination Number, Coordination Sphere)",
+          "titleHindi": "लिगन्ड एवं उपसहसंयोजन संख्या"
+        },
+        {
+          "topicNumber": "5.3",
+          "title": "Nomenclature of Coordination Compounds (IUPAC)",
+          "titleHindi": "IUPAC नामकरण"
+        },
+        {
+          "topicNumber": "5.4",
+          "title": "Isomerism in Coordination Compounds (Structural and Stereoisomerism)",
+          "titleHindi": "उपसहसंयोजन यौगिकों में समावयवता"
+        },
+        {
+          "topicNumber": "5.5",
+          "title": "Bonding in Coordination Compounds (Valence Bond Theory and Crystal Field Theory)",
+          "titleHindi": "संयोजकता आबंध एवं क्रिस्टल क्षेत्र सिद्धांत (CFT)"
+        },
+        {
+          "topicNumber": "5.6",
+          "title": "Bonding in Metal Carbonyls and Stability and Importance of Coordination Compounds",
+          "titleHindi": "धातु कार्बोनिल एवं अनुप्रयोग"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 6,
+      "title": "Haloalkanes and Haloarenes",
+      "titleHindi": "हैलोऐल्केन तथा हैलोऐरीन",
+      "bookPart": 2,
+      "topics": [
+        {
+          "topicNumber": "6.1",
+          "title": "Classification and Nomenclature",
+          "titleHindi": "वर्गीकरण एवं नामकरण"
+        },
+        {
+          "topicNumber": "6.2",
+          "title": "Nature of C-X Bond and Methods of Preparation",
+          "titleHindi": "C-X आबंध की प्रकृति एवं विरचन की विधियाँ"
+        },
+        {
+          "topicNumber": "6.3",
+          "title": "Physical Properties",
+          "titleHindi": "भौतिक गुणधर्म"
+        },
+        {
+          "topicNumber": "6.4",
+          "title": "Chemical Reactions (SN1, SN2 Mechanisms, Elimination Reactions, Reaction with Metals)",
+          "titleHindi": "रासायनिक अभिक्रियाएँ (SN1, SN2 क्रियाविधि)"
+        },
+        {
+          "topicNumber": "6.5",
+          "title": "Reactions of Haloarenes (Electrophilic Substitution, Nucleophilic Substitution)",
+          "titleHindi": "हैलोऐरीन की अभिक्रियाएँ"
+        },
+        {
+          "topicNumber": "6.6",
+          "title": "Polyhalogen Compounds (Dichloromethane, Chloroform, Iodoform, Freons, DDT)",
+          "titleHindi": "पॉलीहैलोजन यौगिक"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 7,
+      "title": "Alcohols, Phenols and Ethers",
+      "titleHindi": "ऐल्कोहॉल, फीनॉल एवं ईथर",
+      "bookPart": 2,
+      "topics": [
+        {
+          "topicNumber": "7.1",
+          "title": "Classification and Nomenclature",
+          "titleHindi": "वर्गीकरण एवं नामकरण"
+        },
+        {
+          "topicNumber": "7.2",
+          "title": "Structures of Functional Groups",
+          "titleHindi": "प्रकार्यात्मक समूहों की संरचना"
+        },
+        {
+          "topicNumber": "7.3",
+          "title": "Alcohols and Phenols: Preparation, Physical & Chemical Properties (Acidity, Esterification, Oxidation)",
+          "titleHindi": "ऐल्कोहॉल एवं फीनॉल (विरचन एवं गुणधर्म)"
+        },
+        {
+          "topicNumber": "7.4",
+          "title": "Commercially Important Alcohols (Methanol, Ethanol)",
+          "titleHindi": "व्यावसायिक रूप से महत्वपूर्ण ऐल्कोहॉल"
+        },
+        {
+          "topicNumber": "7.5",
+          "title": "Ethers: Preparation, Physical & Chemical Properties (Cleavage by HX)",
+          "titleHindi": "ईथर (विरचन एवं गुणधर्म)"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 8,
+      "title": "Aldehydes, Ketones and Carboxylic Acids",
+      "titleHindi": "ऐल्डिहाइड, कीटोन एवं कार्बोक्सिलिक अम्ल",
+      "bookPart": 2,
+      "topics": [
+        {
+          "topicNumber": "8.1",
+          "title": "Nomenclature and Structure of Carbonyl Group",
+          "titleHindi": "कार्बोनिल समूह की संरचना एवं नामकरण"
+        },
+        {
+          "topicNumber": "8.2",
+          "title": "Preparation of Aldehydes and Ketones",
+          "titleHindi": "ऐल्डिहाइड एवं कीटोन का विरचन"
+        },
+        {
+          "topicNumber": "8.3",
+          "title": "Physical & Chemical Properties (Nucleophilic Addition, Reduction, Oxidation, Aldol Condensation, Cannizzaro Reaction)",
+          "titleHindi": "रासायनिक अभिक्रियाएँ (ऐल्डोल, कैनिजारो)"
+        },
+        {
+          "topicNumber": "8.4",
+          "title": "Carboxylic Acids: Nomenclature, Structure of Carboxyl Group, Preparation",
+          "titleHindi": "कार्बोक्सिलिक अम्ल का विरचन"
+        },
+        {
+          "topicNumber": "8.5",
+          "title": "Chemical Reactions of Carboxylic Acids (Acidity, HVZ Reaction, Decarboxylation)",
+          "titleHindi": "कार्बोक्सिलिक अम्ल की रासायनिक अभिक्रियाएँ"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 9,
+      "title": "Amines",
+      "titleHindi": "ऐमीन",
+      "bookPart": 2,
+      "topics": [
+        {
+          "topicNumber": "9.1",
+          "title": "Structure, Classification and Nomenclature of Amines",
+          "titleHindi": "ऐमीन की संरचना एवं वर्गीकरण"
+        },
+        {
+          "topicNumber": "9.2",
+          "title": "Preparation of Amines (Hoffmann Bromamide, Gabriel Phthalimide Synthesis)",
+          "titleHindi": "ऐमीन के विरचन की विधियाँ"
+        },
+        {
+          "topicNumber": "9.3",
+          "title": "Physical & Chemical Properties (Basicity of Amines, Carbylamine Reaction, Hinsberg Test)",
+          "titleHindi": "ऐमीन के गुणधर्म एवं क्षारकता"
+        },
+        {
+          "topicNumber": "9.4",
+          "title": "Diazonium Salts: Preparation, Physical Properties and Chemical Reactions (Sandmeyer Reaction, Coupling Reactions)",
+          "titleHindi": "डाइऐज़ोनियम लवण एवं अभिक्रियाएँ"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 10,
+      "title": "Biomolecules",
+      "titleHindi": "जैव-अणु",
+      "bookPart": 2,
+      "topics": [
+        {
+          "topicNumber": "10.1",
+          "title": "Carbohydrates (Classification, Monosaccharides: Glucose & Fructose, Disaccharides, Polysaccharides)",
+          "titleHindi": "कार्बोहाइड्रेट (ग्लूकोस एवं फ्रक्टोस)"
+        },
+        {
+          "topicNumber": "10.2",
+          "title": "Proteins (Amino Acids, Peptide Bond, Structure of Proteins, Denaturation)",
+          "titleHindi": "प्रोटीन एवं ऐमीनो अम्ल"
+        },
+        {
+          "topicNumber": "10.3",
+          "title": "Enzymes and Vitamins (Classification and Deficiency Diseases)",
+          "titleHindi": "एंजाइम तथा विटामिन"
+        },
+        {
+          "topicNumber": "10.4",
+          "title": "Nucleic Acids (DNA and RNA, Chemical Composition, Double Helix Structure, Biological Functions)",
+          "titleHindi": "न्यूक्लिक अम्ल (DNA एवं RNA)"
+        }
+      ]
+    }
+  ]
+}

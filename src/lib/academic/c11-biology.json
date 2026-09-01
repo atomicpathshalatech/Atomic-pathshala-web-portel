@@ -1,0 +1,536 @@
+{
+  "name": "Biology",
+  "nameHindi": "जीव विज्ञान",
+  "code": "BIO-11",
+  "books": [
+    {
+      "title": "Biology Textbook for Class XI",
+      "titleHindi": "जीव विज्ञान कक्षा 11",
+      "partNumber": 1
+    }
+  ],
+  "chapters": [
+    {
+      "chapterNumber": 1,
+      "title": "The Living World",
+      "titleHindi": "जीव जगत",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "1.1",
+          "title": "What is Living?",
+          "titleHindi": "जीव क्या है?"
+        },
+        {
+          "topicNumber": "1.2",
+          "title": "Diversity in the Living World",
+          "titleHindi": "जीव जगत में विविधता"
+        },
+        {
+          "topicNumber": "1.3",
+          "title": "Taxonomic Categories",
+          "titleHindi": "वर्गिकी संवर्ग"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 2,
+      "title": "Biological Classification",
+      "titleHindi": "जीव जगत का वर्गीकरण",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "2.1",
+          "title": "Kingdom Monera",
+          "titleHindi": "किंगडम मोनेरा"
+        },
+        {
+          "topicNumber": "2.2",
+          "title": "Kingdom Protista",
+          "titleHindi": "किंगडम प्रोटिस्टा"
+        },
+        {
+          "topicNumber": "2.3",
+          "title": "Kingdom Fungi",
+          "titleHindi": "किंगडम फंजाई"
+        },
+        {
+          "topicNumber": "2.4",
+          "title": "Kingdom Plantae & Kingdom Animalia",
+          "titleHindi": "पादप एवं प्राणी जगत"
+        },
+        {
+          "topicNumber": "2.5",
+          "title": "Viruses, Viroids, Prions and Lichens",
+          "titleHindi": "वाइरस, वाइरॉइड, प्रीयॉन तथा लाइकेन"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 3,
+      "title": "Plant Kingdom",
+      "titleHindi": "वनस्पति जगत",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "3.1",
+          "title": "Algae",
+          "titleHindi": "शैवाल"
+        },
+        {
+          "topicNumber": "3.2",
+          "title": "Bryophytes",
+          "titleHindi": "ब्रायोफाइटा"
+        },
+        {
+          "topicNumber": "3.3",
+          "title": "Pteridophytes",
+          "titleHindi": "टेरिडोफाइटा"
+        },
+        {
+          "topicNumber": "3.4",
+          "title": "Gymnosperms",
+          "titleHindi": "जिम्नोस्पर्म (अनावृतबीजी)"
+        },
+        {
+          "topicNumber": "3.5",
+          "title": "Angiosperms",
+          "titleHindi": "एंजियोस्पर्म (आवृतबीजी)"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 4,
+      "title": "Animal Kingdom",
+      "titleHindi": "प्राणी जगत",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "4.1",
+          "title": "Basis of Classification (Levels, Symmetry, Coelom, Segmentation)",
+          "titleHindi": "वर्गीकरण का आधार"
+        },
+        {
+          "topicNumber": "4.2",
+          "title": "Classification of Animals (Non-chordates to Chordates)",
+          "titleHindi": "प्राणियों का वर्गीकरण"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 5,
+      "title": "Morphology of Flowering Plants",
+      "titleHindi": "पुष्पी पादपों की आकारिकी",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "5.1",
+          "title": "The Root and The Stem",
+          "titleHindi": "मूल (जड़) तथा तना"
+        },
+        {
+          "topicNumber": "5.2",
+          "title": "The Leaf",
+          "titleHindi": "पत्ती"
+        },
+        {
+          "topicNumber": "5.3",
+          "title": "The Inflorescence",
+          "titleHindi": "पुष्पक्रम"
+        },
+        {
+          "topicNumber": "5.4",
+          "title": "The Flower, Fruit and Seed",
+          "titleHindi": "पुष्प, फल एवं बीज"
+        },
+        {
+          "topicNumber": "5.5",
+          "title": "Semi-technical Description of a Typical Flowering Plant and Families",
+          "titleHindi": "प्रमुख पादप कुल"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 6,
+      "title": "Anatomy of Flowering Plants",
+      "titleHindi": "पुष्पी पादपों का शारीर",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "6.1",
+          "title": "The Tissue System (Epidermal, Ground, Vascular)",
+          "titleHindi": "ऊतक तंत्र"
+        },
+        {
+          "topicNumber": "6.2",
+          "title": "Anatomy of Dicotyledonous and Monocotyledonous Plants (Root, Stem, Leaf)",
+          "titleHindi": "द्विबीजपत्री एवं एकबीजपत्री पादपों का शारीर"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 7,
+      "title": "Structural Organisation in Animals",
+      "titleHindi": "प्राणियों में संरचनात्मक संगठन",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "7.1",
+          "title": "Animal Tissues (Epithelial, Connective, Muscular, Neural)",
+          "titleHindi": "प्राणी ऊतक"
+        },
+        {
+          "topicNumber": "7.2",
+          "title": "Morphology and Anatomy of Frog",
+          "titleHindi": "मेंढक की आकारिकी एवं शारीरिकी"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 8,
+      "title": "Cell: The Unit of Life",
+      "titleHindi": "कोशिका: जीवन की इकाई",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "8.1",
+          "title": "What is a Cell? and Cell Theory",
+          "titleHindi": "कोशिका क्या है? एवं कोशिका सिद्धांत"
+        },
+        {
+          "topicNumber": "8.2",
+          "title": "An Overview of Cell and Prokaryotic Cells",
+          "titleHindi": "प्रोकैरियोटिक कोशिकाएं"
+        },
+        {
+          "topicNumber": "8.3",
+          "title": "Eukaryotic Cells (Membrane, Wall, Organelles, Nucleus)",
+          "titleHindi": "यूकैरियोटिक कोशिकाएं एवं कोशिकांग"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 9,
+      "title": "Biomolecules",
+      "titleHindi": "जैव अणु",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "9.1",
+          "title": "How to Analyse Chemical Composition?",
+          "titleHindi": "रासायनिक संघटन का विश्लेषण"
+        },
+        {
+          "topicNumber": "9.2",
+          "title": "Primary and Secondary Metabolites",
+          "titleHindi": "प्राथमिक एवं द्वितीयक उपापचयी"
+        },
+        {
+          "topicNumber": "9.3",
+          "title": "Biomacromolecules, Proteins, Polysaccharides, Nucleic Acids",
+          "titleHindi": "प्रोटीन, पॉलीसैकेराइड एवं न्यूक्लिक अम्ल"
+        },
+        {
+          "topicNumber": "9.4",
+          "title": "Structure of Proteins and Nature of Bond Linking Monomers",
+          "titleHindi": "प्रोटीन की संरचना"
+        },
+        {
+          "topicNumber": "9.5",
+          "title": "Dynamic State of Body Constituents – Concept of Metabolism",
+          "titleHindi": "उपापचय की संकल्पना"
+        },
+        {
+          "topicNumber": "9.6",
+          "title": "Enzymes (Chemical Reactions, Mechanism, Factors, Classification & Co-factors)",
+          "titleHindi": "एंजाइम एवं क्रियाविधि"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 10,
+      "title": "Cell Cycle and Cell Division",
+      "titleHindi": "कोशिका चक्र और कोशिका विभाजन",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "10.1",
+          "title": "Cell Cycle and Phases of Cell Cycle",
+          "titleHindi": "कोशिका चक्र की प्रावस्थाएँ"
+        },
+        {
+          "topicNumber": "10.2",
+          "title": "M Phase (Mitosis, Stages & Significance)",
+          "titleHindi": "समसूत्री विभाजन (माइटोसिस)"
+        },
+        {
+          "topicNumber": "10.3",
+          "title": "Meiosis (Meiosis I, Meiosis II & Significance)",
+          "titleHindi": "अर्धसूत्री विभाजन (मियोसिस)"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 11,
+      "title": "Photosynthesis in Higher Plants",
+      "titleHindi": "उच्च पादपों में प्रकाश-संश्लेषण",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "11.1",
+          "title": "What do we Know? and Early Experiments",
+          "titleHindi": "प्रकाश संश्लेषण के प्रारंभिक प्रयोग"
+        },
+        {
+          "topicNumber": "11.2",
+          "title": "Where does Photosynthesis take place? Pigments Involved",
+          "titleHindi": "प्रकाश संश्लेषण स्थल एवं वर्णक"
+        },
+        {
+          "topicNumber": "11.3",
+          "title": "Light Reaction and Photophosphorylation",
+          "titleHindi": "प्रकाशिक अभिक्रिया एवं फोटोफॉस्फोरिलीकरण"
+        },
+        {
+          "topicNumber": "11.4",
+          "title": "Where are ATP and NADPH Used? (Calvin Cycle)",
+          "titleHindi": "केल्विन चक्र (C3 पथ)"
+        },
+        {
+          "topicNumber": "11.5",
+          "title": "The C4 Pathway and Photorespiration",
+          "titleHindi": "C4 पथ एवं प्रकाश श्वसन"
+        },
+        {
+          "topicNumber": "11.6",
+          "title": "Factors affecting Photosynthesis",
+          "titleHindi": "प्रकाश संश्लेषण को प्रभावित करने वाले कारक"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 12,
+      "title": "Respiration in Plants",
+      "titleHindi": "पादप में श्वसन",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "12.1",
+          "title": "Do Plants Breathe?",
+          "titleHindi": "क्या पौधे सांस लेते हैं?"
+        },
+        {
+          "topicNumber": "12.2",
+          "title": "Glycolysis",
+          "titleHindi": "ग्लाइकोलिसिस"
+        },
+        {
+          "topicNumber": "12.3",
+          "title": "Fermentation",
+          "titleHindi": "किण्वन"
+        },
+        {
+          "topicNumber": "12.4",
+          "title": "Aerobic Respiration (TCA Cycle / Krebs Cycle)",
+          "titleHindi": "क्रेब्स चक्र"
+        },
+        {
+          "topicNumber": "12.5",
+          "title": "Electron Transport System (ETS) and Oxidative Phosphorylation",
+          "titleHindi": "इलेक्ट्रॉन परिवहन तंत्र"
+        },
+        {
+          "topicNumber": "12.6",
+          "title": "Amphibolic Pathway and Respiratory Quotient",
+          "titleHindi": "श्वसन गुणांक"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 13,
+      "title": "Plant Growth and Development",
+      "titleHindi": "पादप वृद्धि एवं परिवर्धन",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "13.1",
+          "title": "Growth, Differentiation, Dedifferentiation and Redifferentiation",
+          "titleHindi": "वृद्धि एवं विभेदन"
+        },
+        {
+          "topicNumber": "13.2",
+          "title": "Development and Plasticity",
+          "titleHindi": "परिवर्धन एवं सुनम्यता"
+        },
+        {
+          "topicNumber": "13.3",
+          "title": "Plant Growth Regulators (Auxins, Gibberellins, Cytokinins, Ethylene, ABA)",
+          "titleHindi": "पादप वृद्धि नियामक"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 14,
+      "title": "Breathing and Exchange of Gases",
+      "titleHindi": "श्वसन और गैसों का विनिमय",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "14.1",
+          "title": "Respiratory Organs and Human Respiratory System",
+          "titleHindi": "मानव श्वसन तंत्र"
+        },
+        {
+          "topicNumber": "14.2",
+          "title": "Mechanism of Breathing and Respiratory Volumes",
+          "titleHindi": "श्वसन की क्रियाविधि एवं आयतन"
+        },
+        {
+          "topicNumber": "14.3",
+          "title": "Exchange of Gases and Transport of Gases",
+          "titleHindi": "गैसों का विनिमय एवं परिवहन"
+        },
+        {
+          "topicNumber": "14.4",
+          "title": "Regulation of Respiration and Disorders of Respiratory System",
+          "titleHindi": "श्वसन का नियमन एवं विकार"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 15,
+      "title": "Body Fluids and Circulation",
+      "titleHindi": "शरीर द्रव तथा परिसंचरण",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "15.1",
+          "title": "Blood, Blood Groups and Lymph",
+          "titleHindi": "रक्त, रक्त समूह एवं लसिका"
+        },
+        {
+          "topicNumber": "15.2",
+          "title": "Circulatory Pathways and Human Circulatory System",
+          "titleHindi": "मानव परिसंचरण तंत्र"
+        },
+        {
+          "topicNumber": "15.3",
+          "title": "Cardiac Cycle and Electrocardiograph (ECG)",
+          "titleHindi": "हृद चक्र एवं ईसीजी"
+        },
+        {
+          "topicNumber": "15.4",
+          "title": "Double Circulation, Regulation and Disorders",
+          "titleHindi": "द्विसंचरण एवं विकार"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 16,
+      "title": "Excretory Products and their Elimination",
+      "titleHindi": "उत्सर्जी उत्पाद एवं उनका निष्कासन",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "16.1",
+          "title": "Human Excretory System",
+          "titleHindi": "मानव उत्सर्जन तंत्र"
+        },
+        {
+          "topicNumber": "16.2",
+          "title": "Urine Formation and Function of the Tubules",
+          "titleHindi": "मूत्र निर्माण एवं नलिकाओं के कार्य"
+        },
+        {
+          "topicNumber": "16.3",
+          "title": "Mechanism of Concentration of the Filtrate (Counter Current)",
+          "titleHindi": "निस्यंद को सांद्र करने की क्रियाविधि"
+        },
+        {
+          "topicNumber": "16.4",
+          "title": "Regulation of Kidney Function (RAAS, ADH, ANF)",
+          "titleHindi": "वृक्क कार्यिकी का नियमन"
+        },
+        {
+          "topicNumber": "16.5",
+          "title": "Micturition and Disorders of Excretory System",
+          "titleHindi": "उत्सर्जन तंत्र के विकार"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 17,
+      "title": "Locomotion and Movement",
+      "titleHindi": "गमन एवं संचलन",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "17.1",
+          "title": "Types of Movement and Muscle",
+          "titleHindi": "पेशी एवं संचलन के प्रकार"
+        },
+        {
+          "topicNumber": "17.2",
+          "title": "Mechanism of Muscle Contraction",
+          "titleHindi": "पेशी संकुचन की क्रियाविधि"
+        },
+        {
+          "topicNumber": "17.3",
+          "title": "Skeletal System",
+          "titleHindi": "कंकाल तंत्र"
+        },
+        {
+          "topicNumber": "17.4",
+          "title": "Joints and Disorders of Muscular and Skeletal System",
+          "titleHindi": "संधियाँ एवं विकार"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 18,
+      "title": "Neural Control and Coordination",
+      "titleHindi": "तंत्रिकीय नियंत्रण एवं समन्वय",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "18.1",
+          "title": "Neural System and Human Neural System",
+          "titleHindi": "मानव तंत्रिका तंत्र"
+        },
+        {
+          "topicNumber": "18.2",
+          "title": "Neuron as Structural and Functional Unit (Impulse Conduction)",
+          "titleHindi": "न्यूरॉन एवं तंत्रिका आवेग का संचरण"
+        },
+        {
+          "topicNumber": "18.3",
+          "title": "Central Neural System (Forebrain, Midbrain, Hindbrain)",
+          "titleHindi": "केंद्रीय तंत्रिका तंत्र"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 19,
+      "title": "Chemical Coordination and Integration",
+      "titleHindi": "रासायनिक समन्वय तथा एकीकरण",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "19.1",
+          "title": "Endocrine Glands and Hormones",
+          "titleHindi": "अंतःस्रावी ग्रंथियां एवं हॉर्मोन"
+        },
+        {
+          "topicNumber": "19.2",
+          "title": "Human Endocrine System (Pituitary, Thyroid, Adrenal, Pancreas, Gonads)",
+          "titleHindi": "मानव अंतःस्रावी तंत्र"
+        },
+        {
+          "topicNumber": "19.3",
+          "title": "Hormones of Other Organs and Mechanism of Hormone Action",
+          "titleHindi": "हॉर्मोन क्रिया की क्रियाविधि"
+        }
+      ]
+    }
+  ]
+}

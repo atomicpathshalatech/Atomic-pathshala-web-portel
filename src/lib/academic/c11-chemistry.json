@@ -1,0 +1,406 @@
+{
+  "name": "Chemistry",
+  "nameHindi": "रसायन विज्ञान",
+  "code": "CHE-11",
+  "books": [
+    {
+      "title": "Chemistry Part I",
+      "titleHindi": "रसायन विज्ञान भाग 1",
+      "partNumber": 1
+    },
+    {
+      "title": "Chemistry Part II",
+      "titleHindi": "रसायन विज्ञान भाग 2",
+      "partNumber": 2
+    }
+  ],
+  "chapters": [
+    {
+      "chapterNumber": 1,
+      "title": "Some Basic Concepts of Chemistry",
+      "titleHindi": "रसायन विज्ञान की कुछ मूल अवधारणाएँ",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "1.1",
+          "title": "Importance of Chemistry",
+          "titleHindi": "रसायन विज्ञान का महत्व"
+        },
+        {
+          "topicNumber": "1.2",
+          "title": "Nature of Matter and States of Matter",
+          "titleHindi": "द्रव्य की प्रकृति"
+        },
+        {
+          "topicNumber": "1.3",
+          "title": "Properties of Matter and Their Measurement",
+          "titleHindi": "द्रव्य के गुणधर्म और उनका मापन"
+        },
+        {
+          "topicNumber": "1.4",
+          "title": "Uncertainty in Measurement (Scientific Notation, Significant Figures)",
+          "titleHindi": "मापन में अनिश्चितता"
+        },
+        {
+          "topicNumber": "1.5",
+          "title": "Laws of Chemical Combinations",
+          "titleHindi": "रासायनिक संयोजन के नियम"
+        },
+        {
+          "topicNumber": "1.6",
+          "title": "Dalton Atomic Theory",
+          "titleHindi": "डाल्टन का परमाणु सिद्धांत"
+        },
+        {
+          "topicNumber": "1.7",
+          "title": "Atomic and Molecular Masses, Mole Concept and Molar Masses",
+          "titleHindi": "परमाणु द्रव्यमान एवं मोल संकल्पना"
+        },
+        {
+          "topicNumber": "1.8",
+          "title": "Percentage Composition and Empirical/Molecular Formula",
+          "titleHindi": "प्रतिशत संघटन एवं मूलानुपाती सूत्र"
+        },
+        {
+          "topicNumber": "1.9",
+          "title": "Stoichiometry and Stoichiometric Calculations (Limiting Reagent, Molarity, Molality)",
+          "titleHindi": "रससमीकरणमिति एवं गणनाएँ"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 2,
+      "title": "Structure of Atom",
+      "titleHindi": "परमाणु की संरचना",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "2.1",
+          "title": "Discovery of Sub-atomic Particles (Electron, Proton, Neutron)",
+          "titleHindi": "अपरमाण्विक कणों की खोज"
+        },
+        {
+          "topicNumber": "2.2",
+          "title": "Atomic Models (Thomson, Rutherford Model)",
+          "titleHindi": "परमाणु मॉडल"
+        },
+        {
+          "topicNumber": "2.3",
+          "title": "Developments Leading to the Bohr Model of Atom (Wave Nature, Photoelectric Effect)",
+          "titleHindi": "बोहर मॉडल की पृष्ठभूमि"
+        },
+        {
+          "topicNumber": "2.4",
+          "title": "Bohr Model for Hydrogen Atom",
+          "titleHindi": "हाइड्रोजन परमाणु के लिए बोहर का मॉडल"
+        },
+        {
+          "topicNumber": "2.5",
+          "title": "Towards Quantum Mechanical Model (Dual Behavior of Matter, Heisenberg Uncertainty Principle)",
+          "titleHindi": "क्वांटम यांत्रिकी मॉडल"
+        },
+        {
+          "topicNumber": "2.6",
+          "title": "Quantum Mechanical Model of Atom (Quantum Numbers, Orbitals, Electronic Configuration)",
+          "titleHindi": "परमाणु का क्वांटम यांत्रिक मॉडल एवं इलेक्ट्रॉनिक विन्यास"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 3,
+      "title": "Classification of Elements and Periodicity in Properties",
+      "titleHindi": "तत्वों का वर्गीकरण एवं गुणधर्मों में आवर्तिता",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "3.1",
+          "title": "Why do we need to classify Elements?",
+          "titleHindi": "तत्वों के वर्गीकरण की आवश्यकता"
+        },
+        {
+          "topicNumber": "3.2",
+          "title": "Genesis of Periodic Classification (Mendeleev Periodic Table)",
+          "titleHindi": "आवर्त वर्गीकरण की उत्पत्ति"
+        },
+        {
+          "topicNumber": "3.3",
+          "title": "Modern Periodic Law and Present Form of the Periodic Table",
+          "titleHindi": "आधुनिक आवर्त नियम एवं आवर्त सारणी"
+        },
+        {
+          "topicNumber": "3.4",
+          "title": "Electronic Configurations of Elements and the Periodic Table (s, p, d, f blocks)",
+          "titleHindi": "इलेक्ट्रॉनिक विन्यास और आवर्त सारणी"
+        },
+        {
+          "topicNumber": "3.5",
+          "title": "Periodic Trends in Properties of Elements (Atomic Radii, Ionization Enthalpy, Electron Gain Enthalpy, Electronegativity)",
+          "titleHindi": "तत्वों के गुणों में आवर्ती प्रवृत्तियां"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 4,
+      "title": "Chemical Bonding and Molecular Structure",
+      "titleHindi": "रासायनिक आबंधन तथा आण्विक संरचना",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "4.1",
+          "title": "Kossel-Lewis Approach to Chemical Bonding and Octet Rule",
+          "titleHindi": "रासायनिक आबंधन की कौसेल-लुईस संकल्पना"
+        },
+        {
+          "topicNumber": "4.2",
+          "title": "Ionic or Electrovalent Bond and Lattice Enthalpy",
+          "titleHindi": "आयनिक या वैद्युतसंयोजी आबंध"
+        },
+        {
+          "topicNumber": "4.3",
+          "title": "Bond Parameters (Bond Length, Angle, Enthalpy, Order, Polarity)",
+          "titleHindi": "आबंध प्राचल एवं द्विध्रुव आघूर्ण"
+        },
+        {
+          "topicNumber": "4.4",
+          "title": "The Valence Shell Electron Pair Repulsion (VSEPR) Theory",
+          "titleHindi": "VSEPR सिद्धांत"
+        },
+        {
+          "topicNumber": "4.5",
+          "title": "Valence Bond Theory (VBT) and Orbital Overlap",
+          "titleHindi": "संयोजकता आबंध सिद्धांत"
+        },
+        {
+          "topicNumber": "4.6",
+          "title": "Hybridisation (sp, sp2, sp3, sp3d, sp3d2)",
+          "titleHindi": "संकरण"
+        },
+        {
+          "topicNumber": "4.7",
+          "title": "Molecular Orbital Theory (MOT) and Energy Level Diagrams",
+          "titleHindi": "आण्विक कक्षक सिद्धांत"
+        },
+        {
+          "topicNumber": "4.8",
+          "title": "Hydrogen Bonding",
+          "titleHindi": "हाइड्रोजन आबंधन"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 5,
+      "title": "Thermodynamics",
+      "titleHindi": "ऊष्मागतिकी",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "5.1",
+          "title": "Thermodynamic Terms (System, Surroundings, Types of Systems, State Functions)",
+          "titleHindi": "ऊष्मागतिक पद एवं निकाय"
+        },
+        {
+          "topicNumber": "5.2",
+          "title": "Applications: Work, Heat, Internal Energy and First Law of Thermodynamics",
+          "titleHindi": "ऊष्मागतिकी का प्रथम नियम"
+        },
+        {
+          "topicNumber": "5.3",
+          "title": "Enthalpy (H) and Heat Capacities (Cp, Cv)",
+          "titleHindi": "एन्थैल्पी एवं ऊष्मा धारिता"
+        },
+        {
+          "topicNumber": "5.4",
+          "title": "Measurement of Delta U and Delta H: Calorimetry",
+          "titleHindi": "कैलोरीमिति"
+        },
+        {
+          "topicNumber": "5.5",
+          "title": "Enthalpy Changes During Phase Transformations and Standard Enthalpies of Reactions",
+          "titleHindi": "अभिक्रिया की मानक एन्थैल्पी"
+        },
+        {
+          "topicNumber": "5.6",
+          "title": "Hess Law of Constant Heat Summation",
+          "titleHindi": "हेस का स्थिर ऊष्मा संकलन नियम"
+        },
+        {
+          "topicNumber": "5.7",
+          "title": "Spontaneity, Entropy (S), and Gibbs Energy Change (Delta G)",
+          "titleHindi": "स्वतःप्रवर्तिता, एन्ट्रॉपी एवं गिब्ज़ ऊर्जा"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 6,
+      "title": "Equilibrium",
+      "titleHindi": "साम्यावस्था",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "6.1",
+          "title": "Equilibrium in Physical Processes",
+          "titleHindi": "भौतिक प्रक्रमों में साम्यावस्था"
+        },
+        {
+          "topicNumber": "6.2",
+          "title": "Equilibrium in Chemical Processes – Dynamic Equilibrium",
+          "titleHindi": "रासायनिक प्रक्रमों में साम्यावस्था"
+        },
+        {
+          "topicNumber": "6.3",
+          "title": "Law of Chemical Equilibrium and Equilibrium Constant (Kc, Kp)",
+          "titleHindi": "रासायनिक साम्य का नियम एवं साम्य स्थिरांक"
+        },
+        {
+          "topicNumber": "6.4",
+          "title": "Homogeneous and Heterogeneous Equilibria",
+          "titleHindi": "समांगी एवं विषमांगी साम्यावस्था"
+        },
+        {
+          "topicNumber": "6.5",
+          "title": "Applications of Equilibrium Constants and Relationship with Delta G",
+          "titleHindi": "साम्य स्थिरांक के अनुप्रयोग"
+        },
+        {
+          "topicNumber": "6.6",
+          "title": "Factors Affecting Equilibria: Le Chatelier Principle",
+          "titleHindi": "ला-शातेलिए का सिद्धांत"
+        },
+        {
+          "topicNumber": "6.7",
+          "title": "Ionic Equilibrium in Solution (Acids, Bases, Salts, pH Scale)",
+          "titleHindi": "आयनिक साम्य, अम्ल-क्षार एवं pH पैमाना"
+        },
+        {
+          "topicNumber": "6.8",
+          "title": "Ionization of Acids and Bases, Buffer Solutions",
+          "titleHindi": "अम्ल एवं क्षारों का आयनन तथा बफर विलयन"
+        },
+        {
+          "topicNumber": "6.9",
+          "title": "Solubility Equilibria of Sparingly Soluble Salts and Solubility Product (Ksp)",
+          "titleHindi": "विलेयता गुणनफल"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 7,
+      "title": "Redox Reactions",
+      "titleHindi": "अपचयोपचय (रेडॉक्स) अभिक्रियाएँ",
+      "bookPart": 2,
+      "topics": [
+        {
+          "topicNumber": "7.1",
+          "title": "Classical Idea of Redox Reactions (Oxidation and Reduction)",
+          "titleHindi": "रेडॉक्स अभिक्रियाओं की पारंपरिक धारणा"
+        },
+        {
+          "topicNumber": "7.2",
+          "title": "Redox Reactions in Terms of Electron Transfer Reactions",
+          "titleHindi": "इलेक्ट्रॉन स्थानांतरण अभिक्रियाओं के रूप में रेडॉक्स"
+        },
+        {
+          "topicNumber": "7.3",
+          "title": "Oxidation Number and Rules for Determination",
+          "titleHindi": "ऑक्सीकरण संख्या"
+        },
+        {
+          "topicNumber": "7.4",
+          "title": "Balancing of Redox Reactions (Oxidation Number Method & Ion-Electron Method)",
+          "titleHindi": "रेडॉक्स अभिक्रियाओं का संतुलन"
+        },
+        {
+          "topicNumber": "7.5",
+          "title": "Redox Reactions and Electrode Processes (Electrochemical Cells)",
+          "titleHindi": "रेडॉक्स अभिक्रियाएँ एवं इलेक्ट्रोड प्रक्रम"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 8,
+      "title": "Organic Chemistry – Some Basic Principles and Techniques",
+      "titleHindi": "कार्बनिक रसायन – कुछ आधारभूत सिद्धांत तथा तकनीकें",
+      "bookPart": 2,
+      "topics": [
+        {
+          "topicNumber": "8.1",
+          "title": "General Introduction and Tetravalence of Carbon",
+          "titleHindi": "कार्बन की चतुःसंयोजकता"
+        },
+        {
+          "topicNumber": "8.2",
+          "title": "Structural Representations of Organic Compounds",
+          "titleHindi": "कार्बनिक यौगिकों का संरचनात्मक निरूपण"
+        },
+        {
+          "topicNumber": "8.3",
+          "title": "Classification of Organic Compounds",
+          "titleHindi": "कार्बनिक यौगिकों का वर्गीकरण"
+        },
+        {
+          "topicNumber": "8.4",
+          "title": "Nomenclature of Organic Compounds (IUPAC System)",
+          "titleHindi": "IUPAC नामकरण पद्धति"
+        },
+        {
+          "topicNumber": "8.5",
+          "title": "Isomerism (Structural and Stereoisomerism)",
+          "titleHindi": "समावयवता"
+        },
+        {
+          "topicNumber": "8.6",
+          "title": "Fundamental Concepts in Organic Reaction Mechanisms (Inductive, Electromeric, Resonance, Hyperconjugation)",
+          "titleHindi": "इलेक्ट्रॉनिक विस्थापन प्रभाव एवं अभिक्रिया क्रियाविधि"
+        },
+        {
+          "topicNumber": "8.7",
+          "title": "Methods of Purification of Organic Compounds",
+          "titleHindi": "कार्बनिक यौगिकों के शोधन की विधियाँ"
+        },
+        {
+          "topicNumber": "8.8",
+          "title": "Qualitative and Quantitative Elemental Analysis of Organic Compounds",
+          "titleHindi": "गुणात्मक एवं मात्रात्मक विश्लेषण"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 9,
+      "title": "Hydrocarbons",
+      "titleHindi": "हाइड्रोकार्बन",
+      "bookPart": 2,
+      "topics": [
+        {
+          "topicNumber": "9.1",
+          "title": "Classification of Hydrocarbons",
+          "titleHindi": "हाइड्रोकार्बन का वर्गीकरण"
+        },
+        {
+          "topicNumber": "9.2",
+          "title": "Alkanes (Nomenclature, Preparation, Physical & Chemical Properties, Conformations)",
+          "titleHindi": "ऐल्केन (विरचन, गुणधर्म एवं संरूपण)"
+        },
+        {
+          "topicNumber": "9.3",
+          "title": "Alkenes (Nomenclature, Geometrical Isomerism, Preparation, Properties, Markovnikov Rule)",
+          "titleHindi": "ऐल्कीन (विरचन, मार्कोनीकॉफ नियम एवं गुणधर्म)"
+        },
+        {
+          "topicNumber": "9.4",
+          "title": "Alkynes (Nomenclature, Preparation, Physical & Chemical Properties, Acidity)",
+          "titleHindi": "ऐल्काइन (विरचन एवं अम्लीय प्रकृति)"
+        },
+        {
+          "topicNumber": "9.5",
+          "title": "Aromatic Hydrocarbons (Benzene: Structure, Aromaticity, Electrophilic Substitution Mechanism)",
+          "titleHindi": "ऐरोमैटिक हाइड्रोकार्बन एवं बेन्जीन"
+        },
+        {
+          "topicNumber": "9.6",
+          "title": "Carcinogenicity and Toxicity",
+          "titleHindi": "कैंसरजनीयता तथा विषाक्तता"
+        }
+      ]
+    }
+  ]
+}

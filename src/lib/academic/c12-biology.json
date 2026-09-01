@@ -1,0 +1,428 @@
+{
+  "name": "Biology",
+  "nameHindi": "जीव विज्ञान",
+  "code": "BIO-12",
+  "books": [
+    {
+      "title": "Biology Textbook for Class XII",
+      "titleHindi": "जीव विज्ञान कक्षा 12",
+      "partNumber": 1
+    }
+  ],
+  "chapters": [
+    {
+      "chapterNumber": 1,
+      "title": "Sexual Reproduction in Flowering Plants",
+      "titleHindi": "पुष्पी पादपों में लैंगिक प्रजनन",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "1.1",
+          "title": "Flower – A Fascinating Organ of Angiosperms",
+          "titleHindi": "पुष्प – आवृतबीजी का आकर्षक अंग"
+        },
+        {
+          "topicNumber": "1.2",
+          "title": "Pre-fertilisation: Structures and Events (Microsporogenesis, Megasporogenesis, Pollination)",
+          "titleHindi": "निषेचन-पूर्व: संरचनाएँ एवं घटनाएँ"
+        },
+        {
+          "topicNumber": "1.3",
+          "title": "Double Fertilisation",
+          "titleHindi": "दोहरा निषेचन"
+        },
+        {
+          "topicNumber": "1.4",
+          "title": "Post-fertilisation: Structures and Events (Endosperm, Embryo, Seed, Fruit)",
+          "titleHindi": "निषेचन-पश्च: संरचनाएँ एवं घटनाएँ"
+        },
+        {
+          "topicNumber": "1.5",
+          "title": "Apomixis and Polyembryony",
+          "titleHindi": "असंगजनन एवं बहुभ्रूणता"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 2,
+      "title": "Human Reproduction",
+      "titleHindi": "मानव जनन",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "2.1",
+          "title": "The Male Reproductive System",
+          "titleHindi": "पुरुष जनन तंत्र"
+        },
+        {
+          "topicNumber": "2.2",
+          "title": "The Female Reproductive System",
+          "titleHindi": "स्त्री जनन तंत्र"
+        },
+        {
+          "topicNumber": "2.3",
+          "title": "Gametogenesis (Spermatogenesis and Oogenesis)",
+          "titleHindi": "युग्मकजनन (शुक्राणुजनन एवं अंडाणुजनन)"
+        },
+        {
+          "topicNumber": "2.4",
+          "title": "Menstrual Cycle",
+          "titleHindi": "आर्तव चक्र"
+        },
+        {
+          "topicNumber": "2.5",
+          "title": "Fertilisation and Implantation",
+          "titleHindi": "निषेचन एवं अंतरोपण"
+        },
+        {
+          "topicNumber": "2.6",
+          "title": "Pregnancy and Embryonic Development, Parturition and Lactation",
+          "titleHindi": "सगर्भता, भ्रूणीय परिवर्धन, प्रसव एवं दुग्धस्रवण"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 3,
+      "title": "Reproductive Health",
+      "titleHindi": "जनन स्वास्थ्य",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "3.1",
+          "title": "Reproductive Health – Problems and Strategies",
+          "titleHindi": "जनन स्वास्थ्य – समस्याएँ एवं कार्यनीतियाँ"
+        },
+        {
+          "topicNumber": "3.2",
+          "title": "Population Explosion and Birth Control (Contraceptive Methods)",
+          "titleHindi": "जनसंख्या विस्फोट एवं जन्म नियंत्रण"
+        },
+        {
+          "topicNumber": "3.3",
+          "title": "Medical Termination of Pregnancy (MTP)",
+          "titleHindi": "सगर्भता का चिकित्सीय समापन (MTP)"
+        },
+        {
+          "topicNumber": "3.4",
+          "title": "Sexually Transmitted Infections (STIs)",
+          "titleHindi": "यौन संचारित संक्रमण"
+        },
+        {
+          "topicNumber": "3.5",
+          "title": "Infertility and Assisted Reproductive Technologies (ART: IVF, ZIFT, GIFT, ICSI)",
+          "titleHindi": "बंध्यता एवं सहायक जनन प्रौद्योगिकी (ART)"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 4,
+      "title": "Principles of Inheritance and Variation",
+      "titleHindi": "वंशागति तथा विविधता के सिद्धांत",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "4.1",
+          "title": "Mendel Laws of Inheritance (Monohybrid & Dihybrid Cross)",
+          "titleHindi": "मेंडल के वंशागति के नियम"
+        },
+        {
+          "topicNumber": "4.2",
+          "title": "Inheritance of One Gene (Incomplete Dominance, Co-dominance, Multiple Alleles)",
+          "titleHindi": "अपूर्ण प्रभाविता एवं सह-प्रभाविता"
+        },
+        {
+          "topicNumber": "4.3",
+          "title": "Inheritance of Two Genes (Independent Assortment)",
+          "titleHindi": "द्विसंकर संकरण"
+        },
+        {
+          "topicNumber": "4.4",
+          "title": "Chromosomal Theory of Inheritance, Linkage and Recombination",
+          "titleHindi": "वंशागति का क्रोमोसोम सिद्धांत एवं सहलग्नता"
+        },
+        {
+          "topicNumber": "4.5",
+          "title": "Polygenic Inheritance and Pleiotropy",
+          "titleHindi": "बहुजीनी वंशागति एवं बहुप्रभाविता"
+        },
+        {
+          "topicNumber": "4.6",
+          "title": "Sex Determination (Humans, Birds, Honeybee) and Mutation",
+          "titleHindi": "लिंग निर्धारण एवं उत्परिवर्तन"
+        },
+        {
+          "topicNumber": "4.7",
+          "title": "Genetic Disorders (Pedigree Analysis, Mendelian Disorders, Chromosomal Disorders)",
+          "titleHindi": "वंशावली विश्लेषण एवं आनुवंशिक विकार"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 5,
+      "title": "Molecular Basis of Inheritance",
+      "titleHindi": "वंशागति के आण्विक आधार",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "5.1",
+          "title": "The DNA (Structure, Double Helix, Packaging of DNA Helix)",
+          "titleHindi": "डी.एन.ए. की संरचना एवं पैकेजिंग"
+        },
+        {
+          "topicNumber": "5.2",
+          "title": "The Search for Genetic Material (Griffith, Hershey-Chase Experiments)",
+          "titleHindi": "आनुवंशिक पदार्थ की खोज"
+        },
+        {
+          "topicNumber": "5.3",
+          "title": "RNA World and DNA Replication (Meselson-Stahl Experiment)",
+          "titleHindi": "आर.एन.ए. संसार एवं डी.एन.ए. प्रतिकृतियन"
+        },
+        {
+          "topicNumber": "5.4",
+          "title": "Transcription (Transcription Unit, Types of RNA and Process)",
+          "titleHindi": "अनुलेखन (Transcription)"
+        },
+        {
+          "topicNumber": "5.5",
+          "title": "Genetic Code (Salient Features and Mutations)",
+          "titleHindi": "आनुवंशिक कूट (Genetic Code)"
+        },
+        {
+          "topicNumber": "5.6",
+          "title": "Translation (Protein Synthesis)",
+          "titleHindi": "स्थानांतरण (Translation)"
+        },
+        {
+          "topicNumber": "5.7",
+          "title": "Regulation of Gene Expression (The Lac Operon)",
+          "titleHindi": "जीन अभिव्यक्ति का नियमन (लैक प्रचालक)"
+        },
+        {
+          "topicNumber": "5.8",
+          "title": "Human Genome Project (HGP) and DNA Fingerprinting",
+          "titleHindi": "मानव जीनोम परियोजना एवं DNA अंगुलिछापी"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 6,
+      "title": "Evolution",
+      "titleHindi": "विकास",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "6.1",
+          "title": "Origin of Life (Miller-Urey Experiment)",
+          "titleHindi": "जीवन की उत्पत्ति"
+        },
+        {
+          "topicNumber": "6.2",
+          "title": "Evolution of Life Forms – A Theory and Evidences for Evolution",
+          "titleHindi": "जैव विकास के प्रमाण (समजात एवं समवृत्ति अंग)"
+        },
+        {
+          "topicNumber": "6.3",
+          "title": "What is Adaptive Radiation?",
+          "titleHindi": "अनुकूली विकिरण"
+        },
+        {
+          "topicNumber": "6.4",
+          "title": "Biological Evolution, Theories and Mechanism of Evolution",
+          "titleHindi": "डार्विनवाद एवं उत्परिवर्तन सिद्धांत"
+        },
+        {
+          "topicNumber": "6.5",
+          "title": "Hardy-Weinberg Principle",
+          "titleHindi": "हार्डी-वेनबर्ग सिद्धांत"
+        },
+        {
+          "topicNumber": "6.6",
+          "title": "A Brief Account of Evolution and Origin and Evolution of Man",
+          "titleHindi": "मानव का उद्भव और विकास"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 7,
+      "title": "Human Health and Disease",
+      "titleHindi": "मानव स्वास्थ्य तथा रोग",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "7.1",
+          "title": "Common Diseases in Humans (Bacterial, Viral, Fungal, Protozoan, Helminthic)",
+          "titleHindi": "मानव में सामान्य रोग"
+        },
+        {
+          "topicNumber": "7.2",
+          "title": "Immunity (Innate, Acquired, Active/Passive, Vaccination, Allergies, Autoimmunity)",
+          "titleHindi": "प्रतिरक्षा (Immunity)"
+        },
+        {
+          "topicNumber": "7.3",
+          "title": "Immune System in the Body",
+          "titleHindi": "प्रतिरक्षा तंत्र"
+        },
+        {
+          "topicNumber": "7.4",
+          "title": "AIDS (Transmission, Life Cycle of HIV, Prevention and Treatment)",
+          "titleHindi": "एड्स (AIDS)"
+        },
+        {
+          "topicNumber": "7.5",
+          "title": "Cancer (Causes, Detection, Treatment)",
+          "titleHindi": "कैंसर (Cancer)"
+        },
+        {
+          "topicNumber": "7.6",
+          "title": "Drugs and Alcohol Abuse (Addiction, Dependence, Prevention)",
+          "titleHindi": "ड्रग और ऐल्कोहॉल का दुरुपयोग"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 8,
+      "title": "Microbes in Human Welfare",
+      "titleHindi": "मानव कल्याण में सूक्ष्मजीव",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "8.1",
+          "title": "Microbes in Household Products and Industrial Products",
+          "titleHindi": "घरेलू एवं औद्योगिक उत्पादों में सूक्ष्मजीव"
+        },
+        {
+          "topicNumber": "8.2",
+          "title": "Microbes in Sewage Treatment (STP, Primary & Secondary Treatment)",
+          "titleHindi": "वाहित मल उपचार में सूक्ष्मजीव"
+        },
+        {
+          "topicNumber": "8.3",
+          "title": "Microbes in Production of Biogas",
+          "titleHindi": "बायोगैस के उत्पादन में सूक्ष्मजीव"
+        },
+        {
+          "topicNumber": "8.4",
+          "title": "Microbes as Biocontrol Agents and as Biofertilisers",
+          "titleHindi": "जैव नियंत्रण कारक एवं जैव उर्वरक"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 9,
+      "title": "Biotechnology: Principles and Processes",
+      "titleHindi": "जैव प्रौद्योगिकी – सिद्धांत व प्रक्रम",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "9.1",
+          "title": "Principles of Biotechnology (Genetic Engineering)",
+          "titleHindi": "जैव प्रौद्योगिकी के सिद्धांत"
+        },
+        {
+          "topicNumber": "9.2",
+          "title": "Tools of Recombinant DNA Technology (Restriction Enzymes, Cloning Vectors, Competent Host)",
+          "titleHindi": "पुनर्योगज DNA तकनीक के साधन"
+        },
+        {
+          "topicNumber": "9.3",
+          "title": "Processes of Recombinant DNA Technology (Isolation, PCR, Bioreactors, Downstream Processing)",
+          "titleHindi": "पुनर्योगज DNA प्रौद्योगिकी के प्रक्रम (PCR)"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 10,
+      "title": "Biotechnology and its Applications",
+      "titleHindi": "जैव प्रौद्योगिकी एवं उसके उपयोग",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "10.1",
+          "title": "Biotechnological Applications in Agriculture (Bt Cotton, RNAi)",
+          "titleHindi": "कृषि में जैव प्रौद्योगिकी"
+        },
+        {
+          "topicNumber": "10.2",
+          "title": "Biotechnological Applications in Medicine (Genetically Engineered Insulin, Gene Therapy, Molecular Diagnosis)",
+          "titleHindi": "चिकित्सा में जैव प्रौद्योगिकी"
+        },
+        {
+          "topicNumber": "10.3",
+          "title": "Transgenic Animals and Ethical Issues (Biopiracy)",
+          "titleHindi": "पारजीवी जंतु एवं नैतिक मुद्दे"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 11,
+      "title": "Organisms and Populations",
+      "titleHindi": "जीव और समष्टियाँ",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "11.1",
+          "title": "Populations (Population Attributes, Growth Models: Exponential and Logistic)",
+          "titleHindi": "समष्टि एवं वृद्धि मॉडल"
+        },
+        {
+          "topicNumber": "11.2",
+          "title": "Population Interactions (Predation, Competition, Parasitism, Commensalism, Mutualism)",
+          "titleHindi": "समष्टि पारस्परिक क्रियाएँ"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 12,
+      "title": "Ecosystem",
+      "titleHindi": "पारितंत्र",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "12.1",
+          "title": "Ecosystem – Structure and Function",
+          "titleHindi": "पारितंत्र – संरचना एवं कार्य"
+        },
+        {
+          "topicNumber": "12.2",
+          "title": "Productivity and Decomposition",
+          "titleHindi": "उत्पादकता एवं अपघटन"
+        },
+        {
+          "topicNumber": "12.3",
+          "title": "Energy Flow (Food Chains, Food Web, Trophic Levels)",
+          "titleHindi": "ऊर्जा प्रवाह एवं खाद्य श्रृंखला"
+        },
+        {
+          "topicNumber": "12.4",
+          "title": "Ecological Pyramids (Number, Biomass, Energy)",
+          "titleHindi": "पारिस्थितिक पिरामिड"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 13,
+      "title": "Biodiversity and Conservation",
+      "titleHindi": "जैव विविधता एवं संरक्षण",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "13.1",
+          "title": "Biodiversity (Levels, Patterns of Biodiversity, Species-Area Relationship)",
+          "titleHindi": "जैव विविधता एवं प्रतिरूप"
+        },
+        {
+          "topicNumber": "13.2",
+          "title": "Loss of Biodiversity (Causes – The Evil Quartet)",
+          "titleHindi": "जैव विविधता की क्षति"
+        },
+        {
+          "topicNumber": "13.3",
+          "title": "Biodiversity Conservation (In-situ and Ex-situ Conservation, National Parks, Sanctuaries)",
+          "titleHindi": "जैव विविधता का संरक्षण (स्वस्थाने एवं बाह्यस्थाने)"
+        }
+      ]
+    }
+  ]
+}

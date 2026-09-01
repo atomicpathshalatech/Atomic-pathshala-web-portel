@@ -1,0 +1,636 @@
+{
+  "name": "Physics",
+  "nameHindi": "भौतिक विज्ञान",
+  "code": "PHY-11",
+  "books": [
+    {
+      "title": "Physics Part I",
+      "titleHindi": "भौतिकी भाग 1",
+      "partNumber": 1
+    },
+    {
+      "title": "Physics Part II",
+      "titleHindi": "भौतिकी भाग 2",
+      "partNumber": 2
+    }
+  ],
+  "chapters": [
+    {
+      "chapterNumber": 1,
+      "title": "Units and Measurements",
+      "titleHindi": "मात्रक और मापन",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "1.1",
+          "title": "Introduction",
+          "titleHindi": "भूमिका"
+        },
+        {
+          "topicNumber": "1.2",
+          "title": "The International System of Units",
+          "titleHindi": "मात्रकों की अंतर्राष्ट्रीय प्रणाली"
+        },
+        {
+          "topicNumber": "1.3",
+          "title": "Measurement of Length, Mass and Time",
+          "titleHindi": "लंबाई, द्रव्यमान और समय का मापन"
+        },
+        {
+          "topicNumber": "1.4",
+          "title": "Significant Figures and Rounding Off",
+          "titleHindi": "सार्थक अंक"
+        },
+        {
+          "topicNumber": "1.5",
+          "title": "Dimensions of Physical Quantities",
+          "titleHindi": "भौतिक राशियों की विमाएं"
+        },
+        {
+          "topicNumber": "1.6",
+          "title": "Dimensional Formulae and Dimensional Equations",
+          "titleHindi": "विमीय सूत्र एवं विमीय समीकरण"
+        },
+        {
+          "topicNumber": "1.7",
+          "title": "Dimensional Analysis and Its Applications",
+          "titleHindi": "विमीय विश्लेषण एवं इसके अनुप्रयोग"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 2,
+      "title": "Motion in a Straight Line",
+      "titleHindi": "सरल रेखा में गति",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "2.1",
+          "title": "Introduction",
+          "titleHindi": "भूमिका"
+        },
+        {
+          "topicNumber": "2.2",
+          "title": "Instantaneous Velocity and Speed",
+          "titleHindi": "ताक्षणिक वेग एवं चाल"
+        },
+        {
+          "topicNumber": "2.3",
+          "title": "Acceleration",
+          "titleHindi": "त्वरण"
+        },
+        {
+          "topicNumber": "2.4",
+          "title": "Kinematic Equations for Uniformly Accelerated Motion",
+          "titleHindi": "एकसमान त्वरित गति के लिए शुद्धगतिक समीकरण"
+        },
+        {
+          "topicNumber": "2.5",
+          "title": "Relative Velocity",
+          "titleHindi": "आपेक्षिक वेग"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 3,
+      "title": "Motion in a Plane",
+      "titleHindi": "समतल में गति",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "3.1",
+          "title": "Introduction",
+          "titleHindi": "भूमिका"
+        },
+        {
+          "topicNumber": "3.2",
+          "title": "Scalars and Vectors",
+          "titleHindi": "अदिश एवं सदिश"
+        },
+        {
+          "topicNumber": "3.3",
+          "title": "Multiplication of Vectors by Real Numbers",
+          "titleHindi": "वास्तविक संख्याओं से सदिशों का गुणन"
+        },
+        {
+          "topicNumber": "3.4",
+          "title": "Addition and Subtraction of Vectors – Graphical Method",
+          "titleHindi": "सदिशों का संयोजन एवं व्यवकलन"
+        },
+        {
+          "topicNumber": "3.5",
+          "title": "Resolution of Vectors",
+          "titleHindi": "सदिशों का वियोजन"
+        },
+        {
+          "topicNumber": "3.6",
+          "title": "Vector Addition – Analytical Method",
+          "titleHindi": "सदिश संयोजन – विश्लेषणात्मक विधि"
+        },
+        {
+          "topicNumber": "3.7",
+          "title": "Motion in a Plane with Constant Acceleration",
+          "titleHindi": "समतल में एकसमान त्वरण से गति"
+        },
+        {
+          "topicNumber": "3.8",
+          "title": "Projectile Motion",
+          "titleHindi": "प्रक्षेप्य गति"
+        },
+        {
+          "topicNumber": "3.9",
+          "title": "Uniform Circular Motion",
+          "titleHindi": "एकसमान वृत्तीय गति"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 4,
+      "title": "Laws of Motion",
+      "titleHindi": "गति के नियम",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "4.1",
+          "title": "Introduction",
+          "titleHindi": "भूमिका"
+        },
+        {
+          "topicNumber": "4.2",
+          "title": "Aristotle Fallacy and Law of Inertia",
+          "titleHindi": "अरस्तू की भ्रान्ति एवं जड़त्व का नियम"
+        },
+        {
+          "topicNumber": "4.3",
+          "title": "Newton First Law of Motion",
+          "titleHindi": "न्यूटन का गति का प्रथम नियम"
+        },
+        {
+          "topicNumber": "4.4",
+          "title": "Newton Second Law of Motion",
+          "titleHindi": "न्यूटन का गति का द्वितीय नियम"
+        },
+        {
+          "topicNumber": "4.5",
+          "title": "Newton Third Law of Motion",
+          "titleHindi": "न्यूटन का गति का तृतीय नियम"
+        },
+        {
+          "topicNumber": "4.6",
+          "title": "Conservation of Momentum",
+          "titleHindi": "संवेग संरक्षण"
+        },
+        {
+          "topicNumber": "4.7",
+          "title": "Equilibrium of a Particle",
+          "titleHindi": "कण की साम्यावस्था"
+        },
+        {
+          "topicNumber": "4.8",
+          "title": "Common Forces in Mechanics and Friction",
+          "titleHindi": "यांत्रिकी में सामान्य बल एवं घर्षण"
+        },
+        {
+          "topicNumber": "4.9",
+          "title": "Circular Motion and Centripetal Force",
+          "titleHindi": "वृत्तीय गति एवं अभिकेंद्र बल"
+        },
+        {
+          "topicNumber": "4.10",
+          "title": "Solving Problems in Mechanics",
+          "titleHindi": "यांत्रिकी में समस्याओं का समाधान"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 5,
+      "title": "Work, Energy and Power",
+      "titleHindi": "कार्य, ऊर्जा और शक्ति",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "5.1",
+          "title": "Introduction and Notions of Work and Kinetic Energy",
+          "titleHindi": "भूमिका एवं कार्य-ऊर्जा प्रमेय"
+        },
+        {
+          "topicNumber": "5.2",
+          "title": "Work",
+          "titleHindi": "कार्य"
+        },
+        {
+          "topicNumber": "5.3",
+          "title": "Kinetic Energy",
+          "titleHindi": "गतिज ऊर्जा"
+        },
+        {
+          "topicNumber": "5.4",
+          "title": "Work Done by a Variable Force",
+          "titleHindi": "परिवर्ती बल द्वारा किया गया कार्य"
+        },
+        {
+          "topicNumber": "5.5",
+          "title": "The Work-Energy Theorem for a Variable Force",
+          "titleHindi": "परिवर्ती बल के लिए कार्य-ऊर्जा प्रमेय"
+        },
+        {
+          "topicNumber": "5.6",
+          "title": "The Concept of Potential Energy",
+          "titleHindi": "स्थितिज ऊर्जा की अवधारणा"
+        },
+        {
+          "topicNumber": "5.7",
+          "title": "The Conservation of Mechanical Energy",
+          "titleHindi": "यांत्रिक ऊर्जा का संरक्षण"
+        },
+        {
+          "topicNumber": "5.8",
+          "title": "The Potential Energy of a Spring",
+          "titleHindi": "कमानी की स्थितिज ऊर्जा"
+        },
+        {
+          "topicNumber": "5.9",
+          "title": "Power",
+          "titleHindi": "शक्ति"
+        },
+        {
+          "topicNumber": "5.10",
+          "title": "Collisions in One and Two Dimensions",
+          "titleHindi": "संघट्ट"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 6,
+      "title": "System of Particles and Rotational Motion",
+      "titleHindi": "कणों के निकाय तथा घूर्णी गति",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "6.1",
+          "title": "Introduction",
+          "titleHindi": "भूमिका"
+        },
+        {
+          "topicNumber": "6.2",
+          "title": "Centre of Mass and Motion of Centre of Mass",
+          "titleHindi": "द्रव्यमान केंद्र"
+        },
+        {
+          "topicNumber": "6.3",
+          "title": "Linear Momentum of a System of Particles",
+          "titleHindi": "कणों के निकाय का रेखीय संवेग"
+        },
+        {
+          "topicNumber": "6.4",
+          "title": "Vector Product of Two Vectors",
+          "titleHindi": "दो सदिशों का सदिश गुणनफल"
+        },
+        {
+          "topicNumber": "6.5",
+          "title": "Angular Velocity and Its Relation with Linear Velocity",
+          "titleHindi": "कोणीय वेग"
+        },
+        {
+          "topicNumber": "6.6",
+          "title": "Torque and Angular Momentum",
+          "titleHindi": "बल आघूर्ण एवं कोणीय संवेग"
+        },
+        {
+          "topicNumber": "6.7",
+          "title": "Equilibrium of a Rigid Body",
+          "titleHindi": "दृढ़ पिंड की साम्यावस्था"
+        },
+        {
+          "topicNumber": "6.8",
+          "title": "Moment of Inertia",
+          "titleHindi": "जड़त्व आघूर्ण"
+        },
+        {
+          "topicNumber": "6.9",
+          "title": "Kinematics and Dynamics of Rotational Motion",
+          "titleHindi": "घूर्णी गति की शुद्धगतिकी एवं गतिकी"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 7,
+      "title": "Gravitation",
+      "titleHindi": "गुरुत्वाकर्षण",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "7.1",
+          "title": "Introduction and Kepler Laws",
+          "titleHindi": "भूमिका एवं केप्लर के नियम"
+        },
+        {
+          "topicNumber": "7.2",
+          "title": "Universal Law of Gravitation",
+          "titleHindi": "गुरुत्वाकर्षण का सार्वत्रिक नियम"
+        },
+        {
+          "topicNumber": "7.3",
+          "title": "The Gravitational Constant",
+          "titleHindi": "गुरुत्वीय नियतांक"
+        },
+        {
+          "topicNumber": "7.4",
+          "title": "Acceleration Due to Gravity of the Earth",
+          "titleHindi": "पृथ्वी का गुरुत्वीय त्वरण"
+        },
+        {
+          "topicNumber": "7.5",
+          "title": "Gravitational Potential Energy",
+          "titleHindi": "गुरुत्वीय स्थितिज ऊर्जा"
+        },
+        {
+          "topicNumber": "7.6",
+          "title": "Escape Velocity",
+          "titleHindi": "पलायन चाल"
+        },
+        {
+          "topicNumber": "7.7",
+          "title": "Earth Satellites and Energy of an Orbiting Satellite",
+          "titleHindi": "भू-उपग्रह एवं उपग्रह की ऊर्जा"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 8,
+      "title": "Mechanical Properties of Solids",
+      "titleHindi": "ठोसों के यांत्रिक गुण",
+      "bookPart": 2,
+      "topics": [
+        {
+          "topicNumber": "8.1",
+          "title": "Introduction",
+          "titleHindi": "भूमिका"
+        },
+        {
+          "topicNumber": "8.2",
+          "title": "Stress and Strain",
+          "titleHindi": "प्रतिबल एवं विकृति"
+        },
+        {
+          "topicNumber": "8.3",
+          "title": "Hooke Law and Stress-Strain Curve",
+          "titleHindi": "हुक का नियम"
+        },
+        {
+          "topicNumber": "8.4",
+          "title": "Elastic Moduli (Young, Shear, Bulk Modulus)",
+          "titleHindi": "प्रत्यास्थता गुणांक"
+        },
+        {
+          "topicNumber": "8.5",
+          "title": "Applications of Elastic Behaviour of Materials",
+          "titleHindi": "प्रत्यास्थ व्यवहार के अनुप्रयोग"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 9,
+      "title": "Mechanical Properties of Fluids",
+      "titleHindi": "तरलों के यांत्रिकी गुण",
+      "bookPart": 2,
+      "topics": [
+        {
+          "topicNumber": "9.1",
+          "title": "Introduction",
+          "titleHindi": "भूमिका"
+        },
+        {
+          "topicNumber": "9.2",
+          "title": "Pressure, Pascal Law and Variation with Depth",
+          "titleHindi": "दाब एवं पास्कल का नियम"
+        },
+        {
+          "topicNumber": "9.3",
+          "title": "Streamline Flow and Equation of Continuity",
+          "titleHindi": "धारारेखी प्रवाह एवं सांतत्य समीकरण"
+        },
+        {
+          "topicNumber": "9.4",
+          "title": "Bernoulli Principle and Applications",
+          "titleHindi": "बरनूली का सिद्धांत"
+        },
+        {
+          "topicNumber": "9.5",
+          "title": "Viscosity, Stokes Law and Terminal Velocity",
+          "titleHindi": "श्यानता एवं स्टोक का नियम"
+        },
+        {
+          "topicNumber": "9.6",
+          "title": "Surface Tension, Surface Energy and Capillary Rise",
+          "titleHindi": "पृष्ठ तनाव एवं केशिकीय उन्नयन"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 10,
+      "title": "Thermal Properties of Matter",
+      "titleHindi": "द्रव्य के तापीय गुण",
+      "bookPart": 2,
+      "topics": [
+        {
+          "topicNumber": "10.1",
+          "title": "Introduction, Temperature and Heat",
+          "titleHindi": "भूमिका, ताप एवं ऊष्मा"
+        },
+        {
+          "topicNumber": "10.2",
+          "title": "Measurement of Temperature and Ideal-Gas Equation",
+          "titleHindi": "ताप मापन"
+        },
+        {
+          "topicNumber": "10.3",
+          "title": "Thermal Expansion",
+          "titleHindi": "तापीय प्रसार"
+        },
+        {
+          "topicNumber": "10.4",
+          "title": "Specific Heat Capacity and Calorimetry",
+          "titleHindi": "विशिष्ट ऊष्मा धारिता एवं कैलोरीमिति"
+        },
+        {
+          "topicNumber": "10.5",
+          "title": "Change of State and Latent Heat",
+          "titleHindi": "अवस्था परिवर्तन एवं गुप्त ऊष्मा"
+        },
+        {
+          "topicNumber": "10.6",
+          "title": "Heat Transfer (Conduction, Convection, Radiation)",
+          "titleHindi": "ऊष्मा स्थानांतरण"
+        },
+        {
+          "topicNumber": "10.7",
+          "title": "Newton Law of Cooling",
+          "titleHindi": "न्यूटन का शीतलन नियम"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 11,
+      "title": "Thermodynamics",
+      "titleHindi": "ऊष्मागतिकी",
+      "bookPart": 2,
+      "topics": [
+        {
+          "topicNumber": "11.1",
+          "title": "Introduction and Thermal Equilibrium",
+          "titleHindi": "भूमिका एवं तापीय साम्यावस्था"
+        },
+        {
+          "topicNumber": "11.2",
+          "title": "Zeroth Law of Thermodynamics",
+          "titleHindi": "ऊष्मागतिकी का शून्यवाँ नियम"
+        },
+        {
+          "topicNumber": "11.3",
+          "title": "Heat, Internal Energy and Work",
+          "titleHindi": "ऊष्मा, आंतरिक ऊर्जा एवं कार्य"
+        },
+        {
+          "topicNumber": "11.4",
+          "title": "First Law of Thermodynamics",
+          "titleHindi": "ऊष्मागतिकी का प्रथम नियम"
+        },
+        {
+          "topicNumber": "11.5",
+          "title": "Specific Heat Capacity and Thermodynamic State Variables",
+          "titleHindi": "विशिष्ट ऊष्मा धारिता"
+        },
+        {
+          "topicNumber": "11.6",
+          "title": "Thermodynamic Processes (Isothermal, Adiabatic, Isochoric, Isobaric)",
+          "titleHindi": "ऊष्मागतिक प्रक्रम"
+        },
+        {
+          "topicNumber": "11.7",
+          "title": "Second Law of Thermodynamics and Reversibility",
+          "titleHindi": "ऊष्मागतिकी का द्वितीय नियम"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 12,
+      "title": "Kinetic Theory",
+      "titleHindi": "अणुगति सिद्धांत",
+      "bookPart": 2,
+      "topics": [
+        {
+          "topicNumber": "12.1",
+          "title": "Introduction and Molecular Nature of Matter",
+          "titleHindi": "भूमिका एवं द्रव्य की आण्विक प्रकृति"
+        },
+        {
+          "topicNumber": "12.2",
+          "title": "Behaviour of Gases and Ideal Gas Equation",
+          "titleHindi": "गैसों का व्यवहार"
+        },
+        {
+          "topicNumber": "12.3",
+          "title": "Kinetic Theory of an Ideal Gas: Pressure and Temperature",
+          "titleHindi": "आदर्श गैस का अणुगति सिद्धांत"
+        },
+        {
+          "topicNumber": "12.4",
+          "title": "Law of Equipartition of Energy and Degrees of Freedom",
+          "titleHindi": "ऊर्जा समविभाजन नियम"
+        },
+        {
+          "topicNumber": "12.5",
+          "title": "Specific Heat Capacity of Gases and Solids",
+          "titleHindi": "विशिष्ट ऊष्मा धारिता"
+        },
+        {
+          "topicNumber": "12.6",
+          "title": "Mean Free Path",
+          "titleHindi": "माध्य मुक्त पथ"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 13,
+      "title": "Oscillations",
+      "titleHindi": "दोलन",
+      "bookPart": 2,
+      "topics": [
+        {
+          "topicNumber": "13.1",
+          "title": "Introduction and Periodic/Oscillatory Motions",
+          "titleHindi": "भूमिका एवं आवर्ती गति"
+        },
+        {
+          "topicNumber": "13.2",
+          "title": "Simple Harmonic Motion (SHM)",
+          "titleHindi": "सरल आवर्त गति"
+        },
+        {
+          "topicNumber": "13.3",
+          "title": "Simple Harmonic Motion and Uniform Circular Motion",
+          "titleHindi": "सरल आवर्त गति एवं वृत्तीय गति"
+        },
+        {
+          "topicNumber": "13.4",
+          "title": "Velocity and Acceleration in Simple Harmonic Motion",
+          "titleHindi": "सरल आवर्त गति में वेग एवं त्वरण"
+        },
+        {
+          "topicNumber": "13.5",
+          "title": "Force Law for Simple Harmonic Motion",
+          "titleHindi": "सरल आवर्त गति के लिए बल नियम"
+        },
+        {
+          "topicNumber": "13.6",
+          "title": "Energy in Simple Harmonic Motion",
+          "titleHindi": "सरल आवर्त गति में ऊर्जा"
+        },
+        {
+          "topicNumber": "13.7",
+          "title": "The Simple Pendulum and Spring Systems",
+          "titleHindi": "सरल लोलक एवं कमानी निकाय"
+        }
+      ]
+    },
+    {
+      "chapterNumber": 14,
+      "title": "Waves",
+      "titleHindi": "तरंगें",
+      "bookPart": 2,
+      "topics": [
+        {
+          "topicNumber": "14.1",
+          "title": "Introduction and Transverse/Longitudinal Waves",
+          "titleHindi": "भूमिका एवं तरंगों के प्रकार"
+        },
+        {
+          "topicNumber": "14.2",
+          "title": "Displacement Relation in a Progressive Wave",
+          "titleHindi": "प्रगामी तरंग में विस्थापन संबंध"
+        },
+        {
+          "topicNumber": "14.3",
+          "title": "The Speed of a Travelling Wave",
+          "titleHindi": "प्रगामी तरंग की चाल"
+        },
+        {
+          "topicNumber": "14.4",
+          "title": "The Principle of Superposition of Waves",
+          "titleHindi": "तरंगों के अध्यारोपण का सिद्धांत"
+        },
+        {
+          "topicNumber": "14.5",
+          "title": "Reflection of Waves and Standing Waves",
+          "titleHindi": "तरंगों का परावर्तन एवं अप्रगामी तरंगें"
+        },
+        {
+          "topicNumber": "14.6",
+          "title": "Beats",
+          "titleHindi": "विस्पंद"
+        }
+      ]
+    }
+  ]
+}
