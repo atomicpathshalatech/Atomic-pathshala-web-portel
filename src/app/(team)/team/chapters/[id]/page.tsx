@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { ChapterStatusActions } from "@/components/team-portal/ChapterStatusActions";
+import { ChapterContentManager } from "@/components/team-portal/ChapterContentManager";
 import type { ChapterStatusValue } from "@/lib/chapters/state-machine";
 
 export const metadata: Metadata = {
@@ -26,9 +27,18 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
     where: { id: params.id },
     include: {
       subject: { include: { course: true } },
-      lectures: { orderBy: { order: "asc" } },
-      dpps: { orderBy: { level: "asc" } },
-      tests: { orderBy: { createdAt: "desc" } },
+      lectures: {
+        include: { teacher: { include: { user: { select: { name: true, email: true } } } } },
+        orderBy: { order: "asc" },
+      },
+      dpps: {
+        include: { _count: { select: { questions: true } } },
+        orderBy: { level: "asc" },
+      },
+      tests: {
+        include: { _count: { select: { sections: true, attempts: true } } },
+        orderBy: { createdAt: "desc" },
+      },
     },
   });
   if (!chapter) notFound();
@@ -37,7 +47,8 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
     chapter.medium === "HINDI" ? "Hindi" : chapter.medium === "HINGLISH" ? "Hinglish" : "English";
 
   return (
-    <div className="space-y-stack-lg max-w-4xl">
+    <div className="space-y-stack-lg max-w-5xl">
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
@@ -69,58 +80,58 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
         </div>
       </div>
 
+      {/* Move Chapter Forward */}
       <div className="glass-card p-stack-lg rounded-xl space-y-3">
         <h3 className="font-headline-md text-headline-md text-primary">Move Chapter Forward</h3>
         <ChapterStatusActions chapterId={chapter.id} status={chapter.status as ChapterStatusValue} />
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-gutter">
-        <div className="glass-card p-4 rounded-xl">
-          <p className="text-label-sm text-on-surface-variant">Lectures</p>
-          <p className="text-headline-sm font-headline-sm text-primary">{chapter.lectures.length}</p>
-        </div>
-        <div className="glass-card p-4 rounded-xl">
-          <p className="text-label-sm text-on-surface-variant">DPPs</p>
-          <p className="text-headline-sm font-headline-sm text-primary">{chapter.dpps.length}</p>
-        </div>
-        <div className="glass-card p-4 rounded-xl">
-          <p className="text-label-sm text-on-surface-variant">Chapter Tests</p>
-          <p className="text-headline-sm font-headline-sm text-primary">{chapter.tests.length}</p>
-        </div>
+      {/* Interactive Content Manager: Lectures, DPPs, and Chapter Tests */}
+      <div className="glass-card p-stack-lg rounded-2xl space-y-4">
+        <ChapterContentManager
+          chapterId={chapter.id}
+          chapterTitle={chapter.title}
+          chapterMedium={chapter.medium}
+          initialLectures={chapter.lectures.map((l) => ({
+            id: l.id,
+            title: l.title,
+            videoUrl: l.videoUrl,
+            educatorVideoUrl: l.educatorVideoUrl,
+            slidesUrl: l.slidesUrl,
+            language: l.language,
+            order: l.order,
+            status: l.status,
+            createdAt: l.createdAt,
+            teacher: l.teacher,
+          }))}
+          initialDpps={chapter.dpps.map((d) => ({
+            id: d.id,
+            code: d.code,
+            name: d.name,
+            level: d.level,
+            difficulty: d.difficulty,
+            estimatedTimeMin: d.estimatedTimeMin,
+            correctMarks: d.correctMarks,
+            incorrectMarks: d.incorrectMarks,
+            status: d.status,
+            createdAt: d.createdAt,
+            _count: d._count,
+          }))}
+          initialTests={chapter.tests.map((t) => ({
+            id: t.id,
+            code: t.code,
+            name: t.name,
+            durationMin: t.durationMin,
+            correctMarks: t.correctMarks,
+            incorrectMarks: t.incorrectMarks,
+            examType: t.examType,
+            status: t.status,
+            createdAt: t.createdAt,
+            _count: t._count,
+          }))}
+          canEdit={canUpdate}
+        />
       </div>
-
-      {chapter.lectures.length > 0 && (
-        <div className="glass-card rounded-xl p-stack-lg space-y-stack-md">
-          <h3 className="font-headline-md text-headline-md text-primary">Lectures</h3>
-          <ol className="space-y-2 list-decimal list-inside">
-            {chapter.lectures.map((l) => (
-              <li key={l.id} className="text-body-md flex items-center justify-between gap-2">
-                <span>{l.title}</span>
-                <span className="text-label-sm text-on-surface-variant">{l.status}</span>
-              </li>
-            ))}
-          </ol>
-          <Link href="/team/lectures/new" className="text-label-sm text-primary hover:underline">
-            + Add a lecture to this chapter
-          </Link>
-        </div>
-      )}
-
-      {chapter.dpps.length > 0 && (
-        <div className="glass-card rounded-xl p-stack-lg space-y-stack-md">
-          <h3 className="font-headline-md text-headline-md text-primary">DPPs</h3>
-          <ol className="space-y-2 list-decimal list-inside">
-            {chapter.dpps.map((d) => (
-              <li key={d.id} className="text-body-md flex items-center justify-between gap-2">
-                <span>
-                  {d.name} {d.level ? `· Level ${d.level}` : ""}
-                </span>
-                <span className="text-label-sm text-on-surface-variant">{d.status}</span>
-              </li>
-            ))}
-          </ol>
-        </div>
-      )}
     </div>
   );
 }
