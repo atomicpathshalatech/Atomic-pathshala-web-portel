@@ -336,7 +336,10 @@ export function StudentSchedule() {
             <p className="text-sm text-slate-500">No classes found for this day.</p>
           ) : (
             groupedEntries.map((group) => {
-              const entry = group.entries[0];
+              // group.entries is always built with at least one entry
+              // (see groupedEntries above) — same non-null assertion style
+              // as that memo's own sort comparator a few lines up.
+              const entry = group.entries[0]!;
               const status = getStatus(entry, now);
               const barColor =
                 status === "live"
