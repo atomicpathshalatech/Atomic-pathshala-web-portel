@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { requireStudentSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
+import { resolveStudentForSeries } from "@/lib/test-series/access";
 import { StudentTestListClient, type TestListItem } from "@/components/student/StudentTestListClient";
 
 export const metadata: Metadata = {
@@ -87,9 +88,7 @@ export default async function StudentTestsPage() {
 
   const now = new Date();
 
-  // Standalone TestSeries tests (no batchSchedule) aren't part of this
-  // batch-timetable flow yet — filtered out rather than crashing on a null.
-  const testList: TestListItem[] = tests
+  const scheduledList: TestListItem[] = tests
     .filter((t) => t.batchSchedule)
     .map((t) => {
       const batchSchedule = t.batchSchedule!;
@@ -115,6 +114,68 @@ export default async function StudentTestsPage() {
         score: myAttempt?.score,
       };
     });
+
+  // Standalone TestSeries tests (no BatchSchedule, no timetable window) —
+  // open anytime once PUBLISHED, gated by TestSeries visibility/matching
+  // instead of a batch enrollment (see resolveStudentForSeries).
+  const standaloneTests = await prisma.test.findMany({
+    where: { status: "PUBLISHED", testSeriesId: { not: null }, batchScheduleId: null },
+    include: {
+      testSeries: true,
+      sections: { select: { _count: { select: { questions: true } } } },
+      attempts: { where: { studentId: student.id }, select: { status: true, score: true } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const standaloneList: TestListItem[] = [];
+  for (const t of standaloneTests) {
+    if (!t.testSeriesId) continue;
+    const { student: eligible } = await resolveStudentForSeries(student.userId, t.testSeriesId);
+    if (!eligible) continue;
+
+    const myAttempt = t.attempts[0] ?? null;
+    const questionCount = t.sections.reduce((sum, s) => sum + s._count.questions, 0);
+    const createdAtIso = t.createdAt.toISOString();
+
+    let statusLabel = "Attempt Now";
+    let tone = "bg-emerald-500/15 text-emerald-600 border border-emerald-500/30";
+    let canAttempt = true;
+    let canResume = false;
+    let canViewResult = false;
+
+    if (myAttempt?.status === "IN_PROGRESS") {
+      statusLabel = "In Progress";
+      tone = "bg-secondary/15 text-secondary border border-secondary/30";
+      canAttempt = false;
+      canResume = true;
+    } else if (myAttempt) {
+      statusLabel = `Completed · ${myAttempt.score ?? 0} Marks`;
+      tone = "bg-primary/15 text-primary border border-primary/30";
+      canAttempt = false;
+      canViewResult = true;
+    }
+
+    standaloneList.push({
+      id: t.id,
+      title: t.name,
+      subject: t.examType || "General",
+      batchName: t.testSeries?.name ?? "Test Series",
+      durationMin: t.durationMin,
+      questionCount,
+      startsAt: createdAtIso,
+      endsAt: createdAtIso,
+      statusLabel,
+      tone,
+      canAttempt,
+      canResume,
+      canViewResult,
+      isClosed: false,
+      score: myAttempt?.score,
+    });
+  }
+
+  const testList: TestListItem[] = [...scheduledList, ...standaloneList];
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto pb-16">

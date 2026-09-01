@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { UnauthorizedError, ForbiddenError } from "@/lib/rbac/guard";
-import { resolveStudentForSchedule } from "@/lib/batch/access";
+import { resolveStudentForTest } from "@/lib/test-series/access";
 import { computeDeadlineMs, finalizeAttempt } from "@/lib/test-engine/scoring";
 import { toLegacyQuestion } from "@/lib/questions/legacy";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
@@ -14,7 +14,9 @@ import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
  * result endpoint (post-submission) reveals. If the deadline has quietly
  * passed (student closed the tab instead of clicking Submit), this lazily
  * finalizes the attempt right here before responding — the server, not the
- * client, owns "is time up".
+ * client, owns "is time up". Works for both batch-scheduled and standalone
+ * tests — computeDeadlineMs already treats a null schedule end as "just
+ * use the duration" (see @/lib/test-engine/scoring.ts).
  */
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -37,9 +39,11 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
       },
     });
     if (!test) return apiError("Test not found", 404);
-    if (!test.batchScheduleId) return apiError("This test isn't linked to a scheduled session.", 400);
+    if (!test.batchScheduleId && !test.testSeriesId) {
+      return apiError("This test isn't linked to a scheduled session or a series.", 400);
+    }
 
-    const { student } = await resolveStudentForSchedule(session.user.id, test.batchScheduleId);
+    const { student } = await resolveStudentForTest(session.user.id, test);
     if (!student) throw new ForbiddenError();
 
     let attempt = await prisma.attempt.findUnique({

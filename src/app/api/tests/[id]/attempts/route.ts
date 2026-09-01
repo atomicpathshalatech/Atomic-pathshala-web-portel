@@ -3,12 +3,13 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { UnauthorizedError, ForbiddenError } from "@/lib/rbac/guard";
-import { resolveStudentForSchedule } from "@/lib/batch/access";
+import { resolveStudentForTest } from "@/lib/test-series/access";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 
-/** Starts (or resumes) the calling student's attempt at a published test.
- * One attempt per student per test — enforced by the DB's unique
- * (testId, studentId) constraint, not just app logic. */
+/** Starts (or resumes) the calling student's attempt at a published test —
+ * either a batch-scheduled class test or a standalone TestSeries test (see
+ * resolveStudentForTest). One attempt per student per test — enforced by
+ * the DB's unique (testId, studentId) constraint, not just app logic. */
 export async function POST(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions);
@@ -19,20 +20,20 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
       include: { batchSchedule: true },
     });
     if (!test) return apiError("Test not found", 404);
-    if (!test.batchScheduleId || !test.batchSchedule) {
-      return apiError("This test isn't linked to a scheduled session.", 400);
+    if (!test.batchScheduleId && !test.testSeriesId) {
+      return apiError("This test isn't linked to a scheduled session or a series.", 400);
     }
     if (test.status !== "PUBLISHED") return apiError("This test isn't open yet.", 409);
 
-    const { student } = await resolveStudentForSchedule(session.user.id, test.batchScheduleId);
-    if (!student) throw new ForbiddenError("You are not enrolled in this batch.");
+    const { student } = await resolveStudentForTest(session.user.id, test);
+    if (!student) throw new ForbiddenError("You are not eligible to attempt this test.");
 
     const now = new Date();
-    if (now < test.batchSchedule.startsAt) {
-      return apiError("This test hasn't opened yet.", 409);
-    }
-    if (now > test.batchSchedule.endsAt) {
-      return apiError("This test's window has closed.", 409);
+    // Standalone tests have no schedule window — open anytime once
+    // PUBLISHED. Batch-scheduled tests still respect the class's window.
+    if (test.batchSchedule) {
+      if (now < test.batchSchedule.startsAt) return apiError("This test hasn't opened yet.", 409);
+      if (now > test.batchSchedule.endsAt) return apiError("This test's window has closed.", 409);
     }
 
     const existing = await prisma.attempt.findUnique({

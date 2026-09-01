@@ -58,7 +58,16 @@ export default async function QuestionBankPage({
   const countFor = (isPublished: boolean) =>
     publishedCounts.find((s) => s.isPublished === isPublished)?._count ?? 0;
 
-  const rows = questions.map((q) => ({ ...toLegacyQuestion(q), difficultyRaw: q.difficulty }));
+  // "Bilingual" here means genuinely built on the real Question Bank v2
+  // model (more than one language, or PYQ/question-code metadata set) —
+  // those questions route to the bilingual edit form; everything else
+  // (the legacy single-language shim's own questions) keeps using the
+  // original edit flow so existing rows keep working unchanged.
+  const rows = questions.map((q) => ({
+    ...toLegacyQuestion(q),
+    difficultyRaw: q.difficulty,
+    isBilingual: q.translations.length > 1 || Boolean(q.questionCode) || Boolean(q.pyqSource),
+  }));
 
   return (
     <div className="space-y-stack-lg max-w-7xl">
@@ -70,13 +79,23 @@ export default async function QuestionBankPage({
           </p>
         </div>
         {canCreate && (
-          <Link
-            href="/team/questions/new"
-            className="flex items-center gap-2 bg-primary text-white px-6 py-3 rounded-xl font-label-md shadow-lg hover:shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all"
-          >
-            <span className="material-symbols-outlined">add_circle</span>
-            Create Question
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/team/questions/bilingual/new"
+              className="flex items-center gap-2 bg-surface-container-lowest border border-primary text-primary px-5 py-3 rounded-xl font-label-md hover:bg-primary-container/10 transition-all"
+              title="Full Question Bank v2 form — Hindi/English, PYQ source, question code"
+            >
+              <span className="material-symbols-outlined">translate</span>
+              New (Bilingual)
+            </Link>
+            <Link
+              href="/team/questions/new"
+              className="flex items-center gap-2 bg-primary text-white px-6 py-3 rounded-xl font-label-md shadow-lg hover:shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all"
+            >
+              <span className="material-symbols-outlined">add_circle</span>
+              Create Question
+            </Link>
+          </div>
         )}
       </div>
 
@@ -171,7 +190,11 @@ export default async function QuestionBankPage({
                   </td>
                   <td className="px-6 py-5 text-right">
                     <div className="flex items-center justify-end gap-1">
-                      <Link href={`/team/questions/${q.id}/edit`} className="p-1 hover:text-primary" title="Edit">
+                      <Link
+                        href={q.isBilingual ? `/team/questions/bilingual/${q.id}/edit` : `/team/questions/${q.id}/edit`}
+                        className="p-1 hover:text-primary"
+                        title="Edit"
+                      >
                         <span className="material-symbols-outlined">edit</span>
                       </Link>
                       {canVerify && <QuestionStatusActions questionId={q.id} isPublished={q.isPublished} />}

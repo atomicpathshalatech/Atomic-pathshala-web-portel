@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { requireStudentSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
-import { resolveStudentForSchedule } from "@/lib/batch/access";
+import { resolveStudentForTest } from "@/lib/test-series/access";
+import { computeDeadlineMs } from "@/lib/test-engine/scoring";
 import { toLegacyQuestion } from "@/lib/questions/legacy";
 import { ExamRunner } from "@/components/student/ExamRunner";
 
@@ -17,6 +18,7 @@ export default async function TestAttemptPage({ params }: { params: { id: string
     where: { id: params.id },
     include: {
       batchSchedule: { include: { batch: true } },
+      testSeries: true,
       sections: {
         orderBy: { order: "asc" },
         include: {
@@ -30,13 +32,15 @@ export default async function TestAttemptPage({ params }: { params: { id: string
   });
   if (!test) notFound();
   if (test.status !== "PUBLISHED") redirect("/tests");
-  if (!test.batchScheduleId || !test.batchSchedule) redirect("/tests");
+  if (!test.batchScheduleId && !test.testSeriesId) redirect("/tests");
 
-  const { student } = await resolveStudentForSchedule(session.user.id, test.batchScheduleId);
+  const { student } = await resolveStudentForTest(session.user.id, test);
   if (!student) redirect("/tests");
 
   const now = new Date();
-  if (now < test.batchSchedule.startsAt) redirect("/tests");
+  // Standalone tests have no schedule window — open anytime once
+  // PUBLISHED. Batch-scheduled tests still respect the class's window.
+  if (test.batchSchedule && now < test.batchSchedule.startsAt) redirect("/tests");
 
   let attempt = await prisma.attempt.findUnique({
     where: { testId_studentId: { testId: test.id, studentId: student.id } },
@@ -44,7 +48,7 @@ export default async function TestAttemptPage({ params }: { params: { id: string
   });
 
   if (!attempt) {
-    if (now > test.batchSchedule.endsAt) redirect("/tests");
+    if (test.batchSchedule && now > test.batchSchedule.endsAt) redirect("/tests");
     attempt = await prisma.attempt.create({
       data: { testId: test.id, studentId: student.id },
       include: { answers: true },
@@ -62,11 +66,7 @@ export default async function TestAttemptPage({ params }: { params: { id: string
 
   if (attempt.status !== "IN_PROGRESS") redirect(`/tests/${test.id}/result`);
 
-  // Calculate strict deadline based on duration or schedule close
-  const startMs = new Date(attempt.startedAt).getTime();
-  const durationMs = test.durationMin * 60 * 1000;
-  const scheduleCloseMs = new Date(test.batchSchedule.endsAt).getTime();
-  const deadlineMs = Math.min(startMs + durationMs, scheduleCloseMs);
+  const deadlineMs = computeDeadlineMs(attempt.startedAt, test.durationMin, test.batchSchedule?.endsAt);
 
   const answersMap = new Map(
     attempt.answers.map((a) => [
@@ -82,7 +82,7 @@ export default async function TestAttemptPage({ params }: { params: { id: string
     return {
       id: sq.question.id,
       order: sq.order,
-      subject: test.batchSchedule!.subject || "General",
+      subject: test.batchSchedule?.subject || sq.question.subject || "General",
       body: legacy.body,
       type: legacy.type,
       optionA: legacy.optionA,
@@ -113,7 +113,7 @@ export default async function TestAttemptPage({ params }: { params: { id: string
           title: test.name,
           instructions: test.instructions,
           durationMin: test.durationMin,
-          targetExam: test.batchSchedule.batch.targetExam || "NEET UG",
+          targetExam: test.batchSchedule?.batch.targetExam || test.testSeries?.course || test.examType || "NEET UG",
         },
         questions: questionsData,
         candidateName: user?.name || "Student",

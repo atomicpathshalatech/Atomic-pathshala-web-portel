@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { requireStudentSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
-import { resolveStudentForSchedule } from "@/lib/batch/access";
+import { resolveStudentForTest } from "@/lib/test-series/access";
 import { toLegacyQuestion } from "@/lib/questions/legacy";
 import { FormulaText } from "@/components/test-portal/FormulaText";
 
@@ -29,17 +29,18 @@ export default async function TestResultPage({ params }: { params: { id: string 
         },
       },
       batchSchedule: { include: { batch: true } },
+      testSeries: true,
     },
   });
   if (!test) notFound();
-  if (!test.batchScheduleId) redirect("/tests");
+  if (!test.batchScheduleId && !test.testSeriesId) redirect("/tests");
 
-  const { student } = await resolveStudentForSchedule(session.user.id, test.batchScheduleId);
+  const { student } = await resolveStudentForTest(session.user.id, test);
   if (!student) redirect("/tests");
 
   const attempt = await prisma.attempt.findUnique({
     where: { testId_studentId: { testId: test.id, studentId: student.id } },
-    include: { answers: true },
+    include: { answers: true, _count: { select: { violations: true } } },
   });
   if (!attempt) redirect("/tests");
   if (attempt.status === "IN_PROGRESS") redirect(`/tests/${test.id}/attempt`);
@@ -125,7 +126,16 @@ export default async function TestResultPage({ params }: { params: { id: string 
               {test.name} — Analytics &amp; Scorecard
             </h1>
             <p className="text-xs text-on-surface-variant mt-1">
-              Batch: <b>{test.batchSchedule?.batch.name}</b> &middot; Submitted at:{" "}
+              {test.batchSchedule ? (
+                <>
+                  Batch: <b>{test.batchSchedule.batch.name}</b> &middot;{" "}
+                </>
+              ) : (
+                <>
+                  Series: <b>{test.testSeries?.name ?? "Standalone Test"}</b> &middot;{" "}
+                </>
+              )}
+              Submitted at:{" "}
               {attempt.submittedAt?.toLocaleString("en-IN", {
                 day: "numeric",
                 month: "short",
@@ -231,6 +241,39 @@ export default async function TestResultPage({ params }: { params: { id: string 
               <p className="font-bold text-lg text-on-surface-variant mt-1 font-mono">{unattemptedCount}</p>
               <p className="text-xs text-on-surface-variant">Skipped</p>
             </div>
+          </div>
+
+          {/* Exam Integrity Score */}
+          <div
+            className={`glass-card rounded-2xl p-4 flex items-center justify-between border ${
+              attempt.integrityScore >= 90
+                ? "border-tertiary/30 bg-tertiary-container/10"
+                : attempt.integrityScore >= 70
+                ? "border-secondary/30 bg-secondary-container/10"
+                : "border-error/30 bg-error-container/10"
+            }`}
+          >
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">
+                Exam Integrity Score
+              </p>
+              <p className="text-[10px] text-on-surface-variant mt-0.5">
+                {attempt._count.violations > 0
+                  ? `${attempt._count.violations} proctoring violation${attempt._count.violations === 1 ? "" : "s"} recorded`
+                  : "No proctoring violations recorded"}
+              </p>
+            </div>
+            <span
+              className={`font-headline-md font-bold font-mono text-2xl ${
+                attempt.integrityScore >= 90
+                  ? "text-tertiary"
+                  : attempt.integrityScore >= 70
+                  ? "text-secondary"
+                  : "text-error"
+              }`}
+            >
+              {attempt.integrityScore}
+            </span>
           </div>
 
           {/* AI Diagnostic Recommendation */}

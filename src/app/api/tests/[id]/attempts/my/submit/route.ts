@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { UnauthorizedError, ForbiddenError } from "@/lib/rbac/guard";
-import { resolveStudentForSchedule } from "@/lib/batch/access";
+import { resolveStudentForTest } from "@/lib/test-series/access";
 import { computeDeadlineMs, finalizeAttempt } from "@/lib/test-engine/scoring";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 
@@ -17,9 +17,11 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
       include: { batchSchedule: true },
     });
     if (!test) return apiError("Test not found", 404);
-    if (!test.batchScheduleId) return apiError("This test isn't linked to a scheduled session.", 400);
+    if (!test.batchScheduleId && !test.testSeriesId) {
+      return apiError("This test isn't linked to a scheduled session or a series.", 400);
+    }
 
-    const { student } = await resolveStudentForSchedule(session.user.id, test.batchScheduleId);
+    const { student } = await resolveStudentForTest(session.user.id, test);
     if (!student) throw new ForbiddenError();
 
     const attempt = await prisma.attempt.findUnique({

@@ -28,4 +28,12 @@ export const testAnswerUpsertSchema = z.object({
   selectedOption: z.string().min(1).max(20).nullable(),
 });
 
+export const attemptViolationSchema = z.object({
+  // Bounded to the violation kinds ExamRunner actually detects client-side —
+  // keeps the AttemptViolation.type free-text column constrained at the
+  // validation layer even though the DB doesn't enforce an enum here.
+  type: z.enum(["TAB_SWITCH", "FULLSCREEN_EXIT", "COPY_PASTE", "CONTEXT_MENU"]),
+});
+export type AttemptViolationInput = z.infer<typeof attemptViolationSchema>;
+
 export const TEST_STATUS_OPTIONS = ["DRAFT", "PUBLISHED", "ARCHIVED"] as const;
