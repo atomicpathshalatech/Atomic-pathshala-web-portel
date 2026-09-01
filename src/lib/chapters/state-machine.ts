@@ -1,4 +1,8 @@
-import "server-only";
+// Deliberately no "server-only" guard here, unlike most of this app's
+// lib files — this state machine is pure functions/data with no DB access
+// or secrets, and it's legitimately imported from both the server (the
+// status-transition API route, which is the actual enforcement point) and
+// the client (ChapterStatusActions.tsx, to know which buttons to render).
 
 export type ChapterStatusValue =
   | "DRAFT"
