@@ -55,6 +55,15 @@ model User {
   photoUrl               String?
   status                 UserStatus     @default(ACTIVE)
   roleId                 String
+  department             String?
+  position               String?
+  contractType           String?
+  contractStart          DateTime?
+  contractEnd            DateTime?
+  contractNote           String?
+  reportingManagerId     String?
+  subjectScope           String[]       @default([])
+  batchScope             String[]       @default([])
   securityQuestion       String?
   securityAnswerHash     String?
   passwordResetToken     String?        @unique
@@ -63,6 +72,8 @@ model User {
   updatedAt              DateTime       @updatedAt
   lastLoginAt            DateTime?
   auditLogs              AuditLog[]
+  userPermissionOverrides UserPermissionOverride[]
+  accessRequests         AccessRequest[]
   doubtsResolved         Doubt[]        @relation("DoubtResolvedBy")
   notifications          Notification[]
   questionsCreated       Question[]     @relation("QuestionCreatedBy")
@@ -1418,6 +1429,58 @@ model AuditLog {
   @@map("audit_logs")
 }
 
+model UserPermissionOverride {
+  id             String   @id @default(cuid())
+  userId         String
+  permissionCode String
+  granted        Boolean
+  reason         String?
+  grantedById    String?
+  createdAt      DateTime @default(now())
+
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, permissionCode])
+  @@map("user_permission_overrides")
+}
+
+model DepartmentPosition {
+  id          String   @id @default(cuid())
+  department  String
+  position    String
+  defaultRole String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([department, position])
+  @@map("department_positions")
+}
+
+model AccessRequest {
+  id                  String              @id @default(cuid())
+  userId              String
+  requestedModule     String
+  requestedPermission String
+  reason              String
+  status              AccessRequestStatus @default(PENDING)
+  reviewedById        String?
+  reviewedAt          DateTime?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("access_requests")
+}
+
+enum AccessRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum GlobalRole {
   GUEST
   STUDENT
@@ -1426,18 +1489,17 @@ enum GlobalRole {
   ACADEMIC_HEAD
   QUESTION_TEAM
   CONTENT_TEAM
+  CONTENT_CREATOR
+  SME
   SALES
   SUPPORT
   FINANCE
   HR
   MARKETING
+  DESIGNER
+  VIDEO_EDITOR
   DEPARTMENT_HEAD
-  // Imported from Atomic Test Portal's 4-tier RBAC (SUPER_ADMIN → SUB_ADMIN
-  // → TEACHER → STUDENT). Sits directly under SUPER_ADMIN in the seed's
-  // ROLE_PERMISSION_DEFAULTS — everything SUPER_ADMIN can do inside the Test
-  // Portal modules (TestSeries/Question Bank/DPP admin, Security Center,
-  // Rank/College Predictor data), minus RBAC/system-settings and user
-  // account management, which stay SUPER_ADMIN-only.
+  ADMIN
   SUB_ADMIN
   SUPER_ADMIN
   FOUNDER
@@ -1447,6 +1509,7 @@ enum UserStatus {
   ACTIVE
   INACTIVE
   SUSPENDED
+  EXPIRED
   PENDING_VERIFICATION
 }
 

@@ -38,6 +38,14 @@ const NAV_SECTIONS: { title?: string; items: { href: string; label: string; icon
     ],
   },
   {
+    title: "Administration & RBAC",
+    items: [
+      { href: "/team/users", label: "User Management", icon: "manage_accounts", permission: PERMISSIONS.USER_READ },
+      { href: "/team/roles", label: "Roles & Permissions", icon: "security", permission: PERMISSIONS.ROLE_MANAGE },
+      { href: "/team/departments", label: "Departments & Positions", icon: "corporate_fare", permission: PERMISSIONS.DEPARTMENT_MANAGE },
+    ],
+  },
+  {
     title: "People",
     items: [
       { href: "/team/faculty", label: "Faculty", icon: "school", permission: PERMISSIONS.TEACHER_READ },

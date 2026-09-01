@@ -17,40 +17,123 @@ export class UnauthorizedError extends Error {
 }
 
 /**
- * Checks whether the given user (by id) holds the given permission,
- * by resolving User -> Role -> RolePermission -> Permission.
- * This is the ONLY sanctioned way to gate access. Never compare
- * `user.role.name === "SUPER_ADMIN"` inline in feature code.
+ * Checks whether the given user holds the given permission,
+ * factoring in:
+ * 1. User status (Active vs Inactive/Suspended/Expired)
+ * 2. Contract End Date (Auto-expiration)
+ * 3. User-level explicit overrides (Grant or Deny)
+ * 4. Role-based permissions
  */
 export async function hasPermission(
   userId: string,
   permission: PermissionCode
 ): Promise<boolean> {
+  if (!userId) return false;
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      status: true,
+      contractEnd: true,
+      role: {
+        select: {
+          name: true,
+        },
+      },
+    },
+  });
+
+  if (!user) return false;
+
+  // 1. Inactive, Suspended, or Expired users are completely blocked
+  if (user.status !== "ACTIVE") return false;
+
+  // 2. Contract expiration check
+  if (user.contractEnd && new Date(user.contractEnd) < new Date()) {
+    return false;
+  }
+
+  // 3. Super Admin / Founder has all permissions unless explicitly overridden
+  const isSuperAdmin = user.role.name === "SUPER_ADMIN" || user.role.name === "FOUNDER";
+
+  // 4. Check user-level explicit override first
+  const override = await prisma.userPermissionOverride.findUnique({
+    where: {
+      userId_permissionCode: {
+        userId,
+        permissionCode: permission,
+      },
+    },
+  });
+
+  if (override) {
+    return override.granted;
+  }
+
+  if (isSuperAdmin) return true;
+
+  // 5. Check Role permissions
   const count = await prisma.rolePermission.count({
     where: {
       permission: { code: permission },
       role: { users: { some: { id: userId } } },
     },
   });
+
   return count > 0;
 }
 
 /**
- * Returns every permission code the user holds, in one query — used to
- * filter UI (e.g. sidebar nav items) rather than making N separate
- * hasPermission() calls per render.
+ * Returns every effective permission code the user holds in one pass:
+ * Role permissions + Granted Overrides - Denied Overrides
  */
 export async function getUserPermissionCodes(userId: string): Promise<Set<PermissionCode>> {
-  const rows = await prisma.rolePermission.findMany({
+  if (!userId) return new Set();
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      status: true,
+      contractEnd: true,
+      role: {
+        select: {
+          name: true,
+        },
+      },
+    },
+  });
+
+  if (!user || user.status !== "ACTIVE") return new Set();
+  if (user.contractEnd && new Date(user.contractEnd) < new Date()) return new Set();
+
+  // Role permissions
+  const rolePermissions = await prisma.rolePermission.findMany({
     where: { role: { users: { some: { id: userId } } } },
     select: { permission: { select: { code: true } } },
   });
-  return new Set(rows.map((r) => r.permission.code as PermissionCode));
+
+  const codes = new Set<PermissionCode>(
+    rolePermissions.map((r) => r.permission.code as PermissionCode)
+  );
+
+  // User overrides
+  const overrides = await prisma.userPermissionOverride.findMany({
+    where: { userId },
+  });
+
+  for (const o of overrides) {
+    if (o.granted) {
+      codes.add(o.permissionCode as PermissionCode);
+    } else {
+      codes.delete(o.permissionCode as PermissionCode);
+    }
+  }
+
+  return codes;
 }
 
 /**
- * Throws if the user lacks the permission. Use at the top of every
- * Server Action / API route handler that mutates or reads protected data.
+ * Throws if the user lacks the permission.
  */
 export async function requirePermission(
   userId: string | undefined | null,
