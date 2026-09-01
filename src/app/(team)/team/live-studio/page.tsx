@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 export default function TeamLiveStudioPage() {
   return (
     <AtomicWhiteboardStudio
-      initialTitle="NEET Chemistry: Chemical Bonding & Molecular Structure"
+      classTitle="NEET Chemistry: Chemical Bonding & Molecular Structure"
       batchName="YODHA NEET 2027"
     />
   );
