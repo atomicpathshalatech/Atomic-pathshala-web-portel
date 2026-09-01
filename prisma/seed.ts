@@ -1,4 +1,4 @@
-﻿import { PrismaClient, GlobalRole } from "@prisma/client";
+import { PrismaClient, GlobalRole } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { PERMISSIONS, ROLE_PERMISSION_DEFAULTS } from "../src/lib/rbac/permissions";
 import { DEFAULT_PLAN_PRICING } from "../src/lib/subscription/plan-pricing-defaults";
@@ -297,6 +297,84 @@ async function main() {
       status: "ACTIVE",
     },
   });
+
+  // ============================================================
+  // ACADEMIC COURSES & SUBJECTS
+  // ============================================================
+
+  console.log("Seeding academic courses and subjects...");
+
+  const SEED_COURSES = [
+    {
+      title: "NEET UG 2026 (Medical Target Program)",
+      slug: "neet-ug-2026",
+      description: "Comprehensive NEET coaching for Physics, Chemistry, Botany and Zoology.",
+      subjects: [
+        "Physics",
+        "Chemistry",
+        "Botany",
+        "Zoology",
+        "Physical Chemistry",
+        "Organic Chemistry",
+        "Inorganic Chemistry",
+      ],
+    },
+    {
+      title: "IIT-JEE (Main + Advanced) 2026",
+      slug: "jee-main-advanced-2026",
+      description: "IIT-JEE exam preparation with advanced problem solving and mock tests.",
+      subjects: ["Physics", "Chemistry", "Mathematics"],
+    },
+    {
+      title: "Class 11th Science (NEET / JEE / CBSE)",
+      slug: "class-11th-science",
+      description: "Foundational and advanced concepts for Class 11th Science students.",
+      subjects: ["Physics", "Chemistry", "Biology", "Mathematics"],
+    },
+    {
+      title: "Class 12th Science (Board + Competitive Mastery)",
+      slug: "class-12th-science",
+      description: "Board exams and competitive exam preparation for Class 12th.",
+      subjects: ["Physics", "Chemistry", "Biology", "Mathematics"],
+    },
+    {
+      title: "Foundation (Class 9th & 10th Olympiad / NTSE)",
+      slug: "foundation-9th-10th",
+      description: "Early foundation for Science and Maths Olympiads and NTSE.",
+      subjects: ["Science", "Mathematics", "Mental Ability"],
+    },
+  ];
+
+  for (const c of SEED_COURSES) {
+    const course = await prisma.course.upsert({
+      where: { slug: c.slug },
+      update: {
+        title: c.title,
+        description: c.description,
+        isPublished: true,
+      },
+      create: {
+        title: c.title,
+        slug: c.slug,
+        description: c.description,
+        isPublished: true,
+      },
+    });
+
+    for (const subTitle of c.subjects) {
+      const existing = await prisma.subject.findFirst({
+        where: { courseId: course.id, title: subTitle },
+      });
+      if (!existing) {
+        await prisma.subject.create({
+          data: {
+            title: subTitle,
+            courseId: course.id,
+          },
+        });
+      }
+    }
+  }
 
   // ============================================================
   // OUTPUT
