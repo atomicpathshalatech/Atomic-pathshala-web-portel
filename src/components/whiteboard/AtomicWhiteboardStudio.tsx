@@ -474,14 +474,18 @@ export function AtomicWhiteboardStudio({
         const currentStrokes = [...s.strokes];
         const lastIndex = currentStrokes.length - 1;
         if (lastIndex < 0) return s;
-        const last = { ...currentStrokes[lastIndex] };
-        if (last.tool === "shape") {
-          const p0 = last.points[0] || { x, y };
-          last.points = [p0, { x, y }];
-        } else {
-          last.points = [...last.points, { x, y }];
-        }
-        currentStrokes[lastIndex] = last;
+        const last = currentStrokes[lastIndex];
+        if (!last) return s;
+
+        const currentPoints = last.points || [];
+        const updatedStroke: Stroke = {
+          ...last,
+          points:
+            last.tool === "shape"
+              ? [currentPoints[0] || { x, y }, { x, y }]
+              : [...currentPoints, { x, y }],
+        };
+        currentStrokes[lastIndex] = updatedStroke;
         return { ...s, strokes: currentStrokes };
       })
     );
@@ -494,6 +498,7 @@ export function AtomicWhiteboardStudio({
   const handleUndo = () => {
     if (history.length === 0) return;
     const prev = history[history.length - 1];
+    if (!prev) return;
     setRedoStack((r) => [...r, activeSlide.strokes]);
     setHistory((h) => h.slice(0, -1));
     setSlides((all) => all.map((s, idx) => (idx === activeSlideIndex ? { ...s, strokes: prev } : s)));
@@ -502,6 +507,7 @@ export function AtomicWhiteboardStudio({
   const handleRedo = () => {
     if (redoStack.length === 0) return;
     const next = redoStack[redoStack.length - 1];
+    if (!next) return;
     setHistory((h) => [...h, activeSlide.strokes]);
     setRedoStack((r) => r.slice(0, -1));
     setSlides((all) => all.map((s, idx) => (idx === activeSlideIndex ? { ...s, strokes: next } : s)));
