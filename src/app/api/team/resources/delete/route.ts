@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
       } else if (resource.type === "QUESTION") {
         await prisma.question.delete({ where: { id: resource.targetId } }).catch(() => {});
       } else if (resource.type === "LECTURE") {
-        await prisma.chapterLecture.delete({ where: { id: resource.targetId } }).catch(() => {});
+        await prisma.lecture.delete({ where: { id: resource.targetId } }).catch(() => {});
       }
     } catch {
       // Ignore if already deleted

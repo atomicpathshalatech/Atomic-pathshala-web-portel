@@ -201,7 +201,7 @@ export async function lookupPlatformResource(resourceId: string) {
   }
 
   if (cleanId.startsWith("LEC-") || cleanId.startsWith("VID-")) {
-    const lecture = await prisma.chapterLecture.findFirst({
+    const lecture = await prisma.lecture.findFirst({
       where: {
         OR: [
           { id: cleanId },
