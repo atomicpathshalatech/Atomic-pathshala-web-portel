@@ -233,7 +233,7 @@ export function DualColumnQuestionStudio({
         statementHi: `[अनुवादित] ${currentQ.statementEn}`,
         optionAHi: currentQ.optionAEn ? `[अनुवादित] ${currentQ.optionAEn}` : "",
         optionBHi: currentQ.optionBEn ? `[अनुवादित] ${currentQ.optionBEn}` : "",
-        optionCHHi: currentQ.optionCEn ? `[अनुवादित] ${currentQ.optionCEn}` : "",
+        optionCHi: currentQ.optionCEn ? `[अनुवादित] ${currentQ.optionCEn}` : "",
         optionDHi: currentQ.optionDEn ? `[अनुवादित] ${currentQ.optionDEn}` : "",
         solutionHi: currentQ.solutionEn ? `[अनुवादित] ${currentQ.solutionEn}` : "",
       });
