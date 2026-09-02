@@ -9,13 +9,20 @@ import { testSeriesSchema } from "@/lib/validation/test-series";
 import { generateTestSeriesCode } from "@/lib/test-series/code";
 import { Prisma } from "@prisma/client";
 
-export async function GET(_request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     await requirePermission(session?.user?.id, PERMISSIONS.TEST_READ);
 
+    const { searchParams } = new URL(request.url);
+    const status = searchParams.get("status");
+
     const series = await prisma.testSeries.findMany({
-      include: { _count: { select: { tests: true } } },
+      where: status && status !== "ALL" ? { status } : {},
+      include: {
+        _count: { select: { tests: true } },
+        tests: { select: { id: true, name: true, status: true } },
+      },
       orderBy: { createdAt: "desc" },
     });
 
@@ -29,9 +36,6 @@ export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
-    // Standalone TestSeries are managed the same way standalone (non-
-    // batch-bound) tests are — admin-tier only, per canManageTest's rule
-    // in @/lib/test-engine/access.ts.
     await requirePermission(session.user.id, PERMISSIONS.TEST_PUBLISH);
 
     const data = testSeriesSchema.parse(await request.json());
@@ -53,6 +57,7 @@ export async function POST(request: NextRequest) {
             examType: data.examType || null,
             tags: data.tags.length > 0 ? data.tags.join(",") : null,
             visibility: data.visibility,
+            status: data.status || "DRAFT",
             startDate: data.startDate ? new Date(data.startDate) : null,
             endDate: data.endDate ? new Date(data.endDate) : null,
           },
@@ -75,6 +80,7 @@ export async function POST(request: NextRequest) {
         action: "TEST_SERIES_CREATE",
         entityType: "TestSeries",
         entityId: series.id,
+        metadata: { status: series.status },
       },
     });
 

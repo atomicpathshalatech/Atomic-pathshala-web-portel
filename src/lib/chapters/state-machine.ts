@@ -10,8 +10,32 @@ export type ChapterStatusValue =
   | "LECTURES_COMPLETE"
   | "TESTS_PENDING"
   | "READY_TO_PUBLISH"
+  | "SUBMITTED"
+  | "UNDER_REVIEW"
+  | "APPROVED"
+  | "REJECTED"
+  | "CHANGES_REQUESTED"
   | "PUBLISHED"
   | "ARCHIVED";
+
+/**
+ * Statuses that only the review workflow may move a chapter into. The
+ * generic status-transition route (POST /api/team/chapters/:id/status)
+ * refuses any transition INTO one of these — they're reachable only via
+ * POST .../submit (SUBMITTED -> UNDER_REVIEW) and POST .../review
+ * (UNDER_REVIEW -> APPROVED/REJECTED/CHANGES_REQUESTED), both of which
+ * require the reviewer to be someone other than the chapter's own author.
+ * Leaving one of these states (e.g. CHANGES_REQUESTED back to
+ * LECTURES_IN_PROGRESS, or APPROVED on to PUBLISHED) still goes through
+ * the generic route — only entry is restricted.
+ */
+export const REVIEW_MANAGED_STATES: ChapterStatusValue[] = [
+  "SUBMITTED",
+  "UNDER_REVIEW",
+  "APPROVED",
+  "REJECTED",
+  "CHANGES_REQUESTED",
+];
 
 /**
  * Valid forward/backward transitions for a Chapter's production state
@@ -20,17 +44,24 @@ export type ChapterStatusValue =
  * directly against the API can't skip straight to PUBLISHED.
  *
  * DRAFT -> LECTURES_IN_PROGRESS -> LECTURES_COMPLETE -> TESTS_PENDING ->
- * READY_TO_PUBLISH -> PUBLISHED -> ARCHIVED, with a few backward moves
- * allowed (e.g. pulling a published chapter back to fix something) and
- * ARCHIVED reachable from any non-terminal state.
+ * READY_TO_PUBLISH -> SUBMITTED -> UNDER_REVIEW -> APPROVED -> PUBLISHED,
+ * with REJECTED/CHANGES_REQUESTED branching back to authoring and a few
+ * other backward moves allowed. ARCHIVED reachable from most states.
  */
 const TRANSITIONS: Record<ChapterStatusValue, ChapterStatusValue[]> = {
   DRAFT: ["LECTURES_IN_PROGRESS", "ARCHIVED"],
   LECTURES_IN_PROGRESS: ["DRAFT", "LECTURES_COMPLETE", "ARCHIVED"],
   LECTURES_COMPLETE: ["LECTURES_IN_PROGRESS", "TESTS_PENDING", "ARCHIVED"],
   TESTS_PENDING: ["LECTURES_COMPLETE", "READY_TO_PUBLISH", "ARCHIVED"],
-  READY_TO_PUBLISH: ["TESTS_PENDING", "PUBLISHED", "ARCHIVED"],
-  PUBLISHED: ["READY_TO_PUBLISH", "ARCHIVED"],
+  // Publishing no longer happens directly from here — READY_TO_PUBLISH's
+  // only forward move is into the review workflow via POST .../submit.
+  READY_TO_PUBLISH: ["TESTS_PENDING", "SUBMITTED", "ARCHIVED"],
+  SUBMITTED: ["UNDER_REVIEW"],
+  UNDER_REVIEW: ["APPROVED", "REJECTED", "CHANGES_REQUESTED"],
+  CHANGES_REQUESTED: ["LECTURES_IN_PROGRESS", "READY_TO_PUBLISH", "ARCHIVED"],
+  REJECTED: ["DRAFT", "ARCHIVED"],
+  APPROVED: ["PUBLISHED", "ARCHIVED"],
+  PUBLISHED: ["ARCHIVED"],
   ARCHIVED: ["DRAFT"],
 };
 

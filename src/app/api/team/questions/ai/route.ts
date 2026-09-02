@@ -1,12 +1,15 @@
-﻿import { NextRequest } from "next/server";
+import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/db";
 import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import {
   parseQuestionFromRawText,
+  extractFromImage,
   generateEducationalTranslation,
+  verifyTranslation,
   generateAiMetadata,
   generateAiSolution,
 } from "@/lib/questions/ai-service";
@@ -25,12 +28,44 @@ export async function POST(request: NextRequest) {
       return apiSuccess({ result });
     }
 
+    if (action === "ocr_image") {
+      if (!payload.imageBase64) {
+        return apiError("imageBase64 is required for OCR extraction", 400);
+      }
+      const result = await extractFromImage(
+        payload.imageBase64,
+        payload.mimeType || "image/png"
+      );
+
+      await prisma.auditLog.create({
+        data: {
+          userId: session.user.id,
+          action: "QUESTION_OCR_EXTRACT",
+          entityType: "QuestionOCR",
+          metadata: {
+            confidence: result.confidence,
+            hasOptions: Boolean(result.optionA && result.optionB),
+          },
+        },
+      });
+
+      return apiSuccess({ result });
+    }
+
     if (action === "translate") {
-      const translation = generateEducationalTranslation(
+      const translation = await generateEducationalTranslation(
         payload.text || "",
         payload.sourceLanguage || "ENGLISH"
       );
       return apiSuccess({ translation });
+    }
+
+    if (action === "verify_translation") {
+      const report = await verifyTranslation(
+        payload.englishText || "",
+        payload.hindiText || ""
+      );
+      return apiSuccess({ report });
     }
 
     if (action === "metadata") {

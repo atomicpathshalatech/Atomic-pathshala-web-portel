@@ -1,4 +1,4 @@
-﻿import crypto from "crypto";
+import crypto from "crypto";
 import { PrismaClient } from "@prisma/client";
 
 export interface SimilarityMatch {
@@ -138,17 +138,40 @@ export async function analyzeQuestionSimilarity(
 
   const queryTemplateEn = statementEn ? extractStructuralTemplate(statementEn) : "";
 
-  // Candidate Retrieval: fetch questions in same subject/chapter or general pool
-  const candidates = await prisma.question.findMany({
-    where: {
-      id: input.excludeQuestionId ? { not: input.excludeQuestionId } : undefined,
-    },
+  // Candidate Retrieval: prioritize questions in same subject/chapter
+  const where: any = {
+    id: input.excludeQuestionId ? { not: input.excludeQuestionId } : undefined,
+  };
+  if (input.subject) {
+    where.subject = { equals: input.subject, mode: "insensitive" };
+  }
+
+  let candidates = await prisma.question.findMany({
+    where,
     include: {
       translations: true,
     },
-    take: 100,
+    take: 150,
     orderBy: { createdAt: "desc" },
   });
+
+  // If fewer than 20 candidates in subject, supplement with global pool
+  if (candidates.length < 20) {
+    const globalCandidates = await prisma.question.findMany({
+      where: {
+        id: input.excludeQuestionId ? { not: input.excludeQuestionId } : undefined,
+      },
+      include: {
+        translations: true,
+      },
+      take: 100,
+      orderBy: { createdAt: "desc" },
+    });
+    const existingIds = new Set(candidates.map((c) => c.id));
+    for (const gc of globalCandidates) {
+      if (!existingIds.has(gc.id)) candidates.push(gc);
+    }
+  }
 
   const matches: SimilarityMatch[] = [];
 

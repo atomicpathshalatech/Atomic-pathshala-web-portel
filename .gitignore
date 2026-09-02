@@ -1,4 +1,4 @@
-﻿node_modules/
+node_modules/
 .next/
 .env
 .env.local
@@ -19,3 +19,5 @@ public/pdf.worker.min.mjs
 # AI Chat / Atomic Guru Google Sheets sync credential — never commit
 service-account.json
 scripts/.migration-state.json
+tsconfig.tsbuildinfo
+_import*

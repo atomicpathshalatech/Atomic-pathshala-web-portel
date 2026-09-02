@@ -4,14 +4,31 @@ import { ForbiddenError, UnauthorizedError } from "@/lib/rbac/guard";
 import { SubscriptionError } from "@/server/services/subscription-service";
 
 type ApiSuccess<T> = { success: true; data: T };
-type ApiFailure = { success: false; error: string; issues?: Record<string, string[]> };
+type ApiFailure = {
+  success: false;
+  error: string;
+  issues?: Record<string, string[]>;
+  // Structured machine-readable error identity for business-rule
+  // violations (e.g. chapter sequence locks) — a client that needs to
+  // branch on *why* a request failed (not just show the message) can key
+  // off `code` instead of parsing `error` text.
+  code?: string;
+  details?: Record<string, unknown>;
+};
 
 export function apiSuccess<T>(data: T, status = 200) {
   return NextResponse.json<ApiSuccess<T>>({ success: true, data }, { status });
 }
 
-export function apiError(message: string, status = 400) {
-  return NextResponse.json<ApiFailure>({ success: false, error: message }, { status });
+export function apiError(
+  message: string,
+  status = 400,
+  extra?: { code?: string; details?: Record<string, unknown> }
+) {
+  return NextResponse.json<ApiFailure>(
+    { success: false, error: message, code: extra?.code, details: extra?.details },
+    { status }
+  );
 }
 
 /**

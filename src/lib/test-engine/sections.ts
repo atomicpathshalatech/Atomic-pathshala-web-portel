@@ -46,3 +46,83 @@ export async function nextSectionQuestionOrder(sectionId: string) {
   });
   return (max._max.order ?? 0) + 1;
 }
+
+/**
+ * Clones template sections into real Test Section records and binds the
+ * template to the test. If default or empty sections exist with no questions,
+ * replaces them cleanly with the structured template sections.
+ */
+export async function createSectionsFromTemplate(testId: string, templateId: string) {
+  const template = await prisma.testTemplate.findUnique({
+    where: { id: templateId },
+    include: { sections: { orderBy: { order: "asc" } } },
+  });
+
+  if (!template) {
+    throw new Error("Test template not found");
+  }
+
+  // Check if test has questions in existing sections
+  const existingQuestions = await prisma.sectionQuestion.count({
+    where: { section: { testId } },
+  });
+
+  if (existingQuestions > 0) {
+    throw new Error("Cannot apply template to a test that already has questions assigned");
+  }
+
+  // Delete any empty default section created previously
+  await prisma.section.deleteMany({
+    where: { testId },
+  });
+
+  // Create sections matching template configuration
+  await prisma.$transaction([
+    prisma.test.update({
+      where: { id: testId },
+      data: { templateId },
+    }),
+    ...template.sections.map((sec, idx) =>
+      prisma.section.create({
+        data: {
+          testId,
+          name: sec.name,
+          subject: sec.subject,
+          targetCount: sec.targetCount,
+          marksPerQuestion: sec.marksPerQuestion,
+          negativeMarks: sec.negativeMarks,
+          order: sec.order ?? idx,
+        },
+      })
+    ),
+  ]);
+
+  return prisma.section.findMany({
+    where: { testId },
+    orderBy: { order: "asc" },
+  });
+}
+
+/**
+ * Returns detailed section summary including question counts, target counts, and marks.
+ */
+export async function getTestSectionBreakdown(testId: string) {
+  return prisma.section.findMany({
+    where: { testId },
+    include: {
+      _count: { select: { questions: true } },
+      questions: {
+        include: {
+          question: {
+            include: {
+              translations: true,
+            },
+          },
+        },
+        orderBy: { order: "asc" },
+      },
+    },
+    orderBy: { order: "asc" },
+  });
+}
+

@@ -8,16 +8,11 @@ import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { canManageTest } from "@/lib/test-engine/access";
 import { computeAttemptCounts } from "@/lib/test-engine/scoring";
-import { TestQuestionPicker } from "@/components/team-portal/TestQuestionPicker";
-import { PublishTestButton } from "@/components/team-portal/PublishTestButton";
+import { TestDetailClient } from "@/components/team-portal/TestDetailClient";
 
 export const metadata: Metadata = {
   title: "Test Detail",
 };
-
-function questionStatement(translations: { language: string; statement: string }[]) {
-  return translations.find((t) => t.language === "ENGLISH")?.statement ?? translations[0]?.statement ?? "";
-}
 
 export default async function TestDetailPage({ params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
@@ -29,6 +24,7 @@ export default async function TestDetailPage({ params }: { params: { id: string 
   const test = await prisma.test.findUnique({
     where: { id: params.id },
     include: {
+      template: { select: { id: true, name: true } },
       batchSchedule: { include: { batch: { select: { id: true, name: true } } } },
       sections: {
         orderBy: { order: "asc" },
@@ -50,10 +46,6 @@ export default async function TestDetailPage({ params }: { params: { id: string 
   const isDraft = test.status === "DRAFT";
 
   const sectionQuestions = test.sections.flatMap((s) => s.questions.map((sq) => ({ ...sq, section: s })));
-  const totalMarks = sectionQuestions.reduce(
-    (sum, sq) => sum + (sq.marksOverride ?? sq.section.marksPerQuestion ?? test.correctMarks),
-    0
-  );
 
   const results =
     test.status !== "DRAFT"
@@ -65,91 +57,56 @@ export default async function TestDetailPage({ params }: { params: { id: string 
       : [];
 
   return (
-    <div className="space-y-stack-lg max-w-4xl">
-      <div>
-        <p className="flex items-center gap-2 text-label-sm text-on-surface-variant mb-2">
-          <Link href="/team/tests" className="hover:text-primary">
-            Tests
-          </Link>
-          <span className="material-symbols-outlined text-sm">chevron_right</span>
-          <span className="text-primary">{test.name}</span>
-        </p>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="font-headline-lg text-headline-lg text-on-surface">{test.name}</h1>
-            <p className="text-label-sm text-on-surface-variant mt-1">
-              {test.batchSchedule && `${test.batchSchedule.batch.name} · `}
-              {test.durationMin} min · {totalMarks} marks
-              {test.batchSchedule &&
-                ` · ${new Date(test.batchSchedule.startsAt).toLocaleString()} — ${new Date(
-                  test.batchSchedule.endsAt
-                ).toLocaleString()}`}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Link
-              href={`/team/tests/${test.id}/author`}
-              className="px-4 py-2.5 rounded-xl bg-[#002f6c] hover:bg-[#001f4c] text-white font-extrabold text-xs shadow-md transition flex items-center gap-1.5"
-            >
-              <span className="material-symbols-outlined text-base">view_column</span>
-              <span>Open Dual-Column Studio</span>
-            </Link>
-            {isDraft && canPublish && <PublishTestButton testId={test.id} />}
-          </div>
-        </div>
-        {test.instructions && (
-          <p className="text-body-md text-on-surface-variant mt-3 max-w-2xl">{test.instructions}</p>
-        )}
-      </div>
+    <div className="space-y-6 max-w-5xl">
+      <p className="flex items-center gap-2 text-xs text-slate-500 mb-2">
+        <Link href="/team/tests" className="hover:text-indigo-600 transition">
+          Tests
+        </Link>
+        <span className="material-symbols-outlined text-sm">chevron_right</span>
+        <span className="text-slate-900 font-medium">{test.name}</span>
+      </p>
 
-      <section className="glass-card rounded-2xl p-6">
-        <TestQuestionPicker
-          testId={test.id}
-          editable={isDraft}
-          current={sectionQuestions.map((sq) => ({
-            id: sq.id,
-            order: sq.order,
-            question: {
-              id: sq.question.id,
-              statement: questionStatement(sq.question.translations),
-            },
-          }))}
-        />
-      </section>
+      {/* State-driven Authoring Client */}
+      <TestDetailClient
+        test={test as any}
+        isDraft={isDraft}
+        canPublish={canPublish}
+      />
 
+      {/* Submissions leaderboard if published */}
       {test.status !== "DRAFT" && (
-        <section className="glass-card rounded-2xl p-6 space-y-4">
-          <h2 className="font-headline-md text-headline-md text-on-surface flex items-center gap-2">
-            <span className="material-symbols-outlined text-primary">leaderboard</span>
-            Results ({results.length} submitted)
+        <section className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
+          <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+            <span className="material-symbols-outlined text-indigo-600">leaderboard</span>
+            Student Submissions ({results.length} attempts)
           </h2>
           {results.length === 0 ? (
-            <p className="text-label-sm text-on-surface-variant">No submissions yet.</p>
+            <p className="text-xs text-slate-500">No submissions recorded yet.</p>
           ) : (
-            <ul className="space-y-2">
+            <div className="divide-y divide-slate-100">
               {results.map((r, i) => {
                 const counts = computeAttemptCounts(r.answers, sectionQuestions.length);
                 return (
-                  <li
+                  <div
                     key={r.id}
-                    className="flex items-center justify-between bg-surface-container-lowest rounded-lg px-3 py-2"
+                    className="flex items-center justify-between py-3 hover:bg-slate-50 px-2 rounded-xl transition"
                   >
                     <div className="flex items-center gap-3">
-                      <span className="text-label-sm font-bold text-primary w-6">#{i + 1}</span>
+                      <span className="text-xs font-bold text-indigo-600 w-6">#{i + 1}</span>
                       <div>
-                        <p className="font-label-md text-label-md text-on-surface">{r.student.user.name}</p>
-                        <p className="text-label-sm text-on-surface-variant">
+                        <p className="text-xs font-bold text-slate-900">{r.student.user.name}</p>
+                        <p className="text-[11px] text-slate-500">
                           {r.student.enrollmentNumber} · {counts.correctCount} correct ·{" "}
                           {counts.incorrectCount} incorrect · {counts.unattemptedCount} unattempted
                           {r.status === "AUTO_SUBMITTED" ? " · auto-submitted" : ""}
                         </p>
                       </div>
                     </div>
-                    <span className="font-headline-md text-headline-md text-primary">{r.score ?? 0}</span>
-                  </li>
+                    <span className="text-sm font-bold text-slate-900">{r.score ?? 0} Marks</span>
+                  </div>
                 );
               })}
-            </ul>
+            </div>
           )}
         </section>
       )}

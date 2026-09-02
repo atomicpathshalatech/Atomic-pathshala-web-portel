@@ -94,7 +94,9 @@ model User {
   createdTests           Test[]            @relation("TestCreatedBy")
   createdTestTemplates   TestTemplate[]    @relation("TestTemplateCreatedBy")
   createdDpps            Dpp[]             @relation("DppCreatedBy")
+  chapterReviews         ChapterReview[]   @relation("ChapterReviewActor")
   questionVersionsEdited QuestionVersion[] @relation("QuestionVersionEditedBy")
+  questionAssets         QuestionAsset[]   @relation("QuestionAssetUploadedBy")
   reportsFiled           QuestionReport[]  @relation("ReportFiledBy")
   reportsClaimed         QuestionReport[]  @relation("ReportClaimedBy")
   deviceSessions         DeviceSession[]
@@ -461,12 +463,14 @@ model TestSeries {
   tags         String?
   thumbnailUrl String?
   visibility   String    @default("PRIVATE")
+  status       String    @default("DRAFT")
   startDate    DateTime?
   endDate      DateTime?
   createdAt    DateTime  @default(now())
 
   tests Test[]
 
+  @@index([status])
   @@map("test_series")
 }
 
@@ -475,6 +479,7 @@ model Test {
   testSeriesId           String?
   batchScheduleId        String?      @unique
   chapterId              String?
+  templateId             String?
   name                   String
   code                   String?      @unique
   languageMode           LanguageMode @default(BOTH)
@@ -498,6 +503,7 @@ model Test {
   testSeries    TestSeries?    @relation(fields: [testSeriesId], references: [id])
   batchSchedule BatchSchedule? @relation(fields: [batchScheduleId], references: [id], onDelete: Cascade)
   chapter       Chapter?       @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  template      TestTemplate?  @relation(fields: [templateId], references: [id], onDelete: SetNull)
   createdBy     User?          @relation("TestCreatedBy", fields: [createdById], references: [id])
   sections      Section[]
   attempts      Attempt[]
@@ -505,6 +511,7 @@ model Test {
   @@index([status])
   @@index([chapterId])
   @@index([testSeriesId])
+  @@index([templateId])
   @@map("tests")
 }
 
@@ -648,6 +655,7 @@ model TestTemplate {
 
   createdBy User?                 @relation("TestTemplateCreatedBy", fields: [createdById], references: [id])
   sections  TestTemplateSection[]
+  tests     Test[]
 
   @@map("test_templates")
 }
@@ -1259,6 +1267,12 @@ model Chapter {
   // and isn't part of this model.
   chapterId String?   @unique
   title     String
+  // Student-facing chapter scope, persisted (not UI-only text) per the
+  // Chapter → Lecture → DPP → Chapter Test academic pipeline spec. All
+  // optional so every pre-existing chapter keeps working unchanged.
+  description        String?
+  learningObjectives String?
+  prerequisites      String?
   subjectId String
   medium    Medium    @default(ENGLISH)
   status    ChapterStatus @default(DRAFT)
@@ -1272,6 +1286,7 @@ model Chapter {
   dpps           Dpp[]
   tests          Test[]
   batchSchedules BatchSchedule[]
+  reviews        ChapterReview[]
 
   @@index([subjectId])
   @@index([subjectId, title])
@@ -1285,6 +1300,39 @@ enum Medium {
   HINGLISH
 }
 
+// Append-only audit trail for the Chapter review workflow (SUBMITTED by the
+// author, then APPROVED/REJECTED/CHANGES_REQUESTED by an admin/reviewer via
+// POST /api/team/chapters/:id/review). Never updated in place — a new row
+// is created for every decision, so review history is reproducible even
+// after a chapter is resubmitted and re-reviewed multiple times.
+enum ChapterReviewAction {
+  SUBMITTED
+  APPROVED
+  REJECTED
+  CHANGES_REQUESTED
+}
+
+model ChapterReview {
+  id             String              @id @default(cuid())
+  chapterId      String
+  action         ChapterReviewAction
+  // Required at the application level for REJECTED/CHANGES_REQUESTED
+  // (POST /review enforces this before writing the row); optional here
+  // because the author's own SUBMITTED entry has no reviewer comment.
+  comment        String?
+  actorId        String
+  previousStatus ChapterStatus
+  newStatus      ChapterStatus
+  createdAt      DateTime            @default(now())
+
+  chapter Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  actor   User    @relation("ChapterReviewActor", fields: [actorId], references: [id])
+
+  @@index([chapterId])
+  @@index([actorId])
+  @@map("chapter_reviews")
+}
+
 // State machine for the Chapter Management System — a chapter moves
 // forward through content production before it's visible to students.
 // Transitions are backend-enforced (see chapter status-transition route in
@@ -1295,6 +1343,15 @@ enum ChapterStatus {
   LECTURES_COMPLETE
   TESTS_PENDING
   READY_TO_PUBLISH
+  // --- Admin review workflow (Chapter → Lecture → DPP → Chapter Test →
+  // Review pipeline spec) — entered only via POST /submit and
+  // POST /review, never the generic /status route, so a teacher can
+  // never self-approve their own chapter. ---
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  CHANGES_REQUESTED
   PUBLISHED
   ARCHIVED
 }
@@ -1338,6 +1395,7 @@ model Question {
   dppLinks     DppQuestion[]
   bookmarks    Bookmark[]
   answers      AttemptAnswer[]
+  assets       QuestionAsset[]
 
   @@index([subject])
   @@index([difficulty])
@@ -1361,6 +1419,30 @@ model QuestionTranslation {
 
   @@unique([questionId, language])
   @@map("question_translations")
+}
+
+model QuestionAsset {
+  id           String   @id @default(cuid())
+  questionId   String
+  type         String   @default("REFERENCE") // REFERENCE | SOLUTION | DIAGRAM
+  storageKey   String
+  publicUrl    String
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+  width        Int?
+  height       Int?
+  checksum     String?
+  ocrText      String?  @db.Text
+  order        Int      @default(0)
+  createdById  String?
+  createdAt    DateTime @default(now())
+
+  question  Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  createdBy User?    @relation("QuestionAssetUploadedBy", fields: [createdById], references: [id])
+
+  @@index([questionId])
+  @@map("question_assets")
 }
 
 model Doubt {
