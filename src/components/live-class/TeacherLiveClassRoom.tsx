@@ -1301,7 +1301,7 @@ export function TeacherLiveClassRoom({
 
                 {/* 2-Column Grid of Shapes (Screenshot 5) */}
                 <div className="grid grid-cols-2 gap-1.5 max-h-64 overflow-y-auto pr-1">
-                  {SUBJECT_SHAPES[shapeSubjectTab].map((s, idx) => (
+                  {(SUBJECT_SHAPES[shapeSubjectTab] || SUBJECT_SHAPES.math).map((s, idx) => (
                     <button
                       key={`${s.label}-${idx}`}
                       type="button"

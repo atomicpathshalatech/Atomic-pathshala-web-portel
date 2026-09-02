@@ -303,7 +303,7 @@ export function Simulation3DModal({ onClose, onInsertToSlide }: Simulation3DModa
         for (let r = 50; r <= 150; r += 30) {
           ctx.beginPath();
           ctx.ellipse(0, 0, 160, r, 0, 0, Math.PI * 2);
-          ctx.strokeStyle = fieldColors[(r / 30) % fieldColors.length];
+          ctx.strokeStyle = fieldColors[(r / 30) % fieldColors.length] ?? "#38bdf8";
           ctx.lineWidth = 1.2;
           ctx.globalAlpha = 0.5;
           ctx.stroke();
