@@ -495,30 +495,30 @@ export function AtomicWhiteboardStudio({
     setIsDrawing(false);
   };
 
-  const handleUndo = () => {
+  const handleUndo = useCallback(() => {
     if (history.length === 0) return;
     const prev = history[history.length - 1];
     if (!prev) return;
     setRedoStack((r) => [...r, activeSlide.strokes]);
     setHistory((h) => h.slice(0, -1));
     setSlides((all) => all.map((s, idx) => (idx === activeSlideIndex ? { ...s, strokes: prev } : s)));
-  };
+  }, [history, activeSlide.strokes, activeSlideIndex]);
 
-  const handleRedo = () => {
+  const handleRedo = useCallback(() => {
     if (redoStack.length === 0) return;
     const next = redoStack[redoStack.length - 1];
     if (!next) return;
     setHistory((h) => [...h, activeSlide.strokes]);
     setRedoStack((r) => r.slice(0, -1));
     setSlides((all) => all.map((s, idx) => (idx === activeSlideIndex ? { ...s, strokes: next } : s)));
-  };
+  }, [redoStack, activeSlide.strokes, activeSlideIndex]);
 
-  const handleClear = () => {
+  const handleClear = useCallback(() => {
     setHistory((h) => [...h, activeSlide.strokes]);
     setSlides((all) => all.map((s, idx) => (idx === activeSlideIndex ? { ...s, strokes: [] } : s)));
-  };
+  }, [activeSlide.strokes, activeSlideIndex]);
 
-  const handleAddSlide = () => {
+  const handleAddSlide = useCallback(() => {
     const newSlide: Slide = {
       id: `s-${Date.now()}`,
       theme: activeSlide.theme,
@@ -528,13 +528,114 @@ export function AtomicWhiteboardStudio({
     setSlides((s) => [...s, newSlide]);
     setActiveSlideIndex(slides.length);
     toast.success("New slide added");
-  };
+  }, [activeSlide.theme, slides.length]);
 
-  const handleDeleteSlide = () => {
+  const handleDuplicateSlide = useCallback(() => {
+    const current = slides[activeSlideIndex];
+    if (!current) return;
+    const duplicatedSlide: Slide = {
+      id: `s-${Date.now()}`,
+      theme: current.theme,
+      title: `${current.title} (Copy)`,
+      strokes: JSON.parse(JSON.stringify(current.strokes)),
+      imageUrl: current.imageUrl,
+    };
+    const updated = [...slides];
+    updated.splice(activeSlideIndex + 1, 0, duplicatedSlide);
+    setSlides(updated);
+    setActiveSlideIndex(activeSlideIndex + 1);
+    toast.success("Slide duplicated (Ctrl+D)");
+  }, [slides, activeSlideIndex]);
+
+  const handlePrevSlide = useCallback(() => {
+    setActiveSlideIndex((i) => Math.max(0, i - 1));
+  }, []);
+
+  const handleNextSlide = useCallback(() => {
+    setActiveSlideIndex((i) => Math.min(slides.length - 1, i + 1));
+  }, [slides.length]);
+
+  const handleDeleteSlide = useCallback(() => {
     if (slides.length <= 1) return;
     setSlides((all) => all.filter((_, idx) => idx !== activeSlideIndex));
     setActiveSlideIndex((i) => Math.max(0, i - 1));
-  };
+  }, [slides.length, activeSlideIndex]);
+
+  // Click outside to close any open popup
+  useEffect(() => {
+    const handleGlobalClick = (e: MouseEvent) => {
+      if (openPopup) {
+        const target = e.target as HTMLElement;
+        if (!target.closest("[data-popup-container]")) {
+          setOpenPopup(null);
+        }
+      }
+    };
+    window.addEventListener("mousedown", handleGlobalClick);
+    return () => window.removeEventListener("mousedown", handleGlobalClick);
+  }, [openPopup]);
+
+  // Global Keyboard Shortcuts (Ctrl+Z, Ctrl+Y, Ctrl+D, Up/Down Arrows)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT" ||
+        target.isContentEditable
+      ) {
+        return;
+      }
+
+      // Ctrl+Z or Cmd+Z -> Undo
+      if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z") && !e.shiftKey) {
+        e.preventDefault();
+        handleUndo();
+        return;
+      }
+
+      // Ctrl+Y or Ctrl+Shift+Z -> Redo
+      if (
+        ((e.ctrlKey || e.metaKey) && (e.key === "y" || e.key === "Y")) ||
+        ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "z" || e.key === "Z"))
+      ) {
+        e.preventDefault();
+        handleRedo();
+        return;
+      }
+
+      // Ctrl+D or Cmd+D -> Duplicate Slide
+      if ((e.ctrlKey || e.metaKey) && (e.key === "d" || e.key === "D")) {
+        e.preventDefault();
+        handleDuplicateSlide();
+        return;
+      }
+
+      // Up Arrow or PageUp or Left Arrow -> Slide Back / Previous
+      if (e.key === "ArrowUp" || e.key === "PageUp" || e.key === "ArrowLeft") {
+        e.preventDefault();
+        handlePrevSlide();
+        return;
+      }
+
+      // Down Arrow or PageDown or Right Arrow -> Slide Next
+      if (e.key === "ArrowDown" || e.key === "PageDown" || e.key === "ArrowRight") {
+        e.preventDefault();
+        handleNextSlide();
+        return;
+      }
+
+      // Escape -> Close open popup
+      if (e.key === "Escape") {
+        setOpenPopup(null);
+        return;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleUndo, handleRedo, handleDuplicateSlide, handlePrevSlide, handleNextSlide]);
 
   const handleSetTheme = (t: BoardTheme) => {
     setSlides((all) =>
@@ -681,7 +782,7 @@ export function AtomicWhiteboardStudio({
           {/* Left: Pen, Highlight, Eraser, Shapes (with Popups) */}
           <div className="flex items-center gap-1.5">
             {/* Pen Customizer Flyout (Screenshot 5) */}
-            <div className="relative">
+            <div className="relative" data-popup-container="true">
               <button
                 type="button"
                 onClick={() => {
@@ -804,7 +905,7 @@ export function AtomicWhiteboardStudio({
             </button>
 
             {/* Subject-Wise Smart Shapes (Screenshot 5) */}
-            <div className="relative">
+            <div className="relative" data-popup-container="true">
               <button
                 type="button"
                 onClick={() => {
@@ -910,19 +1011,21 @@ export function AtomicWhiteboardStudio({
               <button
                 type="button"
                 disabled={activeSlideIndex === 0}
-                onClick={() => setActiveSlideIndex((i) => i - 1)}
+                onClick={handlePrevSlide}
                 className="text-gray-400 hover:text-white disabled:opacity-30"
+                title="Previous Slide (Up/Left Arrow)"
               >
                 <span className="material-symbols-outlined text-base">chevron_left</span>
               </button>
-              <span className="text-xs font-bold text-gray-200">
+              <span className="text-xs font-bold text-gray-200 min-w-[70px] text-center">
                 Slide {activeSlideIndex + 1} / {slides.length}
               </span>
               <button
                 type="button"
                 disabled={activeSlideIndex === slides.length - 1}
-                onClick={() => setActiveSlideIndex((i) => i + 1)}
+                onClick={handleNextSlide}
                 className="text-gray-400 hover:text-white disabled:opacity-30"
+                title="Next Slide (Down/Right Arrow)"
               >
                 <span className="material-symbols-outlined text-base">chevron_right</span>
               </button>
@@ -932,9 +1035,19 @@ export function AtomicWhiteboardStudio({
               type="button"
               onClick={handleAddSlide}
               className="px-3 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs flex items-center gap-1 shadow"
+              title="Add New Blank Slide"
             >
               <span className="material-symbols-outlined text-sm">add</span>
               <span>Add</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleDuplicateSlide}
+              className="px-2.5 py-1.5 rounded-xl bg-[#1c1e2c] hover:bg-[#25283a] border border-[#2d3045] text-gray-200 font-bold text-xs flex items-center gap-1 transition"
+              title="Duplicate / Copy Current Slide (Ctrl+D)"
+            >
+              <span className="material-symbols-outlined text-sm text-blue-400">content_copy</span>
+              <span>Copy</span>
             </button>
             <button
               type="button"
@@ -950,7 +1063,7 @@ export function AtomicWhiteboardStudio({
           {/* Right: Poll & Camera Toggles */}
           <div className="flex items-center gap-2">
             {/* Poll Button & Popover (Screenshot 3) */}
-            <div className="relative">
+            <div className="relative" data-popup-container="true">
               <button
                 type="button"
                 onClick={() => setOpenPopup((p) => (p === "pollMenu" ? null : "pollMenu"))}
