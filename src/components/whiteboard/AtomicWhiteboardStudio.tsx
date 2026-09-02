@@ -308,6 +308,10 @@ export function AtomicWhiteboardStudio({
     }
   }, [cameraStream]);
 
+  const activeSlide: Slide =
+    slides[activeSlideIndex] ||
+    slides[0] || { id: "s-1", theme: "brand_white", title: "Slide 1", strokes: [] };
+
   // Synchronous Slide Drawing Helper
   const drawSlideContent = useCallback(
     async (ctx: CanvasRenderingContext2D, slide: Slide, width: number, height: number) => {
