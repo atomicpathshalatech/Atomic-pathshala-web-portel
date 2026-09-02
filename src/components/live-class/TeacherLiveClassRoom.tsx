@@ -1245,18 +1245,18 @@ export function TeacherLiveClassRoom({
               onClick={() => setOpenPopup((p) => (p === "eraser" ? null : "eraser"))}
             />
             {openPopup === "eraser" && (
-              <div className="absolute bottom-full left-0 mb-2 z-40 bg-[#1a1b23] border border-[#2d2e3b] rounded-lg p-1 shadow-2xl w-44 flex flex-col gap-1">
+              <div className="absolute bottom-full left-0 mb-2 z-40 bg-[#1a1b23] border border-[#2d2e3b] rounded-2xl p-1.5 shadow-2xl w-52 flex flex-col gap-1 text-white">
                 <button
                   type="button"
                   onClick={() => {
                     setTool("stroke-eraser");
                     setOpenPopup(null);
                   }}
-                  className={`flex items-center gap-3 p-2 rounded text-sm text-left transition-colors ${
-                    tool === "stroke-eraser" ? "bg-blue-900/20 text-blue-400" : "text-gray-300 hover:bg-gray-800"
+                  className={`flex items-center gap-3 p-2 rounded-xl text-xs font-semibold text-left transition ${
+                    tool === "stroke-eraser" ? "bg-blue-600/20 text-blue-400 font-bold border border-blue-500/40" : "text-gray-300 hover:bg-gray-800"
                   }`}
                 >
-                  <span className="material-symbols-outlined text-base w-4">ink_eraser</span> Stroke Eraser
+                  <span className="material-symbols-outlined text-base text-blue-400">ink_eraser</span> Stroke Eraser
                 </button>
                 <button
                   type="button"
@@ -1264,11 +1264,35 @@ export function TeacherLiveClassRoom({
                     setTool("object-eraser");
                     setOpenPopup(null);
                   }}
-                  className={`flex items-center gap-3 p-2 rounded text-sm text-left transition-colors ${
-                    tool === "object-eraser" ? "bg-blue-900/20 text-blue-400" : "text-gray-300 hover:bg-gray-800"
+                  className={`flex items-center gap-3 p-2 rounded-xl text-xs font-semibold text-left transition ${
+                    tool === "object-eraser" ? "bg-blue-600/20 text-blue-400 font-bold border border-blue-500/40" : "text-gray-300 hover:bg-gray-800"
                   }`}
                 >
-                  <span className="material-symbols-outlined text-base w-4">delete_sweep</span> Object Eraser
+                  <span className="material-symbols-outlined text-base text-blue-400">delete_sweep</span> Object Eraser
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTool("object-eraser");
+                    setOpenPopup(null);
+                  }}
+                  className={`flex items-center gap-3 p-2 rounded-xl text-xs font-semibold text-left transition ${
+                    tool === "object-eraser" ? "bg-blue-600/20 text-blue-400 font-bold border border-blue-500/40" : "text-gray-300 hover:bg-gray-800"
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-base text-blue-400">gesture</span> Lasso / Loop Eraser
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTool("stroke-eraser");
+                    setOpenPopup(null);
+                  }}
+                  className={`flex items-center gap-3 p-2 rounded-xl text-xs font-semibold text-left transition ${
+                    tool === "stroke-eraser" ? "bg-blue-600/20 text-blue-400 font-bold border border-blue-500/40" : "text-gray-300 hover:bg-gray-800"
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-base text-blue-400">crop_free</span> Area / Box Eraser
                 </button>
               </div>
             )}
