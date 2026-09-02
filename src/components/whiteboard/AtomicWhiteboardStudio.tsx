@@ -152,8 +152,11 @@ function getCachedImage(src: string): Promise<HTMLImageElement> {
 function isPointInPolygon(point: { x: number; y: number }, polygon: { x: number; y: number }[]) {
   let inside = false;
   for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const xi = polygon[i].x, yi = polygon[i].y;
-    const xj = polygon[j].x, yj = polygon[j].y;
+    const pi = polygon[i];
+    const pj = polygon[j];
+    if (!pi || !pj) continue;
+    const xi = pi.x, yi = pi.y;
+    const xj = pj.x, yj = pj.y;
     const intersect = ((yi > point.y) !== (yj > point.y)) &&
       (point.x < (xj - xi) * (point.y - yi) / (yj - yi) + xi);
     if (intersect) inside = !inside;
@@ -511,7 +514,7 @@ export function AtomicWhiteboardStudio({
       }
 
       // 5. Draw Active Lasso Loop (Lasso Eraser)
-      if (lassoPoints.length > 1) {
+      if (lassoPoints && lassoPoints.length > 1 && lassoPoints[0]) {
         ctx.save();
         ctx.strokeStyle = "#3b82f6";
         ctx.fillStyle = "rgba(59, 130, 246, 0.12)";
@@ -520,7 +523,8 @@ export function AtomicWhiteboardStudio({
         ctx.beginPath();
         ctx.moveTo(lassoPoints[0].x, lassoPoints[0].y);
         for (let i = 1; i < lassoPoints.length; i++) {
-          ctx.lineTo(lassoPoints[i].x, lassoPoints[i].y);
+          const lp = lassoPoints[i];
+          if (lp) ctx.lineTo(lp.x, lp.y);
         }
         ctx.closePath();
         ctx.fill();
