@@ -246,35 +246,67 @@ export function AtomicWhiteboardStudio({
   const [isCameraOpen, setIsCameraOpen] = useState(true);
   const [isObsOutput, setIsObsOutput] = useState(false);
 
-  // Camera video ref
+  // Camera video ref and streaming state
   const videoRef = useRef<HTMLVideoElement>(null);
   const [cameraActive, setCameraActive] = useState(true);
   const [micActive, setMicActive] = useState(true);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [cameraPermissionError, setCameraPermissionError] = useState<string | null>(null);
 
-  const activeSlide: Slide =
-    slides[activeSlideIndex] ||
-    slides[0] || { id: "s-1", theme: "brand_white", title: "Slide 1", strokes: [] };
+  const startWebcam = useCallback(async () => {
+    if (!navigator?.mediaDevices?.getUserMedia) {
+      setCameraPermissionError("Camera API not supported");
+      return;
+    }
+    setCameraPermissionError(null);
+    try {
+      let stream: MediaStream | null = null;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 640 }, height: { ideal: 360 } },
+          audio: micActive,
+        });
+      } catch {
+        // Fallback to video only (in case microphone is missing or denied)
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false,
+        });
+      }
+      setCameraStream(stream);
+      if (videoRef.current && stream) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(() => {});
+      }
+    } catch (err: any) {
+      console.warn("getUserMedia failed:", err);
+      setCameraPermissionError(err?.message || "Camera permission required");
+    }
+  }, [micActive]);
 
-  // Webcam stream
   useEffect(() => {
-    let currentStream: MediaStream | null = null;
     if (cameraActive && isCameraOpen) {
-      navigator.mediaDevices
-        ?.getUserMedia({ video: true, audio: true })
-        .then((s) => {
-          currentStream = s;
-          if (videoRef.current) {
-            videoRef.current.srcObject = s;
-          }
-        })
-        .catch(() => {});
+      startWebcam();
+    } else {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach((t) => t.stop());
+        setCameraStream(null);
+      }
     }
     return () => {
-      if (currentStream) {
-        currentStream.getTracks().forEach((t) => t.stop());
+      if (cameraStream) {
+        cameraStream.getTracks().forEach((t) => t.stop());
       }
     };
-  }, [cameraActive, isCameraOpen]);
+  }, [cameraActive, isCameraOpen, startWebcam]);
+
+  // Bind video element whenever stream changes or video element mounts
+  useEffect(() => {
+    if (videoRef.current && cameraStream) {
+      videoRef.current.srcObject = cameraStream;
+      videoRef.current.play().catch(() => {});
+    }
+  }, [cameraStream]);
 
   // Synchronous Slide Drawing Helper
   const drawSlideContent = useCallback(
@@ -1170,16 +1202,36 @@ export function AtomicWhiteboardStudio({
         {/* Right Floating Camera Tile */}
         {isCameraOpen && (
           <div className="absolute top-4 right-4 z-20 w-48 h-36 bg-[#12131e] rounded-2xl border border-[#2d3045] shadow-2xl overflow-hidden flex flex-col">
-            <div className="relative flex-1 bg-black flex items-center justify-center">
-              {cameraActive ? (
-                <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover transform scale-x-[-1]" />
+            <div className="relative flex-1 bg-black flex items-center justify-center overflow-hidden">
+              {cameraActive && !cameraPermissionError ? (
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover transform scale-x-[-1]"
+                />
               ) : (
-                <span className="material-symbols-outlined text-3xl text-gray-600">videocam_off</span>
+                <div className="flex flex-col items-center justify-center p-2 text-center gap-1.5">
+                  <span className="material-symbols-outlined text-2xl text-amber-400">videocam_off</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCameraActive(true);
+                      startWebcam();
+                    }}
+                    className="px-2 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-[10px] font-bold text-white shadow"
+                  >
+                    Start Camera
+                  </button>
+                </div>
               )}
-              <div className="absolute bottom-1.5 left-1.5 flex items-center gap-1 bg-black/70 px-2 py-0.5 rounded text-[10px] font-bold text-white backdrop-blur-sm">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Live Camera
-              </div>
+              {cameraActive && !cameraPermissionError && (
+                <div className="absolute bottom-1.5 left-1.5 flex items-center gap-1 bg-black/70 px-2 py-0.5 rounded text-[10px] font-bold text-white backdrop-blur-sm">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Live Camera
+                </div>
+              )}
             </div>
             <div className="h-7 bg-[#171926] px-2 flex items-center justify-between border-t border-[#252838]">
               <button
