@@ -389,11 +389,12 @@ export function AtomicWhiteboardStudio({
             ctx.strokeRect(start.x, start.y, end.x - start.x, end.y - start.y);
           }
         }
-      } else if (pts.length > 1) {
+      } else if (pts && pts.length > 1 && pts[0]) {
         ctx.beginPath();
         ctx.moveTo(pts[0].x, pts[0].y);
         for (let i = 1; i < pts.length; i++) {
-          ctx.lineTo(pts[i].x, pts[i].y);
+          const pt = pts[i];
+          if (pt) ctx.lineTo(pt.x, pt.y);
         }
         ctx.stroke();
       }
@@ -460,7 +461,8 @@ export function AtomicWhiteboardStudio({
         if (lastIndex < 0) return s;
         const last = { ...currentStrokes[lastIndex] };
         if (last.tool === "shape") {
-          last.points = [last.points[0], { x, y }];
+          const p0 = last.points[0] || { x, y };
+          last.points = [p0, { x, y }];
         } else {
           last.points = [...last.points, { x, y }];
         }
