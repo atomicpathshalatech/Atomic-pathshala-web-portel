@@ -581,6 +581,43 @@ export function TeacherLiveClassRoom({
     });
   }
 
+  async function handleInsertSimulationImage(dataUrl: string) {
+    if (!wbSession || !currentPage) return;
+    setWbSession((prev) =>
+      prev
+        ? {
+            ...prev,
+            pages: prev.pages.map((p) => (p.id === currentPage.id ? { ...p, background: dataUrl } : p)),
+          }
+        : prev
+    );
+    try {
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
+      const file = new File([blob], `simulation_${Date.now()}.png`, { type: "image/png" });
+      const formData = new FormData();
+      formData.append("file", file);
+      const uploadRes = await fetch(
+        `/api/whiteboard/sessions/${wbSession.id}/pages/${currentPage.id}/background`,
+        { method: "POST", body: formData }
+      );
+      const json = await uploadRes.json();
+      if (uploadRes.ok && json.success) {
+        const background: string = json.data.page.background;
+        setWbSession((prev) =>
+          prev
+            ? {
+                ...prev,
+                pages: prev.pages.map((p) => (p.id === currentPage.id ? { ...p, background } : p)),
+              }
+            : prev
+        );
+      }
+    } catch (err) {
+      console.error("Failed to upload simulation snapshot background:", err);
+    }
+  }
+
   // ---- Fullscreen ------------------------------------------------------------
   async function toggleFullscreen() {
     setOpenPopup(null);
@@ -1584,40 +1621,14 @@ export function TeacherLiveClassRoom({
       {sim3dOpen && (
         <Simulation3DModal
           onClose={() => setSim3dOpen(false)}
-          onInsertToSlide={(dataUrl) => {
-            if (!engineRef.current || !wbSession || !currentPage) return;
-            const imgObj = {
-              id: `sim_${Date.now()}`,
-              tool: "image" as any,
-              color: "#ffffff",
-              size: 1,
-              points: [{ x: 100, y: 100 }],
-              imageUrl: dataUrl,
-              width: 480,
-              height: 300,
-            } as any;
-            engineRef.current.addObject(imgObj);
-          }}
+          onInsertToSlide={handleInsertSimulationImage}
         />
       )}
 
       {scienceLabsOpen && (
         <ScienceLabsModal
           onClose={() => setScienceLabsOpen(false)}
-          onStampToWhiteboard={(dataUrl) => {
-            if (!engineRef.current || !wbSession || !currentPage) return;
-            const imgObj = {
-              id: `lab_${Date.now()}`,
-              tool: "image" as any,
-              color: "#ffffff",
-              size: 1,
-              points: [{ x: 100, y: 100 }],
-              imageUrl: dataUrl,
-              width: 480,
-              height: 300,
-            } as any;
-            engineRef.current.addObject(imgObj);
-          }}
+          onStampToWhiteboard={handleInsertSimulationImage}
         />
       )}
 
