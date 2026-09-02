@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { chapterStatusTransitionSchema } from "@/lib/validation/chapter";
-import { canTransition, type ChapterStatusValue } from "@/lib/chapters/state-machine";
+import { canTransition, REVIEW_MANAGED_STATES, type ChapterStatusValue } from "@/lib/chapters/state-machine";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 
 /**
@@ -24,6 +24,18 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     if (!chapter) return apiError("Chapter not found", 404);
 
     const { status: nextStatus } = chapterStatusTransitionSchema.parse(await request.json());
+
+    // Review-workflow states are entered only via POST .../submit and
+    // POST .../review, never this generic route — otherwise a teacher
+    // with plain CHAPTER_UPDATE could self-transition straight into
+    // APPROVED, i.e. approve their own chapter.
+    if (REVIEW_MANAGED_STATES.includes(nextStatus)) {
+      return apiError(
+        `Use ${nextStatus === "SUBMITTED" ? "POST /submit" : "POST /review"} to move a chapter into ${nextStatus}.`,
+        409,
+        { code: "USE_REVIEW_WORKFLOW", details: { chapterId: chapter.id, requestedStatus: nextStatus } }
+      );
+    }
 
     if (nextStatus === "PUBLISHED" || chapter.status === "PUBLISHED") {
       await requirePermission(session.user.id, PERMISSIONS.CHAPTER_PUBLISH);

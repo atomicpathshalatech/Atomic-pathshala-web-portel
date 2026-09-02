@@ -108,6 +108,10 @@ export const PERMISSIONS = {
   CHAPTER_UPDATE: "chapter.update",
   CHAPTER_PUBLISH: "chapter.publish",
   CHAPTER_DELETE: "chapter.delete",
+  // Admin decision on a chapter UNDER_REVIEW (approve/reject/request
+  // changes) — kept separate from CHAPTER_PUBLISH/CHAPTER_CREATE so
+  // review authority doesn't default onto every chapter-authoring role.
+  CHAPTER_REVIEW: "chapter.review",
 
   // ID / KYC Document Management
   DOCUMENT_READ_SELF: "document.read.self",
@@ -373,6 +377,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PermissionCode[]> = {
     PERMISSIONS.CHAPTER_CREATE,
     PERMISSIONS.CHAPTER_UPDATE,
     PERMISSIONS.CHAPTER_PUBLISH,
+    PERMISSIONS.CHAPTER_REVIEW,
     PERMISSIONS.CHAPTER_DELETE,
     PERMISSIONS.DOUBT_READ,
     PERMISSIONS.DOUBT_RESOLVE,

@@ -22,6 +22,7 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
   if (!canRead) redirect("/team");
 
   const canUpdate = await hasPermission(session.user.id, PERMISSIONS.CHAPTER_UPDATE);
+  const canReviewPermission = await hasPermission(session.user.id, PERMISSIONS.CHAPTER_REVIEW);
 
   const chapter = await prisma.chapter.findUnique({
     where: { id: params.id },
@@ -240,6 +241,7 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
           _count: t._count,
         }))}
         canEdit={canUpdate}
+        canReview={canReviewPermission && chapter.createdById !== session.user.id}
         studentPreviewData={studentPreviewData}
       />
     </div>

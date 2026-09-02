@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { ChapterContentManager } from "./ChapterContentManager";
 import { ChapterDetailView, ChapterDetailData } from "@/components/chapter-detail/ChapterDetailView";
 import { ChapterStatusActions } from "./ChapterStatusActions";
+import { ChapterReviewActions } from "./ChapterReviewActions";
 import type { ChapterStatusValue } from "@/lib/chapters/state-machine";
 
 interface ChapterTeamViewWrapperProps {
@@ -15,6 +16,7 @@ interface ChapterTeamViewWrapperProps {
   initialDpps: any[];
   initialTests: any[];
   canEdit: boolean;
+  canReview: boolean;
   studentPreviewData: ChapterDetailData;
 }
 
@@ -27,6 +29,7 @@ export function ChapterTeamViewWrapper({
   initialDpps,
   initialTests,
   canEdit,
+  canReview,
   studentPreviewData,
 }: ChapterTeamViewWrapperProps) {
   const [viewMode, setViewMode] = useState<"manager" | "preview">("manager");
@@ -76,6 +79,13 @@ export function ChapterTeamViewWrapper({
             <h3 className="font-headline-md text-headline-md text-primary">Move Chapter Forward</h3>
             <ChapterStatusActions chapterId={chapterId} status={chapterStatus as ChapterStatusValue} />
           </div>
+
+          {/* Admin review panel — only rendered for a reviewer looking at
+              someone else's chapter that is actually awaiting review;
+              the API enforces both checks again regardless. */}
+          {canReview && chapterStatus === "UNDER_REVIEW" && (
+            <ChapterReviewActions chapterId={chapterId} />
+          )}
 
           {/* Interactive Content Manager: Lectures, DPPs, and Chapter Tests */}
           <div className="glass-card p-stack-lg rounded-2xl space-y-4">

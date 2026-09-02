@@ -58,6 +58,9 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         ...(data.subjectId !== undefined ? { subjectId: data.subjectId } : {}),
         ...(data.medium !== undefined ? { medium: data.medium } : {}),
         ...(data.order !== undefined ? { order: data.order } : {}),
+        ...(data.description !== undefined ? { description: data.description || null } : {}),
+        ...(data.learningObjectives !== undefined ? { learningObjectives: data.learningObjectives || null } : {}),
+        ...(data.prerequisites !== undefined ? { prerequisites: data.prerequisites || null } : {}),
       },
       include: {
         subject: { include: { course: true } },
@@ -82,8 +85,12 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
     });
     if (!existing) return apiError("Chapter not found", 404);
 
-    if (existing.status === "PUBLISHED") {
-      return apiError("Unpublish this chapter before deleting it.", 409);
+    const NON_DELETABLE_STATUSES = ["PUBLISHED", "SUBMITTED", "UNDER_REVIEW", "APPROVED"];
+    if (NON_DELETABLE_STATUSES.includes(existing.status)) {
+      return apiError(
+        `Cannot delete a chapter that is ${existing.status.replace(/_/g, " ").toLowerCase()}. Move it back to DRAFT/ARCHIVED first.`,
+        409
+      );
     }
     if (existing._count.lectures > 0 || existing._count.dpps > 0 || existing._count.tests > 0) {
       return apiError("Remove this chapter's lectures, DPPs, and tests before deleting it.", 409);

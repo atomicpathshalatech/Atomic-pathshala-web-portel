@@ -53,6 +53,9 @@ export default async function EditChapterPage({ params }: { params: { id: string
           subjectId: chapter.subjectId,
           medium: (chapter.medium ?? "ENGLISH") as MediumValue,
           order: chapter.order,
+          description: chapter.description,
+          learningObjectives: chapter.learningObjectives,
+          prerequisites: chapter.prerequisites,
         }}
       />
     </div>

@@ -6,6 +6,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
+import type { ChapterStatus } from "@prisma/client";
 
 export const metadata: Metadata = {
   title: "Chapters",
@@ -17,6 +18,11 @@ const STATUS_TONE: Record<string, string> = {
   LECTURES_COMPLETE: "bg-secondary-container text-on-secondary-container",
   TESTS_PENDING: "bg-primary-container text-on-primary-container",
   READY_TO_PUBLISH: "bg-primary-container text-on-primary-container",
+  SUBMITTED: "bg-secondary-container text-on-secondary-container",
+  UNDER_REVIEW: "bg-secondary-container text-on-secondary-container",
+  APPROVED: "bg-tertiary-container text-on-tertiary-container",
+  REJECTED: "bg-error-container text-on-error-container",
+  CHANGES_REQUESTED: "bg-error-container text-on-error-container",
   PUBLISHED: "bg-tertiary-container text-on-tertiary-container",
   ARCHIVED: "bg-outline-variant/30 text-on-surface-variant",
 };
@@ -24,7 +30,7 @@ const STATUS_TONE: Record<string, string> = {
 export default async function ChaptersListPage({
   searchParams,
 }: {
-  searchParams: { subjectId?: string; courseId?: string; medium?: string };
+  searchParams: { subjectId?: string; courseId?: string; medium?: string; status?: string };
 }) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) redirect("/login");
@@ -33,11 +39,13 @@ export default async function ChaptersListPage({
   if (!canRead) redirect("/team");
 
   const canCreate = await hasPermission(session.user.id, PERMISSIONS.CHAPTER_CREATE);
+  const canReview = await hasPermission(session.user.id, PERMISSIONS.CHAPTER_REVIEW);
 
   const whereClause: {
     subjectId?: string;
     subject?: { courseId: string };
     medium?: "HINDI" | "ENGLISH" | "HINGLISH";
+    status?: ChapterStatus;
   } = {};
 
   if (searchParams.subjectId) {
@@ -48,6 +56,9 @@ export default async function ChaptersListPage({
   }
   if (searchParams.medium && ["HINDI", "ENGLISH", "HINGLISH"].includes(searchParams.medium)) {
     whereClause.medium = searchParams.medium as "HINDI" | "ENGLISH" | "HINGLISH";
+  }
+  if (searchParams.status && searchParams.status in STATUS_TONE) {
+    whereClause.status = searchParams.status as ChapterStatus;
   }
 
   const [chapters, courses, subjects, totalChapters] = await Promise.all([
@@ -73,15 +84,26 @@ export default async function ChaptersListPage({
             {totalChapters} chapter{totalChapters === 1 ? "" : "s"} total across academic programs.
           </p>
         </div>
-        {canCreate && (
-          <Link
-            href="/team/chapters/new"
-            className="flex items-center gap-2 bg-primary text-white px-6 py-3 rounded-xl font-label-md shadow-lg hover:shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all"
-          >
-            <span className="material-symbols-outlined">add_circle</span>
-            Create Chapter
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          {canReview && (
+            <Link
+              href="/team/chapters?status=UNDER_REVIEW"
+              className="flex items-center gap-2 border border-primary/40 text-primary px-5 py-3 rounded-xl font-label-md hover:bg-primary/10 transition-all"
+            >
+              <span className="material-symbols-outlined">fact_check</span>
+              Review Queue
+            </Link>
+          )}
+          {canCreate && (
+            <Link
+              href="/team/chapters/new"
+              className="flex items-center gap-2 bg-primary text-white px-6 py-3 rounded-xl font-label-md shadow-lg hover:shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all"
+            >
+              <span className="material-symbols-outlined">add_circle</span>
+              Create Chapter
+            </Link>
+          )}
+        </div>
       </div>
 
       <form className="glass-card p-4 rounded-xl flex flex-wrap items-center gap-3" method="get">
@@ -122,11 +144,24 @@ export default async function ChaptersListPage({
           <option value="HINGLISH">Hinglish</option>
         </select>
 
+        <select
+          name="status"
+          defaultValue={searchParams.status ?? ""}
+          className="bg-surface-container-low rounded-lg border border-outline-variant/30 px-3 py-2 text-label-md"
+        >
+          <option value="">All Statuses</option>
+          {Object.keys(STATUS_TONE).map((s) => (
+            <option key={s} value={s}>
+              {s.replaceAll("_", " ")}
+            </option>
+          ))}
+        </select>
+
         <button type="submit" className="px-5 py-2 bg-primary text-on-primary rounded-lg font-label-md hover:opacity-90 transition-opacity">
           Filter
         </button>
 
-        {(searchParams.courseId || searchParams.subjectId || searchParams.medium) && (
+        {(searchParams.courseId || searchParams.subjectId || searchParams.medium || searchParams.status) && (
           <Link href="/team/chapters" className="px-3 py-2 text-label-md text-on-surface-variant hover:text-primary">
             Reset
           </Link>

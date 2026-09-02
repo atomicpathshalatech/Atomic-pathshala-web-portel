@@ -7,6 +7,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { generateDppCode } from "@/lib/dpp/code";
 import { LanguageMode } from "@prisma/client";
+import { isDppSlotMandatory } from "@/lib/chapters/sequence";
 
 export async function GET(
   request: NextRequest,
@@ -25,7 +26,21 @@ export async function GET(
       orderBy: { createdAt: "asc" },
     });
 
-    return apiSuccess({ dpps });
+    // Chapter-scoped slot/label/mandatory-vs-optional info, per the
+    // DPP1-4-required/DPP5-optional default policy — computed here rather
+    // than stored so relabeling never requires a data migration.
+    const dppsWithSlot = dpps.map((dpp, idx) => {
+      const slot = idx + 1;
+      return {
+        ...dpp,
+        slot,
+        slotLabel: `DPP ${slot}`,
+        slotRequired: isDppSlotMandatory(slot),
+        slotComplete: dpp._count.questions > 0,
+      };
+    });
+
+    return apiSuccess({ dpps: dppsWithSlot });
   } catch (error) {
     return handleApiError(error);
   }
@@ -64,6 +79,8 @@ export async function POST(
     }
 
     const code = await generateDppCode(prisma);
+    const existingDppCount = await prisma.dpp.count({ where: { chapterId: chapter.id } });
+    const slot = existingDppCount + 1;
 
     const dpp = await prisma.dpp.create({
       data: {
@@ -95,7 +112,10 @@ export async function POST(
       },
     });
 
-    return apiSuccess({ dpp }, 201);
+    return apiSuccess(
+      { dpp: { ...dpp, slot, slotLabel: `DPP ${slot}`, slotRequired: isDppSlotMandatory(slot), slotComplete: false } },
+      201
+    );
   } catch (error) {
     return handleApiError(error);
   }

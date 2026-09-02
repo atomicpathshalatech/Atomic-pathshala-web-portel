@@ -6,6 +6,7 @@ import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { LectureStatus } from "@prisma/client";
+import { getChapterSequenceState } from "@/lib/chapters/sequence";
 
 export async function GET(
   request: NextRequest,
@@ -53,6 +54,25 @@ export async function POST(
     }
     if (!videoUrl?.trim()) {
       return apiError("Video / Stream URL is required", 400);
+    }
+
+    // Authoring lock — server-enforced, not a disabled button. A new
+    // lecture may only be created once every DPP slot it depends on
+    // (every 2 completed lectures) has a non-empty DPP. This governs
+    // *creation order* for the teacher/admin; it is independent of
+    // @/lib/chapters/progression.ts, which separately governs whether a
+    // published lecture is unlocked for a given STUDENT to watch.
+    const sequence = await getChapterSequenceState(chapter.id);
+    if (!sequence.nextLectureUnlocked) {
+      const requiredSlot = sequence.requiredDppSlotForNextLecture;
+      return apiError(
+        `Cannot create Lecture ${sequence.nextLecturePosition}. DPP ${requiredSlot} must be created with at least one question first.`,
+        409,
+        {
+          code: "CHAPTER_SEQUENCE_LOCKED",
+          details: { chapterId: chapter.id, requiredContent: `DPP_${requiredSlot}` },
+        }
+      );
     }
 
     // Resolve teacher

@@ -19,6 +19,9 @@ export type ChapterFormInitialData = {
   subjectId: string;
   medium: MediumValue;
   order: number;
+  description?: string | null;
+  learningObjectives?: string | null;
+  prerequisites?: string | null;
 };
 
 export function ChapterForm({
@@ -59,6 +62,9 @@ export function ChapterForm({
       subjectId: initialData?.subjectId ?? "",
       medium: initialData?.medium ?? "ENGLISH",
       order: initialData?.order ?? 0,
+      description: initialData?.description ?? "",
+      learningObjectives: initialData?.learningObjectives ?? "",
+      prerequisites: initialData?.prerequisites ?? "",
     },
   });
 
@@ -203,6 +209,40 @@ export function ChapterForm({
           <p className="text-xs text-on-surface-variant mt-1">
             Determines the sequencing order of this chapter within the subject curriculum.
           </p>
+        </div>
+
+        {/* Chapter Description — persisted, shown to students after
+            publication, and required by Check Chapter Readiness before
+            the chapter can be submitted for review. */}
+        <div>
+          <label className={labelClass}>Chapter Description</label>
+          <textarea
+            className={inputClass}
+            rows={3}
+            placeholder="What will students learn in this chapter?"
+            {...register("description")}
+          />
+          {errors.description && <p className={errorClass}>{errors.description.message}</p>}
+        </div>
+
+        <div>
+          <label className={labelClass}>Learning Objectives</label>
+          <textarea
+            className={inputClass}
+            rows={3}
+            placeholder="Key learning outcomes / important concepts covered"
+            {...register("learningObjectives")}
+          />
+        </div>
+
+        <div>
+          <label className={labelClass}>Prerequisites</label>
+          <textarea
+            className={inputClass}
+            rows={2}
+            placeholder="What should students already know before starting this chapter?"
+            {...register("prerequisites")}
+          />
         </div>
       </div>
 

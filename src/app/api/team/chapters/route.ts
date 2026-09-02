@@ -73,6 +73,9 @@ export async function POST(request: NextRequest) {
             subjectId: data.subjectId,
             medium: data.medium,
             order: data.order,
+            description: data.description ?? null,
+            learningObjectives: data.learningObjectives ?? null,
+            prerequisites: data.prerequisites ?? null,
             createdById: session.user.id,
           },
           include: {
