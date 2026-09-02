@@ -713,6 +713,8 @@ export function TeacherLiveClassRoom({
     );
   }
 
+  if (!wbSession) return null;
+
   const canGoPrev = wbSession.activePageNumber > 1;
   const canGoNext = wbSession.activePageNumber < wbSession.pages.length;
   const pollActive = !!activeQuiz && activeQuiz.status !== "CLOSED";
