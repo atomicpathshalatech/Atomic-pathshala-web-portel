@@ -552,7 +552,7 @@ export function AtomicWhiteboardStudio({
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-[#090b10] text-slate-100 overflow-hidden select-none font-sans">
+    <div className="flex flex-col h-[calc(100vh-75px)] w-full max-w-full bg-[#090b10] text-slate-100 overflow-hidden select-none font-sans rounded-2xl border border-[#212433]">
       {/* 1. TOP HEADER STUDIO NAV */}
       {!isObsOutput && (
         <header className="h-14 bg-[#11131c] border-b border-[#212433] px-4 flex items-center justify-between shrink-0 z-30">
@@ -615,7 +615,7 @@ export function AtomicWhiteboardStudio({
       )}
 
       {/* 2. MAIN WORKSPACE */}
-      <div className="flex-1 flex relative overflow-hidden">
+      <div className="flex-1 w-full min-w-0 flex relative overflow-hidden">
         {/* Left Floating Camera Tile */}
         {isCameraOpen && (
           <div className="absolute top-4 left-4 z-20 w-48 h-36 bg-[#12131e] rounded-2xl border border-[#2d3045] shadow-2xl overflow-hidden flex flex-col">
@@ -657,8 +657,8 @@ export function AtomicWhiteboardStudio({
         )}
 
         {/* 16:9 Presentation Canvas */}
-        <div className="flex-1 flex items-center justify-center p-3 sm:p-5 bg-[#08090f] overflow-hidden">
-          <div className="relative w-full max-w-[calc((100vh-140px)*16/9)] aspect-[16/9] max-h-[calc(100vh-140px)] bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-700/60">
+        <div className="flex-1 w-full h-full min-w-0 flex items-center justify-center p-2 sm:p-4 bg-[#08090f] overflow-hidden">
+          <div className="relative aspect-[16/9] w-full max-w-full max-h-full bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-700/60 flex items-center justify-center">
             <canvas
               ref={canvasRef}
               width={1920}
