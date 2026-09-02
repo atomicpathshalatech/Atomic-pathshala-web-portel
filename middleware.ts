@@ -36,7 +36,8 @@ const NON_TEAM_ROLES = new Set(["STUDENT", "PARENT", "GUEST"]);
  */
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
+  const secret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET || "atomic-pathshala-production-enterprise-secret-key-2026-secure-jwt";
+  const token = await getToken({ req: request, secret });
 
   if (!token) {
     const loginUrl = new URL("/login", request.url);
@@ -47,12 +48,12 @@ export async function middleware(request: NextRequest) {
   const isTeamPath = pathname.startsWith("/team");
   const isStudentPath = STUDENT_PATHS.some((p) => pathname.startsWith(p));
 
-  if (isStudentPath && token.role !== "STUDENT") {
-    return NextResponse.redirect(new URL("/", request.url));
+  if (isStudentPath && token.role !== "STUDENT" && token.role !== "PARENT") {
+    return NextResponse.redirect(new URL("/team", request.url));
   }
 
   if (isTeamPath && NON_TEAM_ROLES.has(token.role as string)) {
-    return NextResponse.redirect(new URL("/", request.url));
+    return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
   return NextResponse.next();

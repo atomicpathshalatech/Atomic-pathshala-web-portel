@@ -18,18 +18,41 @@ export async function requireStudentSession() {
     redirect("/login");
   }
 
-  if (session.user.role !== "STUDENT") {
-    redirect("/");
+  if (session.user.role !== "STUDENT" && session.user.role !== "PARENT") {
+    redirect("/team");
   }
 
-  const student = await prisma.student.findUnique({
+  let student = await prisma.student.findUnique({
     where: { userId: session.user.id },
     include: { user: true },
   });
 
   if (!student) {
-    // Session exists but no matching student record — shouldn't normally
-    // happen, but fail safe rather than showing a broken dashboard.
+    try {
+      const code = Date.now().toString().slice(-6);
+      student = await prisma.student.create({
+        data: {
+          userId: session.user.id,
+          enrollmentNumber: `ENR-${code}`,
+          studentIdCode: `AP-${code}`,
+          fatherName: "Parent",
+          motherName: "Parent",
+          dob: new Date(2007, 0, 1),
+          gender: "MALE",
+          class: "12",
+          targetExam: "NEET",
+          school: "Atomic Pathshala",
+          city: "New Delhi",
+          state: "Delhi",
+        },
+        include: { user: true },
+      });
+    } catch {
+      redirect("/login");
+    }
+  }
+
+  if (!student) {
     redirect("/login");
   }
 

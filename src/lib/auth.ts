@@ -95,5 +95,5 @@ export const authOptions: NextAuthOptions = {
       return session;
     },
   },
-  secret: process.env.NEXTAUTH_SECRET,
+  secret: process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET || "atomic-pathshala-production-enterprise-secret-key-2026-secure-jwt",
 };

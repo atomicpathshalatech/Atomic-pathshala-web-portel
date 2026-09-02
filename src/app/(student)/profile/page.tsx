@@ -6,9 +6,9 @@ export default async function ProfilePage() {
   const { student } = await requireStudentSession();
   const { user } = student;
 
-  const initials = user.name
+  const initials = (user.name || "Student")
     .split(" ")
-    .map((part) => part[0])
+    .map((part: string) => part[0])
     .slice(0, 2)
     .join("")
     .toUpperCase();
