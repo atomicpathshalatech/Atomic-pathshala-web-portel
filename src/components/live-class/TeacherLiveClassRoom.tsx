@@ -7,6 +7,8 @@ import { getPusherClient } from "@/lib/realtime/pusher-client";
 import { sessionChannel, teacherChannel, WB_EVENTS } from "@/lib/realtime/events";
 import { VideoStrip } from "@/components/live-class/VideoStrip";
 import { MessagesPanel } from "@/components/live-class/MessagesPanel";
+import { Simulation3DModal } from "@/components/live-class/Simulation3DModal";
+import { ScienceLabsModal } from "@/components/live-class/ScienceLabsModal";
 import { GRACE_PERIOD_MINUTES, END_WARNING_MINUTES } from "@/lib/whiteboard/constants";
 
 type WhiteboardPage = { id: string; pageNumber: number; objects: StrokeObject[]; background: string };
@@ -41,15 +43,63 @@ type ActiveQuiz = {
 // this list can grow without a migration — see the comment on the column
 // in prisma/schema.prisma. "blank"/undefined falls through to the same
 // plain-white default "light" already meant.
-type SlideTheme = "light" | "dark" | "grid" | "coordinate" | "dotted";
+type SlideTheme =
+  | "atomic_white"
+  | "atomic_dark"
+  | "atomic_ruled"
+  | "grid"
+  | "dark"
+  | "light"
+  | "coordinate"
+  | "ruled"
+  | "dotted"
+  | (string & {});
 
-const SHAPE_TOOLS: { id: ShapeKind; label: string; icon: string }[] = [
-  { id: "line", label: "Line", icon: "horizontal_rule" },
-  { id: "rectangle", label: "Square", icon: "crop_square" },
-  { id: "circle", label: "Circle", icon: "circle" },
-  { id: "triangle", label: "Triangle", icon: "change_history" },
-  { id: "arrow", label: "Arrow", icon: "north_east" },
-];
+type SubjectShapeCategory = "math" | "phys" | "chem" | "bio";
+
+const SUBJECT_SHAPES: Record<
+  SubjectShapeCategory,
+  { id: ShapeKind; label: string; icon: string }[]
+> = {
+  math: [
+    { id: "line", label: "Line", icon: "horizontal_rule" },
+    { id: "arrow", label: "Arrow", icon: "north_east" },
+    { id: "rectangle", label: "Rectangle / Box", icon: "crop_square" },
+    { id: "circle", label: "Circle / Ellipse", icon: "circle" },
+    { id: "triangle", label: "Triangle", icon: "change_history" },
+    { id: "arrow", label: "Double Arrow", icon: "sync_alt" },
+    { id: "triangle", label: "Right-Angled T...", icon: "play_arrow" },
+    { id: "line", label: "XY Coordinate ...", icon: "show_chart" },
+    { id: "rectangle", label: "Cylinder (3D)", icon: "view_in_ar" },
+    { id: "circle", label: "Polygon / Hexa...", icon: "hexagon" },
+    { id: "circle", label: "Star", icon: "star" },
+  ],
+  phys: [
+    { id: "rectangle", label: "Resistor", icon: "reorder" },
+    { id: "rectangle", label: "Capacitor", icon: "pause" },
+    { id: "line", label: "Inductor", icon: "waves" },
+    { id: "rectangle", label: "Battery Cell", icon: "battery_charging_full" },
+    { id: "circle", label: "Pulley", icon: "radio_button_checked" },
+    { id: "triangle", label: "Optics Prism", icon: "change_history" },
+    { id: "rectangle", label: "Bar Magnet", icon: "crop_5_4" },
+  ],
+  chem: [
+    { id: "circle", label: "Benzene Ring", icon: "hexagon" },
+    { id: "triangle", label: "Flask / Beaker", icon: "science" },
+    { id: "circle", label: "Atom Model", icon: "bubble_chart" },
+    { id: "rectangle", label: "Test Tube", icon: "biotech" },
+    { id: "line", label: "Double Bond", icon: "drag_handle" },
+  ],
+  bio: [
+    { id: "circle", label: "DNA Helix", icon: "grain" },
+    { id: "circle", label: "Animal Cell", icon: "lens" },
+    { id: "line", label: "Neuron Cell", icon: "hub" },
+    { id: "circle", label: "Human Heart", icon: "favorite" },
+    { id: "circle", label: "Plant Leaf", icon: "eco" },
+  ],
+};
+
+const SHAPE_TOOLS = SUBJECT_SHAPES.math;
 
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 2;
@@ -108,6 +158,31 @@ function isBackgroundImageUrl(background: string | undefined): background is str
 
 function slideBackgroundStyle(background: string | undefined): React.CSSProperties {
   switch (background) {
+    case "atomic_white":
+      return {
+        backgroundColor: "#ffffff",
+        backgroundImage:
+          "linear-gradient(to bottom, #fff7ed 0px, #fff7ed 36px, #ea580c 36px, #ea580c 38px, transparent 38px)",
+      };
+    case "atomic_dark":
+      return {
+        backgroundColor: "#0d0f17",
+        backgroundImage:
+          "linear-gradient(to bottom, #171924 0px, #171924 36px, #ea580c 36px, #ea580c 38px, transparent 38px)",
+      };
+    case "atomic_ruled":
+      return {
+        backgroundColor: "#ffffff",
+        backgroundImage:
+          "linear-gradient(to bottom, #fff7ed 0px, #fff7ed 36px, #ea580c 36px, #ea580c 38px, transparent 38px), repeating-linear-gradient(to bottom, transparent, transparent 27px, #e2e8f0 27px, #e2e8f0 28px)",
+        backgroundPosition: "0 0, 0 38px",
+      };
+    case "ruled":
+    case "notebook":
+      return {
+        backgroundColor: "#ffffff",
+        backgroundImage: "repeating-linear-gradient(to bottom, transparent, transparent 27px, #e2e8f0 27px, #e2e8f0 28px)",
+      };
     case "dark":
       return { backgroundColor: "#1a1b23" };
     case "grid":
@@ -229,6 +304,9 @@ export function TeacherLiveClassRoom({
   const [uploadingBackground, setUploadingBackground] = useState(false);
   const [openPopup, setOpenPopup] = useState<PopupId>(null);
   const [themeModalOpen, setThemeModalOpen] = useState(false);
+  const [sim3dOpen, setSim3dOpen] = useState(false);
+  const [scienceLabsOpen, setScienceLabsOpen] = useState(false);
+  const [shapeSubjectTab, setShapeSubjectTab] = useState<SubjectShapeCategory>("math");
   const [pollOpen, setPollOpen] = useState(false);
   const [pollModalTab, setPollModalTab] = useState<"quiz" | "ranks">("quiz");
   const [pollType, setPollType] = useState<"mcq4" | "yesno">("mcq4");
@@ -486,19 +564,21 @@ export function TeacherLiveClassRoom({
   async function setSlideTheme(theme: SlideTheme) {
     if (!wbSession || !currentPage) return;
     setOpenPopup(null);
-    try {
-      await patchJson(`/api/whiteboard/sessions/${wbSession.id}/pages/${currentPage.id}`, {
-        objects: engineRef.current?.getObjects() ?? currentPage.objects,
-        background: theme,
-      });
-      setWbSession((prev) =>
-        prev
-          ? { ...prev, pages: prev.pages.map((p) => (p.id === currentPage.id ? { ...p, background: theme } : p)) }
-          : prev
-      );
-    } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "Could not change the slide theme.");
-    }
+
+    // 1. INSTANT OPTIMISTIC LOCAL UPDATE (0ms delay)
+    setWbSession((prev) =>
+      prev
+        ? { ...prev, pages: prev.pages.map((p) => (p.id === currentPage.id ? { ...p, background: theme } : p)) }
+        : prev
+    );
+
+    // 2. ASYNC PERSIST (Non-blocking)
+    patchJson(`/api/whiteboard/sessions/${wbSession.id}/pages/${currentPage.id}`, {
+      objects: engineRef.current?.getObjects() ?? currentPage.objects,
+      background: theme,
+    }).catch((err) => {
+      console.error("Failed to sync slide theme to backend:", err);
+    });
   }
 
   // ---- Fullscreen ------------------------------------------------------------
@@ -1157,30 +1237,89 @@ export function TeacherLiveClassRoom({
             )}
           </div>
 
+          {/* Subject-Wise Smart Shapes (Screenshot 5) */}
           <div className="relative">
             <ToolbarBtn
-              icon="square"
+              icon="category"
               label="Shapes"
-              active={SHAPE_TOOLS.some((s) => s.id === tool)}
+              active={openPopup === "shapes"}
               onClick={() => setOpenPopup((p) => (p === "shapes" ? null : "shapes"))}
             />
             {openPopup === "shapes" && (
-              <div className="absolute bottom-full left-0 mb-2 z-40 bg-[#1a1b23] border border-[#2d2e3b] rounded-lg p-1 shadow-2xl w-40 flex flex-col gap-1">
-                {SHAPE_TOOLS.map((s) => (
+              <div className="absolute bottom-full left-0 mb-3 z-50 bg-[#161722] border border-[#2d2e3b] rounded-2xl p-3 shadow-2xl w-72 flex flex-col gap-3 text-white">
+                {/* Category Switcher Tabs: Math, Phys, Chem, Bio (Screenshot 5) */}
+                <div className="grid grid-cols-4 gap-1 bg-[#10111a] p-1 rounded-xl border border-[#242634]">
                   <button
-                    key={s.id}
                     type="button"
-                    onClick={() => {
-                      setTool(s.id);
-                      setOpenPopup(null);
-                    }}
-                    className={`flex items-center gap-3 p-2 rounded text-sm text-left transition-colors ${
-                      tool === s.id ? "bg-blue-900/20 text-blue-400" : "text-gray-300 hover:bg-gray-800"
+                    onClick={() => setShapeSubjectTab("math")}
+                    className={`flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] font-bold transition ${
+                      shapeSubjectTab === "math"
+                        ? "bg-blue-600 text-white shadow-md"
+                        : "text-gray-400 hover:text-white"
                     }`}
                   >
-                    <span className="material-symbols-outlined text-base w-4">{s.icon}</span> {s.label}
+                    <span className="material-symbols-outlined text-xs">square_foot</span>
+                    Math
                   </button>
-                ))}
+                  <button
+                    type="button"
+                    onClick={() => setShapeSubjectTab("phys")}
+                    className={`flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] font-bold transition ${
+                      shapeSubjectTab === "phys"
+                        ? "bg-blue-600 text-white shadow-md"
+                        : "text-gray-400 hover:text-white"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-xs">bolt</span>
+                    Phys
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShapeSubjectTab("chem")}
+                    className={`flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] font-bold transition ${
+                      shapeSubjectTab === "chem"
+                        ? "bg-blue-600 text-white shadow-md"
+                        : "text-gray-400 hover:text-white"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-xs">science</span>
+                    Chem
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShapeSubjectTab("bio")}
+                    className={`flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] font-bold transition ${
+                      shapeSubjectTab === "bio"
+                        ? "bg-blue-600 text-white shadow-md"
+                        : "text-gray-400 hover:text-white"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-xs">grain</span>
+                    Bio
+                  </button>
+                </div>
+
+                {/* 2-Column Grid of Shapes (Screenshot 5) */}
+                <div className="grid grid-cols-2 gap-1.5 max-h-64 overflow-y-auto pr-1">
+                  {SUBJECT_SHAPES[shapeSubjectTab].map((s, idx) => (
+                    <button
+                      key={`${s.label}-${idx}`}
+                      type="button"
+                      onClick={() => {
+                        setTool(s.id);
+                        setOpenPopup(null);
+                      }}
+                      className={`flex items-center gap-2 p-2 rounded-xl border text-xs text-left transition ${
+                        tool === s.id
+                          ? "bg-blue-600/20 border-blue-500 text-white font-bold"
+                          : "bg-[#10111a] border-[#242634] text-gray-300 hover:border-gray-500"
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-sm text-blue-400 shrink-0">{s.icon}</span>
+                      <span className="truncate">{s.label}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -1378,7 +1517,23 @@ export function TeacherLiveClassRoom({
           <div className="relative">
             <ToolbarBtn icon="more_horiz" label="More" onClick={() => setOpenPopup((p) => (p === "more" ? null : "more"))} />
             {openPopup === "more" && (
-              <div className="absolute bottom-full right-0 mb-2 z-40 w-64 bg-[#1a1b23] border border-[#2d2e3b] rounded-lg p-3 grid grid-cols-2 gap-2 shadow-2xl origin-bottom-right">
+              <div className="absolute bottom-full right-0 mb-2 z-40 w-64 bg-[#1a1b23] border border-[#2d2e3b] rounded-2xl p-3 grid grid-cols-2 gap-2 shadow-2xl origin-bottom-right">
+                <MoreGridBtn
+                  icon="view_in_ar"
+                  label="3D Models"
+                  onClick={() => {
+                    setOpenPopup(null);
+                    setSim3dOpen(true);
+                  }}
+                />
+                <MoreGridBtn
+                  icon="science"
+                  label="Science Labs"
+                  onClick={() => {
+                    setOpenPopup(null);
+                    setScienceLabsOpen(true);
+                  }}
+                />
                 <MoreGridBtn
                   icon={uploadingBackground ? "hourglass_empty" : "image"}
                   label={uploadingBackground ? "Uploading…" : "Upload File"}
@@ -1423,6 +1578,46 @@ export function TeacherLiveClassRoom({
           current={currentPage?.background}
           onSelect={setSlideTheme}
           onClose={() => setThemeModalOpen(false)}
+        />
+      )}
+
+      {sim3dOpen && (
+        <Simulation3DModal
+          onClose={() => setSim3dOpen(false)}
+          onInsertToSlide={(dataUrl) => {
+            if (!engineRef.current || !wbSession || !currentPage) return;
+            const imgObj = {
+              id: `sim_${Date.now()}`,
+              tool: "image" as any,
+              color: "#ffffff",
+              size: 1,
+              points: [{ x: 100, y: 100 }],
+              imageUrl: dataUrl,
+              width: 480,
+              height: 300,
+            } as any;
+            engineRef.current.addObject(imgObj);
+          }}
+        />
+      )}
+
+      {scienceLabsOpen && (
+        <ScienceLabsModal
+          onClose={() => setScienceLabsOpen(false)}
+          onStampToWhiteboard={(dataUrl) => {
+            if (!engineRef.current || !wbSession || !currentPage) return;
+            const imgObj = {
+              id: `lab_${Date.now()}`,
+              tool: "image" as any,
+              color: "#ffffff",
+              size: 1,
+              points: [{ x: 100, y: 100 }],
+              imageUrl: dataUrl,
+              width: 480,
+              height: 300,
+            } as any;
+            engineRef.current.addObject(imgObj);
+          }}
         />
       )}
 
@@ -1787,43 +1982,78 @@ function SettingsModal({
   );
 }
 
-const THEME_PRESETS: {
+const OFFICIAL_THEMES: {
+  id: SlideTheme;
+  label: string;
+  preview: React.CSSProperties;
+  isOfficial?: boolean;
+}[] = [
+  {
+    id: "atomic_white",
+    label: "Atomic Pathshala (White)",
+    preview: {
+      backgroundColor: "#ffffff",
+      backgroundImage: "linear-gradient(to bottom, #fff7ed 0px, #fff7ed 12px, #ea580c 12px, #ea580c 14px, transparent 14px)",
+    },
+    isOfficial: true,
+  },
+  {
+    id: "atomic_dark",
+    label: "Atomic Pathshala (Dark)",
+    preview: {
+      backgroundColor: "#0d0f17",
+      backgroundImage: "linear-gradient(to bottom, #1e293b 0px, #1e293b 12px, #ea580c 12px, #ea580c 14px, transparent 14px)",
+    },
+    isOfficial: true,
+  },
+  {
+    id: "atomic_ruled",
+    label: "Atomic Pathshala (Ruled)",
+    preview: {
+      backgroundColor: "#ffffff",
+      backgroundImage:
+        "linear-gradient(to bottom, #fff7ed 0px, #fff7ed 12px, #ea580c 12px, #ea580c 14px, transparent 14px), repeating-linear-gradient(to bottom, transparent, transparent 10px, #e2e8f0 10px, #e2e8f0 11px)",
+    },
+    isOfficial: true,
+  },
+];
+
+const STANDARD_THEMES: {
   id: SlideTheme;
   label: string;
   preview: React.CSSProperties;
   overlay?: boolean;
 }[] = [
-  { id: "light", label: "Light", preview: { backgroundColor: "#ffffff" } },
-  { id: "dark", label: "Dark", preview: { backgroundColor: "#1a1b23" } },
   {
     id: "grid",
-    label: "Grid",
+    label: "Math Grid",
     preview: {
       backgroundColor: "#ffffff",
       backgroundImage:
         "linear-gradient(#9ca3af 1px, transparent 1px), linear-gradient(90deg, #9ca3af 1px, transparent 1px)",
-      backgroundSize: "15px 15px",
+      backgroundSize: "12px 12px",
     },
   },
+  { id: "dark", label: "Deep Slate Dark", preview: { backgroundColor: "#1a1b23" } },
+  { id: "light", label: "Pure White", preview: { backgroundColor: "#ffffff" } },
   {
     id: "coordinate",
-    label: "Coordinate Plane",
+    label: "Coordinate Plane (XY)",
     preview: {
       backgroundColor: "#ffffff",
       backgroundImage:
         "linear-gradient(#d1d5db 1px, transparent 1px), linear-gradient(90deg, #d1d5db 1px, transparent 1px)",
-      backgroundSize: "15px 15px",
+      backgroundSize: "12px 12px",
       backgroundPosition: "center center",
     },
     overlay: true,
   },
   {
-    id: "dotted",
-    label: "Dotted Grid",
+    id: "ruled",
+    label: "Notebook Ruled",
     preview: {
       backgroundColor: "#ffffff",
-      backgroundImage: "radial-gradient(#9ca3af 1.5px, transparent 1.5px)",
-      backgroundSize: "15px 15px",
+      backgroundImage: "repeating-linear-gradient(to bottom, transparent, transparent 10px, #e2e8f0 10px, #e2e8f0 11px)",
     },
   },
 ];
@@ -1838,48 +2068,108 @@ function ThemeModal({
   onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-      <div className="bg-[#1a1b23] w-full max-w-2xl rounded-xl shadow-2xl flex flex-col overflow-hidden border border-[#2d2e3b] max-h-[90vh]">
-        <div className="flex items-center justify-between p-6 border-b border-[#2d2e3b] bg-[#1e1f2b]">
-          <div>
-            <h2 className="text-lg font-semibold">Choose your slide theme</h2>
-            <p className="text-xs text-gray-400 mt-1">You can change this anytime from More on the toolbar.</p>
+    <div className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4">
+      <div className="bg-[#12131c] w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-[#2d2e3b] max-h-[90vh] text-white">
+        {/* Header (Screenshot 4) */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#252836] bg-[#171924]">
+          <div className="flex items-center gap-2.5">
+            <span className="material-symbols-outlined text-amber-500 text-xl">palette</span>
+            <div>
+              <h2 className="text-sm font-bold text-gray-100">Choose Slide Theme</h2>
+              <p className="text-[11px] text-gray-400">
+                Select Atomic Pathshala official branded background or standard template
+              </p>
+            </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="text-gray-400 hover:text-white bg-[#10131b] p-2 rounded-md border border-[#2d2e3b]"
+            className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-[#252836] transition"
           >
-            <span className="material-symbols-outlined text-lg">close</span>
+            <span className="material-symbols-outlined text-base">close</span>
           </button>
         </div>
-        <div className="p-8 grid grid-cols-2 md:grid-cols-3 gap-6 overflow-y-auto">
-          {THEME_PRESETS.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => {
-                onSelect(p.id);
-                onClose();
-              }}
-              className="flex flex-col items-center gap-3 group"
-            >
-              <div
-                className={`w-full aspect-video rounded-lg shadow-sm relative overflow-hidden border-2 transition-colors ${
-                  current === p.id ? "border-blue-500" : "border-transparent group-hover:border-blue-500"
-                }`}
-                style={p.preview}
-              >
-                {p.overlay && (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="w-full h-[2px] bg-blue-500" />
-                    <div className="absolute h-full w-[2px] bg-blue-500" />
+
+        <div className="p-6 space-y-6 overflow-y-auto flex-1">
+          {/* Section 1: Official Atomic Pathshala Templates (Screenshot 4) */}
+          <div className="space-y-3">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500 flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-sm">school</span>
+              OFFICIAL ATOMIC PATHSHALA TEMPLATES
+            </span>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {OFFICIAL_THEMES.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => {
+                    onSelect(p.id);
+                    onClose();
+                  }}
+                  className={`flex flex-col text-left rounded-2xl border p-2.5 transition gap-2 group ${
+                    current === p.id
+                      ? "border-orange-500 ring-2 ring-orange-500/30 bg-orange-950/10"
+                      : "border-[#252836] hover:border-orange-500/60 bg-[#161724]"
+                  }`}
+                >
+                  <div
+                    className="w-full aspect-video rounded-xl shadow-inner relative overflow-hidden border border-black/20"
+                    style={p.preview}
+                  >
+                    <div className="absolute top-1 left-1.5 flex items-center gap-1">
+                      <span className="text-[8px] font-black text-orange-600 bg-orange-100 px-1 rounded">A</span>
+                    </div>
+                    <div className="absolute top-1 right-1.5 text-[7px] font-black text-slate-700">
+                      ATOMIC
+                    </div>
                   </div>
-                )}
-              </div>
-              <span className="text-sm font-medium text-gray-300">{p.label}</span>
-            </button>
-          ))}
+                  <span className="text-xs font-bold text-gray-200 group-hover:text-orange-400 transition">
+                    {p.label}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Section 2: Standard Classroom Themes (Screenshot 4) */}
+          <div className="space-y-3">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-sm">grid_view</span>
+              STANDARD CLASSROOM THEMES
+            </span>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              {STANDARD_THEMES.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => {
+                    onSelect(p.id);
+                    onClose();
+                  }}
+                  className={`flex flex-col text-left rounded-2xl border p-2.5 transition gap-2 group ${
+                    current === p.id
+                      ? "border-blue-500 ring-2 ring-blue-500/30 bg-blue-950/10"
+                      : "border-[#252836] hover:border-blue-500/60 bg-[#161724]"
+                  }`}
+                >
+                  <div
+                    className="w-full aspect-video rounded-xl shadow-inner relative overflow-hidden border border-black/20"
+                    style={p.preview}
+                  >
+                    {p.overlay && (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="w-full h-[1.5px] bg-blue-500/60" />
+                        <div className="absolute h-full w-[1.5px] bg-blue-500/60" />
+                      </div>
+                    )}
+                  </div>
+                  <span className="text-xs font-semibold text-gray-200 group-hover:text-blue-400 transition truncate">
+                    {p.label}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>
