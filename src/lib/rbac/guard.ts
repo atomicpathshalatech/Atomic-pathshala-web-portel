@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db";
-import type { PermissionCode } from "@/lib/rbac/permissions";
+import { PERMISSIONS, ROLE_PERMISSION_DEFAULTS, type PermissionCode } from "@/lib/rbac/permissions";
 
 export class ForbiddenError extends Error {
   constructor(message = "You do not have permission to perform this action.") {
@@ -22,7 +22,7 @@ export class UnauthorizedError extends Error {
  * 1. User status (Active vs Inactive/Suspended/Expired)
  * 2. Contract End Date (Auto-expiration)
  * 3. User-level explicit overrides (Grant or Deny)
- * 4. Role-based permissions
+ * 4. Role-based permissions & Role defaults
  */
 export async function hasPermission(
   userId: string,
@@ -53,8 +53,11 @@ export async function hasPermission(
     return false;
   }
 
-  // 3. Super Admin / Founder has all permissions unless explicitly overridden
-  const isSuperAdmin = user.role.name === "SUPER_ADMIN" || user.role.name === "FOUNDER";
+  // 3. Super Admin / Founder / Admin has all permissions unless explicitly overridden
+  const isSuperAdmin =
+    user.role.name === "SUPER_ADMIN" ||
+    user.role.name === "FOUNDER" ||
+    user.role.name === "ADMIN";
 
   // 4. Check user-level explicit override first
   const override = await prisma.userPermissionOverride.findUnique({
@@ -72,7 +75,13 @@ export async function hasPermission(
 
   if (isSuperAdmin) return true;
 
-  // 5. Check Role permissions
+  // 5. Check role default catalogue
+  const roleDefaults = ROLE_PERMISSION_DEFAULTS[user.role.name] || [];
+  if (roleDefaults.includes(permission)) {
+    return true;
+  }
+
+  // 6. Check Role permissions in DB
   const count = await prisma.rolePermission.count({
     where: {
       permission: { code: permission },
@@ -85,7 +94,7 @@ export async function hasPermission(
 
 /**
  * Returns every effective permission code the user holds in one pass:
- * Role permissions + Granted Overrides - Denied Overrides
+ * Role permissions + Granted Overrides - Denied Overrides + Role Defaults
  */
 export async function getUserPermissionCodes(userId: string): Promise<Set<PermissionCode>> {
   if (!userId) return new Set();
@@ -106,7 +115,16 @@ export async function getUserPermissionCodes(userId: string): Promise<Set<Permis
   if (!user || user.status !== "ACTIVE") return new Set();
   if (user.contractEnd && new Date(user.contractEnd) < new Date()) return new Set();
 
-  // Role permissions
+  const isSuperAdmin =
+    user.role.name === "SUPER_ADMIN" ||
+    user.role.name === "FOUNDER" ||
+    user.role.name === "ADMIN";
+
+  if (isSuperAdmin) {
+    return new Set(Object.values(PERMISSIONS));
+  }
+
+  // Role permissions from DB
   const rolePermissions = await prisma.rolePermission.findMany({
     where: { role: { users: { some: { id: userId } } } },
     select: { permission: { select: { code: true } } },
@@ -115,6 +133,10 @@ export async function getUserPermissionCodes(userId: string): Promise<Set<Permis
   const codes = new Set<PermissionCode>(
     rolePermissions.map((r) => r.permission.code as PermissionCode)
   );
+
+  // Add role default permissions to guarantee baseline features like Question Bank & Test creation
+  const defaults = ROLE_PERMISSION_DEFAULTS[user.role.name] || [];
+  defaults.forEach((d) => codes.add(d));
 
   // User overrides
   const overrides = await prisma.userPermissionOverride.findMany({
