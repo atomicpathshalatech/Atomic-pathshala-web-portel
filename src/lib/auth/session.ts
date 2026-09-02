@@ -14,7 +14,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 export async function requireStudentSession() {
   const session = await getServerSession(authOptions);
 
-  if (!session?.user) {
+  if (!session?.user?.id) {
     redirect("/login");
   }
 
@@ -45,7 +45,7 @@ export async function requireStudentSession() {
 export async function requireTeamSession() {
   const session = await getServerSession(authOptions);
 
-  if (!session?.user) {
+  if (!session?.user?.id) {
     redirect("/login");
   }
 

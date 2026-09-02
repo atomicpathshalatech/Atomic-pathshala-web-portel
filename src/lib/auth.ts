@@ -78,15 +78,20 @@ export const authOptions: NextAuthOptions = {
       return token;
     },
     async session({ session, token }) {
-      const valid = await isDeviceSessionValid(token.deviceSessionId ?? undefined);
-      if (session.user && valid) {
-        session.user.id = token.id as string;
-        session.user.role = token.role as string;
+      try {
+        const valid = await isDeviceSessionValid(token.deviceSessionId ?? undefined);
+        if (session.user && valid && token.id) {
+          session.user.id = token.id as string;
+          session.user.role = (token.role as string) || "STUDENT";
+        } else if (session.user && !valid) {
+          delete (session as any).user;
+        }
+      } catch {
+        if (session.user && token.id) {
+          session.user.id = token.id as string;
+          session.user.role = (token.role as string) || "STUDENT";
+        }
       }
-      // When invalid, session.user.id/.role are left unset — every
-      // existing `if (!session?.user?.id)` guard across the app already
-      // treats that as signed-out, so this is enough to force a
-      // re-login without touching any of those call sites.
       return session;
     },
   },

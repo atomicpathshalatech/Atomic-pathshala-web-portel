@@ -43,7 +43,8 @@ export function LoginForm() {
       // shared Team Portal, which then shows only the modules their role
       // has permission for.
       const session = await getSession();
-      const destination = session?.user?.role === "STUDENT" ? "/dashboard" : "/team";
+      const userRole = (session?.user as any)?.role;
+      const destination = (!userRole || userRole === "STUDENT" || userRole === "PARENT") ? "/dashboard" : "/team";
       router.push(destination);
       router.refresh();
     } catch {
