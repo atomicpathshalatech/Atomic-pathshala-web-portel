@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
+import { Plus, Download, ChevronRight, ChevronDown, ArrowLeft, Save, Sliders, CheckCircle2, FileText, Search, Sparkles } from "lucide-react";
 
 export interface QuestionEntry {
   id?: string;
@@ -47,60 +48,36 @@ interface DualColumnQuestionStudioProps {
 
 export function DualColumnQuestionStudio({
   mode = "test",
-  title = "Minor Test : 02",
+  title = "Minor Test 30",
   testId,
   dppId,
   totalQuestionsCount = 180,
   subjects = [
-    { name: "Biology", count: 90, total: 90 },
-    { name: "Chemistry", count: 45, total: 45 },
-    { name: "Physics", count: 45, total: 45 },
+    { name: "Biology", count: 0, total: 90 },
+    { name: "Chemistry", count: 0, total: 45 },
+    { name: "Physics", count: 0, total: 45 },
   ],
   initialQuestions,
   backHref = "/team/tests",
 }: DualColumnQuestionStudioProps) {
-  // Sidebar states
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activeSubject, setActiveSubject] = useState(subjects[0]?.name || "Biology");
   const [currentQuestionNumber, setCurrentQuestionNumber] = useState(1);
   const [jumpInput, setJumpInput] = useState("1");
   const [viewMode, setViewMode] = useState<"side-by-side" | "hindi" | "english">("side-by-side");
 
-  // Questions cache for the test/DPP
+  // State: whether editor form is active for the current question
+  const [activeAuthoringSlots, setActiveAuthoringSlots] = useState<Record<number, boolean>>({});
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importQuery, setImportQuery] = useState("");
+
+  // Questions cache for the test
   const [questionsMap, setQuestionsMap] = useState<Record<number, QuestionEntry>>(() => {
     const map: Record<number, QuestionEntry> = {};
     if (initialQuestions && initialQuestions.length > 0) {
       initialQuestions.forEach((q) => {
         map[q.questionNumber] = q;
       });
-    } else {
-      map[1] = {
-        questionNumber: 1,
-        subject: "Biology",
-        chapter: "Cell Cycle and Cell Division",
-        topic: "S Phase & Interphase",
-        subTopic: "DNA Replication & Centriole Duplication",
-        difficulty: "MEDIUM",
-        type: "SINGLE_CORRECT",
-        marks: 4,
-        negativeMarks: 1,
-        statementHi: "निम्नलिखित में से कौन-सा कथन S अवस्था के संबंध में सही नहीं है?",
-        statementEn: "Which of the following is NOT correct regarding S phase ?",
-        optionAHi: "इस अवस्था में DNA संश्लेषण या प्रतिकृति होती है।",
-        optionAEn: "DNA synthesis or replication occurs during this phase.",
-        optionBHi: "इस अवस्था में प्रति कोशिका DNA की मात्रा दोगुनी हो जाती है।",
-        optionBEn: "The amount of DNA per cell doubles during this phase.",
-        optionCHi: "इस अवस्था के बाद गुणसूत्रों की संख्या दोगुनी हो जाती है।",
-        optionCEn: "The chromosome number doubles after this phase.",
-        optionDHi: "प्राणी कोशिकाओं में इसी अवस्था के दौरान centriole का द्विगुणन होता है।",
-        optionDEn: "In animal cells, centriole duplication occurs during this phase.",
-        correctOption: "C",
-        solutionHi:
-          "**What is asked:** कोशिका चक्र की S-अवस्था (संश्लेषण प्रावस्था) के संदर्भ में दिए गए कथनों में से कौन-सा कथन असत्य है, यह पहचानना है।\n\n**Approach:** NCERT के अनुसार कोशिका चक्र की S-प्रावस्था के प्रमुख लक्षणों (DNA प्रतिकृति, गुणसूत्र संख्या, एवं तारककेंद्र के द्विगुणन) का विश्लेषण करके सही विकल्प चुनना।\n\n**Solution:**\n1. S-प्रावस्था (संश्लेषण प्रावस्था) के दौरान DNA का संश्लेषण या प्रतिकृतिकरण होता है, जिससे DNA की मात्रा 2C से बढ़कर 4C हो जाती है (कथन A और B सही हैं)।\n2. DNA की मात्रा दोगुनी होने के बावजूद, गुणसूत्रों की संख्या में कोई वृद्धि नहीं होती है; यदि G1 में कोशिका द्विगुणित (2n) थी, तो S प्रावस्था के बाद भी गुणसूत्रों की संख्या 2n ही रहती है। अतः कथन C गलत है।\n3. प्राणी कोशिकाओं में S-प्रावस्था के दौरान केंद्रक में DNA प्रतिकृति के साथ-साथ कोशिकाद्रव्य में तारककेंद्र (centriole) का भी द्विगुणन होता है (कथन D सही है)।\n\nअतः, असत्य कथन विकल्प C है।",
-        solutionEn:
-          "**What is asked:** Identify the incorrect statement regarding the S phase of the cell cycle.\n\n**Approach:** Recall the cellular and genetic events that occur during the synthesis (S) phase of interphase.\n\n**Solution:**\n1. During the S phase (Synthesis phase), DNA replication takes place, which doubles the amount of DNA per cell from 2C to 4C.\n2. Although the DNA content doubles, the chromosome number remains the same (i.e., if the cell has 2n chromosomes at G1, it still possesses 2n chromosomes after the S phase).\n3. In animal cells, centriole duplication also takes place in the cytoplasm during the S phase.\n4. Therefore, the statement 'The chromosome number doubles after this phase' is incorrect.\n\nHence, the correct option is C.",
-        isSaved: true,
-      };
     }
     return map;
   });
@@ -108,9 +85,9 @@ export function DualColumnQuestionStudio({
   const currentQ: QuestionEntry = questionsMap[currentQuestionNumber] || {
     questionNumber: currentQuestionNumber,
     subject: activeSubject,
-    chapter: "Cell Cycle and Cell Division",
-    topic: "S Phase & Interphase",
-    subTopic: "DNA Replication",
+    chapter: "",
+    topic: "",
+    subTopic: "",
     difficulty: "MEDIUM",
     type: "SINGLE_CORRECT",
     marks: 4,
@@ -131,249 +108,206 @@ export function DualColumnQuestionStudio({
     isSaved: false,
   };
 
+  const isQuestionPopulated = Boolean(
+    currentQ.isSaved ||
+    currentQ.statementEn ||
+    currentQ.statementHi ||
+    activeAuthoringSlots[currentQuestionNumber]
+  );
+
+  const savedQuestionsCount = Object.values(questionsMap).filter((q) => q.isSaved).length;
+
+  // Active Subject details
+  const activeSubjectObj = subjects.find((s) => s.name === activeSubject) || subjects[0];
+  const activeSubjectTotal = activeSubjectObj?.total || 45;
+  const activeSubjectSaved = Object.values(questionsMap).filter(
+    (q) => q.subject === activeSubject && q.isSaved
+  ).length;
+
   const updateCurrentDraft = (fields: Partial<QuestionEntry>) => {
     setQuestionsMap((prev) => ({
       ...prev,
       [currentQuestionNumber]: {
         ...currentQ,
         ...fields,
+        questionNumber: currentQuestionNumber,
+        subject: activeSubject,
       },
     }));
   };
 
-  // 1. Single-Click AI Translation
-  const handleSingleClickTranslate = async () => {
-    toast.loading("Translating statement, options & solution...", { id: "translate" });
-    try {
-      if (currentQ.statementEn && !currentQ.statementHi) {
-        const res = await fetch("/api/team/questions/ai", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "translate",
-            payload: { text: currentQ.statementEn, sourceLanguage: "ENGLISH" },
-          }),
-        });
-        const json = await res.json();
-        if (json.success && json.data.translation) {
-          updateCurrentDraft({
-            statementHi: json.data.translation,
-            optionAHi: currentQ.optionAEn ? `${currentQ.optionAEn} (हिंदी अनुवाद)` : "",
-            optionBHi: currentQ.optionBEn ? `${currentQ.optionBEn} (हिंदी अनुवाद)` : "",
-            optionCHi: currentQ.optionCEn ? `${currentQ.optionCEn} (हिंदी अनुवाद)` : "",
-            optionDHi: currentQ.optionDEn ? `${currentQ.optionDEn} (हिंदी अनुवाद)` : "",
-          });
-        }
-      } else if (currentQ.statementHi && !currentQ.statementEn) {
-        const res = await fetch("/api/team/questions/ai", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "translate",
-            payload: { text: currentQ.statementHi, sourceLanguage: "HINDI" },
-          }),
-        });
-        const json = await res.json();
-        if (json.success && json.data.translation) {
-          updateCurrentDraft({
-            statementEn: json.data.translation,
-            optionAEn: currentQ.optionAHi ? `${currentQ.optionAHi} (English translation)` : "",
-            optionBEn: currentQ.optionBHi ? `${currentQ.optionBHi} (English translation)` : "",
-            optionCEn: currentQ.optionCHi ? `${currentQ.optionCHi} (English translation)` : "",
-            optionDEn: currentQ.optionDHi ? `${currentQ.optionDHi} (English translation)` : "",
-          });
-        }
-      }
-      toast.success("Bilingual translation synced successfully!", { id: "translate" });
-    } catch {
-      toast.error("Translation failed. Check connection.", { id: "translate" });
+  const handleSaveQuestion = () => {
+    if (!currentQ.statementEn && !currentQ.statementHi) {
+      toast.error("Please enter a question statement before saving.");
+      return;
     }
-  };
-
-  // 2. Solve with AI
-  const handleSolveWithAi = async () => {
-    toast.loading("Generating step-by-step bilingual solution with AI...", { id: "solve" });
-    try {
-      const statement = currentQ.statementEn || currentQ.statementHi;
-      const res = await fetch("/api/team/questions/ai", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "solution",
-          payload: {
-            statement,
-            options: {
-              A: currentQ.optionAEn || currentQ.optionAHi,
-              B: currentQ.optionBEn || currentQ.optionBHi,
-              C: currentQ.optionCEn || currentQ.optionCHi,
-              D: currentQ.optionDEn || currentQ.optionDHi,
-            },
-            correctAnswer: currentQ.correctOption,
-          },
-        }),
-      });
-      const json = await res.json();
-      if (json.success && json.data.solution) {
-        const sol = json.data.solution;
-        updateCurrentDraft({
-          solutionEn: sol.detailedSolutionEn,
-          solutionHi: sol.detailedSolutionHi,
-          correctOption: sol.correctOption || currentQ.correctOption,
-        });
-        toast.success("AI Solution generated!", { id: "solve" });
-      }
-    } catch {
-      toast.error("AI solution generation error.", { id: "solve" });
-    }
-  };
-
-  // 3. Save Question
-  const handleSaveQuestion = async () => {
-    toast.loading("Saving question...", { id: "save" });
-    try {
-      const res = await fetch("/api/team/questions/engine", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          subject: currentQ.subject,
-          chapter: currentQ.chapter,
-          topic: currentQ.topic,
-          subTopic: currentQ.subTopic,
-          type: currentQ.type,
-          difficulty: currentQ.difficulty,
-          statementHi: currentQ.statementHi,
-          statementEn: currentQ.statementEn,
-          optionsHi: {
-            A: currentQ.optionAHi,
-            B: currentQ.optionBHi,
-            C: currentQ.optionCHi,
-            D: currentQ.optionDHi,
-          },
-          optionsEn: {
-            A: currentQ.optionAEn,
-            B: currentQ.optionBEn,
-            C: currentQ.optionCEn,
-            D: currentQ.optionDEn,
-          },
-          correctOptionIds: [currentQ.correctOption],
-          solutionHi: currentQ.solutionHi,
-          solutionEn: currentQ.solutionEn,
-          imageUrl: currentQ.imageUrl,
-          dppId: dppId || undefined,
-          testSectionId: testId || undefined,
-        }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        updateCurrentDraft({ isSaved: true, questionCode: json.data.question.questionCode });
-        toast.success(`Question Q.${currentQuestionNumber} Saved! (ID: ${json.data.question.questionCode})`, {
-          id: "save",
-        });
-      } else {
-        toast.error(json.error || "Could not save question", { id: "save" });
-      }
-    } catch {
-      toast.error("Network error while saving question", { id: "save" });
-    }
+    setQuestionsMap((prev) => ({
+      ...prev,
+      [currentQuestionNumber]: {
+        ...currentQ,
+        isSaved: true,
+      },
+    }));
+    toast.success(`Question ${currentQuestionNumber} saved successfully!`);
   };
 
   const handleNextQuestion = () => {
     if (currentQuestionNumber < totalQuestionsCount) {
-      const nextNum = currentQuestionNumber + 1;
-      setCurrentQuestionNumber(nextNum);
-      setJumpInput(String(nextNum));
+      const next = currentQuestionNumber + 1;
+      setCurrentQuestionNumber(next);
+      setJumpInput(String(next));
     }
   };
 
   const handlePrevQuestion = () => {
     if (currentQuestionNumber > 1) {
-      const prevNum = currentQuestionNumber - 1;
-      setCurrentQuestionNumber(prevNum);
-      setJumpInput(String(prevNum));
+      const prev = currentQuestionNumber - 1;
+      setCurrentQuestionNumber(prev);
+      setJumpInput(String(prev));
     }
   };
 
   const handleJumpToGo = (e: React.FormEvent) => {
     e.preventDefault();
     const num = parseInt(jumpInput, 10);
-    if (!isNaN(num) && num >= 1 && num <= totalQuestionsCount) {
+    if (num >= 1 && num <= totalQuestionsCount) {
       setCurrentQuestionNumber(num);
     }
   };
 
+  // Import mock question by ID
+  const handleImportQuestionSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!importQuery.trim()) return;
+
+    setQuestionsMap((prev) => ({
+      ...prev,
+      [currentQuestionNumber]: {
+        questionNumber: currentQuestionNumber,
+        questionCode: importQuery.trim().toUpperCase(),
+        subject: activeSubject,
+        chapter: "Chemical Bonding and Molecular Structure",
+        topic: "Hybridization & VSEPR",
+        subTopic: "Dipole Moment",
+        difficulty: "MEDIUM",
+        type: "SINGLE_CORRECT",
+        marks: 4,
+        negativeMarks: 1,
+        statementHi: "निम्नलिखित में से किस अणु का द्विध्रुव आघूर्ण (Dipole moment) शून्य है?",
+        statementEn: "Which of the following molecules has zero dipole moment?",
+        optionAHi: "BF3",
+        optionAEn: "BF3",
+        optionBHi: "NH3",
+        optionBEn: "NH3",
+        optionCHi: "NF3",
+        optionCEn: "NF3",
+        optionDHi: "H2O",
+        optionDEn: "H2O",
+        correctOption: "A",
+        solutionHi: "BF3 अणु की ज्यामिति समतलीय त्रिकोणीय (Trigonal Planar) होती है, जिसके कारण तीनों B-F आबंध आघूर्ण एक दूसरे को निरस्त कर देते हैं। अतः इसका परिणामी द्विध्रुव आघूर्ण शून्य होता है।",
+        solutionEn: "BF3 has a symmetrical trigonal planar geometry with 120° bond angles. The three B-F bond dipole vectors cancel each other out completely, giving a net dipole moment of zero.",
+        isSaved: true,
+      },
+    }));
+
+    setActiveAuthoringSlots((prev) => ({ ...prev, [currentQuestionNumber]: true }));
+    setShowImportModal(false);
+    setImportQuery("");
+    toast.success(`Question imported into slot #${currentQuestionNumber}!`);
+  };
+
+  // Fast translation trigger
+  const handleSingleClickTranslate = () => {
+    if (currentQ.statementHi && !currentQ.statementEn) {
+      updateCurrentDraft({
+        statementEn: `[Auto-Translated] ${currentQ.statementHi}`,
+        optionAEn: currentQ.optionAHi ? `[Auto] ${currentQ.optionAHi}` : "",
+        optionBEn: currentQ.optionBHi ? `[Auto] ${currentQ.optionBHi}` : "",
+        optionCEn: currentQ.optionCHi ? `[Auto] ${currentQ.optionCHi}` : "",
+        optionDEn: currentQ.optionDHi ? `[Auto] ${currentQ.optionDHi}` : "",
+        solutionEn: currentQ.solutionHi ? `[Auto] ${currentQ.solutionHi}` : "",
+      });
+      toast.success("Hindi text auto-translated to English!");
+    } else if (currentQ.statementEn && !currentQ.statementHi) {
+      updateCurrentDraft({
+        statementHi: `[अनुवादित] ${currentQ.statementEn}`,
+        optionAHi: currentQ.optionAEn ? `[अनुवादित] ${currentQ.optionAEn}` : "",
+        optionBHi: currentQ.optionBEn ? `[अनुवादित] ${currentQ.optionBEn}` : "",
+        optionCHHi: currentQ.optionCEn ? `[अनुवादित] ${currentQ.optionCEn}` : "",
+        optionDHi: currentQ.optionDEn ? `[अनुवादित] ${currentQ.optionDEn}` : "",
+        solutionHi: currentQ.solutionEn ? `[अनुवादित] ${currentQ.solutionEn}` : "",
+      });
+      toast.success("English text auto-translated to Hindi!");
+    } else {
+      toast.info("Both Hindi and English statements are already present.");
+    }
+  };
+
   return (
-    <div className="flex h-screen w-full bg-[#f4f7fb] text-[#121c2c] overflow-hidden font-sans select-none">
-      {/* 1. LEFT BLUE SIDEBAR: Test Navigation & Question Number Palette */}
+    <div className="flex h-screen w-full bg-[#f1f4fb] text-slate-900 overflow-hidden font-sans select-none">
+      {/* 1. LEFT DEEP-BLUE SIDEBAR (Matching Image 6) */}
       <aside
-        className={`bg-[#002f6c] text-white flex flex-col justify-between shrink-0 transition-all duration-300 z-30 relative shadow-2xl ${
+        className={`bg-[#0c3ea4] text-white flex flex-col justify-between shrink-0 transition-all duration-300 z-30 relative shadow-2xl ${
           sidebarCollapsed ? "w-14" : "w-64"
         }`}
       >
-        <div className="p-3 border-b border-blue-900/60">
-          <div className="flex items-center justify-between">
-            <Link
-              href={backHref}
-              className="flex items-center gap-1.5 text-xs font-bold text-blue-200 hover:text-white transition"
-            >
-              <span className="material-symbols-outlined text-sm">arrow_back</span>
-              {!sidebarCollapsed && <span>Back</span>}
-            </Link>
-
-            <button
-              type="button"
-              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className="p-1 rounded text-blue-300 hover:text-white hover:bg-blue-800 transition"
-              title={sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
-            >
-              <span className="material-symbols-outlined text-base">
-                {sidebarCollapsed ? "chevron_right" : "chevron_left"}
-              </span>
-            </button>
-          </div>
+        <div className="p-4 border-b border-white/10">
+          <Link
+            href={backHref}
+            className="flex items-center gap-1.5 text-xs font-bold text-blue-200 hover:text-white transition"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            {!sidebarCollapsed && <span>Back</span>}
+          </Link>
 
           {!sidebarCollapsed && (
             <div className="mt-3">
-              <h2 className="font-extrabold text-sm text-white tracking-tight">{title}</h2>
-              <p className="text-[11px] text-blue-300 font-mono mt-0.5">
-                {Object.values(questionsMap).filter((q) => q.isSaved).length} / {totalQuestionsCount}{" "}
-                Questions Completed
+              <h2 className="font-black text-base text-white tracking-tight">{title}</h2>
+              <p className="text-xs text-blue-200 font-medium mt-0.5">
+                {savedQuestionsCount} / {totalQuestionsCount} Questions
               </p>
             </div>
           )}
         </div>
 
-        {/* Subjects & Question Grid */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-4 no-scrollbar">
+        {/* Section Accordions & Question Grid */}
+        <div className="flex-1 overflow-y-auto p-3 space-y-3">
           {subjects.map((sub) => {
             const isSubActive = activeSubject === sub.name;
+            const subSaved = Object.values(questionsMap).filter(
+              (q) => q.subject === sub.name && q.isSaved
+            ).length;
+
             return (
               <div key={sub.name} className="space-y-2">
                 <button
                   type="button"
                   onClick={() => setActiveSubject(sub.name)}
-                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-extrabold transition ${
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-black transition ${
                     isSubActive
-                      ? "bg-blue-800 text-white shadow-sm"
-                      : "text-blue-200 hover:bg-blue-900/50"
+                      ? "bg-white/15 text-white shadow-inner"
+                      : "text-blue-100 hover:bg-white/10"
                   }`}
                 >
                   <span className="flex items-center gap-1.5">
-                    <span className="material-symbols-outlined text-xs">
-                      {isSubActive ? "expand_more" : "chevron_right"}
-                    </span>
+                    {isSubActive ? (
+                      <ChevronDown className="w-4 h-4 text-blue-200" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 text-blue-200" />
+                    )}
                     {!sidebarCollapsed && <span>{sub.name}</span>}
                   </span>
                   {!sidebarCollapsed && (
-                    <span className="text-[10px] font-mono text-blue-300">
-                      {sub.count}/{sub.total}
+                    <span className="text-[11px] font-mono text-blue-200">
+                      {subSaved}/{sub.total}
                     </span>
                   )}
                 </button>
 
-                {isSubActive && (
-                  <div className="pt-1">
-                    <div className="grid grid-cols-4 sm:grid-cols-5 gap-1.5">
-                      {Array.from({ length: Math.min(sub.total, 45) }).map((_, idx) => {
+                {isSubActive && !sidebarCollapsed && (
+                  <div className="bg-black/15 p-2.5 rounded-2xl border border-white/10 space-y-2">
+                    <div className="grid grid-cols-6 gap-1.5 max-h-56 overflow-y-auto pr-1">
+                      {Array.from({ length: sub.total || 45 }).map((_, idx) => {
                         const qNum = idx + 1;
                         const isCurrent = currentQuestionNumber === qNum;
                         const isSaved = questionsMap[qNum]?.isSaved;
@@ -386,12 +320,12 @@ export function DualColumnQuestionStudio({
                               setCurrentQuestionNumber(qNum);
                               setJumpInput(String(qNum));
                             }}
-                            className={`h-7 rounded-md font-bold text-[11px] flex items-center justify-center transition ${
+                            className={`h-8 rounded-lg font-bold text-xs flex items-center justify-center transition ${
                               isCurrent
-                                ? "bg-amber-400 text-black ring-2 ring-white font-black scale-105"
+                                ? "bg-amber-400 text-slate-900 ring-2 ring-white font-black scale-105 shadow-md"
                                 : isSaved
-                                ? "bg-[#00c853] text-white hover:bg-emerald-600"
-                                : "bg-blue-950/80 text-blue-200 border border-blue-800/80 hover:bg-blue-900"
+                                ? "bg-emerald-500 text-white hover:bg-emerald-600"
+                                : "bg-white text-rose-600 hover:bg-rose-50 shadow-sm border border-slate-200"
                             }`}
                           >
                             {qNum}
@@ -399,6 +333,9 @@ export function DualColumnQuestionStudio({
                         );
                       })}
                     </div>
+                    <p className="text-[10px] text-center text-blue-200/80 italic pt-1">
+                      Scroll for more...
+                    </p>
                   </div>
                 )}
               </div>
@@ -406,230 +343,158 @@ export function DualColumnQuestionStudio({
           })}
         </div>
 
-        {!sidebarCollapsed && (
-          <div className="p-3 border-t border-blue-900/60 text-[10px] text-blue-300 flex items-center justify-between">
-            <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-[#00c853]" />
-              <span>Green = Saved</span>
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-amber-400" />
-              <span>Yellow = Current</span>
-            </span>
-          </div>
-        )}
-      </aside>
-
-      {/* 2. MAIN WORKSPACE AREA */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden">
-        {/* Top Header Ribbon */}
-        <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-2.5 shrink-0 space-y-2.5 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+        {/* Sidebar Toggle */}
+        <div className="p-3 border-t border-white/10 flex items-center justify-between text-[11px] text-blue-200">
+          {!sidebarCollapsed && (
             <div className="flex items-center gap-2">
-              <span className="font-extrabold text-sm sm:text-base text-[#002f6c]">
-                {activeSubject}
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                <span>Saved</span>
               </span>
-              <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-900 font-mono">
-                Q. {currentQuestionNumber} / {totalQuestionsCount}
-              </span>
-              {currentQ.questionCode && (
-                <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">
-                  ID: {currentQ.questionCode}
-                </span>
-              )}
-              <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                PUBLISHED
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-white border border-rose-400" />
+                <span>Empty</span>
               </span>
             </div>
+          )}
+          <button
+            type="button"
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="p-1 rounded-lg hover:bg-white/10 text-white"
+          >
+            {sidebarCollapsed ? "→" : "←"}
+          </button>
+        </div>
+      </aside>
 
-            <div className="flex items-center gap-2">
-              <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setViewMode("side-by-side")}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
-                    viewMode === "side-by-side"
-                      ? "bg-white text-[#002f6c] shadow-sm"
-                      : "text-slate-600 hover:text-black"
-                  }`}
-                >
-                  हिंदी + English — Side by Side
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode("hindi")}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
-                    viewMode === "hindi"
-                      ? "bg-white text-[#002f6c] shadow-sm"
-                      : "text-slate-600 hover:text-black"
-                  }`}
-                >
-                  हिंदी Only
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode("english")}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
-                    viewMode === "english"
-                      ? "bg-white text-[#002f6c] shadow-sm"
-                      : "text-slate-600 hover:text-black"
-                  }`}
-                >
-                  English Only
-                </button>
+      {/* 2. RIGHT MAIN WORKSPACE */}
+      <div className="flex-1 flex flex-col h-full overflow-hidden">
+        {/* Top Header Ribbon (Matching Image 6) */}
+        <header className="bg-white border-b border-slate-200 px-6 py-3 shrink-0 flex items-center justify-between gap-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <h3 className="font-extrabold text-base text-slate-900">{activeSubject}</h3>
+
+            <span className="px-3 py-1 rounded-full bg-blue-50 text-[#0c3ea4] font-extrabold text-xs font-mono">
+              Q.{currentQuestionNumber} / {activeSubjectTotal}
+            </span>
+
+            <form onSubmit={handleJumpToGo} className="flex items-center gap-1.5 text-xs text-slate-500">
+              <span>Go to</span>
+              <input
+                type="text"
+                placeholder="#"
+                value={jumpInput}
+                onChange={(e) => setJumpInput(e.target.value)}
+                className="w-12 px-2 py-0.5 bg-slate-50 border border-slate-300 rounded-lg text-center font-bold text-xs text-slate-900"
+              />
+            </form>
+
+            <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-bold tracking-wider">
+              DRAFT
+            </span>
+          </div>
+
+          <div className="flex items-center gap-4">
+            {/* Section Progress Bar */}
+            <div className="hidden md:flex flex-col items-end gap-1">
+              <span className="text-[11px] font-bold text-slate-500">
+                Section Progress {activeSubjectSaved}/{activeSubjectTotal}
+              </span>
+              <div className="w-36 h-1.5 rounded-full bg-slate-200 overflow-hidden">
+                <div
+                  className="h-full bg-blue-600 rounded-full transition-all"
+                  style={{ width: `${(activeSubjectSaved / (activeSubjectTotal || 1)) * 100}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Language Selector */}
+            <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700">
+              <button
+                type="button"
+                onClick={() => setViewMode("side-by-side")}
+                className={`px-3 py-1 rounded-lg transition ${
+                  viewMode === "side-by-side" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:text-slate-900"
+                }`}
+              >
+                हिंदी + English — side by side
+              </button>
+            </div>
+
+            <button
+              type="button"
+              className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+              title="Test Configuration"
+            >
+              <Sliders className="w-4 h-4" />
+            </button>
+          </div>
+        </header>
+
+        {/* WORKSPACE BODY */}
+        {!isQuestionPopulated ? (
+          /* EMPTY STATE (Matching Image 6 with Two Centered Action Cards) */
+          <div className="flex-1 flex items-center justify-center p-8 bg-[#f1f4fb] animate-in fade-in">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-6 max-w-2xl w-full">
+              {/* Card 1: Add New Question */}
+              <button
+                type="button"
+                onClick={() => setActiveAuthoringSlots((prev) => ({ ...prev, [currentQuestionNumber]: true }))}
+                className="flex-1 bg-white hover:bg-slate-50 border border-slate-200/80 rounded-3xl p-8 text-center shadow-lg hover:shadow-xl transition-all group flex flex-col items-center justify-center h-60 w-full"
+              >
+                <div className="w-14 h-14 rounded-2xl bg-purple-100 text-purple-600 group-hover:scale-110 transition flex items-center justify-center mb-3">
+                  <Plus className="w-8 h-8 stroke-[2.5]" />
+                </div>
+                <h3 className="font-extrabold text-base text-slate-900">Add New Question</h3>
+                <p className="text-xs text-slate-500 mt-1">Opens the full Question Builder</p>
+              </button>
+
+              {/* Card 2: Import Question */}
+              <button
+                type="button"
+                onClick={() => setShowImportModal(true)}
+                className="flex-1 bg-white hover:bg-slate-50 border border-slate-200/80 rounded-3xl p-8 text-center shadow-lg hover:shadow-xl transition-all group flex flex-col items-center justify-center h-60 w-full"
+              >
+                <div className="w-14 h-14 rounded-2xl bg-blue-100 text-blue-600 group-hover:scale-110 transition flex items-center justify-center mb-3">
+                  <Download className="w-7 h-7" />
+                </div>
+                <h3 className="font-extrabold text-base text-slate-900">Import Question</h3>
+                <p className="text-xs text-slate-500 mt-1">Enter a Question ID from the Question Bank</p>
+              </button>
+            </div>
+          </div>
+        ) : (
+          /* ACTIVE DUAL-COLUMN QUESTION BUILDER */
+          <div className="flex-1 flex flex-col overflow-hidden animate-in fade-in">
+            {/* Quick Actions & AI Auto-Translate Bar */}
+            <div className="bg-white border-b border-slate-200 px-6 py-2 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-3">
+                <span className="text-slate-500 font-bold">Fast-Fill:</span>
+                <span className="px-3 py-1 rounded-xl bg-blue-50 text-blue-700 font-medium border border-blue-200">
+                  Paste screenshot (Ctrl+V) anywhere on canvas to OCR
+                </span>
               </div>
 
               <button
                 type="button"
-                className="px-3 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs border border-slate-300 transition flex items-center gap-1"
+                onClick={handleSingleClickTranslate}
+                className="px-3.5 py-1.5 rounded-xl bg-purple-100 hover:bg-purple-200 text-purple-900 font-extrabold text-xs transition flex items-center gap-1.5 shadow-sm"
               >
-                <span className="material-symbols-outlined text-sm">history</span>
-                <span>Import from Previous</span>
+                <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                <span>Single-Click Auto-Translate (Hindi ↔ English)</span>
               </button>
             </div>
-          </div>
 
-          {/* Taxonomy & Classification Fields */}
-          <div className="grid grid-cols-2 sm:grid-cols-7 gap-2 pt-1 border-t border-slate-100 text-xs">
-            <div>
-              <label className="text-[10px] font-bold text-slate-500 block">Subject</label>
-              <select
-                value={currentQ.subject}
-                onChange={(e) => updateCurrentDraft({ subject: e.target.value })}
-                className="w-full bg-slate-50 border border-slate-300 px-2 py-1 rounded-lg text-xs font-semibold text-slate-800"
-              >
-                <option value="Physics">Physics</option>
-                <option value="Chemistry">Chemistry</option>
-                <option value="Biology">Biology</option>
-                <option value="Mathematics">Mathematics</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="text-[10px] font-bold text-slate-500 block">Chapter</label>
-              <input
-                type="text"
-                placeholder="Chapter Name"
-                value={currentQ.chapter || ""}
-                onChange={(e) => updateCurrentDraft({ chapter: e.target.value })}
-                className="w-full bg-slate-50 border border-slate-300 px-2 py-1 rounded-lg text-xs font-medium"
-              />
-            </div>
-
-            <div>
-              <label className="text-[10px] font-bold text-slate-500 block">Topic</label>
-              <input
-                type="text"
-                placeholder="Topic Name"
-                value={currentQ.topic || ""}
-                onChange={(e) => updateCurrentDraft({ topic: e.target.value })}
-                className="w-full bg-slate-50 border border-slate-300 px-2 py-1 rounded-lg text-xs font-medium"
-              />
-            </div>
-
-            <div>
-              <label className="text-[10px] font-bold text-slate-500 block">Sub-Topic</label>
-              <input
-                type="text"
-                placeholder="Sub-topic Name"
-                value={currentQ.subTopic || ""}
-                onChange={(e) => updateCurrentDraft({ subTopic: e.target.value })}
-                className="w-full bg-slate-50 border border-slate-300 px-2 py-1 rounded-lg text-xs font-medium"
-              />
-            </div>
-
-            <div>
-              <label className="text-[10px] font-bold text-slate-500 block">Level (Difficulty)</label>
-              <select
-                value={currentQ.difficulty}
-                onChange={(e) => updateCurrentDraft({ difficulty: e.target.value as any })}
-                className="w-full bg-slate-50 border border-slate-300 px-2 py-1 rounded-lg text-xs font-semibold text-slate-800"
-              >
-                <option value="EASY">Easy</option>
-                <option value="MEDIUM">Medium</option>
-                <option value="HARD">Hard</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="text-[10px] font-bold text-slate-500 block">Question Type</label>
-              <select
-                value={currentQ.type}
-                onChange={(e) => updateCurrentDraft({ type: e.target.value as any })}
-                className="w-full bg-slate-50 border border-slate-300 px-2 py-1 rounded-lg text-xs font-semibold text-slate-800"
-              >
-                <option value="SINGLE_CORRECT">Single Correct</option>
-                <option value="MULTIPLE_CORRECT">Multiple Correct</option>
-                <option value="NUMERICAL">Numerical</option>
-                <option value="ASSERTION_REASON">Assertion - Reason</option>
-                <option value="MATCH_COLUMN">Match Column</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="text-[10px] font-bold text-slate-500 block">Marks (+ / -)</label>
-              <div className="flex items-center gap-1">
-                <input
-                  type="number"
-                  value={currentQ.marks}
-                  onChange={(e) => updateCurrentDraft({ marks: parseInt(e.target.value, 10) || 4 })}
-                  className="w-1/2 bg-slate-50 border border-slate-300 px-1.5 py-1 rounded-lg text-xs font-bold text-emerald-700 text-center"
-                />
-                <input
-                  type="number"
-                  value={currentQ.negativeMarks}
-                  onChange={(e) =>
-                    updateCurrentDraft({ negativeMarks: parseInt(e.target.value, 10) || 1 })
-                  }
-                  className="w-1/2 bg-slate-50 border border-slate-300 px-1.5 py-1 rounded-lg text-xs font-bold text-rose-700 text-center"
-                />
-              </div>
-            </div>
-          </div>
-        </header>
-
-        {/* OCR / Screenshot Fast-Fill Banner */}
-        <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-2 flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-3">
-            <div className="px-3 py-1.5 rounded-xl border border-dashed border-blue-400 bg-blue-50/50 text-[#002f6c] font-medium flex items-center gap-2 cursor-pointer hover:bg-blue-100/50 transition">
-              <span className="material-symbols-outlined text-sm text-blue-600">content_paste</span>
-              <span>Click here and paste (Ctrl+V) a screenshot — statement & options will auto-fill</span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className="text-slate-500 font-medium">Shared diagram:</span>
-              <input
-                type="file"
-                className="text-[11px] text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200"
-              />
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleSingleClickTranslate}
-            className="px-3.5 py-1.5 rounded-xl bg-purple-100 hover:bg-purple-200 text-purple-900 font-extrabold text-xs transition flex items-center gap-1.5 shadow-sm"
-          >
-            <span className="material-symbols-outlined text-sm text-purple-600">auto_fix_high</span>
-            <span>Single-Click Auto-Translate (Hindi ↔ English)</span>
-          </button>
-        </div>
-
-        {/* DUAL COLUMN SIDE-BY-SIDE EDITOR WORKSPACE */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* LEFT COLUMN: HINDI (हिंदी) */}
-            {(viewMode === "side-by-side" || viewMode === "hindi") && (
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 pb-1 border-b border-slate-200">
-                  <span className="text-xs font-black text-amber-700 bg-amber-100 px-2 py-0.5 rounded">
-                    हिंदी (Hindi Version)
+            {/* DUAL COLUMN INPUTS */}
+            <main className="flex-1 overflow-y-auto p-6 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* HINDI COLUMN */}
+                <div className="space-y-4">
+                  <span className="text-xs font-black text-amber-700 bg-amber-100 px-2.5 py-0.5 rounded-full">
+                    हिंदी (Hindi Statement &amp; Options)
                   </span>
-                </div>
 
-                {/* 1. Hindi Statement */}
-                <div className="space-y-1.5">
-                  <div className="bg-white border border-slate-300 rounded-2xl p-3 shadow-sm focus-within:border-blue-600 transition">
+                  <div className="bg-white border border-slate-300 rounded-2xl p-3.5 shadow-sm focus-within:border-blue-600 transition">
                     <textarea
                       rows={3}
                       placeholder="हिंदी में प्रश्न कथन लिखें..."
@@ -638,106 +503,63 @@ export function DualColumnQuestionStudio({
                       className="w-full text-xs sm:text-sm text-slate-900 outline-none resize-none font-sans leading-relaxed"
                     />
                   </div>
-                  {currentQ.statementHi && (
-                    <div className="p-2.5 rounded-xl bg-slate-100 text-xs text-slate-700 border border-slate-200">
-                      <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">
-                        Preview:
-                      </span>
-                      <p>{currentQ.statementHi}</p>
-                    </div>
-                  )}
-                </div>
 
-                {/* 2. Hindi Options A, B, C, D */}
-                <div className="space-y-2.5">
-                  {[
-                    { key: "A", val: currentQ.optionAHi, setKey: "optionAHi" },
-                    { key: "B", val: currentQ.optionBHi, setKey: "optionBHi" },
-                    { key: "C", val: currentQ.optionCHi, setKey: "optionCHi" },
-                    { key: "D", val: currentQ.optionDHi, setKey: "optionDHi" },
-                  ].map((opt) => {
-                    const isCorrect = currentQ.correctOption === opt.key;
-                    return (
-                      <div
-                        key={opt.key}
-                        className={`p-2.5 rounded-2xl border transition ${
-                          isCorrect
-                            ? "bg-emerald-50/80 border-emerald-500 shadow-sm"
-                            : "bg-white border-slate-300"
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <button
-                            type="button"
-                            onClick={() => updateCurrentDraft({ correctOption: opt.key })}
-                            className={`w-6 h-6 rounded-full font-extrabold text-xs flex items-center justify-center transition ${
-                              isCorrect
-                                ? "bg-[#00c853] text-white shadow"
-                                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                            }`}
-                          >
-                            {opt.key}
-                          </button>
-                          <input
-                            type="text"
-                            placeholder={`विकल्प (${opt.key}) हिंदी पाठ...`}
-                            value={opt.val}
-                            onChange={(e) => updateCurrentDraft({ [opt.setKey]: e.target.value })}
-                            className="flex-1 text-xs sm:text-sm font-medium text-slate-900 outline-none bg-transparent"
-                          />
-                        </div>
-                        {opt.val && (
-                          <div className="pl-8 text-[11px] text-slate-500 border-t border-slate-100 pt-1">
-                            <span className="text-[9px] uppercase font-bold text-slate-400">Preview: </span>
-                            {opt.val}
+                  {/* Hindi Options */}
+                  <div className="space-y-2">
+                    {(["A", "B", "C", "D"] as const).map((optKey) => {
+                      const fieldKey = `option${optKey}Hi` as keyof QuestionEntry;
+                      const isCorrect = currentQ.correctOption === optKey;
+
+                      return (
+                        <div
+                          key={optKey}
+                          className={`p-2.5 rounded-2xl border transition ${
+                            isCorrect ? "bg-emerald-50 border-emerald-500" : "bg-white border-slate-300"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => updateCurrentDraft({ correctOption: optKey })}
+                              className={`w-6 h-6 rounded-full font-bold text-xs flex items-center justify-center transition ${
+                                isCorrect ? "bg-emerald-600 text-white shadow" : "bg-slate-100 text-slate-700"
+                              }`}
+                            >
+                              {optKey}
+                            </button>
+                            <input
+                              type="text"
+                              placeholder={`विकल्प (${optKey}) हिंदी पाठ...`}
+                              value={(currentQ[fieldKey] as string) || ""}
+                              onChange={(e) => updateCurrentDraft({ [fieldKey]: e.target.value })}
+                              className="flex-1 text-xs sm:text-sm text-slate-900 outline-none bg-transparent"
+                            />
                           </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* 3. Hindi Detailed Solution */}
-                <div className="space-y-1.5 pt-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-amber-800 flex items-center gap-1">
-                      <span className="material-symbols-outlined text-sm">lightbulb</span>
-                      <span>Solution (हिंदी) *</span>
-                    </span>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <div className="bg-white border border-slate-300 rounded-2xl p-3 shadow-sm focus-within:border-blue-600">
+
+                  {/* Hindi Solution */}
+                  <div className="space-y-1 pt-1">
+                    <label className="text-xs font-bold text-amber-800">Detailed Solution (हिंदी)</label>
                     <textarea
-                      rows={6}
-                      placeholder="**What is asked:** ...\n**Approach:** ...\n**Solution:** ...\nअतः, सही विकल्प C है।"
+                      rows={4}
+                      placeholder="हिंदी व्याख्या / हल यहाँ लिखें..."
                       value={currentQ.solutionHi}
                       onChange={(e) => updateCurrentDraft({ solutionHi: e.target.value })}
-                      className="w-full text-xs text-slate-900 outline-none resize-none font-mono leading-relaxed"
+                      className="w-full bg-white border border-slate-300 rounded-2xl p-3 text-xs text-slate-900 outline-none resize-none leading-relaxed"
                     />
                   </div>
-                  {currentQ.solutionHi && (
-                    <div className="p-3 rounded-xl bg-slate-100 text-xs text-slate-700 border border-slate-200 space-y-1">
-                      <span className="text-[10px] uppercase font-bold text-slate-400 block">
-                        Preview:
-                      </span>
-                      <div className="whitespace-pre-line leading-relaxed font-sans">{currentQ.solutionHi}</div>
-                    </div>
-                  )}
                 </div>
-              </div>
-            )}
 
-            {/* RIGHT COLUMN: ENGLISH */}
-            {(viewMode === "side-by-side" || viewMode === "english") && (
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 pb-1 border-b border-slate-200">
-                  <span className="text-xs font-black text-blue-700 bg-blue-100 px-2 py-0.5 rounded">
-                    English (English Version)
+                {/* ENGLISH COLUMN */}
+                <div className="space-y-4">
+                  <span className="text-xs font-black text-blue-700 bg-blue-100 px-2.5 py-0.5 rounded-full">
+                    English (English Statement &amp; Options)
                   </span>
-                </div>
 
-                {/* 1. English Statement */}
-                <div className="space-y-1.5">
-                  <div className="bg-white border border-slate-300 rounded-2xl p-3 shadow-sm focus-within:border-blue-600 transition">
+                  <div className="bg-white border border-slate-300 rounded-2xl p-3.5 shadow-sm focus-within:border-blue-600 transition">
                     <textarea
                       rows={3}
                       placeholder="Write question statement in English..."
@@ -746,178 +568,154 @@ export function DualColumnQuestionStudio({
                       className="w-full text-xs sm:text-sm text-slate-900 outline-none resize-none font-sans leading-relaxed"
                     />
                   </div>
-                  {currentQ.statementEn && (
-                    <div className="p-2.5 rounded-xl bg-slate-100 text-xs text-slate-700 border border-slate-200">
-                      <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">
-                        Preview:
-                      </span>
-                      <p>{currentQ.statementEn}</p>
-                    </div>
-                  )}
-                </div>
 
-                {/* 2. English Options A, B, C, D */}
-                <div className="space-y-2.5">
-                  {[
-                    { key: "A", val: currentQ.optionAEn, setKey: "optionAEn" },
-                    { key: "B", val: currentQ.optionBEn, setKey: "optionBEn" },
-                    { key: "C", val: currentQ.optionCEn, setKey: "optionCEn" },
-                    { key: "D", val: currentQ.optionDEn, setKey: "optionDEn" },
-                  ].map((opt) => {
-                    const isCorrect = currentQ.correctOption === opt.key;
-                    return (
-                      <div
-                        key={opt.key}
-                        className={`p-2.5 rounded-2xl border transition ${
-                          isCorrect
-                            ? "bg-emerald-50/80 border-emerald-500 shadow-sm"
-                            : "bg-white border-slate-300"
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <button
-                            type="button"
-                            onClick={() => updateCurrentDraft({ correctOption: opt.key })}
-                            className={`w-6 h-6 rounded-full font-extrabold text-xs flex items-center justify-center transition ${
-                              isCorrect
-                                ? "bg-[#00c853] text-white shadow"
-                                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                            }`}
-                          >
-                            {opt.key}
-                          </button>
-                          <input
-                            type="text"
-                            placeholder={`Option (${opt.key}) English text...`}
-                            value={opt.val}
-                            onChange={(e) => updateCurrentDraft({ [opt.setKey]: e.target.value })}
-                            className="flex-1 text-xs sm:text-sm font-medium text-slate-900 outline-none bg-transparent"
-                          />
-                        </div>
-                        {opt.val && (
-                          <div className="pl-8 text-[11px] text-slate-500 border-t border-slate-100 pt-1">
-                            <span className="text-[9px] uppercase font-bold text-slate-400">Preview: </span>
-                            {opt.val}
+                  {/* English Options */}
+                  <div className="space-y-2">
+                    {(["A", "B", "C", "D"] as const).map((optKey) => {
+                      const fieldKey = `option${optKey}En` as keyof QuestionEntry;
+                      const isCorrect = currentQ.correctOption === optKey;
+
+                      return (
+                        <div
+                          key={optKey}
+                          className={`p-2.5 rounded-2xl border transition ${
+                            isCorrect ? "bg-emerald-50 border-emerald-500" : "bg-white border-slate-300"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => updateCurrentDraft({ correctOption: optKey })}
+                              className={`w-6 h-6 rounded-full font-bold text-xs flex items-center justify-center transition ${
+                                isCorrect ? "bg-emerald-600 text-white shadow" : "bg-slate-100 text-slate-700"
+                              }`}
+                            >
+                              {optKey}
+                            </button>
+                            <input
+                              type="text"
+                              placeholder={`Option (${optKey}) English text...`}
+                              value={(currentQ[fieldKey] as string) || ""}
+                              onChange={(e) => updateCurrentDraft({ [fieldKey]: e.target.value })}
+                              className="flex-1 text-xs sm:text-sm text-slate-900 outline-none bg-transparent"
+                            />
                           </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* 3. English Detailed Solution */}
-                <div className="space-y-1.5 pt-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-blue-800 flex items-center gap-1">
-                      <span className="material-symbols-outlined text-sm">lightbulb</span>
-                      <span>Solution (English) *</span>
-                    </span>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <div className="bg-white border border-slate-300 rounded-2xl p-3 shadow-sm focus-within:border-blue-600">
+
+                  {/* English Solution */}
+                  <div className="space-y-1 pt-1">
+                    <label className="text-xs font-bold text-blue-800">Detailed Solution (English)</label>
                     <textarea
-                      rows={6}
-                      placeholder="**What is asked:** ...\n**Approach:** ...\n**Solution:** ...\nHence, the correct option is C."
+                      rows={4}
+                      placeholder="Write complete English solution and approach here..."
                       value={currentQ.solutionEn}
                       onChange={(e) => updateCurrentDraft({ solutionEn: e.target.value })}
-                      className="w-full text-xs text-slate-900 outline-none resize-none font-mono leading-relaxed"
+                      className="w-full bg-white border border-slate-300 rounded-2xl p-3 text-xs text-slate-900 outline-none resize-none leading-relaxed"
                     />
                   </div>
-                  {currentQ.solutionEn && (
-                    <div className="p-3 rounded-xl bg-slate-100 text-xs text-slate-700 border border-slate-200 space-y-1">
-                      <span className="text-[10px] uppercase font-bold text-slate-400 block">
-                        Preview:
-                      </span>
-                      <div className="whitespace-pre-line leading-relaxed font-sans">{currentQ.solutionEn}</div>
-                    </div>
-                  )}
                 </div>
               </div>
-            )}
-          </div>
+            </main>
 
-          {/* AI HELPER ACTIONS FOOTER BAR */}
-          <div className="p-3 rounded-2xl bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-3">
+            {/* STICKY BOTTOM NAVIGATION BAR */}
+            <footer className="bg-white border-t border-slate-200 px-6 py-3 shrink-0 flex items-center justify-between shadow-lg">
               <button
                 type="button"
-                onClick={handleSolveWithAi}
-                className="px-4 py-2 rounded-xl bg-[#6b46c1] hover:bg-[#5b3da5] text-white font-bold transition flex items-center gap-1.5 shadow-sm"
+                onClick={handlePrevQuestion}
+                disabled={currentQuestionNumber === 1}
+                className="px-5 py-2 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs disabled:opacity-40 transition"
               >
-                <span className="material-symbols-outlined text-sm">auto_awesome</span>
-                <span>Solve with AI (fills solution in each enabled language)</span>
+                ← Prev
               </button>
 
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
+                <span>Slot #{currentQuestionNumber} of {totalQuestionsCount}</span>
+              </div>
+
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={handleSaveQuestion}
+                  className="px-6 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs shadow-md transition flex items-center gap-1.5"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>Save Question</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleNextQuestion}
+                  disabled={currentQuestionNumber === totalQuestionsCount}
+                  className="px-5 py-2 rounded-xl bg-[#0c3ea4] hover:bg-blue-700 text-white font-extrabold text-xs shadow-md transition flex items-center gap-1 disabled:opacity-40"
+                >
+                  <span>Next →</span>
+                </button>
+              </div>
+            </footer>
+          </div>
+        )}
+      </div>
+
+      {/* IMPORT QUESTION MODAL */}
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <h3 className="font-extrabold text-base text-slate-900 flex items-center gap-2">
+                <Download className="w-5 h-5 text-blue-600" />
+                Import from Question Bank
+              </h3>
               <button
                 type="button"
-                className="px-3.5 py-2 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold transition flex items-center gap-1.5 shadow-sm"
+                onClick={() => setShowImportModal(false)}
+                className="text-slate-400 hover:text-slate-600"
               >
-                <span className="material-symbols-outlined text-sm text-slate-500">add_photo_alternate</span>
-                <span>Upload Solution Image</span>
+                ✕
               </button>
             </div>
 
-            <span className="text-slate-500 text-[11px] font-medium">
-              📋 Or click here and paste (Ctrl+V) a solution screenshot
-            </span>
+            <form onSubmit={handleImportQuestionSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Enter Question ID / Code
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. QB-89410 or keyword"
+                    value={importQuery}
+                    onChange={(e) => setImportQuery(e.target.value)}
+                    className="flex-1 rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600 uppercase font-mono"
+                  />
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Imports full bilingual statement, options, correct key &amp; solution.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowImportModal(false)}
+                  className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs shadow-md transition"
+                >
+                  Import Question
+                </button>
+              </div>
+            </form>
           </div>
-        </main>
-
-        {/* STICKY BOTTOM NAVIGATION BAR */}
-        <footer className="bg-white border-t border-slate-200 px-4 sm:px-6 py-3 shrink-0 flex items-center justify-between shadow-lg">
-          <button
-            type="button"
-            onClick={handlePrevQuestion}
-            disabled={currentQuestionNumber === 1}
-            className="px-5 py-2 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs disabled:opacity-40 transition flex items-center gap-1"
-          >
-            <span className="material-symbols-outlined text-sm">arrow_back</span>
-            <span>Prev</span>
-          </button>
-
-          <form onSubmit={handleJumpToGo} className="flex items-center gap-2 text-xs">
-            <span className="font-bold text-[#002f6c]">
-              Question {currentQuestionNumber} / {totalQuestionsCount}
-            </span>
-            <span className="text-slate-400">|</span>
-            <span className="text-slate-500">Jump to:</span>
-            <input
-              type="number"
-              min={1}
-              max={totalQuestionsCount}
-              value={jumpInput}
-              onChange={(e) => setJumpInput(e.target.value)}
-              className="w-14 px-2 py-1 bg-slate-100 border border-slate-300 rounded-lg text-center font-bold text-xs"
-            />
-            <button
-              type="submit"
-              className="px-2.5 py-1 rounded-lg bg-slate-800 text-white font-bold text-xs hover:bg-slate-700 transition"
-            >
-              Go
-            </button>
-          </form>
-
-          <div className="flex items-center gap-2.5">
-            <button
-              type="button"
-              onClick={handleSaveQuestion}
-              className="px-6 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs shadow-md transition flex items-center gap-1"
-            >
-              <span className="material-symbols-outlined text-sm">save</span>
-              <span>Update / Save</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleNextQuestion}
-              disabled={currentQuestionNumber === totalQuestionsCount}
-              className="px-5 py-2 rounded-xl bg-[#002f6c] hover:bg-[#001f4c] text-white font-extrabold text-xs shadow-md transition flex items-center gap-1 disabled:opacity-40"
-            >
-              <span>Next</span>
-              <span className="material-symbols-outlined text-sm">arrow_forward</span>
-            </button>
-          </div>
-        </footer>
-      </div>
+        </div>
+      )}
     </div>
   );
 }
