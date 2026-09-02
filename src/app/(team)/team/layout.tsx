@@ -27,6 +27,7 @@ const NAV_SECTIONS: { title?: string; items: { href: string; label: string; icon
       { href: "/team/whiteboard", label: "Whiteboard", icon: "draw", permission: PERMISSIONS.WHITEBOARD_ACCESS },
       { href: "/team/questions", label: "Question Bank", icon: "database", permission: PERMISSIONS.QUESTION_READ },
       { href: "/team/dpp", label: "DPP", icon: "task_alt", permission: PERMISSIONS.DPP_READ },
+      { href: "/team/download-center", label: "Download Center", icon: "download_for_offline", permission: PERMISSIONS.TEAM_PORTAL_ACCESS },
       { href: "/team/doubts", label: "Doubt Desk", icon: "live_help", permission: PERMISSIONS.DOUBT_READ },
     ],
   },

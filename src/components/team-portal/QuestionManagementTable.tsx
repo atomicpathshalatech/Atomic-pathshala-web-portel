@@ -23,6 +23,7 @@ import {
   ShieldCheck,
   UserCheck,
 } from "lucide-react";
+import { SecureDeleteResourceModal } from "@/components/common/SecureDeleteResourceModal";
 
 export interface QuestionRow {
   id: string;
@@ -122,6 +123,13 @@ export function QuestionManagementTable({
   const [historyModalQuestion, setHistoryModalQuestion] = useState<QuestionRow | null>(null);
   const [versions, setVersions] = useState<any[]>([]);
   const [loadingVersions, setLoadingVersions] = useState(false);
+
+  // Secure Delete Modal
+  const [deleteModalResource, setDeleteModalResource] = useState<{
+    id: string;
+    resourceId: string;
+    title: string;
+  } | null>(null);
 
   const applyFilters = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -705,9 +713,15 @@ export function QuestionManagementTable({
                         {/* Delete */}
                         <button
                           type="button"
-                          onClick={() => handleDelete(q.id)}
+                          onClick={() =>
+                            setDeleteModalResource({
+                              id: q.id,
+                              resourceId: q.questionCode || `QST-${q.id.slice(0, 6).toUpperCase()}`,
+                              title: q.translations[0]?.statement.slice(0, 50) || "Question Entry",
+                            })
+                          }
                           className="p-1.5 rounded-lg border border-slate-200 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition"
-                          title="Delete Question"
+                          title="Secure Delete Question"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -961,6 +975,21 @@ export function QuestionManagementTable({
             </div>
           </div>
         </div>
+      )}
+
+      {/* 6. SECURE DELETE MODAL */}
+      {deleteModalResource && (
+        <SecureDeleteResourceModal
+          isOpen={Boolean(deleteModalResource)}
+          onClose={() => setDeleteModalResource(null)}
+          resourceId={deleteModalResource.resourceId}
+          resourceTitle={deleteModalResource.title}
+          resourceType="QUESTION"
+          onDeleted={() => {
+            setDeleteModalResource(null);
+            router.refresh();
+          }}
+        />
       )}
     </div>
   );

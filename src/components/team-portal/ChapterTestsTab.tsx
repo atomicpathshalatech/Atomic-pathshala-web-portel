@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { MoreVertical, Edit2, FileText, Trash2, Download, CheckCircle2, Clock, Award, Plus, Layers, HelpCircle } from "lucide-react";
+import { SecureDeleteResourceModal } from "@/components/common/SecureDeleteResourceModal";
 
 export interface TestItem {
   id: string;
@@ -40,6 +41,7 @@ export function ChapterTestsTab({
   // Modals
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingTest, setEditingTest] = useState<TestItem | null>(null);
+  const [deleteModalTest, setDeleteModalTest] = useState<TestItem | null>(null);
 
   // Form Fields
   const [name, setName] = useState("");
@@ -376,7 +378,10 @@ export function ChapterTestsTab({
 
                           <button
                             type="button"
-                            onClick={() => handleDelete(t.id)}
+                            onClick={() => {
+                              setActiveMenuId(null);
+                              setDeleteModalTest(t);
+                            }}
                             className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-xl text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -613,6 +618,22 @@ export function ChapterTestsTab({
             </form>
           </div>
         </div>
+      )}
+
+      {/* SECURE DELETE MODAL */}
+      {deleteModalTest && (
+        <SecureDeleteResourceModal
+          isOpen={Boolean(deleteModalTest)}
+          onClose={() => setDeleteModalTest(null)}
+          resourceId={deleteModalTest.code || `TST-${deleteModalTest.id.slice(0, 6).toUpperCase()}`}
+          resourceTitle={deleteModalTest.name}
+          resourceType="TEST"
+          onDeleted={() => {
+            setTests((prev) => prev.filter((t) => t.id !== deleteModalTest.id));
+            setDeleteModalTest(null);
+            router.refresh();
+          }}
+        />
       )}
     </div>
   );

@@ -81,6 +81,9 @@ model User {
   questionsReviewed1     Question[]     @relation("QuestionReview1By")
   questionsReviewed2     Question[]     @relation("QuestionReview2By")
   questionsEdited        Question[]     @relation("QuestionEditedBy")
+  platformResourcesCreated PlatformResource[] @relation("PlatformResourceCreatedBy")
+  platformResourcesDeleted PlatformResource[] @relation("PlatformResourceDeletedBy")
+  resourceAuditLogs        ResourceAuditLog[]
   student                Student?
   teacher                Teacher?
   role                   Role           @relation(fields: [roleId], references: [id])
@@ -3216,3 +3219,55 @@ model ProgramMapping {
   @@index([chapterId])
   @@map("academic_program_mappings")
 }
+
+model PlatformResource {
+  id            String    @id @default(cuid())
+  resourceId    String    @unique // e.g. LEC-89104, TST-39102, DPP-10923, QST-77182, PDF-50912
+  type          String // LECTURE | VIDEO | TEST | DPP | QUESTION | PDF | MODULE
+  title         String
+  subject       String?
+  targetId      String // ID of the underlying model
+  downloadUrl   String?
+  format        String? // PDF | MP4 | ZIP | JSON
+  sizeBytes     Int?
+  isDeleted     Boolean   @default(false)
+  deletedAt     DateTime?
+  deletedById   String?
+  deletedReason String?
+  createdById   String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  createdBy     User?     @relation("PlatformResourceCreatedBy", fields: [createdById], references: [id])
+  deletedBy     User?     @relation("PlatformResourceDeletedBy", fields: [deletedById], references: [id])
+  auditLogs     ResourceAuditLog[]
+
+  @@index([resourceId])
+  @@index([type])
+  @@index([targetId])
+  @@index([isDeleted])
+  @@map("platform_resources")
+}
+
+model ResourceAuditLog {
+  id           String   @id @default(cuid())
+  resourceId   String
+  resourceType String
+  userId       String
+  userName     String?
+  action       String // DOWNLOAD | DELETE | ATTEMPT_BLOCKED | RESTORE
+  result       String // SUCCESS | PERMISSION_DENIED | FAILED
+  reason       String?
+  metadata     Json?
+  ipAddress    String?
+  createdAt    DateTime @default(now())
+
+  resource     PlatformResource? @relation(fields: [resourceId], references: [resourceId], onDelete: Cascade)
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([resourceId])
+  @@index([userId])
+  @@index([action])
+  @@map("resource_audit_logs")
+}
+
