@@ -90,7 +90,7 @@ interface Slide {
 }
 
 interface Stroke {
-  tool: "pen" | "highlighter" | "eraser" | "shape";
+  tool: "pen" | "highlighter" | "eraser" | "shape" | "select";
   penStyle?: PenStyleId;
   color: string;
   size: number;
