@@ -83,7 +83,7 @@ export async function lookupPlatformResource(resourceId: string) {
   const cleanId = resourceId.trim().toUpperCase();
 
   // 1. Check PlatformResource registry
-  let resource = await prisma.platformResource.findUnique({
+  const resource = await prisma.platformResource.findUnique({
     where: { resourceId: cleanId },
     include: {
       createdBy: { select: { id: true, name: true, email: true } },
@@ -142,7 +142,6 @@ export async function lookupPlatformResource(resourceId: string) {
       },
       include: {
         createdBy: { select: { id: true, name: true, email: true } },
-        chapter: true,
       },
     });
 
@@ -151,8 +150,8 @@ export async function lookupPlatformResource(resourceId: string) {
         data: {
           resourceId: cleanId.startsWith("DPP-") ? cleanId : `DPP-${dpp.id.slice(0, 6).toUpperCase()}`,
           type: "DPP",
-          title: dpp.title,
-          subject: dpp.chapter?.title || "Daily Practice Problem",
+          title: dpp.name,
+          subject: dpp.chapter || dpp.subject || "Daily Practice Problem",
           targetId: dpp.id,
           downloadUrl: `/api/pdf/dpp/${dpp.id}`,
           format: "PDF",
