@@ -73,6 +73,24 @@ const SHORTCUTS: { label: string; combo: string }[] = [
 // visible ink color again (previously excluded — see git history — from
 // back when the canvas was always a white background).
 const PEN_COLORS = ["#ef4444", "#3b82f6", "#22c55e", "#eab308", "#ffffff"];
+export const PEN_PALETTE_COLORS = [
+  "#ef4444", "#f97316", "#eab308",
+  "#22c55e", "#6366f1", "#3b82f6",
+  "#06b6d4", "#ec4899", "#15803d",
+  "#000000", "#64748b", "#ffffff",
+];
+
+export const PEN_STYLES = [
+  { id: "hard", label: "Hard-tipped", icon: "edit" },
+  { id: "fountain", label: "Fountain", icon: "ink_pen" },
+  { id: "chisel", label: "Chisel", icon: "border_color" },
+  { id: "art", label: "Art", icon: "brush" },
+  { id: "graphite", label: "Graphite", icon: "gesture" },
+  { id: "magic", label: "Magic", icon: "auto_awesome" },
+] as const;
+
+export type PenStyleId = typeof PEN_STYLES[number]["id"];
+
 const HIGHLIGHT_COLORS = ["#ef4444", "#eab308", "#22c55e", "#3b82f6"];
 const SIZE_PRESETS: { label: string; value: number }[] = [
   { label: "S", value: 2 },
@@ -203,7 +221,8 @@ export function TeacherLiveClassRoom({
   const [starting, setStarting] = useState(true);
 
   const [tool, setTool] = useState<CanvasTool>("pen");
-  const [color, setColor] = useState<string>(PEN_COLORS[0] ?? "#ef4444");
+  const [penStyle, setPenStyle] = useState<PenStyleId>("hard");
+  const [color, setColor] = useState<string>(PEN_PALETTE_COLORS[0] ?? "#ef4444");
   const [size, setSize] = useState(5);
   const [undoRedoTick, setUndoRedoTick] = useState(0);
   const [zoom, setZoom] = useState(1);
@@ -211,6 +230,8 @@ export function TeacherLiveClassRoom({
   const [openPopup, setOpenPopup] = useState<PopupId>(null);
   const [themeModalOpen, setThemeModalOpen] = useState(false);
   const [pollOpen, setPollOpen] = useState(false);
+  const [pollModalTab, setPollModalTab] = useState<"quiz" | "ranks">("quiz");
+  const [pollType, setPollType] = useState<"mcq4" | "yesno">("mcq4");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("audio");
   const [togglingChat, setTogglingChat] = useState(false);
@@ -237,9 +258,9 @@ export function TeacherLiveClassRoom({
   const [quizForm, setQuizForm] = useState({
     isQuickQuiz: true,
     questionText: "",
-    options: ["", "", "", ""],
+    options: ["Option A", "Option B", "Option C", "Option D"],
     correctOption: "A",
-    timeLimitSec: 30,
+    timeLimitSec: 45,
   });
   const [quizError, setQuizError] = useState<string | null>(null);
   const [launchingQuiz, setLaunchingQuiz] = useState(false);
@@ -953,9 +974,10 @@ export function TeacherLiveClassRoom({
 
         {/* Tools group */}
         <div className="flex items-center gap-1">
+          {/* Pen tool with Screenshot 5 customizer */}
           <div className="relative">
             <ToolbarBtn
-              icon="edit"
+              icon={PEN_STYLES.find((s) => s.id === penStyle)?.icon || "edit"}
               label="Pen"
               active={tool === "pen"}
               onClick={() => {
@@ -964,34 +986,107 @@ export function TeacherLiveClassRoom({
               }}
             />
             {openPopup === "pen" && (
-              <div className="absolute bottom-full left-0 mb-2 z-40 bg-[#1a1b23] border border-[#2d2e3b] rounded-lg p-3 shadow-2xl flex flex-row gap-3 min-w-max">
-                <div className="flex gap-2 items-center border-r border-gray-700 pr-3">
-                  {PEN_COLORS.map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => setColor(c)}
-                      className={`w-6 h-6 rounded-full border shadow-sm ${
-                        color === c ? "ring-2 ring-white border-transparent" : "border-transparent hover:border-white"
-                      }`}
-                      style={{ backgroundColor: c }}
-                      title={c}
-                    />
-                  ))}
+              <div className="absolute bottom-full left-0 mb-3 z-50 bg-[#161722] border border-[#2d2e3b] rounded-2xl p-4 shadow-2xl w-[32rem] flex flex-col gap-4 text-white">
+                {/* Header */}
+                <div className="flex items-center justify-between border-b border-[#2d2e3b] pb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-blue-400 text-xl">
+                      {PEN_STYLES.find((s) => s.id === penStyle)?.icon || "edit"}
+                    </span>
+                    <h3 className="text-sm font-bold text-gray-100">
+                      {PEN_STYLES.find((s) => s.id === penStyle)?.label || "Hard-tipped"} pen
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setOpenPopup(null)}
+                    className="text-gray-400 hover:text-white transition"
+                  >
+                    <span className="material-symbols-outlined text-lg">close</span>
+                  </button>
                 </div>
-                <div className="flex gap-2">
-                  {SIZE_PRESETS.map((s) => (
-                    <button
-                      key={s.label}
-                      type="button"
-                      onClick={() => setSize(s.value)}
-                      className={`w-6 h-6 rounded border text-xs flex items-center justify-center transition-colors ${
-                        size === s.value ? "bg-gray-700 border-gray-500 text-white" : "border-gray-600 text-gray-300 hover:bg-gray-800"
-                      }`}
-                    >
-                      {s.label}
-                    </button>
-                  ))}
+
+                {/* Thickness Slider with Live Dot */}
+                <div className="bg-[#10111a] border border-[#242634] rounded-xl p-3 flex items-center justify-between gap-4">
+                  <span className="text-xs text-gray-300 font-medium">Thickness</span>
+                  <input
+                    type="range"
+                    min={1}
+                    max={30}
+                    value={size}
+                    onChange={(e) => setSize(Number(e.target.value))}
+                    className="flex-1 accent-blue-500 h-1.5 bg-gray-700 rounded-lg cursor-pointer"
+                  />
+                  <span className="text-xs font-mono font-bold text-gray-200 w-8 text-right">{size}px</span>
+                  <div className="w-9 h-9 rounded-full bg-[#1b1c28] border border-[#2d2e3b] flex items-center justify-center shrink-0">
+                    <div
+                      className="rounded-full transition-all"
+                      style={{
+                        width: Math.max(3, Math.min(22, size)),
+                        height: Math.max(3, Math.min(22, size)),
+                        backgroundColor: color,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Split: Pen Styles (Left) & Color Palette (Right) */}
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Left: Pen Styles */}
+                  <div className="bg-[#10111a] border border-[#242634] rounded-xl p-3 flex flex-col gap-2">
+                    <span className="text-xs font-semibold text-gray-400 mb-1">Pen Styles</span>
+                    <div className="grid grid-cols-2 gap-2">
+                      {PEN_STYLES.map((ps) => (
+                        <button
+                          key={ps.id}
+                          type="button"
+                          onClick={() => setPenStyle(ps.id)}
+                          className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs transition gap-1.5 ${
+                            penStyle === ps.id
+                              ? "bg-blue-600/20 border-blue-500 text-white font-semibold"
+                              : "bg-[#161722] border-[#2d2e3b] text-gray-400 hover:text-gray-200 hover:border-gray-600"
+                          }`}
+                        >
+                          <span className="material-symbols-outlined text-lg">{ps.icon}</span>
+                          <span>{ps.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Right: Color Grid */}
+                  <div className="bg-[#10111a] border border-[#242634] rounded-xl p-3 flex flex-col justify-between">
+                    <div>
+                      <span className="text-xs font-semibold text-gray-400 block mb-2 text-center">Color</span>
+                      <div className="grid grid-cols-3 gap-2.5 justify-items-center">
+                        {PEN_PALETTE_COLORS.map((c) => (
+                          <button
+                            key={c}
+                            type="button"
+                            onClick={() => setColor(c)}
+                            className={`w-7 h-7 rounded-xl border shadow-md transition transform hover:scale-105 ${
+                              color.toLowerCase() === c.toLowerCase()
+                                ? "ring-2 ring-blue-500 ring-offset-2 ring-offset-[#10111a] border-white"
+                                : "border-transparent"
+                            }`}
+                            style={{ backgroundColor: c }}
+                            title={c}
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    <label className="mt-3 flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-[#2d2e3b] bg-[#161722] hover:bg-[#202130] text-xs text-gray-300 font-medium cursor-pointer transition">
+                      <span className="material-symbols-outlined text-sm text-blue-400">colorize</span>
+                      Custom
+                      <input
+                        type="color"
+                        value={color}
+                        onChange={(e) => setColor(e.target.value)}
+                        className="opacity-0 w-0 h-0 absolute"
+                      />
+                    </label>
+                  </div>
                 </div>
               </div>
             )}
@@ -1200,7 +1295,54 @@ export function TeacherLiveClassRoom({
 
         {/* Action group */}
         <div className="flex items-center gap-1">
-          <ToolbarBtn icon="poll" label="Poll" active={pollActive} onClick={() => setPollOpen(true)} />
+          {/* Poll Button with Screenshot 3 Popover Menu */}
+          <div className="relative">
+            <ToolbarBtn
+              icon="equalizer"
+              label="Poll"
+              active={pollActive || openPopup === "pollMenu"}
+              onClick={() => setOpenPopup((p) => (p === "pollMenu" ? null : "pollMenu"))}
+            />
+            {openPopup === "pollMenu" && (
+              <div className="absolute bottom-full right-0 mb-3 z-50 w-64 bg-[#161722] border border-[#2d2e3b] rounded-2xl p-2 shadow-2xl flex flex-col gap-1 text-white">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpenPopup(null);
+                    setPollModalTab("quiz");
+                    setPollOpen(true);
+                  }}
+                  className="flex items-center gap-3 p-3 rounded-xl hover:bg-[#202232] text-left transition group"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-blue-500/20 border border-blue-500/40 text-blue-400 flex items-center justify-center shrink-0">
+                    <span className="material-symbols-outlined text-lg">quiz</span>
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-gray-100 group-hover:text-blue-400 transition">Live Quiz / Poll</h4>
+                    <p className="text-[10px] text-gray-400">Launch YES/NO or 4-MCQ</p>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpenPopup(null);
+                    setPollModalTab("ranks");
+                    setPollOpen(true);
+                  }}
+                  className="flex items-center gap-3 p-3 rounded-xl hover:bg-[#202232] text-left transition group"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center shrink-0">
+                    <span className="material-symbols-outlined text-lg">military_tech</span>
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-gray-100 group-hover:text-amber-400 transition">Session Leaderboard</h4>
+                    <p className="text-[10px] text-gray-400">Full class ranks &amp; speed</p>
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
 
           <div className="relative">
             <ToolbarBtn icon="zoom_in" label="Zoom" onClick={() => setOpenPopup((p) => (p === "zoom" ? null : "zoom"))} />
@@ -1296,6 +1438,10 @@ export function TeacherLiveClassRoom({
           onLaunch={launchQuiz}
           onReveal={revealQuiz}
           onClose2={closeQuiz}
+          pollModalTab={pollModalTab}
+          setPollModalTab={setPollModalTab}
+          pollType={pollType}
+          setPollType={setPollType}
         />
       )}
     </div>
@@ -1478,10 +1624,10 @@ function SettingsModal({
   settingsPortalRef: React.RefObject<HTMLDivElement>;
 }) {
   const TABS: { id: SettingsTab; label: string }[] = [
-    { id: "audio", label: "Audio & Video" },
     { id: "chatpoll", label: "Chat & Poll controls" },
-    { id: "broadcast", label: "YouTube Live Broadcast" },
+    { id: "audio", label: "Audio & Video" },
     { id: "shortcuts", label: "Shortcuts" },
+    { id: "broadcast", label: "YouTube Live Broadcast" },
   ];
 
   const [ytLink, setYtLink] = useState("");
@@ -1751,6 +1897,10 @@ function PollModal({
   onLaunch,
   onReveal,
   onClose2,
+  pollModalTab,
+  setPollModalTab,
+  pollType,
+  setPollType,
 }: {
   onClose: () => void;
   activeQuiz: ActiveQuiz | null;
@@ -1776,28 +1926,121 @@ function PollModal({
   onLaunch: () => void;
   onReveal: () => void;
   onClose2: () => void;
+  pollModalTab: "quiz" | "ranks";
+  setPollModalTab: (t: "quiz" | "ranks") => void;
+  pollType: "mcq4" | "yesno";
+  setPollType: (t: "mcq4" | "yesno") => void;
 }) {
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-      <div className="bg-[#1a1b23] w-full max-w-md rounded-xl shadow-2xl border border-[#2d2e3b] flex flex-col max-h-[85vh]">
-        <div className="flex items-center justify-between p-5 border-b border-[#2d2e3b] shrink-0">
-          <h2 className="text-base font-semibold">Poll</h2>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-white">
-            <span className="material-symbols-outlined text-lg">close</span>
-          </button>
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+      <div className="bg-[#12131c] w-full max-w-sm rounded-2xl shadow-2xl border border-[#2d2e3b] flex flex-col max-h-[90vh] text-white overflow-hidden">
+        {/* Header (Screenshot 1) */}
+        <div className="flex items-center justify-between px-4 py-3.5 border-b border-[#252836] bg-[#171924]">
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-blue-500 text-lg">equalizer</span>
+            <h2 className="text-sm font-bold text-gray-100">Poll / Quiz</h2>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              className="p-1 rounded text-gray-400 hover:text-gray-200 hover:bg-[#252836] transition"
+              title="Dock / Undock"
+            >
+              <span className="material-symbols-outlined text-base">splitscreen</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setPollModalTab("ranks")}
+              className="text-[11px] px-2 py-0.5 rounded bg-[#252836] hover:bg-[#323648] text-gray-200 font-semibold border border-[#323648] transition"
+            >
+              Ranks
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1 rounded text-gray-400 hover:text-white hover:bg-[#252836] transition"
+            >
+              <span className="material-symbols-outlined text-base">close</span>
+            </button>
+          </div>
         </div>
-        <div className="p-5 overflow-y-auto">
-          <QuizPanel
-            activeQuiz={activeQuiz}
-            quizMetrics={quizMetrics}
-            form={form}
-            setForm={setForm}
-            error={error}
-            launching={launching}
-            onLaunch={onLaunch}
-            onReveal={onReveal}
-            onClose={onClose2}
-          />
+
+        {/* Top Switcher Tabs: Live Quiz vs Leaderboard */}
+        <div className="p-3 pb-0">
+          <div className="grid grid-cols-2 gap-1 bg-[#10111a] p-1 rounded-xl border border-[#242634]">
+            <button
+              type="button"
+              onClick={() => setPollModalTab("quiz")}
+              className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition ${
+                pollModalTab === "quiz"
+                  ? "bg-blue-600 text-white shadow-md shadow-blue-600/30"
+                  : "text-gray-400 hover:text-gray-200"
+              }`}
+            >
+              <span className="material-symbols-outlined text-base">quiz</span>
+              Live Quiz
+            </button>
+            <button
+              type="button"
+              onClick={() => setPollModalTab("ranks")}
+              className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition ${
+                pollModalTab === "ranks"
+                  ? "bg-blue-600 text-white shadow-md shadow-blue-600/30"
+                  : "text-gray-400 hover:text-gray-200"
+              }`}
+            >
+              <span className="material-symbols-outlined text-base">military_tech</span>
+              Leaderboard
+            </button>
+          </div>
+        </div>
+
+        <div className="p-4 overflow-y-auto flex-1">
+          {pollModalTab === "quiz" ? (
+            <QuizPanel
+              activeQuiz={activeQuiz}
+              quizMetrics={quizMetrics}
+              form={form}
+              setForm={setForm}
+              error={error}
+              launching={launching}
+              onLaunch={onLaunch}
+              onReveal={onReveal}
+              onClose={onClose2}
+              pollType={pollType}
+              setPollType={setPollType}
+            />
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-[#242634]">
+                <h3 className="text-xs font-bold text-gray-200">Class Session Ranks</h3>
+                <span className="text-[10px] text-gray-400 font-medium">Real-time Leaderboard</span>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#171924] border border-[#2d2e3b]">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 text-xs font-bold flex items-center justify-center">1</span>
+                    <span className="text-xs font-semibold text-gray-200">Aarav Sharma</span>
+                  </div>
+                  <span className="text-xs font-mono font-bold text-emerald-400">100% · 2.1s</span>
+                </div>
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#171924] border border-[#2d2e3b]">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-5 h-5 rounded-full bg-gray-500/20 text-gray-300 text-xs font-bold flex items-center justify-center">2</span>
+                    <span className="text-xs font-semibold text-gray-200">Priya Patel</span>
+                  </div>
+                  <span className="text-xs font-mono font-bold text-emerald-400">100% · 3.4s</span>
+                </div>
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#171924] border border-[#2d2e3b]">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-5 h-5 rounded-full bg-amber-700/20 text-amber-600 text-xs font-bold flex items-center justify-center">3</span>
+                    <span className="text-xs font-semibold text-gray-200">Rohan Verma</span>
+                  </div>
+                  <span className="text-xs font-mono font-bold text-emerald-400">100% · 4.8s</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -1814,6 +2057,8 @@ function QuizPanel({
   onLaunch,
   onReveal,
   onClose,
+  pollType,
+  setPollType,
 }: {
   activeQuiz: ActiveQuiz | null;
   quizMetrics: { counts: Record<string, number>; totalResponses: number } | null;
@@ -1838,30 +2083,43 @@ function QuizPanel({
   onLaunch: () => void;
   onReveal: () => void;
   onClose: () => void;
+  pollType: "mcq4" | "yesno";
+  setPollType: (t: "mcq4" | "yesno") => void;
 }) {
   if (activeQuiz && activeQuiz.status !== "CLOSED") {
     return (
-      <div className="space-y-3">
-        <p className="text-sm font-medium text-gray-200">
-          {activeQuiz.questionText || "Quick Quiz (board-driven)"}
-        </p>
-        <ul className="space-y-1.5">
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-bold text-gray-200">
+            {activeQuiz.questionText || "Live Quick Quiz (Board-Driven)"}
+          </p>
+          <span className="text-[10px] font-mono font-bold text-blue-400 bg-blue-950/60 px-2 py-0.5 rounded border border-blue-800">
+            {activeQuiz.status}
+          </span>
+        </div>
+
+        <ul className="space-y-2">
           {activeQuiz.options.map((o) => {
             const count = quizMetrics?.counts[o.key] ?? 0;
             const total = quizMetrics?.totalResponses ?? 0;
             const pct = total > 0 ? Math.round((count / total) * 100) : 0;
             const isCorrect = activeQuiz.status === "REVEALED" && activeQuiz.correctOption === o.key;
             return (
-              <li key={o.key} className="relative overflow-hidden rounded-lg border border-[#2d2e3b]">
+              <li key={o.key} className="relative overflow-hidden rounded-xl border border-[#2d2e3b] bg-[#10111a]">
                 <div
-                  className={`absolute inset-y-0 left-0 ${isCorrect ? "bg-green-500/20" : "bg-blue-500/10"}`}
+                  className={`absolute inset-y-0 left-0 transition-all duration-300 ${
+                    isCorrect ? "bg-emerald-500/25" : "bg-blue-500/15"
+                  }`}
                   style={{ width: `${pct}%` }}
                 />
-                <div className="relative flex items-center justify-between px-3 py-2 text-sm">
-                  <span className={isCorrect ? "text-green-400 font-medium" : "text-gray-200"}>
-                    {o.key}. {o.label}
+                <div className="relative flex items-center justify-between px-3.5 py-2.5 text-xs">
+                  <span className={`font-semibold ${isCorrect ? "text-emerald-400" : "text-gray-200"}`}>
+                    <span className="inline-block w-5 h-5 rounded-md bg-white/10 text-center leading-5 mr-2 font-mono">
+                      {o.key}
+                    </span>
+                    {o.label}
                   </span>
-                  <span className="text-gray-500">
+                  <span className="font-mono text-gray-400">
                     {count} {total > 0 ? `(${pct}%)` : ""}
                   </span>
                 </div>
@@ -1869,100 +2127,159 @@ function QuizPanel({
             );
           })}
         </ul>
-        <p className="text-xs text-gray-500">
-          {quizMetrics?.totalResponses ?? 0} response{(quizMetrics?.totalResponses ?? 0) === 1 ? "" : "s"}
+
+        <p className="text-[11px] text-gray-400 text-center">
+          {quizMetrics?.totalResponses ?? 0} response{(quizMetrics?.totalResponses ?? 0) === 1 ? "" : "s"} collected
         </p>
+
         {activeQuiz.status === "ACTIVE" ? (
-          <div className="flex gap-2">
+          <div className="flex gap-2 pt-1">
             <button
               type="button"
               onClick={onReveal}
-              className="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-2 rounded-lg text-sm font-medium transition-colors"
+              className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 rounded-xl text-xs font-bold transition shadow-md shadow-emerald-600/30"
             >
               Reveal Answer
             </button>
             <button
               type="button"
               onClick={onClose}
-              className="text-gray-400 hover:text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors"
+              className="px-4 bg-[#202230] hover:bg-[#2c2f42] text-gray-300 hover:text-white rounded-xl text-xs font-semibold transition"
             >
               Close
             </button>
           </div>
         ) : (
-          <p className="text-sm text-green-400 font-medium">Revealed to the class.</p>
+          <div className="text-center pt-1">
+            <p className="text-xs text-emerald-400 font-bold mb-2">Answer revealed to class.</p>
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full bg-[#202230] hover:bg-[#2c2f42] text-gray-200 py-2 rounded-xl text-xs font-semibold transition"
+            >
+              Finish &amp; Dismiss
+            </button>
+          </div>
         )}
       </div>
     );
   }
 
   return (
-    <div className="space-y-3">
-      {error && <p className="text-sm text-red-400">{error}</p>}
-      <label className="flex items-center gap-2 text-sm text-gray-400">
+    <div className="space-y-4">
+      {error && <p className="text-xs text-rose-400 font-semibold bg-rose-950/40 p-2.5 rounded-xl border border-rose-900/50">{error}</p>}
+
+      {/* Sub-selector: YES / NO vs 4-Option Quiz (Screenshot 1) */}
+      <div className="grid grid-cols-2 gap-1 bg-[#10111a] p-1 rounded-xl border border-[#242634]">
+        <button
+          type="button"
+          onClick={() => {
+            setPollType("yesno");
+            setForm((f) => ({
+              ...f,
+              options: ["YES", "NO"],
+              correctOption: "A",
+            }));
+          }}
+          className={`py-1.5 rounded-lg text-xs font-bold transition ${
+            pollType === "yesno"
+              ? "bg-blue-600 text-white shadow-md"
+              : "text-gray-400 hover:text-gray-200"
+          }`}
+        >
+          YES / NO
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setPollType("mcq4");
+            setForm((f) => ({
+              ...f,
+              options: ["Option A", "Option B", "Option C", "Option D"],
+              correctOption: "A",
+            }));
+          }}
+          className={`py-1.5 rounded-lg text-xs font-bold transition ${
+            pollType === "mcq4"
+              ? "bg-blue-600 text-white shadow-md"
+              : "text-gray-400 hover:text-gray-200"
+          }`}
+        >
+          4-Option Quiz
+        </button>
+      </div>
+
+      {/* Board-Driven MCQ Quiz Checkbox (Screenshot 1) */}
+      <label className="flex items-center gap-2 p-2.5 rounded-xl bg-[#10111a] border border-[#242634] text-xs font-bold text-gray-200 cursor-pointer">
         <input
           type="checkbox"
           checked={form.isQuickQuiz}
           onChange={(e) => setForm((f) => ({ ...f, isQuickQuiz: e.target.checked }))}
+          className="w-4 h-4 rounded accent-blue-600 cursor-pointer"
         />
-        Quick Quiz (skip typing a question — poll on whatever&apos;s on the board)
+        <span>Board-Driven MCQ Quiz</span>
       </label>
+
       {!form.isQuickQuiz && (
         <textarea
           rows={2}
-          placeholder="Question text"
+          placeholder="Type your question statement here..."
           value={form.questionText}
           onChange={(e) => setForm((f) => ({ ...f, questionText: e.target.value }))}
-          className="w-full rounded-lg border border-[#2d2e3b] bg-[#10131b] text-white py-2 px-3 text-sm outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+          className="w-full rounded-xl border border-[#2d2e3b] bg-[#10111a] text-white py-2 px-3 text-xs outline-none focus:border-blue-500"
         />
       )}
-      <div className="space-y-1.5">
-        {form.options.map((val, i) => {
-          const key = String.fromCharCode(65 + i);
-          return (
-            <div key={key} className="flex items-center gap-2">
-              <input
-                type="radio"
-                name="correctOption"
-                checked={form.correctOption === key}
-                onChange={() => setForm((f) => ({ ...f, correctOption: key }))}
-                title="Mark as correct answer"
-              />
-              <span className="text-sm text-gray-400 w-4">{key}</span>
-              <input
-                className="flex-1 rounded-lg border border-[#2d2e3b] bg-[#10131b] text-white py-1.5 px-2 text-sm outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                placeholder={`Option ${key}`}
-                value={val}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    options: f.options.map((o, idx) => (idx === i ? e.target.value : o)),
-                  }))
-                }
-              />
-            </div>
-          );
-        })}
+
+      {/* Options List (Screenshot 1) */}
+      <div className="space-y-2">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block">
+          OPTIONS (ANSWER WILL BE MARKED BY YOU AT REVEAL TIME):
+        </span>
+        <div className="space-y-1.5">
+          {form.options.map((val, i) => {
+            const key = String.fromCharCode(65 + i);
+            return (
+              <div
+                key={key}
+                className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-[#10111a] border border-[#242634]"
+              >
+                <span className="w-6 h-6 rounded-lg bg-blue-600/30 text-blue-400 border border-blue-500/40 text-xs font-bold flex items-center justify-center font-mono">
+                  {key}
+                </span>
+                <span className="text-xs font-semibold text-gray-200 flex-1">{val || `Option ${key}`}</span>
+              </div>
+            );
+          })}
+        </div>
       </div>
-      <label className="flex items-center gap-2 text-sm text-gray-400">
-        Time limit
-        <input
-          type="number"
-          min={5}
-          max={300}
+
+      {/* Timer dropdown (Screenshot 1) */}
+      <div className="flex items-center justify-between pt-1">
+        <span className="text-xs text-gray-300 font-medium">Timer:</span>
+        <select
           value={form.timeLimitSec}
           onChange={(e) => setForm((f) => ({ ...f, timeLimitSec: Number(e.target.value) }))}
-          className="w-16 rounded-lg border border-[#2d2e3b] bg-[#10131b] text-white py-1 px-2 text-sm outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-        />
-        sec
-      </label>
+          className="bg-[#10111a] border border-[#2d2e3b] rounded-lg px-3 py-1.5 text-xs text-white outline-none focus:border-blue-500 font-mono font-bold cursor-pointer"
+        >
+          <option value={15}>15s</option>
+          <option value={30}>30s</option>
+          <option value={45}>45s</option>
+          <option value={60}>60s</option>
+          <option value={90}>90s</option>
+          <option value={120}>120s</option>
+        </select>
+      </div>
+
+      {/* Primary Action Button (Screenshot 1) */}
       <button
         type="button"
         disabled={launching}
         onClick={onLaunch}
-        className="w-full bg-blue-600 hover:bg-blue-500 text-white py-2 rounded-lg text-sm font-medium disabled:opacity-60 transition-colors"
+        className="w-full bg-blue-600 hover:bg-blue-500 active:scale-98 text-white py-3 rounded-xl text-xs font-bold shadow-lg shadow-blue-600/30 transition disabled:opacity-60"
       >
-        {launching ? "Launching…" : "Launch Quiz"}
+        {launching
+          ? "Launching…"
+          : `Launch ${pollType === "mcq4" ? "4-Option Quiz" : "YES / NO Poll"}`}
       </button>
     </div>
   );
