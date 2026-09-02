@@ -1955,9 +1955,13 @@ model Lecture {
   title            String
   language         String        @default("English")
   order            Int           @default(0)
-  videoUrl         String
+  videoUrl         String        @default("")
   educatorVideoUrl String?
   slidesUrl        String?
+  scheduledDate    DateTime?
+  startTime        String?
+  endTime          String?
+  durationMin      Int?          @default(60)
   status           LectureStatus @default(DRAFT)
   teacherId        String
   createdAt        DateTime      @default(now())

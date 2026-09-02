@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -47,21 +47,26 @@ export async function POST(
     if (!chapter) return apiError("Chapter not found", 404);
 
     const body = await request.json();
-    const { title, videoUrl, language, order, slidesUrl, educatorVideoUrl, status, teacherId: passedTeacherId } = body;
+    const {
+      title,
+      scheduledDate,
+      startTime,
+      endTime,
+      durationMin,
+      videoUrl,
+      language,
+      order,
+      slidesUrl,
+      educatorVideoUrl,
+      status,
+      teacherId: passedTeacherId,
+    } = body;
 
     if (!title?.trim()) {
       return apiError("Lecture title is required", 400);
     }
-    if (!videoUrl?.trim()) {
-      return apiError("Video / Stream URL is required", 400);
-    }
 
-    // Authoring lock — server-enforced, not a disabled button. A new
-    // lecture may only be created once every DPP slot it depends on
-    // (every 2 completed lectures) has a non-empty DPP. This governs
-    // *creation order* for the teacher/admin; it is independent of
-    // @/lib/chapters/progression.ts, which separately governs whether a
-    // published lecture is unlocked for a given STUDENT to watch.
+    // Authoring lock check
     const sequence = await getChapterSequenceState(chapter.id);
     if (!sequence.nextLectureUnlocked) {
       const requiredSlot = sequence.requiredDppSlotForNextLecture;
@@ -86,7 +91,6 @@ export async function POST(
         if (anyTeacher) {
           teacherId = anyTeacher.id;
         } else {
-          // Create fallback teacher profile for admin
           const newTeacher = await prisma.teacher.create({
             data: {
               userId: session.user.id,
@@ -110,11 +114,18 @@ export async function POST(
       lectureOrder = (last?.order ?? 0) + 1;
     }
 
+    const parsedDate = scheduledDate ? new Date(scheduledDate) : null;
+    const parsedDuration = durationMin ? Number(durationMin) : 60;
+
     const lecture = await prisma.lecture.create({
       data: {
         chapterId: chapter.id,
         title: title.trim(),
-        videoUrl: videoUrl.trim(),
+        scheduledDate: parsedDate,
+        startTime: startTime?.trim() || null,
+        endTime: endTime?.trim() || null,
+        durationMin: parsedDuration,
+        videoUrl: videoUrl?.trim() || "",
         language: language || (chapter.medium === "HINDI" ? "Hindi" : chapter.medium === "HINGLISH" ? "Hinglish" : "English"),
         order: lectureOrder,
         slidesUrl: slidesUrl?.trim() || null,
@@ -133,7 +144,12 @@ export async function POST(
         action: "LECTURE_CREATED",
         entityType: "Lecture",
         entityId: lecture.id,
-        metadata: { chapterId: chapter.id, title: lecture.title },
+        metadata: {
+          chapterId: chapter.id,
+          title: lecture.title,
+          scheduledDate: lecture.scheduledDate,
+          durationMin: lecture.durationMin,
+        },
       },
     });
 
