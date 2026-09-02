@@ -44,15 +44,19 @@ export default async function LiveClassesListPage() {
         include: { teacher: { include: { user: true } }, batch: true },
       })) as ScheduleWithRefs[];
 
+  const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
   const live = schedules.filter((s) => s.status === "LIVE" || (s.startsAt <= now && s.endsAt >= now));
   const upcoming = schedules.filter((s) => !live.includes(s) && s.startsAt > now);
   const recentlyEnded = schedules.filter((s) => !live.includes(s) && s.endsAt < now);
 
   function ScheduleRow({ s, isLive }: { s: ScheduleWithRefs; isLive: boolean }) {
+    const isWaitingRoomOpen = (s.startsAt.getTime() - now.getTime()) <= FIFTEEN_MINUTES_MS && s.endsAt >= now;
+    const canJoin = isLive || isWaitingRoomOpen;
+
     return (
       <div
         className={`glass-card rounded-xl p-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 ${
-          isLive ? "border-2 border-primary" : ""
+          isLive ? "border-2 border-primary" : isWaitingRoomOpen ? "border-2 border-amber-500/60" : ""
         }`}
       >
         <div className="flex-1 min-w-0">
@@ -61,6 +65,11 @@ export default async function LiveClassesListPage() {
               <span className="flex items-center gap-1 bg-error/10 text-error text-[10px] font-bold uppercase px-2 py-0.5 rounded">
                 <span className="w-1.5 h-1.5 rounded-full bg-error animate-pulse" />
                 Live Now
+              </span>
+            ) : isWaitingRoomOpen ? (
+              <span className="flex items-center gap-1 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-bold uppercase px-2 py-0.5 rounded border border-amber-500/30">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                Waiting Room Open (15m window)
               </span>
             ) : (
               <span className="text-label-sm text-on-surface-variant">
@@ -78,12 +87,12 @@ export default async function LiveClassesListPage() {
         <Link
           href={`/live-class/${s.id}`}
           className={`shrink-0 text-center px-5 py-2 rounded-full font-label-md text-label-md transition-colors ${
-            isLive
-              ? "bg-primary text-on-primary hover:opacity-90"
+            canJoin
+              ? "bg-primary text-on-primary hover:opacity-90 shadow-sm"
               : "border border-outline-variant/50 text-on-surface-variant hover:bg-surface-container-high"
           }`}
         >
-          {isLive ? "Join Class" : "View Details"}
+          {isLive ? "Join Class" : isWaitingRoomOpen ? "Enter Waiting Room" : "View Details"}
         </Link>
       </div>
     );

@@ -275,60 +275,72 @@ export function StudentLiveClassRoom({
 
   // ------------------------------------------------------------------------
 
-  if (phase === "waiting") {
+  if (phase === "waiting" || phase === "lobby") {
     return (
-      <div className="space-y-stack-lg max-w-3xl mx-auto">
-        <header>
-          <p className="text-label-sm text-on-surface-variant mb-1">{batchName}</p>
-          <h1 className="font-display-lg text-display-lg-mobile md:text-display-lg text-on-surface">
-            {scheduleTitle}
-          </h1>
+      <div className="space-y-6 max-w-4xl mx-auto">
+        <header className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">{batchName}</p>
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
+              {scheduleTitle}
+            </h1>
+          </div>
+          <span className="flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 px-3 py-1.5 rounded-full animate-pulse shrink-0">
+            <span className="w-2 h-2 rounded-full bg-amber-500" />
+            Waiting Room Open
+          </span>
         </header>
-        <div className="glass-card rounded-2xl p-10 text-center space-y-3">
-          <span className="material-symbols-outlined text-4xl text-primary animate-pulse">cast</span>
-          <p className="font-headline-md text-headline-md text-on-surface">
-            Waiting for {teacherName ?? "your teacher"} to start the class
-          </p>
-          <p className="text-body-md text-on-surface-variant">
-            This page will switch over automatically the moment the live board opens.
-          </p>
-          {error && <p className="text-label-sm text-error">{error}</p>}
-          <Link href="/schedule" className="inline-block text-primary text-label-md hover:underline mt-2">
-            ← Back to schedule
-          </Link>
-        </div>
-      </div>
-    );
-  }
 
-  if (phase === "lobby") {
-    return (
-      <div className="space-y-stack-lg max-w-3xl mx-auto">
-        <header>
-          <p className="text-label-sm text-on-surface-variant mb-1">{batchName}</p>
-          <h1 className="font-display-lg text-display-lg-mobile md:text-display-lg text-on-surface">
-            {scheduleTitle}
-          </h1>
-        </header>
-        <div className="glass-card rounded-2xl p-8 text-center space-y-2">
-          <span className="material-symbols-outlined text-4xl text-primary animate-pulse">meeting_room</span>
-          <p className="font-headline-md text-headline-md text-on-surface">
-            You&apos;re in — {teacherName ?? "your teacher"} hasn&apos;t started the class yet
-          </p>
-          <p className="text-body-md text-on-surface-variant">
-            Chat with your classmates while you wait. The board and video will appear the moment
-            class starts — this page switches over automatically.
-          </p>
-          {error && <p className="text-label-sm text-error">{error}</p>}
+        {/* YouTube-Style Waiting Room Stage */}
+        <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-950 text-white rounded-3xl p-8 sm:p-12 text-center shadow-xl relative overflow-hidden border border-slate-800">
+          <div className="relative z-10 max-w-lg mx-auto space-y-4">
+            <div className="w-16 h-16 rounded-3xl bg-blue-500/20 border border-blue-500/40 text-blue-400 mx-auto flex items-center justify-center shadow-lg shadow-blue-500/10">
+              <span className="material-symbols-outlined text-3xl animate-pulse">live_tv</span>
+            </div>
+
+            <div className="space-y-1">
+              <span className="text-xs font-mono font-bold uppercase tracking-widest text-blue-400">
+                Live Classroom Waiting Room
+              </span>
+              <h2 className="text-xl sm:text-2xl font-extrabold text-white">
+                Waiting for {teacherName ?? "Educator"} to Start Class
+              </h2>
+            </div>
+
+            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+              You are in the waiting room. Chat with your classmates below. The live board and video stream will begin automatically the moment the teacher clicks <span className="font-bold text-emerald-400">&quot;Start Class&quot;</span>.
+            </p>
+
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 text-xs font-bold text-slate-200 backdrop-blur-sm border border-white/10">
+              <span className="material-symbols-outlined text-base text-emerald-400">groups</span>
+              <span>Waiting Room Active &middot; Instant Auto-Connect</span>
+            </div>
+
+            {error && <p className="text-xs text-rose-400 font-bold bg-rose-950/50 p-2.5 rounded-xl">{error}</p>}
+          </div>
         </div>
+
+        {/* Realtime Live Chat During Waiting Room */}
         {wbSessionId && (
-          <div className="glass-card rounded-2xl p-3 h-96 flex flex-col">
-            <MessagesPanel whiteboardSessionId={wbSessionId} currentUserId={currentUserId} role="STUDENT" />
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-4 shadow-sm h-96 flex flex-col">
+            <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100 dark:border-slate-800">
+              <h3 className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-base text-blue-500">chat</span>
+                Class Live Chat
+              </h3>
+              <span className="text-[10px] text-slate-400 font-medium">Real-time messaging active</span>
+            </div>
+            <div className="flex-1 min-h-0">
+              <MessagesPanel whiteboardSessionId={wbSessionId} currentUserId={currentUserId} role="STUDENT" />
+            </div>
           </div>
         )}
-        <Link href="/schedule" className="inline-block text-primary text-label-md hover:underline">
-          ← Back to schedule
-        </Link>
+
+        <div className="text-center pt-2">
+          <Link href="/schedule" className="text-xs font-bold text-blue-600 hover:text-blue-500 hover:underline">
+            &larr; Back to Schedule
+          </Link>
+        </div>
       </div>
     );
   }

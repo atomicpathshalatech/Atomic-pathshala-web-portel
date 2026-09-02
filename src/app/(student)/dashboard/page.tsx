@@ -47,9 +47,14 @@ export default async function StudentDashboardPage() {
     .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
 
   const nextClass = allUpcoming[0] ?? null;
+  const FIFTEEN_MINS_MS = 15 * 60 * 1000;
   const isClassLive = nextClass
     ? nextClass.status === "LIVE" || (nextClass.startsAt <= now && nextClass.endsAt >= now)
     : false;
+  const isWaitingRoomOpen = nextClass
+    ? (nextClass.startsAt.getTime() - now.getTime()) <= FIFTEEN_MINS_MS && nextClass.endsAt >= now
+    : false;
+  const canJoinClass = isClassLive || isWaitingRoomOpen;
 
   // 2. Fetch real counts for feature badges (Zero fake data)
   const [
@@ -180,7 +185,11 @@ export default async function StudentDashboardPage() {
               href={nextClass.type === "LIVE_CLASS" ? `/live-class/${nextClass.id}` : "/schedule"}
               className="px-6 py-3 rounded-xl bg-primary text-on-primary font-semibold text-xs shadow-md hover:opacity-90 active:scale-95 transition-all text-center self-start sm:self-auto shrink-0"
             >
-              {isClassLive ? "Join Live Class Now" : "View Classroom"}
+              {isClassLive
+                ? "Join Live Class Now"
+                : isWaitingRoomOpen
+                ? "Enter Waiting Room"
+                : "View Classroom"}
             </Link>
           </div>
         </section>

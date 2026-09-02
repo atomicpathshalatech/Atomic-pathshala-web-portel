@@ -713,64 +713,10 @@ export function TeacherLiveClassRoom({
     );
   }
 
-  if (!wbSession) return null;
-
-  // ---- Pre-class lobby: chat is live, board/video aren't yet -------------
-  // Shown from the moment the teacher opens this page (session create sets
-  // livePhase: PREPARING) until they explicitly click Start Class. Students
-  // polling by-schedule see the same gate on their side (StudentLiveClassRoom's
-  // "lobby" phase) so both sides agree on when the actual class begins.
-  if (wbSession.livePhase !== "LIVE") {
-    return (
-      <div className="flex h-[calc(100vh-5rem)] -m-6 bg-[#10131b] text-white overflow-hidden">
-        <div className="flex-1 flex flex-col items-center justify-center gap-4 p-8 text-center">
-          <span className="material-symbols-outlined text-5xl text-blue-500">meeting_room</span>
-          <div>
-            <p className="text-[11px] text-gray-500">{batchName}</p>
-            <h1 className="text-xl font-semibold text-gray-100">{scheduleTitle}</h1>
-          </div>
-          <p className="text-sm text-gray-400 max-w-md">
-            You&apos;re in the pre-class lobby. Chat with students who&apos;ve already joined below —
-            the board and video open for everyone once you start the class.
-          </p>
-          <span className="flex items-center gap-1.5 text-xs text-gray-400">
-            <span className="material-symbols-outlined text-base">groups</span>
-            {studentCount} waiting
-          </span>
-          {startClassError && <p className="text-xs text-red-400">{startClassError}</p>}
-          <button
-            type="button"
-            disabled={startingClass}
-            onClick={startClass}
-            className="mt-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-500 px-8 py-3 rounded-lg disabled:opacity-60 transition"
-          >
-            {startingClass ? "Starting…" : "Start Class"}
-          </button>
-          <button
-            type="button"
-            onClick={() => router.push("/team/batches")}
-            className="text-xs text-gray-500 hover:text-gray-300"
-          >
-            Leave for now (chat stays open, resume anytime before you start)
-          </button>
-        </div>
-        <aside className="w-96 bg-[#1a1b23] border-l border-[#2d2e3b] flex flex-col p-4 shrink-0">
-          <p className="text-sm font-medium text-gray-200 mb-3">Lobby Chat</p>
-          <MessagesPanel
-            whiteboardSessionId={wbSession.id}
-            currentUserId={currentUserId}
-            role="TEACHER"
-            theme="dark"
-            showOwnToggle={false}
-          />
-        </aside>
-      </div>
-    );
-  }
-
   const canGoPrev = wbSession.activePageNumber > 1;
   const canGoNext = wbSession.activePageNumber < wbSession.pages.length;
   const pollActive = !!activeQuiz && activeQuiz.status !== "CLOSED";
+  const isClassLive = wbSession.livePhase === "LIVE";
 
   return (
     <div
@@ -812,6 +758,20 @@ export function TeacherLiveClassRoom({
         </div>
         <div className="flex items-center gap-4 shrink-0">
           <SaveIndicator state={saveState} />
+
+          {/* Live Phase Indicator */}
+          {isClassLive ? (
+            <span className="flex items-center gap-1.5 text-xs font-bold text-red-400 border border-red-500/40 bg-red-950/40 px-3 py-1 rounded-full">
+              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+              LIVE
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5 text-xs font-bold text-amber-400 border border-amber-500/40 bg-amber-950/40 px-3 py-1 rounded-full animate-pulse">
+              <span className="w-2 h-2 rounded-full bg-amber-400" />
+              PREPARING (NOT LIVE)
+            </span>
+          )}
+
           {minutesRemaining !== null && minutesRemaining <= END_WARNING_MINUTES && wbSession?.status === "ACTIVE" && (
             <span
               className="flex items-center gap-1.5 text-xs font-semibold text-amber-400 border border-amber-900/50 bg-amber-950/30 px-2.5 py-1 rounded-md"
@@ -821,10 +781,25 @@ export function TeacherLiveClassRoom({
               {minutesRemaining > 0 ? `Ending in ${minutesRemaining}m` : "Past scheduled end — wrap up"}
             </span>
           )}
+
           <span className="flex items-center gap-1.5 text-xs text-gray-400">
             <span className="material-symbols-outlined text-base">groups</span>
-            {studentCount} watching
+            {studentCount} {isClassLive ? "watching" : "waiting"}
           </span>
+
+          {/* Go Live Button when in PREPARING phase */}
+          {!isClassLive && (
+            <button
+              type="button"
+              disabled={startingClass}
+              onClick={startClass}
+              className="flex items-center gap-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 px-4 py-1.5 rounded-md shadow-md shadow-emerald-600/30 transition active:scale-95 disabled:opacity-60"
+            >
+              <span className="material-symbols-outlined text-base">sensors</span>
+              {startingClass ? "Starting Live…" : "Start Class"}
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() => setSettingsOpen(true)}
@@ -832,7 +807,8 @@ export function TeacherLiveClassRoom({
           >
             CLASS SETTINGS
           </button>
-          {!confirmingEnd ? (
+
+          {isClassLive && (!confirmingEnd ? (
             <button
               type="button"
               onClick={() => setConfirmingEnd(true)}
@@ -859,7 +835,7 @@ export function TeacherLiveClassRoom({
                 Cancel
               </button>
             </div>
-          )}
+          ))}
         </div>
       </header>
 
