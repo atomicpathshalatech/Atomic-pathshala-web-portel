@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LogoutButton } from "@/components/student/LogoutButton";
 import { TeamProfileMenu } from "@/components/team-portal/TeamProfileMenu";
+import { OpsBackButton } from "@/components/common/OpsBackButton";
 
 export type TeamNavItem = { href: string; label: string; icon: string };
 export type TeamNavSection = { title?: string; items: TeamNavItem[] };
@@ -35,6 +36,8 @@ export function TeamShell({
   children: React.ReactNode;
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const pathname = usePathname();
+  const isRootTeam = pathname === "/team";
 
   return (
     <div className="min-h-screen bg-surface-container-low/30">
@@ -52,6 +55,12 @@ export function TeamShell({
             <Link href="/team" className="font-headline-md text-headline-md font-bold text-primary shrink-0">
               Atomic Pathshala <span className="text-on-surface-variant font-body-md text-body-md">Team</span>
             </Link>
+
+            {!isRootTeam && (
+              <div className="hidden sm:flex items-center pl-2 border-l border-outline-variant/30">
+                <OpsBackButton label="Back" fallbackHref="/team" />
+              </div>
+            )}
           </div>
 
           <TeamProfileMenu userName={userName} userRoleLabel={userRoleLabel} hasTeacherProfile={hasTeacherProfile} />
@@ -85,7 +94,14 @@ export function TeamShell({
           </div>
         )}
 
-        <main className="flex-1 min-w-0 px-margin-mobile md:px-margin-desktop py-stack-lg">{children}</main>
+        <main className="flex-1 min-w-0 px-margin-mobile md:px-margin-desktop py-stack-lg space-y-4">
+          {!isRootTeam && (
+            <div className="sm:hidden pb-1">
+              <OpsBackButton label="Back" fallbackHref="/team" />
+            </div>
+          )}
+          {children}
+        </main>
       </div>
     </div>
   );

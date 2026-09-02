@@ -832,10 +832,10 @@ export function QuizMode({ onClose }: QuizModeProps) {
         <button
           type="button"
           onClick={onClose}
-          className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-Blue px-3 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:border-red-300 hover:bg-red-50 hover:text-red-600 active:scale-95 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-red-950/20 dark:hover:text-red-400"
+          className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 active:scale-95 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
         >
           <ArrowLeft className="h-4 w-4" />
-          Exit quiz
+          Back
         </button>
         <p className="text-sm font-semibold text-atomic-orange">NEET Quiz</p>
       </header>

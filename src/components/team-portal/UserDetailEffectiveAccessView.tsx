@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
+import { OpsBackButton } from "@/components/common/OpsBackButton";
 
 const MODULES_MATRIX = [
   {
@@ -237,14 +238,11 @@ export function UserDetailEffectiveAccessView({ userId }: { userId: string }) {
       {/* 1. HEADER BREADCRUMB & USER IDENTITY CARD */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-sm space-y-4">
         <div className="flex items-center justify-between">
-          <p className="flex items-center gap-2 text-xs text-slate-500">
-            <Link href="/team/users" className="hover:text-blue-600 font-bold transition flex items-center gap-1">
-              <span className="material-symbols-outlined text-sm">arrow_back</span>
-              <span>All Users</span>
-            </Link>
-            <span>/</span>
-            <span className="text-slate-900 dark:text-white font-mono">{user.id}</span>
-          </p>
+          <div className="flex items-center gap-3">
+            <OpsBackButton href="/team/users" label="Back to Users" />
+            <span className="text-slate-300">/</span>
+            <span className="text-xs text-slate-500 font-mono">{user.id}</span>
+          </div>
 
           <span
             className={`px-3 py-0.5 rounded-full text-xs font-black uppercase tracking-wider ${

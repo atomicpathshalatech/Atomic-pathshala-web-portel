@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { PERMISSIONS, ROLE_PERMISSION_DEFAULTS } from "@/lib/rbac/permissions";
+import { OpsBackButton } from "@/components/common/OpsBackButton";
 
 const MODULE_GROUPS = [
   {
@@ -219,11 +220,8 @@ export function RolesPermissionMatrixView() {
       {/* 1. HEADER */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-sm">
         <div>
-          <div className="flex items-center gap-2">
-            <Link href="/team/users" className="text-xs font-bold text-slate-500 hover:text-blue-600 flex items-center gap-1">
-              <span className="material-symbols-outlined text-sm">arrow_back</span>
-              <span>User Management</span>
-            </Link>
+          <div className="flex items-center gap-3 mb-1">
+            <OpsBackButton href="/team/users" label="Back to Users" />
             <span className="text-slate-300">/</span>
             <span className="text-xs font-extrabold uppercase text-purple-600">Roles &amp; Permissions</span>
           </div>
