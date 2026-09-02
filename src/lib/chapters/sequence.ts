@@ -79,11 +79,13 @@ export async function getChapterSequenceState(chapterId: string): Promise<Chapte
     };
   });
 
-  const completeSlots = new Set(dppSlots.filter((d) => d.complete).map((d) => d.slot));
+  // At authoring/scheduling time, a DPP slot is satisfied as soon as it is created.
+  // Questions are added after classes occur.
+  const createdSlots = new Set(dppSlots.map((d) => d.slot));
   const nextLecturePosition = lectureCount + 1;
   const requiredDppSlotForNextLecture = dppSlotRequiredForLecturePosition(nextLecturePosition);
   const nextLectureUnlocked =
-    requiredDppSlotForNextLecture === 0 || completeSlots.has(requiredDppSlotForNextLecture);
+    requiredDppSlotForNextLecture === 0 || createdSlots.has(requiredDppSlotForNextLecture);
 
   return {
     chapterId,

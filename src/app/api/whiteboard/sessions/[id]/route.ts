@@ -89,6 +89,52 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       return apiError(`Cannot start class from its current state (${existing.livePhase}).`, 409);
     }
 
+    if (input.livePhase === "LIVE" && existing.livePhase !== "LIVE") {
+      const schedule = await prisma.batchSchedule.findUnique({
+        where: { id: existing.batchScheduleId },
+        include: {
+          chapter: {
+            include: {
+              dpps: {
+                select: { id: true, _count: { select: { questions: true } } },
+                orderBy: { createdAt: "asc" },
+              },
+            },
+          },
+        },
+      });
+
+      if (schedule?.chapterId && schedule.chapter) {
+        const priorCompletedLectures = await prisma.batchSchedule.count({
+          where: {
+            chapterId: schedule.chapterId,
+            startsAt: { lt: schedule.startsAt },
+            status: "COMPLETED",
+          },
+        });
+
+        const requiredDppSlot = Math.floor(priorCompletedLectures / 2);
+        if (requiredDppSlot >= 1) {
+          const requiredDpp = schedule.chapter.dpps[requiredDppSlot - 1];
+          const hasQuestions = Boolean(requiredDpp && requiredDpp._count.questions > 0);
+
+          if (!hasQuestions) {
+            const isAdmin =
+              session.user.role === "ADMIN" ||
+              session.user.role === "SUPER_ADMIN" ||
+              session.user.role === "ACADEMIC_DIRECTOR";
+
+            if (!isAdmin) {
+              return apiError(
+                `2 classes have been completed. Questions must be added to DPP ${requiredDppSlot} before this lecture can start. Please add questions to the DPP or obtain Admin permission.`,
+                403
+              );
+            }
+          }
+        }
+      }
+    }
+
     const updated = await prisma.whiteboardSession.update({
       where: { id: params.id },
       data: {

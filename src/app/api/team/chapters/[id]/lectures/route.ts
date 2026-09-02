@@ -71,7 +71,7 @@ export async function POST(
     if (!sequence.nextLectureUnlocked) {
       const requiredSlot = sequence.requiredDppSlotForNextLecture;
       return apiError(
-        `Cannot create Lecture ${sequence.nextLecturePosition}. DPP ${requiredSlot} must be created with at least one question first.`,
+        `Cannot create Lecture ${sequence.nextLecturePosition}. DPP ${requiredSlot} must be created in this chapter first.`,
         409,
         {
           code: "CHAPTER_SEQUENCE_LOCKED",
