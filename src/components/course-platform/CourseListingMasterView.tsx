@@ -1,37 +1,30 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useMemo } from "react";
-import { CourseCard } from "./CourseCard";
-import { SAMPLE_COURSES } from "./sample-courses";
+import { CourseCard, CourseData } from "./CourseCard";
 
-
-export function CourseListingMasterView() {
+export function CourseListingMasterView({ courses = [] }: { courses?: CourseData[] }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedExam, setSelectedExam] = useState("All");
   const [selectedSubject, setSelectedSubject] = useState("All");
-  const [selectedYear, setSelectedYear] = useState("All");
-  const [selectedType, setSelectedType] = useState("All");
 
   const exams = ["All", "NEET", "JEE Mains", "JEE Advanced", "Boards"];
   const subjects = ["All", "Physics", "Chemistry", "Biology", "Mathematics"];
-  const years = ["All", "2027", "2026", "2028"];
-  const courseTypes = ["All", "Full Syllabus", "Chapter-wise", "Crash Course", "Test Series"];
 
   const filteredCourses = useMemo(() => {
-    return SAMPLE_COURSES.filter((c) => {
+    return courses.filter((c) => {
       const matchesSearch =
+        !searchQuery ||
         c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         c.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
         c.educators.toLowerCase().includes(searchQuery.toLowerCase());
 
-      const matchesExam = selectedExam === "All" || c.exam.includes(selectedExam);
+      const matchesExam = selectedExam === "All" || (c.exam && c.exam.includes(selectedExam));
       const matchesSubject = selectedSubject === "All" || c.subject.toLowerCase() === selectedSubject.toLowerCase();
-      const matchesYear = selectedYear === "All" || c.examYear === selectedYear;
-      const matchesType = selectedType === "All" || c.courseType.toLowerCase() === selectedType.toLowerCase();
 
-      return matchesSearch && matchesExam && matchesSubject && matchesYear && matchesType;
+      return matchesSearch && matchesExam && matchesSubject;
     });
-  }, [searchQuery, selectedExam, selectedSubject, selectedYear, selectedType]);
+  }, [courses, searchQuery, selectedExam, selectedSubject]);
 
   return (
     <div className="space-y-6">
@@ -59,10 +52,10 @@ export function CourseListingMasterView() {
         </span>
         <input
           type="text"
-          placeholder="Search courses, chapters, teachers (e.g. Chemistry, Sonu Bhaiya, Thermodynamics)..."
+          placeholder="Search courses, chapters, teachers (e.g. Chemistry, Physics, Biology)..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full pl-12 pr-4 py-3.5 bg-white border border-slate-200/90 rounded-2xl text-xs sm:text-sm text-[#031635] font-medium shadow-sm focus:border-[#6b46c1] focus:ring-2 focus:ring-[#6b46c1]/20 outline-none transition"
+          className="w-full pl-12 pr-4 py-3.5 bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl text-xs sm:text-sm text-[#031635] dark:text-white font-medium shadow-sm focus:border-[#6b46c1] focus:ring-2 focus:ring-[#6b46c1]/20 outline-none transition"
         />
         {searchQuery && (
           <button
@@ -89,8 +82,8 @@ export function CourseListingMasterView() {
               onClick={() => setSelectedExam(ex)}
               className={`px-4 py-1.5 rounded-full text-xs font-bold transition whitespace-nowrap ${
                 selectedExam === ex
-                  ? "bg-[#031635] text-white shadow-sm"
-                  : "bg-white border border-slate-200 text-slate-600 hover:border-slate-400"
+                  ? "bg-[#031635] dark:bg-primary text-white shadow-sm"
+                  : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-400"
               }`}
             >
               {ex}
@@ -111,7 +104,7 @@ export function CourseListingMasterView() {
               className={`px-3.5 py-1 rounded-full text-xs font-semibold transition whitespace-nowrap ${
                 selectedSubject === sub
                   ? "bg-[#6b46c1] text-white shadow-sm"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200"
               }`}
             >
               {sub}
@@ -123,29 +116,37 @@ export function CourseListingMasterView() {
       {/* 4. Course Grid */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-base sm:text-lg font-extrabold text-[#031635]">
-            Featured Courses & Batches ({filteredCourses.length})
+          <h2 className="text-base sm:text-lg font-extrabold text-[#031635] dark:text-white">
+            Available Batches ({filteredCourses.length})
           </h2>
-          <span className="text-xs text-slate-500 font-medium">Sorted by Popularity</span>
         </div>
 
         {filteredCourses.length === 0 ? (
-          <div className="p-12 text-center bg-white rounded-3xl border border-slate-200 space-y-3">
-            <span className="material-symbols-outlined text-4xl text-slate-300">search_off</span>
-            <p className="text-sm font-bold text-[#031635]">No courses found matching your criteria</p>
-            <button
-              type="button"
-              onClick={() => {
-                setSearchQuery("");
-                setSelectedExam("All");
-                setSelectedSubject("All");
-                setSelectedYear("All");
-                setSelectedType("All");
-              }}
-              className="text-xs font-bold text-[#6b46c1] hover:underline"
-            >
-              Clear all filters
-            </button>
+          <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-3">
+            <span className="material-symbols-outlined text-4xl text-slate-300">school</span>
+            <p className="text-sm font-bold text-[#031635] dark:text-white">
+              {courses.length === 0
+                ? "No active batches published yet"
+                : "No batches found matching your criteria"}
+            </p>
+            <p className="text-xs text-slate-500 max-w-md mx-auto">
+              {courses.length === 0
+                ? "New batches will appear here as soon as they are launched by the academic team."
+                : "Try resetting filters or searching with a different term."}
+            </p>
+            {courses.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery("");
+                  setSelectedExam("All");
+                  setSelectedSubject("All");
+                }}
+                className="text-xs font-bold text-[#6b46c1] hover:underline"
+              >
+                Clear all filters
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

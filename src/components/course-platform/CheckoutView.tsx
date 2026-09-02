@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState } from "react";
 import Link from "next/link";
@@ -135,11 +135,17 @@ export function CheckoutView({ course }: { course: CourseData }) {
 
             {/* Course Card Preview */}
             <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 flex items-start gap-3">
-              <img
-                src={course.thumbnailUrl}
-                alt={course.title}
-                className="w-16 h-16 rounded-xl object-cover shrink-0"
-              />
+              {course.thumbnailUrl ? (
+                <img
+                  src={course.thumbnailUrl}
+                  alt={course.title}
+                  className="w-16 h-16 rounded-xl object-cover shrink-0"
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                  <span className="material-symbols-outlined text-2xl">school</span>
+                </div>
+              )}
               <div className="min-w-0">
                 <h4 className="font-bold text-xs text-[#031635] line-clamp-2 leading-snug">
                   {course.title}
