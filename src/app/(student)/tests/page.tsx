@@ -1,200 +1,297 @@
 import type { Metadata } from "next";
 import { requireStudentSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
-import { resolveStudentForSeries } from "@/lib/test-series/access";
-import { StudentTestListClient, type TestListItem } from "@/components/student/StudentTestListClient";
+import {
+  AtomicPracticeTestArena,
+  type SubjectChapterwiseTests,
+  type TestSeriesBoxItem,
+} from "@/components/student/AtomicPracticeTestArena";
 
 export const metadata: Metadata = {
-  title: "Test Portal & AIR Test Series | Atomic Pathshala",
+  title: "Atomic Practice Test & Test Series Arena | Atomic Pathshala",
 };
-
-function getStatusDetails(
-  now: Date,
-  startsAt: Date,
-  endsAt: Date,
-  myAttempt: { status: string; score: number | null } | null
-) {
-  if (myAttempt) {
-    if (myAttempt.status === "IN_PROGRESS") {
-      return {
-        label: "In Progress",
-        tone: "bg-secondary/15 text-secondary border border-secondary/30",
-        canAttempt: false,
-        canResume: now <= endsAt,
-        canViewResult: false,
-        isClosed: now > endsAt,
-      };
-    }
-    return {
-      label: `Completed · ${myAttempt.score ?? 0} Marks`,
-      tone: "bg-primary/15 text-primary border border-primary/30",
-      canAttempt: false,
-      canResume: false,
-      canViewResult: true,
-      isClosed: false,
-    };
-  }
-  if (now < startsAt) {
-    return {
-      label: "Opens Soon",
-      tone: "bg-surface-container-high text-on-surface-variant",
-      canAttempt: false,
-      canResume: false,
-      canViewResult: false,
-      isClosed: false,
-    };
-  }
-  if (now > endsAt) {
-    return {
-      label: "Closed",
-      tone: "bg-outline-variant/30 text-on-surface-variant",
-      canAttempt: false,
-      canResume: false,
-      canViewResult: false,
-      isClosed: true,
-    };
-  }
-  return {
-    label: "● Live Now",
-    tone: "bg-emerald-500/15 text-emerald-600 border border-emerald-500/30",
-    canAttempt: true,
-    canResume: false,
-    canViewResult: false,
-    isClosed: false,
-  };
-}
 
 export default async function StudentTestsPage() {
   const { student } = await requireStudentSession();
+  const now = new Date();
 
+  // 1. Fetch Student's Active Batch Enrollments
   const enrollments = await prisma.batchEnrollment.findMany({
     where: { studentId: student.id, status: "ACTIVE" },
     select: { batchId: true },
   });
   const batchIds = enrollments.map((e) => e.batchId);
 
-  const tests =
-    batchIds.length === 0
-      ? []
-      : await prisma.test.findMany({
-          where: { status: "PUBLISHED", batchSchedule: { batchId: { in: batchIds } } },
+  // 2. Fetch All Subjects & Chapters for Category 1: Chapterwise Practice Tests
+  let dbSubjects: any[] = [];
+  try {
+    dbSubjects = await prisma.subject.findMany({
+      include: {
+        chapters: {
+          where: { status: { in: ["PUBLISHED", "READY_TO_PUBLISH", "LECTURES_COMPLETE", "DRAFT"] } },
           include: {
-            batchSchedule: { include: { batch: { select: { name: true } } } },
-            sections: { select: { _count: { select: { questions: true } } } },
-            attempts: { where: { studentId: student.id }, select: { status: true, score: true } },
+            tests: {
+              where: { status: "PUBLISHED" },
+              include: {
+                attempts: {
+                  where: { studentId: student.id },
+                  select: { id: true, status: true, score: true },
+                },
+                sections: {
+                  select: { _count: { select: { questions: true } } },
+                },
+              },
+            },
           },
-          orderBy: { batchSchedule: { startsAt: "asc" } },
-        });
+          orderBy: { order: "asc" },
+        },
+      },
+    });
+  } catch (err) {
+    console.error("Error fetching subject tests:", err);
+  }
 
-  const now = new Date();
+  const SUBJECT_CONFIGS: Record<string, { icon: string; color: string; gradient: string }> = {
+    Physics: { icon: "bolt", color: "text-blue-500", gradient: "from-blue-600 to-indigo-600" },
+    Chemistry: { icon: "science", color: "text-amber-500", gradient: "from-amber-500 to-orange-600" },
+    Biology: { icon: "biotech", color: "text-emerald-500", gradient: "from-emerald-500 to-teal-600" },
+    Mathematics: { icon: "functions", color: "text-purple-500", gradient: "from-purple-600 to-indigo-600" },
+  };
 
-  const scheduledList: TestListItem[] = tests
-    .filter((t) => t.batchSchedule)
-    .map((t) => {
-      const batchSchedule = t.batchSchedule!;
-      const myAttempt = t.attempts[0] ?? null;
-      const st = getStatusDetails(now, batchSchedule.startsAt, batchSchedule.endsAt, myAttempt);
-      const questionCount = t.sections.reduce((sum, s) => sum + s._count.questions, 0);
+  const subjectTestsMap: Record<string, SubjectChapterwiseTests> = {};
+
+  for (const subj of dbSubjects) {
+    const subjName = subj.title || "Physics";
+    const config = SUBJECT_CONFIGS[subjName] || {
+      icon: "science",
+      color: "text-primary",
+      gradient: "from-primary to-primary-container",
+    };
+
+    const chapters = (subj.chapters || []).map((ch: any, cIdx: number) => {
+      const tests = (ch.tests || []).map((t: any) => {
+        const attempt = t.attempts?.[0];
+        const status: "PENDING" | "IN_PROGRESS" | "COMPLETED" = attempt
+          ? attempt.status === "IN_PROGRESS"
+            ? "IN_PROGRESS"
+            : "COMPLETED"
+          : "PENDING";
+        const qCount = t.sections?.reduce((sum: number, s: any) => sum + (s._count?.questions || 0), 0) || 15;
+
+        return {
+          id: t.id,
+          name: t.name,
+          durationMin: t.durationMin || 45,
+          questionCount: qCount,
+          totalMarks: qCount * (t.correctMarks || 4),
+          status,
+          score: attempt?.score ?? null,
+        };
+      });
 
       return {
-        id: t.id,
-        title: t.name,
-        subject: batchSchedule.subject || "General",
-        batchName: batchSchedule.batch.name,
-        durationMin: t.durationMin,
-        questionCount,
-        startsAt: batchSchedule.startsAt.toISOString(),
-        endsAt: batchSchedule.endsAt.toISOString(),
-        statusLabel: st.label,
-        tone: st.tone,
-        canAttempt: st.canAttempt,
-        canResume: st.canResume,
-        canViewResult: st.canViewResult,
-        isClosed: st.isClosed,
-        score: myAttempt?.score,
+        id: ch.id || `ch-${cIdx}`,
+        chapterNumber: cIdx + 1,
+        title: ch.title,
+        tests,
       };
     });
 
-  // Standalone TestSeries tests (no BatchSchedule, no timetable window) —
-  // open anytime once PUBLISHED, gated by TestSeries visibility/matching
-  // instead of a batch enrollment (see resolveStudentForSeries).
-  const standaloneTests = await prisma.test.findMany({
-    where: { status: "PUBLISHED", testSeriesId: { not: null }, batchScheduleId: null },
-    include: {
-      testSeries: true,
-      sections: { select: { _count: { select: { questions: true } } } },
-      attempts: { where: { studentId: student.id }, select: { status: true, score: true } },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+    subjectTestsMap[subjName] = {
+      id: subj.id,
+      name: subjName,
+      icon: config.icon,
+      color: config.color,
+      gradient: config.gradient,
+      chapters,
+    };
+  }
 
-  const standaloneList: TestListItem[] = [];
-  for (const t of standaloneTests) {
-    if (!t.testSeriesId) continue;
-    const { student: eligible } = await resolveStudentForSeries(student.userId, t.testSeriesId);
-    if (!eligible) continue;
+  // 3. Fetch Category 2: Test Series & Batch Test Series Boxes
+  let dbTestSeries: any[] = [];
+  try {
+    dbTestSeries = await prisma.testSeries.findMany({
+      include: {
+        tests: {
+          where: { status: "PUBLISHED" },
+          include: {
+            attempts: {
+              where: { studentId: student.id },
+              select: { id: true, status: true, score: true },
+            },
+            sections: {
+              select: { _count: { select: { questions: true } } },
+            },
+          },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+  } catch (err) {
+    console.error("Error fetching test series:", err);
+  }
 
-    const myAttempt = t.attempts[0] ?? null;
-    const questionCount = t.sections.reduce((sum, s) => sum + s._count.questions, 0);
-    const createdAtIso = t.createdAt.toISOString();
-
-    let statusLabel = "Attempt Now";
-    let tone = "bg-emerald-500/15 text-emerald-600 border border-emerald-500/30";
-    let canAttempt = true;
-    let canResume = false;
-    let canViewResult = false;
-
-    if (myAttempt?.status === "IN_PROGRESS") {
-      statusLabel = "In Progress";
-      tone = "bg-secondary/15 text-secondary border border-secondary/30";
-      canAttempt = false;
-      canResume = true;
-    } else if (myAttempt) {
-      statusLabel = `Completed · ${myAttempt.score ?? 0} Marks`;
-      tone = "bg-primary/15 text-primary border border-primary/30";
-      canAttempt = false;
-      canViewResult = true;
+  // Also fetch scheduled batch tests and group them if associated with batch
+  let batchSchedules: any[] = [];
+  if (batchIds.length > 0) {
+    try {
+      batchSchedules = await prisma.batchSchedule.findMany({
+        where: {
+          batchId: { in: batchIds },
+          test: { isNot: null },
+        },
+        include: {
+          batch: { select: { id: true, name: true, code: true } },
+          test: {
+            include: {
+              attempts: {
+                where: { studentId: student.id },
+                select: { id: true, status: true, score: true },
+              },
+              sections: {
+                select: { _count: { select: { questions: true } } },
+              },
+            },
+          },
+        },
+        orderBy: { startsAt: "asc" },
+      });
+    } catch (err) {
+      console.error("Error fetching batch scheduled tests:", err);
     }
+  }
 
-    standaloneList.push({
-      id: t.id,
-      title: t.name,
-      subject: t.examType || "General",
-      batchName: t.testSeries?.name ?? "Test Series",
-      durationMin: t.durationMin,
-      questionCount,
-      startsAt: createdAtIso,
-      endsAt: createdAtIso,
-      statusLabel,
-      tone,
-      canAttempt,
-      canResume,
-      canViewResult,
-      isClosed: false,
-      score: myAttempt?.score,
+  const testSeriesBoxes: TestSeriesBoxItem[] = [];
+
+  // Map standalone & enrolled TestSeries into boxes
+  for (const ts of dbTestSeries) {
+    const testsList = (ts.tests || []).map((t: any) => {
+      const attempt = t.attempts?.[0];
+      const qCount = t.sections?.reduce((sum: number, s: any) => sum + (s._count?.questions || 0), 0) || 15;
+      const isCompleted = attempt && attempt.status !== "IN_PROGRESS";
+      const inProg = attempt?.status === "IN_PROGRESS";
+
+      return {
+        id: t.id,
+        name: t.name,
+        durationMin: t.durationMin || 180,
+        questionCount: qCount,
+        totalMarks: qCount * (t.correctMarks || 4),
+        statusLabel: isCompleted
+          ? `Completed · ${attempt.score ?? 0} Marks`
+          : inProg
+          ? "In Progress"
+          : "Available Now",
+        tone: isCompleted
+          ? "bg-primary/15 text-primary border border-primary/30"
+          : inProg
+          ? "bg-secondary/15 text-secondary border border-secondary/30"
+          : "bg-emerald-500/15 text-emerald-600 border border-emerald-500/30",
+        canAttempt: !isCompleted && !inProg,
+        canResume: inProg,
+        canViewResult: isCompleted,
+        isClosed: false,
+        score: attempt?.score ?? null,
+      };
+    });
+
+    testSeriesBoxes.push({
+      id: ts.id,
+      code: ts.code,
+      name: ts.name,
+      examType: ts.examType || "NEET / JEE",
+      description: ts.description,
+      targetBatch: ts.targetBatch || ts.course || null,
+      isEnrolled: true,
+      tests: testsList,
     });
   }
 
-  const testList: TestListItem[] = [...scheduledList, ...standaloneList];
+  // If batch schedules have tests, group them into Batch Test Series Boxes
+  const batchScheduleGroups: Record<string, { batchName: string; batchCode: string; tests: any[] }> = {};
+  for (const bs of batchSchedules) {
+    if (!bs.test) continue;
+    const bId = bs.batchId;
+    if (!batchScheduleGroups[bId]) {
+      batchScheduleGroups[bId] = {
+        batchName: bs.batch.name,
+        batchCode: bs.batch.code,
+        tests: [],
+      };
+    }
+
+    const t = bs.test;
+    const attempt = t.attempts?.[0];
+    const qCount = t.sections?.reduce((sum: number, s: any) => sum + (s._count?.questions || 0), 0) || 15;
+    const isCompleted = attempt && attempt.status !== "IN_PROGRESS";
+    const inProg = attempt?.status === "IN_PROGRESS";
+
+    batchScheduleGroups[bId].tests.push({
+      id: t.id,
+      name: t.name || bs.title,
+      durationMin: t.durationMin || 180,
+      questionCount: qCount,
+      totalMarks: qCount * (t.correctMarks || 4),
+      statusLabel: isCompleted
+        ? `Completed · ${attempt.score ?? 0} Marks`
+        : inProg
+        ? "In Progress"
+        : now < bs.startsAt
+        ? "Opens Soon"
+        : now > bs.endsAt
+        ? "Closed"
+        : "Live Now",
+      tone: isCompleted
+        ? "bg-primary/15 text-primary border border-primary/30"
+        : inProg
+        ? "bg-secondary/15 text-secondary border border-secondary/30"
+        : "bg-emerald-500/15 text-emerald-600 border border-emerald-500/30",
+      canAttempt: !isCompleted && !inProg && now >= bs.startsAt && now <= bs.endsAt,
+      canResume: inProg && now <= bs.endsAt,
+      canViewResult: isCompleted,
+      isClosed: now > bs.endsAt,
+      score: attempt?.score ?? null,
+      startsAt: bs.startsAt?.toISOString(),
+      endsAt: bs.endsAt?.toISOString(),
+    });
+  }
+
+  for (const [bId, group] of Object.entries(batchScheduleGroups)) {
+    testSeriesBoxes.push({
+      id: `batch-ts-${bId}`,
+      code: group.batchCode,
+      name: `${group.batchName} — Scheduled Test Series`,
+      examType: "Batch Series",
+      description: "Official scheduled test papers and mock assessments for your batch.",
+      targetBatch: group.batchName,
+      isEnrolled: true,
+      tests: group.tests,
+    });
+  }
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto pb-16">
+    <div className="space-y-8 max-w-6xl mx-auto pb-16">
       {/* Header */}
       <header className="space-y-2">
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-primary/10 text-primary">
-            NTA CBT Standard &middot; Real-Time AIR
+            NTA CBT STANDARD &middot; ATOMIC ARENA
           </span>
         </div>
         <h1 className="font-display-lg text-display-lg-mobile md:text-display-lg font-bold text-on-surface">
-          Atomic Test Series &amp; Practice Arena
+          Atomic Practice Test &amp; Test Series Arena
         </h1>
-        <p className="text-xs md:text-sm text-on-surface-variant max-w-2xl leading-relaxed">
-          Chapter tests, weekly part tests, and full syllabus All-India mock tests with real-time ranking, KaTeX formula solutions, and AI mistake diagnostic.
+        <p className="text-xs md:text-sm text-on-surface-variant max-w-3xl leading-relaxed">
+          Chapterwise practice tests categorized automatically by batch subjects, plus enrolled All-India Test Series boxes with instant KaTeX formula solutions and rank analytics.
         </p>
       </header>
 
-      <StudentTestListClient tests={testList} />
+      {/* 2-Category Interactive Arena */}
+      <AtomicPracticeTestArena
+        subjectTests={Object.values(subjectTestsMap)}
+        testSeriesBoxes={testSeriesBoxes}
+      />
     </div>
   );
 }
