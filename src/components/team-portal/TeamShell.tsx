@@ -52,8 +52,9 @@ export function TeamShell({
             >
               <span className="material-symbols-outlined text-2xl">menu</span>
             </button>
-            <Link href="/team" className="font-headline-md text-headline-md font-bold text-primary shrink-0">
-              Atomic Pathshala <span className="text-on-surface-variant font-body-md text-body-md">Team</span>
+            <Link href="/team" className="flex items-center gap-2.5 font-headline-md text-headline-md font-bold text-primary shrink-0">
+              <img src="/brand/logo.png" alt="Atomic Logo" className="w-8 h-8 rounded-lg object-contain" />
+              <span>Atomic Pathshala <span className="text-on-surface-variant font-body-md text-body-md">Team</span></span>
             </Link>
 
             {!isRootTeam && (

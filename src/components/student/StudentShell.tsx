@@ -155,11 +155,16 @@ export function StudentShell({
           breakpoint (the whole shell now targets the reference app's
           single mobile-first layout rather than a separate desktop chrome). */}
       <header className="sticky top-0 z-40 flex items-center justify-between gap-3 px-margin-mobile md:px-margin-desktop h-16 bg-surface/95 backdrop-blur-md border-b border-outline-variant/20">
-        <div className="min-w-0">
-          <p className="text-label-sm text-on-surface-variant leading-tight">Current goal</p>
-          <p className="font-headline-sm text-headline-sm text-on-surface font-bold truncate leading-tight">
-            {targetExam}
-          </p>
+        <div className="flex items-center gap-2.5 min-w-0">
+          <Link href="/dashboard" className="shrink-0">
+            <img src="/brand/logo.png" alt="Atomic Logo" className="w-9 h-9 rounded-xl object-contain shadow-sm" />
+          </Link>
+          <div className="min-w-0">
+            <p className="text-label-sm text-on-surface-variant leading-tight">Current goal</p>
+            <p className="font-headline-sm text-headline-sm text-on-surface font-bold truncate leading-tight">
+              {targetExam}
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
           <span

@@ -25,7 +25,15 @@ const LAB_SIMULATIONS = [
 ];
 
 // ---- THEMES ----
-type BoardTheme = "white" | "dark" | "ruled" | "greenboard" | "grid";
+export type BoardTheme =
+  | "brand_white"
+  | "brand_dark"
+  | "brand_ruled"
+  | "white"
+  | "dark"
+  | "ruled"
+  | "greenboard"
+  | "grid";
 
 interface Slide {
   id: string;
@@ -62,6 +70,26 @@ const STROKE_SIZES = [
   { size: 16, label: "Extra Thick" },
 ];
 
+// Preloaded Image Cache for high-performance canvas redrawing
+const imageCache = new Map<string, HTMLImageElement>();
+function getCachedImage(src: string): Promise<HTMLImageElement> {
+  if (imageCache.has(src)) {
+    return Promise.resolve(imageCache.get(src)!);
+  }
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.src = src;
+    img.onload = () => {
+      imageCache.set(src, img);
+      resolve(img);
+    };
+    img.onerror = () => {
+      resolve(img);
+    };
+  });
+}
+
 export function AtomicWhiteboardStudio({
   scheduleId = "live-101",
   classTitle = "NEET 2027 Chemistry: Organic Reaction Mechanisms & Benzene Masterclass",
@@ -76,13 +104,13 @@ export function AtomicWhiteboardStudio({
   // ---- CANVAS & SLIDE STATE ----
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [slides, setSlides] = useState<Slide[]>([
-    { id: "s-1", theme: "white", title: "Slide 1", strokes: [] },
+    { id: "s-1", theme: "brand_white", title: "Slide 1", strokes: [] },
   ]);
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
 
   // ---- TOOLS & PALETTE ----
   const [tool, setTool] = useState<"pen" | "highlighter" | "eraser" | "shape" | "select">("pen");
-  const [color, setColor] = useState("#3b82f6");
+  const [color, setColor] = useState("#0f172a");
   const [size, setSize] = useState(3);
   const [shape, setShape] = useState<"rectangle" | "circle" | "benzene" | "coordinate_axes" | "arrow" | "triangle">("benzene");
   const [isDrawing, setIsDrawing] = useState(false);
@@ -113,74 +141,102 @@ export function AtomicWhiteboardStudio({
   const pdfInputRef = useRef<HTMLInputElement>(null);
   const pptxInputRef = useRef<HTMLInputElement>(null);
 
-  const activeSlide: Slide = slides[activeSlideIndex] || slides[0] || { id: "s-1", theme: "white", title: "Slide 1", strokes: [] };
+  const activeSlide: Slide = slides[activeSlideIndex] || slides[0] || { id: "s-1", theme: "brand_white", title: "Slide 1", strokes: [] };
 
-  // ---- RENDER WHITEBOARD CANVAS ----
-  const redrawCanvas = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+  // Preload brand images on mount
+  useEffect(() => {
+    getCachedImage("/brand/slide-white.png");
+    getCachedImage("/brand/slide-dark.png");
+    getCachedImage("/brand/slide-ruled.png");
+    getCachedImage("/brand/logo.png");
+  }, []);
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const theme = activeSlide?.theme || "white";
+  // Synchronous + Asynchronous Slide Drawing Helper
+  const drawSlideContent = useCallback(async (
+    ctx: CanvasRenderingContext2D,
+    slide: Slide,
+    width: number,
+    height: number
+  ) => {
+    ctx.clearRect(0, 0, width, height);
+    const theme = slide?.theme || "brand_white";
 
-    // 1. Background Fill
-    if (theme === "dark") {
+    // 1. Draw Theme Background
+    if (theme === "brand_white") {
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, width, height);
+      const img = await getCachedImage("/brand/slide-white.png");
+      if (img.complete && img.naturalWidth > 0) {
+        ctx.drawImage(img, 0, 0, width, height);
+      }
+    } else if (theme === "brand_dark") {
       ctx.fillStyle = "#090d16";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillRect(0, 0, width, height);
+      const img = await getCachedImage("/brand/slide-dark.png");
+      if (img.complete && img.naturalWidth > 0) {
+        ctx.drawImage(img, 0, 0, width, height);
+      }
+    } else if (theme === "brand_ruled") {
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, width, height);
+      const img = await getCachedImage("/brand/slide-ruled.png");
+      if (img.complete && img.naturalWidth > 0) {
+        ctx.drawImage(img, 0, 0, width, height);
+      }
+    } else if (theme === "dark") {
+      ctx.fillStyle = "#090d16";
+      ctx.fillRect(0, 0, width, height);
     } else if (theme === "greenboard") {
       ctx.fillStyle = "#0c281e";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillRect(0, 0, width, height);
     } else if (theme === "grid") {
       ctx.fillStyle = "#0f172a";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillRect(0, 0, width, height);
       ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
       ctx.lineWidth = 1;
-      for (let x = 0; x < canvas.width; x += 35) {
+      for (let x = 0; x < width; x += 35) {
         ctx.beginPath();
         ctx.moveTo(x, 0);
-        ctx.lineTo(x, canvas.height);
+        ctx.lineTo(x, height);
         ctx.stroke();
       }
-      for (let y = 0; y < canvas.height; y += 35) {
+      for (let y = 0; y < height; y += 35) {
         ctx.beginPath();
         ctx.moveTo(0, y);
-        ctx.lineTo(canvas.width, y);
+        ctx.lineTo(width, y);
         ctx.stroke();
       }
     } else if (theme === "ruled") {
       ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillRect(0, 0, width, height);
       ctx.strokeStyle = "rgba(100, 149, 237, 0.25)";
       ctx.lineWidth = 1;
-      for (let y = 50; y < canvas.height; y += 32) {
+      for (let y = 50; y < height; y += 32) {
         ctx.beginPath();
         ctx.moveTo(0, y);
-        ctx.lineTo(canvas.width, y);
+        ctx.lineTo(width, y);
         ctx.stroke();
       }
       ctx.strokeStyle = "rgba(255, 99, 71, 0.35)";
       ctx.beginPath();
       ctx.moveTo(80, 0);
-      ctx.lineTo(80, canvas.height);
+      ctx.lineTo(80, height);
       ctx.stroke();
     } else {
       ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillRect(0, 0, width, height);
     }
 
     // 2. Draw Slide Background Image (if PPT/PDF uploaded)
-    if (activeSlide?.imageUrl) {
-      const img = new Image();
-      img.src = activeSlide.imageUrl;
-      img.onload = () => {
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      };
+    if (slide?.imageUrl) {
+      const img = await getCachedImage(slide.imageUrl);
+      if (img.complete && img.naturalWidth > 0) {
+        ctx.drawImage(img, 0, 0, width, height);
+      }
     }
 
     // 3. Draw All User Strokes
-    const strokes = activeSlide?.strokes || [];
+    const strokes = slide?.strokes || [];
     strokes.forEach((stroke) => {
       ctx.save();
       ctx.lineCap = "round";
@@ -264,11 +320,31 @@ export function AtomicWhiteboardStudio({
 
       ctx.restore();
     });
-  }, [activeSlide]);
+  }, []);
+
+  // Redraw Canvas on changes
+  const redrawCanvas = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    drawSlideContent(ctx, activeSlide, canvas.width, canvas.height);
+  }, [activeSlide, drawSlideContent]);
 
   useEffect(() => {
     redrawCanvas();
   }, [redrawCanvas]);
+
+  // Adjust default pen color based on theme
+  useEffect(() => {
+    const isDark = activeSlide.theme === "brand_dark" || activeSlide.theme === "dark" || activeSlide.theme === "greenboard" || activeSlide.theme === "grid";
+    if (isDark && (color === "#0f172a" || color === "#000000")) {
+      setColor("#ffffff");
+    } else if (!isDark && color === "#ffffff") {
+      setColor("#0f172a");
+    }
+  }, [activeSlide.theme]);
 
   // ---- CANVAS COORDINATES & DRAWING ----
   const getCoordinates = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
@@ -302,12 +378,10 @@ export function AtomicWhiteboardStudio({
     setIsDrawing(true);
     setSaveStatus("saving");
     const pos = getCoordinates(e);
-    const theme = activeSlide?.theme || "white";
-    const strokeColor = (theme === "white" || theme === "ruled") && color === "#ffffff" ? "#0f172a" : color;
 
     const newStroke: Stroke = {
       tool: tool === "select" ? "pen" : tool,
-      color: strokeColor,
+      color,
       size,
       points: [pos],
       shapeType: tool === "shape" ? shape : undefined,
@@ -394,7 +468,7 @@ export function AtomicWhiteboardStudio({
   const handleAddSlide = () => {
     const newSlide: Slide = {
       id: `s-${slides.length + 1}`,
-      theme: activeSlide?.theme || "white",
+      theme: activeSlide?.theme || "brand_white",
       title: `Slide ${slides.length + 1}`,
       strokes: [],
     };
@@ -424,7 +498,7 @@ export function AtomicWhiteboardStudio({
       const url = event.target?.result as string;
       const newSlide: Slide = {
         id: `s-${slides.length + 1}`,
-        theme: "white",
+        theme: "brand_white",
         title: file.name,
         imageUrl: url,
         strokes: [],
@@ -436,33 +510,84 @@ export function AtomicWhiteboardStudio({
     reader.readAsDataURL(file);
   };
 
-  // Export PDF / PNG
-  const handleExport = (format: "PDF" | "PNG" | "PPTX") => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+  // Professional Export (PNG / PDF / PPTX) with Baked-In Brand Identity
+  const handleExport = async (format: "PDF" | "PNG" | "PPTX") => {
+    setIsExportOpen(false);
 
     if (format === "PNG") {
+      const exportCanvas = document.createElement("canvas");
+      exportCanvas.width = 1920;
+      exportCanvas.height = 1080;
+      const ctx = exportCanvas.getContext("2d");
+      if (!ctx) return;
+
+      await drawSlideContent(ctx, activeSlide, 1920, 1080);
+
       const link = document.createElement("a");
-      link.download = `AtomicBoard-${activeSlide.title}.png`;
-      link.href = canvas.toDataURL("image/png");
+      link.download = `AtomicPathshala-${activeSlide.title || "Slide"}.png`;
+      link.href = exportCanvas.toDataURL("image/png");
       link.click();
-      toast.success("Current slide exported as PNG!");
-    } else {
-      toast.success(`Exporting multi-page ${format} with watermark...`);
-      setTimeout(() => toast.success(`${format} export complete!`), 1200);
+      toast.success("Slide exported as branded PNG!");
+    } else if (format === "PDF" || format === "PPTX") {
+      toast.info(`Generating ${slides.length}-slide branded ${format} export...`);
+      try {
+        const { jsPDF } = await import("jspdf");
+        const pdf = new jsPDF({
+          orientation: "landscape",
+          unit: "px",
+          format: [1920, 1080],
+        });
+
+        for (let i = 0; i < slides.length; i++) {
+          const slide = slides[i];
+          if (!slide) continue;
+          if (i > 0) pdf.addPage([1920, 1080], "landscape");
+
+          const exportCanvas = document.createElement("canvas");
+          exportCanvas.width = 1920;
+          exportCanvas.height = 1080;
+          const ctx = exportCanvas.getContext("2d");
+          if (ctx) {
+            await drawSlideContent(ctx, slide, 1920, 1080);
+            const imgData = exportCanvas.toDataURL("image/jpeg", 0.95);
+            pdf.addImage(imgData, "JPEG", 0, 0, 1920, 1080);
+          }
+        }
+
+        const filename = format === "PDF"
+          ? `AtomicPathshala-${batchName || "Lecture"}-Notes.pdf`
+          : `AtomicPathshala-${classTitle || "Presentation"}.pdf`;
+
+        pdf.save(filename);
+        toast.success(`${format} Lecture Notes exported with Atomic Pathshala branding!`);
+      } catch (err) {
+        console.error(err);
+        toast.error(`Failed to export ${format}.`);
+      }
     }
-    setIsExportOpen(false);
   };
 
   return (
-    <div className={`fixed inset-0 z-50 bg-[#0d0f17] text-white flex flex-col overflow-hidden font-sans select-none ${isObsOutput ? "bg-black" : ""}`}>
+    <div className={`fixed inset-0 z-50 bg-[#07090e] text-white flex flex-col overflow-hidden font-sans select-none ${isObsOutput ? "bg-black" : ""}`}>
       {/* ========================================================================= */}
-      {/* 1. TOP CLASSROOM HEADER BAR (MATCHING ATOMIC-WHITE BOARD)                 */}
+      {/* 1. TOP CLASSROOM HEADER BAR WITH BRAND IDENTITY                           */}
       {/* ========================================================================= */}
       {!isObsOutput && (
-        <header className="h-14 bg-[#141622] border-b border-[#24283b] px-4 flex items-center justify-between shrink-0 z-30">
+        <header className="h-14 bg-[#11131c] border-b border-[#202435] px-4 flex items-center justify-between shrink-0 z-30">
           {/* Left Action Buttons */}
           <div className="flex items-center gap-2">
+            {/* Brand Icon */}
+            <div className="flex items-center gap-2 pr-2 border-r border-[#24283b]">
+              <img
+                src="/brand/logo.png"
+                alt="Atomic Pathshala"
+                className="w-8 h-8 rounded-lg object-contain shadow-sm"
+              />
+              <span className="font-extrabold text-xs text-white tracking-wide hidden sm:inline">
+                ATOMIC STUDIO
+              </span>
+            </div>
+
             {/* Import PPTX */}
             <button
               type="button"
@@ -525,7 +650,7 @@ export function AtomicWhiteboardStudio({
               className="px-3 py-1.5 rounded-lg border border-[#2d3247] bg-[#1a1d2d] hover:bg-slate-800 text-slate-300 font-bold text-xs flex items-center gap-1.5 transition"
             >
               <span className="material-symbols-outlined text-sm text-orange-400">palette</span>
-              <span>Theme</span>
+              <span>Slide Themes</span>
             </button>
 
             {/* Camera Toggle */}
@@ -580,15 +705,6 @@ export function AtomicWhiteboardStudio({
 
           {/* Right Section: Hub, Teacher Info, Settings, Fullscreen, Export */}
           <div className="flex items-center gap-2">
-            {/* Hub */}
-            <button
-              type="button"
-              className="px-3 py-1.5 rounded-lg bg-orange-600/90 hover:bg-orange-600 text-white text-xs font-black flex items-center gap-1"
-            >
-              <span className="material-symbols-outlined text-sm">hub</span>
-              <span>Hub</span>
-            </button>
-
             {/* Teacher Info */}
             <div className="px-3 py-1.5 rounded-lg bg-[#1a1d2d] border border-[#2d3247] flex items-center gap-2 text-xs">
               <span className="font-bold text-slate-200">{teacherName}</span>
@@ -596,16 +712,6 @@ export function AtomicWhiteboardStudio({
                 <span className="material-symbols-outlined text-sm">exit_to_app</span>
               </Link>
             </div>
-
-            {/* Settings */}
-            <button
-              type="button"
-              onClick={() => setIsSettingsOpen(true)}
-              className="p-1.5 rounded-lg bg-[#1a1d2d] border border-[#2d3247] text-slate-300 hover:text-white"
-              title="Class Settings"
-            >
-              <span className="material-symbols-outlined text-base">settings</span>
-            </button>
 
             {/* Fullscreen */}
             <button
@@ -631,37 +737,46 @@ export function AtomicWhiteboardStudio({
               <button
                 type="button"
                 onClick={() => setIsExportOpen(!isExportOpen)}
-                className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-black text-xs flex items-center gap-1 shadow-md"
+                className="px-4 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-white font-black text-xs flex items-center gap-1 shadow-md shadow-orange-950/40"
               >
                 <span className="material-symbols-outlined text-sm">download</span>
                 <span>EXPORT</span>
               </button>
 
               {isExportOpen && (
-                <div className="absolute right-0 top-full mt-1.5 w-52 bg-[#161824] border border-[#2d3247] rounded-xl shadow-2xl p-1.5 z-50 flex flex-col gap-1 animate-in fade-in zoom-in-95">
+                <div className="absolute right-0 top-full mt-1.5 w-56 bg-[#161824] border border-[#2d3247] rounded-xl shadow-2xl p-1.5 z-50 flex flex-col gap-1 animate-in fade-in zoom-in-95">
                   <button
                     type="button"
                     onClick={() => handleExport("PDF")}
-                    className="p-2 rounded-lg hover:bg-slate-800 text-left text-xs flex items-center gap-2 text-slate-200"
+                    className="p-2.5 rounded-lg hover:bg-slate-800 text-left text-xs flex items-center gap-2.5 text-slate-200"
                   >
                     <span className="material-symbols-outlined text-base text-red-400">picture_as_pdf</span>
-                    <span>Export PDF (.pdf)</span>
+                    <div>
+                      <p className="font-bold">Export All Slides (PDF)</p>
+                      <p className="text-[10px] text-slate-400">With Atomic Pathshala branding</p>
+                    </div>
                   </button>
                   <button
                     type="button"
                     onClick={() => handleExport("PPTX")}
-                    className="p-2 rounded-lg hover:bg-slate-800 text-left text-xs flex items-center gap-2 text-slate-200"
+                    className="p-2.5 rounded-lg hover:bg-slate-800 text-left text-xs flex items-center gap-2.5 text-slate-200"
                   >
                     <span className="material-symbols-outlined text-base text-orange-400">slideshow</span>
-                    <span>Export PPTX (.pptx)</span>
+                    <div>
+                      <p className="font-bold">Export PPT Presentation</p>
+                      <p className="text-[10px] text-slate-400">16:9 Presentation Format</p>
+                    </div>
                   </button>
                   <button
                     type="button"
                     onClick={() => handleExport("PNG")}
-                    className="p-2 rounded-lg hover:bg-slate-800 text-left text-xs flex items-center gap-2 text-slate-200"
+                    className="p-2.5 rounded-lg hover:bg-slate-800 text-left text-xs flex items-center gap-2.5 text-slate-200"
                   >
                     <span className="material-symbols-outlined text-base text-blue-400">image</span>
-                    <span>Export Current Slide (PNG)</span>
+                    <div>
+                      <p className="font-bold">Export Current Slide (PNG)</p>
+                      <p className="text-[10px] text-slate-400">High-Res with official logo</p>
+                    </div>
                   </button>
                 </div>
               )}
@@ -671,16 +786,16 @@ export function AtomicWhiteboardStudio({
       )}
 
       {/* ========================================================================= */}
-      {/* 2. MAIN WHITEBOARD CANVAS + LEFT PALETTE + WATERMARK HEADER                */}
+      {/* 2. MAIN 16:9 PPT SLIDE STAGE + LEFT PALETTE                               */}
       {/* ========================================================================= */}
       <div className="flex-1 flex overflow-hidden relative bg-[#07090e]">
-        {/* LEFT FLOATING COLOR & STROKE PALETTE (MATCHING SCREENSHOT) */}
+        {/* LEFT FLOATING COLOR & STROKE PALETTE */}
         {!isObsOutput && (
           <div className="absolute top-4 left-4 z-20 flex flex-col items-center gap-1.5 p-1.5 bg-[#141724]/95 backdrop-blur-md border border-[#282d42] rounded-2xl shadow-2xl">
             {/* Active Tool Button */}
             <button
               type="button"
-              className="p-2 rounded-xl bg-blue-600 text-white shadow-md"
+              className="p-2 rounded-xl bg-orange-600 text-white shadow-md"
               title="Active Pen"
             >
               <span className="material-symbols-outlined text-base">edit</span>
@@ -719,7 +834,7 @@ export function AtomicWhiteboardStudio({
                   type="button"
                   onClick={() => setSize(s.size)}
                   className={`w-5 h-5 rounded-lg flex items-center justify-center transition ${
-                    size === s.size ? "bg-blue-600/40 text-blue-400 ring-1 ring-blue-400" : "text-slate-400 hover:text-white"
+                    size === s.size ? "bg-orange-600/40 text-orange-400 ring-1 ring-orange-400" : "text-slate-400 hover:text-white"
                   }`}
                   title={`${s.label} (${s.size}px)`}
                 >
@@ -738,7 +853,7 @@ export function AtomicWhiteboardStudio({
               type="button"
               onClick={() => setTool(tool === "select" ? "pen" : "select")}
               className={`p-1.5 rounded-lg transition ${
-                tool === "select" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-white"
+                tool === "select" ? "bg-orange-600 text-white" : "text-slate-400 hover:text-white"
               }`}
               title="Lasso Loop Select"
             >
@@ -747,34 +862,11 @@ export function AtomicWhiteboardStudio({
           </div>
         )}
 
-        {/* WHITEBOARD CANVAS CONTAINER */}
-        <div className="flex-1 flex flex-col relative items-center justify-center p-2 sm:p-4 overflow-hidden">
-          {/* WHITEBOARD FRAME WITH ATOMIC PATHSHALA BRANDING WATERMARK */}
-          <div className="relative w-full h-full max-w-[1920px] max-h-[1080px] bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-700/50">
-            {/* Header Watermark Branding (Matching Screenshot) */}
-            <div className="absolute top-3 left-4 right-4 z-10 flex items-center justify-between pointer-events-none select-none">
-              {/* Logo on Left */}
-              <div className="flex items-center gap-2">
-                <div className="w-9 h-9 rounded-xl bg-orange-50 border border-orange-200 flex items-center justify-center shadow-sm">
-                  <span className="font-black text-orange-600 text-lg">A</span>
-                </div>
-              </div>
-
-              {/* Black underline border */}
-              <div className="flex-1 mx-4 h-0.5 bg-black/80" />
-
-              {/* Atomic Pathshala Text on Right */}
-              <div className="text-right">
-                <div className="font-black text-xs tracking-tight text-slate-900 uppercase">
-                  ATOMIC PATHSHALA
-                </div>
-                <div className="text-[8px] font-bold text-orange-600 tracking-wider">
-                  LEARN • EXPLORE • EXCEL
-                </div>
-              </div>
-            </div>
-
-            {/* HTML5 CANVAS ELEMENT */}
+        {/* 16:9 PPT SLIDE WORKSPACE CONTAINER (CENTERED PRESENTATION SLIDE) */}
+        <div className="flex-1 flex flex-col relative items-center justify-center p-2 sm:p-4 overflow-hidden bg-[#07090e]">
+          {/* Strict 16:9 PPT Slide Frame */}
+          <div className="relative w-full max-w-[calc((100vh-145px)*16/9)] aspect-[16/9] max-h-[calc(100vh-145px)] bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-700/60 flex items-center justify-center">
+            {/* HTML5 CANVAS ELEMENT (1920x1080 16:9 PPT Resolution) */}
             <canvas
               ref={canvasRef}
               width={1920}
@@ -785,24 +877,24 @@ export function AtomicWhiteboardStudio({
               onTouchStart={handleStartDraw}
               onTouchMove={handleMoveDraw}
               onTouchEnd={handleEndDraw}
-              className="w-full h-full object-contain cursor-crosshair"
+              className="w-full h-full object-contain cursor-crosshair select-none"
             />
           </div>
         </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* 3. BOTTOM FLOATING DOCK TOOLBAR (MATCHING SCREENSHOT)                     */}
+      {/* 3. BOTTOM FLOATING DOCK TOOLBAR                                           */}
       {/* ========================================================================= */}
       {!isObsOutput && (
-        <footer className="h-16 bg-[#12141f] border-t border-[#24283b] px-4 flex items-center justify-between shrink-0 z-30">
+        <footer className="h-16 bg-[#10121b] border-t border-[#202435] px-4 flex items-center justify-between shrink-0 z-30">
           {/* Left: Tools (Pen, Highlight, Eraser, Shapes) */}
           <div className="flex items-center gap-1 bg-[#1a1d2e] border border-[#2d3247] rounded-2xl p-1 shadow-md">
             <button
               type="button"
               onClick={() => setTool("pen")}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition ${
-                tool === "pen" ? "bg-blue-600 text-white shadow" : "text-slate-400 hover:text-white"
+                tool === "pen" ? "bg-orange-600 text-white shadow" : "text-slate-400 hover:text-white"
               }`}
             >
               <span className="material-symbols-outlined text-sm">edit</span>
@@ -923,8 +1015,8 @@ export function AtomicWhiteboardStudio({
               </button>
 
               <span className="text-xs font-extrabold text-slate-200 flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-sm text-orange-400">menu_book</span>
-                <span>{activeSlideIndex + 1} / {slides.length}</span>
+                <span className="material-symbols-outlined text-sm text-orange-400">slideshow</span>
+                <span>Slide {activeSlideIndex + 1} / {slides.length}</span>
               </span>
 
               <button
@@ -945,48 +1037,23 @@ export function AtomicWhiteboardStudio({
                 className="px-3 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs flex items-center gap-1 shadow"
               >
                 <span className="material-symbols-outlined text-sm">add</span>
-                <span>Add</span>
+                <span>Add Slide</span>
               </button>
               <button
                 type="button"
                 onClick={handleDeleteSlide}
-                className="p-1.5 rounded-xl border border-[#2d3247] bg-[#1a1d2e] text-slate-400 hover:text-rose-400"
-                title="Delete Current Slide"
+                disabled={slides.length <= 1}
+                className="p-1.5 rounded-xl bg-[#1a1d2e] hover:bg-rose-950/40 text-slate-400 hover:text-rose-400 disabled:opacity-30 border border-[#2d3247]"
+                title="Delete Slide"
               >
-                <span className="material-symbols-outlined text-sm">delete_outline</span>
+                <span className="material-symbols-outlined text-base">delete</span>
               </button>
             </div>
           </div>
 
-          {/* Right: Poll, Zoom, More */}
+          {/* Right Status */}
           <div className="flex items-center gap-2">
-            {/* Poll */}
-            <button
-              type="button"
-              onClick={() => setIsPollOpen(true)}
-              className="px-3 py-1.5 rounded-xl bg-amber-600/90 hover:bg-amber-600 text-white font-bold text-xs flex items-center gap-1.5 shadow"
-            >
-              <span className="material-symbols-outlined text-sm">poll</span>
-              <span>Poll</span>
-            </button>
-
-            {/* Zoom */}
-            <button
-              type="button"
-              className="px-3 py-1.5 rounded-xl border border-[#2d3247] bg-[#1a1d2e] text-slate-300 font-bold text-xs flex items-center gap-1"
-            >
-              <span className="material-symbols-outlined text-sm">zoom_in</span>
-              <span>Zoom</span>
-            </button>
-
-            {/* More */}
-            <button
-              type="button"
-              className="p-1.5 rounded-xl border border-[#2d3247] bg-[#1a1d2e] text-slate-300 hover:text-white"
-              title="More Tools"
-            >
-              <span className="material-symbols-outlined text-base">more_horiz</span>
-            </button>
+            <span className="text-xs font-bold text-slate-400 font-mono">16:9 PPT Slide</span>
           </div>
         </footer>
       )}
@@ -997,41 +1064,48 @@ export function AtomicWhiteboardStudio({
 
       {/* 3D VISUALS MODAL */}
       {is3DOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-[#121422] border border-purple-500/40 rounded-3xl max-w-4xl w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95 flex flex-col max-h-[90vh]">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#141724] border border-purple-500/50 rounded-3xl max-w-4xl w-full h-[80vh] flex flex-col overflow-hidden shadow-2xl">
+            <div className="p-4 border-b border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="w-8 h-8 rounded-xl bg-purple-950 text-purple-400 flex items-center justify-center">
-                  <span className="material-symbols-outlined text-lg">view_in_ar</span>
-                </span>
-                <div>
-                  <h3 className="font-extrabold text-base text-white">3D Visual Interactive Models</h3>
-                  <p className="text-xs text-slate-400">Interactive 3D structures for Biology, Chemistry &amp; Physics</p>
-                </div>
+                <span className="material-symbols-outlined text-purple-400 text-xl">view_in_ar</span>
+                <h3 className="font-extrabold text-base text-white">3D NEET/JEE Visual Models</h3>
               </div>
               <button type="button" onClick={() => setIs3DOpen(false)} className="text-slate-400 hover:text-white">✕</button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 overflow-y-auto p-1">
-              {THREE_D_MODELS.map((m) => (
-                <div key={m.id} className="p-4 rounded-2xl bg-[#191c2e] border border-slate-800 hover:border-purple-400 transition space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="px-2 py-0.5 rounded bg-purple-950 text-purple-300 text-[10px] font-bold">{m.category}</span>
-                    <span className="material-symbols-outlined text-lg text-purple-400">{m.icon}</span>
-                  </div>
-                  <h4 className="font-bold text-xs text-white leading-snug">{m.title}</h4>
+            <div className="flex-1 flex overflow-hidden">
+              <div className="w-72 border-r border-slate-800 overflow-y-auto p-2 space-y-1.5">
+                {THREE_D_MODELS.map((m) => (
                   <button
+                    key={m.id}
                     type="button"
-                    onClick={() => {
-                      setActive3DModel(m);
-                      toast.success(`Launching 3D ${m.title}!`);
-                    }}
-                    className="w-full py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs"
+                    onClick={() => setActive3DModel(m)}
+                    className={`w-full p-2.5 rounded-xl text-left text-xs font-bold flex items-center gap-2 transition ${
+                      active3DModel?.id === m.id ? "bg-purple-900/60 text-purple-200 border border-purple-500" : "bg-[#1c2032] text-slate-300 hover:bg-slate-800"
+                    }`}
                   >
-                    Open 3D Model
+                    <span className="material-symbols-outlined text-base text-purple-400">{m.icon}</span>
+                    <span className="truncate">{m.title}</span>
                   </button>
-                </div>
-              ))}
+                ))}
+              </div>
+
+              <div className="flex-1 bg-black flex items-center justify-center relative">
+                {active3DModel ? (
+                  <iframe
+                    src={active3DModel.embedUrl}
+                    title={active3DModel.title}
+                    className="w-full h-full border-0"
+                    allow="autoplay; fullscreen; xr-spatial-tracking"
+                  />
+                ) : (
+                  <div className="text-center text-slate-500 text-sm">
+                    <span className="material-symbols-outlined text-4xl text-purple-400 block mb-2">view_in_ar</span>
+                    Select a 3D model to interact with during class
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -1039,83 +1113,138 @@ export function AtomicWhiteboardStudio({
 
       {/* LAB SIMS MODAL */}
       {isSimOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-[#121422] border border-emerald-500/40 rounded-3xl max-w-4xl w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95 flex flex-col max-h-[90vh]">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#141724] border border-emerald-500/50 rounded-3xl max-w-5xl w-full h-[85vh] flex flex-col overflow-hidden shadow-2xl">
+            <div className="p-4 border-b border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="w-8 h-8 rounded-xl bg-emerald-950 text-emerald-400 flex items-center justify-center">
-                  <span className="material-symbols-outlined text-lg">science</span>
-                </span>
-                <div>
-                  <h3 className="font-extrabold text-base text-white">Interactive Science &amp; Physics Labs (PhET)</h3>
-                  <p className="text-xs text-slate-400">Perform real-time virtual experiments on the whiteboard</p>
-                </div>
+                <span className="material-symbols-outlined text-emerald-400 text-xl">science</span>
+                <h3 className="font-extrabold text-base text-white">Interactive Physics & Chemistry Lab Simulations</h3>
               </div>
               <button type="button" onClick={() => setIsSimOpen(false)} className="text-slate-400 hover:text-white">✕</button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 overflow-y-auto p-1">
-              {LAB_SIMULATIONS.map((sim) => (
-                <div key={sim.id} className="p-4 rounded-2xl bg-[#191c2e] border border-slate-800 hover:border-emerald-400 transition space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 text-[10px] font-bold">{sim.subject}</span>
-                    <span className="material-symbols-outlined text-lg text-emerald-400">{sim.icon}</span>
-                  </div>
-                  <h4 className="font-bold text-xs text-white leading-snug">{sim.title}</h4>
+            <div className="flex-1 flex overflow-hidden">
+              <div className="w-80 border-r border-slate-800 overflow-y-auto p-2 space-y-1.5">
+                {LAB_SIMULATIONS.map((s) => (
                   <button
+                    key={s.id}
                     type="button"
-                    onClick={() => {
-                      setActiveSim(sim);
-                      toast.success(`Opening Lab Simulation: ${sim.title}`);
-                    }}
-                    className="w-full py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs"
+                    onClick={() => setActiveSim(s)}
+                    className={`w-full p-2.5 rounded-xl text-left text-xs font-bold flex items-center gap-2 transition ${
+                      activeSim?.id === s.id ? "bg-emerald-900/60 text-emerald-200 border border-emerald-500" : "bg-[#1c2032] text-slate-300 hover:bg-slate-800"
+                    }`}
                   >
-                    Launch Lab Simulation
+                    <span className="material-symbols-outlined text-base text-emerald-400">{s.icon}</span>
+                    <span className="truncate">{s.title}</span>
                   </button>
-                </div>
-              ))}
+                ))}
+              </div>
+
+              <div className="flex-1 bg-black flex items-center justify-center relative">
+                {activeSim ? (
+                  <iframe
+                    src={activeSim.simUrl}
+                    title={activeSim.title}
+                    className="w-full h-full border-0"
+                    allowFullScreen
+                  />
+                ) : (
+                  <div className="text-center text-slate-500 text-sm">
+                    <span className="material-symbols-outlined text-4xl text-emerald-400 block mb-2">science</span>
+                    Select an interactive lab simulation
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* THEME SELECTOR MODAL */}
+      {/* THEME SELECTOR MODAL WITH BRANDED PPT SLIDES */}
       {isThemeOpen && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#161824] border border-[#2d3247] rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-              <h3 className="font-extrabold text-base text-white">Board Theme</h3>
+          <div className="bg-[#141724] border border-[#2d3247] rounded-3xl max-w-lg w-full p-6 space-y-5 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <img src="/brand/logo.png" alt="Logo" className="w-6 h-6 rounded object-contain" />
+                <h3 className="font-extrabold text-base text-white">Slide Themes & Brand Templates</h3>
+              </div>
               <button type="button" onClick={() => setIsThemeOpen(false)} className="text-slate-400 hover:text-white">✕</button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { key: "white", label: "Clean White", desc: "Traditional Whiteboard" },
-                { key: "dark", label: "Dark Space", desc: "Eye-friendly dark theme" },
-                { key: "greenboard", label: "Chalkboard", desc: "Classic classroom green" },
-                { key: "ruled", label: "Ruled Notebook", desc: "Notes with line margins" },
-                { key: "grid", label: "Math Grid", desc: "Coordinate & vectors grid" },
-              ].map((t) => (
-                <button
-                  key={t.key}
-                  type="button"
-                  onClick={() => {
-                    const updated = [...slides];
-                    if (updated[activeSlideIndex]) {
-                      updated[activeSlideIndex]!.theme = t.key as BoardTheme;
-                      setSlides(updated);
-                    }
-                    setIsThemeOpen(false);
-                    toast.success(`Theme changed to ${t.label}!`);
-                  }}
-                  className={`p-3 rounded-2xl border text-left transition ${
-                    activeSlide.theme === t.key ? "bg-orange-950/40 border-orange-500" : "bg-[#1e2235] border-[#2d3247]"
-                  }`}
-                >
-                  <p className="font-bold text-xs text-white">{t.label}</p>
-                  <p className="text-[10px] text-slate-400">{t.desc}</p>
-                </button>
-              ))}
+            {/* Official Brand Slide Templates */}
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-orange-400 mb-2 flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-sm">verified</span>
+                Atomic Pathshala Official Slides
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                {[
+                  { key: "brand_white", label: "Brand White", desc: "Official White PPT Slide" },
+                  { key: "brand_dark", label: "Brand Dark", desc: "Night Mode PPT Slide" },
+                  { key: "brand_ruled", label: "Brand Ruled", desc: "Official Ruled Notebook" },
+                ].map((t) => (
+                  <button
+                    key={t.key}
+                    type="button"
+                    onClick={() => {
+                      const updated = [...slides];
+                      if (updated[activeSlideIndex]) {
+                        updated[activeSlideIndex]!.theme = t.key as BoardTheme;
+                        setSlides(updated);
+                      }
+                      setIsThemeOpen(false);
+                      toast.success(`Theme changed to ${t.label}!`);
+                    }}
+                    className={`p-3 rounded-2xl border text-left transition ${
+                      activeSlide.theme === t.key
+                        ? "bg-orange-950/60 border-orange-500 shadow-md ring-2 ring-orange-500/20"
+                        : "bg-[#1c2032] border-[#2d3247] hover:border-orange-500/50"
+                    }`}
+                  >
+                    <p className="font-bold text-xs text-white">{t.label}</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">{t.desc}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Classic Boards */}
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+                Classic Boards
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                {[
+                  { key: "white", label: "Clean White", desc: "Minimal Whiteboard" },
+                  { key: "dark", label: "Dark Space", desc: "Eye-friendly dark" },
+                  { key: "greenboard", label: "Chalkboard", desc: "Classic green" },
+                  { key: "ruled", label: "Ruled Paper", desc: "Notebook lines" },
+                  { key: "grid", label: "Math Grid", desc: "Coordinate grid" },
+                ].map((t) => (
+                  <button
+                    key={t.key}
+                    type="button"
+                    onClick={() => {
+                      const updated = [...slides];
+                      if (updated[activeSlideIndex]) {
+                        updated[activeSlideIndex]!.theme = t.key as BoardTheme;
+                        setSlides(updated);
+                      }
+                      setIsThemeOpen(false);
+                      toast.success(`Theme changed to ${t.label}!`);
+                    }}
+                    className={`p-3 rounded-2xl border text-left transition ${
+                      activeSlide.theme === t.key
+                        ? "bg-orange-950/60 border-orange-500 shadow-md ring-2 ring-orange-500/20"
+                        : "bg-[#1c2032] border-[#2d3247] hover:border-slate-600"
+                    }`}
+                  >
+                    <p className="font-bold text-xs text-white">{t.label}</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">{t.desc}</p>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -1128,40 +1257,29 @@ export function AtomicWhiteboardStudio({
             <div className="flex items-center justify-between border-b border-slate-800 pb-2">
               <h3 className="font-extrabold text-base text-white flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
-                <span>YouTube Live Stream Sync</span>
+                YouTube Live Interactive Sync
               </h3>
               <button type="button" onClick={() => setIsYTSyncOpen(false)} className="text-slate-400 hover:text-white">✕</button>
             </div>
 
-            <div className="space-y-3 text-xs">
+            <p className="text-xs text-slate-300">
+              Broadcast your real-time whiteboard slides, quiz popups &amp; live annotations to YouTube viewers via PIN sync.
+            </p>
+
+            <div className="bg-black/60 p-4 rounded-2xl border border-red-950 flex items-center justify-between">
               <div>
-                <label className="font-bold text-slate-300">YouTube Stream URL / Live Video ID</label>
-                <input
-                  type="text"
-                  placeholder="e.g. https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-                  className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white outline-none"
-                />
+                <span className="text-[10px] uppercase text-slate-400 block font-bold">Classroom Broadcast PIN</span>
+                <span className="text-2xl font-black text-orange-400 tracking-wider font-mono">{ytPin}</span>
               </div>
-
-              <div className="p-3 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
-                <div>
-                  <p className="font-bold text-white">Student Mobile Sync PIN</p>
-                  <p className="text-[10px] text-slate-400">Share PIN with YouTube live viewers</p>
-                </div>
-                <span className="px-3 py-1 rounded-xl bg-orange-600/30 text-orange-400 font-mono font-black text-sm border border-orange-500/40">
-                  {ytPin}
-                </span>
-              </div>
-
               <button
                 type="button"
                 onClick={() => {
-                  setIsYTSyncOpen(false);
-                  toast.success("YouTube Live Stream Linked & Synced!");
+                  navigator.clipboard.writeText(ytPin);
+                  toast.success("PIN copied to clipboard!");
                 }}
-                className="w-full py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs"
+                className="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white font-bold text-xs rounded-xl transition"
               >
-                Connect Stream
+                Copy PIN
               </button>
             </div>
           </div>
