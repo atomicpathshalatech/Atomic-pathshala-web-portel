@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
+import { MoreVertical, Edit2, FileText, Trash2, Video, Calendar, Clock, Timer, Check, Sparkles } from "lucide-react";
 
 export interface LectureItem {
   id: string;
@@ -42,9 +43,14 @@ export function ChapterLecturesTab({
 }) {
   const router = useRouter();
   const [lectures, setLectures] = useState<LectureItem[]>(initialLectures);
-  const [showModal, setShowModal] = useState(false);
 
-  // Form State for Scheduling Lecture
+  // Modals
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [editingLecture, setEditingLecture] = useState<LectureItem | null>(null);
+  const [notesModalLecture, setNotesModalLecture] = useState<LectureItem | null>(null);
+  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+
+  // Form State for Adding / Editing
   const [title, setTitle] = useState("");
   const [scheduledDate, setScheduledDate] = useState<string>(
     new Date().toISOString().split("T")[0] || ""
@@ -55,16 +61,48 @@ export function ChapterLecturesTab({
   const [language, setLanguage] = useState(
     chapterMedium === "HINDI" ? "Hindi" : chapterMedium === "HINGLISH" ? "Hinglish" : "English"
   );
-  const [status, setStatus] = useState<"PUBLISHED" | "DRAFT">("PUBLISHED");
-
-  // Optional Links
-  const [showAdvancedLinks, setShowAdvancedLinks] = useState(false);
-  const [videoUrl, setVideoUrl] = useState("");
-  const [slidesUrl, setSlidesUrl] = useState("");
+  const [notesUrl, setNotesUrl] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
+  // Open Add Modal
+  function handleOpenAdd() {
+    setTitle("");
+    setScheduledDate(new Date().toISOString().split("T")[0] || "");
+    setStartTime("10:00");
+    setDurationMin(60);
+    setOrder(lectures.length + 1);
+    setLanguage(chapterMedium === "HINDI" ? "Hindi" : chapterMedium === "HINGLISH" ? "Hinglish" : "English");
+    setError("");
+    setShowAddModal(true);
+  }
+
+  // Open Edit Modal
+  function handleOpenEdit(lec: LectureItem) {
+    setActiveMenuId(null);
+    setEditingLecture(lec);
+    setTitle(lec.title);
+    setScheduledDate(
+      lec.scheduledDate
+        ? new Date(lec.scheduledDate).toISOString().split("T")[0] || ""
+        : new Date().toISOString().split("T")[0] || ""
+    );
+    setStartTime(lec.startTime || "10:00");
+    setDurationMin(lec.durationMin || 60);
+    setLanguage(lec.language || "Hindi");
+    setError("");
+  }
+
+  // Open Notes Modal
+  function handleOpenNotes(lec: LectureItem) {
+    setActiveMenuId(null);
+    setNotesModalLecture(lec);
+    setNotesUrl(lec.slidesUrl || "");
+    setError("");
+  }
+
+  // Add Lecture Submit
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
@@ -85,9 +123,6 @@ export function ChapterLecturesTab({
           durationMin: Number(durationMin) || 60,
           language,
           order: Number(order) || lectures.length + 1,
-          status,
-          videoUrl: videoUrl.trim() || undefined,
-          slidesUrl: slidesUrl.trim() || undefined,
         }),
       });
       const json = await res.json();
@@ -97,11 +132,7 @@ export function ChapterLecturesTab({
       }
 
       setLectures((prev) => [...prev, json.data.lecture]);
-      setShowModal(false);
-      setTitle("");
-      setVideoUrl("");
-      setSlidesUrl("");
-      setOrder(lectures.length + 2);
+      setShowAddModal(false);
       toast.success("Lecture scheduled successfully!");
       router.refresh();
     } catch (err: any) {
@@ -111,48 +142,143 @@ export function ChapterLecturesTab({
     }
   };
 
+  // Edit Lecture Submit
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingLecture || !title.trim()) return;
+    setSubmitting(true);
+    setError("");
+
+    try {
+      const res = await fetch(`/api/team/chapters/${chapterId}/lectures/${editingLecture.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: title.trim(),
+          scheduledDate: scheduledDate ? new Date(scheduledDate).toISOString() : null,
+          startTime: startTime || null,
+          durationMin: Number(durationMin) || 60,
+          language,
+        }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        setError(json.error || "Failed to update lecture.");
+        return;
+      }
+
+      setLectures((prev) =>
+        prev.map((l) => (l.id === editingLecture.id ? json.data.lecture : l))
+      );
+      setEditingLecture(null);
+      toast.success("Lecture updated successfully!");
+      router.refresh();
+    } catch (err: any) {
+      setError(err.message || "Network error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Save Notes Submit
+  const handleSaveNotes = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!notesModalLecture) return;
+    setSubmitting(true);
+    setError("");
+
+    try {
+      const res = await fetch(`/api/team/chapters/${chapterId}/lectures/${notesModalLecture.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          slidesUrl: notesUrl.trim() || null,
+        }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        setError(json.error || "Failed to save notes.");
+        return;
+      }
+
+      setLectures((prev) =>
+        prev.map((l) => (l.id === notesModalLecture.id ? json.data.lecture : l))
+      );
+      setNotesModalLecture(null);
+      toast.success("Class notes attached successfully!");
+      router.refresh();
+    } catch (err: any) {
+      setError(err.message || "Network error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Delete Lecture
+  const handleDelete = async (lecId: string) => {
+    setActiveMenuId(null);
+    if (!confirm("Are you sure you want to delete this lecture?")) return;
+
+    try {
+      const res = await fetch(`/api/team/chapters/${chapterId}/lectures/${lecId}`, {
+        method: "DELETE",
+      });
+      const json = await res.json();
+      if (!json.success) {
+        toast.error(json.error || "Failed to delete lecture.");
+        return;
+      }
+
+      setLectures((prev) => prev.filter((l) => l.id !== lecId));
+      toast.success("Lecture deleted.");
+      router.refresh();
+    } catch {
+      toast.error("Network error while deleting lecture.");
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Header Bar */}
-      <div className="flex items-center justify-between pb-2">
-        <h3 className="text-base font-bold text-white flex items-center gap-2">
-          <span>Lectures &amp; Live Classes</span>
-          <span className="px-2 py-0.5 rounded-full bg-slate-800 text-amber-400 text-xs font-mono">
-            {lectures.length}
-          </span>
-        </h3>
+      <div className="flex items-center justify-between pb-1">
+        <div>
+          <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <span>Chapter Lectures</span>
+            <span className="px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 text-xs font-mono font-bold">
+              {lectures.length} Total
+            </span>
+          </h3>
+          <p className="text-xs text-slate-500">
+            Schedule lecture roadmap with live studio access &amp; attached class notes.
+          </p>
+        </div>
+
         {canEdit && (
           <button
             type="button"
-            onClick={() => {
-              setOrder(lectures.length + 1);
-              setShowModal(true);
-            }}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-500 text-black font-bold text-xs shadow hover:bg-amber-400 transition"
+            onClick={handleOpenAdd}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 text-white font-bold text-xs shadow-md shadow-blue-500/20 hover:bg-blue-500 transition"
           >
-            <span className="material-symbols-outlined text-base">calendar_add_on</span>
-            <span>+ Schedule Lecture</span>
+            <span className="material-symbols-outlined text-base">add_circle</span>
+            <span>Schedule Lecture</span>
           </button>
         )}
       </div>
 
       {lectures.length === 0 ? (
-        <div className="glass-card rounded-2xl p-8 text-center space-y-3 border border-dashed border-slate-700">
-          <div className="w-12 h-12 rounded-full bg-amber-500/10 text-amber-400 mx-auto flex items-center justify-center">
+        <div className="bg-slate-50 dark:bg-slate-900/40 rounded-2xl p-10 text-center space-y-3 border border-dashed border-slate-300 dark:border-slate-800">
+          <div className="w-12 h-12 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 mx-auto flex items-center justify-center">
             <span className="material-symbols-outlined text-2xl">event_available</span>
           </div>
-          <h4 className="text-sm font-bold text-white">No Lectures Scheduled Yet</h4>
-          <p className="text-xs text-slate-400 max-w-md mx-auto">
-            Schedule lectures with date, time, and duration for {chapterTitle}.
+          <h4 className="text-sm font-bold text-slate-900 dark:text-white">No Lectures Scheduled Yet</h4>
+          <p className="text-xs text-slate-500 max-w-md mx-auto">
+            Schedule lectures with date, start time, duration, and faculty for {chapterTitle}.
           </p>
           {canEdit && (
             <button
               type="button"
-              onClick={() => {
-                setOrder(1);
-                setShowModal(true);
-              }}
-              className="mt-2 px-4 py-2 rounded-xl bg-amber-500 text-black font-bold text-xs shadow hover:bg-amber-400"
+              onClick={handleOpenAdd}
+              className="mt-2 px-5 py-2.5 rounded-xl bg-blue-600 text-white font-bold text-xs shadow hover:bg-blue-500 transition"
             >
               + Schedule First Lecture
             </button>
@@ -169,17 +295,17 @@ export function ChapterLecturesTab({
                   month: "short",
                   year: "numeric",
                 })
-              : null;
+              : "Date Not Set";
 
             return (
               <div
                 key={l.id}
-                className="glass-card rounded-2xl p-4 border border-slate-800 hover:border-slate-700 transition flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                className="bg-white dark:bg-slate-900/90 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 hover:border-blue-500/40 transition shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative"
               >
-                {/* Left: Sequence Badge + Title & Meta Info */}
+                {/* Left: Sequence Badge + Title & Scheduling Details */}
                 <div className="flex items-start sm:items-center gap-3.5 min-w-0">
-                  <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/10 border border-amber-500/30 text-amber-400 flex flex-col items-center justify-center font-bold shrink-0 shadow-sm">
-                    <span className="text-[9px] uppercase tracking-wider text-amber-300 font-medium">Lec</span>
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500/10 to-indigo-500/20 border border-blue-500/30 text-blue-600 dark:text-blue-400 flex flex-col items-center justify-center font-bold shrink-0 shadow-sm">
+                    <span className="text-[9px] uppercase tracking-wider text-blue-500 font-bold">LEC</span>
                     <span className="text-sm font-black font-mono leading-none">
                       {String(displayOrder).padStart(2, "0")}
                     </span>
@@ -187,85 +313,105 @@ export function ChapterLecturesTab({
 
                   <div className="min-w-0 space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h4 className="text-sm font-bold text-white truncate max-w-lg">{l.title}</h4>
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                          l.status === "PUBLISHED"
-                            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                            : "bg-slate-800 text-slate-400 border border-slate-700"
-                        }`}
-                      >
-                        {l.status}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-3 text-[11px] text-slate-400 flex-wrap">
-                      {formattedDate && (
-                        <span className="flex items-center gap-1 text-slate-300">
-                          <span className="material-symbols-outlined text-xs text-amber-400">calendar_today</span>
-                          <span>{formattedDate}</span>
+                      <h4 className="text-sm font-bold text-slate-900 dark:text-white truncate max-w-md">
+                        {l.title}
+                      </h4>
+                      {l.slidesUrl && (
+                        <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                          <FileText className="w-3 h-3" />
+                          <span>Notes Attached</span>
                         </span>
                       )}
+                    </div>
+
+                    <div className="flex items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400 flex-wrap">
+                      <span className="flex items-center gap-1 text-slate-700 dark:text-slate-300 font-medium">
+                        <Calendar className="w-3.5 h-3.5 text-blue-500" />
+                        <span>{formattedDate}</span>
+                      </span>
 
                       {l.startTime && (
-                        <span className="flex items-center gap-1 text-slate-300">
-                          <span className="material-symbols-outlined text-xs text-amber-400">schedule</span>
+                        <span className="flex items-center gap-1 text-slate-700 dark:text-slate-300 font-medium">
+                          <Clock className="w-3.5 h-3.5 text-blue-500" />
                           <span>{l.startTime}</span>
                         </span>
                       )}
 
-                      {l.durationMin && (
-                        <span className="flex items-center gap-1 text-slate-300">
-                          <span className="material-symbols-outlined text-xs text-amber-400">timer</span>
-                          <span>{l.durationMin} mins</span>
-                        </span>
-                      )}
+                      <span className="flex items-center gap-1 text-slate-700 dark:text-slate-300 font-medium">
+                        <Timer className="w-3.5 h-3.5 text-blue-500" />
+                        <span>{l.durationMin || 60} mins</span>
+                      </span>
 
-                      <span className="text-slate-500">•</span>
+                      <span className="text-slate-300 dark:text-slate-700">•</span>
                       <span>{l.language}</span>
 
                       {l.teacher?.user?.name && (
                         <>
-                          <span className="text-slate-500">•</span>
-                          <span className="text-amber-200/80">Faculty: {l.teacher.user.name}</span>
+                          <span className="text-slate-300 dark:text-slate-700">•</span>
+                          <span className="text-blue-600 dark:text-blue-300 font-medium">Faculty: {l.teacher.user.name}</span>
                         </>
                       )}
                     </div>
                   </div>
                 </div>
 
-                {/* Right: Actions */}
+                {/* Right: Single "Start Class" Button + 3-Dot Options Menu */}
                 <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                  {/* Single Primary Action: Start Class */}
                   <Link
                     href={`/whiteboard?scheduleId=${l.id}&chapterId=${chapterId}`}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-orange-600/20 hover:bg-orange-600/30 border border-orange-500/30 text-orange-300 transition text-xs font-bold"
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition text-xs font-bold shadow-md shadow-blue-500/20"
+                    title="Enter live classroom (available 15 mins prior)"
                   >
-                    <span className="material-symbols-outlined text-sm">draw</span>
-                    <span>Live Studio</span>
+                    <Video className="w-3.5 h-3.5" />
+                    <span>Start Class</span>
                   </Link>
 
-                  {l.videoUrl ? (
-                    <a
-                      href={l.videoUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 transition text-xs font-medium"
-                    >
-                      <span className="material-symbols-outlined text-xs text-red-400">play_circle</span>
-                      <span>Watch</span>
-                    </a>
-                  ) : null}
+                  {/* 3-Dot Menu Dropdown */}
+                  {canEdit && (
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setActiveMenuId(activeMenuId === l.id ? null : l.id)}
+                        className="w-8 h-8 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center text-slate-500 hover:text-slate-900 dark:hover:text-white transition"
+                        title="More options"
+                      >
+                        <MoreVertical className="w-4 h-4" />
+                      </button>
 
-                  {l.slidesUrl && (
-                    <a
-                      href={l.slidesUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 transition text-xs font-medium"
-                    >
-                      <span className="material-symbols-outlined text-xs text-amber-400">description</span>
-                      <span>Notes</span>
-                    </a>
+                      {activeMenuId === l.id && (
+                        <div className="absolute right-0 top-full mt-1.5 w-48 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl p-1.5 z-40 space-y-0.5 animate-in fade-in zoom-in-95">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEdit(l)}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-xl text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                          >
+                            <Edit2 className="w-3.5 h-3.5 text-blue-500" />
+                            <span>Edit Lecture</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleOpenNotes(l)}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-xl text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                          >
+                            <FileText className="w-3.5 h-3.5 text-amber-500" />
+                            <span>Add / Edit Notes</span>
+                          </button>
+
+                          <div className="h-px bg-slate-200 dark:bg-slate-800 my-1" />
+
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(l.id)}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-xl text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Delete Lecture</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
@@ -274,75 +420,78 @@ export function ChapterLecturesTab({
         </div>
       )}
 
-      {/* SCHEDULE LECTURE MODAL */}
-      {showModal && (
+      {/* 1. SCHEDULE / ADD LECTURE MODAL */}
+      {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
-          <div className="bg-[#141724] border border-[#2d3247] p-6 rounded-3xl max-w-lg w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <span className="material-symbols-outlined text-amber-400 text-xl">event_available</span>
-                Schedule Lecture / Class
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-3xl max-w-lg w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-blue-600" />
+                Schedule Lecture
               </h3>
               <button
                 type="button"
-                onClick={() => setShowModal(false)}
-                className="text-slate-400 hover:text-white"
+                onClick={() => setShowAddModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-white"
               >
                 ✕
               </button>
             </div>
 
             <form onSubmit={handleCreate} className="space-y-4">
-              {/* Lecture Title */}
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1.5">Lecture Title *</label>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Lecture Title *
+                </label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. Lecture 01 — Bohr's Atomic Model & Energy States"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  className="w-full bg-[#1c2032] border border-[#2d3247] px-3.5 py-2.5 rounded-xl text-sm text-white focus:border-amber-500 focus:outline-none"
+                  className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 px-3.5 py-2.5 rounded-xl text-sm text-slate-900 dark:text-white focus:border-blue-500 focus:outline-none"
                 />
               </div>
 
-              {/* Date & Start Time */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1.5">Schedule Date</label>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Schedule Date
+                  </label>
                   <input
                     type="date"
                     value={scheduledDate}
                     onChange={(e) => setScheduledDate(e.target.value)}
-                    className="w-full bg-[#1c2032] border border-[#2d3247] px-3.5 py-2.5 rounded-xl text-sm text-white focus:border-amber-500 focus:outline-none"
+                    className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 px-3.5 py-2.5 rounded-xl text-sm text-slate-900 dark:text-white focus:border-blue-500 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1.5">Start Time</label>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Start Time
+                  </label>
                   <input
                     type="time"
                     value={startTime}
                     onChange={(e) => setStartTime(e.target.value)}
-                    className="w-full bg-[#1c2032] border border-[#2d3247] px-3.5 py-2.5 rounded-xl text-sm text-white focus:border-amber-500 focus:outline-none"
+                    className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 px-3.5 py-2.5 rounded-xl text-sm text-slate-900 dark:text-white focus:border-blue-500 focus:outline-none"
                   />
                 </div>
               </div>
 
-              {/* Duration & Sequence Order */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1.5">Duration (Mins)</label>
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type="number"
-                      min={15}
-                      step={5}
-                      value={durationMin}
-                      onChange={(e) => setDurationMin(Number(e.target.value))}
-                      className="w-full bg-[#1c2032] border border-[#2d3247] px-3.5 py-2 rounded-xl text-sm text-white focus:border-amber-500 focus:outline-none"
-                    />
-                  </div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Duration (Mins)
+                  </label>
+                  <input
+                    type="number"
+                    min={15}
+                    step={5}
+                    value={durationMin}
+                    onChange={(e) => setDurationMin(Number(e.target.value))}
+                    className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 px-3.5 py-2 rounded-xl text-sm text-slate-900 dark:text-white focus:border-blue-500 focus:outline-none"
+                  />
                   <div className="flex items-center gap-1 mt-1.5">
                     {[45, 60, 90, 120].map((d) => (
                       <button
@@ -351,8 +500,8 @@ export function ChapterLecturesTab({
                         onClick={() => setDurationMin(d)}
                         className={`text-[10px] px-2 py-0.5 rounded-md font-bold transition ${
                           durationMin === d
-                            ? "bg-amber-500 text-black"
-                            : "bg-slate-800 text-slate-400 hover:text-white"
+                            ? "bg-blue-600 text-white"
+                            : "bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white"
                         }`}
                       >
                         {d}m
@@ -362,119 +511,207 @@ export function ChapterLecturesTab({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1.5">Sequence Order</label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={order}
-                    onChange={(e) => setOrder(Number(e.target.value))}
-                    className="w-full bg-[#1c2032] border border-[#2d3247] px-3.5 py-2.5 rounded-xl text-sm text-white focus:border-amber-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Language & Publish Status */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1.5">Language</label>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Language
+                  </label>
                   <select
                     value={language}
                     onChange={(e) => setLanguage(e.target.value)}
-                    className="w-full bg-[#1c2032] border border-[#2d3247] px-3.5 py-2.5 rounded-xl text-sm text-white focus:border-amber-500 focus:outline-none"
+                    className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 px-3.5 py-2.5 rounded-xl text-sm text-slate-900 dark:text-white focus:border-blue-500 focus:outline-none"
                   >
                     <option value="Hindi">Hindi (हिंदी)</option>
                     <option value="English">English</option>
                     <option value="Hinglish">Hinglish</option>
                   </select>
                 </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1.5">Publish Status</label>
-                  <div className="flex items-center gap-3 pt-2">
-                    <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="status"
-                        value="PUBLISHED"
-                        checked={status === "PUBLISHED"}
-                        onChange={() => setStatus("PUBLISHED")}
-                      />
-                      <span>Published</span>
-                    </label>
-                    <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="status"
-                        value="DRAFT"
-                        checked={status === "DRAFT"}
-                        onChange={() => setStatus("DRAFT")}
-                      />
-                      <span>Draft</span>
-                    </label>
-                  </div>
-                </div>
               </div>
 
-              {/* Optional Advanced Links Accordion */}
-              <div className="pt-1">
+              {error && <p className="text-xs text-red-500">{error}</p>}
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
                 <button
                   type="button"
-                  onClick={() => setShowAdvancedLinks(!showAdvancedLinks)}
-                  className="text-xs text-slate-400 hover:text-amber-400 font-bold flex items-center gap-1 transition"
-                >
-                  <span className="material-symbols-outlined text-sm">
-                    {showAdvancedLinks ? "expand_less" : "expand_more"}
-                  </span>
-                  <span>Optional External Stream / Notes Links</span>
-                </button>
-
-                {showAdvancedLinks && (
-                  <div className="space-y-3 pt-2.5 border-t border-slate-800/60 mt-2 animate-in fade-in">
-                    <div>
-                      <label className="block text-[11px] font-medium text-slate-400 mb-1">
-                        Optional Video / YouTube Stream URL
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. https://www.youtube.com/watch?v=xxxx (Optional)"
-                        value={videoUrl}
-                        onChange={(e) => setVideoUrl(e.target.value)}
-                        className="w-full bg-[#1c2032] border border-[#2d3247] px-3 py-2 rounded-lg text-xs text-white focus:border-amber-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-medium text-slate-400 mb-1">
-                        Optional Lecture Notes PDF URL
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="https://.../notes.pdf (Optional)"
-                        value={slidesUrl}
-                        onChange={(e) => setSlidesUrl(e.target.value)}
-                        className="w-full bg-[#1c2032] border border-[#2d3247] px-3 py-2 rounded-lg text-xs text-white focus:border-amber-500"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {error && <p className="text-xs text-red-400">{error}</p>}
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="px-4 py-2 text-sm rounded-xl text-slate-400 hover:text-white"
+                  onClick={() => setShowAddModal(false)}
+                  className="px-4 py-2 text-sm rounded-xl text-slate-500 hover:text-slate-800 dark:hover:text-white"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-5 py-2 text-sm rounded-xl bg-amber-500 text-black font-bold hover:bg-amber-400 shadow-md transition"
+                  className="px-6 py-2.5 text-sm rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-500 shadow-md transition"
                 >
-                  {submitting ? "Saving..." : "Schedule Lecture"}
+                  {submitting ? "Scheduling..." : "Schedule Lecture"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 2. EDIT LECTURE MODAL */}
+      {editingLecture && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-3xl max-w-lg w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Edit2 className="w-5 h-5 text-blue-600" />
+                Edit Lecture Details
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingLecture(null)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdate} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Lecture Title *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 px-3.5 py-2.5 rounded-xl text-sm text-slate-900 dark:text-white focus:border-blue-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Schedule Date
+                  </label>
+                  <input
+                    type="date"
+                    value={scheduledDate}
+                    onChange={(e) => setScheduledDate(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 px-3.5 py-2.5 rounded-xl text-sm text-slate-900 dark:text-white focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Start Time
+                  </label>
+                  <input
+                    type="time"
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 px-3.5 py-2.5 rounded-xl text-sm text-slate-900 dark:text-white focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Duration (Mins)
+                  </label>
+                  <input
+                    type="number"
+                    min={15}
+                    step={5}
+                    value={durationMin}
+                    onChange={(e) => setDurationMin(Number(e.target.value))}
+                    className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 px-3.5 py-2 rounded-xl text-sm text-slate-900 dark:text-white focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Language
+                  </label>
+                  <select
+                    value={language}
+                    onChange={(e) => setLanguage(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 px-3.5 py-2.5 rounded-xl text-sm text-slate-900 dark:text-white focus:border-blue-500 focus:outline-none"
+                  >
+                    <option value="Hindi">Hindi (हिंदी)</option>
+                    <option value="English">English</option>
+                    <option value="Hinglish">Hinglish</option>
+                  </select>
+                </div>
+              </div>
+
+              {error && <p className="text-xs text-red-500">{error}</p>}
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingLecture(null)}
+                  className="px-4 py-2 text-sm rounded-xl text-slate-500 hover:text-slate-800 dark:hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-6 py-2.5 text-sm rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-500 shadow-md transition"
+                >
+                  {submitting ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 3. ADD / EDIT NOTES MODAL */}
+      {notesModalLecture && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-3xl max-w-lg w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <FileText className="w-5 h-5 text-amber-500" />
+                Class Notes &amp; PDF for {notesModalLecture.title}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setNotesModalLecture(null)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveNotes} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Lecture Notes PDF URL / Cloud Link
+                </label>
+                <input
+                  type="text"
+                  placeholder="https://.../lecture-notes.pdf"
+                  value={notesUrl}
+                  onChange={(e) => setNotesUrl(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 px-3.5 py-2.5 rounded-xl text-sm text-slate-900 dark:text-white focus:border-amber-500 focus:outline-none"
+                />
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Students will be able to view and download these handwritten notes in their app.
+                </p>
+              </div>
+
+              {error && <p className="text-xs text-red-500">{error}</p>}
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setNotesModalLecture(null)}
+                  className="px-4 py-2 text-sm rounded-xl text-slate-500 hover:text-slate-800 dark:hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-6 py-2.5 text-sm rounded-xl bg-amber-500 text-black font-bold hover:bg-amber-400 shadow-md transition"
+                >
+                  {submitting ? "Saving..." : "Save Notes"}
                 </button>
               </div>
             </form>
