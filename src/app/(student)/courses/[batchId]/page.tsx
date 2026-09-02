@@ -4,7 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { CourseDetailMasterView } from "@/components/course-platform/CourseDetailMasterView";
-import { SAMPLE_COURSES } from "@/components/course-platform/CourseListingMasterView";
+import { SAMPLE_COURSES } from "@/components/course-platform/sample-courses";
 
 export const metadata: Metadata = {
   title: "Batch & Course — Atomic Pathshala",

@@ -1,6 +1,6 @@
 ﻿import type { Metadata } from "next";
 import { CheckoutView } from "@/components/course-platform/CheckoutView";
-import { SAMPLE_COURSES } from "@/components/course-platform/CourseListingMasterView";
+import { SAMPLE_COURSES } from "@/components/course-platform/sample-courses";
 
 export const metadata: Metadata = {
   title: "Secure Checkout — Atomic Pathshala",
