@@ -1,4 +1,4 @@
-﻿import type { Metadata } from "next";
+import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { requireStudentSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
@@ -65,44 +65,32 @@ export default async function ChapterPage({
   const teacherName = firstLectureTeacher?.user?.name || "Senior Subject Faculty";
   const teacherPhoto = firstLectureTeacher?.user?.photoUrl || null;
 
-  // Build Roadmap groups dynamically from lectures, DPPs, and tests
+  // Build Roadmap groups dynamically from lectures with Class Notes (Tests handled in Test Arena)
   const roadmapGroups: RoadmapTopicGroup[] = [];
   const chunkSize = Math.max(1, Math.ceil(lectures.length / 4));
 
   for (let i = 0; i < Math.max(1, Math.ceil(lectures.length / chunkSize)); i++) {
     const chunkLectures = lectures.slice(i * chunkSize, (i + 1) * chunkSize);
-    const chunkDpps = dpps.slice(i, i + 1);
-    const chunkTest = i === 0 && tests.length > 0 ? tests[0] : null;
 
     roadmapGroups.push({
       id: `step-${i + 1}`,
       stepNumber: i + 1,
-      title: chunkLectures[0]?.title || `Core Concepts Phase ${i + 1}`,
+      title: chunkLectures[0]?.title || `${chapter.title} Part ${i + 1}`,
       lectures: chunkLectures.map((l, lIdx) => {
         const position = i * chunkSize + lIdx + 1;
-        const req = requiredDppCountForPosition(position);
         return {
           id: l.id,
           title: l.title,
           order: l.order || position,
           videoUrl: l.videoUrl,
           isCompleted: completedLectureIds.has(l.id),
-          isLocked: req > 0 && submittedDppCount < req,
+          isLocked: false,
         };
       }),
-      dpps: chunkDpps.map((d) => ({
-        id: d.id,
-        code: d.code,
-        name: d.name,
-        level: d.level,
+      notes: chunkLectures.map((l) => ({
+        id: `notes-${l.id}`,
+        title: `${l.title} — Class Notes`,
       })),
-      test: chunkTest
-        ? {
-            id: chunkTest.id,
-            name: chunkTest.name,
-            durationMin: chunkTest.durationMin,
-          }
-        : null,
     });
   }
 
@@ -111,10 +99,23 @@ export default async function ChapterPage({
     roadmapGroups.push({
       id: "step-1",
       stepNumber: 1,
-      title: `${chapter.title} Fundamental Topics`,
-      lectures: [],
-      dpps: dpps.map((d) => ({ id: d.id, code: d.code, name: d.name, level: d.level })),
-      test: tests[0] ? { id: tests[0].id, name: tests[0].name, durationMin: tests[0].durationMin } : null,
+      title: `${chapter.title} Lec : 01`,
+      lectures: [
+        {
+          id: "lec-demo-1",
+          title: `${chapter.title} Lec : 01`,
+          order: 1,
+          videoUrl: "#",
+          isCompleted: false,
+          isLocked: false,
+        },
+      ],
+      notes: [
+        {
+          id: "notes-demo-1",
+          title: `${chapter.title} Lec : 01 — Class Notes`,
+        },
+      ],
     });
   }
 
