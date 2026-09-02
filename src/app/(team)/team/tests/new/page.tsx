@@ -11,7 +11,11 @@ export const metadata: Metadata = {
   title: "New Test",
 };
 
-export default async function NewTestPage() {
+export default async function NewTestPage({
+  searchParams,
+}: {
+  searchParams?: { testSeriesId?: string };
+}) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) redirect("/login");
 
@@ -35,27 +39,60 @@ export default async function NewTestPage() {
     batchIdFilter = Array.from(assignedBatchIds);
   }
 
-  const eligibleSchedules = await prisma.batchSchedule.findMany({
-    where: {
-      type: "TEST",
-      test: null,
-      ...(batchIdFilter && { batchId: { in: batchIdFilter } }),
-    },
-    include: { batch: { select: { name: true } } },
-    orderBy: { startsAt: "asc" },
-  });
+  const [eligibleSchedules, testSeriesList, templates] = await Promise.all([
+    prisma.batchSchedule.findMany({
+      where: {
+        type: "TEST",
+        test: null,
+        ...(batchIdFilter && { batchId: { in: batchIdFilter } }),
+      },
+      include: { batch: { select: { name: true } } },
+      orderBy: { startsAt: "asc" },
+    }),
+    prisma.testSeries.findMany({
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        targetBatch: true,
+        course: true,
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.testTemplate.findMany({
+      include: {
+        sections: { orderBy: { order: "asc" } },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
 
   return (
-    <div className="space-y-stack-lg max-w-3xl">
+    <div className="space-y-stack-lg max-w-4xl mx-auto">
       <div>
         <h1 className="font-headline-lg text-headline-lg text-primary">New Test</h1>
         <p className="text-on-surface-variant font-body-md mt-1">
-          Bind this test to an existing "Test" timetable slot — its start/end time becomes the
-          test's open window.
+          Create a test with systematic exam blueprints (NEET / JEE / Chapter Test / Custom Template) and link to a Test Series or Timetable slot.
         </p>
       </div>
+
       <TestForm
         mode="create"
+        initialTestSeriesId={searchParams?.testSeriesId}
+        testSeriesOptions={testSeriesList}
+        templates={templates.map((t) => ({
+          id: t.id,
+          name: t.name,
+          description: t.description,
+          sections: t.sections.map((s) => ({
+            id: s.id,
+            name: s.name,
+            subject: s.subject,
+            targetCount: s.targetCount,
+            marksPerQuestion: s.marksPerQuestion,
+            negativeMarks: s.negativeMarks,
+          })),
+        }))}
         scheduleOptions={eligibleSchedules.map((s) => ({
           id: s.id,
           title: s.title,

@@ -1,7 +1,10 @@
 import { z } from "zod";
 
 export const testCreateSchema = z.object({
-  batchScheduleId: z.string().min(1, "batchScheduleId is required"),
+  batchScheduleId: z.string().optional().nullable().or(z.literal("")),
+  testSeriesId: z.string().optional().nullable().or(z.literal("")),
+  templateId: z.string().optional().nullable().or(z.literal("")),
+  templatePreset: z.enum(["NEET", "JEE", "CHAPTER_TEST", "CUSTOM"]).optional().nullable(),
   title: z.string().min(1, "Title is required").max(200),
   instructions: z.string().max(4000).optional(),
   durationMin: z.number().int().min(1, "Duration must be at least 1 minute").max(600),

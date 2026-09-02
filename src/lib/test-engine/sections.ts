@@ -3,16 +3,43 @@ import { prisma } from "@/lib/db";
 
 const DEFAULT_SECTION_NAME = "General";
 
+export const PRESET_BLUEPRINTS = {
+  NEET: {
+    name: "NEET UG Blueprint (180Q / 720 Marks)",
+    durationMin: 200,
+    sections: [
+      { name: "Physics Section A", subject: "Physics", targetCount: 35, marksPerQuestion: 4, negativeMarks: -1, order: 0 },
+      { name: "Physics Section B", subject: "Physics", targetCount: 15, marksPerQuestion: 4, negativeMarks: -1, order: 1 },
+      { name: "Chemistry Section A", subject: "Chemistry", targetCount: 35, marksPerQuestion: 4, negativeMarks: -1, order: 2 },
+      { name: "Chemistry Section B", subject: "Chemistry", targetCount: 15, marksPerQuestion: 4, negativeMarks: -1, order: 3 },
+      { name: "Botany Section A", subject: "Biology", targetCount: 35, marksPerQuestion: 4, negativeMarks: -1, order: 4 },
+      { name: "Botany Section B", subject: "Biology", targetCount: 15, marksPerQuestion: 4, negativeMarks: -1, order: 5 },
+      { name: "Zoology Section A", subject: "Biology", targetCount: 35, marksPerQuestion: 4, negativeMarks: -1, order: 6 },
+      { name: "Zoology Section B", subject: "Biology", targetCount: 15, marksPerQuestion: 4, negativeMarks: -1, order: 7 },
+    ],
+  },
+  JEE: {
+    name: "JEE Main Blueprint (90Q / 300 Marks)",
+    durationMin: 180,
+    sections: [
+      { name: "Physics", subject: "Physics", targetCount: 30, marksPerQuestion: 4, negativeMarks: -1, order: 0 },
+      { name: "Chemistry", subject: "Chemistry", targetCount: 30, marksPerQuestion: 4, negativeMarks: -1, order: 1 },
+      { name: "Mathematics", subject: "Mathematics", targetCount: 30, marksPerQuestion: 4, negativeMarks: -1, order: 2 },
+    ],
+  },
+  CHAPTER_TEST: {
+    name: "Chapter Assessment (30Q / 120 Marks)",
+    durationMin: 60,
+    sections: [
+      { name: "Section A (Single Choice)", subject: "General", targetCount: 30, marksPerQuestion: 4, negativeMarks: -1, order: 0 },
+    ],
+  },
+};
+
 /**
- * Simple batch-scheduled tests (and most standalone tests created via the
- * existing team-portal UI) don't expose the new multi-section structure —
- * they still work with "the test's questions" as one flat list. This
- * auto-creates a single Section named "General" per test the first time
- * it's needed, so the UI/API layer above doesn't have to change to
- * accommodate the new Test -> Section -> SectionQuestion -> Question chain
- * introduced by the Test Portal schema merge. Multi-section tests (Test
- * Series builder, Phase D) create their own named sections directly and
- * never call this.
+ * Simple batch-scheduled tests don't expose multi-section structure upfront —
+ * this auto-creates a single Section named "General" per test the first time
+ * it's needed.
  */
 export async function getOrCreateDefaultSection(testId: string) {
   const existing = await prisma.section.findFirst({
@@ -104,6 +131,44 @@ export async function createSectionsFromTemplate(testId: string, templateId: str
 }
 
 /**
+ * Instantiates section structure from a known systematic preset (NEET, JEE, CHAPTER_TEST).
+ */
+export async function createSectionsFromPreset(testId: string, preset: "NEET" | "JEE" | "CHAPTER_TEST") {
+  const blueprint = PRESET_BLUEPRINTS[preset];
+  if (!blueprint) throw new Error("Unknown preset blueprint");
+
+  await prisma.section.deleteMany({ where: { testId } });
+
+  await prisma.$transaction([
+    prisma.test.update({
+      where: { id: testId },
+      data: {
+        durationMin: blueprint.durationMin,
+        examType: preset,
+      },
+    }),
+    ...blueprint.sections.map((sec, idx) =>
+      prisma.section.create({
+        data: {
+          testId,
+          name: sec.name,
+          subject: sec.subject,
+          targetCount: sec.targetCount,
+          marksPerQuestion: sec.marksPerQuestion,
+          negativeMarks: sec.negativeMarks,
+          order: sec.order ?? idx,
+        },
+      })
+    ),
+  ]);
+
+  return prisma.section.findMany({
+    where: { testId },
+    orderBy: { order: "asc" },
+  });
+}
+
+/**
  * Returns detailed section summary including question counts, target counts, and marks.
  */
 export async function getTestSectionBreakdown(testId: string) {
@@ -125,4 +190,3 @@ export async function getTestSectionBreakdown(testId: string) {
     orderBy: { order: "asc" },
   });
 }
-

@@ -6,15 +6,12 @@ import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { seriesTestCreateSchema } from "@/lib/validation/test-series";
+import {
+  createSectionsFromTemplate,
+  createSectionsFromPreset,
+  getOrCreateDefaultSection,
+} from "@/lib/test-engine/sections";
 
-/**
- * Creates a standalone Test (no batchScheduleId) directly under a
- * TestSeries. Gated the same as everything else that manages a
- * non-batch-bound test — see canManageTest() in
- * @/lib/test-engine/access.ts — so creation and later management stay
- * consistent (a teacher who could create one but not manage it afterward
- * would be a dead end).
- */
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions);
@@ -29,12 +26,22 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const test = await prisma.test.create({
       data: {
         testSeriesId: series.id,
-        name: data.title,
+        name: data.title.trim(),
         instructions: data.instructions || null,
         durationMin: data.durationMin,
+        templateId: data.templateId || null,
         createdById: session.user.id,
       },
     });
+
+    // Apply template or preset sections
+    if (data.templateId) {
+      await createSectionsFromTemplate(test.id, data.templateId);
+    } else if (data.templatePreset && ["NEET", "JEE", "CHAPTER_TEST"].includes(data.templatePreset)) {
+      await createSectionsFromPreset(test.id, data.templatePreset as "NEET" | "JEE" | "CHAPTER_TEST");
+    } else {
+      await getOrCreateDefaultSection(test.id);
+    }
 
     await prisma.auditLog.create({
       data: {
@@ -42,7 +49,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         action: "TEST_CREATED",
         entityType: "Test",
         entityId: test.id,
-        metadata: { testSeriesId: series.id },
+        metadata: {
+          testSeriesId: series.id,
+          templateId: data.templateId,
+          templatePreset: data.templatePreset,
+        },
       },
     });
 

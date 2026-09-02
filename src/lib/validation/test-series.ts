@@ -24,11 +24,12 @@ export const testSeriesStatusUpdateSchema = z.object({
 
 export type TestSeriesStatusUpdateInput = z.infer<typeof testSeriesStatusUpdateSchema>;
 
-/** A standalone test created directly under a TestSeries — no BatchSchedule. */
 export const seriesTestCreateSchema = z.object({
   title: z.string().trim().min(1, "Title is required").max(200),
   durationMin: z.coerce.number().int().min(1, "Duration must be at least 1 minute").max(600),
   instructions: z.string().trim().max(4000).optional().or(z.literal("")),
+  templateId: z.string().optional().nullable().or(z.literal("")),
+  templatePreset: z.enum(["NEET", "JEE", "CHAPTER_TEST", "CUSTOM"]).optional().nullable(),
 });
 
 export type SeriesTestCreateInput = z.infer<typeof seriesTestCreateSchema>;

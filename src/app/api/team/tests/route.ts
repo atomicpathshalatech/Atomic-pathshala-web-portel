@@ -7,14 +7,12 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { resolveTeacherForSchedule } from "@/lib/batch/access";
 import { testCreateSchema } from "@/lib/validation/test";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import {
+  createSectionsFromTemplate,
+  createSectionsFromPreset,
+  getOrCreateDefaultSection,
+} from "@/lib/test-engine/sections";
 
-/**
- * Tests are scoped like everything else batch-first: a teacher who isn't an
- * admin only ever sees tests bound to batches they're actually assigned to
- * (via BatchTeacher or as the schedule's own teacher) — same ownership rule
- * as the live whiteboard, moved to src/lib/batch/access.ts so both features
- * share one implementation.
- */
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -22,12 +20,21 @@ export async function GET(request: NextRequest) {
     await requirePermission(session.user.id, PERMISSIONS.TEST_READ);
 
     const batchId = request.nextUrl.searchParams.get("batchId") ?? undefined;
+    const testSeriesId = request.nextUrl.searchParams.get("testSeriesId") ?? undefined;
     const isAdmin = await hasPermission(session.user.id, PERMISSIONS.TEST_PUBLISH);
 
     if (isAdmin) {
       const tests = await prisma.test.findMany({
-        where: batchId ? { batchSchedule: { batchId } } : {},
-        include: { batchSchedule: { include: { batch: { select: { id: true, name: true } } } } },
+        where: {
+          ...(batchId && { batchSchedule: { batchId } }),
+          ...(testSeriesId && { testSeriesId }),
+        },
+        include: {
+          batchSchedule: { include: { batch: { select: { id: true, name: true } } } },
+          testSeries: { select: { id: true, name: true, code: true } },
+          template: { select: { id: true, name: true } },
+          _count: { select: { sections: true, attempts: true } },
+        },
         orderBy: { createdAt: "desc" },
       });
       return apiSuccess({ tests });
@@ -48,11 +55,22 @@ export async function GET(request: NextRequest) {
 
     const tests = await prisma.test.findMany({
       where: {
-        batchSchedule: {
-          batchId: batchId ?? { in: Array.from(assignedBatchIds) },
-        },
+        OR: [
+          {
+            batchSchedule: {
+              batchId: batchId ?? { in: Array.from(assignedBatchIds) },
+            },
+          },
+          { createdById: session.user.id },
+          ...(testSeriesId ? [{ testSeriesId }] : []),
+        ],
       },
-      include: { batchSchedule: { include: { batch: { select: { id: true, name: true } } } } },
+      include: {
+        batchSchedule: { include: { batch: { select: { id: true, name: true } } } },
+        testSeries: { select: { id: true, name: true, code: true } },
+        template: { select: { id: true, name: true } },
+        _count: { select: { sections: true, attempts: true } },
+      },
       orderBy: { createdAt: "desc" },
     });
     return apiSuccess({ tests });
@@ -69,29 +87,46 @@ export async function POST(request: NextRequest) {
 
     const input = testCreateSchema.parse(await request.json());
 
-    const existing = await prisma.test.findUnique({ where: { batchScheduleId: input.batchScheduleId } });
-    if (existing) return apiError("A test already exists for this schedule entry.", 409);
+    let finalScheduleId: string | null = null;
+    let finalTestSeriesId: string | null = input.testSeriesId || null;
 
-    const { schedule, teacher } = await resolveTeacherForSchedule(session.user.id, input.batchScheduleId);
-    if (!schedule) return apiError("Scheduled test slot not found", 404);
-    if (schedule.type !== "TEST") {
-      return apiError("Tests can only be attached to a 'Test' type schedule entry.", 400);
-    }
+    if (input.batchScheduleId) {
+      const existing = await prisma.test.findUnique({ where: { batchScheduleId: input.batchScheduleId } });
+      if (existing) return apiError("A test already exists for this schedule entry.", 409);
 
-    const isAdmin = await hasPermission(session.user.id, PERMISSIONS.TEST_PUBLISH);
-    if (!teacher && !isAdmin) {
-      throw new ForbiddenError("You are not assigned to teach this batch.");
+      const { schedule, teacher } = await resolveTeacherForSchedule(session.user.id, input.batchScheduleId);
+      if (!schedule) return apiError("Scheduled test slot not found", 404);
+      if (schedule.type !== "TEST") {
+        return apiError("Tests can only be attached to a 'Test' type schedule entry.", 400);
+      }
+
+      const isAdmin = await hasPermission(session.user.id, PERMISSIONS.TEST_PUBLISH);
+      if (!teacher && !isAdmin) {
+        throw new ForbiddenError("You are not assigned to teach this batch.");
+      }
+      finalScheduleId = schedule.id;
     }
 
     const test = await prisma.test.create({
       data: {
-        batchScheduleId: schedule.id,
-        name: input.title,
+        batchScheduleId: finalScheduleId,
+        testSeriesId: finalTestSeriesId,
+        name: input.title.trim(),
         instructions: input.instructions || null,
-        durationMin: input.durationMin,
+        durationMin: input.durationMin || 60,
+        templateId: input.templateId || null,
         createdById: session.user.id,
       },
     });
+
+    // Apply template or preset sections systematically
+    if (input.templateId) {
+      await createSectionsFromTemplate(test.id, input.templateId);
+    } else if (input.templatePreset && ["NEET", "JEE", "CHAPTER_TEST"].includes(input.templatePreset)) {
+      await createSectionsFromPreset(test.id, input.templatePreset as "NEET" | "JEE" | "CHAPTER_TEST");
+    } else {
+      await getOrCreateDefaultSection(test.id);
+    }
 
     await prisma.auditLog.create({
       data: {
@@ -99,7 +134,12 @@ export async function POST(request: NextRequest) {
         action: "TEST_CREATED",
         entityType: "Test",
         entityId: test.id,
-        metadata: { batchScheduleId: schedule.id },
+        metadata: {
+          batchScheduleId: finalScheduleId,
+          testSeriesId: finalTestSeriesId,
+          templateId: input.templateId,
+          templatePreset: input.templatePreset,
+        },
       },
     });
 
