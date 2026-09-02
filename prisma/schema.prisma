@@ -78,6 +78,9 @@ model User {
   notifications          Notification[]
   questionsCreated       Question[]     @relation("QuestionCreatedBy")
   questionsPublished     Question[]     @relation("QuestionPublishedBy")
+  questionsReviewed1     Question[]     @relation("QuestionReview1By")
+  questionsReviewed2     Question[]     @relation("QuestionReview2By")
+  questionsEdited        Question[]     @relation("QuestionEditedBy")
   student                Student?
   teacher                Teacher?
   role                   Role           @relation(fields: [roleId], references: [id])
@@ -1379,6 +1382,18 @@ model Question {
   questionCode  String?      @unique
   solution      String?
   tags          String?
+  status        String       @default("DRAFT") // DRAFT | REVIEW_1 | REVIEW_2 | PUBLISHED | REJECTED
+  version       Int          @default(1)
+  review1Status String? // PENDING | APPROVED | REJECTED | CHANGES_REQUESTED
+  review1ById   String?
+  review1At     DateTime?
+  review1Notes  String?
+  review2Status String? // PENDING | APPROVED | REJECTED | CHANGES_REQUESTED
+  review2ById   String?
+  review2At     DateTime?
+  review2Notes  String?
+  editedById    String?
+  editedAt      DateTime?
   usageCount    Int          @default(0)
   isPublished   Boolean      @default(false)
   publishedAt   DateTime?
@@ -1388,6 +1403,9 @@ model Question {
 
   createdBy    User?                 @relation("QuestionCreatedBy", fields: [createdById], references: [id])
   publishedBy  User?                 @relation("QuestionPublishedBy", fields: [publishedById], references: [id])
+  review1By    User?                 @relation("QuestionReview1By", fields: [review1ById], references: [id])
+  review2By    User?                 @relation("QuestionReview2By", fields: [review2ById], references: [id])
+  editedBy     User?                 @relation("QuestionEditedBy", fields: [editedById], references: [id])
   translations QuestionTranslation[]
   versions     QuestionVersion[]
   reports      QuestionReport[]

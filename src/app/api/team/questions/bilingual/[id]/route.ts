@@ -24,7 +24,13 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
 
     const question = await prisma.question.findUnique({
       where: { id: params.id },
-      include: { translations: true },
+      include: {
+        translations: true,
+        createdBy: { select: { id: true, name: true } },
+        editedBy: { select: { id: true, name: true } },
+        review1By: { select: { id: true, name: true } },
+        review2By: { select: { id: true, name: true } },
+      },
     });
     if (!question) return apiError("Question not found", 404);
 
@@ -40,7 +46,10 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.QUESTION_UPDATE);
 
-    const existing = await prisma.question.findUnique({ where: { id: params.id } });
+    const existing = await prisma.question.findUnique({
+      where: { id: params.id },
+      include: { translations: true },
+    });
     if (!existing) return apiError("Question not found", 404);
 
     const data = bilingualQuestionSchema.parse(await request.json());
@@ -56,11 +65,36 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       data.chapterId || undefined
     );
 
-    // Translations are replaced wholesale rather than diffed — simplest
-    // safe approach given the edit form always submits the full set of
-    // languages it's currently showing.
+    const now = new Date();
+    const currentVersion = existing.version || 1;
+
     const question = await prisma.$transaction(async (tx) => {
+      // 1. Create Revision History Snapshot
+      await tx.questionVersion.create({
+        data: {
+          questionId: existing.id,
+          versionNumber: currentVersion,
+          editedById: session.user.id,
+          editedAt: now,
+          reason: "Question content updated",
+          changeType: "EDIT",
+          snapshot: {
+            subject: existing.subject,
+            chapter: existing.chapter,
+            topic: existing.topic,
+            subTopic: existing.subTopic,
+            difficulty: existing.difficulty,
+            type: existing.type,
+            questionCode: existing.questionCode,
+            translations: existing.translations,
+          },
+        },
+      });
+
+      // 2. Replace translations with new version
       await tx.questionTranslation.deleteMany({ where: { questionId: params.id } });
+
+      // 3. Update Question with new version & reset review if published
       return tx.question.update({
         where: { id: params.id },
         data: {
@@ -74,6 +108,21 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
           type: data.type,
           difficulty: data.difficulty,
           tags: legacyTagsToString(data.tags),
+          version: currentVersion + 1,
+          editedById: session.user.id,
+          editedAt: now,
+          ...(existing.isPublished
+            ? {
+                isPublished: false,
+                status: "DRAFT",
+                review1Status: null,
+                review1ById: null,
+                review1At: null,
+                review2Status: null,
+                review2ById: null,
+                review2At: null,
+              }
+            : {}),
           translations: {
             create: data.translations.map((t) => ({
               language: t.language,
@@ -84,16 +133,21 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
             })),
           },
         },
-        include: { translations: true },
+        include: {
+          translations: true,
+          createdBy: { select: { id: true, name: true } },
+          editedBy: { select: { id: true, name: true } },
+        },
       });
     });
 
     await prisma.auditLog.create({
       data: {
         userId: session.user.id,
-        action: "QUESTION_UPDATE",
+        action: "QUESTION_UPDATED_VERSIONED",
         entityType: "Question",
         entityId: question.id,
+        metadata: { version: question.version },
       },
     });
 

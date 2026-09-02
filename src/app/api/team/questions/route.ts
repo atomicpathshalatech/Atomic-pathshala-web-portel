@@ -21,33 +21,108 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const search = searchParams.get("search")?.trim();
-    const status = searchParams.get("status");
-    const difficulty = searchParams.get("difficulty");
-    // Question.subject is now a plain string (not a Subject relation), so
-    // the old subjectId filter no longer applies here directly — dropped.
+    const subject = searchParams.get("subject")?.trim();
+    const topic = searchParams.get("topic")?.trim();
+    const subTopic = searchParams.get("subTopic")?.trim();
+    const difficulty = searchParams.get("difficulty")?.trim();
+    const type = searchParams.get("type")?.trim();
+    const status = searchParams.get("status")?.trim();
+    const createdById = searchParams.get("createdById")?.trim();
+    const reviewedById = searchParams.get("reviewedById")?.trim();
+    const editedById = searchParams.get("editedById")?.trim();
+    const onlyPublished = searchParams.get("onlyPublished") === "true";
+
     const page = Math.max(1, Number(searchParams.get("page") ?? 1));
-    const pageSize = 20;
+    const pageSize = Math.min(100, Math.max(1, Number(searchParams.get("limit") ?? 20)));
 
-    const where = {
-      ...(search
-        ? { translations: { some: { statement: { contains: search, mode: "insensitive" as const } } } }
-        : {}),
-      ...(status === "PUBLISHED" ? { isPublished: true } : {}),
-      ...(status === "PENDING" ? { isPublished: false } : {}),
-      ...(difficulty ? { difficulty: difficulty as "EASY" | "MEDIUM" | "HARD" } : {}),
-    };
+    const where: any = {};
 
-    const [questions, total, statusCounts, difficultyCounts] = await Promise.all([
+    if (search) {
+      where.OR = [
+        { questionCode: { contains: search, mode: "insensitive" } },
+        { tags: { contains: search, mode: "insensitive" } },
+        { translations: { some: { statement: { contains: search, mode: "insensitive" } } } },
+        { translations: { some: { solution: { contains: search, mode: "insensitive" } } } },
+      ];
+    }
+
+    if (subject && subject !== "ALL") {
+      where.subject = { equals: subject, mode: "insensitive" };
+    }
+
+    if (topic && topic !== "ALL") {
+      where.OR = [
+        { topic: { contains: topic, mode: "insensitive" } },
+        { chapter: { contains: topic, mode: "insensitive" } },
+      ];
+    }
+
+    if (subTopic && subTopic !== "ALL") {
+      where.subTopic = { contains: subTopic, mode: "insensitive" };
+    }
+
+    if (difficulty && difficulty !== "ALL") {
+      where.difficulty = difficulty as any;
+    }
+
+    if (type && type !== "ALL") {
+      where.type = type as any;
+    }
+
+    if (onlyPublished) {
+      where.isPublished = true;
+      where.status = "PUBLISHED";
+    } else if (status && status !== "ALL") {
+      if (status === "PUBLISHED") {
+        where.isPublished = true;
+        where.status = "PUBLISHED";
+      } else if (status === "DRAFT") {
+        where.status = "DRAFT";
+      } else if (status === "REVIEW_1") {
+        where.status = "REVIEW_1";
+      } else if (status === "REVIEW_2") {
+        where.status = "REVIEW_2";
+      } else if (status === "REJECTED") {
+        where.status = "REJECTED";
+      }
+    }
+
+    if (createdById && createdById !== "ALL") {
+      where.createdById = createdById;
+    }
+
+    if (reviewedById && reviewedById !== "ALL") {
+      where.OR = [
+        { review1ById: reviewedById },
+        { review2ById: reviewedById },
+        { publishedById: reviewedById },
+      ];
+    }
+
+    if (editedById && editedById !== "ALL") {
+      where.editedById = editedById;
+    }
+
+    const [questions, total, publishedCount, review1Count, review2Count, draftCount] = await Promise.all([
       prisma.question.findMany({
         where,
-        include: { translations: true },
+        include: {
+          translations: true,
+          createdBy: { select: { id: true, name: true, email: true } },
+          editedBy: { select: { id: true, name: true, email: true } },
+          review1By: { select: { id: true, name: true, email: true } },
+          review2By: { select: { id: true, name: true, email: true } },
+          publishedBy: { select: { id: true, name: true, email: true } },
+        },
         orderBy: { createdAt: "desc" },
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
       prisma.question.count({ where }),
-      prisma.question.groupBy({ by: ["isPublished"], _count: true }),
-      prisma.question.groupBy({ by: ["difficulty"], _count: true }),
+      prisma.question.count({ where: { status: "PUBLISHED" } }),
+      prisma.question.count({ where: { status: "REVIEW_1" } }),
+      prisma.question.count({ where: { status: "REVIEW_2" } }),
+      prisma.question.count({ where: { status: "DRAFT" } }),
     ]);
 
     return apiSuccess({
@@ -55,8 +130,13 @@ export async function GET(request: NextRequest) {
       total,
       page,
       pageSize,
-      statusCounts,
-      difficultyCounts,
+      counts: {
+        published: publishedCount,
+        review1: review1Count,
+        review2: review2Count,
+        draft: draftCount,
+        total: publishedCount + review1Count + review2Count + draftCount,
+      },
     });
   } catch (error) {
     return handleApiError(error);
@@ -82,6 +162,8 @@ export async function POST(request: NextRequest) {
         difficulty: data.difficulty,
         tags: legacyTagsToString(data.tags),
         createdById: session.user.id,
+        status: "DRAFT",
+        version: 1,
         translations: {
           create: legacyToTranslationCreate(data),
         },

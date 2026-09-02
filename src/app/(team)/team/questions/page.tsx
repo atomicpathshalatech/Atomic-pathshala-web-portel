@@ -6,17 +6,29 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
-import { QuestionStatusActions } from "@/components/team-portal/QuestionStatusActions";
-import { toLegacyQuestion } from "@/lib/questions/legacy";
+import { QuestionManagementTable } from "@/components/team-portal/QuestionManagementTable";
+import { Plus, Languages } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Question Bank",
+  title: "Question Bank & Assessment Management",
 };
 
 export default async function QuestionBankPage({
   searchParams,
 }: {
-  searchParams: { search?: string; status?: string; difficulty?: string; page?: string };
+  searchParams: {
+    search?: string;
+    subject?: string;
+    topic?: string;
+    subTopic?: string;
+    difficulty?: string;
+    type?: string;
+    status?: string;
+    createdById?: string;
+    reviewedById?: string;
+    editedById?: string;
+    page?: string;
+  };
 }) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) redirect("/login");
@@ -30,215 +42,159 @@ export default async function QuestionBankPage({
   const page = Math.max(1, Number(searchParams.page ?? 1));
   const pageSize = 20;
 
-  const where = {
-    ...(searchParams.search
-      ? { translations: { some: { statement: { contains: searchParams.search, mode: "insensitive" as const } } } }
-      : {}),
-    ...(searchParams.status === "PUBLISHED" ? { isPublished: true } : {}),
-    ...(searchParams.status === "PENDING" ? { isPublished: false } : {}),
-    ...(searchParams.difficulty
-      ? { difficulty: searchParams.difficulty as "EASY" | "MEDIUM" | "HARD" }
-      : {}),
-  };
+  // Build Filter Query
+  const where: any = {};
 
-  const [questions, total, publishedCounts, subjectCount] = await Promise.all([
+  if (searchParams.search) {
+    where.OR = [
+      { questionCode: { contains: searchParams.search, mode: "insensitive" } },
+      { tags: { contains: searchParams.search, mode: "insensitive" } },
+      { translations: { some: { statement: { contains: searchParams.search, mode: "insensitive" } } } },
+      { translations: { some: { solution: { contains: searchParams.search, mode: "insensitive" } } } },
+    ];
+  }
+
+  if (searchParams.subject && searchParams.subject !== "ALL") {
+    where.subject = { equals: searchParams.subject, mode: "insensitive" };
+  }
+
+  if (searchParams.topic && searchParams.topic !== "ALL") {
+    where.OR = [
+      { topic: { contains: searchParams.topic, mode: "insensitive" } },
+      { chapter: { contains: searchParams.topic, mode: "insensitive" } },
+    ];
+  }
+
+  if (searchParams.subTopic && searchParams.subTopic !== "ALL") {
+    where.subTopic = { contains: searchParams.subTopic, mode: "insensitive" };
+  }
+
+  if (searchParams.difficulty && searchParams.difficulty !== "ALL") {
+    where.difficulty = searchParams.difficulty as any;
+  }
+
+  if (searchParams.type && searchParams.type !== "ALL") {
+    where.type = searchParams.type as any;
+  }
+
+  if (searchParams.status && searchParams.status !== "ALL") {
+    if (searchParams.status === "PUBLISHED") {
+      where.isPublished = true;
+      where.status = "PUBLISHED";
+    } else {
+      where.status = searchParams.status;
+    }
+  }
+
+  if (searchParams.createdById && searchParams.createdById !== "ALL") {
+    where.createdById = searchParams.createdById;
+  }
+
+  if (searchParams.reviewedById && searchParams.reviewedById !== "ALL") {
+    where.OR = [
+      { review1ById: searchParams.reviewedById },
+      { review2ById: searchParams.reviewedById },
+      { publishedById: searchParams.reviewedById },
+    ];
+  }
+
+  if (searchParams.editedById && searchParams.editedById !== "ALL") {
+    where.editedById = searchParams.editedById;
+  }
+
+  const [
+    questions,
+    total,
+    publishedCount,
+    review1Count,
+    review2Count,
+    draftCount,
+    usersList,
+  ] = await Promise.all([
     prisma.question.findMany({
       where,
-      include: { translations: true },
+      include: {
+        translations: true,
+        createdBy: { select: { id: true, name: true, email: true } },
+        editedBy: { select: { id: true, name: true, email: true } },
+        review1By: { select: { id: true, name: true, email: true } },
+        review2By: { select: { id: true, name: true, email: true } },
+        publishedBy: { select: { id: true, name: true, email: true } },
+      },
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * pageSize,
       take: pageSize,
     }),
     prisma.question.count({ where }),
-    prisma.question.groupBy({ by: ["isPublished"], _count: true }),
-    prisma.subject.count(),
+    prisma.question.count({ where: { status: "PUBLISHED" } }),
+    prisma.question.count({ where: { status: "REVIEW_1" } }),
+    prisma.question.count({ where: { status: "REVIEW_2" } }),
+    prisma.question.count({ where: { status: "DRAFT" } }),
+    prisma.user.findMany({
+      where: { status: "ACTIVE" },
+      select: { id: true, name: true, email: true },
+      orderBy: { name: "asc" },
+      take: 100,
+    }),
   ]);
 
-  const totalQuestions = await prisma.question.count();
-  const countFor = (isPublished: boolean) =>
-    publishedCounts.find((s) => s.isPublished === isPublished)?._count ?? 0;
-
-  // "Bilingual" here means genuinely built on the real Question Bank v2
-  // model (more than one language, or PYQ/question-code metadata set) —
-  // those questions route to the bilingual edit form; everything else
-  // (the legacy single-language shim's own questions) keeps using the
-  // original edit flow so existing rows keep working unchanged.
-  const rows = questions.map((q) => ({
-    ...toLegacyQuestion(q),
-    difficultyRaw: q.difficulty,
-    isBilingual: q.translations.length > 1 || Boolean(q.questionCode) || Boolean(q.pyqSource),
-  }));
+  const totalQuestions = publishedCount + review1Count + review2Count + draftCount;
 
   return (
-    <div className="space-y-stack-lg max-w-7xl">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+    <div className="space-y-6 max-w-7xl mx-auto">
+      {/* Header Bar */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="font-headline-lg text-headline-lg text-primary tracking-tight">Question Bank</h1>
-          <p className="text-on-surface-variant font-body-md mt-1">
-            {totalQuestions} question{totalQuestions === 1 ? "" : "s"} total.
+          <h1 className="font-extrabold text-2xl text-slate-900 dark:text-white tracking-tight">
+            Question Bank
+          </h1>
+          <p className="text-xs text-slate-500 mt-1">
+            {totalQuestions} questions total · Structured 2-stage verification workflow.
           </p>
         </div>
+
         {canCreate && (
           <div className="flex items-center gap-3">
             <Link
               href="/team/questions/bilingual/new"
-              className="flex items-center gap-2 bg-surface-container-lowest border border-primary text-primary px-5 py-3 rounded-xl font-label-md hover:bg-primary-container/10 transition-all"
-              title="Full Question Bank v2 form — Hindi/English, PYQ source, question code"
+              className="flex items-center gap-2 bg-white border border-blue-600 text-blue-600 px-5 py-2.5 rounded-full font-bold text-xs hover:bg-blue-50 transition-all shadow-sm"
+              title="Author bilingual question with Hindi and English"
             >
-              <span className="material-symbols-outlined">translate</span>
-              New (Bilingual)
+              <Languages className="w-4 h-4" />
+              <span>New (Bilingual)</span>
             </Link>
             <Link
               href="/team/questions/new"
-              className="flex items-center gap-2 bg-primary text-white px-6 py-3 rounded-xl font-label-md shadow-lg hover:shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all"
+              className="flex items-center gap-2 bg-blue-600 text-white px-6 py-2.5 rounded-full font-bold text-xs shadow-md shadow-blue-500/20 hover:bg-blue-500 active:scale-95 transition-all"
             >
-              <span className="material-symbols-outlined">add_circle</span>
-              Create Question
+              <Plus className="w-4 h-4" />
+              <span>Create Question</span>
             </Link>
           </div>
         )}
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-gutter">
-        <div className="glass-card p-6 rounded-2xl">
-          <p className="text-on-surface-variant font-label-md mb-1">Published</p>
-          <h3 className="text-[28px] font-bold text-tertiary">{countFor(true)}</h3>
-        </div>
-        <div className="glass-card p-6 rounded-2xl">
-          <p className="text-on-surface-variant font-label-md mb-1">Unpublished</p>
-          <h3 className="text-[28px] font-bold text-primary">{countFor(false)}</h3>
-        </div>
-      </div>
-
-      {subjectCount === 0 && (
-        <div className="rounded-xl bg-primary-container/10 border border-primary/20 px-4 py-3 text-label-sm font-label-sm text-on-surface-variant">
-          No subjects/chapters exist yet, so new questions are being saved unclassified. Add
-          subjects via the Content Team module once it&apos;s built to enable classification.
-        </div>
-      )}
-
-      {/* Filters */}
-      <form className="glass-card p-4 rounded-xl flex flex-wrap items-center gap-4" method="get">
-        <input
-          name="search"
-          defaultValue={searchParams.search}
-          placeholder="Search question text..."
-          className="flex-1 min-w-[200px] bg-surface-container-low rounded-lg border border-outline-variant/30 px-3 py-2 text-label-md"
-        />
-        <select
-          name="status"
-          defaultValue={searchParams.status ?? ""}
-          className="bg-surface-container-low rounded-lg border border-outline-variant/30 px-3 py-2 text-label-md"
-        >
-          <option value="">All Status</option>
-          <option value="PENDING">Unpublished</option>
-          <option value="PUBLISHED">Published</option>
-        </select>
-        <select
-          name="difficulty"
-          defaultValue={searchParams.difficulty ?? ""}
-          className="bg-surface-container-low rounded-lg border border-outline-variant/30 px-3 py-2 text-label-md"
-        >
-          <option value="">All Difficulty</option>
-          <option value="EASY">Easy</option>
-          <option value="MEDIUM">Medium</option>
-          <option value="HARD">Hard</option>
-        </select>
-        <button type="submit" className="px-4 py-2 bg-primary text-on-primary rounded-lg font-label-md">
-          Apply
-        </button>
-      </form>
-
-      {/* Table */}
-      <div className="glass-card rounded-2xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead className="bg-surface-container-low border-b border-outline-variant/30">
-              <tr>
-                <th className="px-6 py-4 font-label-md text-on-surface-variant">Question Preview</th>
-                <th className="px-6 py-4 font-label-md text-on-surface-variant">Subject/Topic</th>
-                <th className="px-6 py-4 font-label-md text-on-surface-variant">Difficulty</th>
-                <th className="px-6 py-4 font-label-md text-on-surface-variant">Status</th>
-                <th className="px-6 py-4 font-label-md text-on-surface-variant text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-outline-variant/20">
-              {rows.map((q) => (
-                <tr key={q.id} className="hover:bg-surface-container-lowest/50 transition-colors group">
-                  <td className="px-6 py-5 max-w-md">
-                    <p className="line-clamp-2">{q.body}</p>
-                    <span className="text-label-sm text-outline-variant">ID: {q.id.slice(0, 10)}</span>
-                  </td>
-                  <td className="px-6 py-5">
-                    <div className="flex flex-col">
-                      <span className="font-label-md text-primary">{q.subject ?? "Unclassified"}</span>
-                      {q.chapter && <span className="text-label-sm text-on-surface-variant">{q.chapter}</span>}
-                    </div>
-                  </td>
-                  <td className="px-6 py-5 text-label-sm">{q.difficultyRaw}</td>
-                  <td className="px-6 py-5">
-                    <span
-                      className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
-                        q.isPublished
-                          ? "bg-tertiary-container text-on-tertiary-container"
-                          : "bg-primary-container text-on-primary-container"
-                      }`}
-                    >
-                      {q.isPublished ? "Published" : "Unpublished"}
-                    </span>
-                  </td>
-                  <td className="px-6 py-5 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <Link
-                        href={q.isBilingual ? `/team/questions/bilingual/${q.id}/edit` : `/team/questions/${q.id}/edit`}
-                        className="p-1 hover:text-primary"
-                        title="Edit"
-                      >
-                        <span className="material-symbols-outlined">edit</span>
-                      </Link>
-                      {canVerify && <QuestionStatusActions questionId={q.id} isPublished={q.isPublished} />}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-
-              {rows.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-on-surface-variant font-body-md">
-                    No questions match these filters yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="px-6 py-4 bg-surface-container-low/50 flex items-center justify-between">
-          <p className="text-label-sm text-on-surface-variant">
-            Showing {rows.length === 0 ? 0 : (page - 1) * pageSize + 1}-
-            {(page - 1) * pageSize + rows.length} of {total} questions
-          </p>
-          <div className="flex gap-2">
-            {page > 1 && (
-              <Link
-                href={{ pathname: "/team/questions", query: { ...searchParams, page: page - 1 } }}
-                className="px-3 py-1 border border-outline-variant rounded hover:bg-white transition-all text-sm"
-              >
-                Prev
-              </Link>
-            )}
-            {page * pageSize < total && (
-              <Link
-                href={{ pathname: "/team/questions", query: { ...searchParams, page: page + 1 } }}
-                className="px-3 py-1 border border-outline-variant rounded hover:bg-white transition-all text-sm"
-              >
-                Next
-              </Link>
-            )}
-          </div>
-        </div>
-      </div>
+      {/* Main Question Management Table & Filters */}
+      <QuestionManagementTable
+        questions={questions.map((q) => ({
+          ...q,
+          isBilingual: q.translations.length > 1 || Boolean(q.questionCode) || Boolean(q.pyqSource),
+        }))}
+        totalCount={total}
+        currentPage={page}
+        pageSize={pageSize}
+        counts={{
+          total: totalQuestions,
+          published: publishedCount,
+          review1: review1Count,
+          review2: review2Count,
+          draft: draftCount,
+        }}
+        usersList={usersList}
+        canCreate={canCreate}
+        canVerify={canVerify}
+        currentUserId={session.user.id}
+      />
     </div>
   );
 }
