@@ -89,23 +89,23 @@ export default async function ProfilePage() {
         <div className="lg:col-span-2 space-y-stack-lg">
           {/* Personal Details */}
           <InfoCard icon="person" title="Personal Details">
-            <Field label="Full Name" value={user.name} />
-            <Field label="Email Address" value={user.email} />
+            <Field label="Full Name" value={user.name || "—"} />
+            <Field label="Email Address" value={user.email || "—"} />
             <Field label="Phone Number" value={user.phone ?? "—"} />
             <Field label="Date of Birth" value={formatDate(student.dob)} />
             <Field label="Gender" value={capitalize(student.gender)} />
             <Field label="Blood Group" value={student.bloodGroup ?? "—"} />
-            <Field label="State / City" value={`${student.state}, ${student.city}`} full />
+            <Field label="State / City" value={student.state && student.city ? `${student.state}, ${student.city}` : student.state || student.city || "—"} full />
             {student.address && <Field label="Address" value={student.address} full />}
           </InfoCard>
 
           {/* Academic Details */}
           <InfoCard icon="school" title="Academic Details">
-            <Field label="School / Institution" value={student.school} full />
-            <Field label="Class" value={student.class} />
-            <Field label="Target Exam" value={student.targetExam} />
-            <Field label="Enrollment Number" value={student.enrollmentNumber} />
-            <Field label="Student ID" value={student.studentIdCode} />
+            <Field label="School / Institution" value={student.school || "—"} full />
+            <Field label="Class" value={student.class ? `Class ${student.class}` : "—"} />
+            <Field label="Target Exam" value={student.targetExam || "NEET"} />
+            <Field label="Enrollment Number" value={student.enrollmentNumber || "—"} />
+            <Field label="Student ID" value={student.studentIdCode || "—"} />
           </InfoCard>
 
           {/* Guardian Details */}
@@ -192,6 +192,7 @@ function SidebarLink({ href, icon, label }: { href: string; icon: string; label:
   );
 }
 
-function capitalize(value: string): string {
-  return value.charAt(0) + value.slice(1).toLowerCase();
+function capitalize(value: string | null | undefined): string {
+  if (!value) return "—";
+  return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
 }

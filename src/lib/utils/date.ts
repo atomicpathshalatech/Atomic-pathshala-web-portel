@@ -1,7 +1,14 @@
 import { format } from "date-fns";
 
-export function formatDate(date: Date): string {
-  return format(date, "d MMM yyyy");
+export function formatDate(date: Date | string | number | null | undefined): string {
+  if (!date) return "—";
+  try {
+    const d = typeof date === "string" || typeof date === "number" ? new Date(date) : date;
+    if (isNaN(d.getTime())) return "—";
+    return format(d, "d MMM yyyy");
+  } catch {
+    return "—";
+  }
 }
 
 /**

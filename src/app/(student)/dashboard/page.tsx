@@ -103,7 +103,7 @@ export default async function StudentDashboardPage() {
   );
   const overallAccuracy = totalAttempted > 0 ? Math.round((totalCorrect / totalAttempted) * 100) : null;
 
-  const firstName = student.user.name.split(" ")[0];
+  const firstName = (student.user.name || "Student").split(" ")[0];
   const hour = now.getHours();
   const greeting = hour < 12 ? "Good Morning" : hour < 17 ? "Good Afternoon" : "Good Evening";
 
@@ -114,7 +114,7 @@ export default async function StudentDashboardPage() {
         <div className="z-10 space-y-1">
           <div className="flex items-center gap-2">
             <span className="text-xs uppercase font-bold px-2.5 py-0.5 rounded-full bg-primary/10 text-primary">
-              Class {student.class} &middot; {student.targetExam}
+              Class {student.class || "12"} &middot; {student.targetExam || "NEET"}
             </span>
           </div>
           <h1 className="font-display-lg text-display-lg-mobile md:text-display-lg font-bold text-on-surface">
