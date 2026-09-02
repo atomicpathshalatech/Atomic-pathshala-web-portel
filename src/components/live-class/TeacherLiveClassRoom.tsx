@@ -250,7 +250,7 @@ async function deleteJson(url: string) {
 }
 
 type SettingsTab = "audio" | "chatpoll" | "broadcast" | "shortcuts";
-type PopupId = "pen" | "highlight" | "eraser" | "shapes" | "pages" | "zoom" | "more" | null;
+type PopupId = "pen" | "highlight" | "eraser" | "shapes" | "pages" | "zoom" | "more" | "pollMenu" | null;
 
 export function TeacherLiveClassRoom({
   batchScheduleId,
