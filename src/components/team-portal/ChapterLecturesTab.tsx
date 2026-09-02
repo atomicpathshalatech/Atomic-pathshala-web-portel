@@ -526,7 +526,16 @@ export function ChapterLecturesTab({
                 </div>
               </div>
 
-              {error && <p className="text-xs text-red-500">{error}</p>}
+              {error && (
+                <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl space-y-1">
+                  <p className="text-xs font-semibold text-red-500">{error}</p>
+                  {error.includes("DPP") && (
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      💡 <strong>System Rule:</strong> Har 2 Lectures ke baad DPP create karke questions submit karna compulsory hai. Pehle <strong>DPPs Tab</strong> me jakar required DPP submit karein, fir agla lecture schedule ho jayega.
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
                 <button
