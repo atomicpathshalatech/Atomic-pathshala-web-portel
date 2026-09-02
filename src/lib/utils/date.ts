@@ -11,6 +11,17 @@ export function formatDate(date: Date | string | number | null | undefined): str
   }
 }
 
+export function formatDateTime(date: Date | string | number | null | undefined): string {
+  if (!date) return "—";
+  try {
+    const d = typeof date === "string" || typeof date === "number" ? new Date(date) : date;
+    if (isNaN(d.getTime())) return "—";
+    return format(d, "d MMM yyyy, h:mm a");
+  } catch {
+    return "—";
+  }
+}
+
 /**
  * The ID card's "Valid Until" is derived from the current academic session
  * (India: April–March), not invented — it's always 31 March of the session

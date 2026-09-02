@@ -1,130 +1,62 @@
-﻿"use client";
+"use client";
 
 import React from "react";
 import Link from "next/link";
 
-export function TestsSection() {
-  const tests = [
-    {
-      id: "mock-01",
-      title: "NEET Full Syllabus Mock Test #01",
-      type: "Full Syllabus Mock Test",
-      questions: 180,
-      duration: "180 mins",
-      marks: 720,
-      startDate: "Available Now",
-      status: "AVAILABLE",
-      isFree: true,
-    },
-    {
-      id: "part-01",
-      title: "Physical Chemistry Unit Test: Mole Concept & Thermodynamics",
-      type: "Unit Test",
-      questions: 45,
-      duration: "45 mins",
-      marks: 180,
-      startDate: "Available Now",
-      status: "AVAILABLE",
-      isFree: false,
-    },
-    {
-      id: "mock-02",
-      title: "NEET All-India Major Test #02 (Class 11 + 12 Revision)",
-      type: "Major Test",
-      questions: 180,
-      duration: "180 mins",
-      marks: 720,
-      startDate: "Live on 15 Sept 2026",
-      status: "UPCOMING",
-      isFree: false,
-    },
-  ];
+export function TestsSection({ course }: { course?: any }) {
+  const tests = course?.tests || [];
 
   return (
-    <section id="tests" className="bg-white rounded-3xl border border-slate-200/80 p-5 sm:p-7 space-y-6">
+    <section id="tests" className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 p-5 sm:p-7 space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div>
-          <h2 className="text-lg sm:text-xl font-extrabold text-[#031635] flex items-center gap-2">
+          <h2 className="text-lg sm:text-xl font-extrabold text-[#031635] dark:text-white flex items-center gap-2">
             <span className="material-symbols-outlined text-purple-600">quiz</span>
-            <span>All-India Mock Test Series</span>
+            <span>Batch Tests &amp; Assessments</span>
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            21 High-fidelity test papers with All-India Rank, percentile, and step-by-step video analysis.
+            Standardized test papers and assessment series for this batch.
           </p>
         </div>
 
-        <span className="text-xs font-bold text-[#005231] bg-[#9ff5c1] px-3 py-1 rounded-full self-start sm:self-auto">
-          21 Tests Included
-        </span>
+        {tests.length > 0 && (
+          <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/60 px-3 py-1 rounded-full self-start sm:self-auto">
+            {tests.length} Test{tests.length === 1 ? "" : "s"} Available
+          </span>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {tests.map((test) => (
-          <div
-            key={test.id}
-            className="p-5 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col justify-between hover:border-slate-300 transition"
-          >
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-white text-slate-600 border border-slate-200">
-                  {test.type}
+      {tests.length === 0 ? (
+        <div className="p-8 rounded-2xl bg-slate-50 dark:bg-slate-800/40 text-center text-slate-500 text-xs">
+          Mock tests and chapter practice papers will be published as the batch progresses.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {tests.map((test: any) => (
+            <div
+              key={test.id}
+              className="p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-slate-200 transition"
+            >
+              <div className="space-y-1">
+                <span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 text-[10px] font-bold uppercase">
+                  Assessment
                 </span>
-                {test.isFree ? (
-                  <span className="text-[10px] font-extrabold px-2 py-0.5 rounded bg-[#9ff5c1] text-[#005231]">
-                    FREE ATTEMPT
-                  </span>
-                ) : (
-                  <span className="text-[10px] font-bold text-slate-400 flex items-center gap-0.5">
-                    <span className="material-symbols-outlined text-xs">lock</span>
-                    <span>Enrolled Only</span>
-                  </span>
-                )}
+                <h3 className="font-bold text-xs sm:text-sm text-[#031635] dark:text-white">{test.title}</h3>
+                <p className="text-[11px] text-slate-400">
+                  {test.durationMins || 180} Mins &middot; {test.totalMarks || 720} Marks
+                </p>
               </div>
 
-              <h3 className="font-extrabold text-xs sm:text-sm text-[#031635] line-clamp-2">
-                {test.title}
-              </h3>
-
-              {/* Stats Box */}
-              <div className="grid grid-cols-3 gap-1 p-2.5 rounded-xl bg-white border border-slate-100 text-center text-xs">
-                <div>
-                  <span className="text-slate-400 block text-[10px]">Questions</span>
-                  <span className="font-bold text-[#031635]">{test.questions}</span>
-                </div>
-                <div className="border-x border-slate-100">
-                  <span className="text-slate-400 block text-[10px]">Duration</span>
-                  <span className="font-bold text-[#031635]">{test.duration}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px]">Total Marks</span>
-                  <span className="font-bold text-[#031635]">{test.marks}</span>
-                </div>
-              </div>
+              <Link
+                href={`/tests/${test.id}/attempt`}
+                className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-sm transition text-center self-start sm:self-auto shrink-0"
+              >
+                Attempt Test
+              </Link>
             </div>
-
-            <div className="pt-4 mt-3 border-t border-slate-200/60">
-              {test.isFree ? (
-                <Link
-                  href={`/tests`}
-                  className="w-full py-2.5 rounded-xl bg-[#031635] hover:bg-[#1a2b4b] text-white font-bold text-xs shadow transition text-center flex items-center justify-center gap-1.5"
-                >
-                  <span className="material-symbols-outlined text-sm">play_arrow</span>
-                  <span>Attempt Free Test</span>
-                </Link>
-              ) : (
-                <button
-                  type="button"
-                  disabled
-                  className="w-full py-2 rounded-xl bg-slate-200 text-slate-500 font-bold text-xs flex items-center justify-center gap-1 cursor-not-allowed"
-                >
-                  <span className="material-symbols-outlined text-sm">lock</span>
-                  <span>Unlock on Enrollment</span>
-                </button>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }

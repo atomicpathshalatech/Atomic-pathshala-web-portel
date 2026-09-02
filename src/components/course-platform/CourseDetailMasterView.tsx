@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React from "react";
 import { CourseData } from "./CourseCard";
@@ -30,11 +30,11 @@ export function CourseDetailMasterView({ course }: { course: CourseData }) {
           {/* Left Column (8 cols) */}
           <div className="lg:col-span-8 space-y-6">
             <AboutSection course={course} />
-            <EducatorsSection />
-            <SyllabusSection />
-            <ClassesSection />
-            <TestsSection />
-            <ScheduleSection />
+            <EducatorsSection course={course} />
+            <SyllabusSection course={course} />
+            <ClassesSection course={course} />
+            <TestsSection course={course} />
+            <ScheduleSection course={course} />
             <StudyMaterialSection />
             <FreeTrialSection />
             <FAQSection />

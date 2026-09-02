@@ -155,45 +155,100 @@ export default async function BatchCoursePage({
     }
   }
 
-  // 3. Fallback to Predefined Store Course or Database Course preview
-  if (foundSample) {
-    return <CourseDetailMasterView course={foundSample} />;
-  }
-
-  // Query Database Batch if ID matches
-  let batch = null;
+  // 3. Query Database Batch (by ID, Code or Name)
+  let dbBatch: any = null;
   try {
-    batch = await prisma.batch.findUnique({
-      where: { id: batchId },
-      include: { course: true },
+    dbBatch = await prisma.batch.findFirst({
+      where: {
+        OR: [
+          { id: batchId },
+          { code: batchId },
+          { name: { contains: batchId, mode: "insensitive" } },
+        ],
+      },
+      include: {
+        course: {
+          include: {
+            subjects: {
+              include: {
+                chapters: {
+                  where: { status: "PUBLISHED" },
+                  include: {
+                    _count: { select: { lectures: true, dpps: true, tests: true } },
+                  },
+                  orderBy: { order: "asc" },
+                },
+              },
+            },
+          },
+        },
+        teachers: {
+          include: {
+            teacher: {
+              include: {
+                user: { select: { name: true, photoUrl: true } },
+              },
+            },
+          },
+        },
+        schedules: {
+          orderBy: { startsAt: "asc" },
+          include: {
+            teacher: {
+              include: {
+                user: { select: { name: true } },
+              },
+            },
+          },
+        },
+        _count: { select: { enrollments: true, schedules: true } },
+      },
     });
   } catch (err) {
     console.error("Batch query error:", err);
   }
 
-  const courseData = {
-    id: batch?.id || "default-course",
-    slug: batch?.id || batchId,
-    title: batch?.name || "YODHA Chemistry Batch for NEET 2027",
-    subtitle:
-      batch?.course?.description ||
-      "Complete NCERT Class 11 & 12 Chemistry preparation with structured live + recorded classes.",
-    exam: "NEET",
-    examYear: "2027",
-    subject: "Chemistry",
-    courseType: "Full Syllabus",
-    language: "Hinglish",
-    educators: "By Sonu Bhaiya & Dr. Priya Sharma",
-    duration: "12 Months",
-    classesCount: 128,
-    testsCount: 21,
-    studentsCount: 805,
-    price: 4700,
-    originalPrice: 5500,
+  // Fallback to predefined store course if no DB batch exists yet
+  if (!dbBatch && foundSample) {
+    return <CourseDetailMasterView course={foundSample} />;
+  }
+
+  const educatorsList =
+    dbBatch?.teachers?.map((t: any) => ({
+      id: t.teacherId,
+      name: t.teacher?.user?.name || "Faculty",
+      role: "Faculty",
+      bio: t.teacher?.user?.bio || null,
+      photoUrl: t.teacher?.user?.photoUrl || null,
+    })) || [];
+
+  const educatorsStr =
+    educatorsList.map((e: any) => e.name).join(" & ") || "Atomic Faculty";
+
+  const courseData: any = {
+    id: dbBatch?.id || batchId,
+    slug: dbBatch?.id || batchId,
+    title: dbBatch?.name || "Atomic Batch",
+    subtitle: dbBatch?.course?.description || "Comprehensive structured preparation with live classes and curated practice materials.",
+    exam: dbBatch?.targetExam || "NEET",
+    examYear: "",
+    subject: dbBatch?.course?.subjects?.[0]?.title || "Comprehensive",
+    courseType: "Batch",
+    language: "English / Hindi",
+    educators: educatorsStr,
+    duration: "Full Academic Year",
+    classesCount: dbBatch?._count?.schedules || 0,
+    testsCount: 0,
+    studentsCount: dbBatch?._count?.enrollments || 0,
+    price: 4999,
+    originalPrice: 5999,
     discountPercentage: 15,
     isNewBatch: true,
-    thumbnailUrl:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuD7YAZXVaHigh3RrfotJ1dphorsBl-gSAYvezYpMeV9rQSbQKvPk-AIGgvAUIs_j2OwoO9mv1RtVt-gCvSEP_621X3MnJUCxljXh4RIY-I6RaAwuw1s2rbJcbhRmE4zZjf-Kggrln5NK6LDAzGkCCjaRiQg-wlkb4AQglZ6CtSX0C6SOktuBjAPPjgF7jbnrTLR698i6gAjdpvYGjyIQzSwQYShpDlSqaTeKmUrHC3GKWAEUHK02G85AQ",
+    thumbnailUrl: null,
+    teachers: educatorsList,
+    subjects: dbBatch?.course?.subjects || [],
+    schedules: dbBatch?.schedules || [],
+    tests: [],
   };
 
   return <CourseDetailMasterView course={courseData} />;
