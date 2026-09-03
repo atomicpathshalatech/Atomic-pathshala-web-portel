@@ -32,7 +32,11 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
   });
   if (!chapter) notFound();
 
-  const [lectures, dpps, tests] = await Promise.all([
+  const [user, lectures, dpps, tests, reviews] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: session.user.id },
+      include: { role: true },
+    }),
     prisma.lecture.findMany({
       where: { chapterId: chapter.id },
       include: { teacher: { include: { user: { select: { name: true, photoUrl: true, email: true } } } } },
@@ -48,7 +52,17 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
       include: { _count: { select: { sections: true, attempts: true } } },
       orderBy: { createdAt: "desc" },
     }),
+    prisma.chapterReview.findMany({
+      where: { chapterId: chapter.id },
+      include: {
+        actor: { select: { name: true, email: true, photoUrl: true, role: { select: { name: true } } } },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
   ]);
+
+  const isAdmin = user?.role?.name === "SUPER_ADMIN" || user?.role?.name === "ADMIN";
+  const canReview = canReviewPermission && (isAdmin || chapter.createdById !== session.user.id);
 
   const mediumLabel =
     chapter.medium === "HINDI" ? "Hindi" : chapter.medium === "HINGLISH" ? "Hinglish" : "English";
@@ -241,7 +255,21 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
           _count: t._count,
         }))}
         canEdit={canUpdate}
-        canReview={canReviewPermission && chapter.createdById !== session.user.id}
+        canReview={canReview}
+        reviews={reviews.map((r) => ({
+          id: r.id,
+          action: r.action,
+          comment: r.comment,
+          previousStatus: r.previousStatus,
+          newStatus: r.newStatus,
+          createdAt: r.createdAt,
+          actor: {
+            name: r.actor.name,
+            email: r.actor.email,
+            photoUrl: r.actor.photoUrl,
+            role: r.actor.role ? { name: r.actor.role.name } : null,
+          },
+        }))}
         studentPreviewData={studentPreviewData}
       />
     </div>

@@ -20,6 +20,8 @@ import {
   X,
 } from "lucide-react";
 
+import { ChapterReviewHistoryTimeline, ReviewHistoryItem } from "./ChapterReviewHistoryTimeline";
+
 interface ChapterTeamViewWrapperProps {
   chapterId: string;
   chapterTitle: string;
@@ -30,6 +32,7 @@ interface ChapterTeamViewWrapperProps {
   initialTests: any[];
   canEdit: boolean;
   canReview: boolean;
+  reviews?: ReviewHistoryItem[];
   studentPreviewData: ChapterDetailData;
 }
 
@@ -231,10 +234,10 @@ export function ChapterTeamViewWrapper({
 
       {viewMode === "manager" ? (
         <div className="space-y-6">
-          {/* Review Actions if Under Review */}
-          {canReview && isUnderReview && (
+          {/* Admin Verification Desk (Approve, Send Back / Revision, Reject) */}
+          {canReview && (isUnderReview || status !== "DRAFT") && (
             <div className="p-1 rounded-2xl">
-              <ChapterReviewActions chapterId={chapterId} />
+              <ChapterReviewActions chapterId={chapterId} currentStatus={status} />
             </div>
           )}
 
@@ -250,6 +253,11 @@ export function ChapterTeamViewWrapper({
               canEdit={canEdit && !isUnderReview}
             />
           </div>
+
+          {/* Governance Audit Trail & Review Decision History Timeline (Fully Traceable) */}
+          {reviews && reviews.length > 0 && (
+            <ChapterReviewHistoryTimeline reviews={reviews} />
+          )}
 
           {/* BLUE SUBMISSION / STATUS & BATCH IMPORT BOX (BOTTOM) */}
           <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-3xl p-6 sm:p-8 text-white shadow-xl shadow-blue-500/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">

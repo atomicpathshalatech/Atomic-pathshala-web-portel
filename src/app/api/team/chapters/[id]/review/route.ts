@@ -47,8 +47,16 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     }
 
     const currentStatus = chapter.status as ChapterStatusValue;
-    if (currentStatus !== "UNDER_REVIEW") {
-      return apiError(`Chapter is not awaiting review (currently ${currentStatus}).`, 409, {
+    const allowedReviewStatuses: ChapterStatusValue[] = [
+      "UNDER_REVIEW",
+      "SUBMITTED",
+      "APPROVED",
+      "PUBLISHED",
+      "REJECTED",
+      "CHANGES_REQUESTED",
+    ];
+    if (!allowedReviewStatuses.includes(currentStatus)) {
+      return apiError(`Chapter cannot be reviewed in current status (${currentStatus}).`, 409, {
         code: "INVALID_TRANSITION",
         details: { chapterId: chapter.id, from: currentStatus },
       });
