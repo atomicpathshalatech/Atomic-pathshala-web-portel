@@ -4,6 +4,8 @@ import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { OcrExtractionProgress } from "./OcrExtractionProgress";
+import { EquationLivePreview } from "./EquationLivePreview";
+import { FormulaInsertToolbar } from "./FormulaInsertToolbar";
 import { QuestionIdBadge } from "./QuestionIdBadge";
 import { QuestionTaxonomySidebar } from "./QuestionTaxonomySidebar";
 import { QuestionSimilaritySidebar } from "./QuestionSimilaritySidebar";
@@ -785,7 +787,10 @@ export function AtomicQuestionEditor({
                         </span>
                       )}
                     </label>
-                    <span className="text-[10px] text-slate-400 font-mono">LaTeX / Math supported</span>
+                    <div className="flex items-center gap-2">
+                      <FormulaInsertToolbar onInsert={(snippet) => setStatementEn((prev) => (prev ? prev + " " + snippet : snippet))} />
+                      <span className="text-[10px] text-slate-400 font-mono hidden sm:inline">LaTeX supported</span>
+                    </div>
                   </div>
                   <textarea
                     rows={3}
@@ -795,6 +800,8 @@ export function AtomicQuestionEditor({
                     onChange={(e) => setStatementEn(e.target.value)}
                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-4 rounded-2xl text-sm text-slate-900 dark:text-white focus:bg-white focus:border-blue-500 outline-none font-sans leading-relaxed shadow-sm transition placeholder-slate-400"
                   />
+                  {/* Live Rendered Equation Preview */}
+                  <EquationLivePreview content={statementEn} label="English Statement" />
                 </div>
               )}
 
@@ -815,7 +822,10 @@ export function AtomicQuestionEditor({
                         </span>
                       )}
                     </label>
-                    <span className="text-[10px] text-slate-400 font-mono">Devanagari supported</span>
+                    <div className="flex items-center gap-2">
+                      <FormulaInsertToolbar onInsert={(snippet) => setStatementHi((prev) => (prev ? prev + " " + snippet : snippet))} />
+                      <span className="text-[10px] text-slate-400 font-mono hidden sm:inline">Devanagari supported</span>
+                    </div>
                   </div>
                   <textarea
                     rows={3}
@@ -824,6 +834,8 @@ export function AtomicQuestionEditor({
                     onChange={(e) => setStatementHi(e.target.value)}
                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-4 rounded-2xl text-sm text-slate-900 dark:text-white focus:bg-white focus:border-blue-500 outline-none font-sans leading-relaxed shadow-sm transition placeholder-slate-400"
                   />
+                  {/* Live Rendered Equation Preview */}
+                  <EquationLivePreview content={statementHi} label="Hindi Statement" />
                 </div>
               )}
             </div>
@@ -913,7 +925,7 @@ export function AtomicQuestionEditor({
                           : "bg-slate-50/80 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 hover:border-slate-300"
                       }`}
                     >
-                      <div className="flex items-center justify-between mb-2.5">
+                      <div className="flex items-center justify-between mb-2.5 flex-wrap gap-2">
                         <label className="flex items-center gap-2.5 cursor-pointer">
                           <input
                             type="radio"
@@ -942,26 +954,45 @@ export function AtomicQuestionEditor({
                             )}
                           </span>
                         </label>
+
+                        {/* Quick Formula Palette for Option */}
+                        <FormulaInsertToolbar
+                          onInsert={(snippet) => {
+                            if (activeLangTab === "HINDI") {
+                              opt.setValHi((prev) => (prev ? prev + " " + snippet : snippet));
+                            } else {
+                              opt.setValEn((prev) => (prev ? prev + " " + snippet : snippet));
+                            }
+                          }}
+                        />
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                         {(activeLangTab === "BOTH" || activeLangTab === "ENGLISH") && (
-                          <input
-                            type="text"
-                            placeholder={`Option (${opt.key}) English text`}
-                            value={opt.valEn}
-                            onChange={(e) => opt.setValEn(e.target.value)}
-                            className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3.5 py-2.5 rounded-xl text-xs text-slate-900 dark:text-white focus:border-blue-500 outline-none transition placeholder-slate-400"
-                          />
+                          <div className="space-y-1.5">
+                            <input
+                              type="text"
+                              placeholder={`Option (${opt.key}) English text e.g. {GSHSAU}^2 or 10 m/s`}
+                              value={opt.valEn}
+                              onChange={(e) => opt.setValEn(e.target.value)}
+                              className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3.5 py-2.5 rounded-xl text-xs text-slate-900 dark:text-white focus:border-blue-500 outline-none transition placeholder-slate-400"
+                            />
+                            {/* Live KaTeX / Math / Chemistry Render Preview */}
+                            <EquationLivePreview content={opt.valEn} label={`Option (${opt.key})`} />
+                          </div>
                         )}
                         {(activeLangTab === "BOTH" || activeLangTab === "HINDI") && (
-                          <input
-                            type="text"
-                            placeholder={`विकल्प (${opt.key}) हिंदी पाठ`}
-                            value={opt.valHi}
-                            onChange={(e) => opt.setValHi(e.target.value)}
-                            className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3.5 py-2.5 rounded-xl text-xs text-slate-900 dark:text-white focus:border-blue-500 outline-none transition placeholder-slate-400"
-                          />
+                          <div className="space-y-1.5">
+                            <input
+                              type="text"
+                              placeholder={`विकल्प (${opt.key}) हिंदी पाठ`}
+                              value={opt.valHi}
+                              onChange={(e) => opt.setValHi(e.target.value)}
+                              className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3.5 py-2.5 rounded-xl text-xs text-slate-900 dark:text-white focus:border-blue-500 outline-none transition placeholder-slate-400"
+                            />
+                            {/* Live KaTeX / Math / Chemistry Render Preview */}
+                            <EquationLivePreview content={opt.valHi} label={`विकल्प (${opt.key})`} />
+                          </div>
                         )}
                       </div>
                     </div>
@@ -972,15 +1003,24 @@ export function AtomicQuestionEditor({
 
             {/* D. STEP-BY-STEP SOLUTION */}
             <div className="space-y-3">
-              <div className="flex items-center justify-between pb-1">
+              <div className="flex items-center justify-between pb-1 flex-wrap gap-2">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                   Step-by-Step Solution &amp; Concepts
                 </h4>
+                <FormulaInsertToolbar
+                  onInsert={(snippet) => {
+                    if (activeLangTab === "HINDI") {
+                      setSolutionHi((prev) => (prev ? prev + " " + snippet : snippet));
+                    } else {
+                      setSolutionEn((prev) => (prev ? prev + " " + snippet : snippet));
+                    }
+                  }}
+                />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {(activeLangTab === "BOTH" || activeLangTab === "ENGLISH") && (
-                  <div>
+                  <div className="space-y-1.5">
                     <label className="block text-[11px] font-bold text-slate-500 mb-1">
                       Solution (English)
                     </label>
@@ -991,11 +1031,13 @@ export function AtomicQuestionEditor({
                       onChange={(e) => setSolutionEn(e.target.value)}
                       className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3.5 rounded-2xl text-xs text-slate-900 dark:text-white focus:bg-white focus:border-blue-500 outline-none leading-relaxed font-mono transition placeholder-slate-400"
                     />
+                    {/* Live Rendered Solution Preview */}
+                    <EquationLivePreview content={solutionEn} label="English Solution" />
                   </div>
                 )}
 
                 {(activeLangTab === "BOTH" || activeLangTab === "HINDI") && (
-                  <div>
+                  <div className="space-y-1.5">
                     <label className="block text-[11px] font-bold text-slate-500 mb-1">
                       Solution (Hindi - हिंदी)
                     </label>
@@ -1006,6 +1048,8 @@ export function AtomicQuestionEditor({
                       onChange={(e) => setSolutionHi(e.target.value)}
                       className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3.5 rounded-2xl text-xs text-slate-900 dark:text-white focus:bg-white focus:border-blue-500 outline-none leading-relaxed font-mono transition placeholder-slate-400"
                     />
+                    {/* Live Rendered Solution Preview */}
+                    <EquationLivePreview content={solutionHi} label="Hindi Solution" />
                   </div>
                 )}
               </div>
