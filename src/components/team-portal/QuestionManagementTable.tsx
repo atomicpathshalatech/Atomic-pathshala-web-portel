@@ -690,11 +690,7 @@ export function QuestionManagementTable({
 
                         {/* Edit Question */}
                         <Link
-                          href={
-                            q.isBilingual || q.translations.length > 1
-                              ? `/team/questions/bilingual/${q.id}/edit`
-                              : `/team/questions/${q.id}/edit`
-                          }
+                          href={`/team/questions/${q.id}/edit`}
                           className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 hover:text-blue-600 transition"
                           title="Edit Question"
                         >

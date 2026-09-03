@@ -5,11 +5,10 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
-import { QuestionForm } from "@/components/team-portal/QuestionForm";
-import { toLegacyQuestion, reverseResolveSubjectChapterIds } from "@/lib/questions/legacy";
+import { AtomicQuestionEditor } from "@/components/questions/AtomicQuestionEditor";
 
 export const metadata: Metadata = {
-  title: "Edit Question",
+  title: "Edit Question — Unified Engine",
 };
 
 export default async function EditQuestionPage({ params }: { params: { id: string } }) {
@@ -19,48 +18,31 @@ export default async function EditQuestionPage({ params }: { params: { id: strin
   const canUpdate = await hasPermission(session.user.id, PERMISSIONS.QUESTION_UPDATE);
   if (!canUpdate) redirect("/team/questions");
 
-  const [question, subjects] = await Promise.all([
-    prisma.question.findUnique({ where: { id: params.id }, include: { translations: true } }),
-    prisma.subject.findMany({
-      include: { chapters: { select: { id: true, title: true } } },
-      orderBy: { title: "asc" },
-    }),
-  ]);
+  const question = await prisma.question.findUnique({
+    where: { id: params.id },
+    include: {
+      translations: true,
+      assets: true,
+    },
+  });
 
   if (!question) notFound();
 
-  const legacy = toLegacyQuestion(question);
-  const { subjectId, chapterId } = await reverseResolveSubjectChapterIds(
-    prisma,
-    legacy.subject,
-    legacy.chapter
-  );
+  const refAsset = question.assets.find((a) => a.type === "REFERENCE");
+  const solAsset = question.assets.find((a) => a.type === "SOLUTION");
+
+  const initialQuestion = {
+    ...question,
+    referenceImageUrl: refAsset?.publicUrl || question.imageUrl,
+    solutionImageUrl: solAsset?.publicUrl || null,
+  };
 
   return (
-    <div className="max-w-6xl space-y-6">
-      <div>
-        <h1 className="font-headline-lg text-headline-lg text-primary">Edit Question</h1>
-        <p className="text-on-surface-variant font-body-md mt-1">
-          Editing will not change its publish status.
-        </p>
-      </div>
-      <QuestionForm
-        subjects={subjects}
+    <div className="max-w-7xl mx-auto space-y-6">
+      <AtomicQuestionEditor
         questionId={question.id}
-        initialData={{
-          body: legacy.body,
-          type: legacy.type,
-          optionA: legacy.optionA || undefined,
-          optionB: legacy.optionB || undefined,
-          optionC: legacy.optionC || undefined,
-          optionD: legacy.optionD || undefined,
-          correctOption: legacy.correctOption,
-          explanation: legacy.explanation || undefined,
-          difficulty: legacy.difficulty as "EASY" | "MEDIUM" | "HARD",
-          tags: legacy.tags,
-          subjectId,
-          chapterId,
-        }}
+        initialQuestion={initialQuestion}
+        onCancelHref="/team/questions"
       />
     </div>
   );

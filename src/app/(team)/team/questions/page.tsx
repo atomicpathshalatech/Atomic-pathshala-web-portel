@@ -164,14 +164,6 @@ export default async function QuestionBankPage({
               <span>Hierarchy &amp; Revision Hub</span>
             </Link>
             <Link
-              href="/team/questions/bilingual/new"
-              className="flex items-center gap-2 bg-white border border-blue-600 text-blue-600 px-5 py-2.5 rounded-full font-bold text-xs hover:bg-blue-50 transition-all shadow-sm"
-              title="Author bilingual question with Hindi and English"
-            >
-              <Languages className="w-4 h-4" />
-              <span>New (Bilingual)</span>
-            </Link>
-            <Link
               href="/team/questions/new"
               className="flex items-center gap-2 bg-blue-600 text-white px-6 py-2.5 rounded-full font-bold text-xs shadow-md shadow-blue-500/20 hover:bg-blue-500 active:scale-95 transition-all"
             >

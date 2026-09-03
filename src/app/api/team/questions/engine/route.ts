@@ -318,3 +318,160 @@ export async function POST(request: NextRequest) {
     return handleApiError(error);
   }
 }
+
+export async function PUT(request: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) throw new UnauthorizedError();
+    await requirePermission(session.user.id, PERMISSIONS.QUESTION_UPDATE);
+
+    const body = await request.json();
+    const {
+      questionId,
+      subject,
+      chapter,
+      topic,
+      subTopic,
+      type = "SINGLE_CORRECT",
+      difficulty = "MEDIUM",
+      category,
+      pyqSource,
+      statementEn,
+      statementHi,
+      optionsEn,
+      optionsHi,
+      correctAnswer,
+      solutionEn,
+      solutionHi,
+      figureUrl,
+      referenceImageUrl,
+      solutionImageUrl,
+      tags = [],
+    } = body;
+
+    if (!questionId) {
+      return apiError("questionId is required for editing a question.", 400);
+    }
+
+    const existing = await prisma.question.findUnique({
+      where: { id: questionId },
+      include: { translations: true },
+    });
+    if (!existing) return apiError("Question not found.", 404);
+
+    const resolvedCorrectOptionIds = Array.isArray(correctAnswer) ? correctAnswer : [correctAnswer || "A"];
+    const tagsString = Array.isArray(tags) ? tags.join(", ") : (tags || "");
+
+    // 1. Upsert English translation if present
+    if (statementEn?.trim()) {
+      await prisma.questionTranslation.upsert({
+        where: {
+          questionId_language: { questionId, language: "ENGLISH" },
+        },
+        create: {
+          questionId,
+          language: "ENGLISH",
+          statement: statementEn.trim(),
+          options: optionsEn || {},
+          correctOptionIds: resolvedCorrectOptionIds,
+          solution: solutionEn?.trim() || null,
+        },
+        update: {
+          statement: statementEn.trim(),
+          options: optionsEn || {},
+          correctOptionIds: resolvedCorrectOptionIds,
+          solution: solutionEn?.trim() || null,
+        },
+      });
+    }
+
+    // 2. Upsert Hindi translation if present
+    if (statementHi?.trim()) {
+      await prisma.questionTranslation.upsert({
+        where: {
+          questionId_language: { questionId, language: "HINDI" },
+        },
+        create: {
+          questionId,
+          language: "HINDI",
+          statement: statementHi.trim(),
+          options: optionsHi || {},
+          correctOptionIds: resolvedCorrectOptionIds,
+          solution: solutionHi?.trim() || null,
+        },
+        update: {
+          statement: statementHi.trim(),
+          options: optionsHi || {},
+          correctOptionIds: resolvedCorrectOptionIds,
+          solution: solutionHi?.trim() || null,
+        },
+      });
+    }
+
+    // 3. Update master question
+    const updated = await prisma.question.update({
+      where: { id: questionId },
+      data: {
+        subject: subject ? subject.trim() : existing.subject,
+        chapter: chapter !== undefined ? chapter?.trim() || null : existing.chapter,
+        topic: topic !== undefined ? topic?.trim() || null : existing.topic,
+        subTopic: subTopic !== undefined ? subTopic?.trim() || null : existing.subTopic,
+        type: type as QuestionType,
+        difficulty: difficulty as Difficulty,
+        category: category !== undefined ? category?.trim() || null : existing.category,
+        pyqSource: pyqSource !== undefined ? pyqSource?.trim() || null : existing.pyqSource,
+        solution: solutionEn?.trim() || solutionHi?.trim() || existing.solution,
+        imageUrl: figureUrl?.trim() || referenceImageUrl?.trim() || existing.imageUrl,
+        tags: tagsString || existing.tags,
+        version: { increment: 1 },
+        editedById: session.user.id,
+        editedAt: new Date(),
+        versions: {
+          create: {
+            versionNumber: existing.version + 1,
+            editedById: session.user.id,
+            changeType: "EDIT",
+            snapshot: {
+              statementEn,
+              statementHi,
+              optionsEn,
+              optionsHi,
+              correctOptionIds: resolvedCorrectOptionIds,
+              solutionEn,
+              solutionHi,
+              subject,
+              chapter,
+              topic,
+              referenceImageUrl,
+              solutionImageUrl,
+            },
+          },
+        },
+      },
+      include: {
+        translations: true,
+        createdBy: { select: { name: true, email: true } },
+      },
+    });
+
+    // 4. Audit Log
+    await prisma.auditLog.create({
+      data: {
+        userId: session.user.id,
+        action: "QUESTION_ENGINE_UPDATE",
+        entityType: "Question",
+        entityId: questionId,
+        metadata: {
+          questionCode: updated.questionCode,
+          subject: updated.subject,
+          chapter: updated.chapter,
+          version: updated.version,
+        },
+      },
+    });
+
+    return apiSuccess({ question: updated });
+  } catch (error) {
+    return handleApiError(error);
+  }
+}

@@ -14,6 +14,8 @@ import { SimilarityReport, SimilarityMatch } from "@/lib/questions/similarity";
 import { AiMetadataSuggestion } from "@/lib/questions/ai-service";
 
 export interface AtomicQuestionEditorProps {
+  questionId?: string;
+  initialQuestion?: any;
   initialSubject?: string;
   initialChapter?: string;
   initialTopic?: string;
@@ -65,6 +67,8 @@ function FieldImageUploadButton({
 }
 
 export function AtomicQuestionEditor({
+  questionId,
+  initialQuestion,
   initialSubject = "Chemistry",
   initialChapter = "",
   initialTopic = "",
@@ -77,10 +81,16 @@ export function AtomicQuestionEditor({
 }: AtomicQuestionEditorProps) {
   const router = useRouter();
 
+  const translationEn = initialQuestion?.translations?.find((t: any) => t.language === "ENGLISH");
+  const translationHi = initialQuestion?.translations?.find((t: any) => t.language === "HINDI");
+  const optionsEnData = translationEn?.options || {};
+  const optionsHiData = translationHi?.options || {};
+  const initialCorrect = translationEn?.correctOptionIds?.[0] || translationHi?.correctOptionIds?.[0] || "A";
+
   // Reference Images (Permanent Source Verification)
-  const [questionImagePreview, setQuestionImagePreview] = useState<string | null>(null);
+  const [questionImagePreview, setQuestionImagePreview] = useState<string | null>(initialQuestion?.referenceImageUrl || null);
   const [questionImageFile, setQuestionImageFile] = useState<File | null>(null);
-  const [solutionImagePreview, setSolutionImagePreview] = useState<string | null>(null);
+  const [solutionImagePreview, setSolutionImagePreview] = useState<string | null>(initialQuestion?.solutionImageUrl || null);
   const [solutionImageFile, setSolutionImageFile] = useState<File | null>(null);
   const [showSplitReference, setShowSplitReference] = useState(true);
   const [ocrLoading, setOcrLoading] = useState(false);
@@ -94,39 +104,45 @@ export function AtomicQuestionEditor({
 
   // Content states
   const [activeLangTab, setActiveLangTab] = useState<"ENGLISH" | "HINDI" | "BOTH">("BOTH");
-  const [statementEn, setStatementEn] = useState("");
-  const [statementHi, setStatementHi] = useState("");
+  const [statementEn, setStatementEn] = useState(translationEn?.statement || "");
+  const [statementHi, setStatementHi] = useState(translationHi?.statement || "");
   const [isAiTranslatedHi, setIsAiTranslatedHi] = useState(false);
   const [isAiTranslatedEn, setIsAiTranslatedEn] = useState(false);
 
-  const [optionAEn, setOptionAEn] = useState("");
-  const [optionBEn, setOptionBEn] = useState("");
-  const [optionCEn, setOptionCEn] = useState("");
-  const [optionDEn, setOptionDEn] = useState("");
+  const [optionAEn, setOptionAEn] = useState(optionsEnData.A || "");
+  const [optionBEn, setOptionBEn] = useState(optionsEnData.B || "");
+  const [optionCEn, setOptionCEn] = useState(optionsEnData.C || "");
+  const [optionDEn, setOptionDEn] = useState(optionsEnData.D || "");
 
-  const [optionAHi, setOptionAHi] = useState("");
-  const [optionBHi, setOptionBHi] = useState("");
-  const [optionCHi, setOptionCHi] = useState("");
-  const [optionDHi, setOptionDHi] = useState("");
+  const [optionAHi, setOptionAHi] = useState(optionsHiData.A || "");
+  const [optionBHi, setOptionBHi] = useState(optionsHiData.B || "");
+  const [optionCHi, setOptionCHi] = useState(optionsHiData.C || "");
+  const [optionDHi, setOptionDHi] = useState(optionsHiData.D || "");
 
-  const [correctOption, setCorrectOption] = useState<string>("A");
-  const [solutionEn, setSolutionEn] = useState("");
-  const [solutionHi, setSolutionHi] = useState("");
+  const [correctOption, setCorrectOption] = useState<string>(initialCorrect);
+  const [solutionEn, setSolutionEn] = useState(translationEn?.solution || "");
+  const [solutionHi, setSolutionHi] = useState(translationHi?.solution || "");
 
   // Figure / Diagram attachment (For Student UI)
-  const [figureUrl, setFigureUrl] = useState("");
+  const [figureUrl, setFigureUrl] = useState(initialQuestion?.imageUrl || "");
   const [figureCaption, setFigureCaption] = useState("");
 
   // Taxonomy states
-  const [subject, setSubject] = useState(initialSubject);
-  const [chapter, setChapter] = useState(initialChapter);
-  const [topic, setTopic] = useState(initialTopic);
-  const [subTopic, setSubTopic] = useState("");
-  const [type, setType] = useState("SINGLE_CORRECT");
-  const [difficulty, setDifficulty] = useState("MEDIUM");
-  const [category, setCategory] = useState("NCERT Canonical");
-  const [pyqSource, setPyqSource] = useState("");
-  const [tags, setTags] = useState<string[]>(["NEET 2026", "NCERT Line-by-Line"]);
+  const [subject, setSubject] = useState(initialQuestion?.subject || initialSubject);
+  const [chapter, setChapter] = useState(initialQuestion?.chapter || initialChapter);
+  const [topic, setTopic] = useState(initialQuestion?.topic || initialTopic);
+  const [subTopic, setSubTopic] = useState(initialQuestion?.subTopic || "");
+  const [type, setType] = useState(initialQuestion?.type || "SINGLE_CORRECT");
+  const [difficulty, setDifficulty] = useState(initialQuestion?.difficulty || "MEDIUM");
+  const [category, setCategory] = useState(initialQuestion?.category || "NCERT Canonical");
+  const [pyqSource, setPyqSource] = useState(initialQuestion?.pyqSource || "");
+  const [tags, setTags] = useState<string[]>(
+    initialQuestion?.tags
+      ? Array.isArray(initialQuestion.tags)
+        ? initialQuestion.tags
+        : initialQuestion.tags.split(",").map((t: string) => t.trim()).filter(Boolean)
+      : ["NEET 2026", "NCERT Line-by-Line"]
+  );
 
   // Similarity states
   const [similarityReport, setSimilarityReport] = useState<SimilarityReport | null>(null);
@@ -135,7 +151,7 @@ export function AtomicQuestionEditor({
   // Status & submission states
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
-  const [generatedCode, setGeneratedCode] = useState<string | null>(null);
+  const [generatedCode, setGeneratedCode] = useState<string | null>(initialQuestion?.questionCode || null);
 
   const questionInputRef = useRef<HTMLInputElement>(null);
   const solutionInputRef = useRef<HTMLInputElement>(null);
@@ -460,6 +476,31 @@ export function AtomicQuestionEditor({
         dppId,
         testSectionId,
       };
+
+      if (questionId) {
+        const res = await fetch("/api/team/questions/engine", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            questionId,
+            ...payload,
+          }),
+        });
+
+        const json = await res.json();
+        if (!res.ok || !json.success) {
+          throw new Error(json.error || "Failed to update question.");
+        }
+
+        toast.success("Question updated successfully!");
+        if (onSuccess) {
+          onSuccess(json.data.question);
+        } else {
+          router.push("/team/questions");
+          router.refresh();
+        }
+        return;
+      }
 
       const res = await fetch("/api/team/questions/engine", {
         method: "POST",
@@ -1087,10 +1128,10 @@ export function AtomicQuestionEditor({
                     <div className="flex items-center gap-2">
                       <FieldImageUploadButton
                         onInsertImage={(md) =>
-                          setStatementEn((prev) => (prev ? prev + " " + md : md))
+                          setStatementEn((prev: string) => (prev ? prev + " " + md : md))
                         }
                       />
-                      <FormulaInsertToolbar onInsert={(snippet) => setStatementEn((prev) => (prev ? prev + " " + snippet : snippet))} />
+                      <FormulaInsertToolbar onInsert={(snippet) => setStatementEn((prev: string) => (prev ? prev + " " + snippet : snippet))} />
                       <span className="text-[10px] text-slate-400 font-mono hidden sm:inline">LaTeX &amp; Paste (Ctrl+V)</span>
                     </div>
                   </div>
@@ -1101,7 +1142,7 @@ export function AtomicQuestionEditor({
                     value={statementEn}
                     onPaste={(e) =>
                       handlePasteImageToField(e, (md) =>
-                        setStatementEn((prev) => (prev ? prev + " " + md : md))
+                        setStatementEn((prev: string) => (prev ? prev + " " + md : md))
                       )
                     }
                     onChange={(e) => setStatementEn(e.target.value)}
@@ -1132,10 +1173,10 @@ export function AtomicQuestionEditor({
                     <div className="flex items-center gap-2">
                       <FieldImageUploadButton
                         onInsertImage={(md) =>
-                          setStatementHi((prev) => (prev ? prev + " " + md : md))
+                          setStatementHi((prev: string) => (prev ? prev + " " + md : md))
                         }
                       />
-                      <FormulaInsertToolbar onInsert={(snippet) => setStatementHi((prev) => (prev ? prev + " " + snippet : snippet))} />
+                      <FormulaInsertToolbar onInsert={(snippet) => setStatementHi((prev: string) => (prev ? prev + " " + snippet : snippet))} />
                       <span className="text-[10px] text-slate-400 font-mono hidden sm:inline">Devanagari &amp; Paste (Ctrl+V)</span>
                     </div>
                   </div>
@@ -1145,7 +1186,7 @@ export function AtomicQuestionEditor({
                     value={statementHi}
                     onPaste={(e) =>
                       handlePasteImageToField(e, (md) =>
-                        setStatementHi((prev) => (prev ? prev + " " + md : md))
+                        setStatementHi((prev: string) => (prev ? prev + " " + md : md))
                       )
                     }
                     onChange={(e) => setStatementHi(e.target.value)}
@@ -1277,18 +1318,18 @@ export function AtomicQuestionEditor({
                           <FieldImageUploadButton
                             onInsertImage={(md) => {
                               if (activeLangTab === "HINDI") {
-                                opt.setValHi((prev) => (prev ? prev + " " + md : md));
+                                opt.setValHi((prev: string) => (prev ? prev + " " + md : md));
                               } else {
-                                opt.setValEn((prev) => (prev ? prev + " " + md : md));
+                                opt.setValEn((prev: string) => (prev ? prev + " " + md : md));
                               }
                             }}
                           />
                           <FormulaInsertToolbar
                             onInsert={(snippet) => {
                               if (activeLangTab === "HINDI") {
-                                opt.setValHi((prev) => (prev ? prev + " " + snippet : snippet));
+                                opt.setValHi((prev: string) => (prev ? prev + " " + snippet : snippet));
                               } else {
-                                opt.setValEn((prev) => (prev ? prev + " " + snippet : snippet));
+                                opt.setValEn((prev: string) => (prev ? prev + " " + snippet : snippet));
                               }
                             }}
                           />
@@ -1304,7 +1345,7 @@ export function AtomicQuestionEditor({
                               value={opt.valEn}
                               onPaste={(e) =>
                                 handlePasteImageToField(e, (md) =>
-                                  opt.setValEn((prev) => (prev ? prev + " " + md : md))
+                                  opt.setValEn((prev: string) => (prev ? prev + " " + md : md))
                                 )
                               }
                               onChange={(e) => opt.setValEn(e.target.value)}
@@ -1322,7 +1363,7 @@ export function AtomicQuestionEditor({
                               value={opt.valHi}
                               onPaste={(e) =>
                                 handlePasteImageToField(e, (md) =>
-                                  opt.setValHi((prev) => (prev ? prev + " " + md : md))
+                                  opt.setValHi((prev: string) => (prev ? prev + " " + md : md))
                                 )
                               }
                               onChange={(e) => opt.setValHi(e.target.value)}
@@ -1349,18 +1390,18 @@ export function AtomicQuestionEditor({
                   <FieldImageUploadButton
                     onInsertImage={(md) => {
                       if (activeLangTab === "HINDI") {
-                        setSolutionHi((prev) => (prev ? prev + " " + md : md));
+                        setSolutionHi((prev: string) => (prev ? prev + " " + md : md));
                       } else {
-                        setSolutionEn((prev) => (prev ? prev + " " + md : md));
+                        setSolutionEn((prev: string) => (prev ? prev + " " + md : md));
                       }
                     }}
                   />
                   <FormulaInsertToolbar
                     onInsert={(snippet) => {
                       if (activeLangTab === "HINDI") {
-                        setSolutionHi((prev) => (prev ? prev + " " + snippet : snippet));
+                        setSolutionHi((prev: string) => (prev ? prev + " " + snippet : snippet));
                       } else {
-                        setSolutionEn((prev) => (prev ? prev + " " + snippet : snippet));
+                        setSolutionEn((prev: string) => (prev ? prev + " " + snippet : snippet));
                       }
                     }}
                   />
@@ -1378,7 +1419,7 @@ export function AtomicQuestionEditor({
                     value={solutionEn}
                     onPaste={(e) =>
                       handlePasteImageToField(e, (md) =>
-                        setSolutionEn((prev) => (prev ? prev + " " + md : md))
+                        setSolutionEn((prev: string) => (prev ? prev + " " + md : md))
                       )
                     }
                     onChange={(e) => setSolutionEn(e.target.value)}
@@ -1400,7 +1441,7 @@ export function AtomicQuestionEditor({
                     value={solutionHi}
                     onPaste={(e) =>
                       handlePasteImageToField(e, (md) =>
-                        setSolutionHi((prev) => (prev ? prev + " " + md : md))
+                        setSolutionHi((prev: string) => (prev ? prev + " " + md : md))
                       )
                     }
                     onChange={(e) => setSolutionHi(e.target.value)}

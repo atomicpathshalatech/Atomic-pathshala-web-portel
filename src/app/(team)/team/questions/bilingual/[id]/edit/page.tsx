@@ -5,15 +5,11 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
-import { BilingualQuestionForm } from "@/components/team-portal/BilingualQuestionForm";
-import { reverseResolveSubjectChapterIds } from "@/lib/questions/legacy";
-import type { BilingualQuestionInput } from "@/lib/validation/question-v2";
+import { AtomicQuestionEditor } from "@/components/questions/AtomicQuestionEditor";
 
 export const metadata: Metadata = {
-  title: "Edit Question",
+  title: "Edit Question — Unified Engine",
 };
-
-type OptionsJson = Partial<Record<"A" | "B" | "C" | "D", string>>;
 
 export default async function EditBilingualQuestionPage({ params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
@@ -22,49 +18,32 @@ export default async function EditBilingualQuestionPage({ params }: { params: { 
   const canUpdate = await hasPermission(session.user.id, PERMISSIONS.QUESTION_UPDATE);
   if (!canUpdate) redirect("/team/questions");
 
-  const [question, subjects] = await Promise.all([
-    prisma.question.findUnique({ where: { id: params.id }, include: { translations: true } }),
-    prisma.subject.findMany({
-      include: { chapters: { select: { id: true, title: true } } },
-      orderBy: { title: "asc" },
-    }),
-  ]);
+  const question = await prisma.question.findUnique({
+    where: { id: params.id },
+    include: {
+      translations: true,
+      assets: true,
+    },
+  });
+
   if (!question) notFound();
 
-  const { subjectId, chapterId } = await reverseResolveSubjectChapterIds(prisma, question.subject, question.chapter);
+  const refAsset = question.assets.find((a) => a.type === "REFERENCE");
+  const solAsset = question.assets.find((a) => a.type === "SOLUTION");
 
-  const initialData: Partial<BilingualQuestionInput> = {
-    type: question.type,
-    difficulty: question.difficulty,
-    subjectId,
-    chapterId,
-    topic: question.topic ?? "",
-    subTopic: question.subTopic ?? "",
-    category: question.category ?? "",
-    pyqSource: question.pyqSource ?? "",
-    questionCode: question.questionCode ?? "",
-    tags: question.tags ? question.tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
-    translations: question.translations.map((t) => {
-      const options = (t.options as OptionsJson | null) ?? {};
-      return {
-        language: t.language as "HINDI" | "ENGLISH",
-        statement: t.statement,
-        optionA: options.A ?? "",
-        optionB: options.B ?? "",
-        optionC: options.C ?? "",
-        optionD: options.D ?? "",
-        correctOptionIds: (t.correctOptionIds as string[] | null) ?? [],
-        solution: t.solution ?? "",
-      };
-    }),
+  const initialQuestion = {
+    ...question,
+    referenceImageUrl: refAsset?.publicUrl || question.imageUrl,
+    solutionImageUrl: solAsset?.publicUrl || null,
   };
 
   return (
-    <div className="max-w-4xl space-y-6">
-      <div>
-        <h1 className="font-headline-lg text-headline-lg text-primary">Edit Question</h1>
-      </div>
-      <BilingualQuestionForm subjects={subjects} initialData={initialData} questionId={question.id} />
+    <div className="max-w-7xl mx-auto space-y-6">
+      <AtomicQuestionEditor
+        questionId={question.id}
+        initialQuestion={initialQuestion}
+        onCancelHref="/team/questions"
+      />
     </div>
   );
 }
