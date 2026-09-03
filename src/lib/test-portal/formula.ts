@@ -53,7 +53,8 @@ export function renderFormulaContent(input: string): string {
         return `<img src="${escapeHtml(seg.content)}" style="max-width:100%;max-height:240px;display:block;margin:8px 0;border-radius:8px;" />`;
       }
       try {
-        return katex.renderToString(seg.content, {
+        const cleanFormula = seg.content.replace(/\\\\/g, "\\");
+        return katex.renderToString(cleanFormula, {
           throwOnError: false,
           displayMode: seg.type === "block",
         });

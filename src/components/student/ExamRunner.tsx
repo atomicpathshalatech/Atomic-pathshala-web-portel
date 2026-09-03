@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { EquationLivePreview } from "@/components/questions/EquationLivePreview";
+import { FormulaText } from "@/components/test-portal/FormulaText";
 import { ExamLanguageModal } from "./ExamLanguageModal";
 import { ExamInstructionsView } from "./ExamInstructionsView";
 
@@ -650,10 +650,10 @@ export function ExamRunner({
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-slate-800 shadow-sm space-y-6 min-h-[380px]">
             {/* Statement */}
             <div className="space-y-2">
-              <p className="text-sm sm:text-base font-bold text-slate-900 dark:text-white leading-relaxed">
-                {statement || "No statement available."}
-              </p>
-              <EquationLivePreview content={statement} label="" className="p-0 border-none bg-transparent" />
+              <FormulaText
+                text={statement || "No statement available."}
+                className="text-sm sm:text-base font-bold text-slate-900 dark:text-white leading-relaxed block"
+              />
             </div>
 
             {/* Options List */}
@@ -684,10 +684,10 @@ export function ExamRunner({
                       {key}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <span className="text-xs sm:text-sm font-medium text-slate-900 dark:text-white block">
-                        {optVal}
-                      </span>
-                      <EquationLivePreview content={optVal} label="" className="p-0 border-none bg-transparent" />
+                      <FormulaText
+                        text={optVal || ""}
+                        className="text-xs sm:text-sm font-medium text-slate-900 dark:text-white block"
+                      />
                     </div>
                   </button>
                 );

@@ -25,6 +25,45 @@ export interface AtomicQuestionEditorProps {
   onCancelHref?: string;
 }
 
+function FieldImageUploadButton({
+  onInsertImage,
+}: {
+  onInsertImage: (imgMarkdown: string) => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      onInsertImage(`\n![](${reader.result as string})\n`);
+      toast.success("Image attached to field!");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  return (
+    <>
+      <input
+        type="file"
+        ref={fileInputRef}
+        accept="image/*"
+        className="hidden"
+        onChange={handleFile}
+      />
+      <button
+        type="button"
+        onClick={() => fileInputRef.current?.click()}
+        title="Upload or paste image into this field (Ctrl+V supported)"
+        className="px-2 py-1 rounded-xl bg-slate-100 hover:bg-blue-50 dark:bg-slate-800 dark:hover:bg-blue-950/60 text-slate-700 dark:text-slate-300 hover:text-blue-600 border border-slate-200 dark:border-slate-700 text-xs font-bold transition flex items-center gap-1 shadow-sm active:scale-95"
+      >
+        <span className="material-symbols-outlined text-sm">add_photo_alternate</span>
+        <span className="text-[10px] hidden sm:inline">Add Image</span>
+      </button>
+    </>
+  );
+}
+
 export function AtomicQuestionEditor({
   initialSubject = "Chemistry",
   initialChapter = "",
@@ -252,6 +291,32 @@ export function AtomicQuestionEditor({
       toast.success("Solution reference image attached!");
     };
     reader.readAsDataURL(file);
+  };
+
+  // Direct in-field image paste handler (Ctrl+V directly into Statement or Options)
+  const handlePasteImageToField = (
+    e: React.ClipboardEvent,
+    appendValue: (imgMarkdown: string) => void
+  ) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item && item.type.indexOf("image") !== -1) {
+        const file = item.getAsFile();
+        if (file) {
+          e.preventDefault();
+          const reader = new FileReader();
+          reader.onload = () => {
+            const base64 = reader.result as string;
+            appendValue(`\n![](${base64})\n`);
+            toast.success("Image pasted directly into question field!");
+          };
+          reader.readAsDataURL(file);
+          return;
+        }
+      }
+    }
   };
 
   // AI Assistant Callbacks
@@ -1020,15 +1085,25 @@ export function AtomicQuestionEditor({
                       )}
                     </label>
                     <div className="flex items-center gap-2">
+                      <FieldImageUploadButton
+                        onInsertImage={(md) =>
+                          setStatementEn((prev) => (prev ? prev + " " + md : md))
+                        }
+                      />
                       <FormulaInsertToolbar onInsert={(snippet) => setStatementEn((prev) => (prev ? prev + " " + snippet : snippet))} />
-                      <span className="text-[10px] text-slate-400 font-mono hidden sm:inline">LaTeX supported</span>
+                      <span className="text-[10px] text-slate-400 font-mono hidden sm:inline">LaTeX &amp; Paste (Ctrl+V)</span>
                     </div>
                   </div>
                   <textarea
                     rows={3}
                     required
-                    placeholder="e.g. Which of the following statements is correct regarding the Bohr model of hydrogen atom?"
+                    placeholder="e.g. Which of the following statements is correct regarding the Bohr model? (You can paste Ctrl+V images directly here)"
                     value={statementEn}
+                    onPaste={(e) =>
+                      handlePasteImageToField(e, (md) =>
+                        setStatementEn((prev) => (prev ? prev + " " + md : md))
+                      )
+                    }
                     onChange={(e) => setStatementEn(e.target.value)}
                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-4 rounded-2xl text-sm text-slate-900 dark:text-white focus:bg-white focus:border-blue-500 outline-none font-sans leading-relaxed shadow-sm transition placeholder-slate-400"
                   />
@@ -1055,14 +1130,24 @@ export function AtomicQuestionEditor({
                       )}
                     </label>
                     <div className="flex items-center gap-2">
+                      <FieldImageUploadButton
+                        onInsertImage={(md) =>
+                          setStatementHi((prev) => (prev ? prev + " " + md : md))
+                        }
+                      />
                       <FormulaInsertToolbar onInsert={(snippet) => setStatementHi((prev) => (prev ? prev + " " + snippet : snippet))} />
-                      <span className="text-[10px] text-slate-400 font-mono hidden sm:inline">Devanagari supported</span>
+                      <span className="text-[10px] text-slate-400 font-mono hidden sm:inline">Devanagari &amp; Paste (Ctrl+V)</span>
                     </div>
                   </div>
                   <textarea
                     rows={3}
-                    placeholder="e.g. हाइड्रोजन परमाणु के बोहर मॉडल के संबंध में निम्नलिखित में से कौन सा कथन सही है?"
+                    placeholder="e.g. हाइड्रोजन परमाणु के संबंध में निम्नलिखित में से कौन सा कथन सही है? (यहाँ सीधे Ctrl+V से इमेज पेस्ट कर सकते हैं)"
                     value={statementHi}
+                    onPaste={(e) =>
+                      handlePasteImageToField(e, (md) =>
+                        setStatementHi((prev) => (prev ? prev + " " + md : md))
+                      )
+                    }
                     onChange={(e) => setStatementHi(e.target.value)}
                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-4 rounded-2xl text-sm text-slate-900 dark:text-white focus:bg-white focus:border-blue-500 outline-none font-sans leading-relaxed shadow-sm transition placeholder-slate-400"
                   />
@@ -1187,16 +1272,27 @@ export function AtomicQuestionEditor({
                           </span>
                         </label>
 
-                        {/* Quick Formula Palette for Option */}
-                        <FormulaInsertToolbar
-                          onInsert={(snippet) => {
-                            if (activeLangTab === "HINDI") {
-                              opt.setValHi((prev) => (prev ? prev + " " + snippet : snippet));
-                            } else {
-                              opt.setValEn((prev) => (prev ? prev + " " + snippet : snippet));
-                            }
-                          }}
-                        />
+                        {/* Quick Formula & Image Palette for Option */}
+                        <div className="flex items-center gap-2">
+                          <FieldImageUploadButton
+                            onInsertImage={(md) => {
+                              if (activeLangTab === "HINDI") {
+                                opt.setValHi((prev) => (prev ? prev + " " + md : md));
+                              } else {
+                                opt.setValEn((prev) => (prev ? prev + " " + md : md));
+                              }
+                            }}
+                          />
+                          <FormulaInsertToolbar
+                            onInsert={(snippet) => {
+                              if (activeLangTab === "HINDI") {
+                                opt.setValHi((prev) => (prev ? prev + " " + snippet : snippet));
+                              } else {
+                                opt.setValEn((prev) => (prev ? prev + " " + snippet : snippet));
+                              }
+                            }}
+                          />
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -1204,8 +1300,13 @@ export function AtomicQuestionEditor({
                           <div className="space-y-1.5">
                             <input
                               type="text"
-                              placeholder={`Option (${opt.key}) English text e.g. {GSHSAU}^2 or 10 m/s`}
+                              placeholder={`Option (${opt.key}) English text or paste image (Ctrl+V)`}
                               value={opt.valEn}
+                              onPaste={(e) =>
+                                handlePasteImageToField(e, (md) =>
+                                  opt.setValEn((prev) => (prev ? prev + " " + md : md))
+                                )
+                              }
                               onChange={(e) => opt.setValEn(e.target.value)}
                               className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3.5 py-2.5 rounded-xl text-xs text-slate-900 dark:text-white focus:border-blue-500 outline-none transition placeholder-slate-400"
                             />
@@ -1217,8 +1318,13 @@ export function AtomicQuestionEditor({
                           <div className="space-y-1.5">
                             <input
                               type="text"
-                              placeholder={`विकल्प (${opt.key}) हिंदी पाठ`}
+                              placeholder={`विकल्प (${opt.key}) हिंदी पाठ या इमेज पेस्ट करें (Ctrl+V)`}
                               value={opt.valHi}
+                              onPaste={(e) =>
+                                handlePasteImageToField(e, (md) =>
+                                  opt.setValHi((prev) => (prev ? prev + " " + md : md))
+                                )
+                              }
                               onChange={(e) => opt.setValHi(e.target.value)}
                               className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3.5 py-2.5 rounded-xl text-xs text-slate-900 dark:text-white focus:border-blue-500 outline-none transition placeholder-slate-400"
                             />
@@ -1239,52 +1345,71 @@ export function AtomicQuestionEditor({
                 <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                   Step-by-Step Solution &amp; Concepts
                 </h4>
-                <FormulaInsertToolbar
-                  onInsert={(snippet) => {
-                    if (activeLangTab === "HINDI") {
-                      setSolutionHi((prev) => (prev ? prev + " " + snippet : snippet));
-                    } else {
-                      setSolutionEn((prev) => (prev ? prev + " " + snippet : snippet));
+                <div className="flex items-center gap-2">
+                  <FieldImageUploadButton
+                    onInsertImage={(md) => {
+                      if (activeLangTab === "HINDI") {
+                        setSolutionHi((prev) => (prev ? prev + " " + md : md));
+                      } else {
+                        setSolutionEn((prev) => (prev ? prev + " " + md : md));
+                      }
+                    }}
+                  />
+                  <FormulaInsertToolbar
+                    onInsert={(snippet) => {
+                      if (activeLangTab === "HINDI") {
+                        setSolutionHi((prev) => (prev ? prev + " " + snippet : snippet));
+                      } else {
+                        setSolutionEn((prev) => (prev ? prev + " " + snippet : snippet));
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+
+              {(activeLangTab === "BOTH" || activeLangTab === "ENGLISH") && (
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">
+                    Solution (English)
+                  </label>
+                  <textarea
+                    rows={4}
+                    placeholder={"Step 1: Formula used...\nStep 2: Calculation...\nHence, Option (A) is correct. (Ctrl+V image paste supported)"}
+                    value={solutionEn}
+                    onPaste={(e) =>
+                      handlePasteImageToField(e, (md) =>
+                        setSolutionEn((prev) => (prev ? prev + " " + md : md))
+                      )
                     }
-                  }}
-                />
-              </div>
+                    onChange={(e) => setSolutionEn(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3.5 rounded-2xl text-xs text-slate-900 dark:text-white focus:bg-white focus:border-blue-500 outline-none leading-relaxed font-mono transition placeholder-slate-400"
+                  />
+                  {/* Live Rendered Solution Preview */}
+                  <EquationLivePreview content={solutionEn} label="English Solution" />
+                </div>
+              )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {(activeLangTab === "BOTH" || activeLangTab === "ENGLISH") && (
-                  <div className="space-y-1.5">
-                    <label className="block text-[11px] font-bold text-slate-500 mb-1">
-                      Solution (English)
-                    </label>
-                    <textarea
-                      rows={4}
-                      placeholder={"Step 1: Formula used...\nStep 2: Calculation...\nHence, Option (A) is correct."}
-                      value={solutionEn}
-                      onChange={(e) => setSolutionEn(e.target.value)}
-                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3.5 rounded-2xl text-xs text-slate-900 dark:text-white focus:bg-white focus:border-blue-500 outline-none leading-relaxed font-mono transition placeholder-slate-400"
-                    />
-                    {/* Live Rendered Solution Preview */}
-                    <EquationLivePreview content={solutionEn} label="English Solution" />
-                  </div>
-                )}
-
-                {(activeLangTab === "BOTH" || activeLangTab === "HINDI") && (
-                  <div className="space-y-1.5">
-                    <label className="block text-[11px] font-bold text-slate-500 mb-1">
-                      Solution (Hindi - हिंदी)
-                    </label>
-                    <textarea
-                      rows={4}
-                      placeholder={"चरण 1: प्रयुक्त सूत्र...\nचरण 2: गणना...\nअतः, विकल्प (A) सही है।"}
-                      value={solutionHi}
-                      onChange={(e) => setSolutionHi(e.target.value)}
-                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3.5 rounded-2xl text-xs text-slate-900 dark:text-white focus:bg-white focus:border-blue-500 outline-none leading-relaxed font-mono transition placeholder-slate-400"
-                    />
-                    {/* Live Rendered Solution Preview */}
-                    <EquationLivePreview content={solutionHi} label="Hindi Solution" />
-                  </div>
-                )}
-              </div>
+              {(activeLangTab === "BOTH" || activeLangTab === "HINDI") && (
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">
+                    Solution (Hindi - हिंदी)
+                  </label>
+                  <textarea
+                    rows={4}
+                    placeholder={"चरण 1: प्रयुक्त सूत्र...\nचरण 2: गणना...\nअतः, विकल्प (A) सही है। (Ctrl+V इमेज पेस्ट समर्थित)"}
+                    value={solutionHi}
+                    onPaste={(e) =>
+                      handlePasteImageToField(e, (md) =>
+                        setSolutionHi((prev) => (prev ? prev + " " + md : md))
+                      )
+                    }
+                    onChange={(e) => setSolutionHi(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3.5 rounded-2xl text-xs text-slate-900 dark:text-white focus:bg-white focus:border-blue-500 outline-none leading-relaxed font-mono transition placeholder-slate-400"
+                  />
+                  {/* Live Rendered Solution Preview */}
+                  <EquationLivePreview content={solutionHi} label="Hindi Solution" />
+                </div>
+              )}
             </div>
 
             {/* Save Error */}
