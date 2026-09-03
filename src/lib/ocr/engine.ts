@@ -201,10 +201,12 @@ export function reconstructQuestionFromElements(
     lowConfidenceFields.push("statementHi");
   }
   for (const k of ["A", "B", "C", "D"]) {
-    if (optionsEn[k] && elements.filter((e) => e.needsReview && optionsEn[k].includes(e.content)).length > 0) {
+    const valEn = optionsEn[k];
+    if (valEn && elements.filter((e) => e.needsReview && valEn.includes(e.content)).length > 0) {
       lowConfidenceFields.push(`option_${k}_En`);
     }
-    if (optionsHi[k] && elements.filter((e) => e.needsReview && optionsHi[k].includes(e.content)).length > 0) {
+    const valHi = optionsHi[k];
+    if (valHi && elements.filter((e) => e.needsReview && valHi.includes(e.content)).length > 0) {
       lowConfidenceFields.push(`option_${k}_Hi`);
     }
   }
