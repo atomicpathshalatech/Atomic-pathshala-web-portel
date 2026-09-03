@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { OcrExtractionProgress } from "./OcrExtractionProgress";
 import { QuestionIdBadge } from "./QuestionIdBadge";
 import { QuestionTaxonomySidebar } from "./QuestionTaxonomySidebar";
 import { QuestionSimilaritySidebar } from "./QuestionSimilaritySidebar";
@@ -42,6 +43,7 @@ export function AtomicQuestionEditor({
   const [solutionImageFile, setSolutionImageFile] = useState<File | null>(null);
   const [showSplitReference, setShowSplitReference] = useState(true);
   const [ocrLoading, setOcrLoading] = useState(false);
+  const [lowConfidenceFields, setLowConfidenceFields] = useState<string[]>([]);
 
   // Content states
   const [activeLangTab, setActiveLangTab] = useState<"ENGLISH" | "HINDI" | "BOTH">("BOTH");
@@ -163,32 +165,55 @@ export function AtomicQuestionEditor({
     }
   };
 
-  // Run Unified Gemini Multimodal OCR
+  // Run In-Built Self-Hosted OCR & Formula Recognition Pipeline
   const triggerOcrExtraction = async (base64Img: string, mime: string) => {
     setOcrLoading(true);
     try {
-      const res = await fetch("/api/team/questions/ai", {
+      // Primary: In-Built Self-Hosted OCR Engine (PaddleOCR + Formula LaTeX + Chemistry)
+      const res = await fetch("/api/ocr/extract", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "ocr_image",
-          payload: {
-            imageBase64: base64Img,
-            mimeType: mime || "image/png",
-            solutionImageBase64: solutionImagePreview || undefined,
-            solutionMimeType: solutionImageFile?.type || "image/png",
-          },
+          imageBase64: base64Img,
+          mimeType: mime || "image/png",
+          solutionImageBase64: solutionImagePreview || undefined,
+          language: "both",
         }),
       });
       const json = await res.json();
-      if (json.success && json.data.result) {
-        handleApplyExtraction(json.data.result);
-        toast.success("Bilingual Question & Formulas extracted with high accuracy!");
+      if (json.success && json.data.question) {
+        handleApplyExtraction(json.data.question);
+        if (json.data.question.lowConfidenceFields?.length > 0) {
+          setLowConfidenceFields(json.data.question.lowConfidenceFields);
+          toast.warning("Extracted with minor uncertainty. Marked fields for review.");
+        } else {
+          setLowConfidenceFields([]);
+          toast.success("Question & Formulas extracted via In-Built OCR Engine!");
+        }
       } else {
-        toast.error(json.error || "Could not extract question from image.");
+        // Fallback to secondary AI route if needed
+        const aiRes = await fetch("/api/team/questions/ai", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "ocr_image",
+            payload: {
+              imageBase64: base64Img,
+              mimeType: mime || "image/png",
+              solutionImageBase64: solutionImagePreview || undefined,
+            },
+          }),
+        });
+        const aiJson = await aiRes.json();
+        if (aiJson.success && aiJson.data.result) {
+          handleApplyExtraction(aiJson.data.result);
+          toast.success("Question & Formulas extracted successfully!");
+        } else {
+          toast.error("Could not extract question from image. Please try a clearer screenshot.");
+        }
       }
     } catch {
-      toast.error("Failed to connect to Gemini AI OCR engine.");
+      toast.error("Failed to connect to in-built OCR engine.");
     } finally {
       setOcrLoading(false);
     }
@@ -603,6 +628,9 @@ export function AtomicQuestionEditor({
             )}
           </div>
         </div>
+
+        {/* In-Built OCR Extraction Progress Indicator */}
+        <OcrExtractionProgress isLoading={ocrLoading} />
       </div>
 
       {/* 3. Main Grid with Split Screen Support */}
@@ -750,6 +778,12 @@ export function AtomicQuestionEditor({
                           AI Translated
                         </span>
                       )}
+                      {lowConfidenceFields.includes("statementEn") && (
+                        <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300 text-[10px] font-bold flex items-center gap-1">
+                          <span className="material-symbols-outlined text-xs text-amber-600">warning</span>
+                          Review Required
+                        </span>
+                      )}
                     </label>
                     <span className="text-[10px] text-slate-400 font-mono">LaTeX / Math supported</span>
                   </div>
@@ -772,6 +806,12 @@ export function AtomicQuestionEditor({
                       {isAiTranslatedHi && (
                         <span className="px-2 py-0.2 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 text-[10px] font-mono font-bold">
                           AI Translated (NCERT Aligned)
+                        </span>
+                      )}
+                      {lowConfidenceFields.includes("statementHi") && (
+                        <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300 text-[10px] font-bold flex items-center gap-1">
+                          <span className="material-symbols-outlined text-xs text-amber-600">warning</span>
+                          Review Required
                         </span>
                       )}
                     </label>
@@ -891,8 +931,15 @@ export function AtomicQuestionEditor({
                           >
                             {opt.key}
                           </span>
-                          <span className="text-xs font-bold text-slate-900 dark:text-white">
-                            Option ({opt.key}) {isSelected && <span className="text-emerald-600 dark:text-emerald-400">— Correct Answer</span>}
+                          <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                            <span>Option ({opt.key})</span>
+                            {isSelected && <span className="text-emerald-600 dark:text-emerald-400">— Correct Answer</span>}
+                            {(lowConfidenceFields.includes(`option_${opt.key}_En`) || lowConfidenceFields.includes(`option_${opt.key}_Hi`)) && (
+                              <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300 text-[10px] font-bold flex items-center gap-1">
+                                <span className="material-symbols-outlined text-xs text-amber-600">warning</span>
+                                Review Required
+                              </span>
+                            )}
                           </span>
                         </label>
                       </div>
