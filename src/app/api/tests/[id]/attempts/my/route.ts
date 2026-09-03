@@ -81,15 +81,26 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
       test: { id: test.id, title: test.name, instructions: test.instructions, durationMin: test.durationMin },
       questions: sectionQuestions.map((sq) => {
         const legacy = toLegacyQuestion(sq.question);
+        const enTrans = sq.question.translations?.find((t) => t.language === "ENGLISH");
+        const hiTrans = sq.question.translations?.find((t) => t.language === "HINDI");
+        const enOpts = (enTrans?.options as Record<string, string>) || {};
+        const hiOpts = (hiTrans?.options as Record<string, string>) || {};
+
         return {
           id: sq.question.id,
           order: sq.order,
-          body: legacy.body,
+          subject: sq.question.subject || test.batchSchedule?.subject || "General",
+          body: enTrans?.statement || legacy.body,
           type: legacy.type,
-          optionA: legacy.optionA,
-          optionB: legacy.optionB,
-          optionC: legacy.optionC,
-          optionD: legacy.optionD,
+          optionA: enOpts.A || legacy.optionA,
+          optionB: enOpts.B || legacy.optionB,
+          optionC: enOpts.C || legacy.optionC,
+          optionD: enOpts.D || legacy.optionD,
+          bodyHi: hiTrans?.statement || null,
+          optionAHi: hiOpts.A || null,
+          optionBHi: hiOpts.B || null,
+          optionCHi: hiOpts.C || null,
+          optionDHi: hiOpts.D || null,
           mySelection: answerByQuestion.get(sq.question.id) ?? null,
         };
       }),
