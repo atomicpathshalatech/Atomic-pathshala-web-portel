@@ -309,7 +309,7 @@ export function AtomicQuestionEditor({
     }
   };
 
-  const handleSubmit = async (publishImmediate = false) => {
+  const handleSubmit = async () => {
     setSaveError("");
 
     const activeStatement = statementEn || statementHi;
@@ -985,7 +985,7 @@ export function AtomicQuestionEditor({
               <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={handleSubmit}
+                  onClick={() => handleSubmit()}
                   disabled={saving}
                   className="px-8 py-3 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-black text-sm shadow-lg shadow-blue-500/20 transition flex items-center gap-2 disabled:opacity-50"
                 >
