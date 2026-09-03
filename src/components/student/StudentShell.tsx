@@ -12,16 +12,27 @@ export type StudentNavItem = {
   icon: string;
 };
 
-const NAV_ITEMS: StudentNavItem[] = [
+// Sidebar items for desktop Learning Hub
+const SIDEBAR_ITEMS = [
+  { href: "/dashboard", label: "Dashboard", icon: "space_dashboard" },
+  { href: "/courses", label: "Study Modules", icon: "menu_book" },
+  { href: "/tests", label: "Mock Tests", icon: "assignment_turned_in" },
+  { href: "/live-class", label: "Live Classes", icon: "sensors" },
+  { href: "/guru", label: "AI Doubt Solver", icon: "psychology_alt" },
+  { href: "/predictor", label: "Mastery Pulse", icon: "analytics" },
+];
+
+// Bottom floating dock navigation items
+const DOCK_ITEMS: StudentNavItem[] = [
   { href: "/dashboard", label: "Home", icon: "home" },
   { href: "/schedule", label: "My Schedule", icon: "calendar_month" },
   { href: "/dpp", label: "Practice", icon: "menu_book" },
-  { href: "/tests", label: "Tests", icon: "edit_document" },
+  { href: "/tests", label: "Tests", icon: "assignment" },
   { href: "/courses", label: "Batches", icon: "storefront" },
 ];
 
 function isActive(pathname: string, href: string) {
-  return pathname === href || pathname.startsWith(`${href}/`);
+  return pathname === href || (href !== "/dashboard" && pathname.startsWith(`${href}/`));
 }
 
 function AccountMenu({
@@ -313,49 +324,125 @@ export function StudentShell({
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="flex-1 pb-32">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          {children}
-        </div>
-      </main>
-
-      {/* Persistent Upgrade Banner */}
-      {!hasActiveSubscription && (
-        <div className="fixed bottom-16 left-0 w-full z-40 flex items-center justify-between gap-3 px-4 sm:px-6 py-3 bg-gradient-to-r from-orange-600 to-amber-600 text-white shadow-lg">
-          <div className="min-w-0">
-            <p className="text-xs sm:text-sm font-bold truncate">Unlock All Live Batches &amp; CBT Test Series</p>
-            <p className="text-[11px] opacity-90 truncate">Complete NEET/JEE preparation with top faculty</p>
+      {/* Main Layout Container with Desktop Sidebar */}
+      <div className="flex-1 flex relative">
+        {/* BEGIN: Desktop Sidebar (Learning Hub) */}
+        <aside className="hidden lg:flex fixed left-0 top-[76px] bottom-0 w-64 bg-white dark:bg-slate-900 border-r border-slate-200/80 dark:border-slate-800 shadow-sm z-30 flex-col justify-between py-5 px-3">
+          <div className="space-y-1">
+            <div className="px-3 pb-2 pt-1 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider font-mono">
+              Learning Hub
+            </div>
+            <nav className="space-y-1">
+              {SIDEBAR_ITEMS.map((item) => {
+                const active = isActive(pathname, item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                      active
+                        ? "bg-orange-500 text-white shadow-sm shadow-orange-500/20"
+                        : "text-slate-600 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[22px]">{item.icon}</span>
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </nav>
           </div>
-          <Link
-            href="/subscription"
-            className="shrink-0 px-4 py-1.5 rounded-full bg-white text-orange-600 text-xs font-bold hover:bg-orange-50 transition shadow-sm"
-          >
-            Upgrade Plan
-          </Link>
-        </div>
+
+          {/* Bottom Sidebar: Target Goal Badge + Settings */}
+          <div className="space-y-2 pt-4 border-t border-slate-100 dark:border-slate-800">
+            <div className="bg-slate-50 dark:bg-slate-800/70 p-3 rounded-2xl flex items-center gap-3 border border-slate-200/60 dark:border-slate-700/60">
+              <div className="w-10 h-10 rounded-xl bg-orange-100 dark:bg-orange-950/60 text-orange-600 dark:text-orange-400 flex items-center justify-center flex-shrink-0">
+                <span className="material-symbols-outlined text-[20px]">military_tech</span>
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                  {activeGoal} Prep
+                </span>
+                <span className="text-[10px] text-orange-600 dark:text-orange-400 font-semibold truncate">
+                  Target 680+ Score
+                </span>
+              </div>
+            </div>
+
+            <Link
+              href="/settings"
+              className="flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-all"
+            >
+              <span className="material-symbols-outlined text-[20px]">settings</span>
+              <span>Settings</span>
+            </Link>
+          </div>
+        </aside>
+
+        {/* Content Area (with left margin on lg: screens) */}
+        <main className="flex-1 lg:pl-64 pb-44 w-full">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            {children}
+          </div>
+        </main>
+      </div>
+
+      {/* Floating Subscription Upgrade Banner */}
+      {!hasActiveSubscription && (
+        <aside className="fixed bottom-24 left-1/2 -translate-x-1/2 w-full max-w-4xl px-4 z-40 pointer-events-auto">
+          <div className="rounded-2xl bg-gradient-to-r from-blue-700 via-indigo-600 to-blue-600 text-white shadow-xl p-3 px-5 flex items-center justify-between border border-blue-400/30 backdrop-blur-md">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center text-white flex-shrink-0 shadow-inner">
+                <span className="material-symbols-outlined text-[20px]">lock_open</span>
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="text-xs sm:text-sm font-bold leading-tight truncate">
+                  Get access to all batches
+                </span>
+                <span className="text-[11px] sm:text-xs text-white/85 truncate">
+                  Unlock 100+ live crash courses, test series &amp; personal mentorship
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 flex-shrink-0 ml-4">
+              <Link
+                href="/subscription"
+                className="bg-white text-blue-700 font-bold px-5 py-2 rounded-xl shadow hover:bg-blue-50 active:scale-95 transition-all text-xs"
+              >
+                Upgrade
+              </Link>
+            </div>
+          </div>
+        </aside>
       )}
 
-      {/* Bottom Tab Bar for Mobile & Quick Desktop Navigation */}
-      <nav className="fixed bottom-0 left-0 w-full z-40 flex justify-around items-center px-2 py-2 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800 shadow-lg">
-        {NAV_ITEMS.map((item) => {
-          const active = isActive(pathname, item.href);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex flex-col items-center justify-center gap-0.5 px-3 py-1.5 rounded-2xl transition-colors min-w-[64px] ${
-                active
-                  ? "bg-orange-50 dark:bg-orange-950/60 text-orange-600 dark:text-orange-400 font-bold"
-                  : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-              }`}
-            >
-              <span className="material-symbols-outlined text-xl">{item.icon}</span>
-              <span className="text-[11px] font-medium">{item.label}</span>
-            </Link>
-          );
-        })}
-      </nav>
+      {/* Ultra-Sleek Floating Pill Dock Navigation Bar */}
+      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-full max-w-4xl px-4 z-50 pointer-events-auto">
+        <nav
+          id="bottom-dock-nav"
+          className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-200/80 dark:border-slate-800 shadow-2xl rounded-2xl p-2 flex items-center justify-around gap-2"
+        >
+          {DOCK_ITEMS.map((item) => {
+            const active = isActive(pathname, item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`dock-item rounded-xl px-4 sm:px-5 py-2.5 flex flex-col items-center justify-center gap-1 group select-none flex-1 text-center transition-all duration-200 ease-out hover:scale-105 active:scale-95 ${
+                  active
+                    ? "active bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/25 shadow-sm font-semibold"
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 border border-transparent"
+                }`}
+              >
+                <span className="material-symbols-outlined text-[22px] transition-transform duration-200 group-hover:-translate-y-0.5">
+                  {item.icon}
+                </span>
+                <span className="text-[11px] font-bold leading-none">{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+      </div>
 
       {/* Goal Selection Modal */}
       <GoalSelectionModal
