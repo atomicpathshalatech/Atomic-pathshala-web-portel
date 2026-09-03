@@ -35,6 +35,54 @@ export const HIGHLIGHTER_COLORS = [
   "#ef4444", "#eab308", "#22c55e", "#3b82f6"
 ];
 
+// ---- BEAUTY & FACE ENHANCEMENT CAMERA FILTERS ----
+export type CameraFilterId = "normal" | "beauty_glow" | "bright_studio" | "warm_educator" | "cool_hd" | "soft_skin";
+
+export const CAMERA_FILTERS: { id: CameraFilterId; label: string; icon: string; description: string; cssFilter: string }[] = [
+  {
+    id: "normal",
+    label: "Normal (Original)",
+    icon: "videocam",
+    description: "Raw camera feed without effects",
+    cssFilter: "none",
+  },
+  {
+    id: "beauty_glow",
+    label: "Face Glow & Beauty",
+    icon: "auto_fix_high",
+    description: "Smoothens skin tone, enhances natural facial glow and vibrancy",
+    cssFilter: "brightness(1.12) contrast(1.06) saturate(1.18)",
+  },
+  {
+    id: "bright_studio",
+    label: "Studio Bright (Low Light)",
+    icon: "light_mode",
+    description: "Brightens face in dark rooms and enhances classroom lighting",
+    cssFilter: "brightness(1.24) contrast(1.12) saturate(1.1)",
+  },
+  {
+    id: "warm_educator",
+    label: "Warm Educator Tone",
+    icon: "wb_sunny",
+    description: "Pleasant warm skin complexion with rich contrast",
+    cssFilter: "brightness(1.08) sepia(0.14) saturate(1.25) contrast(1.06)",
+  },
+  {
+    id: "cool_hd",
+    label: "Crisp High Clarity HD",
+    icon: "hd",
+    description: "Sharp focus, deep contrast and high definition detail",
+    cssFilter: "contrast(1.22) brightness(1.08) saturate(1.08)",
+  },
+  {
+    id: "soft_skin",
+    label: "Soft Skin Smooth",
+    icon: "face",
+    description: "Soft focus glow for flawless on-camera presentation",
+    cssFilter: "brightness(1.1) contrast(1.02) saturate(1.1)",
+  },
+];
+
 // ---- ERASER MODES (Screenshot 1 & 3) ----
 export type EraserMode = "stroke" | "object" | "lasso" | "box";
 
@@ -148,7 +196,7 @@ function getCachedImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-// Point in polygon test for Lasso / Loop Eraser
+// Safe Point in polygon test for Lasso / Loop Eraser
 function isPointInPolygon(point: { x: number; y: number }, polygon: { x: number; y: number }[]) {
   let inside = false;
   for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
@@ -242,47 +290,96 @@ export function AtomicWhiteboardStudio({
   } | null>(null);
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<"chatpoll" | "audio" | "shortcuts">("shortcuts");
+  const [settingsTab, setSettingsTab] = useState<"chatpoll" | "audio" | "shortcuts">("audio");
   const [isCameraOpen, setIsCameraOpen] = useState(true);
   const [isObsOutput, setIsObsOutput] = useState(false);
 
-  // Camera video ref and streaming state
+  // ---- CAMERA STREAMING, DEVICES & BEAUTY FILTERS ----
   const videoRef = useRef<HTMLVideoElement>(null);
   const [cameraActive, setCameraActive] = useState(true);
   const [micActive, setMicActive] = useState(true);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [cameraPermissionError, setCameraPermissionError] = useState<string | null>(null);
 
-  const startWebcam = useCallback(async () => {
-    if (!navigator?.mediaDevices?.getUserMedia) {
-      setCameraPermissionError("Camera API not supported");
-      return;
-    }
-    setCameraPermissionError(null);
+  // Device Selection & Filter Presets
+  const [selectedCameraId, setSelectedCameraId] = useState<string>("");
+  const [selectedMicId, setSelectedMicId] = useState<string>("");
+  const [availableVideoDevices, setAvailableVideoDevices] = useState<MediaDeviceInfo[]>([]);
+  const [availableAudioDevices, setAvailableAudioDevices] = useState<MediaDeviceInfo[]>([]);
+  const [cameraFilter, setCameraFilter] = useState<CameraFilterId>("beauty_glow");
+  const [cameraBrightness, setCameraBrightness] = useState(108);
+  const [cameraContrast, setCameraContrast] = useState(105);
+  const [isCameraFilterMenuOpen, setIsCameraFilterMenuOpen] = useState(false);
+
+  const updateDeviceList = useCallback(async () => {
+    if (!navigator?.mediaDevices?.enumerateDevices) return;
     try {
-      let stream: MediaStream | null = null;
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevs = devices.filter((d) => d.kind === "videoinput");
+      const audioDevs = devices.filter((d) => d.kind === "audioinput");
+      setAvailableVideoDevices(videoDevs);
+      setAvailableAudioDevices(audioDevs);
+    } catch {}
+  }, []);
+
+  const startWebcam = useCallback(
+    async (forcedCamId?: string, forcedMicId?: string) => {
+      if (!navigator?.mediaDevices?.getUserMedia) {
+        setCameraPermissionError("Camera API not supported in this browser");
+        return;
+      }
+      setCameraPermissionError(null);
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 640 }, height: { ideal: 360 } },
-          audio: micActive,
-        });
-      } catch {
-        // Fallback to video only (in case microphone is missing or denied)
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: false,
-        });
+        const camId = forcedCamId || selectedCameraId;
+        const micId = forcedMicId || selectedMicId;
+
+        const videoConstraints: MediaTrackConstraints = {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        };
+        if (camId) {
+          videoConstraints.deviceId = { exact: camId };
+        } else {
+          videoConstraints.facingMode = "user";
+        }
+
+        const audioConstraints: boolean | MediaTrackConstraints = micActive
+          ? micId
+            ? { deviceId: { exact: micId } }
+            : true
+          : false;
+
+        let stream: MediaStream | null = null;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: videoConstraints,
+            audio: audioConstraints,
+          });
+        } catch {
+          // Fallback to basic video only (if mic is blocked or unavailable)
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false,
+          });
+        }
+
+        setCameraStream(stream);
+        setCameraActive(true);
+        updateDeviceList();
+
+        if (videoRef.current && stream) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play().catch(() => {});
+        }
+        toast.success("Camera started with Beauty Filters active!");
+      } catch (err: any) {
+        console.warn("getUserMedia failed:", err);
+        setCameraPermissionError(err?.message || "Camera permission required");
+        toast.error("Camera access needed: Please allow camera in browser address bar");
       }
-      setCameraStream(stream);
-      if (videoRef.current && stream) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play().catch(() => {});
-      }
-    } catch (err: any) {
-      console.warn("getUserMedia failed:", err);
-      setCameraPermissionError(err?.message || "Camera permission required");
-    }
-  }, [micActive]);
+    },
+    [micActive, selectedCameraId, selectedMicId, updateDeviceList]
+  );
 
   useEffect(() => {
     if (cameraActive && isCameraOpen) {
@@ -300,13 +397,26 @@ export function AtomicWhiteboardStudio({
     };
   }, [cameraActive, isCameraOpen, startWebcam]);
 
-  // Bind video element whenever stream changes or video element mounts
+  // Bind video element whenever stream changes or component re-renders
   useEffect(() => {
     if (videoRef.current && cameraStream) {
       videoRef.current.srcObject = cameraStream;
       videoRef.current.play().catch(() => {});
     }
   }, [cameraStream]);
+
+  // Compute CSS filter string for video face beautification
+  const getComputedVideoFilter = useCallback(() => {
+    const preset = CAMERA_FILTERS.find((f) => f.id === cameraFilter)?.cssFilter || "none";
+    let base = preset === "none" ? "" : preset;
+    if (cameraBrightness !== 100) {
+      base += ` brightness(${cameraBrightness / 100})`;
+    }
+    if (cameraContrast !== 100) {
+      base += ` contrast(${cameraContrast / 100})`;
+    }
+    return base.trim() || "none";
+  }, [cameraFilter, cameraBrightness, cameraContrast]);
 
   const activeSlide: Slide =
     slides[activeSlideIndex] ||
@@ -881,16 +991,17 @@ export function AtomicWhiteboardStudio({
   // Click outside to close any open popup
   useEffect(() => {
     const handleGlobalClick = (e: MouseEvent) => {
-      if (openPopup) {
-        const target = e.target as HTMLElement;
-        if (!target.closest("[data-popup-container]")) {
-          setOpenPopup(null);
-        }
+      const target = e.target as HTMLElement;
+      if (openPopup && !target.closest("[data-popup-container]")) {
+        setOpenPopup(null);
+      }
+      if (isCameraFilterMenuOpen && !target.closest("[data-filter-menu]")) {
+        setIsCameraFilterMenuOpen(false);
       }
     };
     window.addEventListener("mousedown", handleGlobalClick);
     return () => window.removeEventListener("mousedown", handleGlobalClick);
-  }, [openPopup]);
+  }, [openPopup, isCameraFilterMenuOpen]);
 
   // Global Keyboard Shortcuts
   useEffect(() => {
@@ -950,6 +1061,7 @@ export function AtomicWhiteboardStudio({
         setOpenPopup(null);
         setIsSlidePanelOpen(false);
         setSelectedStrokeIds([]);
+        setIsCameraFilterMenuOpen(false);
         return;
       }
     };
@@ -1034,9 +1146,12 @@ export function AtomicWhiteboardStudio({
 
             <button
               type="button"
-              onClick={() => setIsSettingsOpen(true)}
+              onClick={() => {
+                updateDeviceList();
+                setIsSettingsOpen(true);
+              }}
               className="p-1.5 rounded-xl bg-[#1c1e2c] hover:bg-[#25283a] border border-[#2d3045] text-gray-300 transition"
-              title="Class Settings"
+              title="Class Settings (Audio/Video/Filters)"
             >
               <span className="material-symbols-outlined text-base">settings</span>
             </button>
@@ -1203,59 +1318,141 @@ export function AtomicWhiteboardStudio({
           </div>
         </div>
 
-        {/* Right Floating Camera Tile */}
+        {/* Right Floating Live Camera Tile with Beauty Filters */}
         {isCameraOpen && (
-          <div className="absolute top-4 right-4 z-20 w-48 h-36 bg-[#12131e] rounded-2xl border border-[#2d3045] shadow-2xl overflow-hidden flex flex-col">
+          <div className="absolute top-4 right-4 z-20 w-52 h-40 bg-[#12131e] rounded-2xl border border-[#2d3045] shadow-2xl overflow-hidden flex flex-col">
             <div className="relative flex-1 bg-black flex items-center justify-center overflow-hidden">
-              {cameraActive && !cameraPermissionError ? (
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover transform scale-x-[-1]"
-                />
-              ) : (
-                <div className="flex flex-col items-center justify-center p-2 text-center gap-1.5">
-                  <span className="material-symbols-outlined text-2xl text-amber-400">videocam_off</span>
+              {/* Always keep video in DOM to allow stream attachment */}
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                style={{ filter: getComputedVideoFilter() }}
+                className={`w-full h-full object-cover transform scale-x-[-1] transition-all duration-300 ${
+                  cameraActive && cameraStream ? "opacity-100" : "opacity-0 absolute pointer-events-none"
+                }`}
+              />
+
+              {(!cameraActive || !cameraStream || cameraPermissionError) && (
+                <div className="flex flex-col items-center justify-center p-3 text-center gap-2 z-10">
+                  <span className="material-symbols-outlined text-2xl text-amber-400 animate-bounce">videocam</span>
+                  <p className="text-[10px] text-gray-300 font-semibold">
+                    {cameraPermissionError ? "Camera Access Blocked" : "Camera Idle"}
+                  </p>
                   <button
                     type="button"
                     onClick={() => {
                       setCameraActive(true);
                       startWebcam();
                     }}
-                    className="px-2 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-[10px] font-bold text-white shadow"
+                    className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-[11px] font-bold text-white shadow-lg shadow-blue-600/40 transition active:scale-95"
                   >
                     Start Camera
                   </button>
                 </div>
               )}
-              {cameraActive && !cameraPermissionError && (
-                <div className="absolute bottom-1.5 left-1.5 flex items-center gap-1 bg-black/70 px-2 py-0.5 rounded text-[10px] font-bold text-white backdrop-blur-sm">
+
+              {cameraActive && cameraStream && (
+                <div className="absolute bottom-1.5 left-1.5 flex items-center gap-1.5 bg-black/70 px-2 py-0.5 rounded-md text-[9px] font-bold text-white backdrop-blur-sm">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Live Camera
+                  <span>{CAMERA_FILTERS.find((f) => f.id === cameraFilter)?.label || "Live"}</span>
                 </div>
               )}
             </div>
-            <div className="h-7 bg-[#171926] px-2 flex items-center justify-between border-t border-[#252838]">
-              <button
-                type="button"
-                onClick={() => setMicActive(!micActive)}
-                className={`p-1 rounded ${micActive ? "text-gray-300" : "text-rose-500"}`}
-              >
-                <span className="material-symbols-outlined text-xs">{micActive ? "mic" : "mic_off"}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setCameraActive(!cameraActive)}
-                className={`p-1 rounded ${cameraActive ? "text-gray-300" : "text-rose-500"}`}
-              >
-                <span className="material-symbols-outlined text-xs">{cameraActive ? "videocam" : "videocam_off"}</span>
-              </button>
+
+            {/* Bottom Mini Controls for Camera & Quick Beauty Filters */}
+            <div className="h-8 bg-[#171926] px-2 flex items-center justify-between border-t border-[#252838] relative">
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMicActive(!micActive);
+                    if (cameraStream) {
+                      cameraStream.getAudioTracks().forEach((t) => (t.enabled = !micActive));
+                    }
+                  }}
+                  className={`p-1 rounded ${micActive ? "text-gray-300 hover:text-white" : "text-rose-500"}`}
+                  title={micActive ? "Mute Microphone" : "Unmute Microphone"}
+                >
+                  <span className="material-symbols-outlined text-sm">{micActive ? "mic" : "mic_off"}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = !cameraActive;
+                    setCameraActive(next);
+                    if (cameraStream) {
+                      cameraStream.getVideoTracks().forEach((t) => (t.enabled = next));
+                    }
+                    if (next && !cameraStream) {
+                      startWebcam();
+                    }
+                  }}
+                  className={`p-1 rounded ${cameraActive ? "text-gray-300 hover:text-white" : "text-rose-500"}`}
+                  title={cameraActive ? "Turn Off Video" : "Turn On Video"}
+                >
+                  <span className="material-symbols-outlined text-sm">{cameraActive ? "videocam" : "videocam_off"}</span>
+                </button>
+              </div>
+
+              {/* Quick Beauty Filter Popover Button */}
+              <div className="relative" data-filter-menu="true">
+                <button
+                  type="button"
+                  onClick={() => setIsCameraFilterMenuOpen(!isCameraFilterMenuOpen)}
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 transition ${
+                    cameraFilter !== "normal" ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" : "text-gray-400 hover:text-white"
+                  }`}
+                  title="Face & Beauty Filters"
+                >
+                  <span className="material-symbols-outlined text-xs">auto_fix_high</span>
+                  <span>Filter</span>
+                </button>
+
+                {isCameraFilterMenuOpen && (
+                  <div className="absolute bottom-full right-0 mb-2 w-52 bg-[#161724] border border-[#2d3045] rounded-2xl p-2 shadow-2xl flex flex-col gap-1 z-50 text-white animate-in zoom-in-95">
+                    <div className="flex items-center justify-between pb-1.5 border-b border-[#252838] px-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1">
+                        <span className="material-symbols-outlined text-xs">face</span>
+                        Face &amp; Beauty Filters
+                      </span>
+                    </div>
+
+                    <div className="space-y-1 max-h-48 overflow-y-auto pr-0.5">
+                      {CAMERA_FILTERS.map((f) => (
+                        <button
+                          key={f.id}
+                          type="button"
+                          onClick={() => {
+                            setCameraFilter(f.id);
+                            setIsCameraFilterMenuOpen(false);
+                            toast.success(`${f.label} filter applied!`);
+                          }}
+                          className={`w-full text-left px-2.5 py-1.5 rounded-xl text-xs flex items-center justify-between transition ${
+                            cameraFilter === f.id
+                              ? "bg-amber-500/20 text-amber-300 font-bold border border-amber-500/40"
+                              : "text-gray-300 hover:bg-[#202234]"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="material-symbols-outlined text-sm text-amber-400">{f.icon}</span>
+                            <span>{f.label}</span>
+                          </div>
+                          {cameraFilter === f.id && <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <button
                 type="button"
                 onClick={() => setIsCameraOpen(false)}
                 className="p-1 rounded text-gray-400 hover:text-white"
+                title="Hide Camera"
               >
                 <span className="material-symbols-outlined text-xs">close</span>
               </button>
@@ -1667,7 +1864,7 @@ export function AtomicWhiteboardStudio({
             </button>
           </div>
 
-          {/* Right: Poll, Zoom, More (Screenshot 5) */}
+          {/* Right: Poll, Camera, More (Screenshot 5) */}
           <div className="flex items-center gap-2">
             {/* Requirement 7: Poll & Live Quiz Popover */}
             <div className="relative" data-popup-container="true">
@@ -2065,49 +2262,181 @@ export function AtomicWhiteboardStudio({
         </div>
       )}
 
-      {/* Settings Modal */}
+      {/* Settings Modal (Audio & Video Devices + Face & Beauty Filters) */}
       {isSettingsOpen && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-          <div className="bg-[#12131c] w-full max-w-xl rounded-2xl shadow-2xl border border-[#2d2e3b] flex flex-col text-white overflow-hidden">
+          <div className="bg-[#12131c] w-full max-w-2xl rounded-2xl shadow-2xl border border-[#2d2e3b] flex flex-col text-white overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b border-[#252836] bg-[#171924]">
-              <h3 className="text-sm font-bold text-gray-100">Class Settings</h3>
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-blue-400 text-lg">settings</span>
+                <h3 className="text-sm font-bold text-gray-100">Class &amp; Studio Settings</h3>
+              </div>
               <button type="button" onClick={() => setIsSettingsOpen(false)} className="text-gray-400 hover:text-white">
                 <span className="material-symbols-outlined text-base">close</span>
               </button>
             </div>
 
-            <div className="flex flex-1 min-h-[300px]">
-              <div className="w-48 bg-[#0e0f17] p-3 border-r border-[#252836] space-y-1">
+            <div className="flex flex-1 min-h-[360px]">
+              <div className="w-52 bg-[#0e0f17] p-3 border-r border-[#252836] space-y-1">
+                <button
+                  type="button"
+                  onClick={() => setSettingsTab("audio")}
+                  className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+                    settingsTab === "audio" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white"
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-sm">videocam</span>
+                  Audio &amp; Video &amp; Filters
+                </button>
                 <button
                   type="button"
                   onClick={() => setSettingsTab("chatpoll")}
-                  className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition ${
+                  className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
                     settingsTab === "chatpoll" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white"
                   }`}
                 >
+                  <span className="material-symbols-outlined text-sm">chat</span>
                   Chat &amp; Poll controls
                 </button>
                 <button
                   type="button"
-                  onClick={() => setSettingsTab("audio")}
-                  className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition ${
-                    settingsTab === "audio" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white"
-                  }`}
-                >
-                  Audio &amp; Video
-                </button>
-                <button
-                  type="button"
                   onClick={() => setSettingsTab("shortcuts")}
-                  className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition ${
+                  className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
                     settingsTab === "shortcuts" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white"
                   }`}
                 >
+                  <span className="material-symbols-outlined text-sm">keyboard</span>
                   Shortcuts
                 </button>
               </div>
 
-              <div className="flex-1 p-6">
+              <div className="flex-1 p-6 overflow-y-auto max-h-[500px]">
+                {settingsTab === "audio" && (
+                  <div className="space-y-5">
+                    {/* Device Selection */}
+                    <div className="space-y-3">
+                      <h4 className="text-xs font-bold text-gray-200 uppercase tracking-wider flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-sm text-blue-400">devices</span>
+                        Camera &amp; Audio Input Devices
+                      </h4>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-semibold text-gray-400">Camera Device</label>
+                          <select
+                            value={selectedCameraId}
+                            onChange={(e) => {
+                              setSelectedCameraId(e.target.value);
+                              startWebcam(e.target.value);
+                            }}
+                            className="w-full bg-[#161724] border border-[#2d3045] rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-blue-500"
+                          >
+                            <option value="">Default Integrated Camera</option>
+                            {availableVideoDevices.map((d, idx) => (
+                              <option key={d.deviceId || idx} value={d.deviceId}>
+                                {d.label || `Camera ${idx + 1}`}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-semibold text-gray-400">Microphone Device</label>
+                          <select
+                            value={selectedMicId}
+                            onChange={(e) => {
+                              setSelectedMicId(e.target.value);
+                              startWebcam(selectedCameraId, e.target.value);
+                            }}
+                            className="w-full bg-[#161724] border border-[#2d3045] rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-blue-500"
+                          >
+                            <option value="">Default Microphone</option>
+                            {availableAudioDevices.map((d, idx) => (
+                              <option key={d.deviceId || idx} value={d.deviceId}>
+                                {d.label || `Microphone ${idx + 1}`}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => startWebcam()}
+                        className="py-1.5 px-3 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-xs font-bold text-blue-400 flex items-center gap-1.5 transition"
+                      >
+                        <span className="material-symbols-outlined text-sm">refresh</span>
+                        Restart / Reconnect Camera
+                      </button>
+                    </div>
+
+                    {/* Beauty & Face Quality Filters */}
+                    <div className="space-y-3 pt-3 border-t border-[#252836]">
+                      <h4 className="text-xs font-bold text-gray-200 uppercase tracking-wider flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-sm text-amber-400">auto_fix_high</span>
+                        Face Quality &amp; Beauty Filters
+                      </h4>
+
+                      <div className="grid grid-cols-2 gap-2.5">
+                        {CAMERA_FILTERS.map((f) => (
+                          <button
+                            key={f.id}
+                            type="button"
+                            onClick={() => {
+                              setCameraFilter(f.id);
+                              toast.success(`${f.label} applied`);
+                            }}
+                            className={`p-3 rounded-2xl border text-left transition flex flex-col gap-1 ${
+                              cameraFilter === f.id
+                                ? "bg-amber-500/20 border-amber-500 text-white shadow-lg ring-1 ring-amber-500/40"
+                                : "bg-[#161724] border-[#252836] text-gray-300 hover:border-gray-500"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="material-symbols-outlined text-base text-amber-400">{f.icon}</span>
+                              <span className="text-xs font-bold text-gray-100">{f.label}</span>
+                            </div>
+                            <p className="text-[10px] text-gray-400 leading-tight">{f.description}</p>
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Sliders for Brightness & Contrast */}
+                      <div className="grid grid-cols-2 gap-4 pt-2">
+                        <div className="space-y-1 bg-[#161724] p-3 rounded-xl border border-[#252836]">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-gray-400">Brightness</span>
+                            <span className="font-mono text-amber-400">{cameraBrightness}%</span>
+                          </div>
+                          <input
+                            type="range"
+                            min={70}
+                            max={150}
+                            value={cameraBrightness}
+                            onChange={(e) => setCameraBrightness(Number(e.target.value))}
+                            className="w-full accent-amber-500 h-1.5 bg-gray-700 rounded-lg cursor-pointer"
+                          />
+                        </div>
+
+                        <div className="space-y-1 bg-[#161724] p-3 rounded-xl border border-[#252836]">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-gray-400">Contrast</span>
+                            <span className="font-mono text-amber-400">{cameraContrast}%</span>
+                          </div>
+                          <input
+                            type="range"
+                            min={70}
+                            max={150}
+                            value={cameraContrast}
+                            onChange={(e) => setCameraContrast(Number(e.target.value))}
+                            className="w-full accent-amber-500 h-1.5 bg-gray-700 rounded-lg cursor-pointer"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {settingsTab === "shortcuts" && (
                   <div className="space-y-3">
                     <h4 className="text-xs font-bold text-gray-200">Keyboard shortcuts</h4>
@@ -2144,13 +2473,6 @@ export function AtomicWhiteboardStudio({
                         <input type="checkbox" defaultChecked className="accent-blue-500" />
                       </label>
                     </div>
-                  </div>
-                )}
-
-                {settingsTab === "audio" && (
-                  <div className="space-y-3">
-                    <h4 className="text-xs font-bold text-gray-200">Audio &amp; Video Devices</h4>
-                    <p className="text-xs text-gray-400">Integrated WebRTC camera and microphone active.</p>
                   </div>
                 )}
               </div>
