@@ -270,6 +270,40 @@ export default async function StudentTestsPage() {
     });
   }
 
+  // Fetch Official Demo CBT Test
+  const demoTestRecord = await prisma.test.findUnique({
+    where: { id: "atomic-pathshala-demo-cbt-test" },
+    include: {
+      attempts: {
+        where: { studentId: student.id },
+        select: { id: true, status: true, score: true },
+      },
+      sections: {
+        include: { _count: { select: { questions: true } } },
+      },
+    },
+  });
+
+  const demoAttempt = demoTestRecord?.attempts?.[0];
+  const demoStatus: "PENDING" | "IN_PROGRESS" | "COMPLETED" = demoAttempt
+    ? demoAttempt.status === "IN_PROGRESS"
+      ? "IN_PROGRESS"
+      : "COMPLETED"
+    : "PENDING";
+
+  const demoTestProp = demoTestRecord
+    ? {
+        id: demoTestRecord.id,
+        name: demoTestRecord.name,
+        description: demoTestRecord.description,
+        durationMin: demoTestRecord.durationMin,
+        questionCount: demoTestRecord.sections.reduce((s, sec) => s + (sec._count.questions || 0), 0) || 10,
+        totalMarks: 40,
+        status: demoStatus,
+        score: demoAttempt?.score ?? null,
+      }
+    : null;
+
   return (
     <div className="space-y-8 max-w-6xl mx-auto pb-16">
       {/* Header */}
@@ -291,6 +325,7 @@ export default async function StudentTestsPage() {
       <AtomicPracticeTestArena
         subjectTests={Object.values(subjectTestsMap)}
         testSeriesBoxes={testSeriesBoxes}
+        demoTest={demoTestProp}
       />
     </div>
   );

@@ -57,12 +57,25 @@ export interface TestSeriesBoxItem {
   tests: TestSeriesTestItem[];
 }
 
+export interface DemoTestProp {
+  id: string;
+  name: string;
+  description?: string | null;
+  durationMin: number;
+  questionCount: number;
+  totalMarks: number;
+  status: "PENDING" | "IN_PROGRESS" | "COMPLETED";
+  score?: number | null;
+}
+
 export function AtomicPracticeTestArena({
   subjectTests = [],
   testSeriesBoxes = [],
+  demoTest = null,
 }: {
   subjectTests: SubjectChapterwiseTests[];
   testSeriesBoxes: TestSeriesBoxItem[];
+  demoTest?: DemoTestProp | null;
 }) {
   const [activeCategory, setActiveCategory] = useState<"CHAPTERWISE" | "TEST_SERIES">("CHAPTERWISE");
 
@@ -111,6 +124,95 @@ export function AtomicPracticeTestArena({
 
   return (
     <div className="space-y-6">
+      {/* ========================================================================= */}
+      {/* FEATURED: ATOMIC PATHSHALA DEMO CBT SIMULATOR CARD                         */}
+      {/* ========================================================================= */}
+      {demoTest && (
+        <div className="bg-gradient-to-br from-emerald-950/20 via-slate-900 to-indigo-950/30 border-2 border-emerald-500/40 rounded-3xl p-5 sm:p-7 shadow-xl space-y-4 relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl -z-10 group-hover:bg-emerald-500/15 transition-all" />
+
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="px-3 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1 shadow-sm">
+                  <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                  LIVE DEMO CBT SIMULATOR
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full bg-slate-800 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold">
+                  Bilingual: English / हिंदी
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 text-[10px] font-bold">
+                  NEET Standard (+4 / -1)
+                </span>
+              </div>
+
+              <h2 className="text-lg sm:text-2xl font-black text-white flex items-center gap-2">
+                <span>{demoTest.name}</span>
+              </h2>
+
+              <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
+                {demoTest.description || "10 प्रश्नों वाला Demo Test — Student Test Interface, Question Palette, Review, Language और Result Flow को test करने के लिए।"}
+              </p>
+
+              {/* Subject Breakdown Badges */}
+              <div className="flex items-center gap-2 pt-1 flex-wrap">
+                <span className="text-xs text-slate-400 font-bold">Subjects:</span>
+                <span className="px-2 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-400 text-[11px] font-bold border border-emerald-500/20">
+                  Biology (4 Qs)
+                </span>
+                <span className="px-2 py-0.5 rounded-lg bg-amber-500/10 text-amber-400 text-[11px] font-bold border border-amber-500/20">
+                  Chemistry (3 Qs)
+                </span>
+                <span className="px-2 py-0.5 rounded-lg bg-blue-500/10 text-blue-400 text-[11px] font-bold border border-blue-500/20">
+                  Physics (3 Qs)
+                </span>
+              </div>
+            </div>
+
+            {/* Test Card Actions & Status */}
+            <div className="flex flex-col items-start sm:items-end gap-2.5 shrink-0 self-start sm:self-center">
+              <div className="flex items-center gap-3 text-xs font-bold text-slate-300">
+                <span>⏱️ {demoTest.durationMin} Mins</span>
+                <span>•</span>
+                <span>🎯 {demoTest.questionCount} Questions</span>
+                <span>•</span>
+                <span>🏆 {demoTest.totalMarks} Marks</span>
+              </div>
+
+              {demoTest.status === "COMPLETED" ? (
+                <div className="flex items-center gap-2">
+                  <span className="px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-black">
+                    Score: {demoTest.score ?? 0}/{demoTest.totalMarks}
+                  </span>
+                  <Link
+                    href={`/tests/${demoTest.id}/result`}
+                    className="px-5 py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg transition"
+                  >
+                    View Result &amp; Analysis
+                  </Link>
+                </div>
+              ) : demoTest.status === "IN_PROGRESS" ? (
+                <Link
+                  href={`/tests/${demoTest.id}/attempt`}
+                  className="px-6 py-3 rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/20 transition flex items-center gap-1.5 animate-bounce"
+                >
+                  <span className="material-symbols-outlined text-base">play_arrow</span>
+                  <span>Resume Test</span>
+                </Link>
+              ) : (
+                <Link
+                  href={`/tests/${demoTest.id}/attempt`}
+                  className="px-7 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-black text-sm shadow-xl shadow-emerald-600/30 transition-all transform hover:scale-[1.02] active:scale-95 flex items-center gap-2"
+                >
+                  <span className="material-symbols-outlined text-lg">rocket_launch</span>
+                  <span>Start Test</span>
+                </Link>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ========================================================================= */}
       {/* 1. TOP 2-CATEGORY SWITCHER: CHAPTERWISE TESTS vs TEST SERIES BOXES        */}
       {/* ========================================================================= */}
