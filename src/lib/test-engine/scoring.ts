@@ -119,5 +119,13 @@ export async function finalizeAttempt(attemptId: string, isLate: boolean) {
     }),
   ]);
 
+  // Compute and persist full deterministic test analysis
+  try {
+    const { calculateAndStoreTestAnalysis } = await import("./analysis-engine");
+    await calculateAndStoreTestAnalysis(attemptId);
+  } catch (err) {
+    console.error("Failed to generate TestAttemptAnalysis on submission:", err);
+  }
+
   return prisma.attempt.findUnique({ where: { id: attemptId } });
 }

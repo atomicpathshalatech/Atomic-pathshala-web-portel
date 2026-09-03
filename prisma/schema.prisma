@@ -234,6 +234,7 @@ model Student {
   // bound to a BatchSchedule) and a standalone TestSeries/Dpp attempt — see
   // the Test / Dpp models below for why one Attempt model spans both.
   attempts  Attempt[]
+  testAnalyses TestAttemptAnalysis[]
   bookmarks Bookmark[]
   lectureProgress LectureProgress[]
   teacherFollows  TeacherFollow[]
@@ -574,6 +575,7 @@ model Attempt {
   student    Student            @relation(fields: [studentId], references: [id], onDelete: Cascade)
   answers    AttemptAnswer[]
   violations AttemptViolation[]
+  analysis   TestAttemptAnalysis?
 
   @@unique([testId, studentId])
   @@unique([dppId, studentId])
@@ -609,6 +611,44 @@ model AttemptViolation {
 
   @@index([attemptId])
   @@map("attempt_violations")
+}
+
+model TestAttemptAnalysis {
+  id                String   @id @default(cuid())
+  attemptId         String   @unique
+  studentId         String
+  testId            String
+  totalQuestions    Int
+  attempted         Int
+  unattempted       Int
+  correct           Int
+  incorrect         Int
+  score             Float
+  maxMarks          Float
+  percentage        Float
+  accuracy          Float
+  timeTakenSec      Int      @default(0)
+  rank              Int?
+  topperScore       Float?
+  gapTopperMarks    Float?
+  percentile        Float?
+  subjectStats      Json     // Array of subject stats (Bio, Chem, Phys)
+  questionTypeStats Json     // Array of question-type stats
+  conceptStats      Json     // Array of concept/topic stats
+  chapterStats      Json     // Array of chapter stats
+  errorBreakdown    Json     // Error categories (Conceptual, Silly mistake, etc.)
+  ncertPlan         Json     // Personalized NCERT recommendations
+  actionPlan        Json     // Next improvement steps & practice counts
+  questionReviews   Json     // Detailed per-question analysis snapshots
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  attempt Attempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, createdAt])
+  @@index([testId])
+  @@map("test_attempt_analyses")
 }
 
 model QuestionVersion {
@@ -1386,6 +1426,12 @@ model Question {
   questionCode  String?      @unique
   solution      String?
   tags          String?
+  ncertBook     String?
+  ncertClass    String?
+  ncertChapter  String?
+  ncertPage     String?
+  ncertSection  String?
+  ncertLine     String?
   status        String       @default("DRAFT") // DRAFT | REVIEW_1 | REVIEW_2 | PUBLISHED | REJECTED
   version       Int          @default(1)
   review1Status String? // PENDING | APPROVED | REJECTED | CHANGES_REQUESTED
