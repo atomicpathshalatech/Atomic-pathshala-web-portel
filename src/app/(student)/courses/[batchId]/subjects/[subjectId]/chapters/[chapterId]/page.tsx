@@ -65,59 +65,55 @@ export default async function ChapterPage({
   const teacherName = firstLectureTeacher?.user?.name || "Senior Subject Faculty";
   const teacherPhoto = firstLectureTeacher?.user?.photoUrl || null;
 
-  // Build Roadmap groups dynamically from lectures with Class Notes (Tests handled in Test Arena)
-  const roadmapGroups: RoadmapTopicGroup[] = [];
-  const chunkSize = Math.max(1, Math.ceil(lectures.length / 4));
-
-  for (let i = 0; i < Math.max(1, Math.ceil(lectures.length / chunkSize)); i++) {
-    const chunkLectures = lectures.slice(i * chunkSize, (i + 1) * chunkSize);
-
-    roadmapGroups.push({
-      id: `step-${i + 1}`,
-      stepNumber: i + 1,
-      title: chunkLectures[0]?.title || `${chapter.title} Part ${i + 1}`,
-      lectures: chunkLectures.map((l, lIdx) => {
-        const position = i * chunkSize + lIdx + 1;
-        return {
-          id: l.id,
-          title: l.title,
-          order: l.order || position,
-          videoUrl: l.videoUrl,
-          isCompleted: completedLectureIds.has(l.id),
-          isLocked: false,
-        };
-      }),
-      notes: chunkLectures.map((l) => ({
-        id: `notes-${l.id}`,
-        title: `${l.title} — Class Notes`,
-      })),
-    });
-  }
-
-  // Fallback if no lectures exist yet
-  if (roadmapGroups.length === 0) {
-    roadmapGroups.push({
-      id: "step-1",
-      stepNumber: 1,
-      title: `${chapter.title} Lec : 01`,
-      lectures: [
-        {
-          id: "lec-demo-1",
-          title: `${chapter.title} Lec : 01`,
-          order: 1,
-          videoUrl: "#",
-          isCompleted: false,
-          isLocked: false,
-        },
-      ],
-      notes: [
-        {
-          id: "notes-demo-1",
-          title: `${chapter.title} Lec : 01 — Class Notes`,
-        },
-      ],
-    });
-  }
+  // Build 1-to-1 Roadmap steps: exactly 1 lecture per step
+  const roadmapGroups: RoadmapTopicGroup[] =
+    lectures.length > 0
+      ? lectures.map((l, idx) => ({
+          id: `step-${l.id}`,
+          stepNumber: l.order || idx + 1,
+          title: l.title || `${chapter.title} Lec : ${String(idx + 1).padStart(2, "0")}`,
+          lectures: [
+            {
+              id: l.id,
+              title: l.title,
+              order: l.order || idx + 1,
+              videoUrl: l.videoUrl,
+              notesUrl: l.slidesUrl,
+              isCompleted: completedLectureIds.has(l.id),
+              isLocked: false,
+            },
+          ],
+          notes: [
+            {
+              id: `notes-${l.id}`,
+              title: `${l.title} — Class Notes (PDF)`,
+              pdfUrl: l.slidesUrl || undefined,
+            },
+          ],
+        }))
+      : [
+          {
+            id: "step-1",
+            stepNumber: 1,
+            title: `${chapter.title} Lec : 01`,
+            lectures: [
+              {
+                id: "lec-demo-1",
+                title: `${chapter.title} Lec : 01`,
+                order: 1,
+                videoUrl: "#",
+                isCompleted: false,
+                isLocked: false,
+              },
+            ],
+            notes: [
+              {
+                id: "notes-demo-1",
+                title: `${chapter.title} Lec : 01 — Class Notes (PDF)`,
+              },
+            ],
+          },
+        ];
 
   // First accessible lecture link for "Start Chapter"
   const firstUnlocked = lectures.find((_, idx) => {

@@ -146,34 +146,49 @@ export function ChapterRoadmapTimeline({
                       );
                     })}
 
-                    {/* 2. Class Notes Items (Replaces DPP) */}
-                    {step.lectures.map((l) => (
-                      <div
-                        key={`notes-${l.id}`}
-                        className="p-3 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 flex items-center justify-between gap-2"
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <span className="w-6 h-6 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
-                            <span className="material-symbols-outlined text-sm">description</span>
-                          </span>
-                          <span className="text-slate-800 dark:text-slate-200 font-semibold line-clamp-1">
-                            {l.title} — Class Notes (PDF)
-                          </span>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toast.success(`Downloading ${l.title} Class Notes PDF...`);
-                          }}
-                          className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-bold text-xs hover:bg-indigo-500 transition shadow-sm shrink-0 flex items-center gap-1"
+                    {/* 2. Class Notes Item */}
+                    {step.notes && step.notes.length > 0 ? (
+                      step.notes.map((note) => (
+                        <div
+                          key={note.id}
+                          className="p-3 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 flex items-center justify-between gap-2"
                         >
-                          <span className="material-symbols-outlined text-xs">download</span>
-                          <span>Notes</span>
-                        </button>
-                      </div>
-                    ))}
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span className="w-6 h-6 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                              <span className="material-symbols-outlined text-sm">description</span>
+                            </span>
+                            <span className="text-slate-800 dark:text-slate-200 font-semibold line-clamp-1">
+                              {note.title}
+                            </span>
+                          </div>
+
+                          {note.pdfUrl ? (
+                            <a
+                              href={note.pdfUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-bold text-xs hover:bg-indigo-500 transition shadow-sm shrink-0 flex items-center gap-1"
+                            >
+                              <span className="material-symbols-outlined text-xs">download</span>
+                              <span>Notes</span>
+                            </a>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toast.info("Notes will be available once uploaded by faculty.");
+                              }}
+                              className="px-3 py-1.5 rounded-lg bg-indigo-600/80 text-white font-bold text-xs hover:bg-indigo-500 transition shadow-sm shrink-0 flex items-center gap-1"
+                            >
+                              <span className="material-symbols-outlined text-xs">download</span>
+                              <span>Notes</span>
+                            </button>
+                          )}
+                        </div>
+                      ))
+                    ) : null}
                   </div>
                 )}
               </div>
