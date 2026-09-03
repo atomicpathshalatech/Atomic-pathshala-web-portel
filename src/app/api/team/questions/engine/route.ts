@@ -169,7 +169,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 4. Create Master Question Record
+    // 4. Create Master Question Record (Always created as UNDER REVIEW / DRAFT)
     const question = await prisma.question.create({
       data: {
         subject: subject.trim(),
@@ -184,10 +184,11 @@ export async function POST(request: NextRequest) {
         questionCode,
         solution: solutionEn?.trim() || solutionHi?.trim() || null,
         tags: tagsString,
-        isPublished: !!isPublished,
+        status: "REVIEW_1", // Enforce Centralized Question Review pipeline
+        isPublished: false, // Never automatically published on creation
         createdById: session.user.id,
-        publishedById: isPublished ? session.user.id : null,
-        publishedAt: isPublished ? new Date() : null,
+        publishedById: null,
+        publishedAt: null,
         translations: {
           create: translationsData,
         },

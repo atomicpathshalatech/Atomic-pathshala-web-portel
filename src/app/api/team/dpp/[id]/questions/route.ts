@@ -22,6 +22,19 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     const { questionIds } = attachSchema.parse(await request.json());
 
+    const candidates = await prisma.question.findMany({
+      where: { id: { in: questionIds } },
+      select: { id: true, isPublished: true, status: true },
+    });
+
+    const notPublished = candidates.filter((q) => !q.isPublished || q.status !== "PUBLISHED");
+    if (notPublished.length > 0) {
+      return apiError(
+        "Only reviewed and published questions can be attached to a DPP. Selected question(s) are pending review.",
+        400
+      );
+    }
+
     const existingLinks = await prisma.dppQuestion.findMany({
       where: { dppId: params.id },
       select: { questionId: true, order: true },

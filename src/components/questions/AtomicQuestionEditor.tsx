@@ -356,7 +356,9 @@ export function AtomicQuestionEditor({
         referenceImageUrl: questionImagePreview || undefined,
         solutionImageUrl: solutionImagePreview || undefined,
         tags,
-        workflowStatus: publishImmediate ? "APPROVED" : "DRAFT",
+        isPublished: false,
+        status: "REVIEW_1",
+        workflowStatus: "REVIEW_1",
         dppId,
         testSectionId,
       };
@@ -369,15 +371,11 @@ export function AtomicQuestionEditor({
 
       const json = await res.json();
       if (!res.ok || !json.success) {
-        throw new Error(json.error || "Failed to create question.");
+        throw new Error(json.error || "Failed to save question.");
       }
 
       setGeneratedCode(json.data.question.questionCode);
-      toast.success(
-        publishImmediate
-          ? "Question published to Question Bank with reference permanently saved!"
-          : "Question Draft saved successfully!"
-      );
+      toast.success("Question saved and submitted to Review System for approval.");
 
       if (onSuccess) {
         onSuccess(json.data.question);
@@ -987,21 +985,12 @@ export function AtomicQuestionEditor({
               <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => handleSubmit(false)}
+                  onClick={handleSubmit}
                   disabled={saving}
-                  className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs border border-slate-200 dark:border-slate-700 transition"
+                  className="px-8 py-3 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-black text-sm shadow-lg shadow-blue-500/20 transition flex items-center gap-2 disabled:opacity-50"
                 >
-                  {saving ? "Saving..." : "Save Draft"}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleSubmit(true)}
-                  disabled={saving}
-                  className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-500/20 transition flex items-center gap-1.5"
-                >
-                  <span className="material-symbols-outlined text-base">publish</span>
-                  <span>{saving ? "Publishing..." : "Save & Publish Question"}</span>
+                  <span className="material-symbols-outlined text-lg">save</span>
+                  <span>{saving ? "Saving..." : "Save"}</span>
                 </button>
               </div>
             </div>
