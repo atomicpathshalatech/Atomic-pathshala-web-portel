@@ -153,11 +153,14 @@ export function reconstructQuestionFromElements(
 
     // Check if this line is an option (A, B, C, D)
     const optMatch = textContent.match(optionRegex);
-    if (optMatch && (optMatch[1] || optMatch[2] || optMatch[3])) {
-      currentTarget = "option";
-      const rawKey = (optMatch[1] || optMatch[2] || optMatch[3]).toUpperCase();
-      currentOptionKey = rawKey === "1" ? "A" : rawKey === "2" ? "B" : rawKey === "3" ? "C" : rawKey === "4" ? "D" : rawKey;
-      textContent = optMatch[4] || "";
+    if (optMatch) {
+      const matchGroup = optMatch[1] || optMatch[2] || optMatch[3];
+      if (matchGroup) {
+        currentTarget = "option";
+        const rawKey = matchGroup.toUpperCase();
+        currentOptionKey = rawKey === "1" ? "A" : rawKey === "2" ? "B" : rawKey === "3" ? "C" : rawKey === "4" ? "D" : rawKey;
+        textContent = optMatch[4] || "";
+      }
     }
 
     const isHindi = el.language === "hi" || /[\u0900-\u097F]/.test(textContent);
