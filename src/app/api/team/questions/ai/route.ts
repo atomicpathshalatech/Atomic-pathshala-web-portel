@@ -6,12 +6,14 @@ import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import {
+  extractBilingualQuestionFromImage,
+  translateQuestionContent,
+  generateExpandedSolution,
+} from "@/lib/questions/gemini-engine";
+import {
   parseQuestionFromRawText,
-  extractFromImage,
-  generateEducationalTranslation,
   verifyTranslation,
   generateAiMetadata,
-  generateAiSolution,
 } from "@/lib/questions/ai-service";
 
 export async function POST(request: NextRequest) {
@@ -21,7 +23,7 @@ export async function POST(request: NextRequest) {
     await requirePermission(session.user.id, PERMISSIONS.QUESTION_CREATE);
 
     const body = await request.json();
-    const { action, payload } = body;
+    const { action, payload = {} } = body;
 
     if (action === "extract") {
       const result = parseQuestionFromRawText(payload.rawText || "");
@@ -32,11 +34,15 @@ export async function POST(request: NextRequest) {
       if (!payload.imageBase64) {
         return apiError("imageBase64 is required for OCR extraction", 400);
       }
-      const result = await extractFromImage(
-        payload.imageBase64,
-        payload.mimeType || "image/png"
-      );
 
+      const result = await extractBilingualQuestionFromImage({
+        imageBase64: payload.imageBase64,
+        mimeType: payload.mimeType || "image/png",
+        solutionImageBase64: payload.solutionImageBase64,
+        solutionMimeType: payload.solutionMimeType || "image/png",
+      });
+
+      // Audit log the OCR extraction
       await prisma.auditLog.create({
         data: {
           userId: session.user.id,
@@ -44,7 +50,9 @@ export async function POST(request: NextRequest) {
           entityType: "QuestionOCR",
           metadata: {
             confidence: result.confidence,
-            hasOptions: Boolean(result.optionA && result.optionB),
+            isBilingual: result.isBilingual,
+            subject: result.subject,
+            hasFigure: result.hasFigure,
           },
         },
       });
@@ -53,19 +61,20 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "translate") {
-      const translation = await generateEducationalTranslation(
-        payload.text || "",
-        payload.sourceLanguage || "ENGLISH"
-      );
-      return apiSuccess({ translation });
+      const translated = await translateQuestionContent({
+        text: payload.text || "",
+        targetLang: payload.targetLang || "HINDI",
+        subject: payload.subject,
+      });
+      return apiSuccess({ translated });
     }
 
     if (action === "verify_translation") {
-      const report = await verifyTranslation(
-        payload.englishText || "",
-        payload.hindiText || ""
+      const verification = await verifyTranslation(
+        payload.statementEn || payload.englishText || "",
+        payload.statementHi || payload.hindiText || ""
       );
-      return apiSuccess({ report });
+      return apiSuccess({ verification });
     }
 
     if (action === "metadata") {
@@ -77,11 +86,12 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "solution") {
-      const solution = generateAiSolution(
-        payload.statement || "",
-        payload.options || {},
-        payload.correctAnswer || "A"
-      );
+      const solution = await generateExpandedSolution({
+        statement: payload.statement || "",
+        options: payload.options || {},
+        correctAnswer: Array.isArray(payload.correctAnswer) ? payload.correctAnswer : [payload.correctAnswer || "A"],
+        subject: payload.subject,
+      });
       return apiSuccess({ solution });
     }
 

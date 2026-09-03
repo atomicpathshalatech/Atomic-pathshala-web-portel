@@ -1,4 +1,4 @@
-﻿import { NextRequest } from "next/server";
+import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -104,17 +104,26 @@ export async function POST(request: NextRequest) {
       statementHi,
       optionsEn = {},
       optionsHi = {},
-      correctOptionIds = ["A"],
+      correctOptionIds,
+      correctAnswer,
       solutionEn,
       solutionHi,
       tags = [],
       category,
       pyqSource,
       figureUrl,
+      referenceImageUrl,
+      solutionImageUrl,
       isPublished = true,
       dppId,
       testSectionId,
     } = body;
+
+    const resolvedCorrectOptionIds = Array.isArray(correctAnswer)
+      ? correctAnswer
+      : Array.isArray(correctOptionIds)
+      ? correctOptionIds
+      : [correctAnswer || correctOptionIds || "A"];
 
     if (!subject?.trim()) {
       return apiError("Subject is required.", 400);
@@ -169,7 +178,7 @@ export async function POST(request: NextRequest) {
         subTopic: subTopic?.trim() || null,
         type: type as QuestionType,
         difficulty: difficulty as Difficulty,
-        imageUrl: figureUrl?.trim() || null,
+        imageUrl: figureUrl?.trim() || referenceImageUrl?.trim() || null,
         category: category?.trim() || null,
         pyqSource: pyqSource?.trim() || null,
         questionCode,
@@ -192,12 +201,14 @@ export async function POST(request: NextRequest) {
               statementHi,
               optionsEn,
               optionsHi,
-              correctOptionIds,
+              correctOptionIds: resolvedCorrectOptionIds,
               solutionEn,
               solutionHi,
               subject,
               chapter,
               topic,
+              referenceImageUrl,
+              solutionImageUrl,
             },
           },
         },
@@ -207,6 +218,37 @@ export async function POST(request: NextRequest) {
         createdBy: { select: { name: true, email: true } },
       },
     });
+
+    // 4.1 Persist Permanent Reference & Solution Assets if provided
+    if (referenceImageUrl?.trim()) {
+      await prisma.questionAsset.create({
+        data: {
+          questionId: question.id,
+          type: "REFERENCE",
+          storageKey: `ref-${question.id}`,
+          publicUrl: referenceImageUrl.trim(),
+          originalName: `question-reference-${questionCode}.png`,
+          mimeType: "image/png",
+          sizeBytes: referenceImageUrl.length,
+          createdById: session.user.id,
+        },
+      }).catch((e) => console.warn("[Question Asset] Reference create warning:", e));
+    }
+
+    if (solutionImageUrl?.trim()) {
+      await prisma.questionAsset.create({
+        data: {
+          questionId: question.id,
+          type: "SOLUTION",
+          storageKey: `sol-${question.id}`,
+          publicUrl: solutionImageUrl.trim(),
+          originalName: `solution-reference-${questionCode}.png`,
+          mimeType: "image/png",
+          sizeBytes: solutionImageUrl.length,
+          createdById: session.user.id,
+        },
+      }).catch((e) => console.warn("[Question Asset] Solution create warning:", e));
+    }
 
     let dppQuestion = null;
     let sectionQuestion = null;

@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { QuestionIdBadge } from "./QuestionIdBadge";
 import { QuestionTaxonomySidebar } from "./QuestionTaxonomySidebar";
 import { QuestionSimilaritySidebar } from "./QuestionSimilaritySidebar";
@@ -34,10 +35,20 @@ export function AtomicQuestionEditor({
 }: AtomicQuestionEditorProps) {
   const router = useRouter();
 
+  // Reference Images (Permanent Source Verification)
+  const [questionImagePreview, setQuestionImagePreview] = useState<string | null>(null);
+  const [questionImageFile, setQuestionImageFile] = useState<File | null>(null);
+  const [solutionImagePreview, setSolutionImagePreview] = useState<string | null>(null);
+  const [solutionImageFile, setSolutionImageFile] = useState<File | null>(null);
+  const [showSplitReference, setShowSplitReference] = useState(true);
+  const [ocrLoading, setOcrLoading] = useState(false);
+
   // Content states
   const [activeLangTab, setActiveLangTab] = useState<"ENGLISH" | "HINDI" | "BOTH">("BOTH");
   const [statementEn, setStatementEn] = useState("");
   const [statementHi, setStatementHi] = useState("");
+  const [isAiTranslatedHi, setIsAiTranslatedHi] = useState(false);
+  const [isAiTranslatedEn, setIsAiTranslatedEn] = useState(false);
 
   const [optionAEn, setOptionAEn] = useState("");
   const [optionBEn, setOptionBEn] = useState("");
@@ -53,7 +64,7 @@ export function AtomicQuestionEditor({
   const [solutionEn, setSolutionEn] = useState("");
   const [solutionHi, setSolutionHi] = useState("");
 
-  // Figure / Diagram attachment
+  // Figure / Diagram attachment (For Student UI)
   const [figureUrl, setFigureUrl] = useState("");
   const [figureCaption, setFigureCaption] = useState("");
 
@@ -76,6 +87,44 @@ export function AtomicQuestionEditor({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [generatedCode, setGeneratedCode] = useState<string | null>(null);
+
+  const questionInputRef = useRef<HTMLInputElement>(null);
+  const solutionInputRef = useRef<HTMLInputElement>(null);
+
+  // Global Clipboard Paste (Ctrl+V) handler for Images
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item && item.type.indexOf("image") !== -1) {
+          const file = item.getAsFile();
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = () => {
+              const base64 = reader.result as string;
+              if (!questionImagePreview) {
+                setQuestionImagePreview(base64);
+                setQuestionImageFile(file);
+                toast.success("Question Image pasted from clipboard! Running AI OCR...");
+                triggerOcrExtraction(base64, file.type);
+              } else if (!solutionImagePreview) {
+                setSolutionImagePreview(base64);
+                setSolutionImageFile(file);
+                toast.success("Solution Image pasted from clipboard!");
+              }
+            };
+            reader.readAsDataURL(file);
+          }
+        }
+      }
+    };
+
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [questionImagePreview, solutionImagePreview]);
 
   // Auto trigger debounced similarity check when statement changes
   useEffect(() => {
@@ -114,6 +163,64 @@ export function AtomicQuestionEditor({
     }
   };
 
+  // Run Unified Gemini Multimodal OCR
+  const triggerOcrExtraction = async (base64Img: string, mime: string) => {
+    setOcrLoading(true);
+    try {
+      const res = await fetch("/api/team/questions/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "ocr_image",
+          payload: {
+            imageBase64: base64Img,
+            mimeType: mime || "image/png",
+            solutionImageBase64: solutionImagePreview || undefined,
+            solutionMimeType: solutionImageFile?.type || "image/png",
+          },
+        }),
+      });
+      const json = await res.json();
+      if (json.success && json.data.result) {
+        handleApplyExtraction(json.data.result);
+        toast.success("Bilingual Question & Formulas extracted with high accuracy!");
+      } else {
+        toast.error(json.error || "Could not extract question from image.");
+      }
+    } catch {
+      toast.error("Failed to connect to Gemini AI OCR engine.");
+    } finally {
+      setOcrLoading(false);
+    }
+  };
+
+  const handleQuestionFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setQuestionImageFile(file);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result as string;
+      setQuestionImagePreview(base64);
+      triggerOcrExtraction(base64, file.type);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSolutionFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setSolutionImageFile(file);
+    const reader = new FileReader();
+    reader.onload = () => {
+      setSolutionImagePreview(reader.result as string);
+      toast.success("Solution reference image attached!");
+    };
+    reader.readAsDataURL(file);
+  };
+
   // AI Assistant Callbacks
   const handleApplyExtraction = (extracted: any) => {
     if (extracted.statementEn) setStatementEn(extracted.statementEn);
@@ -140,16 +247,46 @@ export function AtomicQuestionEditor({
     if (extracted.solutionEn) setSolutionEn(extracted.solutionEn);
     if (extracted.solutionHi) setSolutionHi(extracted.solutionHi);
 
-    if (extracted.metadata) {
-      handleApplyMetadata(extracted.metadata);
-    }
+    if (extracted.subject) setSubject(extracted.subject);
+    if (extracted.chapter) setChapter(extracted.chapter);
+    if (extracted.topic) setTopic(extracted.topic);
+    if (extracted.difficulty) setDifficulty(extracted.difficulty);
+    if (extracted.hasFigure) setFigureCaption(extracted.figureCaption || "Figure 1.1");
   };
 
-  const handleApplyTranslation = (translatedText: string, targetLang: "ENGLISH" | "HINDI") => {
-    if (targetLang === "HINDI") {
-      setStatementHi(translatedText);
-    } else {
-      setStatementEn(translatedText);
+  // 1-Click Translation Action
+  const handleQuickTranslate = async (targetLang: "HINDI" | "ENGLISH") => {
+    const sourceText = targetLang === "HINDI" ? statementEn : statementHi;
+    if (!sourceText.trim()) {
+      toast.error(`Please enter ${targetLang === "HINDI" ? "English" : "Hindi"} text first.`);
+      return;
+    }
+
+    const toastId = toast.loading(`Translating to ${targetLang === "HINDI" ? "Hindi (Devanagari)" : "English"} via Gemini NCERT engine...`);
+    try {
+      const res = await fetch("/api/team/questions/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "translate",
+          payload: { text: sourceText, targetLang, subject },
+        }),
+      });
+      const json = await res.json();
+      if (json.success && json.data.translated) {
+        if (targetLang === "HINDI") {
+          setStatementHi(json.data.translated);
+          setIsAiTranslatedHi(true);
+        } else {
+          setStatementEn(json.data.translated);
+          setIsAiTranslatedEn(true);
+        }
+        toast.success(`Translated to ${targetLang} with formulas preserved!`, { id: toastId });
+      } else {
+        toast.error("Translation failed. Please try again.", { id: toastId });
+      }
+    } catch {
+      toast.error("Network error during translation.", { id: toastId });
     }
   };
 
@@ -157,9 +294,8 @@ export function AtomicQuestionEditor({
     if (typeof solution === "string") {
       setSolutionEn(solution);
     } else if (solution) {
-      if (solution.explanationEn) setSolutionEn(solution.explanationEn);
-      if (solution.explanationHi) setSolutionHi(solution.explanationHi);
-      if (solution.correctAnswer?.[0]) setCorrectOption(solution.correctAnswer[0].toUpperCase());
+      if (solution.solutionEn) setSolutionEn(solution.solutionEn);
+      if (solution.solutionHi) setSolutionHi(solution.solutionHi);
     }
   };
 
@@ -217,13 +353,15 @@ export function AtomicQuestionEditor({
         solutionHi: solutionHi.trim() || undefined,
         figureUrl: figureUrl.trim() || undefined,
         figureCaption: figureCaption.trim() || undefined,
+        referenceImageUrl: questionImagePreview || undefined,
+        solutionImageUrl: solutionImagePreview || undefined,
         tags,
         workflowStatus: publishImmediate ? "APPROVED" : "DRAFT",
         dppId,
         testSectionId,
       };
 
-      const res = await fetch("/api/team/questions", {
+      const res = await fetch("/api/team/questions/engine", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -235,6 +373,11 @@ export function AtomicQuestionEditor({
       }
 
       setGeneratedCode(json.data.question.questionCode);
+      toast.success(
+        publishImmediate
+          ? "Question published to Question Bank with reference permanently saved!"
+          : "Question Draft saved successfully!"
+      );
 
       if (onSuccess) {
         onSuccess(json.data.question);
@@ -254,12 +397,12 @@ export function AtomicQuestionEditor({
 
   return (
     <div className="space-y-6">
-      {/* 1. Top Header & Mode Banner (Clean White Background Card) */}
+      {/* 1. Header & Live Question ID Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
         <div>
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs font-bold px-3 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 font-mono">
-              UNIVERSAL QUESTION ENGINE
+              AI MULTIMODAL INGESTION
             </span>
             {dppName && (
               <span className="text-xs px-3 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 font-semibold">
@@ -273,24 +416,247 @@ export function AtomicQuestionEditor({
             )}
           </div>
           <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight mt-1.5">
-            Create Question Studio
+            Unified Image to Question Studio
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Author bilingual questions with LaTeX formulas, AI OCR, instant duplicate check, and NCERT taxonomies.
+            Paste/upload question or textbook screenshot (Ctrl+V). AI extracts bilingual text, formulas &amp; options with side-by-side verification.
           </p>
         </div>
 
-        {/* Live Question ID Indicator */}
         <div className="w-full sm:w-auto">
           <QuestionIdBadge questionCode={generatedCode} subjectName={subject} isSaving={saving} />
         </div>
       </div>
 
-      {/* 2. Main Grid: Editor on Left (col-span-8), Taxonomies & Similarity on Right (col-span-4) */}
+      {/* 2. Unified Image Dropzone & Permanent Reference Dock (Top) */}
+      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+        <div className="flex items-center justify-between flex-wrap gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold">
+              <span className="material-symbols-outlined text-lg">document_scanner</span>
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                Image Source &amp; Reference Verification
+              </h3>
+              <p className="text-[11px] text-slate-500">
+                Paste directly (<kbd className="px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border text-[10px] font-mono">Ctrl+V</kbd>) or upload. Original image is preserved permanently.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {questionImagePreview && (
+              <button
+                type="button"
+                onClick={() => setShowSplitReference(!showSplitReference)}
+                className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition flex items-center gap-1.5"
+              >
+                <span className="material-symbols-outlined text-sm">
+                  {showSplitReference ? "visibility_off" : "visibility"}
+                </span>
+                <span>{showSplitReference ? "Hide Reference View" : "Show Side Reference"}</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Dropzone Boxes: Question Image (Primary) + Solution Image (Secondary) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Question Image Dropzone */}
+          <div
+            onClick={() => questionInputRef.current?.click()}
+            className={`border-2 border-dashed rounded-2xl p-5 text-center cursor-pointer transition relative group ${
+              questionImagePreview
+                ? "border-blue-500 bg-blue-50/20 dark:bg-blue-950/20"
+                : "border-slate-300 dark:border-slate-700 hover:border-blue-500 bg-slate-50 dark:bg-slate-800/40"
+            }`}
+          >
+            <input
+              ref={questionInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleQuestionFileSelect}
+              className="hidden"
+            />
+
+            {questionImagePreview ? (
+              <div className="space-y-3">
+                <div className="relative max-h-48 mx-auto overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
+                  <img
+                    src={questionImagePreview}
+                    alt="Question Reference"
+                    className="max-h-48 w-full object-contain"
+                  />
+                  {ocrLoading && (
+                    <div className="absolute inset-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm flex flex-col items-center justify-center gap-2">
+                      <span className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                      <span className="text-xs font-bold text-blue-600 dark:text-blue-400">
+                        Extracting Question, Formulas &amp; Options...
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between text-xs pt-1">
+                  <span className="font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                    <span className="material-symbols-outlined text-sm">check_circle</span>
+                    Question Reference Stored
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (questionImageFile && questionImagePreview) {
+                          triggerOcrExtraction(questionImagePreview, questionImageFile.type);
+                        }
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-[11px] shadow-sm transition"
+                    >
+                      Re-Extract OCR
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setQuestionImagePreview(null);
+                        setQuestionImageFile(null);
+                      }}
+                      className="px-2 py-1 rounded-lg text-red-500 hover:bg-red-50 text-[11px] font-bold"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-1.5 py-3">
+                <div className="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 mx-auto flex items-center justify-center shadow-sm">
+                  <span className="material-symbols-outlined text-xl">add_photo_alternate</span>
+                </div>
+                <h4 className="text-xs font-bold text-slate-800 dark:text-white">
+                  Drop Question Image or Click to Browse
+                </h4>
+                <p className="text-[11px] text-slate-500">
+                  Supports bilingual English/Hindi, chemical formulas, and circuit diagrams.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Solution Image Dropzone */}
+          <div
+            onClick={() => solutionInputRef.current?.click()}
+            className={`border-2 border-dashed rounded-2xl p-5 text-center cursor-pointer transition relative group ${
+              solutionImagePreview
+                ? "border-indigo-500 bg-indigo-50/20 dark:bg-indigo-950/20"
+                : "border-slate-300 dark:border-slate-700 hover:border-indigo-500 bg-slate-50 dark:bg-slate-800/40"
+            }`}
+          >
+            <input
+              ref={solutionInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleSolutionFileSelect}
+              className="hidden"
+            />
+
+            {solutionImagePreview ? (
+              <div className="space-y-3">
+                <div className="max-h-48 mx-auto overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
+                  <img
+                    src={solutionImagePreview}
+                    alt="Solution Reference"
+                    className="max-h-48 w-full object-contain"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between text-xs pt-1">
+                  <span className="font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1">
+                    <span className="material-symbols-outlined text-sm">verified</span>
+                    Solution Reference Attached
+                  </span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSolutionImagePreview(null);
+                      setSolutionImageFile(null);
+                    }}
+                    className="px-2 py-1 rounded-lg text-red-500 hover:bg-red-50 text-[11px] font-bold"
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-1.5 py-3">
+                <div className="w-10 h-10 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 mx-auto flex items-center justify-center shadow-sm">
+                  <span className="material-symbols-outlined text-xl">description</span>
+                </div>
+                <h4 className="text-xs font-bold text-slate-800 dark:text-white">
+                  Attach Solution / Answer Key Image (Optional)
+                </h4>
+                <p className="text-[11px] text-slate-500">
+                  Step-by-step solution reference will be stored beside the question.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Main Grid with Split Screen Support */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* LEFT COLUMN: Question Content, Bilingual Fields, Options & Solutions (8 cols) */}
-        <div className="lg:col-span-8 space-y-6">
-          {/* AI Co-Pilot Bar */}
+        {/* If Split Reference is active and Question Image exists, show left comparison dock */}
+        {showSplitReference && questionImagePreview && (
+          <div className="lg:col-span-4 space-y-4">
+            <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-blue-200 dark:border-blue-900/60 shadow-sm sticky top-6 space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+                <span className="text-xs font-bold text-blue-600 dark:text-blue-400 flex items-center gap-1.5 uppercase tracking-wider font-mono">
+                  <span className="material-symbols-outlined text-base">image</span>
+                  Source Reference
+                </span>
+                <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-500 px-2 py-0.5 rounded-full font-bold">
+                  Side-by-Side Verification
+                </span>
+              </div>
+
+              <div className="rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950/50 max-h-[75vh] overflow-y-auto p-2">
+                <img
+                  src={questionImagePreview}
+                  alt="Original Source Reference"
+                  className="w-full object-contain rounded-xl"
+                />
+              </div>
+
+              {solutionImagePreview && (
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2">
+                  <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5 uppercase font-mono">
+                    <span className="material-symbols-outlined text-base">description</span>
+                    Solution Reference
+                  </span>
+                  <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-50 p-2">
+                    <img
+                      src={solutionImagePreview}
+                      alt="Solution Source Reference"
+                      className="w-full object-contain rounded-lg"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* CENTER / MAIN COLUMN: Editable Bilingual Content Canvas */}
+        <div
+          className={`${
+            showSplitReference && questionImagePreview ? "lg:col-span-8" : "lg:col-span-8"
+          } space-y-6`}
+        >
+          {/* AI Tools Co-Pilot Bar */}
           <AiAssistantTools
             statementEn={statementEn}
             statementHi={statementHi}
@@ -298,12 +664,15 @@ export function AtomicQuestionEditor({
             optionsHi={{ A: optionAHi, B: optionBHi, C: optionCHi, D: optionDHi }}
             correctAnswer={[correctOption]}
             onApplyExtraction={handleApplyExtraction}
-            onApplyTranslation={handleApplyTranslation}
+            onApplyTranslation={(txt, lang) => {
+              if (lang === "HINDI") setStatementHi(txt);
+              else setStatementEn(txt);
+            }}
             onApplySolution={handleApplySolution}
             onApplyMetadata={handleApplyMetadata}
           />
 
-          {/* Main Question Content Card (Clean White Background) */}
+          {/* Question Editor Card */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-7 border border-slate-200 dark:border-slate-800 shadow-sm space-y-6">
             {/* Bilingual Language Switcher */}
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 flex-wrap gap-2">
@@ -345,16 +714,47 @@ export function AtomicQuestionEditor({
                   Hindi Only
                 </button>
               </div>
+
+              {/* 1-Click Translation Buttons */}
+              <div className="flex items-center gap-2">
+                {statementEn && !statementHi && (
+                  <button
+                    type="button"
+                    onClick={() => handleQuickTranslate("HINDI")}
+                    className="px-3 py-1 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100 text-xs font-bold transition flex items-center gap-1 shadow-sm"
+                  >
+                    <span className="material-symbols-outlined text-xs">translate</span>
+                    <span>Translate to Hindi (Devanagari)</span>
+                  </button>
+                )}
+                {statementHi && !statementEn && (
+                  <button
+                    type="button"
+                    onClick={() => handleQuickTranslate("ENGLISH")}
+                    className="px-3 py-1 rounded-xl bg-blue-50 text-blue-700 border border-blue-300 hover:bg-blue-100 text-xs font-bold transition flex items-center gap-1 shadow-sm"
+                  >
+                    <span className="material-symbols-outlined text-xs">translate</span>
+                    <span>Translate to English</span>
+                  </button>
+                )}
+              </div>
             </div>
 
-            {/* A. QUESTION STATEMENT */}
+            {/* A. QUESTION STATEMENTS */}
             <div className="space-y-4">
               {(activeLangTab === "BOTH" || activeLangTab === "ENGLISH") && (
                 <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
-                    <span>Question Statement (English) *</span>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                      <span>Question Statement (English) *</span>
+                      {isAiTranslatedEn && (
+                        <span className="px-2 py-0.2 rounded-full bg-blue-50 text-blue-600 border border-blue-200 text-[10px] font-mono font-bold">
+                          AI Translated
+                        </span>
+                      )}
+                    </label>
                     <span className="text-[10px] text-slate-400 font-mono">LaTeX / Math supported</span>
-                  </label>
+                  </div>
                   <textarea
                     rows={3}
                     required
@@ -368,10 +768,17 @@ export function AtomicQuestionEditor({
 
               {(activeLangTab === "BOTH" || activeLangTab === "HINDI") && (
                 <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
-                    <span>Question Statement (Hindi - हिंदी)</span>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                      <span>Question Statement (Hindi - हिंदी)</span>
+                      {isAiTranslatedHi && (
+                        <span className="px-2 py-0.2 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 text-[10px] font-mono font-bold">
+                          AI Translated (NCERT Aligned)
+                        </span>
+                      )}
+                    </label>
                     <span className="text-[10px] text-slate-400 font-mono">Devanagari supported</span>
-                  </label>
+                  </div>
                   <textarea
                     rows={3}
                     placeholder="e.g. हाइड्रोजन परमाणु के बोहर मॉडल के संबंध में निम्नलिखित में से कौन सा कथन सही है?"
@@ -388,7 +795,7 @@ export function AtomicQuestionEditor({
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                   <span className="material-symbols-outlined text-base text-blue-600">image</span>
-                  Figure / Diagram Attachment (Optional)
+                  Figure / Diagram for Student UI (Optional)
                 </span>
               </div>
 
@@ -416,7 +823,7 @@ export function AtomicQuestionEditor({
               )}
             </div>
 
-            {/* C. OPTIONS (A, B, C, D) & CORRECT ANSWER MARKING */}
+            {/* C. OPTIONS (A, B, C, D) & CORRECT ANSWER */}
             <div className="space-y-3">
               <div className="flex items-center justify-between pb-1 border-b border-slate-100 dark:border-slate-800">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
@@ -518,11 +925,13 @@ export function AtomicQuestionEditor({
               </div>
             </div>
 
-            {/* D. EXPLANATION & SOLUTIONS */}
+            {/* D. STEP-BY-STEP SOLUTION */}
             <div className="space-y-3">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                Detailed Solution &amp; Concepts
-              </h4>
+              <div className="flex items-center justify-between pb-1">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                  Step-by-Step Solution &amp; Concepts
+                </h4>
+              </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {(activeLangTab === "BOTH" || activeLangTab === "ENGLISH") && (
@@ -557,7 +966,7 @@ export function AtomicQuestionEditor({
               </div>
             </div>
 
-            {/* Save Error Display */}
+            {/* Save Error */}
             {saveError && (
               <div className="p-4 rounded-2xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-xs font-bold flex items-center gap-2.5">
                 <span className="material-symbols-outlined text-base text-red-600">error</span>
@@ -565,7 +974,7 @@ export function AtomicQuestionEditor({
               </div>
             )}
 
-            {/* Save Action Controls */}
+            {/* Save Actions */}
             <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
               <button
                 type="button"
@@ -599,9 +1008,8 @@ export function AtomicQuestionEditor({
           </div>
         </div>
 
-        {/* RIGHT COLUMN: Curriculum Taxonomy & Similarity Sidebar (4 cols) */}
+        {/* RIGHT COLUMN: Curriculum Taxonomy & Similarity Sidebar */}
         <div className="lg:col-span-4 space-y-6">
-          {/* 1. Taxonomy & Curriculum Sidebar */}
           <QuestionTaxonomySidebar
             subject={subject}
             setSubject={setSubject}
@@ -623,7 +1031,6 @@ export function AtomicQuestionEditor({
             setTags={setTags}
           />
 
-          {/* 2. Real-time Similarity & Duplicate Check Sidebar */}
           <QuestionSimilaritySidebar
             report={similarityReport}
             checking={checkingSimilarity}
