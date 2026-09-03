@@ -135,8 +135,9 @@ export default function QuestionBankHierarchicalPage() {
   };
 
   const handleSelectNode = (node: HierarchyNode) => {
-    if (data?.breadcrumbsMap[node.key]) {
-      setSelectedBreadcrumbs(data.breadcrumbsMap[node.key]);
+    const crumbs = data?.breadcrumbsMap?.[node.key];
+    if (crumbs) {
+      setSelectedBreadcrumbs(crumbs);
     }
   };
 
