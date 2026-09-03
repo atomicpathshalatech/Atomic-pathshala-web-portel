@@ -80,28 +80,21 @@ export async function POST(
       );
     }
 
-    // Resolve teacher
+    // Resolve teacher (defaults to the actual creator user)
     let teacherId = passedTeacherId;
     if (!teacherId) {
-      const myTeacher = await prisma.teacher.findUnique({ where: { userId: session.user.id } });
-      if (myTeacher) {
-        teacherId = myTeacher.id;
-      } else {
-        const anyTeacher = await prisma.teacher.findFirst();
-        if (anyTeacher) {
-          teacherId = anyTeacher.id;
-        } else {
-          const newTeacher = await prisma.teacher.create({
-            data: {
-              userId: session.user.id,
-              employeeCode: `EMP_${session.user.id.slice(0, 6)}`,
-              department: "ACADEMICS",
-              subjects: [chapter.subject.title],
-            },
-          });
-          teacherId = newTeacher.id;
-        }
+      let myTeacher = await prisma.teacher.findUnique({ where: { userId: session.user.id } });
+      if (!myTeacher) {
+        myTeacher = await prisma.teacher.create({
+          data: {
+            userId: session.user.id,
+            employeeCode: `EMP_${session.user.id.slice(0, 6).toUpperCase()}`,
+            department: "ACADEMICS",
+            subjects: [chapter.subject.title],
+          },
+        });
       }
+      teacherId = myTeacher.id;
     }
 
     // Find next order if not passed

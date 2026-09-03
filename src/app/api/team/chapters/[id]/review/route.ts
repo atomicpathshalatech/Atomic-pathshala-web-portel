@@ -22,11 +22,8 @@ const DECISION_TO_REVIEW_ACTION: Record<"APPROVE" | "REJECT" | "REQUEST_CHANGES"
 
 /**
  * POST /api/team/chapters/:id/review — admin decision on a chapter that
- * is UNDER_REVIEW: Approve, Reject, or Request Changes. Requires
- * CHAPTER_REVIEW (a distinct permission from the CHAPTER_UPDATE a teacher
- * uses to author their own chapter) and explicitly refuses to let the
- * chapter's own creator review it — "approve own chapter" is blocked at
- * the API, not just hidden in the UI.
+ * is UNDER_REVIEW: Approve, Reject, or Request Changes.
+ * Admins & Super Admins can approve any chapter submitted for review.
  */
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -37,8 +34,16 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const chapter = await prisma.chapter.findUnique({ where: { id: params.id } });
     if (!chapter) return apiError("Chapter not found", 404);
 
-    if (chapter.createdById && chapter.createdById === session.user.id) {
-      throw new ForbiddenError("You cannot review a chapter you created yourself.");
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      include: { role: true },
+    });
+    const isAdmin = user?.role?.name === "SUPER_ADMIN" || user?.role?.name === "ADMIN";
+
+    // Non-admin peer reviewers cannot approve their own authored chapter,
+    // but Admins / Super Admins can verify and approve any chapter.
+    if (!isAdmin && chapter.createdById && chapter.createdById === session.user.id) {
+      throw new ForbiddenError("Non-admin authors cannot self-approve. An Admin must review.");
     }
 
     const currentStatus = chapter.status as ChapterStatusValue;
