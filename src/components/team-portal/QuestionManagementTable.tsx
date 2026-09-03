@@ -373,6 +373,7 @@ export function QuestionManagementTable({
               <option value="Chemistry">Chemistry</option>
               <option value="Biology">Biology</option>
               <option value="Mathematics">Mathematics</option>
+              <option value="Science">Science</option>
             </select>
           </div>
 

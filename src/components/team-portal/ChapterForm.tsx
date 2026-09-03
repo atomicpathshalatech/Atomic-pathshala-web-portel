@@ -152,11 +152,22 @@ export function ChapterForm({
                 ? "No subjects in this course"
                 : "Select subject..."}
             </option>
-            {availableSubjects.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.title}
-              </option>
-            ))}
+            {availableSubjects.map((s) => {
+              const lower = s.title.toLowerCase();
+              let displayTitle = s.title;
+              if (lower.includes("phys")) displayTitle = "Physics";
+              else if (lower.includes("chem")) displayTitle = "Chemistry";
+              else if (lower.includes("bio") || lower.includes("botan") || lower.includes("zool")) displayTitle = "Biology";
+              else if (lower.includes("math")) displayTitle = "Mathematics";
+              else if (lower.includes("scien")) displayTitle = "Science";
+              else displayTitle = s.title.split("(")[0]?.trim() || s.title;
+
+              return (
+                <option key={s.id} value={s.id}>
+                  {displayTitle}
+                </option>
+              );
+            })}
           </select>
           {errors.subjectId && <p className={errorClass}>{errors.subjectId.message}</p>}
         </div>

@@ -48,11 +48,103 @@ export default async function ChaptersListPage({
     status?: ChapterStatus;
   } = {};
 
-  if (searchParams.subjectId) {
-    whereClause.subjectId = searchParams.subjectId;
+  const selectedCourse = searchParams.course || searchParams.courseId;
+  const selectedSubject = searchParams.subject || searchParams.subjectId;
+
+  if (selectedCourse) {
+    if (selectedCourse === "Class 11th (NEET)") {
+      whereClause.subject = {
+        course: {
+          OR: [
+            { title: { contains: "11", mode: "insensitive" } },
+            { title: { contains: "Class 11", mode: "insensitive" } },
+          ],
+        },
+      };
+    } else if (selectedCourse === "Class 12th (NEET)") {
+      whereClause.subject = {
+        course: {
+          OR: [
+            { title: { contains: "12", mode: "insensitive" } },
+            { title: { contains: "Class 12", mode: "insensitive" } },
+          ],
+        },
+      };
+    } else if (selectedCourse === "NEET Dropper") {
+      whereClause.subject = {
+        course: {
+          OR: [
+            { title: { contains: "Dropper", mode: "insensitive" } },
+            { title: { contains: "Repeater", mode: "insensitive" } },
+          ],
+        },
+      };
+    } else if (selectedCourse === "Foundation (Class 9th & 10th)") {
+      whereClause.subject = {
+        course: {
+          OR: [
+            { title: { contains: "Foundation", mode: "insensitive" } },
+            { title: { contains: "9", mode: "insensitive" } },
+            { title: { contains: "10", mode: "insensitive" } },
+          ],
+        },
+      };
+    } else if (selectedCourse === "JEE Main + Advanced") {
+      whereClause.subject = {
+        course: {
+          OR: [
+            { title: { contains: "JEE", mode: "insensitive" } },
+            { title: { contains: "Engineering", mode: "insensitive" } },
+          ],
+        },
+      };
+    } else {
+      whereClause.subject = {
+        OR: [
+          { courseId: selectedCourse },
+          { course: { title: { contains: selectedCourse, mode: "insensitive" } } },
+        ],
+      };
+    }
   }
-  if (searchParams.courseId) {
-    whereClause.subject = { courseId: searchParams.courseId };
+
+  if (selectedSubject) {
+    if (selectedSubject === "Physics") {
+      whereClause.subject = {
+        ...(whereClause.subject || {}),
+        title: { contains: "Physics", mode: "insensitive" },
+      };
+    } else if (selectedSubject === "Chemistry") {
+      whereClause.subject = {
+        ...(whereClause.subject || {}),
+        OR: [
+          { title: { contains: "Chem", mode: "insensitive" } },
+          { title: { in: ["Chemistry", "Organic Chemistry", "Inorganic Chemistry", "Physical Chemistry"] } },
+        ],
+      };
+    } else if (selectedSubject === "Biology") {
+      whereClause.subject = {
+        ...(whereClause.subject || {}),
+        OR: [
+          { title: { contains: "Bio", mode: "insensitive" } },
+          { title: { contains: "Botan", mode: "insensitive" } },
+          { title: { contains: "Zool", mode: "insensitive" } },
+          { title: { in: ["Biology", "Botany", "Zoology"] } },
+        ],
+      };
+    } else if (selectedSubject === "Mathematics") {
+      whereClause.subject = {
+        ...(whereClause.subject || {}),
+        title: { contains: "Math", mode: "insensitive" },
+      };
+    } else if (selectedSubject === "Science") {
+      whereClause.subject = {
+        ...(whereClause.subject || {}),
+        title: { contains: "Science", mode: "insensitive" },
+      };
+    } else {
+      whereClause.subjectId = selectedSubject;
+    }
   }
   if (searchParams.medium && ["HINDI", "ENGLISH", "HINGLISH"].includes(searchParams.medium)) {
     whereClause.medium = searchParams.medium as "HINDI" | "ENGLISH" | "HINGLISH";
@@ -61,7 +153,7 @@ export default async function ChaptersListPage({
     whereClause.status = searchParams.status as ChapterStatus;
   }
 
-  const [chapters, courses, subjects, totalChapters, underReviewCount, approvedCount] = await Promise.all([
+  const [chapters, totalChapters, underReviewCount, approvedCount] = await Promise.all([
     prisma.chapter.findMany({
       where: whereClause,
       include: {
@@ -75,8 +167,6 @@ export default async function ChaptersListPage({
       },
       orderBy: [{ updatedAt: "desc" }, { subjectId: "asc" }, { order: "asc" }],
     }),
-    prisma.course.findMany({ orderBy: { title: "asc" } }),
-    prisma.subject.findMany({ include: { course: true }, orderBy: { title: "asc" } }),
     prisma.chapter.count(),
     prisma.chapter.count({ where: { status: "UNDER_REVIEW" } }),
     prisma.chapter.count({ where: { status: { in: ["APPROVED", "PUBLISHED"] } } }),
@@ -154,32 +244,34 @@ export default async function ChaptersListPage({
         </Link>
       </div>
 
-      {/* Filter Toolbar */}
+      {/* Filter Toolbar with Exact Requested Course & Subject Options */}
       <form className="bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 p-3.5 rounded-2xl flex flex-wrap items-center gap-3" method="get">
+        {/* Course / Exam Dropdown */}
         <select
-          name="courseId"
-          defaultValue={searchParams.courseId ?? ""}
+          name="course"
+          defaultValue={selectedCourse ?? ""}
           className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white outline-none focus:border-blue-500"
         >
           <option value="">All Courses / Exams</option>
-          {courses.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.title}
-            </option>
-          ))}
+          <option value="Class 11th (NEET)">Class 11th (NEET)</option>
+          <option value="Class 12th (NEET)">Class 12th (NEET)</option>
+          <option value="NEET Dropper">NEET Dropper</option>
+          <option value="Foundation (Class 9th & 10th)">Foundation (Class 9th & 10th)</option>
+          <option value="JEE Main + Advanced">JEE Main + Advanced</option>
         </select>
 
+        {/* Subject Dropdown */}
         <select
-          name="subjectId"
-          defaultValue={searchParams.subjectId ?? ""}
+          name="subject"
+          defaultValue={selectedSubject ?? ""}
           className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white outline-none focus:border-blue-500"
         >
           <option value="">All Subjects</option>
-          {subjects.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.title} ({s.course.title})
-            </option>
-          ))}
+          <option value="Physics">Physics</option>
+          <option value="Chemistry">Chemistry</option>
+          <option value="Biology">Biology</option>
+          <option value="Mathematics">Mathematics</option>
+          <option value="Science">Science</option>
         </select>
 
         <select
@@ -212,7 +304,7 @@ export default async function ChaptersListPage({
           Apply Filter
         </button>
 
-        {(searchParams.courseId || searchParams.subjectId || searchParams.medium || searchParams.status) && (
+        {(searchParams.course || searchParams.courseId || searchParams.subject || searchParams.subjectId || searchParams.medium || searchParams.status) && (
           <Link href="/team/chapters" className="px-3 py-2 text-xs text-slate-500 hover:text-slate-900 dark:hover:text-white font-medium">
             Reset
           </Link>
