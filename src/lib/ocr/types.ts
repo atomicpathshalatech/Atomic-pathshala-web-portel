@@ -50,20 +50,8 @@ export interface OCRDocument {
 export interface StructuredQuestion {
   statementEn: string;
   statementHi: string;
-  optionsEn: {
-    A: string;
-    B: string;
-    C: string;
-    D: string;
-    [key: string]: string;
-  };
-  optionsHi: {
-    A: string;
-    B: string;
-    C: string;
-    D: string;
-    [key: string]: string;
-  };
+  optionsEn: Record<string, string>;
+  optionsHi: Record<string, string>;
   correctAnswer: string[];
   solutionEn: string;
   solutionHi: string;
