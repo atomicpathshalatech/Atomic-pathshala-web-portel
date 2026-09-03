@@ -54,15 +54,20 @@ export async function getUserRevisionDashboard(userId: string): Promise<{
   stats: RevisionDashboardStats;
   items: RevisionItemSummary[];
 }> {
-  const activeItems = await prisma.revisionItem.findMany({
-    where: { userId, active: true },
-    include: {
-      sessions: {
-        orderBy: { revisionNumber: "asc" },
+  let activeItems: any[] = [];
+  try {
+    activeItems = await prisma.revisionItem.findMany({
+      where: { userId, active: true },
+      include: {
+        sessions: {
+          orderBy: { revisionNumber: "asc" },
+        },
       },
-    },
-    orderBy: { updatedAt: "desc" },
-  });
+      orderBy: { updatedAt: "desc" },
+    });
+  } catch (err) {
+    console.warn("[Revision Service] activeItems fetch fallback:", err);
+  }
 
   let totalSessions = 0;
   let totalQuestionsRevised = 0;
@@ -76,7 +81,7 @@ export async function getUserRevisionDashboard(userId: string): Promise<{
 
   for (const item of activeItems) {
     const sessions = item.sessions || [];
-    const completedSessions = sessions.filter((s) => s.completedAt !== null);
+    const completedSessions = sessions.filter((s: any) => s.completedAt !== null);
 
     totalSessions += completedSessions.length;
 
@@ -107,7 +112,7 @@ export async function getUserRevisionDashboard(userId: string): Promise<{
 
     const avgAcc =
       completedSessions.length > 0
-        ? Math.round(completedSessions.reduce((acc, s) => acc + s.accuracy, 0) / completedSessions.length)
+        ? Math.round(completedSessions.reduce((acc: number, s: any) => acc + s.accuracy, 0) / completedSessions.length)
         : 0;
 
     for (const s of completedSessions) {
@@ -149,12 +154,12 @@ export async function getUserRevisionDashboard(userId: string): Promise<{
       title: item.title,
       fullPath: item.fullPath,
       active: item.active,
-      questionCount: Math.max(questionCount, item.sessions.reduce((max, s) => Math.max(max, s.totalQuestions), 0)),
+      questionCount: Math.max(questionCount, item.sessions.reduce((max: number, s: any) => Math.max(max, s.totalQuestions), 0)),
       revisionCount: completedSessions.length,
       latestAccuracy,
       averageAccuracy: avgAcc,
       status,
-      history: completedSessions.map((s) => ({
+      history: completedSessions.map((s: any) => ({
         sessionId: s.id,
         revisionNumber: s.revisionNumber,
         accuracy: Math.round(s.accuracy),

@@ -4,6 +4,7 @@ import {
   HierarchicalQuestionBankResponse,
   NodeCounts,
 } from "./types";
+import { seedAcademicHierarchy } from "@/lib/academic/seed-academic-data";
 
 const NEW_NODE_THRESHOLD_DAYS = 7;
 
@@ -26,26 +27,36 @@ export async function getHierarchicalQuestionBank(
 ): Promise<HierarchicalQuestionBankResponse> {
   const sevenDaysAgo = new Date(Date.now() - NEW_NODE_THRESHOLD_DAYS * 24 * 60 * 60 * 1000);
 
-  // 1. Fetch User Seen Nodes (for NEW indicator dismissal)
-  const seenNodes = userId
-    ? await prisma.revisionNodeSeen.findMany({
+  // 1. Fetch User Seen Nodes (for NEW indicator dismissal) with graceful fallback
+  let seenNodes: { entityType: string; entityId: string }[] = [];
+  try {
+    if (userId) {
+      seenNodes = await prisma.revisionNodeSeen.findMany({
         where: { userId },
         select: { entityType: true, entityId: true },
-      })
-    : [];
+      });
+    }
+  } catch (e) {
+    console.warn("[Hierarchy Service] Note: revisionNodeSeen query:", e);
+  }
   const seenSet = new Set(seenNodes.map((n) => `${n.entityType}_${n.entityId}`));
 
-  // 2. Fetch User Active Revision Items
-  const activeRevisionItems = userId
-    ? await prisma.revisionItem.findMany({
+  // 2. Fetch User Active Revision Items with graceful fallback
+  let activeRevisionItems: { id: string; entityType: string; entityId: string }[] = [];
+  try {
+    if (userId) {
+      activeRevisionItems = await prisma.revisionItem.findMany({
         where: { userId, active: true },
         select: { id: true, entityType: true, entityId: true },
-      })
-    : [];
+      });
+    }
+  } catch (e) {
+    console.warn("[Hierarchy Service] Note: revisionItem query:", e);
+  }
   const revisionMap = new Map(activeRevisionItems.map((r) => [`${r.entityType}_${r.entityId}`, r.id]));
 
   // 3. Fetch Full Academic Hierarchy from DB (Single Source of Truth)
-  const academicClasses = await prisma.academicClass.findMany({
+  let academicClasses = await prisma.academicClass.findMany({
     where: { isActive: true },
     orderBy: { numericValue: "asc" },
     include: {
@@ -73,6 +84,44 @@ export async function getHierarchicalQuestionBank(
       },
     },
   });
+
+  // If Academic Hierarchy is empty in database, automatically seed NCERT taxonomy!
+  if (academicClasses.length === 0) {
+    try {
+      console.log("[Hierarchy Service] Academic classes empty. Auto-seeding master NCERT hierarchy...");
+      await seedAcademicHierarchy();
+      academicClasses = await prisma.academicClass.findMany({
+        where: { isActive: true },
+        orderBy: { numericValue: "asc" },
+        include: {
+          subjects: {
+            where: { isActive: true },
+            orderBy: { order: "asc" },
+            include: {
+              chapters: {
+                where: { isActive: true },
+                orderBy: [{ displayOrder: "asc" }, { chapterNumber: "asc" }],
+                include: {
+                  topics: {
+                    where: { isActive: true },
+                    orderBy: { displayOrder: "asc" },
+                    include: {
+                      subtopics: {
+                        where: { isActive: true },
+                        orderBy: { displayOrder: "asc" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+    } catch (err) {
+      console.error("[Hierarchy Service] Failed to auto-seed academic hierarchy:", err);
+    }
+  }
 
   // 4. Fetch Question Aggregations directly from Database
   const questions = await prisma.question.findMany({
