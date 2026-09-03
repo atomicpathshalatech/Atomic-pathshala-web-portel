@@ -94,11 +94,11 @@ export function QuestionSimilaritySidebar({
           {/* Risk Level Alert */}
           <div
             className={`p-3 rounded-2xl border text-xs font-bold flex items-center justify-between ${getRiskColor(
-              report.highestRisk
+              report.duplicateRisk
             )}`}
           >
             <span>Duplicate Risk Level:</span>
-            <span className="font-mono uppercase">{report.highestRisk}</span>
+            <span className="font-mono uppercase">{report.duplicateRisk}</span>
           </div>
 
           {/* Matches List */}
@@ -114,10 +114,10 @@ export function QuestionSimilaritySidebar({
                   </span>
                   <span
                     className={`px-2 py-0.5 rounded-full font-mono text-[10px] font-bold border ${getRiskColor(
-                      m.riskLevel
+                      m.classification
                     )}`}
                   >
-                    {Math.round(m.similarityScore * 100)}% Match
+                    {Math.round(m.overallScore)}% Match
                   </span>
                 </div>
 
