@@ -740,14 +740,16 @@ export function AtomicWhiteboardStudio({
       return;
     }
 
-    // 2. LASSO / LOOP ERASER
-    if (tool === "eraser" && eraserMode === "lasso") {
+    // 2. LASSO / LOOP ERASER or FREEHAND LASSO SELECT TOOL
+    if ((tool === "eraser" && eraserMode === "lasso") || tool === "select") {
       setLassoPoints([{ x, y }]);
+      setSelectedStrokeIds([]);
+      setSelectionBox(null);
       return;
     }
 
-    // 3. AREA / BOX ERASER or SELECT TOOL
-    if ((tool === "eraser" && eraserMode === "box") || tool === "select") {
+    // 3. AREA / BOX ERASER
+    if (tool === "eraser" && eraserMode === "box") {
       setSelectionBox({ x1: x, y1: y, x2: x, y2: y });
       setSelectedStrokeIds([]);
       return;
@@ -785,14 +787,14 @@ export function AtomicWhiteboardStudio({
 
     if (!isDrawing) return;
 
-    // 1. LASSO / LOOP ERASER
-    if (tool === "eraser" && eraserMode === "lasso") {
+    // 1. LASSO / LOOP ERASER or FREEHAND LASSO SELECT TOOL
+    if ((tool === "eraser" && eraserMode === "lasso") || tool === "select") {
       setLassoPoints((pts) => [...pts, { x, y }]);
       return;
     }
 
-    // 2. AREA / BOX ERASER or SELECT TOOL
-    if ((tool === "eraser" && eraserMode === "box") || tool === "select") {
+    // 2. AREA / BOX ERASER
+    if (tool === "eraser" && eraserMode === "box") {
       setSelectionBox((prev) => (prev ? { ...prev, x2: x, y2: y } : null));
       return;
     }
@@ -840,6 +842,18 @@ export function AtomicWhiteboardStudio({
       return;
     }
 
+    // Finalize Freehand Lasso Select Tool (matches screenshot)
+    if (tool === "select" && lassoPoints.length > 2) {
+      const selectedIds = activeSlide.strokes
+        .filter((st) => st.points.some((p) => isPointInPolygon(p, lassoPoints)))
+        .map((st) => st.id || "");
+      setSelectedStrokeIds(selectedIds.filter(Boolean));
+      if (selectedIds.length > 0) {
+        toast.success(`${selectedIds.length} object(s) selected inside lasso!`);
+      }
+      return;
+    }
+
     // Finalize Area/Box Eraser (delete strokes inside box)
     if (tool === "eraser" && eraserMode === "box" && selectionBox) {
       setSlides((all) =>
@@ -855,9 +869,6 @@ export function AtomicWhiteboardStudio({
       toast.success("Selected box cleared");
       return;
     }
-
-    // Finalize Select Tool (select strokes inside box)
-    if (tool === "select" && selectionBox) {
       const selectedIds = activeSlide.strokes
         .filter((st) => st.points.some((p) => isPointInRect(p, selectionBox)))
         .map((st) => st.id || "");
@@ -1217,106 +1228,117 @@ export function AtomicWhiteboardStudio({
           </aside>
         )}
 
-        {/* Requirement 3: Left Vertical Select & Palette Toolbar (Screenshot 4) */}
-        <div className="absolute top-16 left-3 z-30 flex flex-col items-center py-2.5 px-1.5 bg-[#141624]/90 backdrop-blur-md rounded-full border border-[#292d42] shadow-2xl gap-2">
-          {/* Active Tool Icon Indicator */}
-          <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-xs text-orange-400">
-            <span className="material-symbols-outlined text-sm">
-              {tool === "pen" ? "edit" : tool === "highlighter" ? "ink_highlighter" : tool === "eraser" ? "ink_eraser" : tool === "shape" ? "category" : "gesture"}
-            </span>
-          </div>
+        {/* Left Side Outside Margin: Vertical Tool Palette (Outside the Board) */}
+        <aside className="w-14 sm:w-16 h-full flex flex-col items-center justify-center py-2 bg-[#090b14] border-r border-[#1e2235] shrink-0 z-30 select-none">
+          {/* Vertical Toolbar Capsule */}
+          <div className="flex flex-col items-center py-2.5 px-1.5 bg-[#141624] rounded-full border border-[#292d42] shadow-2xl gap-2">
+            {/* Active Tool Icon Indicator */}
+            <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-xs text-orange-400">
+              <span className="material-symbols-outlined text-sm">
+                {tool === "pen"
+                  ? "edit"
+                  : tool === "highlighter"
+                  ? "ink_highlighter"
+                  : tool === "eraser"
+                  ? "ink_eraser"
+                  : tool === "shape"
+                  ? "category"
+                  : "gesture"}
+              </span>
+            </div>
 
-          <div className="w-4 h-[1px] bg-gray-700/60" />
+            <div className="w-4 h-[1px] bg-gray-700/60" />
 
-          {/* Color Swatches (Screenshot 4) */}
-          <div className="flex flex-col gap-1.5">
-            {LEFT_BAR_COLORS.map((c) => (
+            {/* Color Swatches (Screenshot 4) */}
+            <div className="flex flex-col gap-1.5">
+              {LEFT_BAR_COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => {
+                    setColor(c);
+                    setHighlighterColor(c);
+                  }}
+                  className={`w-4 h-4 rounded-full transition transform hover:scale-125 ${
+                    color === c ? "ring-2 ring-white ring-offset-1 ring-offset-[#141624]" : "opacity-85"
+                  }`}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+            </div>
+
+            <div className="w-4 h-[1px] bg-gray-700/60" />
+
+            {/* 3 Size Dots (Screenshot 4) */}
+            <div className="flex flex-col gap-2 items-center py-1">
+              {[4, 10, 18].map((sz) => (
+                <button
+                  key={sz}
+                  type="button"
+                  onClick={() => setSize(sz)}
+                  className={`rounded-full transition flex items-center justify-center ${
+                    size === sz ? "ring-2 ring-blue-400 ring-offset-1 ring-offset-[#141624]" : ""
+                  }`}
+                  style={{
+                    width: `${Math.max(8, sz / 1.5)}px`,
+                    height: `${Math.max(8, sz / 1.5)}px`,
+                    backgroundColor: color,
+                  }}
+                />
+              ))}
+            </div>
+
+            <div className="w-4 h-[1px] bg-gray-700/60" />
+
+            {/* Freehand Lasso Select Tool Button (Screenshot 4 & user screenshot) */}
+            <button
+              type="button"
+              onClick={() => {
+                setTool("select");
+                toast.info("Freehand Lasso Select Tool active: Draw a loop to select drawings");
+              }}
+              className={`w-7 h-7 rounded-full flex items-center justify-center transition shadow ${
+                tool === "select"
+                  ? "bg-blue-600 text-white ring-2 ring-blue-400"
+                  : "bg-white/10 text-gray-300 hover:text-white"
+              }`}
+              title="Freehand Lasso Selection Tool"
+            >
+              <span className="material-symbols-outlined text-sm">gesture</span>
+            </button>
+
+            {/* Actions for Selected Objects (Screenshot 4) */}
+            <div className="flex flex-col gap-1 pt-1">
               <button
-                key={c}
                 type="button"
-                onClick={() => {
-                  setColor(c);
-                  setHighlighterColor(c);
-                }}
-                className={`w-4 h-4 rounded-full transition transform hover:scale-125 ${
-                  color === c ? "ring-2 ring-white ring-offset-1 ring-offset-[#141624]" : "opacity-85"
-                }`}
-                style={{ backgroundColor: c }}
-              />
-            ))}
-          </div>
-
-          <div className="w-4 h-[1px] bg-gray-700/60" />
-
-          {/* 3 Size Dots (Screenshot 4) */}
-          <div className="flex flex-col gap-2 items-center py-1">
-            {[4, 10, 18].map((sz) => (
+                onClick={handleDuplicateSelected}
+                disabled={selectedStrokeIds.length === 0}
+                className="p-1 rounded-full text-gray-400 hover:text-white disabled:opacity-20 transition"
+                title="Duplicate Selected (Ctrl+D)"
+              >
+                <span className="material-symbols-outlined text-xs">content_copy</span>
+              </button>
               <button
-                key={sz}
                 type="button"
-                onClick={() => setSize(sz)}
-                className={`rounded-full transition flex items-center justify-center ${
-                  size === sz ? "ring-2 ring-blue-400 ring-offset-1 ring-offset-[#141624]" : ""
-                }`}
-                style={{
-                  width: `${Math.max(8, sz / 1.5)}px`,
-                  height: `${Math.max(8, sz / 1.5)}px`,
-                  backgroundColor: color,
-                }}
-              />
-            ))}
+                onClick={handleCopySelected}
+                disabled={selectedStrokeIds.length === 0}
+                className="p-1 rounded-full text-gray-400 hover:text-white disabled:opacity-20 transition"
+                title="Copy Selected"
+              >
+                <span className="material-symbols-outlined text-xs">content_paste</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteSelected}
+                disabled={selectedStrokeIds.length === 0}
+                className="p-1 rounded-full text-gray-400 hover:text-rose-400 disabled:opacity-20 transition"
+                title="Delete Selected (Delete key)"
+              >
+                <span className="material-symbols-outlined text-xs">delete</span>
+              </button>
+            </div>
           </div>
-
-          <div className="w-4 h-[1px] bg-gray-700/60" />
-
-          {/* Select / Lasso Tool Button (Screenshot 4) */}
-          <button
-            type="button"
-            onClick={() => {
-              setTool("select");
-              toast.info("Select Tool active: Drag box to select objects");
-            }}
-            className={`w-7 h-7 rounded-full flex items-center justify-center transition shadow ${
-              tool === "select"
-                ? "bg-blue-600 text-white ring-2 ring-blue-400"
-                : "bg-white/10 text-gray-300 hover:text-white"
-            }`}
-            title="Lasso / Object Select Tool"
-          >
-            <span className="material-symbols-outlined text-sm">gesture</span>
-          </button>
-
-          {/* Actions for Selected Objects (Screenshot 4) */}
-          <div className="flex flex-col gap-1 pt-1">
-            <button
-              type="button"
-              onClick={handleDuplicateSelected}
-              disabled={selectedStrokeIds.length === 0}
-              className="p-1 rounded-full text-gray-400 hover:text-white disabled:opacity-20 transition"
-              title="Duplicate Selected (Ctrl+D)"
-            >
-              <span className="material-symbols-outlined text-xs">content_copy</span>
-            </button>
-            <button
-              type="button"
-              onClick={handleCopySelected}
-              disabled={selectedStrokeIds.length === 0}
-              className="p-1 rounded-full text-gray-400 hover:text-white disabled:opacity-20 transition"
-              title="Copy Selected"
-            >
-              <span className="material-symbols-outlined text-xs">content_paste</span>
-            </button>
-            <button
-              type="button"
-              onClick={handleDeleteSelected}
-              disabled={selectedStrokeIds.length === 0}
-              className="p-1 rounded-full text-gray-400 hover:text-rose-400 disabled:opacity-20 transition"
-              title="Delete Selected (Delete key)"
-            >
-              <span className="material-symbols-outlined text-xs">delete</span>
-            </button>
-          </div>
-        </div>
+        </aside>
 
         {/* Right Floating Live Camera Tile with Beauty Filters */}
         {isCameraOpen && (
