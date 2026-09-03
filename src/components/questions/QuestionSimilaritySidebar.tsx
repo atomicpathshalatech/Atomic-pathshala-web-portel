@@ -153,7 +153,7 @@ export function QuestionSimilaritySidebar({
       {selectedMatch && (
         <SideBySideCompareModal
           match={selectedMatch}
-          newQuestionData={newQuestionData}
+          newQuestion={newQuestionData}
           onClose={() => setSelectedMatch(null)}
           onUseExisting={onUseExisting}
         />
