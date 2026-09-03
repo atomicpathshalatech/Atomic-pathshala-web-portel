@@ -114,45 +114,31 @@ export default async function StudentDashboardPage() {
 
   return (
     <div className="space-y-10 max-w-7xl">
-      {/* SECTION 1 — TODAY (Hero + Real-Time Overview) */}
-      <section className="glass-card rounded-3xl p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden bg-gradient-to-r from-primary/10 via-surface to-surface border border-outline-variant/30 shadow-sm">
-        <div className="z-10 space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="text-xs uppercase font-bold px-2.5 py-0.5 rounded-full bg-primary/10 text-primary">
-              Class {student.class || "12"} &middot; {student.targetExam || "NEET"}
-            </span>
-          </div>
-          <h1 className="font-display-lg text-display-lg-mobile md:text-display-lg font-bold text-on-surface">
-            {greeting}, {firstName}!
+      {/* Welcome Strip Banner */}
+      <section className="bg-gradient-to-r from-orange-50/90 via-white to-indigo-50/50 dark:from-slate-900 dark:via-slate-900 dark:to-indigo-950/40 border border-slate-200/70 dark:border-slate-800 rounded-3xl p-6 md:p-8 shadow-xs flex flex-col md:flex-row md:items-center md:justify-between gap-6 relative overflow-hidden">
+        <div className="z-10 space-y-1.5">
+          <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+            Welcome back, {firstName}!
           </h1>
-          <p className="text-xs md:text-sm text-on-surface-variant max-w-lg leading-relaxed">
-            {enrollments.length > 0
-              ? `You are active in ${enrollments.length} batch${enrollments.length === 1 ? "" : "es"}. Here is your structured learning plan.`
-              : "Welcome to Atomic Pathshala! Enroll in a batch to get started."}
+          <p className="text-xs md:text-sm text-slate-600 dark:text-slate-400 max-w-xl leading-relaxed">
+            You are targeting <span className="font-bold text-slate-900 dark:text-white">{student.targetExam || "NEET"}</span>. Stay consistent and keep your streak alive today.
           </p>
         </div>
 
-        <div className="flex items-center gap-3 z-10 self-start md:self-auto flex-wrap">
-          <div className="flex items-center gap-2 bg-surface-container-lowest border border-outline-variant/30 px-4 py-2 rounded-2xl shadow-sm">
-            <span className="material-symbols-outlined text-error text-xl">local_fire_department</span>
-            <div>
-              <span className="font-bold text-sm text-on-surface block leading-tight">
-                {student.currentStreakDays} Days
-              </span>
-              <span className="text-[10px] text-on-surface-variant">Daily Streak</span>
-            </div>
-          </div>
+        <div className="flex items-center gap-3 z-10 flex-wrap">
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-3.5 py-2 rounded-xl bg-orange-100/70 dark:bg-orange-950/60 text-orange-800 dark:text-orange-300 border border-orange-200/60 dark:border-orange-900/60">
+            <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" fill="none" r="9" stroke="currentColor" strokeWidth="2" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+            <span>Daily Goal: 3/5 Tasks</span>
+          </span>
           <Link
-            href="/leaderboard"
-            className="flex items-center gap-2 bg-surface-container-lowest border border-outline-variant/30 px-4 py-2 rounded-2xl shadow-sm hover:border-primary/40 transition-colors"
+            href={nextClass ? `/courses/${nextClass.batchId}` : "/schedule"}
+            className="px-5 py-2.5 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 dark:bg-orange-500 dark:hover:bg-orange-600 rounded-xl shadow-md shadow-slate-900/10 transition-colors flex items-center gap-1.5"
           >
-            <span className="material-symbols-outlined text-primary text-xl">military_tech</span>
-            <div>
-              <span className="font-bold text-sm text-on-surface block leading-tight">
-                Level {student.level}
-              </span>
-              <span className="text-[10px] text-on-surface-variant">{student.xp} XP</span>
-            </div>
+            <span>Resume Learning</span>
+            <span className="material-symbols-outlined text-sm">arrow_forward</span>
           </Link>
         </div>
       </section>
