@@ -33,8 +33,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     // Optional Batch Scheduling Calculation across selected Weekdays
     const lectureUpdates: any[] = [];
     if (startDate && Array.isArray(weekdays) && weekdays.length > 0) {
-      const [year, month, day] = String(startDate).split("-").map(Number);
-      const current = new Date(year, month - 1, day);
+      const parts = String(startDate).split("-").map((p) => parseInt(p, 10));
+      const year = parts[0] || new Date().getFullYear();
+      const month = (parts[1] || 1) - 1;
+      const day = parts[2] || 1;
+      const current = new Date(year, month, day);
       const duration = Number(durationMin) || 90;
 
       for (const lec of chapter.lectures) {
