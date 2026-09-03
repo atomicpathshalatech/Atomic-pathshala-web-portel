@@ -311,7 +311,7 @@ export async function getHierarchicalQuestionBank(
           level: "CHAPTER",
           name: chap.title,
           nameHindi: chap.titleHindi,
-          code: chap.chapterId || `CH-${chap.chapterNumber}`,
+          code: `CH-${chap.chapterNumber}`,
           order: chap.displayOrder,
           fullPath: chapPath,
           pathIds: {
