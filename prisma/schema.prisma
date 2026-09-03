@@ -614,34 +614,45 @@ model AttemptViolation {
 }
 
 model TestAttemptAnalysis {
-  id                String   @id @default(cuid())
-  attemptId         String   @unique
-  studentId         String
-  testId            String
-  totalQuestions    Int
-  attempted         Int
-  unattempted       Int
-  correct           Int
-  incorrect         Int
-  score             Float
-  maxMarks          Float
-  percentage        Float
-  accuracy          Float
-  timeTakenSec      Int      @default(0)
-  rank              Int?
-  topperScore       Float?
-  gapTopperMarks    Float?
-  percentile        Float?
-  subjectStats      Json     // Array of subject stats (Bio, Chem, Phys)
-  questionTypeStats Json     // Array of question-type stats
-  conceptStats      Json     // Array of concept/topic stats
-  chapterStats      Json     // Array of chapter stats
-  errorBreakdown    Json     // Error categories (Conceptual, Silly mistake, etc.)
-  ncertPlan         Json     // Personalized NCERT recommendations
-  actionPlan        Json     // Next improvement steps & practice counts
-  questionReviews   Json     // Detailed per-question analysis snapshots
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                      String   @id @default(cuid())
+  attemptId               String   @unique
+  studentId               String
+  testId                  String
+  totalQuestions          Int
+  attempted               Int
+  unattempted             Int
+  correct                 Int
+  incorrect               Int
+  score                   Float
+  maxMarks                Float
+  percentage              Float
+  accuracy                Float
+  timeTakenSec            Int      @default(0)
+  rank                    Int?
+  totalTestParticipants   Int?     @default(1)
+  topperScore             Float?
+  gapTopperMarks          Float?
+  percentile              Float?
+  neetEquivalentScore     Float?
+  estimatedNeetAir        Int?
+  estimatedNeetAirMin     Int?
+  estimatedNeetAirMax     Int?
+  neetAirConfidence       String?  @default("ESTIMATED")
+  estimatedCategoryRank   Int?
+  estimatedCategoryRankMin Int?
+  estimatedCategoryRankMax Int?
+  neetDatasetYear         Int?     @default(2026)
+  neetPredictionSource    String?
+  subjectStats            Json     // Array of subject stats (Bio, Chem, Phys)
+  questionTypeStats       Json     // Array of question-type stats
+  conceptStats            Json     // Array of concept/topic stats
+  chapterStats            Json     // Array of chapter stats
+  errorBreakdown          Json     // Error categories (Conceptual, Silly mistake, etc.)
+  ncertPlan               Json     // Personalized NCERT recommendations
+  actionPlan              Json     // Next improvement steps & practice counts
+  questionReviews         Json     // Detailed per-question analysis snapshots
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
   attempt Attempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
@@ -649,6 +660,79 @@ model TestAttemptAnalysis {
   @@index([studentId, createdAt])
   @@index([testId])
   @@map("test_attempt_analyses")
+}
+
+model NEETRankDataset {
+  id                 String                       @id @default(cuid())
+  year               Int                          @unique
+  version            String                       @default("v1.0")
+  title              String
+  sourceDocument     String                       @default("Official NTA NEET (UG)-2026 Re-exam Result PDF")
+  totalPages         Int                          @default(15)
+  isActive           Boolean                      @default(true)
+  notes              String?
+  references         NEETRankReference[]
+  categoryReferences NEETCategoryRankReference[]
+  marksBrackets      NEETMarksBracket[]
+  createdAt          DateTime                     @default(now())
+  updatedAt          DateTime                     @updatedAt
+
+  @@map("neet_rank_datasets")
+}
+
+model NEETRankReference {
+  id               String          @id @default(cuid())
+  datasetId        String
+  neetRank         Int
+  marks            Float
+  percentile       Float?
+  candidateCount   Int?
+  sourcePage       Int             @default(14)
+  confidence       String          @default("EXACT") // EXACT | HIGH | MEDIUM | LOW
+  isExactReference Boolean         @default(true)
+  createdAt        DateTime        @default(now())
+
+  dataset NEETRankDataset @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+
+  @@index([datasetId, marks])
+  @@index([datasetId, neetRank])
+  @@map("neet_rank_references")
+}
+
+model NEETCategoryRankReference {
+  id           String          @id @default(cuid())
+  datasetId    String
+  category     String          // General, OBC-NCL, Gen-EWS, SC, ST, PwBD-Female, PwBD-Male
+  categoryRank Int?
+  neetRank     Int
+  marks        Float?
+  percentile   Float?
+  state        String?
+  gender       String?
+  sourcePage   Int             @default(9)
+  confidence   String          @default("EXACT")
+  createdAt    DateTime        @default(now())
+
+  dataset NEETRankDataset @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+
+  @@index([datasetId, category, neetRank])
+  @@map("neet_category_rank_references")
+}
+
+model NEETMarksBracket {
+  id                   String          @id @default(cuid())
+  datasetId            String
+  marksFrom            Float
+  marksTo              Float
+  candidateCount       Int
+  cumulativeCandidates Int?
+  sourcePage           Int             @default(14)
+  createdAt            DateTime        @default(now())
+
+  dataset NEETRankDataset @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+
+  @@index([datasetId, marksFrom, marksTo])
+  @@map("neet_marks_brackets")
 }
 
 model QuestionVersion {

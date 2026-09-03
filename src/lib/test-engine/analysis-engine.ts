@@ -157,11 +157,21 @@ export type FullTestAnalysisResult = {
   accuracy: number;
   timeTakenSec: number;
   timeRemainingSec?: number;
-  rank: number;
-  totalParticipants: number;
+  rank: number; // Atomic Test Rank
+  totalParticipants: number; // Total Atomic test participants
   topperScore: number;
   gapTopperMarks: number;
   percentile: number;
+  neetEquivalentScore?: number | null;
+  estimatedNeetAir?: number | null;
+  estimatedNeetAirMin?: number | null;
+  estimatedNeetAirMax?: number | null;
+  neetAirConfidence?: string | null;
+  estimatedCategoryRank?: number | null;
+  estimatedCategoryRankMin?: number | null;
+  estimatedCategoryRankMax?: number | null;
+  neetDatasetYear?: number | null;
+  neetPredictionSource?: string | null;
   subjectStats: SubjectStat[];
   questionTypeStats: QuestionTypeStat[];
   errorBreakdown: ErrorTaxonomyStat[];
@@ -850,7 +860,15 @@ export async function calculateAndStoreTestAnalysis(
     details: "Attempt a custom 15-question mini-test on these chapters to verify mastery retention.",
   });
 
-  // 9. Leaderboard & Benchmark Calculation
+  // 9. NEET 2026 Rank Prediction
+  const { predictNEETRank } = await import("@/lib/predictor/neet-rank-service");
+  const neetPrediction = await predictNEETRank({
+    marks: computedScore,
+    maxMarks: totalMaxMarks,
+    category: attempt.student?.targetExam || "General",
+  });
+
+  // 10. Atomic Test Rank & Leaderboard Calculation
   const finalizedAttempts = await prisma.attempt.findMany({
     where: { testId: test.id, status: { in: ["SUBMITTED", "AUTO_SUBMITTED"] } },
     select: { id: true, score: true, startedAt: true, submittedAt: true },
@@ -859,13 +877,13 @@ export async function calculateAndStoreTestAnalysis(
 
   const totalParticipants = Math.max(finalizedAttempts.length, 1);
   const myScore = computedScore;
-  const rank = finalizedAttempts.filter((a) => (a.score ?? 0) > myScore).length + 1;
+  const atomicTestRank = finalizedAttempts.filter((a) => (a.score ?? 0) > myScore).length + 1;
   const topperScore = Math.max(...finalizedAttempts.map((a) => a.score ?? 0), myScore);
   const gapTopperMarks = Math.max(0, topperScore - myScore);
   const percentile =
     totalParticipants <= 1
       ? 100
-      : Math.round(((totalParticipants - rank) / (totalParticipants - 1)) * 10000) / 100;
+      : Math.round(((totalParticipants - atomicTestRank) / (totalParticipants - 1)) * 10000) / 100;
 
   // Persist into TestAttemptAnalysis table (Idempotent Upsert)
   await prisma.testAttemptAnalysis.upsert({
@@ -884,10 +902,21 @@ export async function calculateAndStoreTestAnalysis(
       percentage: Math.round(percentage * 100) / 100,
       accuracy: Math.round(accuracy * 100) / 100,
       timeTakenSec: totalTimeSec,
-      rank,
+      rank: atomicTestRank,
+      totalTestParticipants: totalParticipants,
       topperScore,
       gapTopperMarks,
       percentile,
+      neetEquivalentScore: neetPrediction.neetEquivalentScore,
+      estimatedNeetAir: neetPrediction.estimatedAIR,
+      estimatedNeetAirMin: neetPrediction.minAIR,
+      estimatedNeetAirMax: neetPrediction.maxAIR,
+      neetAirConfidence: neetPrediction.confidence,
+      estimatedCategoryRank: neetPrediction.categoryPrediction?.estimatedCategoryRank ?? null,
+      estimatedCategoryRankMin: neetPrediction.categoryPrediction?.minCategoryRank ?? null,
+      estimatedCategoryRankMax: neetPrediction.categoryPrediction?.maxCategoryRank ?? null,
+      neetDatasetYear: neetPrediction.datasetYear,
+      neetPredictionSource: `${neetPrediction.sourceDocument} (Page ${neetPrediction.sourcePage})`,
       subjectStats: subjectStats as any,
       questionTypeStats: questionTypeStats as any,
       conceptStats: topicStats as any,
@@ -908,10 +937,21 @@ export async function calculateAndStoreTestAnalysis(
       percentage: Math.round(percentage * 100) / 100,
       accuracy: Math.round(accuracy * 100) / 100,
       timeTakenSec: totalTimeSec,
-      rank,
+      rank: atomicTestRank,
+      totalTestParticipants: totalParticipants,
       topperScore,
       gapTopperMarks,
       percentile,
+      neetEquivalentScore: neetPrediction.neetEquivalentScore,
+      estimatedNeetAir: neetPrediction.estimatedAIR,
+      estimatedNeetAirMin: neetPrediction.minAIR,
+      estimatedNeetAirMax: neetPrediction.maxAIR,
+      neetAirConfidence: neetPrediction.confidence,
+      estimatedCategoryRank: neetPrediction.categoryPrediction?.estimatedCategoryRank ?? null,
+      estimatedCategoryRankMin: neetPrediction.categoryPrediction?.minCategoryRank ?? null,
+      estimatedCategoryRankMax: neetPrediction.categoryPrediction?.maxCategoryRank ?? null,
+      neetDatasetYear: neetPrediction.datasetYear,
+      neetPredictionSource: `${neetPrediction.sourceDocument} (Page ${neetPrediction.sourcePage})`,
       subjectStats: subjectStats as any,
       questionTypeStats: questionTypeStats as any,
       conceptStats: topicStats as any,
@@ -940,11 +980,21 @@ export async function calculateAndStoreTestAnalysis(
     percentage: Math.round(percentage * 100) / 100,
     accuracy: Math.round(accuracy * 100) / 100,
     timeTakenSec: totalTimeSec,
-    rank,
+    rank: atomicTestRank,
     totalParticipants,
     topperScore,
     gapTopperMarks,
     percentile,
+    neetEquivalentScore: neetPrediction.neetEquivalentScore,
+    estimatedNeetAir: neetPrediction.estimatedAIR,
+    estimatedNeetAirMin: neetPrediction.minAIR,
+    estimatedNeetAirMax: neetPrediction.maxAIR,
+    neetAirConfidence: neetPrediction.confidence,
+    estimatedCategoryRank: neetPrediction.categoryPrediction?.estimatedCategoryRank ?? null,
+    estimatedCategoryRankMin: neetPrediction.categoryPrediction?.minCategoryRank ?? null,
+    estimatedCategoryRankMax: neetPrediction.categoryPrediction?.maxCategoryRank ?? null,
+    neetDatasetYear: neetPrediction.datasetYear,
+    neetPredictionSource: `${neetPrediction.sourceDocument} (Page ${neetPrediction.sourcePage})`,
     subjectStats,
     questionTypeStats,
     errorBreakdown,
@@ -1034,10 +1084,20 @@ export async function getStoredTestAnalysis(
     accuracy: analysis.accuracy,
     timeTakenSec: analysis.timeTakenSec,
     rank: analysis.rank ?? 1,
-    totalParticipants: Math.max(totalParticipants, 1),
+    totalParticipants: Math.max(totalParticipants, analysis.totalTestParticipants ?? 1),
     topperScore: analysis.topperScore ?? analysis.score,
     gapTopperMarks: analysis.gapTopperMarks ?? 0,
     percentile: analysis.percentile ?? 100,
+    neetEquivalentScore: analysis.neetEquivalentScore,
+    estimatedNeetAir: analysis.estimatedNeetAir,
+    estimatedNeetAirMin: analysis.estimatedNeetAirMin,
+    estimatedNeetAirMax: analysis.estimatedNeetAirMax,
+    neetAirConfidence: analysis.neetAirConfidence,
+    estimatedCategoryRank: analysis.estimatedCategoryRank,
+    estimatedCategoryRankMin: analysis.estimatedCategoryRankMin,
+    estimatedCategoryRankMax: analysis.estimatedCategoryRankMax,
+    neetDatasetYear: analysis.neetDatasetYear,
+    neetPredictionSource: analysis.neetPredictionSource,
     subjectStats: (analysis.subjectStats as any) || [],
     questionTypeStats,
     errorBreakdown: (analysis.errorBreakdown as any) || [],
