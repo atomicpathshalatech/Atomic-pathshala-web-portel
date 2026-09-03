@@ -148,6 +148,18 @@ export function StudentShell({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const isExamAttempt = pathname?.includes("/attempt");
+
+  // When student is in live CBT exam attempt, strip out all shell chrome
+  // (header, bottom tab bar, profile, notifications, upgrade banner)
+  // so only the fullscreen CBT examination engine occupies the screen.
+  if (isExamAttempt) {
+    return (
+      <div className="min-h-screen w-full bg-[#f8fafc] dark:bg-slate-950">
+        {children}
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-surface-container-low/30 flex flex-col">

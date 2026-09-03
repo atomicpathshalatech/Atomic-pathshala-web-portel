@@ -23,12 +23,13 @@ export function FloatingGuruWidget() {
   });
   const hasMovedRef = useRef(false);
 
-  // Hide on full Guru chat page itself to avoid duplication
+  // Hide on full Guru chat page, live studio, and during live test attempts
   const isGuruPage =
     pathname === "/guru" ||
     pathname?.startsWith("/guru/") ||
     pathname === "/live-studio" ||
-    pathname?.startsWith("/team/live-studio");
+    pathname?.startsWith("/team/live-studio") ||
+    pathname?.includes("/attempt");
 
   // Initialize position to bottom-right safely on client
   useEffect(() => {
