@@ -47,6 +47,12 @@ export function AtomicQuestionEditor({
   const [ocrLoading, setOcrLoading] = useState(false);
   const [lowConfidenceFields, setLowConfidenceFields] = useState<string[]>([]);
 
+  // View Modes & NTA Simulation
+  const [editorViewMode, setEditorViewMode] = useState<"STUDIO" | "NTA_PREVIEW">("STUDIO");
+  const [ntaViewLang, setNtaViewLang] = useState<"ENGLISH" | "HINDI">("ENGLISH");
+  const [ntaSimSelectedOption, setNtaSimSelectedOption] = useState<string | null>(null);
+  const [ntaShowSolution, setNtaShowSolution] = useState(false);
+
   // Content states
   const [activeLangTab, setActiveLangTab] = useState<"ENGLISH" | "HINDI" | "BOTH">("BOTH");
   const [statementEn, setStatementEn] = useState("");
@@ -444,7 +450,7 @@ export function AtomicQuestionEditor({
             Unified Image to Question Studio
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Paste/upload question or textbook screenshot (Ctrl+V). AI extracts bilingual text, formulas &amp; options with side-by-side verification.
+            Paste/upload question or textbook screenshot (Ctrl+V). Standardized bilingual NTA format for Question Bank, DPP and Tests.
           </p>
         </div>
 
@@ -453,8 +459,234 @@ export function AtomicQuestionEditor({
         </div>
       </div>
 
-      {/* 2. Unified Image Dropzone & Permanent Reference Dock (Top) */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+      {/* 2. Top View Switcher: Authoring Studio vs NTA CBT Exam Live Preview */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-2.5 rounded-3xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 shadow-inner">
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setEditorViewMode("STUDIO")}
+            className={`px-5 py-2.5 rounded-2xl text-xs font-black transition flex items-center gap-2 ${
+              editorViewMode === "STUDIO"
+                ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-sm"
+                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+            }`}
+          >
+            <span className="material-symbols-outlined text-base">edit_note</span>
+            <span>Authoring Studio</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setEditorViewMode("NTA_PREVIEW")}
+            className={`px-5 py-2.5 rounded-2xl text-xs font-black transition flex items-center gap-2 ${
+              editorViewMode === "NTA_PREVIEW"
+                ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-indigo-500/20"
+                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+            }`}
+          >
+            <span className="material-symbols-outlined text-base">desktop_windows</span>
+            <span>NTA CBT Exam Live Preview (NEET/JEE)</span>
+          </button>
+        </div>
+
+        {editorViewMode === "NTA_PREVIEW" ? (
+          <div className="flex items-center gap-2 pr-2">
+            <span className="text-xs font-bold text-slate-500">View In:</span>
+            <div className="flex items-center gap-1 bg-white dark:bg-slate-900 p-1 rounded-2xl border border-slate-200 dark:border-slate-700 text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => setNtaViewLang("ENGLISH")}
+                className={`px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 ${
+                  ntaViewLang === "ENGLISH"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-600 dark:text-slate-400 hover:text-blue-600"
+                }`}
+              >
+                <span>English</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setNtaViewLang("HINDI")}
+                className={`px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 ${
+                  ntaViewLang === "HINDI"
+                    ? "bg-emerald-600 text-white shadow-sm"
+                    : "text-slate-600 dark:text-slate-400 hover:text-emerald-600"
+                }`}
+              >
+                <span>हिंदी (Hindi)</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="text-[11px] text-slate-500 font-medium pr-3 hidden sm:block">
+            Standard format: Statement &amp; Options authored bilingually
+          </div>
+        )}
+      </div>
+
+      {/* When in NTA CBT PREVIEW MODE, render authentic NTA screen */}
+      {editorViewMode === "NTA_PREVIEW" ? (
+        <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl space-y-6">
+          {/* NTA Examination Header */}
+          <div className="p-4 rounded-2xl bg-[#0f2744] text-white flex flex-wrap items-center justify-between gap-4 shadow-md">
+            <div>
+              <span className="text-[10px] font-mono uppercase tracking-widest text-blue-200 block">
+                NTA Computer Based Test (CBT) Simulation
+              </span>
+              <h3 className="text-base font-black text-white">
+                {subject ? subject.toUpperCase() : "CHEMISTRY"} — SECTION A
+              </h3>
+            </div>
+
+            {/* Language Switcher Popup Dropdown */}
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5 bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/20 text-xs font-bold">
+                <span className="material-symbols-outlined text-sm text-amber-300">translate</span>
+                <span>View in:</span>
+                <select
+                  value={ntaViewLang}
+                  onChange={(e) => setNtaViewLang(e.target.value as any)}
+                  className="bg-transparent text-white font-bold outline-none cursor-pointer"
+                >
+                  <option value="ENGLISH" className="text-slate-900">English</option>
+                  <option value="HINDI" className="text-slate-900">हिंदी (Hindi)</option>
+                </select>
+              </div>
+
+              <div className="text-xs font-mono bg-white/10 px-3 py-1.5 rounded-xl border border-white/20">
+                <span className="text-emerald-300 font-bold">+4.00</span> / <span className="text-red-300 font-bold">-1.00</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Question Body */}
+          <div className="space-y-4 p-6 rounded-2xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
+            <div className="flex items-center justify-between text-xs font-bold text-slate-500 pb-2 border-b border-slate-200 dark:border-slate-700">
+              <span>Question No. 1 ({type})</span>
+              <span className="text-blue-600 dark:text-blue-400">
+                {ntaViewLang === "ENGLISH" ? "Language: English" : "भाषा: हिंदी"}
+              </span>
+            </div>
+
+            {/* Statement */}
+            <div className="space-y-3">
+              <p className="text-base font-bold text-slate-900 dark:text-white leading-relaxed">
+                {ntaViewLang === "ENGLISH"
+                  ? statementEn || "No English statement provided yet."
+                  : statementHi || "कोई हिंदी प्रश्न कथन दर्ज नहीं किया गया है।"}
+              </p>
+              <EquationLivePreview
+                content={ntaViewLang === "ENGLISH" ? statementEn : statementHi}
+                label="KaTeX Formatted Question"
+              />
+            </div>
+
+            {/* Options */}
+            <div className="space-y-3 pt-4 border-t border-slate-200/80 dark:border-slate-700/80">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
+                Choose the correct option:
+              </span>
+
+              {[
+                { key: "A", val: ntaViewLang === "ENGLISH" ? optionAEn : optionAHi },
+                { key: "B", val: ntaViewLang === "ENGLISH" ? optionBEn : optionBHi },
+                { key: "C", val: ntaViewLang === "ENGLISH" ? optionCEn : optionCHi },
+                { key: "D", val: ntaViewLang === "ENGLISH" ? optionDEn : optionDHi },
+              ].map((opt) => {
+                const isSelected = ntaSimSelectedOption === opt.key;
+                const isCorrect = correctOption === opt.key;
+                return (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => setNtaSimSelectedOption(opt.key)}
+                    className={`w-full p-4 rounded-2xl border text-left transition flex items-center gap-3.5 ${
+                      isSelected
+                        ? "bg-blue-50 dark:bg-blue-950/60 border-blue-500 ring-2 ring-blue-500/20 shadow-sm"
+                        : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 hover:border-slate-300"
+                    }`}
+                  >
+                    <span
+                      className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
+                        isSelected
+                          ? "bg-blue-600 text-white shadow-sm"
+                          : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-600"
+                      }`}
+                    >
+                      {opt.key}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-xs sm:text-sm font-medium text-slate-900 dark:text-white block">
+                        {opt.val || `Option (${opt.key}) content`}
+                      </span>
+                      {opt.val && (
+                        <EquationLivePreview
+                          content={opt.val}
+                          label=""
+                          className="p-1 mt-1 bg-transparent border-none"
+                        />
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* CBT Action Buttons Simulator */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setNtaSimSelectedOption(null)}
+                  className="px-4 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100"
+                >
+                  Clear Response
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNtaShowSolution(!ntaShowSolution)}
+                  className="px-4 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-xs font-bold flex items-center gap-1.5"
+                >
+                  <span className="material-symbols-outlined text-base">help</span>
+                  <span>{ntaShowSolution ? "Hide Explanation" : "Inspect Solution"}</span>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditorViewMode("STUDIO")}
+                  className="px-6 py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-md shadow-blue-500/20"
+                >
+                  Back to Editing Studio
+                </button>
+              </div>
+            </div>
+
+            {/* Explanation Drawer */}
+            {ntaShowSolution && (
+              <div className="p-5 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/60 space-y-3">
+                <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300 font-bold text-xs">
+                  <span className="material-symbols-outlined text-base">verified</span>
+                  <span>Correct Answer: Option ({correctOption})</span>
+                </div>
+                <div className="text-xs text-slate-800 dark:text-slate-200 space-y-2">
+                  <p className="font-medium">
+                    {ntaViewLang === "ENGLISH" ? solutionEn : solutionHi}
+                  </p>
+                  <EquationLivePreview
+                    content={ntaViewLang === "ENGLISH" ? solutionEn : solutionHi}
+                    label="Solution Formula Render"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {/* 3. Unified Image Dropzone & Permanent Reference Dock (Top) */}
+      <div className={`bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4 ${editorViewMode === "NTA_PREVIEW" ? "hidden" : ""}`}>
         <div className="flex items-center justify-between flex-wrap gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold">

@@ -2,12 +2,15 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { AtomicQuestionEditor } from "@/components/questions/AtomicQuestionEditor";
 
 type BankQuestion = {
   id: string;
   type: string;
   difficulty: string;
   subject: string | null;
+  chapter: string | null;
   statement: string;
 };
 
@@ -17,19 +20,21 @@ type CurrentQuestion = {
   question: { id: string; statement: string };
 };
 
-const inputClass =
-  "w-full rounded-lg border border-outline-variant bg-surface-container-lowest py-2 px-3 text-body-sm outline-none focus:ring-2 focus:ring-primary/30";
-
 export function TestQuestionPicker({
   testId,
   current,
   editable,
+  testSubject,
+  testChapter,
 }: {
   testId: string;
   current: CurrentQuestion[];
   editable: boolean;
+  testSubject?: string;
+  testChapter?: string;
 }) {
   const router = useRouter();
+  const [activeMode, setActiveMode] = useState<"search" | "create">("search");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<BankQuestion[]>([]);
   const [searching, setSearching] = useState(false);
@@ -49,7 +54,7 @@ export function TestQuestionPicker({
         setError(json.error ?? "Could not search the question bank.");
         return;
       }
-      setResults(json.data.questions);
+      setResults(json.data.questions || []);
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {
@@ -71,6 +76,7 @@ export function TestQuestionPicker({
         setError(json.error ?? "Could not add that question.");
         return;
       }
+      toast.success("Question added to test!");
       router.refresh();
     } catch {
       setError("Something went wrong. Please try again.");
@@ -91,6 +97,7 @@ export function TestQuestionPicker({
         setError(json.error ?? "Could not remove that question.");
         return;
       }
+      toast.success("Question removed from test.");
       router.refresh();
     } catch {
       setError("Something went wrong. Please try again.");
@@ -102,17 +109,63 @@ export function TestQuestionPicker({
   return (
     <div className="space-y-6">
       {error && (
-        <div className="bg-error-container/40 border border-error/20 rounded-xl px-4 py-2">
-          <p className="text-label-sm font-label-sm text-error">{error}</p>
+        <div className="p-3 rounded-2xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-xs text-red-600 dark:text-red-400 font-medium">
+          {error}
         </div>
       )}
 
+      {/* Header Bar with Mode Switcher */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-3xl bg-slate-900 text-white">
+        <div>
+          <h3 className="text-sm font-black flex items-center gap-2">
+            <span className="material-symbols-outlined text-blue-400">quiz</span>
+            <span>Test Questions ({current.length})</span>
+          </h3>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Pick from published question bank or create new standardized bilingual questions.
+          </p>
+        </div>
+
+        {editable && (
+          <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-2xl border border-slate-800 shrink-0">
+            <button
+              type="button"
+              onClick={() => setActiveMode("search")}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+                activeMode === "search"
+                  ? "bg-blue-600 text-white shadow-sm"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              <span className="material-symbols-outlined text-sm">search</span>
+              <span>Pick Existing ({results.length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveMode("create")}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+                activeMode === "create"
+                  ? "bg-emerald-600 text-white shadow-sm"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              <span className="material-symbols-outlined text-sm">add_circle</span>
+              <span>+ Create New</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Current Questions List */}
       <div>
-        <h3 className="font-headline-md text-headline-md text-on-surface mb-3">
-          Questions on this test ({current.length})
-        </h3>
+        <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider mb-2">
+          Questions Attached to this Test ({current.length})
+        </h4>
         {current.length === 0 ? (
-          <p className="text-label-sm text-on-surface-variant">No questions added yet.</p>
+          <div className="p-6 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 text-center text-xs text-slate-400">
+            No questions attached yet. Use the search or create option below.
+          </div>
         ) : (
           <ul className="space-y-2">
             {current
@@ -121,18 +174,22 @@ export function TestQuestionPicker({
               .map((c) => (
                 <li
                   key={c.id}
-                  className="flex items-start justify-between gap-3 bg-surface-container-lowest rounded-lg px-3 py-2"
+                  className="flex items-start justify-between gap-3 bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-2xl p-3 shadow-sm"
                 >
-                  <div>
-                    <span className="text-label-sm text-on-surface-variant mr-2">Q{c.order}</span>
-                    <span className="text-label-md text-on-surface">{c.question.statement}</span>
+                  <div className="flex items-start gap-2.5">
+                    <span className="px-2 py-0.5 rounded-lg bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 font-mono text-xs font-bold shrink-0">
+                      Q{c.order}
+                    </span>
+                    <span className="text-xs font-medium text-slate-800 dark:text-slate-200">
+                      {c.question.statement}
+                    </span>
                   </div>
                   {editable && (
                     <button
                       type="button"
                       disabled={removing === c.id}
                       onClick={() => removeQuestion(c.id)}
-                      className="shrink-0 text-error text-label-sm hover:underline disabled:opacity-50"
+                      className="shrink-0 text-red-500 hover:text-red-700 text-xs font-bold transition disabled:opacity-50"
                     >
                       Remove
                     </button>
@@ -143,57 +200,102 @@ export function TestQuestionPicker({
         )}
       </div>
 
+      {/* Mode View */}
       {editable && (
-        <div>
-          <h3 className="font-headline-md text-headline-md text-on-surface mb-3">Add from Question Bank</h3>
-          <div className="flex gap-2 mb-3">
-            <input
-              className={inputClass}
-              placeholder="Search published questions..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && search()}
-            />
-            <button
-              type="button"
-              onClick={search}
-              disabled={searching}
-              className="shrink-0 bg-primary text-on-primary text-label-sm font-label-sm px-4 py-2 rounded-lg hover:opacity-90 disabled:opacity-60"
-            >
-              {searching ? "Searching..." : "Search"}
-            </button>
-          </div>
-          {results.length === 0 ? (
-            <p className="text-label-sm text-on-surface-variant">
-              {searching ? "Searching..." : "Search the Question Bank to add questions here."}
-            </p>
-          ) : (
-            <ul className="space-y-2">
-              {results.map((q) => (
-                <li
-                  key={q.id}
-                  className="flex items-start justify-between gap-3 bg-surface-container-lowest rounded-lg px-3 py-2"
-                >
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wide bg-secondary/10 text-secondary px-1.5 py-0.5 rounded mr-2">
-                      {q.difficulty}
-                    </span>
-                    {q.subject && <span className="text-label-sm text-on-surface-variant mr-2">{q.subject}</span>}
-                    <span className="text-label-md text-on-surface">{q.statement}</span>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={currentIds.has(q.id) || adding === q.id}
-                    onClick={() => addQuestion(q.id)}
-                    className="shrink-0 text-primary text-label-sm hover:underline disabled:opacity-50 disabled:no-underline"
+        activeMode === "search" ? (
+          <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm">
+            <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
+              Search Question Bank
+            </h4>
+            <div className="flex gap-2">
+              <input
+                className="flex-1 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 py-2.5 px-4 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Search published questions by keywords, code, chapter..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && search()}
+              />
+              <button
+                type="button"
+                onClick={search}
+                disabled={searching}
+                className="shrink-0 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-6 py-2.5 rounded-2xl shadow-md shadow-blue-500/20 transition disabled:opacity-60"
+              >
+                {searching ? "Searching..." : "Search Bank"}
+              </button>
+            </div>
+
+            {results.length === 0 ? (
+              <p className="text-xs text-slate-400 py-2">
+                {searching ? "Searching..." : "Type keywords to search published questions."}
+              </p>
+            ) : (
+              <ul className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                {results.map((q) => (
+                  <li
+                    key={q.id}
+                    className="flex items-center justify-between gap-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl p-3 hover:border-blue-300 transition"
                   >
-                    {currentIds.has(q.id) ? "Added" : adding === q.id ? "Adding..." : "Add"}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wide bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-lg shrink-0">
+                        {q.difficulty}
+                      </span>
+                      {q.subject && (
+                        <span className="text-xs font-bold text-slate-600 dark:text-slate-400 shrink-0">
+                          {q.subject}:
+                        </span>
+                      )}
+                      <span className="text-xs text-slate-800 dark:text-slate-200 truncate">
+                        {q.statement}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={currentIds.has(q.id) || adding === q.id}
+                      onClick={() => addQuestion(q.id)}
+                      className="shrink-0 px-4 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-sm disabled:opacity-40 disabled:bg-slate-300 transition"
+                    >
+                      {currentIds.has(q.id) ? "Attached" : adding === q.id ? "Adding..." : "+ Add"}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ) : (
+          <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div>
+                <h4 className="text-sm font-black text-slate-900 dark:text-white">
+                  Universal Question Engine (Test Creator)
+                </h4>
+                <p className="text-xs text-slate-400">
+                  Author question with Bilingual NTA format, OCR, and Equation live previews.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveMode("search")}
+                className="text-xs font-bold text-slate-400 hover:text-slate-600"
+              >
+                ✕ Cancel
+              </button>
+            </div>
+
+            <AtomicQuestionEditor
+              initialSubject={testSubject || "Chemistry"}
+              initialChapter={testChapter || ""}
+              onSuccess={(createdQuestion) => {
+                toast.success("Question created and submitted for centralized review!");
+                if (createdQuestion?.id) {
+                  addQuestion(createdQuestion.id);
+                }
+                setActiveMode("search");
+                router.refresh();
+              }}
+            />
+          </div>
+        )
       )}
     </div>
   );
