@@ -869,15 +869,6 @@ export function AtomicWhiteboardStudio({
       toast.success("Selected box cleared");
       return;
     }
-      const selectedIds = activeSlide.strokes
-        .filter((st) => st.points.some((p) => isPointInRect(p, selectionBox)))
-        .map((st) => st.id || "");
-      setSelectedStrokeIds(selectedIds.filter(Boolean));
-      setSelectionBox(null);
-      if (selectedIds.length > 0) {
-        toast.success(`${selectedIds.length} object(s) selected`);
-      }
-    }
   };
 
   // Selection Tool Actions (Requirement 3: Delete, Copy, Duplicate)
