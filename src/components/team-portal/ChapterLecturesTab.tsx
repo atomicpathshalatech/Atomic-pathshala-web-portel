@@ -1,8 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { toast } from "sonner";
 import { MoreVertical, Edit2, FileText, Trash2, Video, Calendar, Clock, Timer, Check, Sparkles } from "lucide-react";
 
@@ -43,6 +42,10 @@ export function ChapterLecturesTab({
 }) {
   const router = useRouter();
   const [lectures, setLectures] = useState<LectureItem[]>(initialLectures);
+
+  useEffect(() => {
+    setLectures(initialLectures);
+  }, [initialLectures]);
 
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
