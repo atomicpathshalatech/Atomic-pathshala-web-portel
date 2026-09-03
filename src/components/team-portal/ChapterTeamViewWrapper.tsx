@@ -56,6 +56,7 @@ export function ChapterTeamViewWrapper({
   initialTests,
   canEdit,
   canReview,
+  reviews = [],
   studentPreviewData,
 }: ChapterTeamViewWrapperProps) {
   const router = useRouter();

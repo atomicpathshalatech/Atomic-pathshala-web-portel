@@ -30,7 +30,14 @@ const STATUS_TONE: Record<string, string> = {
 export default async function ChaptersListPage({
   searchParams,
 }: {
-  searchParams: { subjectId?: string; courseId?: string; medium?: string; status?: string };
+  searchParams: {
+    subjectId?: string;
+    courseId?: string;
+    course?: string;
+    subject?: string;
+    medium?: string;
+    status?: string;
+  };
 }) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) redirect("/login");
