@@ -156,6 +156,14 @@ export default async function QuestionBankPage({
         {canCreate && (
           <div className="flex items-center gap-3">
             <Link
+              href="/team/question-bank-hierarchical"
+              className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-5 py-2.5 rounded-full font-bold text-xs hover:opacity-95 transition-all shadow-md shadow-indigo-500/20"
+              title="Hierarchical Question Bank with Class, Subject, Chapter, Topic taxonomy and Revision Hub"
+            >
+              <span className="material-symbols-outlined text-base">account_tree</span>
+              <span>Hierarchy &amp; Revision Hub</span>
+            </Link>
+            <Link
               href="/team/questions/bilingual/new"
               className="flex items-center gap-2 bg-white border border-blue-600 text-blue-600 px-5 py-2.5 rounded-full font-bold text-xs hover:bg-blue-50 transition-all shadow-sm"
               title="Author bilingual question with Hindi and English"

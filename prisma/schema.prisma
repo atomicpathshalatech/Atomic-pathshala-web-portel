@@ -136,6 +136,7 @@ model User {
   quizAttempts           QuizAttempt[]
   answerReports          AnswerReport[]
   aiChatPasswordResetTokens PasswordResetToken[]
+  revisionItems          RevisionItem[]
 
   @@index([roleId])
   @@index([status])
@@ -1417,6 +1418,7 @@ model Question {
   bookmarks    Bookmark[]
   answers      AttemptAnswer[]
   assets       QuestionAsset[]
+  revisionAttempts RevisionQuestionAttempt[]
 
   @@index([subject])
   @@index([difficulty])
@@ -3270,4 +3272,77 @@ model ResourceAuditLog {
   @@index([action])
   @@map("resource_audit_logs")
 }
+
+model RevisionItem {
+  id         String   @id @default(cuid())
+  userId     String
+  entityType String   // CLASS | SUBJECT | CHAPTER | TOPIC | SUBTOPIC
+  entityId   String
+  title      String
+  fullPath   String
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user     User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessions RevisionSession[]
+
+  @@unique([userId, entityType, entityId])
+  @@index([userId])
+  @@index([active])
+  @@map("revision_items")
+}
+
+model RevisionSession {
+  id             String    @id @default(cuid())
+  userId         String
+  revisionItemId String
+  revisionNumber Int
+  mode           String    @default("ALL") // ALL | UNATTEMPTED | PREVIOUSLY_INCORRECT | WEAK | RANDOM
+  totalQuestions Int
+  attempted      Int       @default(0)
+  correct        Int       @default(0)
+  incorrect      Int       @default(0)
+  skipped        Int       @default(0)
+  accuracy       Float     @default(0.0)
+  startedAt      DateTime  @default(now())
+  completedAt    DateTime?
+  createdAt      DateTime  @default(now())
+
+  revisionItem RevisionItem               @relation(fields: [revisionItemId], references: [id], onDelete: Cascade)
+  attempts     RevisionQuestionAttempt[]
+
+  @@index([userId])
+  @@index([revisionItemId])
+  @@map("revision_sessions")
+}
+
+model RevisionQuestionAttempt {
+  id          String   @id @default(cuid())
+  sessionId   String
+  questionId  String
+  isCorrect   Boolean
+  userAnswer  String?
+  attemptedAt DateTime @default(now())
+
+  session  RevisionSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  question Question        @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([questionId])
+  @@map("revision_question_attempts")
+}
+
+model RevisionNodeSeen {
+  id         String   @id @default(cuid())
+  userId     String
+  entityType String
+  entityId   String
+  seenAt     DateTime @default(now())
+
+  @@unique([userId, entityType, entityId])
+  @@index([userId])
+  @@map("revision_nodes_seen")
+}
+
 
