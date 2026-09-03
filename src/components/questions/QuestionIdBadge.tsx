@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState } from "react";
 
@@ -35,24 +35,24 @@ export function QuestionIdBadge({
   };
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-slate-950 border border-slate-800 shadow-sm">
+    <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
       <div className="flex items-center gap-3">
-        <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center font-bold">
+        <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold">
           <span className="material-symbols-outlined text-lg">tag</span>
         </div>
 
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-mono font-extrabold text-amber-400 tracking-wider">
+            <span className="text-[11px] font-mono font-extrabold text-blue-600 dark:text-blue-400 tracking-wider">
               QUESTION ID
             </span>
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-semibold">
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold">
               8-Digit Standard
             </span>
           </div>
 
           <div className="flex items-center gap-2 mt-0.5">
-            <span className="text-sm sm:text-base font-mono font-black text-white tracking-widest">
+            <span className="text-sm sm:text-base font-mono font-black text-slate-900 dark:text-white tracking-widest">
               {displayId}
             </span>
 
@@ -60,12 +60,13 @@ export function QuestionIdBadge({
               <button
                 type="button"
                 onClick={handleCopy}
+                className="text-xs px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition font-sans flex items-center gap-1"
                 title="Copy Question ID"
-                className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition"
               >
-                <span className="material-symbols-outlined text-sm">
+                <span className="material-symbols-outlined text-xs">
                   {copied ? "check" : "content_copy"}
                 </span>
+                <span>{copied ? "Copied" : "Copy"}</span>
               </button>
             )}
           </div>
@@ -73,13 +74,15 @@ export function QuestionIdBadge({
       </div>
 
       <div className="flex items-center gap-2 text-xs">
-        <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold flex items-center gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-          <span>Unique Non-Reusable ID</span>
-        </span>
-        <span className="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-400 font-mono text-[11px]">
+        <span className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-mono font-bold">
           {getPrefixInfo(questionCode)}
         </span>
+        {isSaving && (
+          <span className="flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 font-medium">
+            <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping" />
+            Generating ID...
+          </span>
+        )}
       </div>
     </div>
   );
