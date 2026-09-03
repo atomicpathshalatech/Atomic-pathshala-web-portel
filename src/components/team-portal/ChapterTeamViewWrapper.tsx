@@ -251,7 +251,7 @@ export function ChapterTeamViewWrapper({
               initialLectures={initialLectures}
               initialDpps={initialDpps}
               initialTests={initialTests}
-              canEdit={canEdit && !isUnderReview}
+              canEdit={canEdit || canReview}
             />
           </div>
 

@@ -66,18 +66,26 @@ export async function POST(
       return apiError("Lecture title is required", 400);
     }
 
-    // Authoring lock check
-    const sequence = await getChapterSequenceState(chapter.id);
-    if (!sequence.nextLectureUnlocked) {
-      const requiredSlot = sequence.requiredDppSlotForNextLecture;
-      return apiError(
-        `Cannot create Lecture ${sequence.nextLecturePosition}. DPP ${requiredSlot} must be created in this chapter first.`,
-        409,
-        {
-          code: "CHAPTER_SEQUENCE_LOCKED",
-          details: { chapterId: chapter.id, requiredContent: `DPP_${requiredSlot}` },
-        }
-      );
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      include: { role: true },
+    });
+    const isAdmin = user?.role?.name === "SUPER_ADMIN" || user?.role?.name === "ADMIN";
+
+    // Authoring lock check (Admins can add lectures anytime even after publish)
+    if (!isAdmin) {
+      const sequence = await getChapterSequenceState(chapter.id);
+      if (!sequence.nextLectureUnlocked) {
+        const requiredSlot = sequence.requiredDppSlotForNextLecture;
+        return apiError(
+          `Cannot create Lecture ${sequence.nextLecturePosition}. DPP ${requiredSlot} must be created in this chapter first.`,
+          409,
+          {
+            code: "CHAPTER_SEQUENCE_LOCKED",
+            details: { chapterId: chapter.id, requiredContent: `DPP_${requiredSlot}` },
+          }
+        );
+      }
     }
 
     // Resolve teacher (defaults to the actual creator user)
