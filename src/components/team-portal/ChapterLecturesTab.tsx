@@ -456,58 +456,15 @@ export function ChapterLecturesTab({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                    Schedule Date
-                  </label>
-                  <input
-                    type="date"
-                    value={scheduledDate}
-                    onChange={(e) => setScheduledDate(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 px-3.5 py-2.5 rounded-xl text-sm text-slate-900 dark:text-white focus:border-blue-500 focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                    Start Time
-                  </label>
-                  <input
-                    type="time"
-                    value={startTime}
-                    onChange={(e) => setStartTime(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 px-3.5 py-2.5 rounded-xl text-sm text-slate-900 dark:text-white focus:border-blue-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                    Duration (Mins)
+                    Sequence Order #
                   </label>
                   <input
                     type="number"
-                    min={15}
-                    step={5}
-                    value={durationMin}
-                    onChange={(e) => setDurationMin(Number(e.target.value))}
-                    className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 px-3.5 py-2 rounded-xl text-sm text-slate-900 dark:text-white focus:border-blue-500 focus:outline-none"
+                    min={1}
+                    value={order}
+                    onChange={(e) => setOrder(Number(e.target.value))}
+                    className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 px-3.5 py-2.5 rounded-xl text-sm text-slate-900 dark:text-white focus:border-blue-500 focus:outline-none"
                   />
-                  <div className="flex items-center gap-1 mt-1.5">
-                    {[45, 60, 90, 120].map((d) => (
-                      <button
-                        key={d}
-                        type="button"
-                        onClick={() => setDurationMin(d)}
-                        className={`text-[10px] px-2 py-0.5 rounded-md font-bold transition ${
-                          durationMin === d
-                            ? "bg-blue-600 text-white"
-                            : "bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white"
-                        }`}
-                      >
-                        {d}m
-                      </button>
-                    ))}
-                  </div>
                 </div>
 
                 <div>
@@ -523,6 +480,17 @@ export function ChapterLecturesTab({
                     <option value="English">English</option>
                     <option value="Hinglish">Hinglish</option>
                   </select>
+                </div>
+              </div>
+
+              {/* Informational Box about Batch Scheduling */}
+              <div className="p-3.5 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/60 rounded-2xl flex items-start gap-2.5 text-xs text-blue-800 dark:text-blue-300">
+                <Sparkles className="w-4 h-4 shrink-0 text-blue-600 dark:text-blue-400 mt-0.5" />
+                <div className="space-y-0.5">
+                  <p className="font-bold">Auto-Scheduled on Chapter Submission</p>
+                  <p className="text-[11px] text-blue-600/80 dark:text-blue-400/80 leading-relaxed">
+                    Date, time aur duration authoring ke time enter karne ki zaroorat nahi hai. Jab aap chapter complete karke <strong>Submit / Publish for Review</strong> karenge, tab aap Weekdays (e.g. Mon, Wed, Fri) aur Duration (e.g. 90m) select karke sabhi classes automatically future dates me schedule kar sakenge.
+                  </p>
                 </div>
               </div>
 

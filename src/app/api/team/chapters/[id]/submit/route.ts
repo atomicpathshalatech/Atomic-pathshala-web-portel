@@ -13,21 +13,55 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.CHAPTER_UPDATE);
 
+    const body = await request.json().catch(() => ({}));
+    const { startDate, startTime = "10:00", durationMin = 90, weekdays } = body;
+
     const chapter = await prisma.chapter.findUnique({
       where: { id: params.id },
       include: {
-        _count: { select: { lectures: true } },
+        lectures: { orderBy: [{ order: "asc" }, { createdAt: "asc" }] },
       },
     });
     if (!chapter) return apiError("Chapter not found", 404);
 
-    if (chapter._count.lectures === 0) {
+    if (chapter.lectures.length === 0) {
       return apiError("Please add at least one lecture before submitting the chapter.", 400);
     }
 
     const currentStatus = chapter.status as ChapterStatusValue;
 
+    // Optional Batch Scheduling Calculation across selected Weekdays
+    const lectureUpdates: any[] = [];
+    if (startDate && Array.isArray(weekdays) && weekdays.length > 0) {
+      const [year, month, day] = String(startDate).split("-").map(Number);
+      const current = new Date(year, month - 1, day);
+      const duration = Number(durationMin) || 90;
+
+      for (const lec of chapter.lectures) {
+        // Find next matching weekday
+        while (!weekdays.includes(current.getDay())) {
+          current.setDate(current.getDate() + 1);
+        }
+
+        const scheduledDate = new Date(current);
+        lectureUpdates.push(
+          prisma.lecture.update({
+            where: { id: lec.id },
+            data: {
+              scheduledDate: scheduledDate,
+              startTime: startTime || "10:00",
+              durationMin: duration,
+            },
+          })
+        );
+
+        // Move to next calendar day for the next iteration
+        current.setDate(current.getDate() + 1);
+      }
+    }
+
     const [updated] = await prisma.$transaction([
+      ...lectureUpdates,
       prisma.chapter.update({
         where: { id: chapter.id },
         data: { status: "UNDER_REVIEW" },
@@ -47,7 +81,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           action: "CHAPTER_SUBMITTED",
           entityType: "Chapter",
           entityId: chapter.id,
-          metadata: { from: currentStatus, to: "UNDER_REVIEW" },
+          metadata: {
+            from: currentStatus,
+            to: "UNDER_REVIEW",
+            batchSchedule: startDate ? { startDate, startTime, durationMin, weekdays } : null,
+          },
         },
       }),
     ]);
