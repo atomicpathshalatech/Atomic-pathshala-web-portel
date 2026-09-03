@@ -48,112 +48,134 @@ export default async function ChaptersListPage({
   const canCreate = await hasPermission(session.user.id, PERMISSIONS.CHAPTER_CREATE);
   const canReview = await hasPermission(session.user.id, PERMISSIONS.CHAPTER_REVIEW);
 
-  const whereClause: Prisma.ChapterWhereInput = {};
+  const andConditions: Prisma.ChapterWhereInput[] = [];
 
   const selectedCourse = searchParams.course || searchParams.courseId;
   const selectedSubject = searchParams.subject || searchParams.subjectId;
 
   if (selectedCourse) {
     if (selectedCourse === "Class 11th (NEET)") {
-      whereClause.subject = {
-        course: {
-          OR: [
-            { title: { contains: "11", mode: "insensitive" } },
-            { title: { contains: "Class 11", mode: "insensitive" } },
-          ],
+      andConditions.push({
+        subject: {
+          course: {
+            OR: [
+              { title: { contains: "11", mode: "insensitive" } },
+              { title: { contains: "Class 11", mode: "insensitive" } },
+            ],
+          },
         },
-      };
+      });
     } else if (selectedCourse === "Class 12th (NEET)") {
-      whereClause.subject = {
-        course: {
-          OR: [
-            { title: { contains: "12", mode: "insensitive" } },
-            { title: { contains: "Class 12", mode: "insensitive" } },
-          ],
+      andConditions.push({
+        subject: {
+          course: {
+            OR: [
+              { title: { contains: "12", mode: "insensitive" } },
+              { title: { contains: "Class 12", mode: "insensitive" } },
+            ],
+          },
         },
-      };
+      });
     } else if (selectedCourse === "NEET Dropper") {
-      whereClause.subject = {
-        course: {
-          OR: [
-            { title: { contains: "Dropper", mode: "insensitive" } },
-            { title: { contains: "Repeater", mode: "insensitive" } },
-          ],
+      andConditions.push({
+        subject: {
+          course: {
+            OR: [
+              { title: { contains: "Dropper", mode: "insensitive" } },
+              { title: { contains: "Repeater", mode: "insensitive" } },
+            ],
+          },
         },
-      };
+      });
     } else if (selectedCourse === "Foundation (Class 9th & 10th)") {
-      whereClause.subject = {
-        course: {
-          OR: [
-            { title: { contains: "Foundation", mode: "insensitive" } },
-            { title: { contains: "9", mode: "insensitive" } },
-            { title: { contains: "10", mode: "insensitive" } },
-          ],
+      andConditions.push({
+        subject: {
+          course: {
+            OR: [
+              { title: { contains: "Foundation", mode: "insensitive" } },
+              { title: { contains: "9", mode: "insensitive" } },
+              { title: { contains: "10", mode: "insensitive" } },
+            ],
+          },
         },
-      };
+      });
     } else if (selectedCourse === "JEE Main + Advanced") {
-      whereClause.subject = {
-        course: {
+      andConditions.push({
+        subject: {
+          course: {
+            OR: [
+              { title: { contains: "JEE", mode: "insensitive" } },
+              { title: { contains: "Engineering", mode: "insensitive" } },
+            ],
+          },
+        },
+      });
+    } else {
+      andConditions.push({
+        subject: {
           OR: [
-            { title: { contains: "JEE", mode: "insensitive" } },
-            { title: { contains: "Engineering", mode: "insensitive" } },
+            { courseId: selectedCourse },
+            { course: { title: { contains: selectedCourse, mode: "insensitive" } } },
           ],
         },
-      };
-    } else {
-      whereClause.subject = {
-        OR: [
-          { courseId: selectedCourse },
-          { course: { title: { contains: selectedCourse, mode: "insensitive" } } },
-        ],
-      };
+      });
     }
   }
 
   if (selectedSubject) {
     if (selectedSubject === "Physics") {
-      whereClause.subject = {
-        ...(whereClause.subject || {}),
-        title: { contains: "Physics", mode: "insensitive" },
-      };
+      andConditions.push({
+        subject: { title: { contains: "Physics", mode: "insensitive" } },
+      });
     } else if (selectedSubject === "Chemistry") {
-      whereClause.subject = {
-        ...(whereClause.subject || {}),
-        OR: [
-          { title: { contains: "Chem", mode: "insensitive" } },
-          { title: { in: ["Chemistry", "Organic Chemistry", "Inorganic Chemistry", "Physical Chemistry"] } },
-        ],
-      };
+      andConditions.push({
+        subject: {
+          OR: [
+            { title: { contains: "Chem", mode: "insensitive" } },
+            { title: { in: ["Chemistry", "Organic Chemistry", "Inorganic Chemistry", "Physical Chemistry"] } },
+          ],
+        },
+      });
     } else if (selectedSubject === "Biology") {
-      whereClause.subject = {
-        ...(whereClause.subject || {}),
-        OR: [
-          { title: { contains: "Bio", mode: "insensitive" } },
-          { title: { contains: "Botan", mode: "insensitive" } },
-          { title: { contains: "Zool", mode: "insensitive" } },
-          { title: { in: ["Biology", "Botany", "Zoology"] } },
-        ],
-      };
+      andConditions.push({
+        subject: {
+          OR: [
+            { title: { contains: "Bio", mode: "insensitive" } },
+            { title: { contains: "Botan", mode: "insensitive" } },
+            { title: { contains: "Zool", mode: "insensitive" } },
+            { title: { in: ["Biology", "Botany", "Zoology"] } },
+          ],
+        },
+      });
     } else if (selectedSubject === "Mathematics") {
-      whereClause.subject = {
-        ...(whereClause.subject || {}),
-        title: { contains: "Math", mode: "insensitive" },
-      };
+      andConditions.push({
+        subject: { title: { contains: "Math", mode: "insensitive" } },
+      });
     } else if (selectedSubject === "Science") {
-      whereClause.subject = {
-        ...(whereClause.subject || {}),
-        title: { contains: "Science", mode: "insensitive" },
-      };
+      andConditions.push({
+        subject: { title: { contains: "Science", mode: "insensitive" } },
+      });
     } else {
-      whereClause.subjectId = selectedSubject;
+      andConditions.push({
+        subjectId: selectedSubject,
+      });
     }
   }
+
   if (searchParams.medium && ["HINDI", "ENGLISH", "HINGLISH"].includes(searchParams.medium)) {
-    whereClause.medium = searchParams.medium as "HINDI" | "ENGLISH" | "HINGLISH";
+    andConditions.push({
+      medium: searchParams.medium as "HINDI" | "ENGLISH" | "HINGLISH",
+    });
   }
+
   if (searchParams.status && searchParams.status in STATUS_TONE) {
-    whereClause.status = searchParams.status as ChapterStatus;
+    andConditions.push({
+      status: searchParams.status as ChapterStatus,
+    });
   }
+
+  const whereClause: Prisma.ChapterWhereInput =
+    andConditions.length > 0 ? { AND: andConditions } : {};
 
   const [chapters, totalChapters, underReviewCount, approvedCount] = await Promise.all([
     prisma.chapter.findMany({
