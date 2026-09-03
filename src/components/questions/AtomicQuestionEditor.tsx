@@ -12,6 +12,7 @@ import { QuestionSimilaritySidebar } from "./QuestionSimilaritySidebar";
 import { AiAssistantTools } from "./AiAssistantTools";
 import { SimilarityReport, SimilarityMatch } from "@/lib/questions/similarity";
 import { AiMetadataSuggestion } from "@/lib/questions/ai-service";
+import { detectNeetQuestionType, NEET_QUESTION_TYPES, NeetTypeDetectionResult } from "@/lib/questions/neet-question-classifier";
 
 export interface AtomicQuestionEditorProps {
   questionId?: string;
@@ -148,13 +149,48 @@ export function AtomicQuestionEditor({
   const [similarityReport, setSimilarityReport] = useState<SimilarityReport | null>(null);
   const [checkingSimilarity, setCheckingSimilarity] = useState(false);
 
-  // Status & submission states
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [generatedCode, setGeneratedCode] = useState<string | null>(initialQuestion?.questionCode || null);
+  const [detectedNeetType, setDetectedNeetType] = useState<NeetTypeDetectionResult | null>(null);
 
   const questionInputRef = useRef<HTMLInputElement>(null);
   const solutionInputRef = useRef<HTMLInputElement>(null);
+
+  // Real-time Structural NEET Question Type Detection Engine
+  useEffect(() => {
+    const rawStatement = statementEn || statementHi;
+    if (!rawStatement.trim()) return;
+
+    const result = detectNeetQuestionType(
+      rawStatement,
+      {
+        A: optionAEn || optionAHi,
+        B: optionBEn || optionBHi,
+        C: optionCEn || optionCHi,
+        D: optionDEn || optionDHi,
+      },
+      Boolean(questionImagePreview || figureUrl)
+    );
+
+    setDetectedNeetType(result);
+    if (result && result.detectedType && result.detectedType !== type) {
+      setType(result.detectedType);
+    }
+  }, [
+    statementEn,
+    statementHi,
+    optionAEn,
+    optionBEn,
+    optionCEn,
+    optionDEn,
+    optionAHi,
+    optionBHi,
+    optionCHi,
+    optionDHi,
+    questionImagePreview,
+    figureUrl,
+  ]);
 
   // Global Clipboard Paste (Ctrl+V) handler for Images
   useEffect(() => {
@@ -1105,6 +1141,26 @@ export function AtomicQuestionEditor({
                 )}
               </div>
             </div>
+
+            {/* Live Auto-Detected NEET Question Format Badge */}
+            {detectedNeetType && (
+              <div className="flex items-center justify-between p-3 rounded-2xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-xs">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-bold px-2 py-0.5 rounded-full bg-indigo-600 text-white text-[10px] font-mono">
+                    AUTO-DETECTED FORMAT
+                  </span>
+                  <span className="font-extrabold text-indigo-950 dark:text-indigo-200">
+                    {detectedNeetType.typeDef.name} ({detectedNeetType.typeDef.hindiName})
+                  </span>
+                  <span className="text-[11px] text-indigo-700 dark:text-indigo-300">
+                    — {detectedNeetType.reason}
+                  </span>
+                </div>
+                <span className="text-[10px] font-mono font-bold text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-900 px-2 py-0.5 rounded-lg border border-indigo-200 dark:border-indigo-800 shrink-0">
+                  {detectedNeetType.confidence}% confidence
+                </span>
+              </div>
+            )}
 
             {/* A. QUESTION STATEMENTS */}
             <div className="space-y-4">

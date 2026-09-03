@@ -327,6 +327,8 @@ Output ONLY raw JSON.`;
   };
 }
 
+import { detectNeetQuestionType } from "./neet-question-classifier";
+
 export function generateAiMetadata(
   statement: string,
   options?: { A?: string; B?: string; C?: string; D?: string }
@@ -367,19 +369,22 @@ export function generateAiMetadata(
     difficulty = "HARD";
   }
 
+  // Automatic NEET Question Type Classification
+  const typeResult = detectNeetQuestionType(statement, options);
+
   return {
     subject,
     chapter,
     topic,
     subTopic,
     difficulty,
-    questionType: "SINGLE_CORRECT",
+    questionType: typeResult.detectedType,
     concept,
     formula: "R = ρ(L/A)",
-    tags: ["NEET 2026", "NCERT Line-by-Line", "High Yield"],
+    tags: ["NEET 2026", "NCERT Line-by-Line", "High Yield", typeResult.typeDef.name],
     ncertRelevance: "Class 11 / 12 NCERT Core Curriculum",
     examRelevance: "NEET UG / JEE Main High Priority",
-    confidence: 94,
+    confidence: typeResult.confidence,
     chapterConfidence: 96,
     topicConfidence: 92,
     difficultyConfidence: 89,
