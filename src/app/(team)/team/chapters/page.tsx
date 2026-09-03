@@ -6,7 +6,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
-import type { ChapterStatus } from "@prisma/client";
+import { Prisma, type ChapterStatus } from "@prisma/client";
 
 export const metadata: Metadata = {
   title: "Chapters",
@@ -48,12 +48,7 @@ export default async function ChaptersListPage({
   const canCreate = await hasPermission(session.user.id, PERMISSIONS.CHAPTER_CREATE);
   const canReview = await hasPermission(session.user.id, PERMISSIONS.CHAPTER_REVIEW);
 
-  const whereClause: {
-    subjectId?: string;
-    subject?: { courseId: string };
-    medium?: "HINDI" | "ENGLISH" | "HINGLISH";
-    status?: ChapterStatus;
-  } = {};
+  const whereClause: Prisma.ChapterWhereInput = {};
 
   const selectedCourse = searchParams.course || searchParams.courseId;
   const selectedSubject = searchParams.subject || searchParams.subjectId;
