@@ -1006,6 +1006,23 @@ model WhiteboardSession {
   recordingVideoId    String?
   peakViewers         Int      @default(0)
 
+  // Presentation & Pre-flight Config
+  presentationUrl     String?  // Cloud/Upload URL of PDF or PPT
+  presentationName    String?  // Original file name
+  presentationType    String?  // PDF / PPTX
+  classroomTheme      String   @default("LIGHT") // LIGHT / DARK
+  cameraShape         String   @default("SQUARE") // SQUARE / CIRCULAR
+  cameraPosition      String   @default("UPPER_RIGHT")
+
+  // Authoritative Timing & Extensions
+  scheduledStart       DateTime?
+  scheduledEnd         DateTime?
+  actualStartedAt      DateTime?
+  actualEndedAt        DateTime?
+  totalExtendedMinutes Int      @default(0)
+  extensionHistory     Json?    // Array of { addedMinutes: number, extendedAt: string, teacherId: string }
+  cancellationReason   String?
+
   batchSchedule BatchSchedule        @relation(fields: [batchScheduleId], references: [id], onDelete: Cascade)
   teacher       Teacher              @relation(fields: [teacherId], references: [id], onDelete: Cascade)
   pages         WhiteboardPage[]

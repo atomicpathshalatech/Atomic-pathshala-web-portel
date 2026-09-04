@@ -45,6 +45,17 @@ export async function GET(
         youtubeVideoId: true,
         startedAt: true,
         endedAt: true,
+        presentationUrl: true,
+        presentationName: true,
+        presentationType: true,
+        classroomTheme: true,
+        cameraShape: true,
+        cameraPosition: true,
+        scheduledStart: true,
+        scheduledEnd: true,
+        actualStartedAt: true,
+        actualEndedAt: true,
+        totalExtendedMinutes: true,
       },
     });
 
@@ -64,6 +75,8 @@ export async function GET(
               title: schedule.title,
               livePhase: "PREPARING",
               status: "ACTIVE",
+              scheduledStart: schedule.startsAt ? new Date(schedule.startsAt) : new Date(),
+              scheduledEnd: schedule.endsAt ? new Date(schedule.endsAt) : new Date(Date.now() + 60 * 60 * 1000),
               pages: { create: { pageNumber: 1, objects: [] } },
             },
             select: {
@@ -75,6 +88,17 @@ export async function GET(
               youtubeVideoId: true,
               startedAt: true,
               endedAt: true,
+              presentationUrl: true,
+              presentationName: true,
+              presentationType: true,
+              classroomTheme: true,
+              cameraShape: true,
+              cameraPosition: true,
+              scheduledStart: true,
+              scheduledEnd: true,
+              actualStartedAt: true,
+              actualEndedAt: true,
+              totalExtendedMinutes: true,
             },
           });
         } catch {
@@ -89,13 +113,33 @@ export async function GET(
               youtubeVideoId: true,
               startedAt: true,
               endedAt: true,
+              presentationUrl: true,
+              presentationName: true,
+              presentationType: true,
+              classroomTheme: true,
+              cameraShape: true,
+              cameraPosition: true,
+              scheduledStart: true,
+              scheduledEnd: true,
+              actualStartedAt: true,
+              actualEndedAt: true,
+              totalExtendedMinutes: true,
             },
           });
         }
       }
     }
 
-    return apiSuccess({ whiteboardSession: wbSession ?? null });
+    return apiSuccess({
+      whiteboardSession: wbSession ?? null,
+      schedule: {
+        id: schedule.id,
+        title: schedule.title,
+        startsAt: schedule.startsAt,
+        endsAt: schedule.endsAt,
+        type: schedule.type,
+      },
+    });
   } catch (error) {
     return handleApiError(error);
   }

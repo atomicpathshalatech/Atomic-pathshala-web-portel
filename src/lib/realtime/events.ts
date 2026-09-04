@@ -46,4 +46,7 @@ export const WB_EVENTS = {
   // lets a student sitting in the lobby jump straight into the board/video
   // the instant class actually starts instead of waiting out the interval.
   LIVE_PHASE_CHANGED: "live-phase-changed",
+  SESSION_EXTENDED: "session-extended",
+  PRESENCE_EVENT: "presence-event",
+  CONFIG_UPDATED: "config-updated",
 } as const;

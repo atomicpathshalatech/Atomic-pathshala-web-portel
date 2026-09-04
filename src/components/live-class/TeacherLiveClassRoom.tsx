@@ -9,6 +9,7 @@ import { VideoStrip } from "@/components/live-class/VideoStrip";
 import { MessagesPanel } from "@/components/live-class/MessagesPanel";
 import { Simulation3DModal } from "@/components/live-class/Simulation3DModal";
 import { ScienceLabsModal } from "@/components/live-class/ScienceLabsModal";
+import { PreFlightSetupWizard, type PreFlightConfig } from "@/components/live-class/PreFlightSetupWizard";
 import { GRACE_PERIOD_MINUTES, END_WARNING_MINUTES } from "@/lib/whiteboard/constants";
 
 type WhiteboardPage = { id: string; pageNumber: number; objects: StrokeObject[]; background: string };
@@ -26,6 +27,19 @@ type WhiteboardSession = {
   activePageNumber: number;
   chatEnabled: boolean;
   handRaiseEnabled: boolean;
+  presentationUrl?: string | null;
+  presentationName?: string | null;
+  presentationType?: "PDF" | "PPTX" | string | null;
+  classroomTheme?: "LIGHT" | "DARK" | string;
+  cameraShape?: "SQUARE" | "CIRCULAR" | string;
+  cameraPosition?: string;
+  scheduledStart?: string | null;
+  scheduledEnd?: string | null;
+  startedAt?: string | null;
+  endedAt?: string | null;
+  actualStartedAt?: string | null;
+  actualEndedAt?: string | null;
+  totalExtendedMinutes?: number;
   pages: WhiteboardPage[];
 };
 type HandRaiseQueueItem = { id: string; studentId: string; studentName: string; raisedAt: string };
@@ -249,6 +263,17 @@ async function deleteJson(url: string) {
   return json.data;
 }
 
+function formatHms(totalSec: number) {
+  const isNeg = totalSec < 0;
+  const abs = Math.abs(totalSec);
+  const h = Math.floor(abs / 3600);
+  const m = Math.floor((abs % 3600) / 60);
+  const s = abs % 60;
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  if (h > 0) return `${isNeg ? "-" : ""}${pad(h)}:${pad(m)}:${pad(s)}`;
+  return `${isNeg ? "-" : ""}${pad(m)}:${pad(s)}`;
+}
+
 type SettingsTab = "audio" | "chatpoll" | "broadcast" | "shortcuts";
 type PopupId = "pen" | "highlight" | "eraser" | "shapes" | "pages" | "zoom" | "more" | "pollMenu" | null;
 
@@ -321,6 +346,12 @@ export function TeacherLiveClassRoom({
   const [startingClass, setStartingClass] = useState(false);
   const [startClassError, setStartClassError] = useState<string | null>(null);
 
+  // Pre-flight & Authoritative System State
+  const [showPreFlightWizard, setShowPreFlightWizard] = useState(false);
+  const [extendingTime, setExtendingTime] = useState(false);
+  const [extensionMenuOpen, setExtensionMenuOpen] = useState(false);
+  const [currentTimeMs, setCurrentTimeMs] = useState(Date.now());
+
   const [studentCount, setStudentCount] = useState(0);
   const [handRaiseQueue, setHandRaiseQueue] = useState<HandRaiseQueueItem[]>([]);
   const [rightTab, setRightTab] = useState<"messages" | "questions">("messages");
@@ -359,7 +390,12 @@ export function TeacherLiveClassRoom({
     (async () => {
       try {
         const data = await postJson("/api/whiteboard/sessions", { batchScheduleId });
-        if (!cancelled) setWbSession(data.whiteboardSession);
+        if (!cancelled) {
+          setWbSession(data.whiteboardSession);
+          if (!data.whiteboardSession?.presentationUrl && data.whiteboardSession?.livePhase !== "LIVE") {
+            setShowPreFlightWizard(true);
+          }
+        }
       } catch (err) {
         if (!cancelled) setLoadError(err instanceof Error ? err.message : "Could not start the live class.");
       } finally {
@@ -462,6 +498,31 @@ export function TeacherLiveClassRoom({
     presence.bind("pusher:member_removed", () => setStudentCount((c) => Math.max(0, c - 1)));
     presence.bind(WB_EVENTS.MESSAGE_SENT, () => {
       if (rightTabRef.current !== "messages") setUnreadMessages((c) => c + 1);
+    });
+    presence.bind(WB_EVENTS.SESSION_EXTENDED, (data: { addedMinutes: number; newScheduledEnd: string; totalExtendedMinutes: number }) => {
+      setWbSession((prev) =>
+        prev
+          ? {
+              ...prev,
+              scheduledEnd: data.newScheduledEnd,
+              totalExtendedMinutes: data.totalExtendedMinutes,
+            }
+          : prev
+      );
+    });
+    presence.bind(WB_EVENTS.CONFIG_UPDATED, (data: any) => {
+      setWbSession((prev) =>
+        prev
+          ? {
+              ...prev,
+              presentationUrl: data.presentationUrl ?? prev.presentationUrl,
+              presentationName: data.presentationName ?? prev.presentationName,
+              presentationType: data.presentationType ?? prev.presentationType,
+              classroomTheme: data.classroomTheme ?? prev.classroomTheme,
+              cameraShape: data.cameraShape ?? prev.cameraShape,
+            }
+          : prev
+      );
     });
 
     const teacherCh = client.subscribe(teacherChannel(wbSession.id));
@@ -708,14 +769,18 @@ export function TeacherLiveClassRoom({
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  // ---- Start class (leave the pre-class lobby) --------------------------
+  // ---- Start class (authoritative server validation) -------------------
   async function startClass() {
     if (!wbSession || startingClass) return;
     setStartingClass(true);
     setStartClassError(null);
     try {
-      const data = await patchJson(`/api/whiteboard/sessions/${wbSession.id}`, { livePhase: "LIVE" });
-      setWbSession(data.whiteboardSession);
+      const data = await postJson(`/api/team/live-class/${batchScheduleId}/start`, {});
+      if (data.whiteboardSession) {
+        setWbSession((prev) =>
+          prev ? { ...prev, ...data.whiteboardSession, livePhase: "LIVE" } : data.whiteboardSession
+        );
+      }
     } catch (err) {
       setStartClassError(err instanceof Error ? err.message : "Could not start the class.");
     } finally {
@@ -723,32 +788,66 @@ export function TeacherLiveClassRoom({
     }
   }
 
-  // ---- End-of-class countdown + backend-mirroring auto-end --------------
-  // No cron/worker exists in this app (see endWhiteboardSession's comment)
-  // — the backend force-ends a class lazily, on the next request that
-  // touches it. This timer is what makes that actually happen promptly
-  // for a teacher whose tab is still open, instead of waiting for some
-  // other request to stumble in; a teacher who navigates away is still
-  // covered server-side by resolveWhiteboardAccess's own grace check.
-  const [minutesRemaining, setMinutesRemaining] = useState<number | null>(null);
+  // ---- Extend class (+5, +10, +15, +30, +60 minutes) -------------------
+  async function extendClass(minutes: number) {
+    if (!wbSession || extendingTime) return;
+    setExtendingTime(true);
+    try {
+      const data = await postJson(`/api/team/live-class/${batchScheduleId}/extend`, { addedMinutes: minutes });
+      if (data.whiteboardSession) {
+        setWbSession((prev) =>
+          prev ? { ...prev, ...data.whiteboardSession } : data.whiteboardSession
+        );
+      }
+      setExtensionMenuOpen(false);
+    } catch (err: any) {
+      alert(err instanceof Error ? err.message : "Could not extend the class.");
+    } finally {
+      setExtendingTime(false);
+    }
+  }
+
+  // ---- Authoritative Countdown, Grace Period & Timer State --------------
   const autoEndTriggeredRef = useRef(false);
 
   useEffect(() => {
-    const endsAtMs = new Date(endsAt).getTime();
-    const tick = () => {
-      const now = Date.now();
-      setMinutesRemaining(Math.ceil((endsAtMs - now) / 60_000));
-      const gracePeriodExpired = now > endsAtMs + GRACE_PERIOD_MINUTES * 60_000;
-      if (gracePeriodExpired && !autoEndTriggeredRef.current && wbSession?.status === "ACTIVE" && !ending) {
-        autoEndTriggeredRef.current = true;
-        endClass();
-      }
-    };
-    tick();
-    const interval = setInterval(tick, 15_000);
+    const interval = setInterval(() => {
+      setCurrentTimeMs(Date.now());
+    }, 1000);
     return () => clearInterval(interval);
+  }, []);
+
+  const scheduledStartMs = wbSession?.scheduledStart ? new Date(wbSession.scheduledStart).getTime() : 0;
+  const scheduledEndMs = wbSession?.scheduledEnd
+    ? new Date(wbSession.scheduledEnd).getTime()
+    : new Date(endsAt).getTime();
+  const actualStartedAtMs = wbSession?.actualStartedAt
+    ? new Date(wbSession.actualStartedAt).getTime()
+    : wbSession?.startedAt
+    ? new Date(wbSession.startedAt).getTime()
+    : null;
+
+  // Waiting mode timing
+  const secondsUntilStart = scheduledStartMs > 0 ? Math.floor((scheduledStartMs - currentTimeMs) / 1000) : 0;
+  const isEarlyAllowed = scheduledStartMs === 0 || currentTimeMs >= scheduledStartMs - 15 * 60 * 1000;
+  const canStartClass = isEarlyAllowed && wbSession?.livePhase !== "LIVE";
+
+  // Live mode timing
+  const elapsedSeconds = actualStartedAtMs ? Math.max(0, Math.floor((currentTimeMs - actualStartedAtMs) / 1000)) : 0;
+  const remainingSeconds = Math.floor((scheduledEndMs - currentTimeMs) / 1000);
+  const isInGracePeriod = remainingSeconds <= 0 && remainingSeconds > -GRACE_PERIOD_MINUTES * 60;
+  const graceSecondsLeft = Math.max(0, GRACE_PERIOD_MINUTES * 60 + remainingSeconds);
+  const minutesRemaining = Math.ceil(remainingSeconds / 60);
+
+  // Auto-end trigger when grace period fully expires
+  useEffect(() => {
+    const gracePeriodExpired = currentTimeMs > scheduledEndMs + GRACE_PERIOD_MINUTES * 60_000;
+    if (gracePeriodExpired && !autoEndTriggeredRef.current && wbSession?.status === "ACTIVE" && !ending && wbSession.livePhase === "LIVE") {
+      autoEndTriggeredRef.current = true;
+      endClass();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [endsAt, wbSession?.status]);
+  }, [currentTimeMs, scheduledEndMs, wbSession?.status, wbSession?.livePhase]);
 
   // ---- End class -------------------------------------------------------------
   async function endClass() {
@@ -892,34 +991,144 @@ export function TeacherLiveClassRoom({
         className="flex items-center justify-between gap-4 px-6 border-b border-[#2d2e3b] bg-[#1a1b23]"
         style={{ gridColumn: "2 / 4", gridRow: "1" }}
       >
-        <div className="min-w-0">
-          <p className="text-[11px] text-gray-500 truncate">{batchName}</p>
-          <h1 className="text-sm font-medium text-gray-200 truncate">{scheduleTitle}</h1>
-        </div>
-        <div className="flex items-center gap-4 shrink-0">
-          <SaveIndicator state={saveState} />
-
-          {/* Live Phase Indicator */}
-          {isClassLive ? (
-            <span className="flex items-center gap-1.5 text-xs font-bold text-red-400 border border-red-500/40 bg-red-950/40 px-3 py-1 rounded-full">
-              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-              LIVE
-            </span>
-          ) : (
-            <span className="flex items-center gap-1.5 text-xs font-bold text-amber-400 border border-amber-500/40 bg-amber-950/40 px-3 py-1 rounded-full animate-pulse">
-              <span className="w-2 h-2 rounded-full bg-amber-400" />
-              PREPARING (NOT LIVE)
+        <div className="min-w-0 flex items-center gap-3">
+          <div>
+            <p className="text-[11px] text-gray-500 truncate">{batchName}</p>
+            <h1 className="text-sm font-medium text-gray-200 truncate">{scheduleTitle}</h1>
+          </div>
+          {wbSession.presentationName && (
+            <span className="hidden lg:inline-flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded-md bg-indigo-500/10 text-indigo-300 border border-indigo-500/30">
+              <span className="material-symbols-outlined text-xs">description</span>
+              {wbSession.presentationName}
             </span>
           )}
+        </div>
 
-          {minutesRemaining !== null && minutesRemaining <= END_WARNING_MINUTES && wbSession?.status === "ACTIVE" && (
-            <span
-              className="flex items-center gap-1.5 text-xs font-semibold text-amber-400 border border-amber-900/50 bg-amber-950/30 px-2.5 py-1 rounded-md"
-              title="This class will auto-end shortly after its scheduled time if not ended manually."
-            >
-              <span className="material-symbols-outlined text-base">schedule</span>
-              {minutesRemaining > 0 ? `Ending in ${minutesRemaining}m` : "Past scheduled end — wrap up"}
-            </span>
+        <div className="flex items-center gap-3 shrink-0">
+          <SaveIndicator state={saveState} />
+
+          {/* Pre-Flight Wizard Trigger */}
+          <button
+            type="button"
+            onClick={() => setShowPreFlightWizard(true)}
+            className="flex items-center gap-1.5 text-xs font-medium text-indigo-300 bg-indigo-950/40 hover:bg-indigo-900/50 border border-indigo-500/30 px-3 py-1.5 rounded-lg transition"
+            title="Configure Teaching Material, Theme, and Video Devices"
+          >
+            <span className="material-symbols-outlined text-sm">tune</span>
+            <span className="hidden sm:inline">Material &amp; Setup</span>
+          </button>
+
+          {/* Authoritative Live Status & Timers */}
+          {isClassLive ? (
+            <div className="flex items-center gap-2">
+              <span className="flex items-center gap-1.5 text-xs font-bold text-red-400 border border-red-500/40 bg-red-950/40 px-3 py-1 rounded-full">
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                LIVE
+              </span>
+
+              {/* Elapsed Time */}
+              <span className="text-xs font-mono font-semibold text-gray-300 bg-black/40 border border-gray-700/60 px-2.5 py-1 rounded-md">
+                Elapsed: {formatHms(elapsedSeconds)}
+              </span>
+
+              {/* Remaining / Grace Period Timer */}
+              {isInGracePeriod ? (
+                <div className="relative flex items-center gap-1.5">
+                  <span className="flex items-center gap-1 text-xs font-mono font-bold text-rose-300 bg-rose-950/80 border border-rose-500/60 px-2.5 py-1 rounded-md animate-pulse">
+                    <span className="material-symbols-outlined text-xs text-rose-400">warning</span>
+                    Grace Period: {formatHms(graceSecondsLeft)}
+                  </span>
+                  {/* Quick Add Time Button */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setExtensionMenuOpen((o) => !o)}
+                      className="flex items-center gap-1 text-xs font-bold text-emerald-300 bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/50 px-2.5 py-1 rounded-md transition shadow-md"
+                    >
+                      <span className="material-symbols-outlined text-xs">add</span> Add Time
+                    </button>
+                    {extensionMenuOpen && (
+                      <div className="absolute right-0 top-full mt-2 w-36 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-1.5 z-50 flex flex-col gap-1">
+                        <span className="text-[10px] text-slate-400 px-2 py-0.5 uppercase tracking-wider font-bold">
+                          Extend Class
+                        </span>
+                        {[5, 10, 15, 30, 60].map((mins) => (
+                          <button
+                            key={mins}
+                            type="button"
+                            disabled={extendingTime}
+                            onClick={() => extendClass(mins)}
+                            className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-200 hover:bg-indigo-600 hover:text-white transition disabled:opacity-50"
+                          >
+                            +{mins} Minutes
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : remainingSeconds > 0 ? (
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`flex items-center gap-1 text-xs font-mono font-semibold px-2.5 py-1 rounded-md border ${
+                      remainingSeconds <= 300
+                        ? "text-amber-300 bg-amber-950/60 border-amber-500/50 animate-pulse"
+                        : "text-gray-300 bg-black/40 border-gray-700/60"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-xs">timer</span>
+                    {remainingSeconds <= 300 ? "5m Warning: " : "Rem: "}
+                    {formatHms(remainingSeconds)}
+                  </span>
+                  {/* Add Time Menu Button */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setExtensionMenuOpen((o) => !o)}
+                      className="flex items-center gap-1 text-xs font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 px-2 py-1 rounded-md transition"
+                      title="Extend Class Duration"
+                    >
+                      <span className="material-symbols-outlined text-xs">more_time</span>
+                      <span className="hidden sm:inline">+Time</span>
+                    </button>
+                    {extensionMenuOpen && (
+                      <div className="absolute right-0 top-full mt-2 w-36 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-1.5 z-50 flex flex-col gap-1">
+                        <span className="text-[10px] text-slate-400 px-2 py-0.5 uppercase tracking-wider font-bold">
+                          Add Time
+                        </span>
+                        {[5, 10, 15, 30, 60].map((mins) => (
+                          <button
+                            key={mins}
+                            type="button"
+                            disabled={extendingTime}
+                            onClick={() => extendClass(mins)}
+                            className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-200 hover:bg-indigo-600 hover:text-white transition disabled:opacity-50"
+                          >
+                            +{mins} Minutes
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="flex items-center gap-1.5 text-xs font-bold text-amber-400 border border-amber-500/40 bg-amber-950/40 px-3 py-1 rounded-full">
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                WAITING ROOM
+              </span>
+              {secondsUntilStart > 0 ? (
+                <span className="text-xs font-mono font-medium text-amber-300 bg-amber-950/30 border border-amber-800/40 px-2.5 py-1 rounded-md">
+                  Starts in: {formatHms(secondsUntilStart)}
+                </span>
+              ) : (
+                <span className="text-xs font-semibold text-emerald-400 bg-emerald-950/30 border border-emerald-800/40 px-2.5 py-1 rounded-md">
+                  Ready to Start
+                </span>
+              )}
+            </div>
           )}
 
           <span className="flex items-center gap-1.5 text-xs text-gray-400">
@@ -927,32 +1136,44 @@ export function TeacherLiveClassRoom({
             {studentCount} {isClassLive ? "watching" : "waiting"}
           </span>
 
-          {/* Go Live Button when in PREPARING phase */}
+          {/* Authoritative Start Class Button */}
           {!isClassLive && (
-            <button
-              type="button"
-              disabled={startingClass}
-              onClick={startClass}
-              className="flex items-center gap-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 px-4 py-1.5 rounded-md shadow-md shadow-emerald-600/30 transition active:scale-95 disabled:opacity-60"
-            >
-              <span className="material-symbols-outlined text-base">sensors</span>
-              {startingClass ? "Starting Live…" : "Start Class"}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={startingClass || !canStartClass}
+                onClick={startClass}
+                className={`flex items-center gap-1.5 text-xs font-bold px-4 py-1.5 rounded-lg shadow-md transition active:scale-95 ${
+                  canStartClass
+                    ? "text-white bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/30 ring-2 ring-emerald-400/40 animate-pulse cursor-pointer"
+                    : "text-gray-400 bg-gray-800 border border-gray-700 cursor-not-allowed opacity-60"
+                }`}
+                title={canStartClass ? "Start Live Teaching for all students" : "Class start unlocks within 15 minutes of scheduled time"}
+              >
+                <span className="material-symbols-outlined text-base">sensors</span>
+                {startingClass ? "Starting Live…" : canStartClass ? "Start Class" : "Scheduled Time Locked"}
+              </button>
+              {startClassError && (
+                <span className="text-xs text-red-400 max-w-xs truncate" title={startClassError}>
+                  {startClassError}
+                </span>
+              )}
+            </div>
           )}
 
           <button
             type="button"
             onClick={() => setSettingsOpen(true)}
-            className="text-xs font-semibold text-gray-300 border border-gray-600 px-4 py-1.5 rounded-md hover:bg-gray-700 transition"
+            className="text-xs font-semibold text-gray-300 border border-gray-600 px-3 py-1.5 rounded-md hover:bg-gray-700 transition"
           >
-            CLASS SETTINGS
+            SETTINGS
           </button>
 
           {isClassLive && (!confirmingEnd ? (
             <button
               type="button"
               onClick={() => setConfirmingEnd(true)}
-              className="text-xs font-semibold text-red-400 border border-red-900/50 px-4 py-1.5 rounded-md hover:bg-red-950/40 transition"
+              className="text-xs font-semibold text-red-400 border border-red-900/50 px-3.5 py-1.5 rounded-md hover:bg-red-950/40 transition"
             >
               END CLASS
             </button>
@@ -1672,6 +1893,38 @@ export function TeacherLiveClassRoom({
           setPollModalTab={setPollModalTab}
           pollType={pollType}
           setPollType={setPollType}
+        />
+      )}
+
+      {/* Pre-Flight Setup Wizard Modal */}
+      {showPreFlightWizard && (
+        <PreFlightSetupWizard
+          scheduleId={batchScheduleId}
+          classTitle={scheduleTitle}
+          initialConfig={{
+            presentationUrl: wbSession.presentationUrl || "",
+            presentationName: wbSession.presentationName || "",
+            presentationType: (wbSession.presentationType as any) || "PDF",
+            classroomTheme: (wbSession.classroomTheme as any) || "LIGHT",
+            cameraShape: (wbSession.cameraShape as any) || "SQUARE",
+            cameraPosition: "UPPER_RIGHT",
+          }}
+          onComplete={(config: PreFlightConfig) => {
+            setWbSession((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    presentationUrl: config.presentationUrl,
+                    presentationName: config.presentationName,
+                    presentationType: config.presentationType,
+                    classroomTheme: config.classroomTheme,
+                    cameraShape: config.cameraShape,
+                  }
+                : prev
+            );
+            setShowPreFlightWizard(false);
+          }}
+          onCancel={() => setShowPreFlightWizard(false)}
         />
       )}
     </div>
