@@ -3,6 +3,9 @@ import { requireStudentSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { HorizontalScheduleCalendar, type ScheduleItem, type BatchOption } from "@/components/schedule/HorizontalScheduleCalendar";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export const metadata: Metadata = {
   title: "My Schedule",
 };
