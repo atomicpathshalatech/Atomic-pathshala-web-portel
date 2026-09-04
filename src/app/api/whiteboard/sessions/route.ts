@@ -66,9 +66,42 @@ export async function POST(request: NextRequest) {
       return apiSuccess({ whiteboardSession: resumed, resumed: true });
     }
 
-    const schedule = await prisma.batchSchedule.findUnique({
+    let schedule = await prisma.batchSchedule.findUnique({
       where: { id: input.batchScheduleId },
     });
+
+    if (!schedule) {
+      const lecture = await prisma.lecture.findUnique({
+        where: { id: input.batchScheduleId },
+      });
+      if (lecture) {
+        const defaultBatch =
+          (await prisma.batch.findFirst({ where: { status: "ACTIVE" } })) ||
+          (await prisma.batch.findFirst());
+        if (defaultBatch) {
+          try {
+            schedule = await prisma.batchSchedule.upsert({
+              where: { id: lecture.id },
+              update: {},
+              create: {
+                id: lecture.id,
+                title: lecture.title,
+                type: "LIVE_CLASS",
+                batchId: defaultBatch.id,
+                teacherId: lecture.teacherId,
+                chapterId: lecture.chapterId,
+                startsAt: lecture.scheduledDate ? new Date(lecture.scheduledDate) : new Date(),
+                endsAt: new Date(Date.now() + (lecture.durationMin || 60) * 60 * 1000),
+                createdById: session.user.id,
+              },
+            });
+          } catch {
+            schedule = await prisma.batchSchedule.findFirst({ where: { id: lecture.id } });
+          }
+        }
+      }
+    }
+
     if (!schedule) return apiError("Scheduled class not found", 404);
     if (schedule.type !== "LIVE_CLASS") {
       return apiError(

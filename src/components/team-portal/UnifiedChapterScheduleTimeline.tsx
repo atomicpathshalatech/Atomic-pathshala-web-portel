@@ -838,7 +838,7 @@ export function UnifiedChapterScheduleTimeline({
                   {item.type === "LECTURE" && item.lectureData && (
                     <>
                       <Link
-                        href="/team/live-studio"
+                        href={`/team/live-class/${item.lectureData?.id || item.id}`}
                         className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm shadow-blue-500/20 transition"
                       >
                         <Play className="w-3.5 h-3.5 fill-white" />
@@ -955,7 +955,7 @@ export function UnifiedChapterScheduleTimeline({
                                 </button>
 
                                 <Link
-                                  href="/team/live-studio"
+                                  href={`/team/live-class/${item.lectureData?.id || item.id}`}
                                   className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition text-left"
                                 >
                                   <Play className="w-3.5 h-3.5 text-blue-600" />

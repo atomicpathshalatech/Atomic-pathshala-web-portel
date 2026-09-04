@@ -363,9 +363,9 @@ export function ChapterLecturesTab({
                 <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
                   {/* Single Primary Action: Start Class */}
                   <Link
-                    href={`/whiteboard?scheduleId=${l.id}&chapterId=${chapterId}`}
+                    href={`/team/live-class/${l.id}`}
                     className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition text-xs font-bold shadow-md shadow-blue-500/20"
-                    title="Enter live classroom (available 15 mins prior)"
+                    title="Enter live classroom"
                   >
                     <Video className="w-3.5 h-3.5" />
                     <span>Start Class</span>
