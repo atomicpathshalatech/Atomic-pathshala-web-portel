@@ -177,9 +177,9 @@ export function StudentLiveClassRoom({
     }
   }
 
-  // Once live: mount read-only board-mirror canvas
+  // Mount read-only board-mirror canvas whenever room is open
   useEffect(() => {
-    if (phase !== "live" || !boardBaseRef.current || !boardActiveRef.current) return;
+    if (phase === "ended" || !boardBaseRef.current || !boardActiveRef.current) return;
     const engine = new CanvasEngine(boardBaseRef.current, boardActiveRef.current, undefined, undefined, {
       readOnly: true,
     });
@@ -336,93 +336,14 @@ export function StudentLiveClassRoom({
     ? new Date(wbSession.actualStartedAt).getTime()
     : null;
 
+  const isLive = phase === "live" || wbSession?.livePhase === "LIVE";
   const secondsUntilStart = scheduledStartMs > 0 ? Math.floor((scheduledStartMs - currentTimeMs) / 1000) : 0;
   const elapsedSeconds = actualStartedAtMs ? Math.max(0, Math.floor((currentTimeMs - actualStartedAtMs) / 1000)) : 0;
   const remainingSeconds = scheduledEndMs > 0 ? Math.floor((scheduledEndMs - currentTimeMs) / 1000) : 0;
 
-  const isThemeDark = wbSession?.classroomTheme === "DARK";
+  const isThemeDark = wbSession?.classroomTheme !== "LIGHT";
   const isCameraCircle = wbSession?.cameraShape === "CIRCULAR";
-
-  // ---------------- WAITING / LOBBY ROOM ----------------
-  if (phase === "waiting" || phase === "lobby") {
-    return (
-      <div className="space-y-6 max-w-4xl mx-auto p-4 animate-in fade-in duration-200">
-        <header className="flex items-center justify-between gap-4">
-          <div>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">{batchName}</p>
-            <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
-              {scheduleTitle}
-            </h1>
-          </div>
-          <span className="flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 px-3 py-1.5 rounded-full animate-pulse shrink-0">
-            <span className="w-2 h-2 rounded-full bg-amber-500" />
-            Waiting Room Open
-          </span>
-        </header>
-
-        {/* Live Classroom Waiting Stage */}
-        <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-950 text-white rounded-3xl p-8 sm:p-12 text-center shadow-xl relative overflow-hidden border border-slate-800">
-          <div className="relative z-10 max-w-lg mx-auto space-y-4">
-            <div className="w-16 h-16 rounded-3xl bg-indigo-500/20 border border-indigo-500/40 text-indigo-400 mx-auto flex items-center justify-center shadow-lg shadow-indigo-500/10">
-              <span className="material-symbols-outlined text-3xl animate-pulse">live_tv</span>
-            </div>
-
-            <div className="space-y-1">
-              <span className="text-xs font-mono font-bold uppercase tracking-widest text-indigo-400">
-                Live Classroom Waiting Room
-              </span>
-              <h2 className="text-xl sm:text-2xl font-extrabold text-white">
-                Waiting for {teacherName ?? "Teacher"} to Start Class
-              </h2>
-            </div>
-
-            {/* Countdown Display */}
-            {secondsUntilStart > 0 && (
-              <div className="inline-block bg-indigo-900/50 border border-indigo-500/30 rounded-2xl px-6 py-3 my-2">
-                <p className="text-[11px] font-medium text-indigo-300 uppercase tracking-wider">Class starts in</p>
-                <p className="text-2xl sm:text-3xl font-mono font-black text-white tracking-widest">
-                  {formatHms(secondsUntilStart)}
-                </p>
-              </div>
-            )}
-
-            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-              You are connected in the live waiting lobby. You can chat with your teacher and classmates below. The whiteboard and video feed will start automatically the moment the teacher clicks <span className="font-bold text-emerald-400">&quot;Start Class&quot;</span>.
-            </p>
-
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 text-xs font-bold text-slate-200 backdrop-blur-sm border border-white/10">
-              <span className="material-symbols-outlined text-base text-emerald-400">groups</span>
-              <span>Instant Auto-Connect Active</span>
-            </div>
-
-            {error && <p className="text-xs text-rose-400 font-bold bg-rose-950/50 p-2.5 rounded-xl">{error}</p>}
-          </div>
-        </div>
-
-        {/* Realtime Live Chat During Waiting Room */}
-        {wbSession?.id && (
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-4 shadow-sm h-96 flex flex-col">
-            <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100 dark:border-slate-800">
-              <h3 className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-base text-indigo-500">chat</span>
-                Class Live Chat &amp; Arrivals
-              </h3>
-              <span className="text-[10px] text-slate-400 font-medium">Real-time messaging active</span>
-            </div>
-            <div className="flex-1 min-h-0">
-              <MessagesPanel whiteboardSessionId={wbSession.id} currentUserId={currentUserId} role="STUDENT" />
-            </div>
-          </div>
-        )}
-
-        <div className="text-center pt-2">
-          <Link href="/schedule" className="text-xs font-bold text-indigo-600 hover:text-indigo-500 hover:underline">
-            &larr; Back to Schedule
-          </Link>
-        </div>
-      </div>
-    );
-  }
+  const isYouTube = wbSession?.videoTransport === "YOUTUBE";
 
   // ---------------- CLASS ENDED ----------------
   if (phase === "ended") {
@@ -445,57 +366,81 @@ export function StudentLiveClassRoom({
     );
   }
 
-  // ---------------- LIVE CLASSROOM (MATCHED 2-COLUMN LAYOUT) ----------------
-  const isYouTube = wbSession?.videoTransport === "YOUTUBE";
-
+  // ---------------- COMPLETE WHITEBOARD STUDIO (ACTIVE FOR ALL STUDENTS) ----------------
   return (
-    <div className={`min-h-[calc(100vh-4rem)] p-4 ${isThemeDark ? "bg-[#0c0e14] text-white" : "bg-slate-50 text-slate-900"}`}>
-      {/* Top Authoritative Header */}
-      <header className="flex flex-wrap items-center justify-between gap-4 pb-4 mb-4 border-b border-slate-700/40">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">{batchName}</p>
-          <h1 className="text-lg sm:text-xl font-bold truncate max-w-lg">{scheduleTitle}</h1>
+    <div className={`min-h-[calc(100vh-4rem)] p-3 sm:p-5 ${isThemeDark ? "bg-[#0b0d14] text-white" : "bg-slate-50 text-slate-900"}`}>
+      {/* Top Authoritative Studio Header */}
+      <header className="flex flex-wrap items-center justify-between gap-3 pb-3 mb-3 border-b border-slate-800/60">
+        <div className="flex items-center gap-3 min-w-0">
+          <Link
+            href="/schedule"
+            className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center shrink-0 transition"
+            title="Back to Schedule"
+          >
+            <span className="material-symbols-outlined text-base">arrow_back</span>
+          </Link>
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 truncate">{batchName}</p>
+            <h1 className="text-base sm:text-lg font-bold truncate max-w-md sm:max-w-xl text-white">{scheduleTitle}</h1>
+          </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <span className="flex items-center gap-1.5 text-xs font-bold text-red-400 border border-red-500/40 bg-red-950/40 px-3 py-1 rounded-full">
-            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-            LIVE
-          </span>
-
-          <span className="text-xs font-mono font-semibold px-2.5 py-1 rounded-md bg-slate-800/80 border border-slate-700 text-slate-200">
-            Elapsed: {formatHms(elapsedSeconds)}
-          </span>
-
-          {remainingSeconds > 0 && (
-            <span
-              className={`text-xs font-mono font-semibold px-2.5 py-1 rounded-md border ${
-                remainingSeconds <= 300
-                  ? "text-amber-300 bg-amber-950/60 border-amber-500/50 animate-pulse"
-                  : "text-slate-300 bg-slate-800/80 border-slate-700"
-              }`}
-            >
-              {remainingSeconds <= 300 ? "5m Left" : `Rem: ${formatHms(remainingSeconds)}`}
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+          {/* Status Badge */}
+          {isLive ? (
+            <span className="flex items-center gap-1.5 text-xs font-black text-rose-400 border border-rose-500/40 bg-rose-950/60 px-3 py-1 rounded-full shadow-sm shadow-rose-950">
+              <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
+              LIVE CLASS
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5 text-xs font-bold text-amber-400 border border-amber-500/40 bg-amber-950/60 px-3 py-1 rounded-full">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+              STUDIO CONNECTED (PRE-CLASS)
             </span>
           )}
 
+          {/* Dynamic Timers */}
+          {isLive ? (
+            <>
+              <span className="text-xs font-mono font-semibold px-2.5 py-1 rounded-md bg-slate-800/90 border border-slate-700 text-slate-200">
+                Elapsed: {formatHms(elapsedSeconds)}
+              </span>
+              {remainingSeconds > 0 && (
+                <span
+                  className={`text-xs font-mono font-semibold px-2.5 py-1 rounded-md border ${
+                    remainingSeconds <= 300
+                      ? "text-amber-300 bg-amber-950/60 border-amber-500/50 animate-pulse"
+                      : "text-slate-300 bg-slate-800/90 border-slate-700"
+                  }`}
+                >
+                  {remainingSeconds <= 300 ? "5m Left" : `Rem: ${formatHms(remainingSeconds)}`}
+                </span>
+              )}
+            </>
+          ) : secondsUntilStart > 0 ? (
+            <span className="text-xs font-mono font-semibold px-2.5 py-1 rounded-md bg-indigo-950/60 border border-indigo-500/40 text-indigo-300">
+              Starts in: {formatHms(secondsUntilStart)}
+            </span>
+          ) : null}
+
+          {/* Raise Hand Button */}
           <button
             type="button"
             disabled={handRaiseBusy}
             onClick={toggleHandRaise}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-sm ${
               handRaised
                 ? "bg-amber-500 text-slate-950 ring-2 ring-amber-400/50"
                 : "bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
             }`}
           >
             <span className="material-symbols-outlined text-sm">back_hand</span>
-            {handRaised ? "Hand Raised" : "Raise Hand"}
+            <span>{handRaised ? "Hand Raised" : "Raise Hand"}</span>
           </button>
         </div>
       </header>
 
-      {/* Main Studio Grid: Left Main Presentation + Right Upper-Right Camera & Chat */}
+      {/* Main Studio Grid: Left Main Whiteboard Canvas (9 cols) + Right Camera & Chat (3 cols) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
         {/* Main Canvas / Video Area (75% / 9 cols) */}
         <div className="lg:col-span-8 xl:col-span-9 space-y-4">
@@ -504,24 +449,30 @@ export function StudentLiveClassRoom({
               youtubeVideoId={wbSession?.youtubeVideoId ?? null}
               title={scheduleTitle}
               subject={batchName}
-              livePhase="LIVE"
+              livePhase={isLive ? "LIVE" : "PREPARING"}
             />
           ) : (
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl relative">
-              <div className="flex items-center justify-between px-4 py-2 bg-slate-950/80 border-b border-slate-800 text-xs text-slate-400">
-                <span className="flex items-center gap-1.5 font-medium">
-                  <span className="material-symbols-outlined text-sm text-indigo-400">cast</span>
-                  Live Teacher Presentation &amp; Whiteboard
+            <div className="bg-[#10121d] border border-slate-800/80 rounded-2xl overflow-hidden shadow-2xl relative">
+              {/* Presentation Toolbar Header */}
+              <div className="flex items-center justify-between px-4 py-2 bg-[#0a0b12] border-b border-slate-800 text-xs text-slate-400">
+                <span className="flex items-center gap-2 font-medium">
+                  <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                  <span>Live Whiteboard &amp; Presentation</span>
                 </span>
-                {wbSession?.presentationName && (
-                  <span className="text-[11px] font-mono text-slate-300 bg-slate-800 px-2 py-0.5 rounded">
-                    {wbSession.presentationName}
+                <div className="flex items-center gap-2">
+                  {wbSession?.presentationName && (
+                    <span className="text-[11px] font-mono text-indigo-300 bg-indigo-950/60 border border-indigo-500/30 px-2 py-0.5 rounded">
+                      {wbSession.presentationName}
+                    </span>
+                  )}
+                  <span className="text-[10px] font-bold text-slate-500 bg-slate-800/60 px-2 py-0.5 rounded">
+                    16:9 HD Mirror
                   </span>
-                )}
+                </div>
               </div>
 
               {/* Canvas Frame Preserving 16:9 Aspect Ratio */}
-              <div className={`relative aspect-[16/9] w-full ${boardBackground === "dark" ? "bg-[#10131b]" : "bg-white"}`}>
+              <div className={`relative aspect-[16/9] w-full ${boardBackground === "dark" || isThemeDark ? "bg-[#10131d]" : "bg-white"}`}>
                 {isBackgroundImageUrl(boardBackground) && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
@@ -532,16 +483,28 @@ export function StudentLiveClassRoom({
                 )}
                 <canvas ref={boardBaseRef} className="absolute inset-0 w-full h-full" />
                 <canvas ref={boardActiveRef} className="absolute inset-0 w-full h-full pointer-events-none" />
-                {boardEmpty && !boardBackground && (
-                  <div className="absolute inset-0 flex items-center justify-center text-xs text-slate-500 pointer-events-none">
-                    Presentation canvas active &middot; Waiting for teacher ink
+
+                {/* Subtle Standby Studio Watermark when empty */}
+                {boardEmpty && !isBackgroundImageUrl(boardBackground) && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 pointer-events-none text-center p-6 bg-gradient-to-b from-transparent via-[#10131d]/40 to-[#10131d]/80">
+                    <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center mb-1">
+                      <span className="material-symbols-outlined text-2xl">draw</span>
+                    </div>
+                    <p className="text-sm font-bold text-slate-300">
+                      Atomic Whiteboard Studio Connected
+                    </p>
+                    <p className="text-xs text-slate-500 max-w-md">
+                      {isLive
+                        ? "Teacher canvas is active. Slides, notes, and strokes appear here in real time."
+                        : "Waiting for teacher to start presentation. You are connected to the live studio canvas."}
+                    </p>
                   </div>
                 )}
               </div>
             </div>
           )}
 
-          {/* Active Quiz Card */}
+          {/* Active Quiz / Poll Card */}
           {quiz && (
             <div className="bg-slate-900 border border-indigo-500/50 rounded-2xl p-5 shadow-2xl space-y-3 animate-in fade-in">
               <div className="flex items-center justify-between">
@@ -588,9 +551,9 @@ export function StudentLiveClassRoom({
         {/* Right Rail (25% / 3-4 cols): Upper-Right Camera + Chat Below */}
         <div className="lg:col-span-4 xl:col-span-3 space-y-4">
           {/* Upper-Right Teacher Camera Feed */}
-          {wbSession?.id && !isYouTube && (
+          {!isYouTube && (
             <div
-              className={`bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl ${
+              className={`bg-[#10121d] border border-slate-800 rounded-2xl overflow-hidden shadow-xl ${
                 isCameraCircle ? "p-3 flex items-center justify-center aspect-square" : ""
               }`}
             >
@@ -601,31 +564,40 @@ export function StudentLiveClassRoom({
                     : "aspect-video rounded-xl"
                 }`}
               >
-                <VideoStrip whiteboardSessionId={wbSession.id} variant="panel" />
+                <VideoStrip
+                  whiteboardSessionId={wbSession?.id || batchScheduleId}
+                  variant="panel"
+                  role="STUDENT"
+                  teacherName={teacherName}
+                />
               </div>
             </div>
           )}
 
           {/* Live Chat Panel Directly Below Camera */}
-          {wbSession?.id && (
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl h-[460px] flex flex-col">
-              <div className="px-4 py-2.5 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
-                <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-sm text-indigo-400">chat</span>
-                  Classroom Live Chat
-                </span>
-                <span className="text-[10px] text-slate-400 font-mono">Real-time</span>
-              </div>
-              <div className="flex-1 min-h-0 p-2">
+          <div className="bg-[#10121d] border border-slate-800 rounded-2xl overflow-hidden shadow-xl h-[460px] flex flex-col">
+            <div className="px-4 py-2.5 bg-[#0a0b12] border-b border-slate-800 flex items-center justify-between">
+              <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-sm text-indigo-400">chat</span>
+                Classroom Live Chat
+              </span>
+              <span className="text-[10px] text-slate-400 font-mono">Real-time</span>
+            </div>
+            <div className="flex-1 min-h-0 p-2">
+              {wbSession?.id ? (
                 <MessagesPanel
                   whiteboardSessionId={wbSession.id}
                   currentUserId={currentUserId}
                   role="STUDENT"
                   theme={isThemeDark ? "dark" : "light"}
                 />
-              </div>
+              ) : (
+                <div className="h-full flex items-center justify-center text-xs text-slate-500">
+                  Connecting chat...
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
       </div>
     </div>

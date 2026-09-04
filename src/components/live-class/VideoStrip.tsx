@@ -16,10 +16,14 @@ import { Track } from "livekit-client";
 export function VideoStrip({
   whiteboardSessionId,
   variant = "header",
+  role = "TEACHER",
+  teacherName,
   settingsPortalRef,
 }: {
   whiteboardSessionId: string;
   variant?: "header" | "panel";
+  role?: "TEACHER" | "STUDENT";
+  teacherName?: string | null;
   settingsPortalRef?: RefObject<HTMLDivElement>;
 }) {
   const [creds, setCreds] = useState<{ token: string; url: string } | null>(null);
@@ -46,7 +50,7 @@ export function VideoStrip({
   }, [whiteboardSessionId]);
 
   if (useFallbackCamera || !creds) {
-    return <LocalWebcamPreview variant={variant} />;
+    return <LocalWebcamPreview variant={variant} role={role} teacherName={teacherName} />;
   }
 
   return (
@@ -55,12 +59,12 @@ export function VideoStrip({
       token={creds.token}
       connect
       audio
-      video
+      video={role === "TEACHER"}
       className="contents"
       onError={() => setUseFallbackCamera(true)}
     >
       <RoomAudioRenderer />
-      <VideoStripInner variant={variant} settingsPortalRef={settingsPortalRef} />
+      <VideoStripInner variant={variant} role={role} teacherName={teacherName} settingsPortalRef={settingsPortalRef} />
     </LiveKitRoom>
   );
 }
@@ -69,7 +73,15 @@ export function VideoStrip({
  * Reliable Direct HTML5 Webcam component that always works in modern browsers
  * without requiring third-party cloud signaling credentials.
  */
-function LocalWebcamPreview({ variant }: { variant: "header" | "panel" }) {
+function LocalWebcamPreview({
+  variant,
+  role = "TEACHER",
+  teacherName,
+}: {
+  variant: "header" | "panel";
+  role?: "TEACHER" | "STUDENT";
+  teacherName?: string | null;
+}) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [cameraActive, setCameraActive] = useState(true);
   const [micActive, setMicActive] = useState(true);
@@ -77,6 +89,7 @@ function LocalWebcamPreview({ variant }: { variant: "header" | "panel" }) {
   const [camError, setCamError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (role === "STUDENT") return;
     let currentStream: MediaStream | null = null;
 
     async function initCam() {
@@ -104,7 +117,7 @@ function LocalWebcamPreview({ variant }: { variant: "header" | "panel" }) {
         currentStream.getTracks().forEach((t) => t.stop());
       }
     };
-  }, [cameraActive]);
+  }, [cameraActive, role]);
 
   const toggleCamera = () => {
     if (stream) {
@@ -119,6 +132,23 @@ function LocalWebcamPreview({ variant }: { variant: "header" | "panel" }) {
     }
     setMicActive(!micActive);
   };
+
+  if (role === "STUDENT") {
+    return (
+      <div className="relative w-full h-full bg-[#0a0b12] rounded-xl overflow-hidden border border-[#252836] flex flex-col items-center justify-center p-4 text-center">
+        <div className="w-12 h-12 rounded-2xl bg-indigo-500/20 border border-indigo-500/40 text-indigo-400 flex items-center justify-center mb-2 shadow-md">
+          <span className="material-symbols-outlined text-2xl">person</span>
+        </div>
+        <p className="text-xs font-bold text-white truncate max-w-full">
+          {teacherName || "Instructor"}
+        </p>
+        <span className="text-[10px] text-indigo-300 font-medium mt-1 flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+          Camera Feed Standby
+        </span>
+      </div>
+    );
+  }
 
   if (variant === "panel") {
     return (
@@ -182,9 +212,13 @@ function LocalWebcamPreview({ variant }: { variant: "header" | "panel" }) {
 
 function VideoStripInner({
   variant,
+  role = "TEACHER",
+  teacherName,
   settingsPortalRef,
 }: {
   variant: "header" | "panel";
+  role?: "TEACHER" | "STUDENT";
+  teacherName?: string | null;
   settingsPortalRef?: RefObject<HTMLDivElement>;
 }) {
   const tracks = useTracks([Track.Source.Camera], { onlySubscribed: false });
@@ -198,54 +232,73 @@ function VideoStripInner({
   });
 
   if (variant === "panel") {
-    const primary = tracks.find((t) => t.participant.isLocal) ?? tracks[0];
+    const primary =
+      role === "STUDENT"
+        ? (tracks.find((t) => !t.participant.isLocal) ?? (tracks[0]?.participant.isLocal ? null : tracks[0]))
+        : (tracks.find((t) => t.participant.isLocal) ?? tracks[0]);
+
     return (
       <div className="relative w-full h-full bg-[#0a0b12] rounded-xl overflow-hidden border border-[#252836]">
         {primary ? (
           primary.publication && !primary.publication.isMuted ? (
             <VideoTrack trackRef={primary} className="w-full h-full object-cover" />
           ) : (
-            <div className="w-full h-full flex items-center justify-center bg-black">
+            <div className="w-full h-full flex flex-col items-center justify-center bg-black gap-2 text-center p-4">
               <span className="material-symbols-outlined text-gray-600 text-4xl">videocam_off</span>
+              <span className="text-xs text-gray-400">{teacherName || "Instructor"} camera is muted</span>
             </div>
           )
         ) : (
-          <div className="w-full h-full flex items-center justify-center bg-black">
-            <span className="text-sm text-gray-500">Waiting for video…</span>
+          <div className="w-full h-full flex flex-col items-center justify-center bg-[#0d0f18] p-4 text-center">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-500/20 border border-indigo-500/40 text-indigo-400 flex items-center justify-center mb-2 shadow-md">
+              <span className="material-symbols-outlined text-2xl">person</span>
+            </div>
+            <span className="text-xs font-bold text-white">{teacherName || "Instructor"}</span>
+            <span className="text-[10px] text-indigo-300 mt-1 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+              Camera Feed Standby
+            </span>
           </div>
         )}
 
         <div className="absolute bottom-2 left-2 flex items-center gap-2">
-          <div className="bg-black/60 px-2 py-1 rounded text-xs text-white backdrop-blur-sm border border-white/10 font-bold">
-            {primary?.participant.isLocal ? "Educator" : primary?.participant.name || localParticipant.name || "Educator"}
+          <div className="bg-black/70 px-2 py-1 rounded text-xs text-white backdrop-blur-sm border border-white/10 font-bold flex items-center gap-1.5">
+            <span className={`w-2 h-2 rounded-full ${primary ? "bg-emerald-500 animate-pulse" : "bg-amber-400"}`} />
+            {role === "STUDENT"
+              ? teacherName || "Instructor"
+              : primary?.participant.isLocal
+              ? "Educator"
+              : primary?.participant.name || localParticipant.name || "Educator"}
           </div>
         </div>
 
-        <div className="absolute bottom-2 right-2 flex items-center gap-1">
-          <TrackToggle
-            source={Track.Source.Microphone}
-            showIcon={false}
-            className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors backdrop-blur-sm ${
-              isMicrophoneEnabled ? "bg-black/50 text-white" : "bg-red-600/80 text-white"
-            }`}
-            title={isMicrophoneEnabled ? "Mute mic" : "Unmute mic"}
-          >
-            <span className="material-symbols-outlined text-base">{isMicrophoneEnabled ? "mic" : "mic_off"}</span>
-          </TrackToggle>
-          <TrackToggle
-            source={Track.Source.Camera}
-            showIcon={false}
-            className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors backdrop-blur-sm ${
-              isCameraEnabled ? "bg-black/50 text-white" : "bg-red-600/80 text-white"
-            }`}
-            title={isCameraEnabled ? "Turn camera off" : "Turn camera on"}
-          >
-            <span className="material-symbols-outlined text-base">
-              {isCameraEnabled ? "videocam" : "videocam_off"}
-            </span>
-          </TrackToggle>
-          <DeviceSettingsPopover mic={mic} cam={cam} dark />
-        </div>
+        {role === "TEACHER" && (
+          <div className="absolute bottom-2 right-2 flex items-center gap-1">
+            <TrackToggle
+              source={Track.Source.Microphone}
+              showIcon={false}
+              className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors backdrop-blur-sm ${
+                isMicrophoneEnabled ? "bg-black/50 text-white" : "bg-red-600/80 text-white"
+              }`}
+              title={isMicrophoneEnabled ? "Mute mic" : "Unmute mic"}
+            >
+              <span className="material-symbols-outlined text-base">{isMicrophoneEnabled ? "mic" : "mic_off"}</span>
+            </TrackToggle>
+            <TrackToggle
+              source={Track.Source.Camera}
+              showIcon={false}
+              className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors backdrop-blur-sm ${
+                isCameraEnabled ? "bg-black/50 text-white" : "bg-red-600/80 text-white"
+              }`}
+              title={isCameraEnabled ? "Turn camera off" : "Turn camera on"}
+            >
+              <span className="material-symbols-outlined text-base">
+                {isCameraEnabled ? "videocam" : "videocam_off"}
+              </span>
+            </TrackToggle>
+            <DeviceSettingsPopover mic={mic} cam={cam} dark />
+          </div>
+        )}
       </div>
     );
   }
