@@ -20,6 +20,7 @@ const MODULE_CARDS = [
   { href: "/team/batches", label: "Batches", icon: "groups", description: "Create batches, assign teachers, enroll students, and build the class timetable.", permission: PERMISSIONS.BATCH_READ, available: true },
   { href: "/team/tests", label: "Tests", icon: "quiz", description: "Build timed mock tests from the Question Bank and publish them to a batch.", permission: PERMISSIONS.TEST_READ, available: true },
   { href: "/team/questions", label: "Question Bank", icon: "database", description: "Create, verify, and organize NEET/JEE question papers.", permission: PERMISSIONS.QUESTION_READ, available: true },
+  { href: "/team/question-extract", label: "Question Extract", icon: "document_scanner", description: "Upload PDF papers (ALLEN, RACE, NCERT), extract questions/tables/images, and move verified to Drafts.", permission: PERMISSIONS.QUESTION_CREATE, available: true },
   { href: "/team/doubts", label: "Doubt Desk", icon: "live_help", description: "Resolve student doubts flagged from live classes and DPPs.", permission: PERMISSIONS.DOUBT_READ, available: true },
   { href: "/team/faculty", label: "Faculty", icon: "school", description: "Onboard educators and manage faculty profiles.", permission: PERMISSIONS.TEACHER_READ, available: true },
   { href: "/team/coupons", label: "Coupon Management", icon: "confirmation_number", description: "Create and track discount codes and campaign performance.", permission: PERMISSIONS.COUPON_READ, available: true },

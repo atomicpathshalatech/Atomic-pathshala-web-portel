@@ -108,6 +108,7 @@ model User {
   deviceSessions         DeviceSession[]
   modulesCreated         Module[]          @relation("ModuleCreatedBy")
   brandProfilesCreated   BrandProfile[]    @relation("BrandProfileCreatedBy")
+  extractionJobs         ExtractionJob[]   @relation("ExtractionJobCreatedBy")
 
   // --- AI Chat / Atomic Guru integration (imported from _import_atomic-ai-chat) ---
   // Reuses this existing User for login — the imported app's own User/Account/
@@ -3474,5 +3475,92 @@ model RevisionNodeSeen {
   @@index([userId])
   @@map("revision_nodes_seen")
 }
+
+// ============================================================
+// HIGH-PRECISION QUESTION EXTRACTION & INGESTION MODULE
+// ============================================================
+
+model ExtractionJob {
+  id              String   @id @default(cuid())
+  sourceName      String   // e.g. "ALLEN", "RACE", "NCERT", "NEET 2025", "AIIMS"
+  fileName        String
+  fileUrl         String
+  fileSize        Int      @default(0)
+  startNumber     Int      @default(1)
+  endNumber       Int      @default(180)
+  expectedCount   Int      @default(180)
+  extractedCount  Int      @default(0)
+  verifiedCount   Int      @default(0)
+  reviewCount     Int      @default(0)
+  errorCount      Int      @default(0)
+  missingCount    Int      @default(0)
+  duplicateCount  Int      @default(0)
+  status          String   @default("PENDING") // PENDING, PROCESSING, REVIEW_REQUIRED, VERIFIED, IMPORTED, FAILED
+  progress        Int      @default(0) // 0 - 100
+  currentStep     String?  // e.g. "Detecting Questions...", "Extracting Tables...", "Validating Answer Keys..."
+  reportJson      Json?    // Detailed Validation Report, issue list, and count reconciliation
+  examName        String?
+  year            String?
+  subject         String?  // Configured or Auto-detected
+  chapter         String?
+  tags            String[] @default([])
+  createdById     String
+  createdBy       User     @relation("ExtractionJobCreatedBy", fields: [createdById], references: [id])
+  questions       ExtractedQuestion[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([sourceName])
+  @@index([status])
+  @@index([createdById])
+  @@map("extraction_jobs")
+}
+
+model ExtractedQuestion {
+  id                   String        @id @default(cuid())
+  jobId                String
+  job                  ExtractionJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  questionIndex        Int           // Sequence index (1, 2, 3...)
+  originalNumber       Int           // Exact printed number in source (e.g. 37)
+  sourceName           String        // Permanent source (e.g. "ALLEN")
+  sourcePdfUrl         String
+  sourcePdfName        String
+  sourcePage           Int           @default(1)
+  statement            String        // Exact text with LaTeX & symbols
+  statementHi          String?
+  options              Json          // { A: "...", B: "...", C: "...", D: "..." }
+  correctAnswer        String        @default("A") // "A" | "B" | "C" | "D"
+  answerKeySource      String?       // "ANSWER_KEY_SECTION" | "INFERRED_REVIEW" | "MANUAL"
+  solution             String?       // Original extracted step-by-step solution
+  solutionHi           String?
+  hasTable             Boolean       @default(false)
+  tablesJson           Json?         // Structured markdown or matrix
+  hasImage             Boolean       @default(false)
+  imagesJson           Json?         // Extracted image objects & coordinates
+  imageUrl             String?       // Extracted reference diagram
+  hasEquation          Boolean       @default(false)
+  subject              String        @default("General")
+  chapter              String?
+  topic                String?
+  subTopic             String?
+  questionType         String        @default("SINGLE_CORRECT") // One of the 18 NEET types
+  difficulty           String        @default("MEDIUM") // EASY, MEDIUM, HARD, VERY_HARD
+  status               String        @default("VERIFIED") // VERIFIED, REVIEW_REQUIRED, EXTRACTION_ERROR, MISSING, DUPLICATE, IMPORTED
+  confidence           Float         @default(95.0)
+  confidenceBreakdown  Json?         // { text: 99.8, options: 99.9, table: 98.4, image: 100, answer: 100, solution: 99.7 }
+  reviewReasons        Json?         // String[] of review reasons
+  originalSnapshot     Json          // Immutable initial extraction snapshot
+  isEdited             Boolean       @default(false)
+  draftQuestionId      String?       // Linked Question Bank ID when moved to Draft
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  @@index([jobId])
+  @@index([status])
+  @@index([sourceName])
+  @@index([originalNumber])
+  @@map("extracted_questions")
+}
+
 
 
