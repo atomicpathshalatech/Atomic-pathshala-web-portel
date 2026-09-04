@@ -203,23 +203,18 @@ export default async function TeacherMySchedulePage() {
                             </div>
                           </div>
                           {s.type === "LIVE_CLASS" && (
-                            <div className="shrink-0 w-full md:w-auto">
-                              {canEnter ? (
-                                <Link
-                                  href={`/team/live-class/${s.id}`}
-                                  className="block text-center w-full md:w-auto px-6 py-2 bg-primary text-on-primary font-label-md rounded-lg hover:opacity-90"
-                                >
-                                  {isLiveNow ? "Enter Class" : "Start Class"}
-                                </Link>
-                              ) : (
-                                <button
-                                  disabled
-                                  title="Opens 15 minutes before the scheduled start"
-                                  className="w-full md:w-auto px-6 py-2 bg-surface-container text-on-surface-variant font-label-md rounded-lg opacity-70 cursor-not-allowed"
-                                >
-                                  Opens 15 min before
-                                </button>
-                              )}
+                            <div className="shrink-0 w-full md:w-auto self-end md:self-center">
+                              <Link
+                                href={`/team/live-class/${s.id}`}
+                                className={`block text-center w-full md:w-auto px-6 py-2.5 rounded-xl text-xs font-bold transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5 ${
+                                  isLiveNow
+                                    ? "bg-rose-600 hover:bg-rose-500 text-white shadow-rose-600/25 animate-pulse"
+                                    : "bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/25"
+                                }`}
+                              >
+                                <span className="material-symbols-outlined text-base">videocam</span>
+                                <span>{isLiveNow ? "🔴 Enter Live Class" : "🚀 Start Class"}</span>
+                              </Link>
                             </div>
                           )}
                         </div>
