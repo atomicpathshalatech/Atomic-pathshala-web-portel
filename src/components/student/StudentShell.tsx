@@ -12,23 +12,24 @@ export type StudentNavItem = {
   icon: string;
 };
 
-// Sidebar items for desktop Learning Hub
-const SIDEBAR_ITEMS = [
+// Sidebar items for Student Learning Hub
+const SIDEBAR_ITEMS: StudentNavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: "space_dashboard" },
-  { href: "/courses", label: "Study Modules", icon: "menu_book" },
-  { href: "/tests", label: "Mock Tests", icon: "assignment_turned_in" },
-  { href: "/live-class", label: "Live Classes", icon: "sensors" },
+  { href: "/courses", label: "My Batches", icon: "school" },
+  { href: "/tests", label: "My Test", icon: "assignment_turned_in" },
+  { href: "/dpp", label: "My DPP", icon: "fact_check" },
+  { href: "/schedule", label: "Live Classes", icon: "sensors" },
   { href: "/guru", label: "AI Doubt Solver", icon: "psychology_alt" },
-  { href: "/predictor", label: "Mastery Pulse", icon: "analytics" },
+  { href: "/predictor", label: "Rank Predictor", icon: "insights" },
 ];
 
 // Bottom floating dock navigation items
 const DOCK_ITEMS: StudentNavItem[] = [
   { href: "/dashboard", label: "Home", icon: "home" },
-  { href: "/schedule", label: "My Schedule", icon: "calendar_month" },
-  { href: "/dpp", label: "Practice", icon: "menu_book" },
-  { href: "/tests", label: "Tests", icon: "assignment" },
-  { href: "/courses", label: "Batches", icon: "storefront" },
+  { href: "/courses", label: "Batches", icon: "school" },
+  { href: "/schedule", label: "Live", icon: "sensors" },
+  { href: "/dpp", label: "My DPP", icon: "fact_check" },
+  { href: "/tests", label: "My Test", icon: "assignment_turned_in" },
 ];
 
 function isActive(pathname: string, href: string) {
@@ -169,10 +170,27 @@ export function StudentShell({
   const isExamAttempt = pathname?.includes("/attempt");
   const [activeGoal, setActiveGoal] = useState<string>(targetExam || "NEET");
   const [goalModalOpen, setGoalModalOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     if (targetExam) setActiveGoal(targetExam);
   }, [targetExam]);
+
+  // Close sidebar on ESC key
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setSidebarOpen(false);
+    }
+    if (sidebarOpen) {
+      window.addEventListener("keydown", onKeyDown);
+      return () => window.removeEventListener("keydown", onKeyDown);
+    }
+  }, [sidebarOpen]);
+
+  // Auto close sidebar on route change
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [pathname]);
 
   if (isExamAttempt) {
     return (
@@ -187,8 +205,21 @@ export function StudentShell({
       {/* BEGIN: MainHeader */}
       <header className="sticky top-0 z-40 w-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-[#EDE9FE]/70 dark:border-slate-800 shadow-sm transition-all">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-[76px] flex items-center justify-between">
-          {/* Left: Brand & Goal Selector */}
-          <div className="flex items-center gap-3.5 sm:gap-4 shrink-0">
+          {/* Left: 3-Lines Hamburger Menu + Brand & Goal Selector */}
+          <div className="flex items-center gap-2.5 sm:gap-4 shrink-0">
+            {/* 3-Lines Hamburger Pop-up Trigger Button */}
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(true)}
+              className="flex items-center justify-center w-11 h-11 rounded-2xl bg-slate-50 hover:bg-orange-50 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200/80 hover:border-orange-300 dark:border-slate-700 text-slate-700 hover:text-orange-600 dark:text-slate-200 transition-all shadow-xs active:scale-95 focus:outline-none cursor-pointer group"
+              aria-label="Open Navigation Menu"
+              title="Open Navigation Menu"
+            >
+              <span className="material-symbols-outlined text-[24px] group-hover:scale-110 transition-transform">
+                menu
+              </span>
+            </button>
+
             {/* Logo Mark Card */}
             <Link
               href="/dashboard"
@@ -324,81 +355,186 @@ export function StudentShell({
         </div>
       </header>
 
-      {/* Main Layout Container with Desktop Sidebar */}
-      <div className="flex-1 flex relative">
-        {/* BEGIN: Desktop Sidebar (Learning Hub) */}
-        <aside className="hidden lg:flex fixed left-0 top-[76px] bottom-0 w-64 bg-white dark:bg-slate-900 border-r border-slate-200/80 dark:border-slate-800 shadow-sm z-30 flex-col justify-between py-5 px-3">
-          <div className="space-y-1">
-            <div className="px-3 pb-2 pt-1 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider font-mono">
-              Learning Hub
+      {/* POP-UP SIDEBAR DRAWER (Animated 3-Lines Pop-up Overlay for Website, App, Mobile & Tablet) */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-50 flex animate-in fade-in duration-200">
+          {/* Backdrop Blur Overlay */}
+          <div
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm transition-opacity"
+            onClick={() => setSidebarOpen(false)}
+            aria-hidden="true"
+          />
+
+          {/* Sliding Drawer Body */}
+          <aside className="relative w-84 max-w-[85vw] bg-white dark:bg-slate-900 h-full shadow-2xl border-r border-slate-200/80 dark:border-slate-800 flex flex-col justify-between z-10 animate-in slide-in-from-left duration-300 overflow-y-auto">
+            {/* Drawer Header */}
+            <div>
+              <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-center w-10 h-10 rounded-2xl bg-orange-50 dark:bg-orange-950/60 border border-orange-200/80 dark:border-orange-800 shadow-xs">
+                    <span className="material-symbols-outlined text-orange-600 dark:text-orange-400 text-2xl font-bold">
+                      local_fire_department
+                    </span>
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-extrabold text-slate-900 dark:text-white tracking-tight">
+                      Atomic Pathshala
+                    </h2>
+                    <p className="text-[11px] text-slate-400 font-medium">Student Learning Portal</p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setSidebarOpen(false)}
+                  className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors focus:outline-none cursor-pointer"
+                  aria-label="Close Sidebar"
+                >
+                  <span className="material-symbols-outlined text-2xl">close</span>
+                </button>
+              </div>
+
+              {/* Student Profile Card inside Drawer */}
+              <div className="p-4 pb-2">
+                <div className="bg-slate-50 dark:bg-slate-800/70 border border-slate-200/70 dark:border-slate-700/70 rounded-2xl p-3.5 flex items-center gap-3 shadow-xs">
+                  <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 font-black text-base flex items-center justify-center shrink-0 border border-indigo-200 dark:border-indigo-800">
+                    {studentName.charAt(0).toUpperCase() || "A"}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{studentName}</p>
+                    <p className="text-[10px] text-slate-400 font-mono truncate">{studentIdCode}</p>
+                  </div>
+                  <span className="text-[10px] font-bold text-orange-600 dark:text-orange-400 bg-orange-100 dark:bg-orange-950/80 px-2 py-0.5 rounded-md border border-orange-200 dark:border-orange-800 shrink-0">
+                    {activeGoal}
+                  </span>
+                </div>
+              </div>
+
+              {/* Main Navigation Items */}
+              <div className="p-4 pt-2 space-y-1">
+                <div className="px-3 pb-2 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider font-mono">
+                  Learning Hub
+                </div>
+                <nav className="space-y-1.5">
+                  {SIDEBAR_ITEMS.map((item) => {
+                    const active = isActive(pathname, item.href);
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setSidebarOpen(false)}
+                        className={`flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                          active
+                            ? "bg-orange-500 text-white shadow-sm shadow-orange-500/20"
+                            : "text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-[22px]">{item.icon}</span>
+                        <span>{item.label}</span>
+                      </Link>
+                    );
+                  })}
+                </nav>
+
+                {/* Additional Student Features & Utilities */}
+                <div className="pt-4 mt-4 border-t border-slate-100 dark:border-slate-800 space-y-1">
+                  <div className="px-3 pb-1.5 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider font-mono">
+                    Utilities &amp; Tools
+                  </div>
+                  <Link
+                    href="/id-card"
+                    onClick={() => setSidebarOpen(false)}
+                    className="flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition"
+                  >
+                    <span className="material-symbols-outlined text-lg text-blue-500">badge</span>
+                    <span>Profile &amp; ID Card</span>
+                  </Link>
+                  <Link
+                    href="/leaderboard"
+                    onClick={() => setSidebarOpen(false)}
+                    className="flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition"
+                  >
+                    <span className="material-symbols-outlined text-lg text-amber-500">leaderboard</span>
+                    <span>Leaderboard</span>
+                  </Link>
+                  <Link
+                    href="/settings"
+                    onClick={() => setSidebarOpen(false)}
+                    className="flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition"
+                  >
+                    <span className="material-symbols-outlined text-lg text-slate-500">settings</span>
+                    <span>Settings</span>
+                  </Link>
+                </div>
+              </div>
             </div>
-            <nav className="space-y-1">
+
+            {/* Drawer Bottom Footer (Subscription Upgrade + Logout) */}
+            <div className="p-4 border-t border-slate-100 dark:border-slate-800 space-y-3 bg-slate-50/50 dark:bg-slate-900/50">
+              {!hasActiveSubscription && (
+                <div className="bg-gradient-to-r from-blue-700 via-indigo-600 to-blue-600 text-white p-3.5 rounded-2xl shadow-sm border border-blue-400/30 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-base">lock_open</span>
+                    <span className="text-xs font-bold leading-tight">Unlock All Batches</span>
+                  </div>
+                  <p className="text-[10px] text-white/85 leading-relaxed">
+                    Get full access to all crash courses, test series &amp; personal mentorship.
+                  </p>
+                  <Link
+                    href="/subscription"
+                    onClick={() => setSidebarOpen(false)}
+                    className="block text-center bg-white text-blue-700 font-bold px-3 py-1.5 rounded-xl shadow-xs hover:bg-blue-50 active:scale-95 transition-all text-xs"
+                  >
+                    Upgrade Now
+                  </Link>
+                </div>
+              )}
+
+              <LogoutButton />
+            </div>
+          </aside>
+        </div>
+      )}
+
+      {/* Main Layout Container (Clean Full-Width Space with Top Quick Navigation Bar) */}
+      <div className="flex-1 flex flex-col relative w-full">
+        {/* Quick Horizontal Sub-Navigation Bar for Desktop / Laptops */}
+        <div className="hidden lg:block bg-white dark:bg-slate-900 border-b border-slate-200/80 dark:border-slate-800 px-4 sm:px-6 lg:px-8 py-2.5">
+          <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+            <nav className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
               {SIDEBAR_ITEMS.map((item) => {
                 const active = isActive(pathname, item.href);
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                    className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
                       active
-                        ? "bg-orange-500 text-white shadow-sm shadow-orange-500/20"
-                        : "text-slate-600 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
+                        ? "bg-orange-500 text-white shadow-xs"
+                        : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
                     }`}
                   >
-                    <span className="material-symbols-outlined text-[22px]">{item.icon}</span>
+                    <span className="material-symbols-outlined text-[18px]">{item.icon}</span>
                     <span>{item.label}</span>
                   </Link>
                 );
               })}
             </nav>
-          </div>
 
-          {/* Bottom Sidebar: Target Goal Badge + Settings + Optional Upgrade */}
-          <div className="space-y-2.5 pt-4 border-t border-slate-100 dark:border-slate-800">
-            {!hasActiveSubscription && (
-              <div className="bg-gradient-to-r from-blue-700 via-indigo-600 to-blue-600 text-white p-3.5 rounded-2xl shadow-sm border border-blue-400/30 space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-base">lock_open</span>
-                  <span className="text-xs font-bold leading-tight">Unlock All Batches</span>
-                </div>
-                <p className="text-[10px] text-white/80 leading-relaxed">
-                  Get full access to all crash courses, test series &amp; personal mentorship.
-                </p>
-                <Link
-                  href="/subscription"
-                  className="block text-center bg-white text-blue-700 font-bold px-3 py-1.5 rounded-xl shadow-xs hover:bg-blue-50 active:scale-95 transition-all text-xs"
-                >
-                  Upgrade Now
-                </Link>
-              </div>
-            )}
-
-            <div className="bg-slate-50 dark:bg-slate-800/70 p-3 rounded-2xl flex items-center gap-3 border border-slate-200/60 dark:border-slate-700/60">
-              <div className="w-10 h-10 rounded-xl bg-orange-100 dark:bg-orange-950/60 text-orange-600 dark:text-orange-400 flex items-center justify-center flex-shrink-0">
-                <span className="material-symbols-outlined text-[20px]">military_tech</span>
-              </div>
-              <div className="flex flex-col min-w-0">
-                <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                  {activeGoal} Prep
-                </span>
-                <span className="text-[10px] text-orange-600 dark:text-orange-400 font-semibold truncate">
-                  Target 680+ Score
-                </span>
-              </div>
-            </div>
-
-            <Link
-              href="/settings"
-              className="flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-all"
+            {/* Quick Pop-up Sidebar Button */}
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(true)}
+              className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-orange-600 dark:text-slate-400 dark:hover:text-orange-400 bg-slate-50 hover:bg-orange-50 dark:bg-slate-800 dark:hover:bg-slate-700 px-3 py-1.5 rounded-xl border border-slate-200/80 hover:border-orange-300 dark:border-slate-700 transition-all cursor-pointer"
             >
-              <span className="material-symbols-outlined text-[20px]">settings</span>
-              <span>Settings</span>
-            </Link>
+              <span className="material-symbols-outlined text-[18px]">menu</span>
+              <span>All Hubs</span>
+            </button>
           </div>
-        </aside>
+        </div>
 
-        {/* Content Area (Responsive padding across Mobile, Tablet, Laptop) */}
-        <main className="flex-1 lg:pl-64 pb-32 lg:pb-12 w-full">
+        {/* Content Area (Responsive across Mobile, Tablet, Laptop) */}
+        <main className="flex-1 pb-32 lg:pb-12 w-full">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
             {children}
           </div>
@@ -434,8 +570,8 @@ export function StudentShell({
         </aside>
       )}
 
-      {/* Mobile & Tablet Bottom Navigation Dock (Hidden on Laptop/Desktop where Left Sidebar is active) */}
-      <div className="lg:hidden fixed bottom-3 left-0 right-0 max-w-lg mx-auto px-3 z-50 pointer-events-auto">
+      {/* Mobile & Tablet Bottom Navigation Dock (Responsive, with 3-Lines Menu Trigger) */}
+      <div className="lg:hidden fixed bottom-3 left-0 right-0 max-w-lg mx-auto px-3 z-40 pointer-events-auto">
         <nav
           id="bottom-dock-nav"
           className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200/90 dark:border-slate-800 shadow-2xl rounded-2xl p-1.5 flex items-center justify-around gap-1"
@@ -459,6 +595,18 @@ export function StudentShell({
               </Link>
             );
           })}
+
+          {/* 3-Lines Pop-up Sidebar Button inside Dock */}
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(true)}
+            className="dock-item rounded-xl px-2.5 py-2 flex flex-col items-center justify-center gap-1 group select-none flex-1 text-center transition-all duration-200 ease-out active:scale-95 text-slate-500 dark:text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 border border-transparent cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-[20px] transition-transform duration-200 group-hover:-translate-y-0.5">
+              menu
+            </span>
+            <span className="text-[10px] font-bold leading-none">Menu</span>
+          </button>
         </nav>
       </div>
 
