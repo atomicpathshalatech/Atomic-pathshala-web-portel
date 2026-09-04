@@ -325,12 +325,8 @@ export function ChapterTeamViewWrapper({
             initialDpps={initialDpps}
             initialTests={initialTests}
             canEdit={canEdit || canReview}
+            reviews={reviews}
           />
-
-          {/* Governance Audit Trail & Review Decision History Timeline (Fully Traceable) */}
-          {reviews && reviews.length > 0 && (
-            <ChapterReviewHistoryTimeline reviews={reviews} />
-          )}
 
           {/* Secure Delete Resource Modal */}
           <SecureDeleteResourceModal

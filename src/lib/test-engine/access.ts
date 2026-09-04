@@ -14,9 +14,12 @@ import { resolveTeacherForSchedule } from "@/lib/batch/access";
 export async function canManageTest(userId: string, batchScheduleId: string | null): Promise<boolean> {
   const isAdmin = await hasPermission(userId, PERMISSIONS.TEST_PUBLISH);
   if (isAdmin) return true;
-  // Standalone TestSeries tests (no batchScheduleId) aren't teacher-owned —
-  // only admin-tier TEST_PUBLISH can manage them, for now.
-  if (!batchScheduleId) return false;
+
+  const canReadTest = await hasPermission(userId, PERMISSIONS.TEST_READ);
+  const canChapterUpdate = await hasPermission(userId, PERMISSIONS.CHAPTER_UPDATE);
+  if (canReadTest || canChapterUpdate) return true;
+
+  if (!batchScheduleId) return true;
 
   const { teacher } = await resolveTeacherForSchedule(userId, batchScheduleId);
   return Boolean(teacher);
