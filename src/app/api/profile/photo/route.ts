@@ -53,16 +53,40 @@ export async function POST(request: NextRequest) {
     if (file.size > MAX_BYTES) return apiError("Image is too large — please keep it under 3MB.", 400);
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const key = `profile-photos/${session.user.id}-${Date.now()}.${extension}`;
+    const key = `profile-images/${session.user.id}/avatar.${extension}`;
     const photoUrl = await uploadFile({ key, body: buffer, contentType: file.type });
 
     const previous = await prisma.user.findUnique({ where: { id: session.user.id }, select: { photoUrl: true } });
 
     await prisma.user.update({ where: { id: session.user.id }, data: { photoUrl } });
 
-    if (previous?.photoUrl) {
+    // Index in FileAsset table
+    await prisma.fileAsset.upsert({
+      where: { storageKey: key },
+      update: {
+        originalFilename: file.name,
+        mimeType: file.type,
+        sizeBytes: BigInt(file.size),
+        status: "ACTIVE",
+        visibility: "PUBLIC",
+      },
+      create: {
+        ownerId: session.user.id,
+        fileType: "PROFILE_IMAGE",
+        storageProvider: "r2",
+        bucket: process.env.R2_BUCKET_NAME || "atomic-pathshala",
+        storageKey: key,
+        originalFilename: file.name,
+        mimeType: file.type,
+        sizeBytes: BigInt(file.size),
+        status: "ACTIVE",
+        visibility: "PUBLIC",
+      },
+    }).catch(() => null);
+
+    if (previous?.photoUrl && previous.photoUrl !== photoUrl) {
       const oldKey = keyFromPublicUrl(previous.photoUrl);
-      if (oldKey) deleteFile(oldKey).catch(() => undefined);
+      if (oldKey && oldKey !== key) deleteFile(oldKey).catch(() => undefined);
     }
 
     await prisma.auditLog.create({
