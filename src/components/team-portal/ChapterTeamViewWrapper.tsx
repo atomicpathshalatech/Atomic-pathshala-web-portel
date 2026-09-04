@@ -2,9 +2,11 @@
 
 import React, { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { ChapterContentManager } from "./ChapterContentManager";
+import { TeacherChapterHeader } from "./TeacherChapterHeader";
+import { UnifiedChapterScheduleTimeline } from "./UnifiedChapterScheduleTimeline";
 import { ChapterDetailView, ChapterDetailData } from "@/components/chapter-detail/ChapterDetailView";
 import { ChapterReviewActions } from "./ChapterReviewActions";
+import { SecureDeleteResourceModal } from "@/components/common/SecureDeleteResourceModal";
 import { toast } from "sonner";
 import {
   CheckCircle2,
@@ -24,9 +26,14 @@ import { ChapterReviewHistoryTimeline, ReviewHistoryItem } from "./ChapterReview
 
 interface ChapterTeamViewWrapperProps {
   chapterId: string;
+  chapterCode?: string | null;
   chapterTitle: string;
   chapterMedium: string;
   chapterStatus: string;
+  subjectTitle?: string;
+  courseTitle?: string;
+  teacherName?: string;
+  teacherPhoto?: string | null;
   initialLectures: any[];
   initialDpps: any[];
   initialTests: any[];
@@ -48,9 +55,14 @@ const WEEK_DAYS = [
 
 export function ChapterTeamViewWrapper({
   chapterId,
+  chapterCode,
   chapterTitle,
   chapterMedium,
   chapterStatus: initialStatus,
+  subjectTitle,
+  courseTitle,
+  teacherName,
+  teacherPhoto,
   initialLectures,
   initialDpps,
   initialTests,
@@ -62,6 +74,7 @@ export function ChapterTeamViewWrapper({
   const router = useRouter();
   const [viewMode, setViewMode] = useState<"manager" | "preview">("manager");
   const [status, setStatus] = useState<string>(initialStatus);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   // Batch Auto-Scheduling & Submission Modal State
   const [showScheduleModal, setShowScheduleModal] = useState(false);
@@ -81,6 +94,44 @@ export function ChapterTeamViewWrapper({
 
   const isUnderReview = status === "UNDER_REVIEW";
   const isApproved = status === "APPROVED" || status === "PUBLISHED";
+
+  // Calculate stats for Header
+  const totalQuestions = useMemo(() => {
+    let count = 0;
+    initialDpps.forEach((d) => {
+      count += d._count?.questions || 0;
+    });
+    initialTests.forEach((t) => {
+      count += t._count?.sections || 0;
+    });
+    return count;
+  }, [initialDpps, initialTests]);
+
+  const totalDurationMin = useMemo(() => {
+    let mins = 0;
+    initialLectures.forEach((l) => {
+      mins += l.durationMin || 60;
+    });
+    return mins;
+  }, [initialLectures]);
+
+  const dateRangeStr = useMemo(() => {
+    let start: Date | undefined;
+    let end: Date | undefined;
+    initialLectures.forEach((l) => {
+      if (l.scheduledDate) {
+        const d = new Date(l.scheduledDate);
+        if (!start || d < start) start = d;
+        if (!end || d > end) end = d;
+      }
+    });
+    if (start instanceof Date && end instanceof Date) {
+      const s = start.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
+      const e = end.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
+      return `${s} - ${e}`;
+    }
+    return undefined;
+  }, [initialLectures]);
 
   // Toggle Weekday Selection
   const toggleWeekday = (dayIdx: number) => {
@@ -235,30 +286,64 @@ export function ChapterTeamViewWrapper({
 
       {viewMode === "manager" ? (
         <div className="space-y-6">
+          {/* Teacher Chapter Overview Header */}
+          <TeacherChapterHeader
+            chapterId={chapterId}
+            chapterCode={chapterCode}
+            chapterTitle={chapterTitle}
+            subjectTitle={subjectTitle || studentPreviewData.subjectName}
+            courseTitle={courseTitle || studentPreviewData.courseTitle}
+            medium={chapterMedium}
+            status={status}
+            teacherName={teacherName || studentPreviewData.teacher.name}
+            teacherPhoto={teacherPhoto || studentPreviewData.teacher.photo}
+            totalLectures={initialLectures.length}
+            totalDpps={initialDpps.length}
+            totalTests={initialTests.length}
+            totalQuestions={totalQuestions}
+            totalDurationMin={totalDurationMin}
+            dateRangeStr={dateRangeStr}
+            canEdit={canEdit}
+            onDeleteClick={() => setShowDeleteModal(true)}
+          />
+
           {/* Admin Verification Desk (Approve, Send Back / Revision, Reject) */}
-          {canReview && (isUnderReview || status !== "DRAFT") && (
+          {/* Automatically hidden once Chapter is APPROVED or PUBLISHED */}
+          {canReview && !isApproved && (isUnderReview || status !== "DRAFT") && (
             <div className="p-1 rounded-2xl">
               <ChapterReviewActions chapterId={chapterId} currentStatus={status} />
             </div>
           )}
 
-          {/* Interactive Content Manager: Lectures, DPPs, and Chapter Tests */}
-          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-            <ChapterContentManager
-              chapterId={chapterId}
-              chapterTitle={chapterTitle}
-              chapterMedium={chapterMedium}
-              initialLectures={initialLectures}
-              initialDpps={initialDpps}
-              initialTests={initialTests}
-              canEdit={canEdit || canReview}
-            />
-          </div>
+          {/* Unified Chapter Content & Schedule Timeline */}
+          <UnifiedChapterScheduleTimeline
+            chapterId={chapterId}
+            chapterTitle={chapterTitle}
+            chapterMedium={chapterMedium}
+            chapterStatus={status}
+            initialLectures={initialLectures}
+            initialDpps={initialDpps}
+            initialTests={initialTests}
+            canEdit={canEdit || canReview}
+          />
 
           {/* Governance Audit Trail & Review Decision History Timeline (Fully Traceable) */}
           {reviews && reviews.length > 0 && (
             <ChapterReviewHistoryTimeline reviews={reviews} />
           )}
+
+          {/* Secure Delete Resource Modal */}
+          <SecureDeleteResourceModal
+            isOpen={showDeleteModal}
+            onClose={() => setShowDeleteModal(false)}
+            resourceId={chapterId}
+            resourceTitle={chapterTitle}
+            resourceType="CHAPTER"
+            onDeleted={() => {
+              setShowDeleteModal(false);
+              router.push("/team/chapters");
+            }}
+          />
 
           {/* BLUE SUBMISSION / STATUS & BATCH IMPORT BOX (BOTTOM) */}
           <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-3xl p-6 sm:p-8 text-white shadow-xl shadow-blue-500/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
