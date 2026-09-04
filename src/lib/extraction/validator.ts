@@ -13,6 +13,7 @@
 import { ParsedQuestionBlock } from "./boundary-detector";
 import { ExtractedAnswerKey, ExtractedSolution } from "./answer-key-engine";
 import { detectNeetQuestionType } from "../questions/neet-question-classifier";
+import { autoDetectNeetTaxonomy } from "../questions/neet-taxonomy-detector";
 
 export interface ValidationIssue {
   type: "MISSING_QUESTION" | "DUPLICATE_QUESTION" | "ANSWER_KEY_MISMATCH" | "ANSWER_KEY_MISSING" | "LOW_CONFIDENCE" | "IMAGE_ERROR" | "TABLE_ERROR" | "OPTIONS_INCOMPLETE";
@@ -231,18 +232,20 @@ export function validateAndClassifyQuestions(
         block.hasImage
       );
 
-      // Auto-detect Subject if not set
-      let subject = config.defaultSubject || "General";
-      const fullContent = (block.statement + " " + Object.values(block.options).join(" ")).toLowerCase();
-      if (subject === "General" || subject === "Auto Detect") {
-        if (/cell|dna|rna|plant|tissue|protein|genetics|organism|photosynthesis|mitosis|chloroplast|mitochondria/i.test(fullContent)) {
-          subject = "Biology";
-        } else if (/chemical|reaction|mole|acid|base|organic|orbital|bond|molarity|atom|ph\b/i.test(fullContent)) {
-          subject = "Chemistry";
-        } else if (/velocity|resistance|force|mass|momentum|electric|current|lens|optics|joule|magnetic/i.test(fullContent)) {
-          subject = "Physics";
-        }
-      }
+      // Automatic NEET Taxonomy (Subject, Chapter, Topic, Sub-Topic, Level of Question / Difficulty)
+      const taxonomy = autoDetectNeetTaxonomy(
+        block.statement,
+        block.options,
+        config.defaultSubject
+      );
+
+      const subject = config.defaultSubject && config.defaultSubject !== "Auto Detect" && config.defaultSubject !== "General"
+        ? config.defaultSubject
+        : taxonomy.subject;
+      const chapter = config.defaultChapter || taxonomy.chapter;
+      const topic = taxonomy.topic;
+      const subTopic = taxonomy.subTopic;
+      const difficulty = taxonomy.difficulty;
 
       // Check for low confidence or formatting issues
       if (block.confidence.overall < 88) {
@@ -286,9 +289,11 @@ export function validateAndClassifyQuestions(
         hasImage: block.hasImage,
         hasEquation: block.hasEquation,
         subject,
-        chapter: config.defaultChapter || undefined,
+        chapter: chapter || undefined,
+        topic: topic || undefined,
+        subTopic: subTopic || undefined,
         questionType: neetClassification.detectedType,
-        difficulty: "MEDIUM",
+        difficulty,
         status,
         confidence: block.confidence.overall,
         confidenceBreakdown: confBreakdown,
