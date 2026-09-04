@@ -31,7 +31,7 @@ export async function GET(
     if (!schedule) return apiError("Scheduled class not found", 404);
     if (!teacher && !student) throw new ForbiddenError();
 
-    const wbSession = await prisma.whiteboardSession.findUnique({
+    let wbSession = await prisma.whiteboardSession.findUnique({
       where: { batchScheduleId: params.batchScheduleId },
       // livePhase lets the student client tell "session exists but teacher
       // hasn't hit Start Class yet" (PREPARING — show the lobby, chat is
@@ -47,6 +47,53 @@ export async function GET(
         endedAt: true,
       },
     });
+
+    if (!wbSession && schedule.type === "LIVE_CLASS") {
+      const assignedTeacherId =
+        schedule.teacherId ??
+        (await prisma.batchTeacher.findFirst({ where: { batchId: schedule.batchId } }))?.teacherId;
+
+      if (assignedTeacherId) {
+        try {
+          wbSession = await prisma.whiteboardSession.upsert({
+            where: { batchScheduleId: params.batchScheduleId },
+            update: {},
+            create: {
+              batchScheduleId: schedule.id,
+              teacherId: assignedTeacherId,
+              title: schedule.title,
+              livePhase: "PREPARING",
+              status: "ACTIVE",
+              pages: { create: { pageNumber: 1, objects: [] } },
+            },
+            select: {
+              id: true,
+              title: true,
+              status: true,
+              livePhase: true,
+              videoTransport: true,
+              youtubeVideoId: true,
+              startedAt: true,
+              endedAt: true,
+            },
+          });
+        } catch {
+          wbSession = await prisma.whiteboardSession.findUnique({
+            where: { batchScheduleId: params.batchScheduleId },
+            select: {
+              id: true,
+              title: true,
+              status: true,
+              livePhase: true,
+              videoTransport: true,
+              youtubeVideoId: true,
+              startedAt: true,
+              endedAt: true,
+            },
+          });
+        }
+      }
+    }
 
     return apiSuccess({ whiteboardSession: wbSession ?? null });
   } catch (error) {

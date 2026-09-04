@@ -42,14 +42,12 @@ const STATUS_STYLES: Record<ScheduleEntry["status"], string> = {
   CANCELLED: "bg-outline-variant/30 text-on-surface-variant line-through",
 };
 
-function toDateTimeLocal(value: string) {
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(
-    d.getMinutes()
-  )}`;
-}
+import {
+  parseISTDateTimeInput,
+  toISTDateTimeLocal,
+  formatISTTime,
+  formatISTDate,
+} from "@/lib/date-utils";
 
 const inputClass =
   "w-full rounded-xl border border-outline-variant/40 bg-surface-container-lowest py-2.5 px-3.5 text-body-sm outline-none focus:ring-2 focus:ring-primary/30";
@@ -88,7 +86,8 @@ export function BatchScheduleManager({
     const duration = form.isCustomDuration ? form.customDuration : form.durationMinutes;
     if (!duration || duration <= 0) return null;
     try {
-      return calculateEndTime(form.startsAt, duration);
+      const startsAtDate = parseISTDateTimeInput(form.startsAt);
+      return calculateEndTime(startsAtDate, duration);
     } catch {
       return null;
     }
@@ -124,7 +123,7 @@ export function BatchScheduleManager({
       type: entry.type,
       status: entry.status,
       teacherId: entry.teacherId ?? "",
-      startsAt: toDateTimeLocal(entry.startsAt),
+      startsAt: toISTDateTimeLocal(entry.startsAt),
       durationMinutes: isCommon ? diffMins : 60,
       isCustomDuration: !isCommon,
       customDuration: diffMins,
@@ -160,14 +159,17 @@ export function BatchScheduleManager({
         ? `/api/team/batches/${batchId}/schedule/${editingId}`
         : `/api/team/batches/${batchId}/schedule`;
 
+      const startsAtDate = parseISTDateTimeInput(form.startsAt);
+      const endsAtDate = calculatedEndTime;
+
       const payload = {
         title: form.title.trim(),
         subject: form.subject.trim() || undefined,
         type: form.type,
         ...(editingId ? { status: form.status } : {}),
         teacherId: form.teacherId || undefined,
-        startsAt: new Date(form.startsAt).toISOString(),
-        endsAt: calculatedEndTime.toISOString(),
+        startsAt: startsAtDate.toISOString(),
+        endsAt: endsAtDate.toISOString(),
         notes: form.notes.trim() || undefined,
       };
 
@@ -272,9 +274,9 @@ export function BatchScheduleManager({
               <div className="flex flex-wrap items-center gap-2 text-xs text-on-surface-variant">
                 {s.subject && <span className="font-semibold text-primary">{s.subject} &middot;</span>}
                 <span>
-                  {new Date(s.startsAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })} &middot;{" "}
-                  {new Date(s.startsAt).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true })} →{" "}
-                  {new Date(s.endsAt).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true })}
+                  {formatISTDate(s.startsAt)} &middot;{" "}
+                  {formatISTTime(s.startsAt)} →{" "}
+                  {formatISTTime(s.endsAt)} (IST)
                 </span>
                 {s.teacher && <span className="font-medium bg-surface-container-high px-2 py-0.5 rounded">Faculty: {s.teacher.user.name}</span>}
               </div>
@@ -301,7 +303,7 @@ export function BatchScheduleManager({
               {editingId ? "Edit Lecture Timetable" : "Schedule New Lecture"}
             </h4>
             <span className="text-[11px] text-on-surface-variant font-mono">
-              Auto End-Time &amp; Overlap Detection Enabled
+              Auto End-Time &amp; Overlap Detection Enabled (IST)
             </span>
           </div>
 
@@ -359,7 +361,7 @@ export function BatchScheduleManager({
 
             {/* Start Date & Time */}
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-on-surface">Start Date &amp; Time *</label>
+              <label className="text-xs font-bold text-on-surface">Start Date &amp; Time (IST) *</label>
               <input
                 type="datetime-local"
                 className={inputClass}
@@ -370,16 +372,11 @@ export function BatchScheduleManager({
 
             {/* Auto-Calculated End Time Display */}
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-on-surface">Calculated End Time (Automatic)</label>
+              <label className="text-xs font-bold text-on-surface">Calculated End Time (Automatic IST)</label>
               <div className="w-full rounded-xl border border-primary/30 bg-primary/5 py-2.5 px-3.5 text-xs text-primary font-bold flex items-center justify-between">
                 <span>
                   {calculatedEndTime
-                    ? calculatedEndTime.toLocaleTimeString("en-IN", {
-                        hour: "numeric",
-                        minute: "2-digit",
-                        hour12: true,
-                      }) +
-                      ` (${calculatedEndTime.toLocaleDateString("en-IN", { day: "numeric", month: "short" })})`
+                    ? `${formatISTTime(calculatedEndTime)} (${formatISTDate(calculatedEndTime)})`
                     : "Set Start Time & Duration"}
                 </span>
                 <span className="material-symbols-outlined text-sm text-primary">schedule</span>

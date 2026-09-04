@@ -32,16 +32,11 @@ const TYPE_BORDER: Record<string, string> = {
   OTHER: "border-l-tertiary",
 };
 
-function formatDay(date: Date) {
-  const today = new Date();
-  const isToday = date.toDateString() === today.toDateString();
-  const tomorrow = new Date(today);
-  tomorrow.setDate(today.getDate() + 1);
-  const isTomorrow = date.toDateString() === tomorrow.toDateString();
-  if (isToday) return "Today";
-  if (isTomorrow) return "Tomorrow";
-  return date.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
-}
+import {
+  formatISTTime,
+  formatISTDayLabel,
+  getISTDayKey,
+} from "@/lib/date-utils";
 
 /**
  * Teacher's own class timetable — every schedule entry across every batch
@@ -108,7 +103,7 @@ export default async function TeacherMySchedulePage() {
   const past = schedules.filter((s) => s.endsAt < now);
 
   const grouped = upcoming.reduce<Record<string, ScheduleWithBatch[]>>((acc, s) => {
-    const key = s.startsAt.toDateString();
+    const key = getISTDayKey(s.startsAt);
     (acc[key] ??= []).push(s);
     return acc;
   }, {});
@@ -157,12 +152,10 @@ export default async function TeacherMySchedulePage() {
                   <div className="relative">
                     <div className="absolute -left-[22px] md:-left-[30px] top-1/2 -translate-y-1/2 w-4 h-4 bg-primary rounded-full ring-4 ring-primary-container/20 z-10" />
                     <span className="text-label-sm font-bold text-primary uppercase tracking-wider">
-                      {formatDay(new Date(dayKey))}
+                      {formatISTDayLabel(dayKey)}
                     </span>
                   </div>
                   {entries.map((s) => {
-                    const joinOpensAt = new Date(s.startsAt.getTime() - JOIN_WINDOW_MS);
-                    const canEnter = s.type === "LIVE_CLASS" && now >= joinOpensAt && now <= s.endsAt;
                     const isLiveNow = s.status === "LIVE" || (s.startsAt <= now && s.endsAt >= now);
                     return (
                       <div
@@ -195,10 +188,9 @@ export default async function TeacherMySchedulePage() {
                                 <span className="material-symbols-outlined text-lg">groups</span>
                                 {s.batch.name}
                               </span>
-                              <span className="flex items-center gap-1">
+                              <span className="flex items-center gap-1 font-mono">
                                 <span className="material-symbols-outlined text-lg">schedule</span>
-                                {s.startsAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} –{" "}
-                                {s.endsAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                {formatISTTime(s.startsAt)} – {formatISTTime(s.endsAt)} (IST)
                               </span>
                             </div>
                           </div>

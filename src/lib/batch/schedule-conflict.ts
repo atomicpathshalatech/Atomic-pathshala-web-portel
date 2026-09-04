@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { formatISTTime, formatISTDate } from "@/lib/date-utils";
 
 export type ConflictCheckResult = {
   hasConflict: boolean;
@@ -34,15 +35,10 @@ export function calculateEndTime(startsAt: Date | string, durationMinutes: numbe
 }
 
 /**
- * Format time range for conflict messages
+ * Format time range for conflict messages in Indian Standard Time (IST)
  */
 function formatTimeRange(start: Date, end: Date): string {
-  const formatTime = (d: Date) =>
-    d.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true });
-  const formatDate = (d: Date) =>
-    d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
-
-  return `${formatDate(start)} (${formatTime(start)} → ${formatTime(end)})`;
+  return `${formatISTDate(start)} (${formatISTTime(start)} → ${formatISTTime(end)} IST)`;
 }
 
 /**
