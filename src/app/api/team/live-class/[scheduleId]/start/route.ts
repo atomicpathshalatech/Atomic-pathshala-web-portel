@@ -25,14 +25,20 @@ export async function POST(
 
     const now = new Date();
 
-    // Server-authoritative start time validation
-    // Allow start up to 15 minutes before scheduled start time
-    if (schedule.startsAt) {
-      const scheduledStart = new Date(schedule.startsAt);
-      const earlyWindowMs = 15 * 60 * 1000;
-      if (now.getTime() < scheduledStart.getTime() - earlyWindowMs) {
-        return apiError("Cannot start class yet. Class can only be started within 15 minutes of scheduled time.", 400);
-      }
+    const { canTeacherStart } = await import("@/lib/schedule/access-rules");
+    const evaluation = canTeacherStart(schedule, now);
+    if (!evaluation.allowed) {
+      return apiError(
+        evaluation.reason || "Live class cannot be started yet. Starting is allowed within 15 minutes of scheduled time.",
+        403,
+        {
+          code: "START_WINDOW_NOT_OPEN",
+          details: {
+            opensAt: evaluation.opensAt.toISOString(),
+            secondsUntilWindowOpens: evaluation.secondsUntilWindowOpens,
+          },
+        }
+      );
     }
 
     const teacher = await prisma.teacher.findFirst({

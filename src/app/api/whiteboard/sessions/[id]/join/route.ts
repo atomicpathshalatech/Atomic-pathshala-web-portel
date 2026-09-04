@@ -32,9 +32,35 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
     const access = await resolveWhiteboardAccess(session.user.id, params.id);
     if (!access || access.role !== "STUDENT") throw new ForbiddenError();
 
-    const wbSession = await prisma.whiteboardSession.findUnique({ where: { id: params.id } });
+    const wbSession = await prisma.whiteboardSession.findUnique({
+      where: { id: params.id },
+      include: { batchSchedule: true },
+    });
     if (!wbSession) return apiError("Whiteboard session not found", 404);
-    if (wbSession.status === "ENDED") return apiError("This class has ended.", 409);
+
+    const { canStudentJoin } = await import("@/lib/schedule/access-rules");
+    const scheduleTarget = wbSession.batchSchedule ?? {
+      id: wbSession.id,
+      startsAt: wbSession.scheduledStart ?? new Date(),
+      endsAt: wbSession.scheduledEnd ?? new Date(Date.now() + 60 * 60 * 1000),
+      status: wbSession.status === "ENDED" ? "COMPLETED" : wbSession.livePhase === "LIVE" ? "LIVE" : "SCHEDULED",
+      liveWhiteboardSession: wbSession,
+    };
+
+    const evaluation = canStudentJoin(scheduleTarget, new Date());
+    if (!evaluation.allowed) {
+      return apiError(
+        evaluation.reason || "Class is not accessible yet. Access opens 15 minutes before the scheduled start time.",
+        403,
+        {
+          code: "JOIN_WINDOW_NOT_OPEN",
+          details: {
+            opensAt: evaluation.opensAt.toISOString(),
+            secondsUntilWindowOpens: evaluation.secondsUntilWindowOpens,
+          },
+        }
+      );
+    }
 
     let firstJoin = false;
     try {

@@ -25,7 +25,11 @@ export default async function StudentLiveClassPage({
 
   const schedule = await prisma.batchSchedule.findUnique({
     where: { id: params.scheduleId },
-    include: { batch: true, teacher: { include: { user: true } } },
+    include: {
+      batch: true,
+      teacher: { include: { user: true } },
+      liveWhiteboardSession: true,
+    },
   });
   if (!schedule) notFound();
   if (schedule.type !== "LIVE_CLASS") redirect("/schedule");
@@ -34,6 +38,13 @@ export default async function StudentLiveClassPage({
     where: { studentId: student.id, batchId: schedule.batchId, status: "ACTIVE" },
   });
   if (!enrollment) redirect("/schedule");
+
+  // Server-authoritative 15-minute access boundary check
+  const { canStudentJoin } = await import("@/lib/schedule/access-rules");
+  const accessEval = canStudentJoin(schedule, new Date());
+  if (!accessEval.allowed) {
+    redirect(`/schedule?blocked=1&reason=${encodeURIComponent(accessEval.reason || "Class is not accessible yet.")}`);
+  }
 
   return (
     <StudentLiveClassRoom

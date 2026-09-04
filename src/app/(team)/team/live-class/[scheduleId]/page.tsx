@@ -97,6 +97,13 @@ export default async function TeacherLiveClassPage({
     redirect("/team");
   }
 
+  // Check 15-minute start window
+  const { canTeacherStart } = await import("@/lib/schedule/access-rules");
+  const teacherEval = canTeacherStart(schedule, new Date());
+  if (!teacherEval.allowed) {
+    redirect(`/team/my-schedule?blocked=1&reason=${encodeURIComponent(teacherEval.reason || "Live class cannot be started yet.")}`);
+  }
+
   return (
     <TeacherLiveClassRoom
       batchScheduleId={schedule.id}

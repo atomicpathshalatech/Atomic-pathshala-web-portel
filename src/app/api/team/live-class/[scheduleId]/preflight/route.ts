@@ -23,6 +23,22 @@ export async function POST(
 
     if (!schedule) return apiError("Scheduled class not found", 404);
 
+    const { canTeacherStart } = await import("@/lib/schedule/access-rules");
+    const evaluation = canTeacherStart(schedule, new Date());
+    if (!evaluation.allowed) {
+      return apiError(
+        evaluation.reason || "Live class setup is only allowed within 15 minutes of scheduled time.",
+        403,
+        {
+          code: "START_WINDOW_NOT_OPEN",
+          details: {
+            opensAt: evaluation.opensAt.toISOString(),
+            secondsUntilWindowOpens: evaluation.secondsUntilWindowOpens,
+          },
+        }
+      );
+    }
+
     const teacher = await prisma.teacher.findFirst({
       where: { userId: session.user.id },
     });

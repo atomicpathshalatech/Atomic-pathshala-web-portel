@@ -130,14 +130,41 @@ export async function GET(
       }
     }
 
+    const { canStudentJoin, canTeacherStart, getEffectiveScheduleStatus } = await import("@/lib/schedule/access-rules");
+    const now = new Date();
+    const scheduleTarget = {
+      id: schedule.id,
+      startsAt: schedule.startsAt,
+      endsAt: schedule.endsAt,
+      status: schedule.status,
+      type: schedule.type,
+      liveWhiteboardSession: wbSession,
+    };
+
+    const studentEval = canStudentJoin(scheduleTarget, now);
+    const teacherEval = canTeacherStart(scheduleTarget, now);
+    const effectiveStatus = getEffectiveScheduleStatus(scheduleTarget, now);
+
     return apiSuccess({
       whiteboardSession: wbSession ?? null,
+      serverTime: now.toISOString(),
       schedule: {
         id: schedule.id,
         title: schedule.title,
         startsAt: schedule.startsAt,
         endsAt: schedule.endsAt,
         type: schedule.type,
+        status: effectiveStatus,
+      },
+      access: {
+        canStudentJoin: studentEval.allowed,
+        canTeacherStart: teacherEval.allowed,
+        studentReason: studentEval.reason,
+        teacherReason: teacherEval.reason,
+        opensAt: studentEval.opensAt.toISOString(),
+        isLive: studentEval.isLive,
+        isCompleted: studentEval.isCompleted,
+        isCancelled: studentEval.isCancelled,
       },
     });
   } catch (error) {

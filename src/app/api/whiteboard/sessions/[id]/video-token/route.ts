@@ -26,9 +26,39 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     const access = await resolveWhiteboardAccess(session.user.id, params.id);
     if (!access) throw new ForbiddenError();
 
-    const wbSession = await prisma.whiteboardSession.findUnique({ where: { id: params.id } });
+    const wbSession = await prisma.whiteboardSession.findUnique({
+      where: { id: params.id },
+      include: { batchSchedule: true },
+    });
     if (!wbSession) return apiError("Whiteboard session not found", 404);
     if (wbSession.status !== "ACTIVE") return apiError("This class isn't live right now.", 409);
+
+    const { canStudentJoin, canTeacherStart } = await import("@/lib/schedule/access-rules");
+    const scheduleTarget = wbSession.batchSchedule ?? {
+      id: wbSession.id,
+      startsAt: wbSession.scheduledStart ?? new Date(),
+      endsAt: wbSession.scheduledEnd ?? new Date(Date.now() + 60 * 60 * 1000),
+      status: wbSession.livePhase === "LIVE" ? ("LIVE" as const) : ("SCHEDULED" as const),
+      liveWhiteboardSession: wbSession,
+    };
+
+    const evaluation = access.role === "STUDENT"
+      ? canStudentJoin(scheduleTarget, new Date())
+      : canTeacherStart(scheduleTarget, new Date());
+
+    if (!evaluation.allowed) {
+      return apiError(
+        evaluation.reason || "Video access is only allowed within 15 minutes of scheduled class start time.",
+        403,
+        {
+          code: "JOIN_WINDOW_NOT_OPEN",
+          details: {
+            opensAt: evaluation.opensAt.toISOString(),
+            secondsUntilWindowOpens: evaluation.secondsUntilWindowOpens,
+          },
+        }
+      );
+    }
 
     const url = process.env.NEXT_PUBLIC_LIVEKIT_URL;
     if (!url) return apiError("Video calling isn't configured on this server yet.", 503);
