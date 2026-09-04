@@ -3,11 +3,12 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Layers, Plus, Sparkles, CheckCircle2, ArrowRight } from "lucide-react";
+import { Layers, Plus, Sparkles, CheckCircle2, ArrowRight, Download } from "lucide-react";
 import { TemplateBuilder } from "@/components/team-portal/TemplateBuilder";
 import { TemplateSummaryCard } from "@/components/team-portal/TemplateSummaryCard";
 import { TestQuestionPicker } from "@/components/team-portal/TestQuestionPicker";
 import { PublishTestButton } from "@/components/team-portal/PublishTestButton";
+import { TestPdfDownloadModal } from "@/components/test-portal/TestPdfDownloadModal";
 
 interface TestDetailClientProps {
   test: {
@@ -101,6 +102,19 @@ export function TestDetailClient({ test, isDraft, canPublish }: TestDetailClient
         </div>
 
         <div className="flex items-center gap-2">
+          <TestPdfDownloadModal
+            testId={test.id}
+            testName={test.name}
+            triggerButton={
+              <button
+                type="button"
+                className="px-3.5 py-2 bg-slate-900 hover:bg-black text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition"
+              >
+                <Download className="w-4 h-4" /> Export Test PDF
+              </button>
+            }
+          />
+
           {isDraft && !hasTemplate && (
             <button
               type="button"

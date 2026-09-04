@@ -12,6 +12,7 @@ import { NcertRevisionSection } from "./NcertRevisionSection";
 import { QuestionReviewSection } from "./QuestionReviewSection";
 import { PersonalizedActionPlan } from "./PersonalizedActionPlan";
 import { LeaderboardModal } from "./LeaderboardModal";
+import { TestPdfDownloadModal } from "@/components/test-portal/TestPdfDownloadModal";
 
 type ActiveTab =
   | "OVERVIEW"
@@ -58,13 +59,29 @@ export function StudentResultDashboard({
           <span className="text-blue-600 dark:text-blue-400 font-bold">AIR Analytics</span>
         </div>
 
-        <Link
-          href="/tests"
-          className="px-4 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-sm transition flex items-center gap-1.5"
-        >
-          <span className="material-symbols-outlined text-sm">arrow_back</span>
-          <span>Back to Test Arena</span>
-        </Link>
+        <div className="flex items-center gap-2">
+          <TestPdfDownloadModal
+            testId={analysis.testId}
+            testName={analysis.testName}
+            triggerButton={
+              <button
+                type="button"
+                className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white text-xs font-bold shadow-sm transition flex items-center gap-1.5"
+              >
+                <span className="material-symbols-outlined text-sm">download</span>
+                <span>Download Test / Solutions</span>
+              </button>
+            }
+          />
+
+          <Link
+            href="/tests"
+            className="px-4 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-sm transition flex items-center gap-1.5"
+          >
+            <span className="material-symbols-outlined text-sm">arrow_back</span>
+            <span>Back to Test Arena</span>
+          </Link>
+        </div>
       </div>
 
       {/* Main Score & Top Metric Card */}

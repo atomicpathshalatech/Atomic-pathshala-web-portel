@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { TestPdfDownloadModal } from "@/components/test-portal/TestPdfDownloadModal";
 
 export interface ChapterwiseTestItem {
   id: string;
@@ -180,35 +181,51 @@ export function AtomicPracticeTestArena({
                 <span>🏆 {demoTest.totalMarks} Marks</span>
               </div>
 
-              {demoTest.status === "COMPLETED" ? (
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="px-3.5 py-2 rounded-xl bg-white/20 text-white border border-white/30 text-xs font-black backdrop-blur-md">
-                    Score: {demoTest.score ?? 0}/{demoTest.totalMarks}
-                  </span>
+              <div className="flex items-center gap-3 flex-wrap">
+                <TestPdfDownloadModal
+                  testId={demoTest.id}
+                  testName={demoTest.name}
+                  triggerButton={
+                    <button
+                      type="button"
+                      className="px-4 py-3 rounded-2xl bg-white/15 hover:bg-white/25 text-white border border-white/30 font-bold text-xs shadow-md transition flex items-center gap-1.5 backdrop-blur-md"
+                    >
+                      <span className="material-symbols-outlined text-base">picture_as_pdf</span>
+                      <span>Download Test PDF</span>
+                    </button>
+                  }
+                />
+
+                {demoTest.status === "COMPLETED" ? (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="px-3.5 py-2 rounded-xl bg-white/20 text-white border border-white/30 text-xs font-black backdrop-blur-md">
+                      Score: {demoTest.score ?? 0}/{demoTest.totalMarks}
+                    </span>
+                    <Link
+                      href={`/tests/${demoTest.id}/result`}
+                      className="px-5 py-2.5 rounded-2xl bg-white hover:bg-indigo-50 text-indigo-700 font-black text-xs shadow-lg transition active:scale-95"
+                    >
+                      View Result &amp; Analysis
+                    </Link>
+                  </div>
+                ) : demoTest.status === "IN_PROGRESS" ? (
                   <Link
-                    href={`/tests/${demoTest.id}/result`}
-                    className="px-5 py-2.5 rounded-2xl bg-white hover:bg-indigo-50 text-indigo-700 font-black text-xs shadow-lg transition active:scale-95"
+                    href={`/tests/${demoTest.id}/attempt`}
+                    className="px-6 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/25 transition flex items-center gap-1.5 animate-bounce"
                   >
-                    View Result &amp; Analysis
+                    <span className="material-symbols-outlined text-base">play_arrow</span>
+                    <span>Resume Test</span>
                   </Link>
-                </div>
-              ) : demoTest.status === "IN_PROGRESS" ? (
-                <Link
-                  href={`/tests/${demoTest.id}/attempt`}
-                  className="px-6 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/25 transition flex items-center gap-1.5 animate-bounce"
-                >
-                  <span className="material-symbols-outlined text-base">play_arrow</span>
-                  <span>Resume Test</span>
-                </Link>
-              ) : (
-                <Link
-                  href={`/tests/${demoTest.id}/attempt`}
-                  className="px-7 py-3.5 rounded-2xl bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-black text-sm shadow-xl shadow-emerald-500/25 transition-all transform hover:scale-[1.02] active:scale-95 flex items-center gap-2"
-                >
-                  <span className="material-symbols-outlined text-lg">rocket_launch</span>
-                  <span>Start Test</span>
-                </Link>
-              )}
+                ) : (
+                  <Link
+                    href={`/tests/${demoTest.id}/attempt`}
+                    className="px-7 py-3.5 rounded-2xl bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-black text-sm shadow-xl shadow-emerald-500/25 transition-all transform hover:scale-[1.02] active:scale-95 flex items-center gap-2"
+                  >
+                    <span className="material-symbols-outlined text-lg">rocket_launch</span>
+                    <span>Start Test</span>
+                  </Link>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -470,9 +487,20 @@ export function AtomicPracticeTestArena({
                                 </div>
 
                                 <div className="pt-4 mt-2 border-t border-outline-variant/20 flex items-center justify-between gap-2">
-                                  <span className="text-[11px] text-on-surface-variant font-medium">
-                                    {test.status === "COMPLETED" ? "Submitted" : "Online Practice"}
-                                  </span>
+                                  <TestPdfDownloadModal
+                                    testId={test.id}
+                                    testName={test.name}
+                                    triggerButton={
+                                      <button
+                                        type="button"
+                                        title="Download Test PDF"
+                                        className="p-1.5 rounded-lg border border-outline-variant/40 hover:bg-surface-container-high text-on-surface-variant text-[11px] font-bold flex items-center gap-1 transition"
+                                      >
+                                        <span className="material-symbols-outlined text-sm text-indigo-500">picture_as_pdf</span>
+                                        <span>PDF</span>
+                                      </button>
+                                    }
+                                  />
 
                                   <Link
                                     href={test.status === "COMPLETED" ? `/tests/${test.id}/result` : `/tests/${test.id}/attempt`}
@@ -658,6 +686,21 @@ export function AtomicPracticeTestArena({
                                 </div>
 
                                 <div className="shrink-0 flex items-center gap-2">
+                                  <TestPdfDownloadModal
+                                    testId={t.id}
+                                    testName={t.name}
+                                    triggerButton={
+                                      <button
+                                        type="button"
+                                        title="Download Test PDF"
+                                        className="p-2.5 rounded-xl border border-purple-200 dark:border-purple-900/50 hover:bg-purple-50 dark:hover:bg-purple-950/40 text-purple-600 dark:text-purple-400 text-xs font-bold flex items-center gap-1 transition shadow-sm"
+                                      >
+                                        <span className="material-symbols-outlined text-sm">picture_as_pdf</span>
+                                        <span>PDF</span>
+                                      </button>
+                                    }
+                                  />
+
                                   {t.canAttempt || t.canResume ? (
                                     <Link
                                       href={`/tests/${t.id}/attempt`}

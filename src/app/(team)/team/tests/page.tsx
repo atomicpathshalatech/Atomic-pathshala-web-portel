@@ -11,6 +11,8 @@ export const metadata: Metadata = {
   title: "Tests",
 };
 
+import { TestPdfDownloadModal } from "@/components/test-portal/TestPdfDownloadModal";
+
 const STATUS_STYLES: Record<string, string> = {
   DRAFT: "bg-surface-container-high text-on-surface-variant",
   PUBLISHED: "bg-primary/10 text-primary",
@@ -88,32 +90,49 @@ export default async function TestsListPage() {
           {tests.map((t) => {
             const questionCount = t.sections.reduce((sum, s) => sum + s._count.questions, 0);
             return (
-              <li key={t.id}>
-                <Link
-                  href={`/team/tests/${t.id}`}
-                  className="glass-card rounded-xl p-4 flex flex-wrap items-center justify-between gap-3 hover:shadow-md transition-all block"
-                >
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span
-                        className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded ${
-                          STATUS_STYLES[t.status] ?? "bg-surface-container-high text-on-surface-variant"
-                        }`}
-                      >
-                        {t.status}
-                      </span>
-                      {t.batchSchedule && (
-                        <span className="text-label-sm text-on-surface-variant">{t.batchSchedule.batch.name}</span>
-                      )}
-                    </div>
-                    <p className="font-label-md text-label-md text-on-surface">{t.name}</p>
-                    <p className="text-label-sm text-on-surface-variant">
-                      {questionCount} question{questionCount === 1 ? "" : "s"} · {t.durationMin} min ·{" "}
-                      {t._count.attempts} attempt{t._count.attempts === 1 ? "" : "s"}
-                    </p>
+              <li key={t.id} className="glass-card rounded-xl p-4 flex flex-wrap items-center justify-between gap-3 hover:shadow-md transition-all">
+                <Link href={`/team/tests/${t.id}`} className="flex-1 min-w-[240px]">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span
+                      className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded ${
+                        STATUS_STYLES[t.status] ?? "bg-surface-container-high text-on-surface-variant"
+                      }`}
+                    >
+                      {t.status}
+                    </span>
+                    {t.batchSchedule && (
+                      <span className="text-label-sm text-on-surface-variant">{t.batchSchedule.batch.name}</span>
+                    )}
                   </div>
-                  <span className="material-symbols-outlined text-on-surface-variant">chevron_right</span>
+                  <p className="font-label-md text-label-md text-on-surface hover:text-primary transition">{t.name}</p>
+                  <p className="text-label-sm text-on-surface-variant">
+                    {questionCount} question{questionCount === 1 ? "" : "s"} · {t.durationMin} min ·{" "}
+                    {t._count.attempts} attempt{t._count.attempts === 1 ? "" : "s"}
+                  </p>
                 </Link>
+
+                <div className="flex items-center gap-2">
+                  <TestPdfDownloadModal
+                    testId={t.id}
+                    testName={t.name}
+                    triggerButton={
+                      <button
+                        type="button"
+                        className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs font-bold flex items-center gap-1.5 shadow-sm transition"
+                      >
+                        <span className="material-symbols-outlined text-sm text-indigo-600">picture_as_pdf</span>
+                        <span>PDF Export</span>
+                      </button>
+                    }
+                  />
+
+                  <Link
+                    href={`/team/tests/${t.id}`}
+                    className="p-2 rounded-lg hover:bg-surface-container-high text-on-surface-variant transition"
+                  >
+                    <span className="material-symbols-outlined text-base">chevron_right</span>
+                  </Link>
+                </div>
               </li>
             );
           })}

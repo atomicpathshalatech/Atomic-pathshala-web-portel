@@ -1,8 +1,10 @@
 "use client";
 
 import React, { useState } from "react";
+import { TestPdfDownloadModal } from "@/components/test-portal/TestPdfDownloadModal";
 
 interface ExamInstructionsViewProps {
+  testId?: string;
   testTitle: string;
   durationMin: number;
   totalQuestions: number;
@@ -12,6 +14,7 @@ interface ExamInstructionsViewProps {
 }
 
 export function ExamInstructionsView({
+  testId,
   testTitle,
   durationMin,
   totalQuestions,
@@ -26,14 +29,32 @@ export function ExamInstructionsView({
 
   return (
     <div className="max-w-4xl mx-auto p-4 sm:p-8 space-y-8 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm my-6 animate-in fade-in duration-300">
-      {/* Title */}
-      <div className="text-center pb-4 border-b border-slate-200 dark:border-slate-800 space-y-1">
-        <h1 className="text-lg sm:text-2xl font-black text-slate-900 dark:text-white">
-          महत्वपूर्ण निर्देश : Important Instructions
-        </h1>
-        <p className="text-xs text-slate-500 font-bold">
-          {testTitle} • {targetExam}
-        </p>
+      {/* Title Header with PDF Download Button */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
+        <div className="text-center sm:text-left space-y-1">
+          <h1 className="text-lg sm:text-2xl font-black text-slate-900 dark:text-white">
+            महत्वपूर्ण निर्देश : Important Instructions
+          </h1>
+          <p className="text-xs text-slate-500 font-bold">
+            {testTitle} • {targetExam}
+          </p>
+        </div>
+
+        {testId && (
+          <TestPdfDownloadModal
+            testId={testId}
+            testName={testTitle}
+            triggerButton={
+              <button
+                type="button"
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-bold text-xs shadow-md transition flex items-center gap-2 shrink-0"
+              >
+                <span className="material-symbols-outlined text-base">picture_as_pdf</span>
+                <span>Download Test Paper PDF</span>
+              </button>
+            }
+          />
+        )}
       </div>
 
       {/* Section 1: Hindi Instructions */}

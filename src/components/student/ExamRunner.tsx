@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { FormulaText } from "@/components/test-portal/FormulaText";
 import { ExamLanguageModal } from "./ExamLanguageModal";
 import { ExamInstructionsView } from "./ExamInstructionsView";
+import { TestPdfDownloadModal } from "@/components/test-portal/TestPdfDownloadModal";
 
 export type QuestionData = {
   id: string;
@@ -502,6 +503,7 @@ export function ExamRunner({
   if (phase === "INSTRUCTIONS") {
     return (
       <ExamInstructionsView
+        testId={testId}
         testTitle={data?.test.title || "Test"}
         durationMin={data?.test.durationMin || 180}
         totalQuestions={data?.questions.length || 187}
@@ -571,8 +573,24 @@ export function ExamRunner({
             </div>
           </div>
 
-          {/* Right Controls: Independent Language Toggle & Time Left */}
-          <div className="flex items-center gap-4">
+          {/* Right Controls: Independent Language Toggle, PDF Download & Time Left */}
+          <div className="flex items-center gap-3">
+            {/* Paper PDF Export */}
+            <TestPdfDownloadModal
+              testId={testId}
+              testName={data?.test.title || "Exam Paper"}
+              triggerButton={
+                <button
+                  type="button"
+                  title="Download Paper PDF"
+                  className="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition flex items-center gap-1 border border-slate-300 dark:border-slate-700 shadow-sm"
+                >
+                  <span className="material-symbols-outlined text-sm text-indigo-600 dark:text-indigo-400">picture_as_pdf</span>
+                  <span className="hidden sm:inline">Paper PDF</span>
+                </button>
+              }
+            />
+
             {/* Language Switcher Popover Button */}
             <div className="relative">
               <button
