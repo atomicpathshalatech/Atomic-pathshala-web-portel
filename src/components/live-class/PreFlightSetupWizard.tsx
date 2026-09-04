@@ -216,44 +216,24 @@ export function PreFlightSetupWizard({
 
     setError(null);
     setUploadingFile(true);
-    setUploadProgress(20);
+    setUploadProgress(10);
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("context", "live_class_presentation");
-      formData.append("scheduleId", scheduleId);
-
-      setUploadProgress(45);
-      const res = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
+      const { uploadFileToR2 } = await import("@/lib/storage/upload-client");
+      const result = await uploadFileToR2(file, {
+        prefix: "modules",
+        fileType: isPpt ? "DOCUMENT" : "PDF",
+        subPath: `live-classes/${scheduleId}`,
+        visibility: "PROTECTED",
+        onProgress: (p) => setUploadProgress(p),
       });
 
-      setUploadProgress(80);
-      let uploadedUrl: string | null = null;
-      let uploadedName = file.name;
-
-      try {
-        const json = await res.json();
-        uploadedUrl = json.data?.url || json.url;
-        if (json.data?.name) uploadedName = json.data.name;
-      } catch (jsonErr) {
-        console.warn("JSON parse warning:", jsonErr);
-      }
-
-      if (!res.ok || !uploadedUrl) {
-        // Fallback: create object URL or base64 locally so the class proceeds seamlessly
-        const localBlobUrl = URL.createObjectURL(file);
-        uploadedUrl = localBlobUrl;
-      }
-
-      setPresentationUrl(uploadedUrl);
-      setPresentationName(uploadedName);
+      setPresentationUrl(result.url || URL.createObjectURL(file));
+      setPresentationName(result.filename);
       setPresentationType(isPpt ? "PPTX" : "PDF");
       setUploadProgress(100);
     } catch (err: any) {
-      console.warn("Upload error, using local file preview:", err);
+      console.warn("Direct R2 upload fallback to local blob:", err);
       try {
         const localBlobUrl = URL.createObjectURL(file);
         setPresentationUrl(localBlobUrl);
