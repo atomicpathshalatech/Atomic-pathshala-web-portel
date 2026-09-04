@@ -3579,5 +3579,106 @@ model ExtractedQuestion {
   @@map("extracted_questions")
 }
 
+// ==========================================================================
+// MEDIA, LIVE CLASS, R2 ASSET & CHAT INFRASTRUCTURE MODELS
+// ==========================================================================
 
+model FileAsset {
+  id               String   @id @default(uuid())
+  ownerId          String
+  fileType         String   // PDF, IMAGE, DOCUMENT, DPP, NOTES, WHITEBOARD_SNAPSHOT, PROFILE_IMAGE, THUMBNAIL
+  storageProvider  String   @default("r2")
+  bucket           String   @default("atomic-pathshala")
+  storageKey       String   @unique
+  originalFilename String
+  mimeType         String
+  sizeBytes        BigInt   @default(0)
+  status           String   @default("ACTIVE") // PENDING_UPLOAD, ACTIVE, DELETED
+  visibility       String   @default("PROTECTED") // PUBLIC, PROTECTED, PRIVATE
+  metadata         Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
+  @@index([ownerId])
+  @@index([fileType])
+  @@index([status])
+  @@index([visibility])
+  @@map("file_assets")
+}
+
+model VideoAsset {
+  id               String   @id @default(uuid())
+  lectureId        String?
+  liveClassId      String?
+  provider         String   @default("publitio") // publitio, bunny, youtube
+  providerVideoId  String
+  status           String   @default("READY") // UPLOADING, PROCESSING, READY, FAILED
+  durationSeconds  Int?
+  thumbnailUrl     String?
+  hlsUrl           String?
+  mp4Url           String?
+  playbackMetadata Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([lectureId])
+  @@index([liveClassId])
+  @@index([provider])
+  @@index([status])
+  @@map("video_assets")
+}
+
+model LiveClass {
+  id                 String    @id @default(uuid())
+  lectureId          String?
+  batchScheduleId    String?   @unique
+  roomName           String    @unique // e.g. atomic-live-<UUID>
+  teacherId          String
+  status             String    @default("SCHEDULED") // SCHEDULED, LIVE, ENDED, RECORDING_PROCESSING, PUBLISHED
+  classType          String    @default("APP_LIVE") // APP_LIVE, YOUTUBE, RECORDED_APP
+  youtubeVideoId     String?
+  scheduledStart     DateTime
+  scheduledEnd       DateTime
+  actualStart        DateTime?
+  actualEnd          DateTime?
+  recordingStatus    String    @default("NONE") // NONE, RECORDING, PROCESSING, AVAILABLE, FAILED
+  recordingVideoId   String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([teacherId])
+  @@index([status])
+  @@index([classType])
+  @@index([scheduledStart])
+  @@map("live_classes")
+}
+
+model WhiteboardSnapshot {
+  id           String   @id @default(uuid())
+  liveClassId  String
+  r2FileId     String
+  snapshotType String   @default("FINAL") // PERIODIC, FINAL
+  pageCount    Int      @default(1)
+  createdAt    DateTime @default(now())
+
+  @@index([liveClassId])
+  @@index([r2FileId])
+  @@map("whiteboard_snapshots")
+}
+
+model LiveChatMessage {
+  id             String    @id @default(uuid())
+  liveClassId    String
+  userId         String
+  authorName     String
+  authorRole     String    @default("STUDENT")
+  message        String
+  isAnnouncement Boolean   @default(false)
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([liveClassId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("live_chat_messages")
+}
