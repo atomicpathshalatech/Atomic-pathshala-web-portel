@@ -38,6 +38,11 @@ export async function POST(
       },
     });
 
+    await prisma.batchSchedule.update({
+      where: { id: params.scheduleId },
+      data: { status: "COMPLETED" },
+    });
+
     // Notify all participants that class has ended
     try {
       await pusherServer.trigger(sessionChannel(wbSession.id), WB_EVENTS.SESSION_ENDED, {

@@ -74,6 +74,11 @@ export async function POST(
       },
     });
 
+    await prisma.batchSchedule.update({
+      where: { id: params.scheduleId },
+      data: { status: "LIVE" },
+    });
+
     // Notify all participants that class is now LIVE
     try {
       await pusherServer.trigger(sessionChannel(wbSession.id), WB_EVENTS.LIVE_PHASE_CHANGED, {
