@@ -231,14 +231,15 @@ export function PreFlightSetupWizard({
       });
 
       setUploadProgress(80);
-      const data = await res.json();
+      const json = await res.json();
+      const uploadedUrl = json.data?.url || json.url;
 
-      if (!res.ok || !data.url) {
-        throw new Error(data.message || "Failed to upload presentation file.");
+      if (!res.ok || !uploadedUrl) {
+        throw new Error(json.error || json.message || "Failed to upload presentation file.");
       }
 
-      setPresentationUrl(data.url);
-      setPresentationName(file.name);
+      setPresentationUrl(uploadedUrl);
+      setPresentationName(json.data?.name || file.name);
       setPresentationType(isPpt ? "PPTX" : "PDF");
       setUploadProgress(100);
     } catch (err: any) {
