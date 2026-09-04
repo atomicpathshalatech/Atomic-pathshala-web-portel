@@ -23,10 +23,10 @@ export function ResultOverviewCard({
   return (
     <div className="space-y-6">
       {/* Top Banner: Score, Rank, Percentile, and NEET 2026 Prediction */}
-      <div className="rounded-3xl p-6 sm:p-8 bg-gradient-to-br from-slate-900 via-blue-950 to-indigo-950 text-white shadow-xl relative overflow-hidden border border-blue-900/40">
+      <div className="rounded-3xl p-6 sm:p-8 bg-gradient-to-r from-blue-700 via-indigo-700 to-violet-800 text-white shadow-xl shadow-indigo-950/15 relative overflow-hidden border-2 border-indigo-400/30">
         {/* Subtle decorative circles */}
-        <div className="absolute top-0 right-0 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-0 w-60 h-60 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none" />
+        <div className="absolute top-0 right-0 w-80 h-80 bg-white/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-60 h-60 bg-emerald-400/20 rounded-full blur-2xl pointer-events-none" />
 
         <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
           {/* Left: Test Name, Raw Score & NEET Equivalent Score */}

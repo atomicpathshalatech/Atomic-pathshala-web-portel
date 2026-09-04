@@ -353,8 +353,26 @@ export function StudentShell({
             </nav>
           </div>
 
-          {/* Bottom Sidebar: Target Goal Badge + Settings */}
-          <div className="space-y-2 pt-4 border-t border-slate-100 dark:border-slate-800">
+          {/* Bottom Sidebar: Target Goal Badge + Settings + Optional Upgrade */}
+          <div className="space-y-2.5 pt-4 border-t border-slate-100 dark:border-slate-800">
+            {!hasActiveSubscription && (
+              <div className="bg-gradient-to-r from-blue-700 via-indigo-600 to-blue-600 text-white p-3.5 rounded-2xl shadow-sm border border-blue-400/30 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-base">lock_open</span>
+                  <span className="text-xs font-bold leading-tight">Unlock All Batches</span>
+                </div>
+                <p className="text-[10px] text-white/80 leading-relaxed">
+                  Get full access to all crash courses, test series &amp; personal mentorship.
+                </p>
+                <Link
+                  href="/subscription"
+                  className="block text-center bg-white text-blue-700 font-bold px-3 py-1.5 rounded-xl shadow-xs hover:bg-blue-50 active:scale-95 transition-all text-xs"
+                >
+                  Upgrade Now
+                </Link>
+              </div>
+            )}
+
             <div className="bg-slate-50 dark:bg-slate-800/70 p-3 rounded-2xl flex items-center gap-3 border border-slate-200/60 dark:border-slate-700/60">
               <div className="w-10 h-10 rounded-xl bg-orange-100 dark:bg-orange-950/60 text-orange-600 dark:text-orange-400 flex items-center justify-center flex-shrink-0">
                 <span className="material-symbols-outlined text-[20px]">military_tech</span>
@@ -379,35 +397,35 @@ export function StudentShell({
           </div>
         </aside>
 
-        {/* Content Area (with left margin on lg: screens) */}
-        <main className="flex-1 lg:pl-64 pb-44 w-full">
+        {/* Content Area (Responsive padding across Mobile, Tablet, Laptop) */}
+        <main className="flex-1 lg:pl-64 pb-32 lg:pb-12 w-full">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
             {children}
           </div>
         </main>
       </div>
 
-      {/* Floating Subscription Upgrade Banner */}
+      {/* Floating Subscription Upgrade Banner (Mobile & Tablet only) */}
       {!hasActiveSubscription && (
-        <aside className="fixed bottom-24 left-1/2 -translate-x-1/2 w-full max-w-4xl px-4 z-40 pointer-events-auto">
-          <div className="rounded-2xl bg-gradient-to-r from-blue-700 via-indigo-600 to-blue-600 text-white shadow-xl p-3 px-5 flex items-center justify-between border border-blue-400/30 backdrop-blur-md">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center text-white flex-shrink-0 shadow-inner">
-                <span className="material-symbols-outlined text-[20px]">lock_open</span>
+        <aside className="lg:hidden fixed bottom-20 left-0 right-0 max-w-lg mx-auto px-4 z-40 pointer-events-auto">
+          <div className="rounded-2xl bg-gradient-to-r from-blue-700 via-indigo-600 to-blue-600 text-white shadow-xl p-3 px-4 flex items-center justify-between border border-blue-400/30 backdrop-blur-md">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center text-white flex-shrink-0 shadow-inner">
+                <span className="material-symbols-outlined text-[18px]">lock_open</span>
               </div>
               <div className="flex flex-col min-w-0">
-                <span className="text-xs sm:text-sm font-bold leading-tight truncate">
+                <span className="text-xs font-bold leading-tight truncate">
                   Get access to all batches
                 </span>
-                <span className="text-[11px] sm:text-xs text-white/85 truncate">
-                  Unlock 100+ live crash courses, test series &amp; personal mentorship
+                <span className="text-[10px] text-white/85 truncate">
+                  Unlock 100+ live crash courses &amp; test series
                 </span>
               </div>
             </div>
-            <div className="flex items-center gap-3 flex-shrink-0 ml-4">
+            <div className="flex items-center gap-2 flex-shrink-0 ml-2">
               <Link
                 href="/subscription"
-                className="bg-white text-blue-700 font-bold px-5 py-2 rounded-xl shadow hover:bg-blue-50 active:scale-95 transition-all text-xs"
+                className="bg-white text-blue-700 font-bold px-3.5 py-1.5 rounded-xl shadow hover:bg-blue-50 active:scale-95 transition-all text-xs"
               >
                 Upgrade
               </Link>
@@ -416,11 +434,11 @@ export function StudentShell({
         </aside>
       )}
 
-      {/* Ultra-Sleek Floating Pill Dock Navigation Bar */}
-      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-full max-w-4xl px-4 z-50 pointer-events-auto">
+      {/* Mobile & Tablet Bottom Navigation Dock (Hidden on Laptop/Desktop where Left Sidebar is active) */}
+      <div className="lg:hidden fixed bottom-3 left-0 right-0 max-w-lg mx-auto px-3 z-50 pointer-events-auto">
         <nav
           id="bottom-dock-nav"
-          className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-200/80 dark:border-slate-800 shadow-2xl rounded-2xl p-2 flex items-center justify-around gap-2"
+          className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200/90 dark:border-slate-800 shadow-2xl rounded-2xl p-1.5 flex items-center justify-around gap-1"
         >
           {DOCK_ITEMS.map((item) => {
             const active = isActive(pathname, item.href);
@@ -428,16 +446,16 @@ export function StudentShell({
               <Link
                 key={item.href}
                 href={item.href}
-                className={`dock-item rounded-xl px-4 sm:px-5 py-2.5 flex flex-col items-center justify-center gap-1 group select-none flex-1 text-center transition-all duration-200 ease-out hover:scale-105 active:scale-95 ${
+                className={`dock-item rounded-xl px-2.5 py-2 flex flex-col items-center justify-center gap-1 group select-none flex-1 text-center transition-all duration-200 ease-out active:scale-95 ${
                   active
-                    ? "active bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/25 shadow-sm font-semibold"
+                    ? "active bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/25 shadow-xs font-semibold"
                     : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 border border-transparent"
                 }`}
               >
-                <span className="material-symbols-outlined text-[22px] transition-transform duration-200 group-hover:-translate-y-0.5">
+                <span className="material-symbols-outlined text-[20px] transition-transform duration-200 group-hover:-translate-y-0.5">
                   {item.icon}
                 </span>
-                <span className="text-[11px] font-bold leading-none">{item.label}</span>
+                <span className="text-[10px] font-bold leading-none">{item.label}</span>
               </Link>
             );
           })}
