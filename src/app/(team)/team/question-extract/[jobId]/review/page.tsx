@@ -21,7 +21,9 @@ export default async function ReviewRequiredQueuePage({
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) redirect("/login");
 
-  const canRead = await hasPermission(session.user.id, PERMISSIONS.QUESTION_READ);
+  const canRead =
+    (await hasPermission(session.user.id, PERMISSIONS.QUESTION_READ)) ||
+    (await hasPermission(session.user.id, PERMISSIONS.TEAM_PORTAL_ACCESS));
   if (!canRead) redirect("/team");
 
   const job = await prisma.extractionJob.findUnique({

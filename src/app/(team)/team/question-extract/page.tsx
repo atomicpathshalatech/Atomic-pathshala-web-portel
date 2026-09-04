@@ -31,7 +31,9 @@ export default async function QuestionExtractHubPage({
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) redirect("/login");
 
-  const canRead = await hasPermission(session.user.id, PERMISSIONS.QUESTION_READ);
+  const canRead =
+    (await hasPermission(session.user.id, PERMISSIONS.QUESTION_READ)) ||
+    (await hasPermission(session.user.id, PERMISSIONS.TEAM_PORTAL_ACCESS));
   if (!canRead) redirect("/team");
 
   const where: any = {};
@@ -49,19 +51,34 @@ export default async function QuestionExtractHubPage({
     ];
   }
 
-  const [jobs, totalJobs, totalVerified, totalReview, totalDraft] = await Promise.all([
-    prisma.extractionJob.findMany({
-      where,
-      include: {
-        createdBy: { select: { name: true, email: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    }),
-    prisma.extractionJob.count(),
-    prisma.extractedQuestion.count({ where: { status: "VERIFIED" } }),
-    prisma.extractedQuestion.count({ where: { status: "REVIEW_REQUIRED" } }),
-    prisma.extractedQuestion.count({ where: { status: "IMPORTED" } }),
-  ]);
+  let jobs: any[] = [];
+  let totalJobs = 0;
+  let totalVerified = 0;
+  let totalReview = 0;
+  let totalDraft = 0;
+
+  try {
+    const [jobsRes, totalJobsRes, totalVerifiedRes, totalReviewRes, totalDraftRes] = await Promise.all([
+      prisma.extractionJob.findMany({
+        where,
+        include: {
+          createdBy: { select: { name: true, email: true } },
+        },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.extractionJob.count(),
+      prisma.extractedQuestion.count({ where: { status: "VERIFIED" } }),
+      prisma.extractedQuestion.count({ where: { status: "REVIEW_REQUIRED" } }),
+      prisma.extractedQuestion.count({ where: { status: "IMPORTED" } }),
+    ]);
+    jobs = jobsRes;
+    totalJobs = totalJobsRes;
+    totalVerified = totalVerifiedRes;
+    totalReview = totalReviewRes;
+    totalDraft = totalDraftRes;
+  } catch (err) {
+    console.error("[Question Extract Hub] Query error:", err);
+  }
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
