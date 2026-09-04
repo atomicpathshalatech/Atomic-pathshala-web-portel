@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { computeISTScheduleDates } from "@/lib/date-utils";
 
 export async function PATCH(
   request: NextRequest,
@@ -39,6 +40,25 @@ export async function PATCH(
       },
     });
 
+    // Auto-sync BatchSchedule with accurate IST dates
+    try {
+      const { startsAt, endsAt } = computeISTScheduleDates(
+        updated.scheduledDate,
+        updated.startTime,
+        updated.durationMin || 60
+      );
+      await prisma.batchSchedule.updateMany({
+        where: { id: updated.id },
+        data: {
+          title: updated.title,
+          startsAt,
+          endsAt,
+        },
+      });
+    } catch {
+      // Non-blocking sync
+    }
+
     await prisma.auditLog.create({
       data: {
         userId: session.user.id,
@@ -72,6 +92,14 @@ export async function DELETE(
     await prisma.lecture.delete({
       where: { id: params.lectureId },
     });
+
+    try {
+      await prisma.batchSchedule.deleteMany({
+        where: { id: params.lectureId },
+      });
+    } catch {
+      // Ignore
+    }
 
     await prisma.auditLog.create({
       data: {

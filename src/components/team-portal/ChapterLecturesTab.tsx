@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import { MoreVertical, Edit2, FileText, Trash2, Video, Calendar, Clock, Timer, Check, Sparkles } from "lucide-react";
+import { formatISTDate, formatISTTime, computeISTScheduleDates } from "@/lib/date-utils";
 
 export interface LectureItem {
   id: string;
@@ -293,13 +294,13 @@ export function ChapterLecturesTab({
         <div className="space-y-3">
           {lectures.map((l, idx) => {
             const displayOrder = l.order || idx + 1;
-            const formattedDate = l.scheduledDate
-              ? new Date(l.scheduledDate).toLocaleDateString("en-IN", {
-                  day: "numeric",
-                  month: "short",
-                  year: "numeric",
-                })
-              : "Date Not Set";
+            const { startsAt, endsAt } = computeISTScheduleDates(
+              l.scheduledDate,
+              l.startTime,
+              l.durationMin || 60
+            );
+            const formattedDate = l.scheduledDate ? formatISTDate(startsAt) : "Date Not Set";
+            const formattedTime = l.startTime ? `${formatISTTime(startsAt)} – ${formatISTTime(endsAt)} (IST)` : null;
 
             return (
               <div
@@ -334,10 +335,10 @@ export function ChapterLecturesTab({
                         <span>{formattedDate}</span>
                       </span>
 
-                      {l.startTime && (
+                      {formattedTime && (
                         <span className="flex items-center gap-1 text-slate-700 dark:text-slate-300 font-medium">
                           <Clock className="w-3.5 h-3.5 text-blue-500" />
-                          <span>{l.startTime}</span>
+                          <span>{formattedTime}</span>
                         </span>
                       )}
 

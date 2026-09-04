@@ -6,7 +6,8 @@ import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { getMasterChapterById } from "@/lib/batch/master-chapters";
-import { calculateEndTime, checkScheduleConflict } from "@/lib/batch/schedule-conflict";
+import { checkScheduleConflict } from "@/lib/batch/schedule-conflict";
+import { computeISTScheduleDates } from "@/lib/date-utils";
 import { z } from "zod";
 
 const importChapterSchema = z.object({
@@ -47,10 +48,7 @@ export async function POST(
       batch.teachers[0]?.teacherId ||
       null;
 
-    // Base start date: tomorrow or chosen date
-    const baseDate = input.startDate ? new Date(input.startDate) : new Date(Date.now() + 24 * 60 * 60 * 1000);
-    const [startHour, startMin] = input.dailyStartTime.split(":").map(Number);
-    baseDate.setHours(startHour || 10, startMin || 0, 0, 0);
+    const rawBaseDate = input.startDate ? new Date(input.startDate) : new Date(Date.now() + 24 * 60 * 60 * 1000);
 
     const createdSchedules = [];
 
@@ -70,8 +68,12 @@ export async function POST(
       const lecture = masterChapter.lectures[i];
       if (!lecture) continue;
 
-      const startsAt = new Date(baseDate.getTime() + i * 24 * 60 * 60 * 1000);
-      const endsAt = calculateEndTime(startsAt, input.durationMinutes || lecture.durationMinutes);
+      const targetDay = new Date(rawBaseDate.getTime() + i * 24 * 60 * 60 * 1000);
+      const { startsAt, endsAt } = computeISTScheduleDates(
+        targetDay,
+        input.dailyStartTime || "10:00",
+        input.durationMinutes || lecture.durationMinutes || 60
+      );
 
       // Check conflict before creating
       const conflict = await checkScheduleConflict({

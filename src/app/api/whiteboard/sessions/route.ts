@@ -80,9 +80,20 @@ export async function POST(request: NextRequest) {
           (await prisma.batch.findFirst());
         if (defaultBatch) {
           try {
+            const { computeISTScheduleDates } = await import("@/lib/date-utils");
+            const { startsAt, endsAt } = computeISTScheduleDates(
+              lecture.scheduledDate,
+              lecture.startTime,
+              lecture.durationMin || 60
+            );
+
             schedule = await prisma.batchSchedule.upsert({
               where: { id: lecture.id },
-              update: {},
+              update: {
+                title: lecture.title,
+                startsAt,
+                endsAt,
+              },
               create: {
                 id: lecture.id,
                 title: lecture.title,
@@ -90,8 +101,8 @@ export async function POST(request: NextRequest) {
                 batchId: defaultBatch.id,
                 teacherId: lecture.teacherId,
                 chapterId: lecture.chapterId,
-                startsAt: lecture.scheduledDate ? new Date(lecture.scheduledDate) : new Date(),
-                endsAt: new Date(Date.now() + (lecture.durationMin || 60) * 60 * 1000),
+                startsAt,
+                endsAt,
                 createdById: session.user.id,
               },
             });

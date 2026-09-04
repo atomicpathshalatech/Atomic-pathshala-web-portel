@@ -182,3 +182,40 @@ export function getISTDayKey(date: Date | string | number): string {
   if (isNaN(d.getTime())) return "";
   return d.toLocaleDateString("en-CA", { timeZone: IST_TIMEZONE });
 }
+
+/**
+ * Calculates exact startsAt and endsAt in UTC given an Indian date, time string (e.g. "10:00" or "10:00 AM"),
+ * and duration in minutes.
+ * Guarantees identical time rendering in both Teacher and Student portals.
+ */
+export function computeISTScheduleDates(
+  scheduledDate: Date | string | null | undefined,
+  startTimeStr: string | null | undefined,
+  durationMin: number = 60
+): { startsAt: Date; endsAt: Date } {
+  const dateBase = scheduledDate ? new Date(scheduledDate) : new Date();
+  const yyyyMmDd = dateBase.toLocaleDateString("en-CA", { timeZone: IST_TIMEZONE });
+
+  let hh = 10;
+  let mm = 0;
+  if (startTimeStr) {
+    const cleanTime = startTimeStr.trim();
+    const match = cleanTime.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+    if (match && match[1] && match[2]) {
+      let rawH = parseInt(match[1], 10);
+      const rawM = parseInt(match[2], 10);
+      const meridiem = match[3]?.toUpperCase();
+      if (meridiem === "PM" && rawH < 12) rawH += 12;
+      if (meridiem === "AM" && rawH === 12) rawH = 0;
+      hh = rawH;
+      mm = rawM;
+    }
+  }
+
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  const isoWithOffset = `${yyyyMmDd}T${pad(hh)}:${pad(mm)}:00+05:30`;
+  const startsAt = new Date(isoWithOffset);
+  const endsAt = new Date(startsAt.getTime() + (durationMin || 60) * 60 * 1000);
+
+  return { startsAt, endsAt };
+}

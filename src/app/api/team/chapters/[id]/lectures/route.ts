@@ -7,6 +7,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { LectureStatus } from "@prisma/client";
 import { getChapterSequenceState } from "@/lib/chapters/sequence";
+import { computeISTScheduleDates } from "@/lib/date-utils";
 
 export async function GET(
   request: NextRequest,
@@ -138,6 +139,41 @@ export async function POST(
         teacher: { include: { user: { select: { name: true } } } },
       },
     });
+
+    // Auto-sync BatchSchedule with accurate IST dates
+    try {
+      const { startsAt, endsAt } = computeISTScheduleDates(parsedDate, startTime, parsedDuration);
+      const defaultBatch =
+        (await prisma.batch.findFirst({ where: { status: "ACTIVE" } })) ||
+        (await prisma.batch.findFirst());
+      if (defaultBatch) {
+        await prisma.batchSchedule.upsert({
+          where: { id: lecture.id },
+          update: {
+            title: lecture.title,
+            subject: chapter.subject?.title || null,
+            teacherId: lecture.teacherId,
+            chapterId: chapter.id,
+            startsAt,
+            endsAt,
+          },
+          create: {
+            id: lecture.id,
+            title: lecture.title,
+            subject: chapter.subject?.title || null,
+            type: "LIVE_CLASS",
+            batchId: defaultBatch.id,
+            teacherId: lecture.teacherId,
+            chapterId: chapter.id,
+            startsAt,
+            endsAt,
+            createdById: session.user.id,
+          },
+        });
+      }
+    } catch {
+      // Non-blocking sync
+    }
 
     await prisma.auditLog.create({
       data: {

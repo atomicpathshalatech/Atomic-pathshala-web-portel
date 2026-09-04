@@ -32,6 +32,7 @@ import { LectureItem } from "./ChapterLecturesTab";
 import { DppItem } from "./ChapterDppsTab";
 import { TestItem } from "./ChapterTestsTab";
 import { ChapterReviewHistoryTimeline, ReviewHistoryItem } from "./ChapterReviewHistoryTimeline";
+import { formatISTDate, formatISTTime, computeISTScheduleDates } from "@/lib/date-utils";
 
 export interface UnifiedChapterScheduleTimelineProps {
   chapterId: string;
@@ -148,22 +149,20 @@ export function UnifiedChapterScheduleTimeline({
       const lec = lectures[i];
       if (lec) {
         let dateFormatted = "";
-        if (lec.scheduledDate) {
-          const d = new Date(lec.scheduledDate);
-          dateFormatted = d.toLocaleDateString("en-IN", {
-            day: "numeric",
-            month: "short",
-          });
-        }
-
         let timeFormatted = "";
-        if (lec.startTime) {
-          const [hStr, mStr] = lec.startTime.split(":");
-          const h = parseInt(hStr || "0", 10);
-          const m = mStr || "00";
-          const ampm = h >= 12 ? "PM" : "AM";
-          const h12 = h % 12 || 12;
-          timeFormatted = `${h12}:${m} ${ampm}`;
+
+        if (lec.scheduledDate || lec.startTime) {
+          const { startsAt, endsAt } = computeISTScheduleDates(
+            lec.scheduledDate,
+            lec.startTime,
+            lec.durationMin || 60
+          );
+          if (lec.scheduledDate) {
+            dateFormatted = formatISTDate(startsAt);
+          }
+          if (lec.startTime) {
+            timeFormatted = `${formatISTTime(startsAt)} – ${formatISTTime(endsAt)} (IST)`;
+          }
         }
 
         entries.push({

@@ -40,14 +40,23 @@ export default async function TeacherLiveClassPage({
         (await prisma.batch.findFirst());
 
       if (defaultBatch) {
-        // Upsert BatchSchedule for this lecture
+        // Upsert BatchSchedule for this lecture with accurate IST timing
         try {
+          const { computeISTScheduleDates } = await import("@/lib/date-utils");
+          const { startsAt, endsAt } = computeISTScheduleDates(
+            lecture.scheduledDate,
+            lecture.startTime,
+            lecture.durationMin || 60
+          );
+
           schedule = await prisma.batchSchedule.upsert({
             where: { id: lecture.id },
             update: {
               title: lecture.title,
               chapterId: lecture.chapterId,
               teacherId: lecture.teacherId,
+              startsAt,
+              endsAt,
             },
             create: {
               id: lecture.id,
@@ -56,8 +65,8 @@ export default async function TeacherLiveClassPage({
               batchId: defaultBatch.id,
               teacherId: lecture.teacherId,
               chapterId: lecture.chapterId,
-              startsAt: lecture.scheduledDate ? new Date(lecture.scheduledDate) : new Date(),
-              endsAt: new Date(Date.now() + (lecture.durationMin || 60) * 60 * 1000),
+              startsAt,
+              endsAt,
               createdById: session.user.id,
             },
             include: { batch: true },
