@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import { lectureIssueReportSchema } from "@/lib/validation/lecture";
 import { FollowTeacherButton } from "@/components/student/FollowTeacherButton";
+import { LectureVideoPlayer } from "@/components/video-player/LectureVideoPlayer";
 
 type Props = {
   lectureId: string;
@@ -491,246 +492,50 @@ export function LecturePlayer({
 
       <div className="flex flex-col lg:flex-row gap-4">
         {/* Video area */}
-        <div
-          ref={containerRef}
-          className="relative flex-1 min-w-0 bg-black rounded-2xl overflow-hidden aspect-video group shadow-lg"
-        >
+        <div className="relative flex-1 min-w-0 bg-black rounded-2xl overflow-hidden aspect-video shadow-xl">
           {slideMode && slidesUrl ? (
-            <iframe src={slidesUrl} title="Slides" className="w-full h-full bg-white" />
+            <div className="relative w-full h-full bg-white">
+              <iframe src={slidesUrl} title="Slides" className="w-full h-full bg-white" />
+              <button
+                type="button"
+                onClick={() => setSlideMode(false)}
+                className="absolute top-3 left-3 flex items-center gap-1.5 bg-black/75 text-white text-xs font-bold px-3 py-1.5 rounded-xl hover:bg-black transition-colors shadow-lg z-20 cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-base">videocam</span>
+                Return to Video
+              </button>
+            </div>
           ) : (
-            <video
-              ref={videoRef}
-              src={videoUrl}
-              className="w-full h-full cursor-pointer"
-              onClick={togglePlay}
-              onPlay={() => setIsPlaying(true)}
-              onPause={() => setIsPlaying(false)}
-              onLoadedMetadata={(e) => {
-                setDuration(e.currentTarget.duration);
-                e.currentTarget.playbackRate = playbackRate;
+            <LectureVideoPlayer
+              mode="recorded"
+              lectureId={lectureId}
+              title={title}
+              subjectTitle={subjectTitle}
+              educatorName={teacherName}
+              videoUrl={videoUrl}
+              onBookmarkAdd={(t) => {
+                addBookmark(t);
+                setSidePanelTab("bookmarks");
               }}
-              onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+              onTimeUpdate={(cur, dur) => {
+                setCurrentTime(cur);
+                setDuration(dur);
+              }}
               onEnded={markComplete}
+              onProgressPercentage={(pct) => {
+                if (pct >= 90 && !completed) {
+                  markComplete();
+                }
+              }}
+              isCompleted={completed}
             />
           )}
 
           {/* Educator webcam PiP */}
           {!slideMode && educatorVideoUrl && educatorVideoOn && (
-            <div className="absolute top-3 right-3 w-28 sm:w-36 aspect-video rounded-lg overflow-hidden shadow-lg ring-2 ring-white/20">
+            <div className="absolute top-3 right-3 w-28 sm:w-36 aspect-video rounded-xl overflow-hidden shadow-2xl ring-2 ring-white/20 z-20 pointer-events-none">
               <video src={educatorVideoUrl} className="w-full h-full object-cover" muted loop autoPlay playsInline />
             </div>
-          )}
-
-          {/* Custom controls overlay */}
-          {!slideMode && (
-            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent px-3 sm:px-4 pt-10 pb-2 transition-opacity">
-              {/* Seek bar with bookmark markers */}
-              <div className="relative mb-2 flex items-center">
-                <input
-                  type="range"
-                  min={0}
-                  max={duration || 0}
-                  step={0.1}
-                  value={currentTime}
-                  onChange={(e) => handleSeekBarChange(Number(e.target.value))}
-                  className="w-full h-1.5 accent-primary cursor-pointer relative z-10"
-                  style={{
-                    background: `linear-gradient(to right, var(--color-primary, #6750A4) ${progressPct}%, rgba(255,255,255,0.3) ${progressPct}%)`,
-                  }}
-                  aria-label="Seek"
-                />
-                {/* Visual Bookmark Dots on Timeline */}
-                {duration > 0 &&
-                  bookmarks.map((bm) => {
-                    const leftPct = (bm.timestamp / duration) * 100;
-                    return (
-                      <div
-                        key={bm.id}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          seekToTimestamp(bm.timestamp);
-                        }}
-                        title={`${formatTime(bm.timestamp)}: ${bm.note}`}
-                        style={{ left: `${leftPct}%` }}
-                        className="absolute w-2 h-2 rounded-full bg-amber-400 -translate-x-1/2 z-20 cursor-pointer hover:scale-150 transition-transform shadow"
-                      />
-                    );
-                  })}
-              </div>
-
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1 sm:gap-2">
-                  <button
-                    type="button"
-                    onClick={() => seekBy(-10)}
-                    className="w-8 h-8 flex items-center justify-center rounded-full text-white hover:bg-white/10 transition-colors"
-                    aria-label="Rewind 10 seconds"
-                    title="Rewind 10s (J)"
-                  >
-                    <span className="material-symbols-outlined text-xl">replay_10</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={togglePlay}
-                    className="w-9 h-9 flex items-center justify-center rounded-full text-white hover:bg-white/10 transition-colors"
-                    aria-label={isPlaying ? "Pause" : "Play"}
-                    title="Play/Pause (Space)"
-                  >
-                    <span className="material-symbols-outlined text-2xl">{isPlaying ? "pause" : "play_arrow"}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => seekBy(10)}
-                    className="w-8 h-8 flex items-center justify-center rounded-full text-white hover:bg-white/10 transition-colors"
-                    aria-label="Forward 10 seconds"
-                    title="Forward 10s (L)"
-                  >
-                    <span className="material-symbols-outlined text-xl">forward_10</span>
-                  </button>
-                  <span className="text-white text-label-sm font-label-sm ml-1 hidden sm:inline">
-                    {formatTime(currentTime)} / {formatTime(duration)}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-1 sm:gap-2">
-                  {/* Bookmark Button */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      addBookmark();
-                      setSidePanelTab("bookmarks");
-                    }}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-colors"
-                    title="Add Bookmark at current timestamp (B)"
-                  >
-                    <span className="material-symbols-outlined text-sm text-amber-400">bookmark_add</span>
-                    <span className="hidden sm:inline">Bookmark</span>
-                  </button>
-
-                  <div className="hidden sm:flex items-center gap-1.5">
-                    <button type="button" onClick={toggleMute} className="text-white hover:opacity-80">
-                      <span className="material-symbols-outlined text-lg">{isMuted ? "volume_off" : "volume_up"}</span>
-                    </button>
-                    <input
-                      type="range"
-                      min={0}
-                      max={1}
-                      step={0.05}
-                      value={isMuted ? 0 : volume}
-                      onChange={(e) => handleVolumeChange(Number(e.target.value))}
-                      className="w-16 accent-primary cursor-pointer"
-                      aria-label="Volume"
-                    />
-                  </div>
-
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setShowSettings((v) => !v)}
-                      className="w-8 h-8 flex items-center justify-center rounded-full text-white hover:bg-white/10 transition-colors"
-                      aria-label="Settings"
-                    >
-                      <span className="material-symbols-outlined text-xl">settings</span>
-                    </button>
-
-                    {showSettings && (
-                      <div className="absolute bottom-10 right-0 w-64 bg-surface rounded-xl shadow-xl border border-outline-variant/20 py-1.5 text-on-surface z-30">
-                        <div className="relative">
-                          <button
-                            type="button"
-                            onClick={() => setShowPlaybackMenu((v) => !v)}
-                            className="w-full flex items-center justify-between px-4 py-2 text-body-md hover:bg-primary/5 transition-colors"
-                          >
-                            <span>Playback speed</span>
-                            <span className="text-on-surface-variant text-label-sm font-semibold">{playbackRate}x</span>
-                          </button>
-                          {showPlaybackMenu && (
-                            <div className="px-2 pb-1 grid grid-cols-4 gap-1">
-                              {PLAYBACK_RATES.map((rate) => (
-                                <button
-                                  key={rate}
-                                  type="button"
-                                  onClick={() => handlePlaybackRateChange(rate)}
-                                  className={`text-label-sm rounded-md py-1 transition-colors ${
-                                    rate === playbackRate
-                                      ? "bg-primary text-on-primary font-bold"
-                                      : "hover:bg-primary/5 text-on-surface-variant"
-                                  }`}
-                                >
-                                  {rate}x
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-
-                        {educatorVideoUrl && (
-                          <button
-                            type="button"
-                            onClick={() => setEducatorVideoOn((v) => !v)}
-                            className="w-full flex items-center justify-between px-4 py-2 text-body-md hover:bg-primary/5 transition-colors"
-                          >
-                            <span>Educator video</span>
-                            <span className="text-on-surface-variant text-label-sm">{educatorVideoOn ? "On" : "Off"}</span>
-                          </button>
-                        )}
-
-                        {slidesUrl && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSlideMode((v) => !v);
-                              setShowSettings(false);
-                            }}
-                            className="w-full flex items-center justify-between px-4 py-2 text-body-md hover:bg-primary/5 transition-colors"
-                          >
-                            <span>Slide mode</span>
-                            <span className="text-on-surface-variant text-label-sm">{slideMode ? "On" : "Off"}</span>
-                          </button>
-                        )}
-
-                        <div className="h-px bg-outline-variant/20 my-1" />
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowSettings(false);
-                            setShowReportModal(true);
-                          }}
-                          className="w-full flex items-center gap-2 px-4 py-2 text-body-md text-error hover:bg-error-container/20 transition-colors"
-                        >
-                          <span className="material-symbols-outlined text-lg">flag</span>
-                          Report an issue
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={toggleFullscreen}
-                    className="w-8 h-8 flex items-center justify-center rounded-full text-white hover:bg-white/10 transition-colors"
-                    aria-label="Fullscreen"
-                    title="Fullscreen (F)"
-                  >
-                    <span className="material-symbols-outlined text-xl">
-                      {isFullscreen ? "fullscreen_exit" : "fullscreen"}
-                    </span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {slideMode && (
-            <button
-              type="button"
-              onClick={() => setSlideMode(false)}
-              className="absolute top-3 left-3 flex items-center gap-1.5 bg-black/60 text-white text-label-sm px-3 py-1.5 rounded-lg hover:bg-black/80 transition-colors"
-            >
-              <span className="material-symbols-outlined text-lg">movie</span>
-              Back to video
-            </button>
           )}
         </div>
 

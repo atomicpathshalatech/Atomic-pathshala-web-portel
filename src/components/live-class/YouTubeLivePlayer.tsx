@@ -1,6 +1,6 @@
 "use client";
 
-import { buildYouTubeEmbedUrl } from "@/lib/live-class/youtube";
+import { LectureVideoPlayer } from "@/components/video-player/LectureVideoPlayer";
 
 export type YouTubeLivePlayerProps = {
   youtubeVideoId: string | null;
@@ -63,29 +63,12 @@ export function YouTubeLivePlayer({
     );
   }
 
-  const embedUrl = buildYouTubeEmbedUrl(youtubeVideoId, { autoplay: true });
-
   return (
-    <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-black border border-outline-variant/40 shadow-2xl group">
-      <iframe
-        src={embedUrl}
-        title={title}
-        className="w-full h-full border-0"
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-        allowFullScreen
-      />
-
-      <div className="absolute top-3 left-3 flex items-center gap-2 pointer-events-none z-10">
-        <span className="px-2.5 py-1 rounded-full bg-red-600 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-lg animate-pulse">
-          <span className="w-1.5 h-1.5 rounded-full bg-white" />
-          LIVE
-        </span>
-        {subject && (
-          <span className="px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md text-white/90 text-[11px] font-semibold shadow">
-            {subject}
-          </span>
-        )}
-      </div>
-    </div>
+    <LectureVideoPlayer
+      mode="live"
+      videoUrl={`https://www.youtube.com/watch?v=${youtubeVideoId}`}
+      title={title}
+      subjectTitle={subject || undefined}
+    />
   );
 }

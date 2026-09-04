@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
+import { LectureVideoPlayer } from "@/components/video-player/LectureVideoPlayer";
 
 export interface VideoPlayerProps {
   lectureId?: string;
@@ -278,183 +279,36 @@ export function AtomicVideoPlayer({
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-0 overflow-hidden">
         {/* Left: Video Cinema Screen (8 cols on desktop) */}
         <div className="lg:col-span-8 flex flex-col bg-black relative">
-          <div
-            ref={containerRef}
-            className="w-full flex-1 aspect-video lg:aspect-auto min-h-[360px] sm:min-h-[480px] bg-black relative flex items-center justify-center group overflow-hidden"
-          >
-            {isYouTube ? (
-              <iframe
-                src={getEmbedUrl(videoUrl)}
-                title={title}
-                className="w-full h-full border-0 absolute inset-0"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                allowFullScreen
-              />
-            ) : (
-              <>
-                <video
-                  ref={videoRef}
-                  src={videoUrl}
-                  className="w-full h-full object-contain cursor-pointer"
-                  onClick={togglePlay}
-                  onTimeUpdate={() => {
-                    if (videoRef.current) setCurrentTime(videoRef.current.currentTime);
-                  }}
-                  onLoadedMetadata={() => {
-                    if (videoRef.current) setDuration(videoRef.current.duration);
-                  }}
-                  onEnded={() => {
-                    setIsPlaying(false);
-                    setCompleted(true);
-                  }}
-                />
-
-                {/* Video Play Overlay Button */}
-                {!isPlaying && (
-                  <button
-                    type="button"
-                    onClick={togglePlay}
-                    className="absolute w-20 h-20 rounded-full bg-[#6b46c1]/90 hover:bg-[#6b46c1] text-white shadow-2xl flex items-center justify-center backdrop-blur-sm transition-transform hover:scale-110 z-20"
-                  >
-                    <span className="material-symbols-outlined text-4xl">play_arrow</span>
-                  </button>
-                )}
-
-                {/* Custom Overlay Controls (Visible on hover) */}
-                <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/95 via-black/60 to-transparent p-4 space-y-2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
-                  {/* Seeker Progress Bar */}
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="range"
-                      min={0}
-                      max={duration || 100}
-                      value={currentTime}
-                      onChange={handleSeek}
-                      className="w-full h-1.5 bg-slate-700 accent-purple-500 rounded-lg cursor-pointer transition"
-                    />
-                  </div>
-
-                  {/* Controls Bottom Row */}
-                  <div className="flex items-center justify-between text-xs text-white">
-                    <div className="flex items-center gap-4">
-                      {/* Play / Pause */}
-                      <button type="button" onClick={togglePlay} className="hover:text-purple-400 transition">
-                        <span className="material-symbols-outlined text-2xl">
-                          {isPlaying ? "pause" : "play_arrow"}
-                        </span>
-                      </button>
-
-                      {/* 10s Rewind & Forward */}
-                      <button
-                        type="button"
-                        onClick={() => handleSkip(-10)}
-                        className="hover:text-purple-400 transition flex items-center"
-                        title="Rewind 10s"
-                      >
-                        <span className="material-symbols-outlined text-xl">replay_10</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSkip(10)}
-                        className="hover:text-purple-400 transition flex items-center"
-                        title="Forward 10s"
-                      >
-                        <span className="material-symbols-outlined text-xl">forward_10</span>
-                      </button>
-
-                      {/* Volume Slider */}
-                      <div className="flex items-center gap-1.5 group/vol">
-                        <button type="button" onClick={toggleMute} className="hover:text-purple-400 transition">
-                          <span className="material-symbols-outlined text-xl">
-                            {isMuted || volume === 0
-                              ? "volume_off"
-                              : volume < 0.5
-                              ? "volume_down"
-                              : "volume_up"}
-                          </span>
-                        </button>
-                        <input
-                          type="range"
-                          min={0}
-                          max={1}
-                          step={0.05}
-                          value={isMuted ? 0 : volume}
-                          onChange={handleVolumeChange}
-                          className="w-16 h-1 bg-slate-600 accent-purple-500 cursor-pointer"
-                        />
-                      </div>
-
-                      {/* Time Indicator */}
-                      <span className="font-mono text-[11px] text-slate-300">
-                        {formatTime(currentTime)} / {formatTime(duration)}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      {/* Speed Selector */}
-                      <div className="relative group/speed">
-                        <button
-                          type="button"
-                          className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 font-mono font-bold text-xs"
-                        >
-                          {playbackRate}x
-                        </button>
-                        <div className="absolute bottom-full right-0 mb-2 hidden group-hover/speed:flex flex-col bg-slate-900 border border-slate-800 rounded-xl p-1 shadow-xl z-30">
-                          {[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((r) => (
-                            <button
-                              key={r}
-                              type="button"
-                              onClick={() => handlePlaybackRate(r)}
-                              className={`px-3 py-1 rounded-lg text-xs font-mono text-left transition ${
-                                playbackRate === r ? "bg-purple-600 text-white font-bold" : "hover:bg-slate-800"
-                              }`}
-                            >
-                              {r}x
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Quality Selector */}
-                      <div className="relative group/qual">
-                        <button
-                          type="button"
-                          className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 font-bold text-xs"
-                        >
-                          {quality}
-                        </button>
-                        <div className="absolute bottom-full right-0 mb-2 hidden group-hover/qual:flex flex-col bg-slate-900 border border-slate-800 rounded-xl p-1 shadow-xl z-30">
-                          {["1080p", "720p", "480p", "360p", "Auto"].map((q) => (
-                            <button
-                              key={q}
-                              type="button"
-                              onClick={() => setQuality(q)}
-                              className={`px-3 py-1 rounded-lg text-xs text-left transition ${
-                                quality === q ? "bg-purple-600 text-white font-bold" : "hover:bg-slate-800"
-                              }`}
-                            >
-                              {q}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Fullscreen Button */}
-                      <button
-                        type="button"
-                        onClick={toggleFullscreen}
-                        className="hover:text-purple-400 transition"
-                        title="Toggle Fullscreen"
-                      >
-                        <span className="material-symbols-outlined text-xl">
-                          {isFullscreen ? "fullscreen_exit" : "fullscreen"}
-                        </span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
+          <div className="w-full flex-1 aspect-video lg:aspect-auto min-h-[360px] sm:min-h-[480px] bg-black relative flex items-center justify-center overflow-hidden">
+            <LectureVideoPlayer
+              mode="recorded"
+              lectureId={lectureId}
+              title={title}
+              subjectTitle={subjectTitle}
+              educatorName={educatorName}
+              videoUrl={videoUrl}
+              onBookmarkAdd={(t) => {
+                const newBm = {
+                  id: `bm-${Date.now()}`,
+                  time: Math.floor(t),
+                  note: `Bookmark at ${formatTime(t)}`,
+                };
+                setBookmarks((prev) => [...prev, newBm]);
+                setActiveTab("notes");
+                toast.success(`Bookmark saved at ${formatTime(t)}!`);
+              }}
+              onTimeUpdate={(cur, dur) => {
+                setCurrentTime(cur);
+                setDuration(dur);
+              }}
+              onEnded={handleMarkComplete}
+              onProgressPercentage={(pct) => {
+                if (pct >= 90 && !completed) {
+                  handleMarkComplete();
+                }
+              }}
+              isCompleted={completed}
+            />
           </div>
         </div>
 
