@@ -91,6 +91,9 @@ export function StudentLiveClassRoom({
   const [remainingSec, setRemainingSec] = useState(0);
   const [quizError, setQuizError] = useState<string | null>(null);
 
+  const [activeMobileTab, setActiveMobileTab] = useState<"chat" | "quiz" | "info">("chat");
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
   // Time & countdown state
   const [currentTimeMs, setCurrentTimeMs] = useState(Date.now());
   const [scheduleTimes, setScheduleTimes] = useState<{ startTime?: string; endTime?: string } | null>(null);
@@ -106,6 +109,23 @@ export function StudentLiveClassRoom({
   useEffect(() => {
     const interval = setInterval(() => setCurrentTimeMs(Date.now()), 1000);
     return () => clearInterval(interval);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (typeof document === "undefined") return;
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
+    } else {
+      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
+    }
+  };
+
+  useEffect(() => {
+    const onFsChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
   }, []);
 
   // Poll for the session state until live/ended
@@ -187,10 +207,24 @@ export function StudentLiveClassRoom({
     engine.syncSize();
     refreshBoard();
 
-    const onResize = () => engine.syncSize();
+    const onResize = () => {
+      engine.syncSize();
+      refreshBoard();
+    };
     window.addEventListener("resize", onResize);
+
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined" && boardBaseRef.current.parentElement) {
+      ro = new ResizeObserver(() => {
+        engine.syncSize();
+        refreshBoard();
+      });
+      ro.observe(boardBaseRef.current.parentElement);
+    }
+
     return () => {
       window.removeEventListener("resize", onResize);
+      if (ro) ro.disconnect();
       engine.destroy();
       boardEngineRef.current = null;
     };
@@ -368,58 +402,45 @@ export function StudentLiveClassRoom({
 
   // ---------------- COMPLETE WHITEBOARD STUDIO (ACTIVE FOR ALL STUDENTS) ----------------
   return (
-    <div className={`min-h-[calc(100vh-4rem)] p-3 sm:p-5 ${isThemeDark ? "bg-[#0b0d14] text-white" : "bg-slate-50 text-slate-900"}`}>
+    <div className={`fixed inset-0 w-screen h-[100dvh] flex flex-col overflow-hidden select-none z-50 ${isThemeDark ? "bg-[#0b0d14] text-white" : "bg-slate-900 text-slate-100"}`}>
       {/* Top Authoritative Studio Header */}
-      <header className="flex flex-wrap items-center justify-between gap-3 pb-3 mb-3 border-b border-slate-800/60">
-        <div className="flex items-center gap-3 min-w-0">
+      <header className="h-12 sm:h-14 px-3 sm:px-4 shrink-0 flex items-center justify-between border-b border-slate-800/80 bg-[#10131d] z-20">
+        <div className="flex items-center gap-2.5 min-w-0">
           <Link
             href="/schedule"
-            className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center shrink-0 transition"
+            className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center shrink-0 transition shadow-xs"
             title="Back to Schedule"
           >
             <span className="material-symbols-outlined text-base">arrow_back</span>
           </Link>
           <div className="min-w-0">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 truncate">{batchName}</p>
-            <h1 className="text-base sm:text-lg font-bold truncate max-w-md sm:max-w-xl text-white">{scheduleTitle}</h1>
+            <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400 truncate leading-tight">{batchName}</p>
+            <h1 className="text-xs sm:text-sm font-bold truncate max-w-[140px] xs:max-w-[200px] sm:max-w-md text-white leading-tight">{scheduleTitle}</h1>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
           {/* Status Badge */}
           {isLive ? (
-            <span className="flex items-center gap-1.5 text-xs font-black text-rose-400 border border-rose-500/40 bg-rose-950/60 px-3 py-1 rounded-full shadow-sm shadow-rose-950">
+            <span className="flex items-center gap-1.5 text-[11px] sm:text-xs font-black text-rose-400 border border-rose-500/40 bg-rose-950/60 px-2.5 sm:px-3 py-1 rounded-full shadow-sm shadow-rose-950">
               <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
-              LIVE CLASS
+              LIVE
             </span>
           ) : (
-            <span className="flex items-center gap-1.5 text-xs font-bold text-amber-400 border border-amber-500/40 bg-amber-950/60 px-3 py-1 rounded-full">
-              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-              STUDIO CONNECTED (PRE-CLASS)
+            <span className="flex items-center gap-1 text-[10px] sm:text-xs font-bold text-amber-400 border border-amber-500/40 bg-amber-950/60 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+              CONNECTING
             </span>
           )}
 
           {/* Dynamic Timers */}
           {isLive ? (
-            <>
-              <span className="text-xs font-mono font-semibold px-2.5 py-1 rounded-md bg-slate-800/90 border border-slate-700 text-slate-200">
-                Elapsed: {formatHms(elapsedSeconds)}
-              </span>
-              {remainingSeconds > 0 && (
-                <span
-                  className={`text-xs font-mono font-semibold px-2.5 py-1 rounded-md border ${
-                    remainingSeconds <= 300
-                      ? "text-amber-300 bg-amber-950/60 border-amber-500/50 animate-pulse"
-                      : "text-slate-300 bg-slate-800/90 border-slate-700"
-                  }`}
-                >
-                  {remainingSeconds <= 300 ? "5m Left" : `Rem: ${formatHms(remainingSeconds)}`}
-                </span>
-              )}
-            </>
+            <span className="hidden sm:inline-flex text-xs font-mono font-semibold px-2 py-0.5 rounded-md bg-slate-800/90 border border-slate-700 text-slate-200">
+              {formatHms(elapsedSeconds)}
+            </span>
           ) : secondsUntilStart > 0 ? (
-            <span className="text-xs font-mono font-semibold px-2.5 py-1 rounded-md bg-indigo-950/60 border border-indigo-500/40 text-indigo-300">
-              Starts in: {formatHms(secondsUntilStart)}
+            <span className="hidden sm:inline-flex text-xs font-mono font-semibold px-2 py-0.5 rounded-md bg-indigo-950/60 border border-indigo-500/40 text-indigo-300">
+              Starts: {formatHms(secondsUntilStart)}
             </span>
           ) : null}
 
@@ -428,51 +449,68 @@ export function StudentLiveClassRoom({
             type="button"
             disabled={handRaiseBusy}
             onClick={toggleHandRaise}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-sm ${
+            className={`flex items-center gap-1 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition shadow-sm ${
               handRaised
                 ? "bg-amber-500 text-slate-950 ring-2 ring-amber-400/50"
                 : "bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
             }`}
+            title={handRaised ? "Lower Hand" : "Raise Hand to ask Doubt"}
           >
             <span className="material-symbols-outlined text-sm">back_hand</span>
-            <span>{handRaised ? "Hand Raised" : "Raise Hand"}</span>
+            <span className="hidden xs:inline">{handRaised ? "Raised" : "Raise"}</span>
+          </button>
+
+          {/* Fullscreen Toggle */}
+          <button
+            type="button"
+            onClick={toggleFullscreen}
+            className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition border border-slate-700"
+            title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+          >
+            <span className="material-symbols-outlined text-base">
+              {isFullscreen ? "fullscreen_exit" : "fullscreen"}
+            </span>
           </button>
         </div>
       </header>
 
-      {/* Main Studio Grid: Left Main Whiteboard Canvas (9 cols) + Right Camera & Chat (3 cols) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
-        {/* Main Canvas / Video Area (75% / 9 cols) */}
-        <div className="lg:col-span-8 xl:col-span-9 space-y-4">
-          {isYouTube ? (
-            <YouTubeLivePlayer
-              youtubeVideoId={wbSession?.youtubeVideoId ?? null}
-              title={scheduleTitle}
-              subject={batchName}
-              livePhase={isLive ? "LIVE" : "PREPARING"}
-            />
-          ) : (
-            <div className="bg-[#10121d] border border-slate-800/80 rounded-2xl overflow-hidden shadow-2xl relative">
-              {/* Presentation Toolbar Header */}
-              <div className="flex items-center justify-between px-4 py-2 bg-[#0a0b12] border-b border-slate-800 text-xs text-slate-400">
-                <span className="flex items-center gap-2 font-medium">
-                  <span className="w-2 h-2 rounded-full bg-indigo-500" />
-                  <span>Live Whiteboard &amp; Presentation</span>
+      {/* ========================================================================= */}
+      {/* DESKTOP & LAPTOP VIEW (lg and up): 2-Column Split (Left Canvas, Right Feed/Chat) */}
+      {/* ========================================================================= */}
+      <div className="hidden lg:flex flex-1 min-h-0 flex-row p-3 gap-3 overflow-hidden bg-[#0b0d14]">
+        {/* Left Main Stage (Whiteboard Canvas / YouTube Player + Quiz Drawer) */}
+        <div className="flex-1 min-w-0 h-full flex flex-col bg-[#10121d] rounded-2xl border border-slate-800/80 overflow-hidden relative shadow-2xl">
+          {/* Presentation Title Banner */}
+          <div className="flex items-center justify-between px-4 py-2 bg-[#0a0b12] border-b border-slate-800 text-xs text-slate-400 shrink-0">
+            <span className="flex items-center gap-2 font-medium text-slate-300">
+              <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+              <span>{isYouTube ? "Live Stream Broadcast" : "Live Whiteboard & Presentation Stage"}</span>
+            </span>
+            <div className="flex items-center gap-2">
+              {wbSession?.presentationName && (
+                <span className="text-[11px] font-mono text-indigo-300 bg-indigo-950/60 border border-indigo-500/30 px-2 py-0.5 rounded">
+                  {wbSession.presentationName}
                 </span>
-                <div className="flex items-center gap-2">
-                  {wbSession?.presentationName && (
-                    <span className="text-[11px] font-mono text-indigo-300 bg-indigo-950/60 border border-indigo-500/30 px-2 py-0.5 rounded">
-                      {wbSession.presentationName}
-                    </span>
-                  )}
-                  <span className="text-[10px] font-bold text-slate-500 bg-slate-800/60 px-2 py-0.5 rounded">
-                    16:9 HD Mirror
-                  </span>
-                </div>
-              </div>
+              )}
+              <span className="text-[10px] font-bold text-slate-500 bg-slate-800/60 px-2 py-0.5 rounded">
+                16:9 HD Mirror
+              </span>
+            </div>
+          </div>
 
-              {/* Canvas Frame Preserving 16:9 Aspect Ratio */}
-              <div className={`relative aspect-[16/9] w-full ${boardBackground === "dark" || isThemeDark ? "bg-[#10131d]" : "bg-white"}`}>
+          {/* Canvas Center Stage */}
+          <div className="flex-1 min-h-0 w-full relative flex items-center justify-center p-2 bg-[#0d0e16] overflow-hidden">
+            {isYouTube ? (
+              <div className="w-full h-full max-w-full max-h-full aspect-video flex items-center justify-center">
+                <YouTubeLivePlayer
+                  youtubeVideoId={wbSession?.youtubeVideoId ?? null}
+                  title={scheduleTitle}
+                  subject={batchName}
+                  livePhase={isLive ? "LIVE" : "PREPARING"}
+                />
+              </div>
+            ) : (
+              <div className={`relative aspect-[16/9] w-full max-w-full max-h-full h-auto overflow-hidden rounded-xl border border-slate-800/60 shadow-2xl ${boardBackground === "dark" || isThemeDark ? "bg-[#10131d]" : "bg-white"}`}>
                 {isBackgroundImageUrl(boardBackground) && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
@@ -484,15 +522,13 @@ export function StudentLiveClassRoom({
                 <canvas ref={boardBaseRef} className="absolute inset-0 w-full h-full" />
                 <canvas ref={boardActiveRef} className="absolute inset-0 w-full h-full pointer-events-none" />
 
-                {/* Subtle Standby Studio Watermark when empty */}
+                {/* Standby Watermark */}
                 {boardEmpty && !isBackgroundImageUrl(boardBackground) && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 pointer-events-none text-center p-6 bg-gradient-to-b from-transparent via-[#10131d]/40 to-[#10131d]/80">
                     <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center mb-1">
                       <span className="material-symbols-outlined text-2xl">draw</span>
                     </div>
-                    <p className="text-sm font-bold text-slate-300">
-                      Atomic Whiteboard Studio Connected
-                    </p>
+                    <p className="text-sm font-bold text-slate-300">Atomic Whiteboard Studio Connected</p>
                     <p className="text-xs text-slate-500 max-w-md">
                       {isLive
                         ? "Teacher canvas is active. Slides, notes, and strokes appear here in real time."
@@ -501,69 +537,59 @@ export function StudentLiveClassRoom({
                   </div>
                 )}
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Active Quiz / Poll Card */}
-          {quiz && (
-            <div className="bg-slate-900 border border-indigo-500/50 rounded-2xl p-5 shadow-2xl space-y-3 animate-in fade-in">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-indigo-400 animate-ping" />
-                  {quiz.questionText || "Live Class Quiz"}
-                </h3>
-                {quiz.status === "ACTIVE" && (
-                  <span className="text-xs font-mono font-bold text-amber-400 bg-amber-950/60 border border-amber-800/60 px-2.5 py-0.5 rounded-full">
-                    {remainingSec}s
-                  </span>
-                )}
+            {/* Desktop Quiz / Poll Floating Drawer */}
+            {quiz && (
+              <div className="absolute bottom-4 left-4 right-4 max-w-2xl mx-auto bg-slate-900/95 backdrop-blur-md border border-indigo-500/60 rounded-2xl p-4 shadow-2xl space-y-2 z-30 animate-in slide-in-from-bottom duration-200">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-indigo-400 animate-ping" />
+                    {quiz.questionText || "Live Class Quiz"}
+                  </h3>
+                  {quiz.status === "ACTIVE" && (
+                    <span className="text-xs font-mono font-bold text-amber-400 bg-amber-950/60 border border-amber-800/60 px-2 py-0.5 rounded-full">
+                      {remainingSec}s
+                    </span>
+                  )}
+                </div>
+                {quizError && <p className="text-[11px] text-rose-400">{quizError}</p>}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {quiz.options.map((o) => {
+                    const selected = mySelection === o.key;
+                    const revealed = quiz.status === "REVEALED";
+                    const isCorrect = revealed && quiz.correctOption === o.key;
+                    return (
+                      <button
+                        key={o.key}
+                        type="button"
+                        disabled={Boolean(mySelection) || quiz.status !== "ACTIVE" || submittingAnswer}
+                        onClick={() => submitAnswer(o.key)}
+                        className={`text-left px-3 py-2 rounded-xl border text-xs font-medium transition ${
+                          isCorrect
+                            ? "border-emerald-500 bg-emerald-950/60 text-emerald-300 font-bold"
+                            : selected
+                            ? "border-indigo-500 bg-indigo-950/60 text-white font-bold"
+                            : "border-slate-800 hover:bg-slate-800 text-slate-300"
+                        } disabled:cursor-default`}
+                      >
+                        <span className="font-mono font-bold mr-1.5 text-indigo-400">{o.key}.</span>
+                        <span className="truncate">{o.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-              {quizError && <p className="text-xs text-rose-400">{quizError}</p>}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {quiz.options.map((o) => {
-                  const selected = mySelection === o.key;
-                  const revealed = quiz.status === "REVEALED";
-                  const isCorrect = revealed && quiz.correctOption === o.key;
-                  return (
-                    <button
-                      key={o.key}
-                      type="button"
-                      disabled={Boolean(mySelection) || quiz.status !== "ACTIVE" || submittingAnswer}
-                      onClick={() => submitAnswer(o.key)}
-                      className={`text-left px-4 py-3 rounded-xl border text-xs font-medium transition ${
-                        isCorrect
-                          ? "border-emerald-500 bg-emerald-950/60 text-emerald-300"
-                          : selected
-                          ? "border-indigo-500 bg-indigo-950/60 text-white"
-                          : "border-slate-800 hover:bg-slate-800 text-slate-300"
-                      } disabled:cursor-default`}
-                    >
-                      <span className="font-mono font-bold mr-2 text-indigo-400">{o.key}.</span>
-                      {o.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
-        {/* Right Rail (25% / 3-4 cols): Upper-Right Camera + Chat Below */}
-        <div className="lg:col-span-4 xl:col-span-3 space-y-4">
-          {/* Upper-Right Teacher Camera Feed */}
+        {/* Right Rail (Teacher Video + Live Chat) */}
+        <div className="w-80 xl:w-96 h-full flex flex-col gap-3 shrink-0">
+          {/* Teacher Video Box */}
           {!isYouTube && (
-            <div
-              className={`bg-[#10121d] border border-slate-800 rounded-2xl overflow-hidden shadow-xl ${
-                isCameraCircle ? "p-3 flex items-center justify-center aspect-square" : ""
-              }`}
-            >
-              <div
-                className={`w-full overflow-hidden ${
-                  isCameraCircle
-                    ? "aspect-square rounded-full border-2 border-indigo-500 shadow-lg shadow-indigo-500/20"
-                    : "aspect-video rounded-xl"
-                }`}
-              >
+            <div className={`bg-[#10121d] border border-slate-800/80 rounded-2xl overflow-hidden shadow-xl shrink-0 ${isCameraCircle ? "p-3 flex items-center justify-center aspect-square" : ""}`}>
+              <div className={`w-full overflow-hidden ${isCameraCircle ? "aspect-square rounded-full border-2 border-indigo-500 shadow-lg shadow-indigo-500/20" : "aspect-video rounded-xl"}`}>
                 <VideoStrip
                   whiteboardSessionId={wbSession?.id || batchScheduleId}
                   variant="panel"
@@ -574,9 +600,9 @@ export function StudentLiveClassRoom({
             </div>
           )}
 
-          {/* Live Chat Panel Directly Below Camera */}
-          <div className="bg-[#10121d] border border-slate-800 rounded-2xl overflow-hidden shadow-xl h-[460px] flex flex-col">
-            <div className="px-4 py-2.5 bg-[#0a0b12] border-b border-slate-800 flex items-center justify-between">
+          {/* Live Chat Panel */}
+          <div className="bg-[#10121d] border border-slate-800/80 rounded-2xl overflow-hidden shadow-xl flex-1 min-h-0 flex flex-col">
+            <div className="px-4 py-2.5 bg-[#0a0b12] border-b border-slate-800 flex items-center justify-between shrink-0">
               <span className="text-xs font-bold text-white flex items-center gap-1.5">
                 <span className="material-symbols-outlined text-sm text-indigo-400">chat</span>
                 Classroom Live Chat
@@ -597,6 +623,221 @@ export function StudentLiveClassRoom({
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* MOBILE & TABLET VIEW (< lg): Top Video/Canvas Stage + Bottom Tabbed Console */}
+      {/* ========================================================================= */}
+      <div className="lg:hidden flex-1 min-h-0 flex flex-col overflow-hidden bg-[#0b0d14]">
+        {/* Top Media Area: 16:9 Canvas or YouTube Player */}
+        <div className="w-full shrink-0 aspect-video max-h-[38dvh] sm:max-h-[45dvh] bg-black relative flex items-center justify-center overflow-hidden border-b border-slate-800/80">
+          {isYouTube ? (
+            <YouTubeLivePlayer
+              youtubeVideoId={wbSession?.youtubeVideoId ?? null}
+              title={scheduleTitle}
+              subject={batchName}
+              livePhase={isLive ? "LIVE" : "PREPARING"}
+            />
+          ) : (
+            <div className={`relative aspect-[16/9] w-full h-full max-w-full max-h-full overflow-hidden ${boardBackground === "dark" || isThemeDark ? "bg-[#10131d]" : "bg-white"}`}>
+              {isBackgroundImageUrl(boardBackground) && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={boardBackground}
+                  alt=""
+                  className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+                />
+              )}
+              <canvas ref={boardBaseRef} className="absolute inset-0 w-full h-full" />
+              <canvas ref={boardActiveRef} className="absolute inset-0 w-full h-full pointer-events-none" />
+
+              {/* Watermark */}
+              {boardEmpty && !isBackgroundImageUrl(boardBackground) && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-center p-4 bg-gradient-to-b from-transparent via-[#10131d]/50 to-[#10131d]/90">
+                  <span className="material-symbols-outlined text-xl text-indigo-400">draw</span>
+                  <p className="text-xs font-bold text-slate-300">Whiteboard Canvas Connected</p>
+                  <p className="text-[10px] text-slate-500">
+                    {isLive ? "Notes and drawings sync live from teacher." : "Waiting for teacher to start class."}
+                  </p>
+                </div>
+              )}
+
+              {/* Mobile PiP Teacher Video (Corner Preview) */}
+              {!isYouTube && (
+                <div className="absolute top-2 right-2 w-28 xs:w-32 aspect-video rounded-lg overflow-hidden border border-indigo-500/60 shadow-xl bg-[#10121d] z-20">
+                  <VideoStrip
+                    whiteboardSessionId={wbSession?.id || batchScheduleId}
+                    variant="panel"
+                    role="STUDENT"
+                    teacherName={teacherName}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Bottom Interactive Area (Tabs: Chat | Quiz | Details) */}
+        <div className="flex-1 min-h-0 flex flex-col bg-[#10121d] overflow-hidden">
+          {/* Tab Selection Bar */}
+          <div className="flex items-center justify-around bg-[#0a0b12] border-b border-slate-800 shrink-0 px-2">
+            <button
+              type="button"
+              onClick={() => setActiveMobileTab("chat")}
+              className={`flex-1 py-2.5 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border-b-2 ${
+                activeMobileTab === "chat"
+                  ? "text-indigo-400 border-indigo-500 bg-indigo-950/20"
+                  : "text-slate-400 border-transparent hover:text-slate-200"
+              }`}
+            >
+              <span className="material-symbols-outlined text-base">chat</span>
+              <span>Live Chat</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveMobileTab("quiz")}
+              className={`flex-1 py-2.5 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border-b-2 relative ${
+                activeMobileTab === "quiz"
+                  ? "text-indigo-400 border-indigo-500 bg-indigo-950/20"
+                  : "text-slate-400 border-transparent hover:text-slate-200"
+              }`}
+            >
+              <span className="material-symbols-outlined text-base">quiz</span>
+              <span>Quiz &amp; Polls</span>
+              {quiz && quiz.status === "ACTIVE" && (
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping absolute top-2 right-3" />
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveMobileTab("info")}
+              className={`flex-1 py-2.5 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border-b-2 ${
+                activeMobileTab === "info"
+                  ? "text-indigo-400 border-indigo-500 bg-indigo-950/20"
+                  : "text-slate-400 border-transparent hover:text-slate-200"
+              }`}
+            >
+              <span className="material-symbols-outlined text-base">info</span>
+              <span>Class Info</span>
+            </button>
+          </div>
+
+          {/* Active Tab Body */}
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            {activeMobileTab === "chat" && (
+              <div className="h-full p-2">
+                {wbSession?.id ? (
+                  <MessagesPanel
+                    whiteboardSessionId={wbSession.id}
+                    currentUserId={currentUserId}
+                    role="STUDENT"
+                    theme={isThemeDark ? "dark" : "light"}
+                  />
+                ) : (
+                  <div className="h-full flex items-center justify-center text-xs text-slate-500">
+                    Connecting live chat...
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeMobileTab === "quiz" && (
+              <div className="p-4 space-y-4">
+                {quiz ? (
+                  <div className="bg-slate-900 border border-indigo-500/50 rounded-2xl p-4 shadow-xl space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-indigo-400 animate-ping" />
+                        {quiz.questionText || "Live Class Quiz"}
+                      </h3>
+                      {quiz.status === "ACTIVE" && (
+                        <span className="text-xs font-mono font-bold text-amber-400 bg-amber-950/60 border border-amber-800/60 px-2.5 py-0.5 rounded-full">
+                          {remainingSec}s
+                        </span>
+                      )}
+                    </div>
+                    {quizError && <p className="text-xs text-rose-400">{quizError}</p>}
+                    <div className="grid grid-cols-1 gap-2">
+                      {quiz.options.map((o) => {
+                        const selected = mySelection === o.key;
+                        const revealed = quiz.status === "REVEALED";
+                        const isCorrect = revealed && quiz.correctOption === o.key;
+                        return (
+                          <button
+                            key={o.key}
+                            type="button"
+                            disabled={Boolean(mySelection) || quiz.status !== "ACTIVE" || submittingAnswer}
+                            onClick={() => submitAnswer(o.key)}
+                            className={`text-left px-4 py-3 rounded-xl border text-xs font-medium transition ${
+                              isCorrect
+                                ? "border-emerald-500 bg-emerald-950/60 text-emerald-300 font-bold"
+                                : selected
+                                ? "border-indigo-500 bg-indigo-950/60 text-white font-bold"
+                                : "border-slate-800 hover:bg-slate-800 text-slate-300"
+                            } disabled:cursor-default`}
+                          >
+                            <span className="font-mono font-bold mr-2 text-indigo-400">{o.key}.</span>
+                            {o.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-slate-500 space-y-2">
+                    <span className="material-symbols-outlined text-3xl">hourglass_empty</span>
+                    <p className="text-xs font-semibold">No active quiz or poll at this moment.</p>
+                    <p className="text-[11px]">When the teacher launches a live poll, it will appear here instantly.</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeMobileTab === "info" && (
+              <div className="p-4 space-y-4 text-xs">
+                {/* Full Teacher Video Preview in Info */}
+                {!isYouTube && (
+                  <div className="space-y-1.5">
+                    <p className="font-bold text-slate-400 text-[11px] uppercase tracking-wider">Teacher Video Stream</p>
+                    <div className="w-full aspect-video rounded-xl overflow-hidden bg-black border border-slate-800 shadow-md">
+                      <VideoStrip
+                        whiteboardSessionId={wbSession?.id || batchScheduleId}
+                        variant="panel"
+                        role="STUDENT"
+                        teacherName={teacherName}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-3.5 space-y-2">
+                  <div className="flex justify-between items-center py-1 border-b border-slate-800">
+                    <span className="text-slate-400">Batch:</span>
+                    <span className="font-bold text-white truncate max-w-[200px]">{batchName}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-800">
+                    <span className="text-slate-400">Topic:</span>
+                    <span className="font-bold text-white truncate max-w-[200px]">{scheduleTitle}</span>
+                  </div>
+                  {teacherName && (
+                    <div className="flex justify-between items-center py-1 border-b border-slate-800">
+                      <span className="text-slate-400">Teacher:</span>
+                      <span className="font-bold text-indigo-300">{teacherName}</span>
+                    </div>
+                  )}
+                  {wbSession?.presentationName && (
+                    <div className="flex justify-between items-center py-1">
+                      <span className="text-slate-400">Material:</span>
+                      <span className="font-mono text-[11px] text-indigo-400">{wbSession.presentationName}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

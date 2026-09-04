@@ -960,7 +960,7 @@ export function TeacherLiveClassRoom({
   return (
     <div
       ref={containerRef}
-      className="grid h-[calc(100vh-5rem)] -m-6 bg-[#10131b] text-white overflow-hidden"
+      className="fixed inset-0 w-screen h-screen grid bg-[#10131b] text-white overflow-hidden select-none z-50"
       style={{ gridTemplateColumns: "64px 1fr 320px", gridTemplateRows: "56px 1fr 64px" }}
     >
       <input

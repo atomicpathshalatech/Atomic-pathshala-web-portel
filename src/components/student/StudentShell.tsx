@@ -168,6 +168,7 @@ export function StudentShell({
 }) {
   const pathname = usePathname();
   const isExamAttempt = pathname?.includes("/attempt");
+  const isLiveClass = pathname?.startsWith("/live-class");
   const [activeGoal, setActiveGoal] = useState<string>(targetExam || "NEET");
   const [goalModalOpen, setGoalModalOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -192,9 +193,9 @@ export function StudentShell({
     setSidebarOpen(false);
   }, [pathname]);
 
-  if (isExamAttempt) {
+  if (isExamAttempt || isLiveClass) {
     return (
-      <div className="min-h-screen w-full bg-[#f8fafc] dark:bg-slate-950">
+      <div className="fixed inset-0 w-screen h-[100dvh] overflow-hidden bg-[#0b0d14]">
         {children}
       </div>
     );

@@ -38,6 +38,15 @@ export function TeamShell({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const pathname = usePathname();
   const isRootTeam = pathname === "/team";
+  const isLiveStudio = pathname?.startsWith("/team/live-class") || pathname?.startsWith("/team/live-studio");
+
+  if (isLiveStudio) {
+    return (
+      <div className="fixed inset-0 w-screen h-screen overflow-hidden bg-[#10131b]">
+        {children}
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-surface-container-low/30">
