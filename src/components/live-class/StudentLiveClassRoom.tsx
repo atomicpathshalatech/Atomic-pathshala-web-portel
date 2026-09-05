@@ -189,6 +189,7 @@ export function StudentLiveClassRoom({
       const json = await res.json();
       if (!res.ok || !json.success) return;
       const objects: StrokeObject[] = json.data.page?.objects ?? [];
+      boardEngineRef.current.syncSize();
       boardEngineRef.current.loadObjects(objects);
       setBoardEmpty(objects.length === 0);
       setBoardBackground(json.data.page?.background ?? "blank");
@@ -229,6 +230,15 @@ export function StudentLiveClassRoom({
       boardEngineRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, wbSession?.id]);
+
+  // Periodic fallback sync while live to ensure board stays 100% synchronized
+  useEffect(() => {
+    if (phase !== "live" || !wbSession?.id) return;
+    const interval = setInterval(() => {
+      refreshBoard();
+    }, 2500);
+    return () => clearInterval(interval);
   }, [phase, wbSession?.id]);
 
   // Subscribe to realtime Pusher session events
@@ -510,7 +520,7 @@ export function StudentLiveClassRoom({
                 />
               </div>
             ) : (
-              <div className={`relative aspect-[16/9] w-full max-w-full max-h-full h-auto overflow-hidden rounded-xl border border-slate-800/60 shadow-2xl ${boardBackground === "dark" || isThemeDark ? "bg-[#10131d]" : "bg-white"}`}>
+              <div className={`relative aspect-[16/9] w-full max-w-full max-h-full h-auto overflow-hidden rounded-xl border border-slate-800/60 shadow-2xl ${boardBackground === "dark" ? "bg-[#10131d]" : "bg-white"}`}>
                 {isBackgroundImageUrl(boardBackground) && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
@@ -524,11 +534,15 @@ export function StudentLiveClassRoom({
 
                 {/* Standby Watermark */}
                 {boardEmpty && !isBackgroundImageUrl(boardBackground) && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 pointer-events-none text-center p-6 bg-gradient-to-b from-transparent via-[#10131d]/40 to-[#10131d]/80">
-                    <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center mb-1">
+                  <div className={`absolute inset-0 flex flex-col items-center justify-center gap-2 pointer-events-none text-center p-6 ${
+                    boardBackground === "dark"
+                      ? "bg-gradient-to-b from-transparent via-[#10131d]/40 to-[#10131d]/80 text-slate-300"
+                      : "bg-gradient-to-b from-transparent via-slate-100/40 to-slate-200/80 text-slate-700"
+                  }`}>
+                    <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-500 flex items-center justify-center mb-1">
                       <span className="material-symbols-outlined text-2xl">draw</span>
                     </div>
-                    <p className="text-sm font-bold text-slate-300">Atomic Whiteboard Studio Connected</p>
+                    <p className="text-sm font-bold">Atomic Whiteboard Studio Connected</p>
                     <p className="text-xs text-slate-500 max-w-md">
                       {isLive
                         ? "Teacher canvas is active. Slides, notes, and strokes appear here in real time."
@@ -641,7 +655,7 @@ export function StudentLiveClassRoom({
               livePhase={isLive ? "LIVE" : "PREPARING"}
             />
           ) : (
-            <div className={`relative aspect-[16/9] w-full h-full max-w-full max-h-full overflow-hidden ${boardBackground === "dark" || isThemeDark ? "bg-[#10131d]" : "bg-white"}`}>
+            <div className={`relative aspect-[16/9] w-full h-full max-w-full max-h-full overflow-hidden ${boardBackground === "dark" ? "bg-[#10131d]" : "bg-white"}`}>
               {isBackgroundImageUrl(boardBackground) && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
