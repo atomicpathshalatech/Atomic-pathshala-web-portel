@@ -58,8 +58,19 @@ export function VideoStrip({
       serverUrl={creds.url}
       token={creds.token}
       connect
-      audio
-      video={role === "TEACHER"}
+      // Deliberately DON'T request camera/mic as part of connecting to the
+      // room. When these were `audio`/`video={role === "TEACHER"}`, a plain
+      // getUserMedia failure (permission denied, no device, device busy —
+      // all common on a first visit or a locked-down browser) rejected the
+      // whole connect() call, which LiveKitRoom reports through onError,
+      // which used to tear down the ENTIRE room and drop into
+      // LocalWebcamPreview — killing whiteboard video *and* audio for
+      // everyone just because one participant's camera didn't come up.
+      // Instead we connect with no local tracks, then request mic/camera
+      // separately in VideoStripInner so a camera failure can never take
+      // audio or the room connection down with it.
+      audio={false}
+      video={false}
       className="contents"
       onError={() => setUseFallbackCamera(true)}
     >
@@ -100,11 +111,12 @@ function LocalWebcamPreview({
         });
         currentStream = s;
         setStream(s);
+        setCamError(null);
         if (videoRef.current) {
           videoRef.current.srcObject = s;
         }
-      } catch {
-        setCamError("Camera or Mic permission required");
+      } catch (err) {
+        setCamError(describeMediaError(err));
       }
     }
 
@@ -164,7 +176,16 @@ function LocalWebcamPreview({
         ) : (
           <div className="flex flex-col items-center justify-center gap-2 text-gray-500 p-4 text-center">
             <span className="material-symbols-outlined text-4xl">videocam_off</span>
-            <span className="text-xs font-semibold">{camError || "Camera Off"}</span>
+            <span className="text-xs font-semibold max-w-[220px]">{camError || "Camera Off"}</span>
+            {camError && (
+              <button
+                type="button"
+                onClick={() => setCameraActive(true)}
+                className="mt-1 text-[11px] font-bold text-indigo-300 hover:text-indigo-200 underline underline-offset-2"
+              >
+                Retry camera / mic access
+              </button>
+            )}
           </div>
         )}
 
@@ -210,6 +231,26 @@ function LocalWebcamPreview({
   );
 }
 
+/** Turns a getUserMedia rejection into a short, specific, user-facing reason
+ * instead of one generic "permission required" string for every failure
+ * mode — a denied prompt, a missing device, and a device already claimed by
+ * another app all need different next steps from the user. */
+function describeMediaError(err: unknown): string {
+  const name = err instanceof DOMException ? err.name : undefined;
+  switch (name) {
+    case "NotAllowedError":
+    case "SecurityError":
+      return "Camera/mic permission denied — allow access in your browser's site settings.";
+    case "NotFoundError":
+    case "OverconstrainedError":
+      return "No camera or microphone found on this device.";
+    case "NotReadableError":
+      return "Camera/mic is already in use by another app.";
+    default:
+      return "Camera or mic permission required";
+  }
+}
+
 function VideoStripInner({
   variant,
   role = "TEACHER",
@@ -225,6 +266,62 @@ function VideoStripInner({
   const { isCameraEnabled, isMicrophoneEnabled, localParticipant } = useLocalParticipant();
   const mic = useMediaDeviceSelect({ kind: "audioinput" });
   const cam = useMediaDeviceSelect({ kind: "videoinput" });
+
+  const [micError, setMicError] = useState<string | null>(null);
+  const [camError, setCamError] = useState<string | null>(null);
+
+  // Request mic (both roles) and camera (teacher only) independently, once
+  // the room itself is connected. Each is its own try/catch: a camera
+  // failure never takes the mic down, a mic failure never takes the camera
+  // down, and neither can take the LiveKit connection (whiteboard sync,
+  // chat, the other side's audio) down with it — that's the whole point of
+  // not requesting them via LiveKitRoom's connect-time audio/video props.
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        await localParticipant.setMicrophoneEnabled(true);
+        if (!cancelled) setMicError(null);
+      } catch (err) {
+        if (!cancelled) setMicError(describeMediaError(err));
+      }
+    })();
+
+    if (role === "TEACHER") {
+      (async () => {
+        try {
+          await localParticipant.setCameraEnabled(true);
+          if (!cancelled) setCamError(null);
+        } catch (err) {
+          if (!cancelled) setCamError(describeMediaError(err));
+        }
+      })();
+    }
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localParticipant, role]);
+
+  const retryMic = async () => {
+    try {
+      await localParticipant.setMicrophoneEnabled(true);
+      setMicError(null);
+    } catch (err) {
+      setMicError(describeMediaError(err));
+    }
+  };
+
+  const retryCamera = async () => {
+    try {
+      await localParticipant.setCameraEnabled(true);
+      setCamError(null);
+    } catch (err) {
+      setCamError(describeMediaError(err));
+    }
+  };
 
   const [, setPortalNode] = useState<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -256,8 +353,17 @@ function VideoStripInner({
             <span className="text-xs font-bold text-white">{teacherName || "Instructor"}</span>
             <span className="text-[10px] text-indigo-300 mt-1 flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-              Camera Feed Standby
+              {role === "TEACHER" && camError ? camError : "Camera Feed Standby"}
             </span>
+            {role === "TEACHER" && camError && (
+              <button
+                type="button"
+                onClick={retryCamera}
+                className="mt-1.5 text-[11px] font-bold text-indigo-300 hover:text-indigo-200 underline underline-offset-2"
+              >
+                Retry camera access
+              </button>
+            )}
           </div>
         )}
 
@@ -270,6 +376,16 @@ function VideoStripInner({
               ? "Educator"
               : primary?.participant.name || localParticipant.name || "Educator"}
           </div>
+          {micError && (
+            <div
+              className="bg-rose-900/80 px-2 py-1 rounded text-[10px] text-rose-100 backdrop-blur-sm border border-rose-500/40 font-semibold flex items-center gap-1 cursor-pointer"
+              title={micError}
+              onClick={retryMic}
+            >
+              <span className="material-symbols-outlined text-xs">mic_off</span>
+              Mic blocked — retry
+            </div>
+          )}
         </div>
 
         {role === "TEACHER" && (
@@ -352,6 +468,7 @@ function DeviceSettingsPopover({
                 onChange={(e) => cam.setActiveMediaDevice(e.target.value)}
                 className="w-full bg-[#10111a] border border-[#2d2e3b] rounded-lg px-2 py-1.5 text-xs text-white outline-none"
               >
+                {cam.devices.length === 0 && <option value="">No camera found</option>}
                 {cam.devices.map((d) => (
                   <option key={d.deviceId} value={d.deviceId}>
                     {d.label || `Camera ${d.deviceId.slice(0, 5)}`}
@@ -369,6 +486,7 @@ function DeviceSettingsPopover({
                 onChange={(e) => mic.setActiveMediaDevice(e.target.value)}
                 className="w-full bg-[#10111a] border border-[#2d2e3b] rounded-lg px-2 py-1.5 text-xs text-white outline-none"
               >
+                {mic.devices.length === 0 && <option value="">No microphone found</option>}
                 {mic.devices.map((d) => (
                   <option key={d.deviceId} value={d.deviceId}>
                     {d.label || `Microphone ${d.deviceId.slice(0, 5)}`}
