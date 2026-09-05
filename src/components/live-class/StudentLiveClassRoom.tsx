@@ -825,13 +825,15 @@ export function StudentLiveClassRoom({
                 {!isYouTube && (
                   <div className="space-y-1.5">
                     <p className="font-bold text-slate-400 text-[11px] uppercase tracking-wider">Teacher Video Stream</p>
-                    <div className="w-full aspect-video rounded-xl overflow-hidden bg-black border border-slate-800 shadow-md">
-                      <VideoStrip
-                        whiteboardSessionId={wbSession?.id || batchScheduleId}
-                        variant="panel"
-                        role="STUDENT"
-                        teacherName={teacherName}
-                      />
+                    <div className="w-full aspect-video rounded-xl overflow-hidden bg-[#0a0b12] border border-slate-800 shadow-md flex flex-col items-center justify-center gap-2">
+                      <div className="w-10 h-10 rounded-2xl bg-indigo-500/20 border border-indigo-500/40 text-indigo-400 flex items-center justify-center">
+                        <span className="material-symbols-outlined text-xl">videocam</span>
+                      </div>
+                      <p className="text-xs font-bold text-white">{teacherName || "Instructor"}</p>
+                      <span className="text-[10px] text-indigo-300 flex items-center gap-1.5">
+                        <span className={`w-1.5 h-1.5 rounded-full ${isLive ? "bg-rose-500 animate-ping" : "bg-amber-400 animate-pulse"}`} />
+                        {isLive ? "Live Teaching" : "Awaiting Class"}
+                      </span>
                     </div>
                   </div>
                 )}
