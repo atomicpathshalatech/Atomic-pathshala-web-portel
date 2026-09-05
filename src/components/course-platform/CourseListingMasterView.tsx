@@ -29,18 +29,18 @@ export function CourseListingMasterView({ courses = [] }: { courses?: CourseData
   return (
     <div className="space-y-6">
       {/* 1. Hero Banner */}
-      <section className="bg-[#031635] text-white rounded-3xl p-6 sm:p-10 relative overflow-hidden flex flex-col justify-center min-h-[220px] shadow-lg shadow-navy-950/20">
+      <section className="bg-white border border-slate-200/90 rounded-2xl p-5 sm:p-7 relative overflow-hidden shadow-2xs">
         <div className="relative z-10 max-w-2xl space-y-2">
           <div className="flex items-center gap-2">
-            <span className="bg-[#9ff5c1] text-[#005231] font-extrabold text-[10px] px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+            <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 font-extrabold text-[10px] px-2.5 py-0.5 rounded-full uppercase tracking-wider">
               Atomic Pathshala Admissions Open
             </span>
           </div>
-          <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight">
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
             Prepare Smarter. Score Higher.
           </h1>
-          <p className="text-xs sm:text-base text-slate-300 leading-relaxed max-w-xl">
-            Explore India&apos;s most structured NEET, JEE, and Board batches with India&apos;s leading faculty.
+          <p className="text-xs sm:text-sm text-slate-600 leading-relaxed max-w-xl">
+            Explore India&apos;s most structured NEET batches with leading medical faculty.
           </p>
         </div>
       </section>
@@ -52,10 +52,10 @@ export function CourseListingMasterView({ courses = [] }: { courses?: CourseData
         </span>
         <input
           type="text"
-          placeholder="Search courses, chapters, teachers (e.g. Chemistry, Physics, Biology)..."
+          placeholder="Search batches, chapters, teachers (e.g. Chemistry, Physics, Biology)..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full pl-12 pr-4 py-3.5 bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl text-xs sm:text-sm text-[#031635] dark:text-white font-medium shadow-sm focus:border-[#6b46c1] focus:ring-2 focus:ring-[#6b46c1]/20 outline-none transition"
+          className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200/90 rounded-xl text-xs sm:text-sm text-slate-800 font-medium shadow-2xs focus:border-[#6b46c1] focus:ring-2 focus:ring-[#6b46c1]/20 outline-none transition"
         />
         {searchQuery && (
           <button
@@ -80,10 +80,10 @@ export function CourseListingMasterView({ courses = [] }: { courses?: CourseData
               key={ex}
               type="button"
               onClick={() => setSelectedExam(ex)}
-              className={`px-4 py-1.5 rounded-full text-xs font-bold transition whitespace-nowrap ${
+              className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition whitespace-nowrap ${
                 selectedExam === ex
-                  ? "bg-[#031635] dark:bg-primary text-white shadow-sm"
-                  : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-400"
+                  ? "bg-slate-900 text-white shadow-2xs"
+                  : "bg-white border border-slate-200 text-slate-600 hover:border-slate-300"
               }`}
             >
               {ex}
@@ -101,10 +101,10 @@ export function CourseListingMasterView({ courses = [] }: { courses?: CourseData
               key={sub}
               type="button"
               onClick={() => setSelectedSubject(sub)}
-              className={`px-3.5 py-1 rounded-full text-xs font-semibold transition whitespace-nowrap ${
+              className={`px-3 py-1 rounded-full text-xs font-semibold transition whitespace-nowrap ${
                 selectedSubject === sub
-                  ? "bg-[#6b46c1] text-white shadow-sm"
-                  : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200"
+                  ? "bg-purple-600 text-white shadow-2xs"
+                  : "bg-white border border-slate-200 text-slate-600 hover:border-slate-300"
               }`}
             >
               {sub}
@@ -116,15 +116,15 @@ export function CourseListingMasterView({ courses = [] }: { courses?: CourseData
       {/* 4. Course Grid */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-base sm:text-lg font-extrabold text-[#031635] dark:text-white">
+          <h2 className="text-sm sm:text-base font-black text-[#031635]">
             Available Batches ({filteredCourses.length})
           </h2>
         </div>
 
         {filteredCourses.length === 0 ? (
-          <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-3">
+          <div className="p-10 text-center bg-white rounded-2xl border border-slate-200 space-y-3 shadow-2xs">
             <span className="material-symbols-outlined text-4xl text-slate-300">school</span>
-            <p className="text-sm font-bold text-[#031635] dark:text-white">
+            <p className="text-sm font-bold text-[#031635]">
               {courses.length === 0
                 ? "No active batches published yet"
                 : "No batches found matching your criteria"}
@@ -142,14 +142,14 @@ export function CourseListingMasterView({ courses = [] }: { courses?: CourseData
                   setSelectedExam("All");
                   setSelectedSubject("All");
                 }}
-                className="text-xs font-bold text-[#6b46c1] hover:underline"
+                className="text-xs font-bold text-purple-600 hover:underline cursor-pointer"
               >
                 Clear all filters
               </button>
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {filteredCourses.map((c) => (
               <CourseCard key={c.id} course={c} />
             ))}

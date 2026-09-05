@@ -41,6 +41,7 @@ export default async function StudentDashboardPage() {
   });
 
   const enrolledBatchIds = enrollments.map((e) => e.batch.id);
+  const primaryBatchId = enrolledBatchIds[0] || null;
 
   const allUpcoming: ScheduleWithTeacher[] = enrollments
     .flatMap((e) => e.batch.schedules as ScheduleWithTeacher[])
@@ -113,20 +114,20 @@ export default async function StudentDashboardPage() {
   const greeting = hour < 12 ? "Good Morning" : hour < 17 ? "Good Afternoon" : "Good Evening";
 
   return (
-    <div className="space-y-10 max-w-7xl">
+    <div className="space-y-6 max-w-7xl">
       {/* Welcome Strip Banner */}
-      <section className="bg-gradient-to-r from-orange-50/90 via-white to-indigo-50/50 dark:from-slate-900 dark:via-slate-900 dark:to-indigo-950/40 border border-slate-200/70 dark:border-slate-800 rounded-3xl p-6 md:p-8 shadow-xs flex flex-col md:flex-row md:items-center md:justify-between gap-6 relative overflow-hidden">
-        <div className="z-10 space-y-1.5">
-          <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+      <section className="bg-white border border-slate-200/80 rounded-2xl p-4 sm:p-5 shadow-2xs flex flex-col md:flex-row md:items-center md:justify-between gap-4 relative overflow-hidden">
+        <div className="space-y-1">
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
             Welcome back, {firstName}!
           </h1>
-          <p className="text-xs md:text-sm text-slate-600 dark:text-slate-400 max-w-xl leading-relaxed">
-            You are targeting <span className="font-bold text-slate-900 dark:text-white">{student.targetExam || "NEET"}</span>. Stay consistent and keep your streak alive today.
+          <p className="text-xs text-slate-500 max-w-xl leading-relaxed">
+            Targeting <span className="font-bold text-slate-800">{student.targetExam || "NEET"}</span>. Stay consistent and keep your study streak alive today.
           </p>
         </div>
 
-        <div className="flex items-center gap-3 z-10 flex-wrap">
-          <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-3.5 py-2 rounded-xl bg-orange-100/70 dark:bg-orange-950/60 text-orange-800 dark:text-orange-300 border border-orange-200/60 dark:border-orange-900/60">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-orange-50 text-orange-700 border border-orange-200">
             <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
               <circle cx="12" cy="12" fill="none" r="9" stroke="currentColor" strokeWidth="2" />
               <circle cx="12" cy="12" r="3" />
@@ -135,7 +136,7 @@ export default async function StudentDashboardPage() {
           </span>
           <Link
             href={nextClass ? `/courses/${nextClass.batchId}` : "/schedule"}
-            className="px-5 py-2.5 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 dark:bg-orange-500 dark:hover:bg-orange-600 rounded-xl shadow-md shadow-slate-900/10 transition-colors flex items-center gap-1.5"
+            className="px-4 py-1.5 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow-2xs transition-colors flex items-center gap-1.5"
           >
             <span>Resume Learning</span>
             <span className="material-symbols-outlined text-sm">arrow_forward</span>
@@ -145,31 +146,31 @@ export default async function StudentDashboardPage() {
 
       {/* Up Next / Live Spotlight */}
       {nextClass && (
-        <section className="glass-card rounded-2xl p-5 md:p-6 relative overflow-hidden bg-gradient-to-r from-blue-500/10 via-surface to-surface border border-blue-200/50 dark:border-blue-900/40">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <section className="bg-white border border-blue-200/80 rounded-2xl p-4 sm:p-5 shadow-2xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping" />
-                <span className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
+                <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">
                   Next Scheduled Session &middot; {nextClass.type.replace("_", " ")}
                 </span>
               </div>
-              <h2 className="font-headline-md text-headline-md font-bold text-on-surface">
+              <h2 className="text-base sm:text-lg font-bold text-slate-900">
                 {nextClass.title}
               </h2>
               {nextClass.teacher && (
-                <p className="text-xs text-on-surface-variant">
+                <p className="text-xs text-slate-500">
                   Instructor: <b>{nextClass.teacher.user.name}</b>
                 </p>
               )}
-              <div className="pt-1">
+              <div className="pt-0.5">
                 <NextClassCountdown startsAtIso={nextClass.startsAt.toISOString()} />
               </div>
             </div>
 
             <Link
               href={nextClass.type === "LIVE_CLASS" ? `/live-class/${nextClass.id}` : "/schedule"}
-              className="px-6 py-3 rounded-xl bg-primary text-on-primary font-semibold text-xs shadow-md hover:opacity-90 active:scale-95 transition-all text-center self-start sm:self-auto shrink-0"
+              className="px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs shadow-2xs active:scale-95 transition-all text-center self-start sm:self-auto shrink-0"
             >
               {isClassLive
                 ? "Join Live Class Now"
@@ -182,19 +183,17 @@ export default async function StudentDashboardPage() {
       )}
 
       {/* SECTION 2 — LEARN */}
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="font-headline-md text-headline-md font-bold text-on-surface">
-              1. Learn &amp; Understand
-            </h2>
-            <p className="text-xs text-on-surface-variant">
-              Live lectures, comprehensive recordings, and structured study material.
-            </p>
-          </div>
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-sm sm:text-base font-bold text-slate-900">
+            1. Learn &amp; Understand
+          </h2>
+          <p className="text-xs text-slate-500">
+            Live lectures, comprehensive recordings, and structured study material.
+          </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-3.5">
           <FeatureCard
             title="Live Classes"
             description="Join live classes and learn in real time"
@@ -209,8 +208,8 @@ export default async function StudentDashboardPage() {
             description="Watch lectures anytime, at your own pace"
             icon="play_circle"
             theme="teal"
-            href="/courses"
-            contextText={`${enrollments.length} Batches Active`}
+            href={primaryBatchId ? `/courses/${primaryBatchId}/subjects` : "/courses"}
+            contextText={primaryBatchId ? "Physics, Chem & Bio" : `${enrollments.length} Batches Active`}
           />
           <FeatureCard
             title="Study Material"
@@ -224,24 +223,24 @@ export default async function StudentDashboardPage() {
       </section>
 
       {/* SECTION 3 — PRACTICE */}
-      <section className="space-y-4">
+      <section className="space-y-3">
         <div>
-          <h2 className="font-headline-md text-headline-md font-bold text-on-surface">
+          <h2 className="text-sm sm:text-base font-bold text-slate-900">
             2. Daily Practice &amp; Revision
           </h2>
-          <p className="text-xs text-on-surface-variant">
+          <p className="text-xs text-slate-500">
             Targeted question solving, previous year questions, daily practice problems, and error analysis.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-3.5">
           <FeatureCard
             title="Question Practice"
             description="Practice questions topic by topic"
             icon="edit_note"
             theme="orange"
             href="/practice"
-            contextText="NEET, JEE & NCERT Quiz"
+            contextText="NEET &amp; NCERT Quiz"
           />
           <FeatureCard
             title="PYQ Practice"
@@ -249,7 +248,7 @@ export default async function StudentDashboardPage() {
             icon="history_edu"
             theme="rose"
             href="/tests"
-            contextText="NEET &amp; JEE Archives"
+            contextText="NEET Archives"
           />
           <FeatureCard
             title="Daily DPP"
@@ -271,24 +270,24 @@ export default async function StudentDashboardPage() {
       </section>
 
       {/* SECTION 4 — TEST & ANALYZE */}
-      <section className="space-y-4">
+      <section className="space-y-3">
         <div>
-          <h2 className="font-headline-md text-headline-md font-bold text-on-surface">
+          <h2 className="text-sm sm:text-base font-bold text-slate-900">
             3. Test &amp; Analyze
           </h2>
-          <p className="text-xs text-on-surface-variant">
+          <p className="text-xs text-slate-500">
             Simulated test series, All India Rank diagnostics, and deep performance analysis.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-3.5">
           <FeatureCard
-            title="Test Series"
+            title="Atomic Test Series"
             description="Take tests and measure your preparation"
             icon="quiz"
             theme="green"
             href="/tests"
-            contextText={testsCount > 0 ? `${testsCount} Mock Tests` : "Mock Tests"}
+            contextText={testsCount > 0 ? `${testsCount} Mock Tests` : "Test Series"}
           />
           <FeatureCard
             title="My Performance"
@@ -302,17 +301,17 @@ export default async function StudentDashboardPage() {
       </section>
 
       {/* SECTION 5 — AI ASSISTANT (ATOMIC GURU) */}
-      <section className="space-y-4">
+      <section className="space-y-3">
         <div>
-          <h2 className="font-headline-md text-headline-md font-bold text-on-surface">
+          <h2 className="text-sm sm:text-base font-bold text-slate-900">
             4. AI Concept &amp; Doubt Help
           </h2>
-          <p className="text-xs text-on-surface-variant">
+          <p className="text-xs text-slate-500">
             Instant step-by-step problem solver, conceptual explanation, and doubt escalation.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:gap-5">
+        <div className="grid grid-cols-1 gap-3 sm:gap-3.5">
           <FeatureCard
             title="Atomic Guru"
             description="Ask doubts and understand concepts with AI"
@@ -326,36 +325,36 @@ export default async function StudentDashboardPage() {
 
       {/* Enrolled Batches Section */}
       {enrollments.length > 0 && (
-        <section className="space-y-4 pt-4 border-t border-outline-variant/20">
+        <section className="space-y-3 pt-3 border-t border-slate-200/80">
           <div className="flex justify-between items-center">
-            <h2 className="font-headline-md text-headline-md font-bold text-on-surface">
+            <h2 className="text-sm sm:text-base font-bold text-slate-900">
               My Enrolled Batches
             </h2>
-            <Link href="/courses" className="text-xs font-semibold text-primary hover:underline">
-              View All Courses &rarr;
+            <Link href="/courses" className="text-xs font-bold text-orange-600 hover:underline">
+              View All Batches &rarr;
             </Link>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {enrollments.map((e) => (
               <Link
                 key={e.id}
                 href={`/courses/${e.batch.id}`}
-                className="glass-card rounded-2xl p-5 border border-outline-variant/30 hover:border-primary/50 transition-all hover:shadow-md block"
+                className="bg-white rounded-xl p-3.5 sm:p-4 border border-slate-200/80 hover:border-slate-300 transition-all hover:shadow-2xs block"
               >
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="material-symbols-outlined text-primary text-xl">science</span>
-                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-primary/10 text-primary">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="material-symbols-outlined text-orange-500 text-lg">science</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-orange-50 text-orange-700 border border-orange-200">
                     {e.batch.code}
                   </span>
                 </div>
-                <h3 className="font-bold text-sm text-on-surface line-clamp-1">{e.batch.name}</h3>
-                <p className="text-xs text-on-surface-variant mt-0.5 truncate">
+                <h3 className="font-bold text-sm text-slate-900 line-clamp-1">{e.batch.name}</h3>
+                <p className="text-xs text-slate-500 mt-0.5 truncate">
                   {e.batch.course?.title ?? "Standard Curriculum"}
                 </p>
-                <div className="mt-3 pt-3 border-t border-outline-variant/20 flex items-center justify-between text-xs text-on-surface-variant">
+                <div className="mt-2.5 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
                   <span>{e.batch.teachers.length} Faculty</span>
-                  <span className="text-primary font-semibold">Open Batch &rarr;</span>
+                  <span className="text-orange-600 font-bold">Open Batch &rarr;</span>
                 </div>
               </Link>
             ))}

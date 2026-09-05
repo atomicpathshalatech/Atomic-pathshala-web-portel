@@ -8,7 +8,7 @@ import {
 } from "@/components/student/AtomicPracticeTestArena";
 
 export const metadata: Metadata = {
-  title: "Atomic Practice Test & Test Series Arena | Atomic Pathshala",
+  title: "Atomic Test Series | Atomic Pathshala",
 };
 
 export default async function StudentTestsPage() {
@@ -47,6 +47,14 @@ export default async function StudentTestsPage() {
         },
       },
     });
+
+    // Exclude Mathematics if student is targeting NEET
+    const isNeet = !student.targetExam || student.targetExam.toUpperCase().includes("NEET");
+    if (isNeet) {
+      dbSubjects = dbSubjects.filter(
+        (s) => !s.title?.toLowerCase().includes("math")
+      );
+    }
   } catch (err) {
     console.error("Error fetching subject tests:", err);
   }
@@ -270,54 +278,20 @@ export default async function StudentTestsPage() {
     });
   }
 
-  // Fetch Official Demo CBT Test
-  const demoTestRecord = await prisma.test.findUnique({
-    where: { id: "atomic-pathshala-demo-cbt-test" },
-    include: {
-      attempts: {
-        where: { studentId: student.id },
-        select: { id: true, status: true, score: true },
-      },
-      sections: {
-        include: { _count: { select: { questions: true } } },
-      },
-    },
-  });
-
-  const demoAttempt = demoTestRecord?.attempts?.[0];
-  const demoStatus: "PENDING" | "IN_PROGRESS" | "COMPLETED" = demoAttempt
-    ? demoAttempt.status === "IN_PROGRESS"
-      ? "IN_PROGRESS"
-      : "COMPLETED"
-    : "PENDING";
-
-  const demoTestProp = demoTestRecord
-    ? {
-        id: demoTestRecord.id,
-        name: demoTestRecord.name,
-        description: demoTestRecord.description,
-        durationMin: demoTestRecord.durationMin,
-        questionCount: demoTestRecord.sections.reduce((s, sec) => s + (sec._count.questions || 0), 0) || 10,
-        totalMarks: 40,
-        status: demoStatus,
-        score: demoAttempt?.score ?? null,
-      }
-    : null;
-
   return (
-    <div className="space-y-8 max-w-6xl mx-auto pb-16">
+    <div className="space-y-6 max-w-6xl mx-auto pb-16">
       {/* Header */}
-      <header className="space-y-2">
+      <header className="space-y-1.5 bg-white border border-slate-200/80 rounded-2xl p-4 sm:p-5 shadow-2xs">
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-primary/10 text-primary">
-            NTA CBT STANDARD &middot; ATOMIC ARENA
+          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-orange-50 text-orange-600 border border-orange-200">
+            NTA CBT STANDARD &middot; ATOMIC TEST SERIES
           </span>
         </div>
-        <h1 className="font-display-lg text-display-lg-mobile md:text-display-lg font-bold text-on-surface">
-          Atomic Practice Test &amp; Test Series Arena
+        <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+          Atomic Test Series
         </h1>
-        <p className="text-xs md:text-sm text-on-surface-variant max-w-3xl leading-relaxed">
-          Chapterwise practice tests categorized automatically by batch subjects, plus enrolled All-India Test Series boxes with instant KaTeX formula solutions and rank analytics.
+        <p className="text-xs text-slate-500 max-w-3xl leading-relaxed">
+          Chapterwise practice tests categorized automatically by batch subjects, plus enrolled All-India Test Series with direct PDF downloads, instant solutions and rank analytics.
         </p>
       </header>
 
@@ -325,7 +299,6 @@ export default async function StudentTestsPage() {
       <AtomicPracticeTestArena
         subjectTests={Object.values(subjectTestsMap)}
         testSeriesBoxes={testSeriesBoxes}
-        demoTest={demoTestProp}
       />
     </div>
   );

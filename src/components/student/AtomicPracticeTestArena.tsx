@@ -125,130 +125,22 @@ export function AtomicPracticeTestArena({
 
   return (
     <div className="space-y-6">
-      {/* ========================================================================= */}
-      {/* FEATURED: ATOMIC PATHSHALA DEMO CBT SIMULATOR CARD                         */}
-      {/* ========================================================================= */}
-      {demoTest && (
-        <div className="bg-gradient-to-r from-blue-700 via-indigo-600 to-violet-700 border-2 border-indigo-300/30 rounded-3xl p-5 sm:p-7 shadow-xl shadow-indigo-950/15 space-y-4 relative overflow-hidden group text-white">
-          <div className="absolute top-0 right-0 w-80 h-80 bg-white/10 rounded-full blur-3xl -z-0 pointer-events-none group-hover:bg-white/15 transition-all" />
-          <div className="absolute -bottom-10 -left-10 w-60 h-60 bg-emerald-400/20 rounded-full blur-2xl -z-0 pointer-events-none" />
-
-          <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="px-3 py-1 rounded-full bg-emerald-400 text-slate-950 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
-                  <span className="w-2 h-2 rounded-full bg-slate-950 animate-pulse" />
-                  LIVE DEMO CBT SIMULATOR
-                </span>
-                <span className="px-2.5 py-1 rounded-full bg-white/20 text-white border border-white/30 text-[10px] font-bold backdrop-blur-md">
-                  Bilingual: English / हिंदी
-                </span>
-                <span className="px-2.5 py-1 rounded-full bg-white/20 text-white border border-white/30 text-[10px] font-bold backdrop-blur-md">
-                  NEET Standard (+4 / -1)
-                </span>
-              </div>
-
-              <h2 className="text-lg sm:text-2xl font-black text-white flex items-center gap-2">
-                <span>{demoTest.name}</span>
-              </h2>
-
-              <p className="text-xs sm:text-sm text-indigo-100 max-w-2xl leading-relaxed">
-                {demoTest.description || "10 प्रश्नों वाला Demo Test — Student Test Interface, Question Palette, Review, Language और Result Flow को test करने के लिए।"}
-              </p>
-
-              {/* Subject Breakdown Badges */}
-              <div className="flex items-center gap-2 pt-1 flex-wrap">
-                <span className="text-xs text-indigo-200 font-bold">Subjects:</span>
-                <span className="px-2.5 py-0.5 rounded-lg bg-white/15 text-white text-[11px] font-bold border border-white/20 backdrop-blur-sm">
-                  Biology (4 Qs)
-                </span>
-                <span className="px-2.5 py-0.5 rounded-lg bg-white/15 text-white text-[11px] font-bold border border-white/20 backdrop-blur-sm">
-                  Chemistry (3 Qs)
-                </span>
-                <span className="px-2.5 py-0.5 rounded-lg bg-white/15 text-white text-[11px] font-bold border border-white/20 backdrop-blur-sm">
-                  Physics (3 Qs)
-                </span>
-              </div>
-            </div>
-
-            {/* Test Card Actions & Status */}
-            <div className="flex flex-col items-start sm:items-end gap-2.5 shrink-0 self-start sm:self-center">
-              <div className="flex items-center gap-3 text-xs font-bold text-indigo-100">
-                <span>⏱️ {demoTest.durationMin} Mins</span>
-                <span>•</span>
-                <span>🎯 {demoTest.questionCount} Questions</span>
-                <span>•</span>
-                <span>🏆 {demoTest.totalMarks} Marks</span>
-              </div>
-
-              <div className="flex items-center gap-3 flex-wrap">
-                <TestPdfDownloadModal
-                  testId={demoTest.id}
-                  testName={demoTest.name}
-                  triggerButton={
-                    <button
-                      type="button"
-                      className="px-4 py-3 rounded-2xl bg-white/15 hover:bg-white/25 text-white border border-white/30 font-bold text-xs shadow-md transition flex items-center gap-1.5 backdrop-blur-md"
-                    >
-                      <span className="material-symbols-outlined text-base">picture_as_pdf</span>
-                      <span>Download Test PDF</span>
-                    </button>
-                  }
-                />
-
-                {demoTest.status === "COMPLETED" ? (
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="px-3.5 py-2 rounded-xl bg-white/20 text-white border border-white/30 text-xs font-black backdrop-blur-md">
-                      Score: {demoTest.score ?? 0}/{demoTest.totalMarks}
-                    </span>
-                    <Link
-                      href={`/tests/${demoTest.id}/result`}
-                      className="px-5 py-2.5 rounded-2xl bg-white hover:bg-indigo-50 text-indigo-700 font-black text-xs shadow-lg transition active:scale-95"
-                    >
-                      View Result &amp; Analysis
-                    </Link>
-                  </div>
-                ) : demoTest.status === "IN_PROGRESS" ? (
-                  <Link
-                    href={`/tests/${demoTest.id}/attempt`}
-                    className="px-6 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/25 transition flex items-center gap-1.5 animate-bounce"
-                  >
-                    <span className="material-symbols-outlined text-base">play_arrow</span>
-                    <span>Resume Test</span>
-                  </Link>
-                ) : (
-                  <Link
-                    href={`/tests/${demoTest.id}/attempt`}
-                    className="px-7 py-3.5 rounded-2xl bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-black text-sm shadow-xl shadow-emerald-500/25 transition-all transform hover:scale-[1.02] active:scale-95 flex items-center gap-2"
-                  >
-                    <span className="material-symbols-outlined text-lg">rocket_launch</span>
-                    <span>Start Test</span>
-                  </Link>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* 1. TOP 2-CATEGORY SWITCHER: CHAPTERWISE TESTS vs TEST SERIES BOXES        */}
-      {/* ========================================================================= */}
-      <div className="bg-surface dark:bg-slate-900 border border-outline-variant/30 rounded-3xl p-2 shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+      {/* 1. TOP 2-CATEGORY SWITCHER: CHAPTERWISE TESTS vs TEST SERIES BOXES */}
+      <div className="bg-white border border-slate-200/80 rounded-2xl p-1.5 shadow-2xs flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5">
         <button
           type="button"
           onClick={() => setActiveCategory("CHAPTERWISE")}
-          className={`flex-1 flex items-center justify-center gap-2.5 py-3.5 px-5 rounded-2xl font-bold text-xs sm:text-sm transition-all ${
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer ${
             activeCategory === "CHAPTERWISE"
-              ? "bg-primary text-on-primary shadow-md shadow-primary/20 scale-[1.01]"
-              : "bg-surface-container-low dark:bg-slate-800/60 text-on-surface-variant hover:text-on-surface hover:bg-surface-container"
+              ? "bg-orange-500 text-white shadow-2xs"
+              : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
           }`}
         >
-          <span className="material-symbols-outlined text-lg sm:text-xl">menu_book</span>
+          <span className="material-symbols-outlined text-[18px]">menu_book</span>
           <span>1. Chapterwise Practice Tests</span>
           <span
             className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
-              activeCategory === "CHAPTERWISE" ? "bg-white/20 text-white" : "bg-surface-container-high text-on-surface"
+              activeCategory === "CHAPTERWISE" ? "bg-white/25 text-white" : "bg-slate-100 text-slate-700"
             }`}
           >
             {totalChapterwiseTests}
@@ -258,17 +150,17 @@ export function AtomicPracticeTestArena({
         <button
           type="button"
           onClick={() => setActiveCategory("TEST_SERIES")}
-          className={`flex-1 flex items-center justify-center gap-2.5 py-3.5 px-5 rounded-2xl font-bold text-xs sm:text-sm transition-all ${
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer ${
             activeCategory === "TEST_SERIES"
-              ? "bg-purple-600 text-white shadow-md shadow-purple-600/20 scale-[1.01]"
-              : "bg-surface-container-low dark:bg-slate-800/60 text-on-surface-variant hover:text-on-surface hover:bg-surface-container"
+              ? "bg-purple-600 text-white shadow-2xs"
+              : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
           }`}
         >
-          <span className="material-symbols-outlined text-lg sm:text-xl">military_tech</span>
+          <span className="material-symbols-outlined text-[18px]">military_tech</span>
           <span>2. Enrolled &amp; Batch Test Series</span>
           <span
             className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
-              activeCategory === "TEST_SERIES" ? "bg-white/20 text-white" : "bg-surface-container-high text-on-surface"
+              activeCategory === "TEST_SERIES" ? "bg-white/25 text-white" : "bg-slate-100 text-slate-700"
             }`}
           >
             {testSeriesBoxes.length} Box{testSeriesBoxes.length === 1 ? "" : "es"} &middot; {totalSeriesTests} Tests
@@ -280,11 +172,11 @@ export function AtomicPracticeTestArena({
       {/* CATEGORY 1: CHAPTERWISE PRACTICE TESTS                                    */}
       {/* ========================================================================= */}
       {activeCategory === "CHAPTERWISE" && (
-        <div className="space-y-6">
+        <div className="space-y-4">
           {/* Horizontal Subject Bar */}
           {subjectTests.length > 0 && (
-            <div className="bg-surface dark:bg-slate-900 border border-outline-variant/30 rounded-3xl p-2.5 shadow-sm">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
+            <div className="bg-white border border-slate-200/80 rounded-2xl p-2 shadow-2xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                 {subjectTests.map((subj) => {
                   const isSelected = (activeSubjectData?.name || selectedSubject) === subj.name;
                   const totalTests = subj.chapters.reduce((sum, ch) => sum + ch.tests.length, 0);
@@ -298,39 +190,37 @@ export function AtomicPracticeTestArena({
                       key={subj.id}
                       type="button"
                       onClick={() => setSelectedSubject(subj.name)}
-                      className={`relative flex flex-col sm:flex-row items-center justify-center sm:justify-between p-3 sm:px-5 sm:py-3.5 rounded-2xl transition-all duration-200 text-center sm:text-left ${
+                      className={`relative flex items-center justify-between p-2.5 sm:px-4 sm:py-3 rounded-xl transition-all duration-200 text-left cursor-pointer ${
                         isSelected
-                          ? `bg-gradient-to-r ${subj.gradient || "from-primary to-primary-container"} text-white shadow-lg shadow-primary/20 scale-[1.01]`
-                          : "bg-surface-container-low dark:bg-slate-800/60 hover:bg-surface-container text-on-surface hover:text-primary border border-outline-variant/20"
+                          ? "bg-orange-500 text-white shadow-2xs"
+                          : "bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-200/60"
                       }`}
                     >
-                      <div className="flex items-center gap-2.5">
+                      <div className="flex items-center gap-2.5 min-w-0">
                         <span
                           className={`material-symbols-outlined text-2xl ${
-                            isSelected ? "text-white" : subj.color || "text-primary"
+                            isSelected ? "text-white" : subj.color || "text-orange-500"
                           }`}
                         >
                           {subj.icon || "science"}
                         </span>
-                        <div>
-                          <h3 className="font-headline-sm text-sm sm:text-base font-bold leading-tight">
+                        <div className="min-w-0">
+                          <h3 className="text-xs sm:text-sm font-bold leading-tight truncate">
                             {subj.name}
                           </h3>
-                          <p className={`text-[10px] sm:text-xs ${isSelected ? "text-white/80" : "text-on-surface-variant"}`}>
+                          <p className={`text-[10px] sm:text-[11px] ${isSelected ? "text-white/80" : "text-slate-500"}`}>
                             {subj.chapters.length} Chapters &middot; {totalTests} Tests
                           </p>
                         </div>
                       </div>
 
-                      <div className="hidden sm:flex items-center gap-1.5 text-xs font-bold mt-2 sm:mt-0">
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-[11px] ${
-                            isSelected ? "bg-white/20 text-white" : "bg-surface-container-high text-on-surface-variant"
-                          }`}
-                        >
-                          {completedTests}/{totalTests} Done
-                        </span>
-                      </div>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
+                          isSelected ? "bg-white/20 text-white" : "bg-white text-slate-600 border border-slate-200"
+                        }`}
+                      >
+                        {completedTests}/{totalTests} Done
+                      </span>
                     </button>
                   );
                 })}
@@ -339,23 +229,23 @@ export function AtomicPracticeTestArena({
           )}
 
           {/* Search Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-surface dark:bg-slate-900 border border-outline-variant/30 rounded-2xl p-4 shadow-sm">
-            <div className="flex items-center gap-3">
-              <span className={`material-symbols-outlined text-3xl ${activeSubjectData?.color || "text-primary"}`}>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white border border-slate-200/80 rounded-2xl p-3.5 shadow-2xs">
+            <div className="flex items-center gap-2.5">
+              <span className={`material-symbols-outlined text-2xl ${activeSubjectData?.color || "text-orange-500"}`}>
                 {activeSubjectData?.icon || "science"}
               </span>
               <div>
-                <h2 className="font-headline-md text-base sm:text-lg font-bold text-on-surface">
+                <h2 className="text-sm sm:text-base font-bold text-slate-900 leading-snug">
                   {activeSubjectData?.name || "Subject"} — Chapterwise Practice Tests
                 </h2>
-                <p className="text-xs text-on-surface-variant">
+                <p className="text-[11px] text-slate-500">
                   Tests automatically added as chapters and subjects are created in your batch.
                 </p>
               </div>
             </div>
 
             <div className="relative w-full sm:w-64">
-              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-lg">
+              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">
                 search
               </span>
               <input
@@ -363,22 +253,22 @@ export function AtomicPracticeTestArena({
                 value={chapterSearch}
                 onChange={(e) => setChapterSearch(e.target.value)}
                 placeholder="Search chapter or test..."
-                className="w-full pl-9 pr-3 py-2 rounded-xl bg-surface-container-low dark:bg-slate-800 border border-outline-variant/40 text-xs text-on-surface placeholder:text-on-surface-variant/60 focus:outline-none focus:ring-2 focus:ring-primary/40"
+                className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/40"
               />
             </div>
           </div>
 
           {/* Chapters Accordion */}
-          <div className="space-y-4">
+          <div className="space-y-3">
             {filteredChapters.length === 0 ? (
-              <div className="glass-card rounded-3xl p-12 text-center text-on-surface-variant space-y-2 border border-outline-variant/30">
-                <span className="material-symbols-outlined text-4xl text-on-surface-variant/40">quiz</span>
-                <p className="font-bold text-sm text-on-surface">
+              <div className="bg-white rounded-2xl p-10 text-center text-slate-500 space-y-1.5 border border-slate-200/80">
+                <span className="material-symbols-outlined text-4xl text-slate-300">quiz</span>
+                <p className="font-bold text-sm text-slate-800">
                   {chapterSearch
                     ? "No matching chapters found"
                     : `No practice tests added in ${activeSubjectData?.name || "this subject"} yet`}
                 </p>
-                <p className="text-xs text-on-surface-variant">
+                <p className="text-xs text-slate-400">
                   Practice tests will appear here as chapters are added to your batch courses.
                 </p>
               </div>
@@ -390,22 +280,22 @@ export function AtomicPracticeTestArena({
                 return (
                   <div
                     key={chapter.id}
-                    className="bg-surface dark:bg-slate-900 border border-outline-variant/30 rounded-3xl overflow-hidden shadow-sm transition-all"
+                    className="bg-white border border-slate-200/80 rounded-2xl overflow-hidden shadow-2xs transition-all"
                   >
                     <button
                       type="button"
                       onClick={() => toggleChapter(chapter.id)}
-                      className="w-full flex items-center justify-between p-4 sm:p-5 text-left hover:bg-surface-container-low dark:hover:bg-slate-800/50 transition-colors"
+                      className="w-full flex items-center justify-between p-3.5 sm:p-4 text-left hover:bg-slate-50/80 transition-colors cursor-pointer"
                     >
                       <div className="flex items-center gap-3 min-w-0">
-                        <span className="w-8 h-8 rounded-xl bg-primary/10 text-primary font-black text-xs flex items-center justify-center shrink-0">
+                        <span className="w-7 h-7 rounded-lg bg-orange-50 text-orange-600 font-bold text-xs flex items-center justify-center shrink-0 border border-orange-200/60">
                           {chapter.chapterNumber}
                         </span>
                         <div className="min-w-0">
-                          <h3 className="font-headline-sm text-sm sm:text-base font-bold text-on-surface truncate">
+                          <h3 className="text-xs sm:text-sm font-bold text-slate-900 truncate">
                             Chapter {chapter.chapterNumber}: {chapter.title}
                           </h3>
-                          <p className="text-xs text-on-surface-variant">
+                          <p className="text-[11px] text-slate-500">
                             {chapter.tests.length} Test{chapter.tests.length === 1 ? "" : "s"} &middot; {completed}/{chapter.tests.length} Completed
                           </p>
                         </div>
@@ -413,10 +303,10 @@ export function AtomicPracticeTestArena({
 
                       <div className="flex items-center gap-2 shrink-0">
                         <span
-                          className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                             completed === chapter.tests.length && chapter.tests.length > 0
-                              ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/30"
-                              : "bg-surface-container-high text-on-surface-variant"
+                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                              : "bg-slate-100 text-slate-600"
                           }`}
                         >
                           {completed === chapter.tests.length && chapter.tests.length > 0
@@ -424,7 +314,7 @@ export function AtomicPracticeTestArena({
                             : `${completed}/${chapter.tests.length}`}
                         </span>
                         <span
-                          className={`material-symbols-outlined text-xl text-on-surface-variant transition-transform duration-200 ${
+                          className={`material-symbols-outlined text-lg text-slate-400 transition-transform duration-200 ${
                             isExpanded ? "rotate-180" : ""
                           }`}
                         >
@@ -434,59 +324,50 @@ export function AtomicPracticeTestArena({
                     </button>
 
                     {isExpanded && (
-                      <div className="p-4 sm:p-5 pt-0 border-t border-outline-variant/20">
+                      <div className="p-3 sm:p-4 pt-0 border-t border-slate-100">
                         {chapter.tests.length === 0 ? (
-                          <p className="text-xs text-on-surface-variant py-4 text-center">
+                          <p className="text-xs text-slate-400 py-3 text-center">
                             No practice tests published for this chapter yet.
                           </p>
                         ) : (
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-3">
+                          <div className="space-y-2 pt-2.5">
                             {chapter.tests.map((test) => (
                               <div
                                 key={test.id}
-                                className="bg-surface-container-lowest dark:bg-slate-950 border border-outline-variant/30 rounded-2xl p-4 flex flex-col justify-between hover:border-primary/50 hover:shadow-md transition-all group"
+                                className="bg-white border border-slate-200/90 rounded-xl p-3 sm:px-4 sm:py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-slate-300 hover:shadow-2xs transition-all"
                               >
-                                <div className="space-y-2">
-                                  <div className="flex items-center justify-between gap-2">
-                                    <span className="px-2.5 py-0.5 rounded-lg bg-primary/10 text-primary font-black text-[11px]">
-                                      Chapter Test
-                                    </span>
+                                <div className="flex items-start sm:items-center gap-3 min-w-0">
+                                  <div className="shrink-0 pt-0.5 sm:pt-0">
                                     {test.status === "COMPLETED" ? (
-                                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/10 text-emerald-600">
+                                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                                         Score: {test.score}/{test.totalMarks}
                                       </span>
                                     ) : test.status === "IN_PROGRESS" ? (
-                                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/10 text-amber-600">
+                                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
                                         In Progress
                                       </span>
                                     ) : (
-                                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-500/10 text-blue-600">
+                                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
                                         Available
                                       </span>
                                     )}
                                   </div>
 
-                                  <h4 className="font-bold text-xs sm:text-sm text-on-surface leading-snug line-clamp-2">
-                                    {test.name}
-                                  </h4>
-
-                                  <div className="flex items-center gap-3 text-[11px] text-on-surface-variant pt-1">
-                                    <span className="flex items-center gap-1">
-                                      <span className="material-symbols-outlined text-sm text-primary">quiz</span>
-                                      {test.questionCount} Qs
-                                    </span>
-                                    <span className="flex items-center gap-1">
-                                      <span className="material-symbols-outlined text-sm text-primary">timer</span>
-                                      {test.durationMin} Mins
-                                    </span>
-                                    <span className="flex items-center gap-1">
-                                      <span className="material-symbols-outlined text-sm text-primary">military_tech</span>
-                                      {test.totalMarks} Mks
-                                    </span>
+                                  <div className="min-w-0">
+                                    <h4 className="font-bold text-xs sm:text-sm text-slate-900 truncate">
+                                      {test.name}
+                                    </h4>
+                                    <div className="flex items-center gap-2.5 text-[11px] text-slate-500 pt-0.5">
+                                      <span>{test.questionCount} Questions</span>
+                                      <span>&middot;</span>
+                                      <span>{test.durationMin} Mins</span>
+                                      <span>&middot;</span>
+                                      <span>{test.totalMarks} Marks</span>
+                                    </div>
                                   </div>
                                 </div>
 
-                                <div className="pt-4 mt-2 border-t border-outline-variant/20 flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
                                   <TestPdfDownloadModal
                                     testId={test.id}
                                     testName={test.name}
@@ -494,20 +375,20 @@ export function AtomicPracticeTestArena({
                                       <button
                                         type="button"
                                         title="Download Test PDF"
-                                        className="p-1.5 rounded-lg border border-outline-variant/40 hover:bg-surface-container-high text-on-surface-variant text-[11px] font-bold flex items-center gap-1 transition"
+                                        className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition shadow-2xs cursor-pointer"
                                       >
-                                        <span className="material-symbols-outlined text-sm text-indigo-500">picture_as_pdf</span>
-                                        <span>PDF</span>
+                                        <span className="material-symbols-outlined text-[16px] text-indigo-600">picture_as_pdf</span>
+                                        <span>Download PDF</span>
                                       </button>
                                     }
                                   />
 
                                   <Link
                                     href={test.status === "COMPLETED" ? `/tests/${test.id}/result` : `/tests/${test.id}/attempt`}
-                                    className={`px-3 py-1.5 rounded-xl font-bold text-xs transition shadow-sm ${
+                                    className={`px-3.5 py-1.5 rounded-lg font-bold text-xs transition shadow-2xs text-center ${
                                       test.status === "COMPLETED"
-                                        ? "bg-surface-container-high text-on-surface hover:bg-surface-container-highest"
-                                        : "bg-primary text-on-primary hover:opacity-90 active:scale-95"
+                                        ? "bg-slate-100 hover:bg-slate-200 text-slate-800"
+                                        : "bg-orange-500 hover:bg-orange-600 text-white active:scale-95"
                                     }`}
                                   >
                                     {test.status === "COMPLETED" ? "View Analysis" : test.status === "IN_PROGRESS" ? "Resume" : "Start Test"}
@@ -531,21 +412,21 @@ export function AtomicPracticeTestArena({
       {/* CATEGORY 2: ENROLLED TEST SERIES & BATCH TEST SERIES BOXES                */}
       {/* ========================================================================= */}
       {activeCategory === "TEST_SERIES" && (
-        <div className="space-y-6">
+        <div className="space-y-4">
           {/* Search Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-surface dark:bg-slate-900 border border-outline-variant/30 rounded-2xl p-4 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white border border-slate-200/80 rounded-2xl p-3.5 shadow-2xs">
             <div>
-              <h2 className="font-headline-md text-base sm:text-lg font-bold text-on-surface flex items-center gap-2">
+              <h2 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-2">
                 <span className="material-symbols-outlined text-purple-600">inventory_2</span>
                 <span>Enrolled &amp; Batch Test Series Boxes</span>
               </h2>
-              <p className="text-xs text-on-surface-variant">
-                Every test series you enroll in or assigned in your batch creates a dedicated test box below.
+              <p className="text-[11px] text-slate-500">
+                Official test series assigned to your batches with direct PDF downloads and instant analytics.
               </p>
             </div>
 
             <div className="relative w-full sm:w-64">
-              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-lg">
+              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">
                 search
               </span>
               <input
@@ -553,24 +434,24 @@ export function AtomicPracticeTestArena({
                 value={seriesSearch}
                 onChange={(e) => setSeriesSearch(e.target.value)}
                 placeholder="Search test series or test..."
-                className="w-full pl-9 pr-3 py-2 rounded-xl bg-surface-container-low dark:bg-slate-800 border border-outline-variant/40 text-xs text-on-surface placeholder:text-on-surface-variant/60 focus:outline-none focus:ring-2 focus:ring-purple-500/40"
+                className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/40"
               />
             </div>
           </div>
 
           {/* Test Series Boxes List */}
           {filteredSeriesBoxes.length === 0 ? (
-            <div className="glass-card rounded-3xl p-12 text-center text-on-surface-variant space-y-2 border border-outline-variant/30">
-              <span className="material-symbols-outlined text-5xl text-purple-400">inventory_2</span>
-              <h3 className="font-bold text-sm text-on-surface">No Test Series Boxes Found</h3>
-              <p className="text-xs text-on-surface-variant max-w-md mx-auto">
+            <div className="bg-white rounded-2xl p-10 text-center text-slate-500 space-y-1.5 border border-slate-200/80">
+              <span className="material-symbols-outlined text-4xl text-purple-400">inventory_2</span>
+              <h3 className="font-bold text-sm text-slate-800">No Test Series Boxes Found</h3>
+              <p className="text-xs text-slate-400 max-w-md mx-auto">
                 {seriesSearch
                   ? "No test series box matches your search query."
                   : "You are not enrolled in any test series yet, and no test series are scheduled in your batches."}
               </p>
             </div>
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-4">
               {filteredSeriesBoxes.map((box) => {
                 const isExpanded = expandedSeries[box.id] !== false; // Default expanded
                 const completedCount = box.tests.filter((t) => t.canViewResult || t.statusLabel.includes("Completed")).length;
@@ -578,51 +459,51 @@ export function AtomicPracticeTestArena({
                 return (
                   <div
                     key={box.id}
-                    className="bg-surface dark:bg-slate-900 border-2 border-purple-500/30 dark:border-purple-500/20 rounded-3xl overflow-hidden shadow-md transition-all"
+                    className="bg-white border border-slate-200/90 rounded-2xl overflow-hidden shadow-2xs transition-all"
                   >
                     {/* Test Series Box Header */}
-                    <div className="p-5 sm:p-6 bg-gradient-to-r from-purple-900/10 via-indigo-900/5 to-transparent border-b border-outline-variant/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div className="space-y-1.5">
+                    <div className="p-3.5 sm:p-4 bg-slate-50/60 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="space-y-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="px-2.5 py-0.5 rounded-full bg-purple-600 text-white text-[10px] font-extrabold uppercase tracking-wider">
-                            Test Series Box
+                          <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200 text-[10px] font-bold uppercase tracking-wider">
+                            Atomic Test Series Box
                           </span>
                           {box.examType && (
-                            <span className="px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface text-[10px] font-bold">
+                            <span className="px-2 py-0.5 rounded-md bg-white text-slate-600 border border-slate-200 text-[10px] font-bold">
                               {box.examType}
                             </span>
                           )}
                           {box.targetBatch && (
-                            <span className="text-xs font-bold text-purple-600 dark:text-purple-400">
+                            <span className="text-xs font-bold text-purple-600">
                               Batch: {box.targetBatch}
                             </span>
                           )}
                         </div>
 
-                        <h3 className="font-headline-lg text-lg sm:text-xl font-black text-on-surface">
+                        <h3 className="text-sm sm:text-base font-bold text-slate-900">
                           {box.name}
                         </h3>
                         {box.description && (
-                          <p className="text-xs text-on-surface-variant max-w-2xl">{box.description}</p>
+                          <p className="text-[11px] text-slate-500 max-w-2xl">{box.description}</p>
                         )}
                       </div>
 
                       <div className="flex items-center gap-3 shrink-0 self-start sm:self-auto">
                         <div className="text-right">
-                          <span className="text-xs font-bold text-on-surface block">
+                          <span className="text-xs font-bold text-slate-800 block">
                             {completedCount}/{box.tests.length} Tests Completed
                           </span>
-                          <span className="text-[10px] text-on-surface-variant font-mono">Code: {box.code}</span>
+                          <span className="text-[10px] text-slate-400 font-mono">Code: {box.code}</span>
                         </div>
 
                         <button
                           type="button"
                           onClick={() => toggleSeries(box.id)}
-                          className="p-2 rounded-xl bg-surface-container-high hover:bg-surface-container-highest transition"
+                          className="p-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 transition cursor-pointer"
                           title="Toggle Tests inside Box"
                         >
                           <span
-                            className={`material-symbols-outlined text-xl text-on-surface-variant transition-transform duration-200 ${
+                            className={`material-symbols-outlined text-lg text-slate-500 transition-transform duration-200 ${
                               isExpanded ? "rotate-180" : ""
                             }`}
                           >
@@ -634,31 +515,31 @@ export function AtomicPracticeTestArena({
 
                     {/* Tests inside Test Series Box */}
                     {isExpanded && (
-                      <div className="p-5 sm:p-6 space-y-3">
-                        <h4 className="text-xs font-extrabold text-on-surface uppercase tracking-wider mb-2">
-                          Tests inside {box.name} ({box.tests.length})
+                      <div className="p-3 sm:p-4 space-y-2">
+                        <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+                          Tests in this Series ({box.tests.length})
                         </h4>
 
                         {box.tests.length === 0 ? (
-                          <div className="p-6 rounded-2xl bg-surface-container-low text-center text-xs text-on-surface-variant">
+                          <div className="p-5 rounded-xl bg-slate-50 text-center text-xs text-slate-400">
                             No tests have been published in this test series yet.
                           </div>
                         ) : (
-                          <div className="grid grid-cols-1 gap-3">
+                          <div className="space-y-2">
                             {box.tests.map((t) => (
                               <div
                                 key={t.id}
-                                className="p-4 rounded-2xl bg-surface-container-lowest dark:bg-slate-950 border border-outline-variant/30 hover:border-purple-500/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all shadow-sm"
+                                className="p-3 sm:px-4 sm:py-2.5 rounded-xl bg-white border border-slate-200/90 hover:border-purple-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all shadow-2xs"
                               >
-                                <div className="space-y-1 flex-1">
+                                <div className="space-y-0.5 flex-1 min-w-0">
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <span
-                                      className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full ${t.tone}`}
+                                      className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${t.tone}`}
                                     >
                                       {t.statusLabel}
                                     </span>
                                     {t.startsAt && (
-                                      <span className="text-[11px] text-on-surface-variant">
+                                      <span className="text-[10px] text-slate-400">
                                         {new Date(t.startsAt).toLocaleDateString(undefined, {
                                           month: "short",
                                           day: "numeric",
@@ -667,25 +548,18 @@ export function AtomicPracticeTestArena({
                                     )}
                                   </div>
 
-                                  <h4 className="font-bold text-sm text-on-surface">{t.name}</h4>
+                                  <h4 className="font-bold text-xs sm:text-sm text-slate-900 truncate">{t.name}</h4>
 
-                                  <div className="flex items-center gap-4 text-xs text-on-surface-variant">
-                                    <span className="flex items-center gap-1">
-                                      <span className="material-symbols-outlined text-sm text-purple-600">quiz</span>
-                                      {t.questionCount} Questions
-                                    </span>
-                                    <span className="flex items-center gap-1">
-                                      <span className="material-symbols-outlined text-sm text-purple-600">timer</span>
-                                      {t.durationMin} Mins
-                                    </span>
-                                    <span className="flex items-center gap-1">
-                                      <span className="material-symbols-outlined text-sm text-purple-600">military_tech</span>
-                                      {t.totalMarks} Marks
-                                    </span>
+                                  <div className="flex items-center gap-3 text-[11px] text-slate-500">
+                                    <span>{t.questionCount} Questions</span>
+                                    <span>&middot;</span>
+                                    <span>{t.durationMin} Mins</span>
+                                    <span>&middot;</span>
+                                    <span>{t.totalMarks} Marks</span>
                                   </div>
                                 </div>
 
-                                <div className="shrink-0 flex items-center gap-2">
+                                <div className="shrink-0 flex items-center gap-2 self-end sm:self-auto">
                                   <TestPdfDownloadModal
                                     testId={t.id}
                                     testName={t.name}
@@ -693,10 +567,10 @@ export function AtomicPracticeTestArena({
                                       <button
                                         type="button"
                                         title="Download Test PDF"
-                                        className="p-2.5 rounded-xl border border-purple-200 dark:border-purple-900/50 hover:bg-purple-50 dark:hover:bg-purple-950/40 text-purple-600 dark:text-purple-400 text-xs font-bold flex items-center gap-1 transition shadow-sm"
+                                        className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition shadow-2xs cursor-pointer"
                                       >
-                                        <span className="material-symbols-outlined text-sm">picture_as_pdf</span>
-                                        <span>PDF</span>
+                                        <span className="material-symbols-outlined text-[16px] text-indigo-600">picture_as_pdf</span>
+                                        <span>Download PDF</span>
                                       </button>
                                     }
                                   />
@@ -704,21 +578,21 @@ export function AtomicPracticeTestArena({
                                   {t.canAttempt || t.canResume ? (
                                     <Link
                                       href={`/tests/${t.id}/attempt`}
-                                      className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-md transition text-center"
+                                      className="px-4 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-2xs transition text-center active:scale-95"
                                     >
                                       {t.canResume ? "Resume Test" : "Start Test"}
                                     </Link>
                                   ) : t.canViewResult ? (
                                     <Link
                                       href={`/tests/${t.id}/result`}
-                                      className="px-4 py-2.5 rounded-xl border border-purple-500 text-purple-600 hover:bg-purple-500/10 font-bold text-xs transition text-center"
+                                      className="px-3.5 py-1.5 rounded-lg border border-purple-500 text-purple-600 hover:bg-purple-50 font-bold text-xs transition text-center"
                                     >
                                       Review Analysis
                                     </Link>
                                   ) : (
                                     <button
                                       disabled
-                                      className="px-4 py-2 rounded-xl bg-surface-container-high text-on-surface opacity-60 text-xs font-bold cursor-not-allowed"
+                                      className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-400 text-xs font-bold cursor-not-allowed"
                                     >
                                       {t.statusLabel}
                                     </button>

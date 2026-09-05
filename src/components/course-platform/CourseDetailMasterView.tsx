@@ -17,7 +17,7 @@ import { FAQSection } from "./FAQSection";
 
 export function CourseDetailMasterView({ course }: { course: CourseData }) {
   return (
-    <div className="min-h-screen bg-[#f9f9ff] text-[#121c2c] pb-28 lg:pb-16 font-sans">
+    <div className="min-h-screen bg-white text-slate-850 pb-28 lg:pb-16 font-sans">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6">
         {/* Course Hero Banner */}
         <CourseHero course={course} />

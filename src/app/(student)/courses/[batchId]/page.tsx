@@ -213,6 +213,41 @@ export default async function BatchCoursePage({
     return <CourseDetailMasterView course={foundSample} />;
   }
 
+  let dbTests: any[] = [];
+  if (dbBatch) {
+    try {
+      const rawTests = await prisma.test.findMany({
+        where: {
+          OR: [
+            { batchSchedule: { batchId: dbBatch.id } },
+            ...(dbBatch.courseId
+              ? [{ chapter: { subject: { courseId: dbBatch.courseId } } }]
+              : []),
+          ],
+          status: "PUBLISHED",
+        },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+        select: {
+          id: true,
+          name: true,
+          durationMin: true,
+        },
+      });
+
+      dbTests = rawTests.map((t) => ({
+        id: t.id,
+        title: t.name,
+        name: t.name,
+        durationMins: t.durationMin,
+        durationMin: t.durationMin,
+        totalMarks: 720,
+      }));
+    } catch (err) {
+      console.error("Test query error for batch:", err);
+    }
+  }
+
   const educatorsList =
     dbBatch?.teachers?.map((t: any) => ({
       id: t.teacherId,
@@ -238,7 +273,7 @@ export default async function BatchCoursePage({
     educators: educatorsStr,
     duration: "Full Academic Year",
     classesCount: dbBatch?._count?.schedules || 0,
-    testsCount: 0,
+    testsCount: dbTests.length,
     studentsCount: dbBatch?._count?.enrollments || 0,
     price: 4999,
     originalPrice: 5999,
@@ -248,7 +283,7 @@ export default async function BatchCoursePage({
     teachers: educatorsList,
     subjects: dbBatch?.course?.subjects || [],
     schedules: dbBatch?.schedules || [],
-    tests: [],
+    tests: dbTests,
   };
 
   return <CourseDetailMasterView course={courseData} />;

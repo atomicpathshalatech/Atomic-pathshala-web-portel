@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React from "react";
 
@@ -13,7 +13,7 @@ export function AboutSection({ course }: { course: any }) {
     {
       icon: "quiz",
       title: "Standardized Mock Tests",
-      desc: "21 Full syllabus & part tests strictly matching the latest NEET/JEE patterns.",
+      desc: "21 Full syllabus & part tests strictly matching the latest NEET examination patterns.",
       color: "bg-purple-50 text-purple-600",
     },
     {
@@ -31,7 +31,7 @@ export function AboutSection({ course }: { course: any }) {
     {
       icon: "history_edu",
       title: "15-Year PYQ Bank",
-      desc: "Thoroughly solved past 15 years NEET/JEE questions categorized by topic.",
+      desc: "Thoroughly solved past 15 years NEET questions categorized by topic.",
       color: "bg-blue-50 text-blue-600",
     },
     {
@@ -45,32 +45,32 @@ export function AboutSection({ course }: { course: any }) {
   return (
     <section id="about" className="bg-white rounded-3xl border border-slate-200/80 p-5 sm:p-7 space-y-6">
       <div>
-        <h2 className="text-lg sm:text-xl font-extrabold text-[#031635] flex items-center gap-2">
+        <h2 className="text-base sm:text-lg font-black text-[#031635] flex items-center gap-2">
           <span className="material-symbols-outlined text-indigo-600">verified</span>
           <span>What&apos;s Included in this Batch</span>
         </h2>
-        <p className="text-xs text-slate-500 mt-1">
-          Everything you need to secure a top 1000 rank in NEET/JEE 2027.
+        <p className="text-xs text-slate-500 mt-0.5">
+          Everything you need to secure a top medical college rank in NEET {course?.examYear || "2026/2027"}.
         </p>
       </div>
 
       {/* Stats Summary Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="p-4 rounded-2xl bg-[#f0f3ff] border border-slate-200/60 text-center">
-          <span className="text-2xl font-black text-[#031635] block">128+</span>
-          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Live Classes</span>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <div className="p-3.5 rounded-xl bg-white border border-slate-200/90 text-center shadow-2xs">
+          <span className="text-xl font-black text-[#031635] block">{course?.classesCount || "120"}+</span>
+          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Live Classes</span>
         </div>
-        <div className="p-4 rounded-2xl bg-[#f0f3ff] border border-slate-200/60 text-center">
-          <span className="text-2xl font-black text-[#031635] block">21</span>
-          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Mock Tests</span>
+        <div className="p-3.5 rounded-xl bg-white border border-slate-200/90 text-center shadow-2xs">
+          <span className="text-xl font-black text-[#031635] block">{course?.testsCount || "20"}+</span>
+          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Mock Tests</span>
         </div>
-        <div className="p-4 rounded-2xl bg-[#f0f3ff] border border-slate-200/60 text-center">
-          <span className="text-2xl font-black text-[#031635] block">12 Mo</span>
-          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Course Validity</span>
+        <div className="p-3.5 rounded-xl bg-white border border-slate-200/90 text-center shadow-2xs">
+          <span className="text-xl font-black text-[#031635] block">12 Mo</span>
+          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Course Validity</span>
         </div>
-        <div className="p-4 rounded-2xl bg-[#f0f3ff] border border-slate-200/60 text-center">
-          <span className="text-2xl font-black text-[#031635] block">5 / Wk</span>
-          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Class Schedule</span>
+        <div className="p-3.5 rounded-xl bg-white border border-slate-200/90 text-center shadow-2xs">
+          <span className="text-xl font-black text-[#031635] block">5 / Wk</span>
+          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Class Schedule</span>
         </div>
       </div>
 

@@ -202,22 +202,22 @@ export function StudentShell({
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col selection:bg-orange-100 selection:text-orange-900 font-sans antialiased">
+    <div className="min-h-screen bg-white text-slate-800 flex flex-col selection:bg-orange-100 selection:text-orange-900 font-sans antialiased">
       {/* BEGIN: MainHeader */}
-      <header className="sticky top-0 z-40 w-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-[#EDE9FE]/70 dark:border-slate-800 shadow-sm transition-all">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-[76px] flex items-center justify-between">
+      <header className="sticky top-0 z-40 w-full bg-white border-b border-slate-200/80 shadow-2xs transition-all">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-[64px] flex items-center justify-between">
           {/* Left: 3-Lines Hamburger Menu + Brand & Goal Selector */}
-          <div className="flex items-center gap-2.5 sm:gap-4 shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-3.5 shrink-0">
             {/* 3-Lines Hamburger Pop-up Trigger Button */}
             <button
               type="button"
-              onClick={() => setSidebarOpen(true)}
-              className="flex items-center justify-center w-11 h-11 rounded-2xl bg-slate-50 hover:bg-orange-50 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200/80 hover:border-orange-300 dark:border-slate-700 text-slate-700 hover:text-orange-600 dark:text-slate-200 transition-all shadow-xs active:scale-95 focus:outline-none cursor-pointer group"
-              aria-label="Open Navigation Menu"
-              title="Open Navigation Menu"
+              onClick={() => setSidebarOpen((v) => !v)}
+              className="flex items-center justify-center w-10 h-10 rounded-xl bg-slate-50 hover:bg-orange-50 border border-slate-200/80 hover:border-orange-300 text-slate-700 hover:text-orange-600 transition-all shadow-2xs active:scale-95 focus:outline-none cursor-pointer group"
+              aria-label="Toggle Navigation Menu"
+              title={sidebarOpen ? "Close Menu" : "Open Menu"}
             >
-              <span className="material-symbols-outlined text-[24px] group-hover:scale-110 transition-transform">
-                menu
+              <span className="material-symbols-outlined text-[22px] group-hover:scale-105 transition-transform">
+                {sidebarOpen ? "close" : "menu"}
               </span>
             </button>
 
@@ -225,10 +225,10 @@ export function StudentShell({
             <Link
               href="/dashboard"
               aria-label="Home"
-              className="group relative flex items-center justify-center w-[48px] h-[48px] rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-md transition-all duration-200"
+              className="group relative flex items-center justify-center w-10 h-10 rounded-xl bg-white border border-slate-200/80 shadow-2xs hover:shadow-xs transition-all duration-200"
             >
               <svg
-                className="w-8 h-8 transition-transform group-hover:scale-105 duration-200"
+                className="w-7 h-7 transition-transform group-hover:scale-105 duration-200"
                 fill="none"
                 viewBox="0 0 48 48"
                 xmlns="http://www.w3.org/2000/svg"
@@ -245,32 +245,32 @@ export function StudentShell({
                 {/* Orbital particle point */}
                 <circle cx="39.5" cy="12.5" fill="#F97316" r="2.2" />
                 {/* Bold Stylized Letter 'A' */}
-                <path d="M24 8L13 36H19.5L21.8 29.8H26.2L28.5 36H35L24 8Z" fill="#0F172A" className="dark:fill-white" />
+                <path d="M24 8L13 36H19.5L21.8 29.8H26.2L28.5 36H35L24 8Z" fill="#0F172A" />
                 {/* Inner A cutout arrow accent */}
-                <polygon fill="#FFFFFF" points="24,14.5 21,24.5 27,24.5" className="dark:fill-slate-900" />
+                <polygon fill="#FFFFFF" points="24,14.5 21,24.5 27,24.5" />
                 {/* Sharp upward accent bar in orange */}
                 <path d="M19 27.5L24 16.5L29 27.5H23.5L19 27.5Z" fill="#EA580C" />
               </svg>
             </Link>
 
             {/* Subtle Vertical Separator */}
-            <div aria-hidden="true" className="h-8 w-[1px] bg-slate-200/80 dark:bg-slate-800 rounded-full" />
+            <div aria-hidden="true" className="h-7 w-[1px] bg-slate-200 rounded-full" />
 
             {/* Current Goal Dropdown Button */}
             <div className="flex flex-col justify-center">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 leading-none mb-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 leading-none mb-0.5">
                 Current goal
               </span>
               <button
                 type="button"
                 onClick={() => setGoalModalOpen(true)}
-                className="group flex items-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/50 rounded"
+                className="group flex items-center gap-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/50 rounded"
               >
-                <span className="text-[17px] sm:text-[18px] font-extrabold text-slate-900 dark:text-white tracking-tight group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors">
+                <span className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight group-hover:text-orange-600 transition-colors">
                   {activeGoal}
                 </span>
                 <svg
-                  className="w-4 h-4 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200 transition-transform duration-200 group-hover:translate-y-0.5"
+                  className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 transition-transform duration-200 group-hover:translate-y-0.5"
                   fill="currentColor"
                   viewBox="0 0 20 20"
                 >
@@ -285,23 +285,23 @@ export function StudentShell({
           </div>
 
           {/* Right Section (Streak, Wallet, Notification, Profile) */}
-          <div className="flex items-center gap-2 sm:gap-3.5 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
             {/* Streak Pill Badge */}
             <Link
               href="/leaderboard"
-              className="flex items-center gap-2 bg-orange-50/80 dark:bg-orange-950/40 border border-orange-200/90 dark:border-orange-800/80 rounded-full pl-1.5 pr-3.5 py-1 shadow-xs hover:bg-orange-100/70 transition-colors cursor-pointer select-none"
+              className="flex items-center gap-1.5 bg-orange-50 border border-orange-200/90 rounded-full pl-1.5 pr-3 py-1 shadow-2xs hover:bg-orange-100 transition-colors cursor-pointer select-none"
               title="Daily study streak"
             >
-              <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-orange-600 via-orange-500 to-amber-500 flex items-center justify-center text-white shadow-xs">
-                <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+              <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-orange-600 via-orange-500 to-amber-500 flex items-center justify-center text-white shadow-2xs">
+                <svg className="w-3 h-3 fill-current" viewBox="0 0 24 24">
                   <path d="M12.9 2.1c-.4-.5-1.1-.3-1.3.3-.8 2.6-2.5 4.3-4.2 6.1C5.6 10.5 4 12.8 4 16c0 4.4 3.6 8 8 8s8-3.6 8-8c0-3.1-1.4-5.8-3.6-7.8-1.5-1.4-2.7-3.4-3.5-6.1zM12 21.5c-3 0-5.5-2.5-5.5-5.5 0-1.8.9-3.4 2.2-4.6 1.4-1.3 2.6-2.8 3.3-4.7.7 1.8 1.9 3.3 3.3 4.6 1.3 1.2 2.2 2.8 2.2 4.7 0 3-2.5 5.5-5.5 5.5z" />
                 </svg>
               </div>
               <div className="flex items-baseline gap-1">
-                <span className="text-xs font-bold text-orange-950 dark:text-orange-200 tracking-tight">
-                  {currentStreakDays} day{currentStreakDays === 1 ? "" : "s"}
+                <span className="text-xs font-bold text-orange-950 tracking-tight">
+                  {currentStreakDays}d
                 </span>
-                <span className="hidden sm:inline text-[11px] font-medium text-orange-700/80 dark:text-orange-400">
+                <span className="hidden sm:inline text-[11px] font-medium text-orange-700">
                   Streak
                 </span>
               </div>
@@ -311,10 +311,10 @@ export function StudentShell({
             <Link
               href="/subscription"
               aria-label="Wallet & Balance"
-              className="relative w-10 h-10 flex items-center justify-center rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200/90 dark:border-slate-700 text-slate-700 dark:text-slate-300 shadow-xs hover:border-slate-300 transition-all focus:outline-none"
+              className="relative w-9 h-9 flex items-center justify-center rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 shadow-2xs hover:border-slate-300 transition-all focus:outline-none"
             >
               <svg
-                className="w-5 h-5 text-slate-600 dark:text-slate-300"
+                className="w-4.5 h-4.5 text-slate-600"
                 fill="none"
                 stroke="currentColor"
                 strokeLinecap="round"
@@ -332,10 +332,10 @@ export function StudentShell({
             <Link
               href="/notifications"
               aria-label="Notifications"
-              className="relative w-10 h-10 flex items-center justify-center rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200/90 dark:border-slate-700 text-slate-700 dark:text-slate-300 shadow-xs hover:border-slate-300 transition-all focus:outline-none"
+              className="relative w-9 h-9 flex items-center justify-center rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 shadow-2xs hover:border-slate-300 transition-all focus:outline-none"
             >
               <svg
-                className="w-5 h-5 text-slate-600 dark:text-slate-300"
+                className="w-4.5 h-4.5 text-slate-600"
                 fill="none"
                 stroke="currentColor"
                 strokeLinecap="round"
@@ -347,7 +347,7 @@ export function StudentShell({
                 <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
               </svg>
               {/* Notification Dot */}
-              <span className="absolute top-2 right-2 w-2 h-2 bg-orange-500 rounded-full ring-2 ring-white dark:ring-slate-800" />
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-orange-500 rounded-full ring-2 ring-white" />
             </Link>
 
             {/* User Profile Avatar with Dropdown Indicator */}
@@ -357,66 +357,67 @@ export function StudentShell({
       </header>
 
       {/* POP-UP SIDEBAR DRAWER (Animated 3-Lines Pop-up Overlay for Website, App, Mobile & Tablet) */}
+      {/* POP-UP / SLIDE-IN SIDEBAR DRAWER (Smooth inside/outside toggle) */}
       {sidebarOpen && (
-        <div className="fixed inset-0 z-50 flex animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 flex animate-in fade-in duration-150">
           {/* Backdrop Blur Overlay */}
           <div
-            className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm transition-opacity"
+            className="fixed inset-0 bg-slate-900/30 backdrop-blur-xs transition-opacity"
             onClick={() => setSidebarOpen(false)}
             aria-hidden="true"
           />
 
           {/* Sliding Drawer Body */}
-          <aside className="relative w-84 max-w-[85vw] bg-white dark:bg-slate-900 h-full shadow-2xl border-r border-slate-200/80 dark:border-slate-800 flex flex-col justify-between z-10 animate-in slide-in-from-left duration-300 overflow-y-auto">
+          <aside className="relative w-80 max-w-[85vw] bg-white h-full shadow-2xl border-r border-slate-200/80 flex flex-col justify-between z-10 animate-in slide-in-from-left duration-200 overflow-y-auto">
             {/* Drawer Header */}
             <div>
-              <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center justify-center w-10 h-10 rounded-2xl bg-orange-50 dark:bg-orange-950/60 border border-orange-200/80 dark:border-orange-800 shadow-xs">
-                    <span className="material-symbols-outlined text-orange-600 dark:text-orange-400 text-2xl font-bold">
+              <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-orange-50 border border-orange-200/80 shadow-2xs">
+                    <span className="material-symbols-outlined text-orange-600 text-xl font-bold">
                       local_fire_department
                     </span>
                   </div>
                   <div>
-                    <h2 className="text-sm font-extrabold text-slate-900 dark:text-white tracking-tight">
+                    <h2 className="text-sm font-extrabold text-slate-900 tracking-tight">
                       Atomic Pathshala
                     </h2>
-                    <p className="text-[11px] text-slate-400 font-medium">Student Learning Portal</p>
+                    <p className="text-[10px] text-slate-400 font-medium">Student Learning Portal</p>
                   </div>
                 </div>
 
                 <button
                   type="button"
                   onClick={() => setSidebarOpen(false)}
-                  className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors focus:outline-none cursor-pointer"
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors focus:outline-none cursor-pointer"
                   aria-label="Close Sidebar"
                 >
-                  <span className="material-symbols-outlined text-2xl">close</span>
+                  <span className="material-symbols-outlined text-xl">close</span>
                 </button>
               </div>
 
               {/* Student Profile Card inside Drawer */}
-              <div className="p-4 pb-2">
-                <div className="bg-slate-50 dark:bg-slate-800/70 border border-slate-200/70 dark:border-slate-700/70 rounded-2xl p-3.5 flex items-center gap-3 shadow-xs">
-                  <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 font-black text-base flex items-center justify-center shrink-0 border border-indigo-200 dark:border-indigo-800">
+              <div className="p-3.5 pb-2">
+                <div className="bg-slate-50 border border-slate-200/70 rounded-xl p-3 flex items-center gap-2.5 shadow-2xs">
+                  <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-600 font-black text-sm flex items-center justify-center shrink-0 border border-indigo-200">
                     {studentName.charAt(0).toUpperCase() || "A"}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{studentName}</p>
+                    <p className="text-xs font-bold text-slate-900 truncate">{studentName}</p>
                     <p className="text-[10px] text-slate-400 font-mono truncate">{studentIdCode}</p>
                   </div>
-                  <span className="text-[10px] font-bold text-orange-600 dark:text-orange-400 bg-orange-100 dark:bg-orange-950/80 px-2 py-0.5 rounded-md border border-orange-200 dark:border-orange-800 shrink-0">
+                  <span className="text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-200 shrink-0">
                     {activeGoal}
                   </span>
                 </div>
               </div>
 
               {/* Main Navigation Items */}
-              <div className="p-4 pt-2 space-y-1">
-                <div className="px-3 pb-2 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider font-mono">
+              <div className="p-3 pt-1 space-y-1">
+                <div className="px-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">
                   Learning Hub
                 </div>
-                <nav className="space-y-1.5">
+                <nav className="space-y-1">
                   {SIDEBAR_ITEMS.map((item) => {
                     const active = isActive(pathname, item.href);
                     return (
@@ -424,13 +425,13 @@ export function StudentShell({
                         key={item.href}
                         href={item.href}
                         onClick={() => setSidebarOpen(false)}
-                        className={`flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                        className={`flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
                           active
-                            ? "bg-orange-500 text-white shadow-sm shadow-orange-500/20"
-                            : "text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
+                            ? "bg-orange-500 text-white shadow-2xs"
+                            : "text-slate-700 hover:bg-slate-50 hover:text-slate-900"
                         }`}
                       >
-                        <span className="material-symbols-outlined text-[22px]">{item.icon}</span>
+                        <span className="material-symbols-outlined text-[20px]">{item.icon}</span>
                         <span>{item.label}</span>
                       </Link>
                     );
@@ -438,81 +439,62 @@ export function StudentShell({
                 </nav>
 
                 {/* Additional Student Features & Utilities */}
-                <div className="pt-4 mt-4 border-t border-slate-100 dark:border-slate-800 space-y-1">
-                  <div className="px-3 pb-1.5 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider font-mono">
+                <div className="pt-3 mt-3 border-t border-slate-100 space-y-1">
+                  <div className="px-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">
                     Utilities &amp; Tools
                   </div>
                   <Link
                     href="/id-card"
                     onClick={() => setSidebarOpen(false)}
-                    className="flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition"
+                    className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition"
                   >
-                    <span className="material-symbols-outlined text-lg text-blue-500">badge</span>
+                    <span className="material-symbols-outlined text-[18px] text-blue-500">badge</span>
                     <span>Profile &amp; ID Card</span>
                   </Link>
                   <Link
                     href="/leaderboard"
                     onClick={() => setSidebarOpen(false)}
-                    className="flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition"
+                    className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition"
                   >
-                    <span className="material-symbols-outlined text-lg text-amber-500">leaderboard</span>
+                    <span className="material-symbols-outlined text-[18px] text-amber-500">leaderboard</span>
                     <span>Leaderboard</span>
                   </Link>
                   <Link
                     href="/settings"
                     onClick={() => setSidebarOpen(false)}
-                    className="flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition"
+                    className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition"
                   >
-                    <span className="material-symbols-outlined text-lg text-slate-500">settings</span>
+                    <span className="material-symbols-outlined text-[18px] text-slate-400">settings</span>
                     <span>Settings</span>
                   </Link>
                 </div>
               </div>
             </div>
 
-            {/* Drawer Bottom Footer (Subscription Upgrade + Logout) */}
-            <div className="p-4 border-t border-slate-100 dark:border-slate-800 space-y-3 bg-slate-50/50 dark:bg-slate-900/50">
-              {!hasActiveSubscription && (
-                <div className="bg-gradient-to-r from-blue-700 via-indigo-600 to-blue-600 text-white p-3.5 rounded-2xl shadow-sm border border-blue-400/30 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-base">lock_open</span>
-                    <span className="text-xs font-bold leading-tight">Unlock All Batches</span>
-                  </div>
-                  <p className="text-[10px] text-white/85 leading-relaxed">
-                    Get full access to all crash courses, test series &amp; personal mentorship.
-                  </p>
-                  <Link
-                    href="/subscription"
-                    onClick={() => setSidebarOpen(false)}
-                    className="block text-center bg-white text-blue-700 font-bold px-3 py-1.5 rounded-xl shadow-xs hover:bg-blue-50 active:scale-95 transition-all text-xs"
-                  >
-                    Upgrade Now
-                  </Link>
-                </div>
-              )}
-
+            {/* Drawer Bottom Footer (Logout) */}
+            <div className="p-3 border-t border-slate-100 bg-white">
               <LogoutButton />
             </div>
           </aside>
         </div>
       )}
 
-      {/* Main Layout Container (Clean Full-Width Space with Top Quick Navigation Bar) */}
-      <div className="flex-1 flex flex-col relative w-full">
+      {/* Main Layout Container (Clean Pure White Full-Width Space) */}
+      <div className="flex-1 flex flex-col relative w-full bg-white">
         {/* Quick Horizontal Sub-Navigation Bar for Desktop / Laptops */}
-        <div className="hidden lg:block bg-white dark:bg-slate-900 border-b border-slate-200/80 dark:border-slate-800 px-4 sm:px-6 lg:px-8 py-2.5">
+        <div className="hidden lg:block bg-white border-b border-slate-200/80 px-4 sm:px-6 lg:px-8 py-2">
           <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-            <nav className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+            <nav className="flex items-center gap-1 overflow-x-auto pb-0.5">
               {SIDEBAR_ITEMS.map((item) => {
                 const active = isActive(pathname, item.href);
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
                       active
-                        ? "bg-orange-500 text-white shadow-xs"
-                        : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
+                        ? "bg-orange-500 text-white shadow-2xs"
+                        : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                     }`}
                   >
                     <span className="material-symbols-outlined text-[18px]">{item.icon}</span>
@@ -522,21 +504,21 @@ export function StudentShell({
               })}
             </nav>
 
-            {/* Quick Pop-up Sidebar Button */}
+            {/* Quick Pop-up / Slide-in Sidebar Button */}
             <button
               type="button"
-              onClick={() => setSidebarOpen(true)}
-              className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-orange-600 dark:text-slate-400 dark:hover:text-orange-400 bg-slate-50 hover:bg-orange-50 dark:bg-slate-800 dark:hover:bg-slate-700 px-3 py-1.5 rounded-xl border border-slate-200/80 hover:border-orange-300 dark:border-slate-700 transition-all cursor-pointer"
+              onClick={() => setSidebarOpen((v) => !v)}
+              className="flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-orange-600 bg-slate-50 hover:bg-orange-50 px-3 py-1.5 rounded-lg border border-slate-200/80 hover:border-orange-200 transition-all cursor-pointer"
             >
-              <span className="material-symbols-outlined text-[18px]">menu</span>
-              <span>All Hubs</span>
+              <span className="material-symbols-outlined text-[18px]">{sidebarOpen ? "close" : "menu"}</span>
+              <span>Menu</span>
             </button>
           </div>
         </div>
 
-        {/* Content Area (Responsive across Mobile, Tablet, Laptop) */}
-        <main className="flex-1 pb-32 lg:pb-12 w-full">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* Content Area (Pure White Background) */}
+        <main className="flex-1 pb-28 lg:pb-12 w-full bg-white">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
             {children}
           </div>
         </main>
