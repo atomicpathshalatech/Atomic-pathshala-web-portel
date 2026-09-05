@@ -270,119 +270,286 @@ export function generateTestPaperHtml(
     year: "numeric",
   }).format(test.createdAt || new Date());
 
-  // Render Front Cover
+  // Deterministic series & form code
+  const bookletSeries = test.code ? (test.code.length > 8 ? test.code.slice(0, 8) : test.code) : "AP-26";
+  const formNumber = Math.abs(test.id.split("").reduce((acc, char) => (acc * 31 + char.charCodeAt(0)) | 0, 100000) % 900000 + 100000);
+  const logoUrl = options.logoUrl || "https://lh3.googleusercontent.com/aida-public/AB6AXuDa8QagvEZSN1R6zCaBlM0eWp9DB1GRPhy4yheOUBaJvnKUg9tMNGAPUuG0HJZKPpgI-USkw0DIBEQcokjGHeiAazuM1lTDHYx1Za_F-501AexZPNtMJ-k1sXmJbvL-j0OdFpqHkq17Qp8MtB66bJxDHC9OfMpKJmv1fidamNpe6ORcKNoAW_O3skqdq_xFhix8XysEcocM3LposHxd4osXTqDpiAPr7LRYDNExF8B7CGj0qWoIf_1m-xX6ZiUp8rVVWw";
+
+  // Section syllabus & breakdown calculations
+  let currentStart = 1;
+  const sectionBreakdowns = test.sections.map((section, idx) => {
+    const startQ = currentStart;
+    const endQ = currentStart + section.questions.length - 1;
+    currentStart = endQ + 1;
+    const sectionMarks = section.questions.length * section.marksPerQuestion;
+    
+    const subjLower = section.subject.toLowerCase();
+    let defaultSyllabus = "Mechanics, Electrodynamics, Optics, Thermodynamics, Modern Physics & Wave Motion.";
+    if (subjLower.includes("chem")) {
+      defaultSyllabus = "Physical Chemistry, Inorganic Chemistry, Organic Chemistry & Applied Principles.";
+    } else if (subjLower.includes("bio") || subjLower.includes("bot") || subjLower.includes("zoo")) {
+      defaultSyllabus = "Botany (Plant Physiology, Genetics, Ecology) & Zoology (Human Physiology, Reproduction, Evolution).";
+    } else if (subjLower.includes("math")) {
+      defaultSyllabus = "Calculus, Coordinate Geometry, Algebra, Vectors & 3D, Trigonometry.";
+    } else {
+      defaultSyllabus = `${section.name} Curriculum & Comprehensive Standard Syllabus.`;
+    }
+
+    const pad = (n: number) => n < 10 ? `0${n}` : `${n}`;
+
+    return {
+      name: section.subject.toUpperCase(),
+      rangeText: `Q ${pad(startQ)}–${pad(endQ)} • ${sectionMarks} M`,
+      startQ,
+      endQ,
+      syllabus: defaultSyllabus,
+      isEven: idx % 2 === 0,
+    };
+  });
+
+  const sectionBreakdownColsHtml = sectionBreakdowns.map((sb) => `
+    <div class="p-2 ${sb.isEven ? "bg-slate-50/50" : ""} flex flex-col">
+      <div class="flex items-center justify-between border-b border-slate-200 pb-1 mb-1">
+        <span class="font-heading font-extrabold text-slate-950 text-[10.5px] uppercase tracking-wide">${sb.name}</span>
+        <span class="font-mono-code text-[8.5px] font-bold text-[#0284c7] bg-sky-50 border border-sky-300 px-1 rounded-xs">${sb.rangeText}</span>
+      </div>
+      <p class="text-slate-600 text-[9.5px] leading-tight font-medium">
+        <strong class="text-slate-800 font-semibold">Syllabus:</strong> ${sb.syllabus}
+      </p>
+    </div>
+  `).join("");
+
+  const enSectionRange = sectionBreakdowns.map((sb) => `${sb.name}: ${sb.startQ}-${sb.endQ}`).join(", ") || `Physics: 1-45, Chemistry: 46-90, Biology: 91-180`;
+  const hiSectionRange = sectionBreakdowns.map((sb) => `${sb.name}: ${sb.startQ} से ${sb.endQ}`).join(", ") || `भौतिक विज्ञान: 1 से 45, रसायन विज्ञान: 46 से 90, जीव विज्ञान: 91 से 180`;
+
+  // Estimate total pages: 1 Cover + Math.ceil(totalQuestions / 6) + 3 Rough + 1 Back Cover + (withSolution ? 1 + Math.ceil(totalQuestions / 4) : 0)
+  const questionPagesEst = Math.ceil(test.totalQuestions / 6);
+  const totalPagesEstimated = 1 + questionPagesEst + 3 + 1 + (withSolution ? Math.ceil(test.totalQuestions / 5) + 1 : 0);
+
+  // Render Front Cover (Exact User-Specified Authentic Layout)
   const frontCoverHtml = `
-    <div class="page cover-page">
-      <div class="cover-border">
-        <!-- Top Barcode & Header Details -->
-        <div class="cover-top-header">
-          <div class="cover-top-left">
-            <span class="barcode-pill">(${test.code})</span>
-            <div class="lang-tag">Hindi + English</div>
+    <div class="a4-sheet border-2 border-slate-900 rounded-xs cover-sheet">
+      <div class="flex flex-col gap-3">
+        <!-- TOP META BAR: CONFIDENTIAL STRIP -->
+        <div class="flex items-center justify-between border-b-2 border-slate-900 pb-1 text-[9px] tracking-wider uppercase font-semibold text-slate-700 font-mono-code">
+          <div class="flex items-center gap-2">
+            <span class="bg-slate-900 text-white px-2 py-0.5 rounded-xs font-bold text-[8.5px] tracking-wide">STRICTLY CONFIDENTIAL</span>
+            <span class="font-bold text-red-600">DO NOT OPEN UNTIL INSTRUCTED</span>
           </div>
-          <div class="cover-top-center">
-            <div class="brand-logo-text">⚡ ATOMIC PATHSHALA</div>
-            <div class="brand-sub-program">DISTANCE LEARNING PROGRAMME / ALL INDIA TEST SERIES</div>
-            <div class="academic-session">(Academic Session : 2026 - 2027)</div>
-          </div>
-          <div class="cover-top-right">
-            <div class="test-pattern-badge">Test Pattern</div>
-            <div class="test-pattern-name">${test.examType}</div>
-            <div class="test-pattern-type">MAJOR TEST</div>
-            <div class="test-pattern-date">${currentDateStr}</div>
+          <div class="flex items-center gap-4">
+            <span>BOOKLET SERIES: <strong class="text-slate-950 font-bold text-[10px] bg-slate-100 px-1.5 py-0.5 border border-slate-300">${bookletSeries}</strong></span>
+            <span>FORM NO: <strong class="text-slate-950 font-bold text-[10px]">${formNumber}</strong></span>
           </div>
         </div>
 
-        <!-- Target Course Banner -->
-        <div class="target-banner">
-          PRE-MEDICAL & PRE-ENGINEERING : LEADER & ACHIEVER TEST SERIES
-        </div>
-
-        <div class="candidate-level-pill">
-          12th Undergoing / Pass / Dropper Student
-        </div>
-
-        <!-- Test Name Box -->
-        <div class="test-name-box">
-          <div class="test-type-label">Test Name : <span class="test-type-value">${test.name.toUpperCase()}</span></div>
-        </div>
-
-        <!-- Warning Subtitle -->
-        <div class="cover-warning-notice">
-          <div class="line-1">This Booklet contains section-wise questions for <strong>${test.sections.map((s) => s.subject).filter((v, i, a) => a.indexOf(v) === i).join(", ")}</strong>.</div>
-          <div class="line-2">इस परीक्षा पुस्तिका को तब तक न खोलें जब तक कहा न जाए। / <strong>Do not open this Test Booklet until you are asked to do so.</strong></div>
-          <div class="line-3">इस परीक्षा पुस्तिका के पिछले आवरण पर दिए निर्देशों को ध्यान से पढ़ें। / <strong>Read carefully the Instructions on the Back Cover of this Test Booklet.</strong></div>
-        </div>
-
-        <!-- 2-Column Instructions Table -->
-        <div class="instructions-box-table">
-          <div class="inst-col inst-col-left">
-            <div class="inst-heading">महत्वपूर्ण निर्देश :</div>
-            <ol class="inst-list">
-              <li>उत्तर पत्र पर ध्यानपूर्वक केवल <strong>नीले / काले बॉल पॉइंट पेन</strong> से विवरण भरें।</li>
-              <li>परीक्षा की अवधि <strong>${durationHours} घंटे</strong> है एवं परीक्षा पुस्तिका में <strong>${test.totalQuestions} प्रश्न</strong> हैं। प्रत्येक प्रश्न <strong>${test.correctMarks} अंक</strong> का है। प्रत्येक सही उत्तर के लिए ${test.correctMarks} अंक दिए जाएंगे। प्रत्येक गलत उत्तर के लिए <strong>${Math.abs(test.incorrectMarks)} अंक</strong> काटा जाएगा। अधिकतम अंक <strong>${test.totalMarks}</strong> हैं।</li>
-              <li>इस पृष्ठ पर विवरण अंकित करने एवं उत्तर पत्र पर निशान लगाने के लिए केवल नीले / काले बॉल पॉइंट पेन का प्रयोग करें।</li>
-              <li>रफ कार्य इस परीक्षा पुस्तिका में निर्धारित <strong>SPACE FOR ROUGH WORK</strong> वाले पृष्ठों पर ही करें।</li>
-              <li>परीक्षा सम्पन्न होने पर, परीक्षार्थी कक्ष/हॉल छोड़ने से पूर्व उत्तर पत्र कक्ष निरीक्षक को अवश्य सौंप दें।</li>
-              <li>परीक्षार्थी सुनिश्चित करें कि उत्तर पत्र को मोड़ा न जाए एवं उस पर कोई अन्य अवांछित निशान न लगाएं।</li>
-              <li>उत्तर पत्र पर किसी प्रकार के संशोधन हेतु व्हाइट फ्लूइड / ब्लेड के प्रयोग की अनुमति नहीं है।</li>
-            </ol>
-          </div>
-          <div class="inst-col inst-col-right">
-            <div class="inst-heading">Important Instructions :</div>
-            <ol class="inst-list">
-              <li>On the Answer Sheet, fill in the particulars carefully with <strong>blue / black ball point pen</strong> only.</li>
-              <li>The test is of <strong>${durationText}</strong> duration and this Test Booklet contains <strong>${test.totalQuestions} questions</strong>. Each question carries <strong>${test.correctMarks} marks</strong>. For each correct response, ${test.correctMarks} marks will be given. For each incorrect response, <strong>${Math.abs(test.incorrectMarks)} mark</strong> will be deducted from the total scores. The maximum marks are <strong>${test.totalMarks}</strong>.</li>
-              <li>Use <strong>Blue / Black Ball Point Pen</strong> only for writing particulars on this page and marking responses.</li>
-              <li>Rough work is to be done in the space provided for this purpose (<strong>SPACE FOR ROUGH WORK</strong>) in the Test Booklet only.</li>
-              <li>On completion of the test, the candidate must hand over the Answer Sheet to the Invigilator before leaving the Examination Hall.</li>
-              <li>The candidates should ensure that the Answer Sheet is not folded or defaced. Do not make any stray marks.</li>
-              <li>Use of white fluid or eraser for correction is <strong>strictly prohibited</strong>.</li>
-            </ol>
-          </div>
-        </div>
-
-        <!-- Ambiguity Rule -->
-        <div class="ambiguity-banner">
-          <div>प्रश्नों के अनुवाद में किसी अस्पष्टता की स्थिति में, अंग्रेजी संस्करण को ही अंतिम माना जाएगा।</div>
-          <div class="ambiguity-en">In case of any ambiguity in translation of any question, English version shall be treated as final.</div>
-        </div>
-
-        <!-- Candidate Particulars Box -->
-        <div class="candidate-particulars-box">
-          <div class="part-row">
-            <span class="part-label">परीक्षार्थी का नाम (बड़े अक्षरों में) / Name of Candidate (in Capitals) :</span>
-            <span class="part-line"></span>
-          </div>
-          <div class="part-row-grid">
-            <div class="grid-cell">
-              <span class="part-label">फॉर्म / रोल नम्बर (अंकों में) / Roll No. (in figures) :</span>
-              <span class="part-line"></span>
-            </div>
-            <div class="grid-cell">
-              <span class="part-label">शब्दों में / in words :</span>
-              <span class="part-line"></span>
+        <!-- MAIN HEADER WITH ATOMIC PATHSHALA BRANDING -->
+        <div class="flex items-center justify-between pb-2 border-b border-slate-300">
+          <!-- Logo and Brand Info -->
+          <div class="flex items-center gap-3">
+            <img alt="Atomic Pathshala Logo" class="w-14 h-14 object-contain rounded-sm border border-slate-200 p-0.5 bg-white shadow-xs" src="${logoUrl}" />
+            <div>
+              <h1 class="font-heading font-black text-[22px] tracking-tight text-slate-900 leading-none">
+                ATOMIC <span class="text-[#0284c7]">PATHSHALA</span>
+              </h1>
+              <p class="text-[9.5px] font-bold tracking-[0.18em] text-slate-700 uppercase mt-1">LEARN • EXPLORE • EXCEL</p>
             </div>
           </div>
-          <div class="part-row">
-            <span class="part-label">परीक्षा केन्द्र (बड़े अक्षरों में) / Centre of Examination (in Capitals) :</span>
-            <span class="part-line"></span>
-          </div>
-          <div class="part-row-grid pt-2">
-            <div class="grid-cell">
-              <span class="part-label">परीक्षार्थी के हस्ताक्षर / Candidate's Signature :</span>
-              <span class="part-line sig-line"></span>
+          <!-- Series Emblem Badge -->
+          <div class="text-right flex flex-col items-end">
+            <div class="inline-flex items-center gap-1.5 px-3 py-1 bg-sky-50 border border-sky-300 rounded-[3px]">
+              <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span class="font-heading font-extrabold text-[11px] text-sky-950 tracking-wider">ALL INDIA TEST SERIES (${test.examType || "NEET UG"})</span>
             </div>
-            <div class="grid-cell">
-              <span class="part-label">निरीक्षक के हस्ताक्षर / Invigilator's Signature :</span>
-              <span class="part-line sig-line"></span>
+            <div class="mt-1 text-[9px] font-bold text-slate-700 tracking-wide font-heading">
+              NEET (UG) | JEE (MAIN+ADV) | FOUNDATION
+            </div>
+            <div class="text-[8px] text-slate-500 font-mono-code mt-0.5">
+              EXAM ID: <span class="text-slate-900 font-bold">${test.code}</span>
             </div>
           </div>
         </div>
 
-        <!-- Bottom Motto Banner -->
-        <div class="bottom-target-motto">
-          ⚡ Your Target is to secure Top AIR in ${test.examType} with Atomic Pathshala ⚡
+        <!-- EXAM TITLE BANNER -->
+        <div class="text-center py-2 bg-slate-50 border border-slate-300 rounded-sm">
+          <div class="text-[8.5px] font-extrabold uppercase tracking-[0.25em] text-[#0284c7]">
+            TARGET MEDICAL ENTRANCE EXAMINATION
+          </div>
+          <h2 class="font-heading font-black text-[18px] tracking-wide text-slate-950 uppercase leading-tight my-0.5">
+            ${test.name.toUpperCase()}
+          </h2>
+          <div class="flex items-center justify-center gap-2 text-[10px] font-bold text-slate-700 font-mono-code">
+            <span>${test.examType || "NEET UG"}</span>
+            <span>•</span>
+            <span class="text-[#0284c7]">TEST SERIES 2026</span>
+            <span>•</span>
+            <span>COMPREHENSIVE LEVEL 1</span>
+          </div>
+        </div>
+
+        <!-- EXAM METRIC GRID -->
+        <div class="border border-slate-900 rounded-xs overflow-hidden">
+          <div class="grid grid-cols-4 bg-white text-center divide-x divide-slate-800 border-b border-slate-800">
+            <div class="py-1.5 px-2">
+              <div class="text-[7.5px] uppercase tracking-wider font-bold text-slate-500">Course Target</div>
+              <div class="font-heading font-extrabold text-[11px] text-slate-900">${test.examType || "NEET UG"}</div>
+            </div>
+            <div class="py-1.5 px-2 bg-sky-50/50">
+              <div class="text-[7.5px] uppercase tracking-wider font-bold text-slate-500">Test Pattern</div>
+              <div class="font-heading font-extrabold text-[11px] text-[#0369a1]">FULL SYLLABUS</div>
+            </div>
+            <div class="py-1.5 px-2">
+              <div class="text-[7.5px] uppercase tracking-wider font-bold text-slate-500">Duration</div>
+              <div class="font-heading font-extrabold text-[11px] text-slate-900">${test.durationMin} MINUTES (${(test.durationMin / 60).toFixed(1)} Hrs)</div>
+            </div>
+            <div class="py-1.5 px-2 bg-slate-50">
+              <div class="text-[7.5px] uppercase tracking-wider font-bold text-slate-500">Maximum Marks</div>
+              <div class="font-heading font-black text-[12px] text-slate-950">${test.totalMarks} MARKS</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TEST COVERAGE SECTION -->
+        <div class="border border-slate-900 rounded-xs overflow-hidden">
+          <div class="bg-slate-900 text-white px-3 py-1 flex items-center justify-between">
+            <span class="font-heading font-bold text-[9.5px] tracking-wider uppercase">TEST SYLLABUS &amp; SUBJECT BREAKDOWN</span>
+            <span class="text-[8px] font-mono-code text-sky-300 font-semibold">TOTAL: ${test.totalMarks} MARKS • ${test.totalQuestions} QUESTIONS</span>
+          </div>
+
+          <div class="grid grid-cols-${Math.min(sectionBreakdowns.length, 4) || 3} divide-x divide-slate-300 bg-white text-slate-800 text-[10px]">
+            ${sectionBreakdownColsHtml}
+          </div>
+        </div>
+
+        <!-- IMPORTANT INSTRUCTIONS FOR CANDIDATES (8-ITEM DUAL COLUMN) -->
+        <div class="border border-slate-900 rounded-xs bg-slate-50/70 p-3.5">
+          <div class="flex items-center justify-between border-b border-slate-400 pb-1.5 mb-2.5">
+            <div class="font-heading font-extrabold text-[12px] text-slate-950 uppercase flex items-center gap-2">
+              <span class="w-2.5 h-4 bg-[#0284c7] inline-block rounded-[1px]"></span>
+              IMPORTANT INSTRUCTIONS FOR CANDIDATES / परीक्षार्थियों के लिए महत्वपूर्ण निर्देश
+            </div>
+            <span class="text-[9px] font-bold text-slate-700 font-mono-code tracking-wider">[READ CAREFULLY BEFORE ATTEMPTING]</span>
+          </div>
+          <ol class="grid grid-cols-2 gap-x-6 gap-y-3 text-[11.5px] leading-snug text-slate-900">
+            <li class="flex items-start gap-2">
+              <span class="font-mono-code font-extrabold text-slate-950 text-[13px] shrink-0">1.</span>
+              <div>
+                <div class="font-semibold text-slate-950">The test booklet contains <strong>${test.totalQuestions} multiple-choice questions</strong> (${enSectionRange}).</div>
+                <div class="text-slate-700 mt-0.5 text-[10.5px] leading-tight font-medium">प्रश्न पुस्तिका में ${test.totalQuestions} बहुविकल्पीय प्रश्न हैं (${hiSectionRange})।</div>
+              </div>
+            </li>
+            <li class="flex items-start gap-2">
+              <span class="font-mono-code font-extrabold text-slate-950 text-[13px] shrink-0">2.</span>
+              <div>
+                <div class="font-semibold text-slate-950">Each correct answer carries <strong>${test.correctMarks} marks (+${test.correctMarks})</strong>. Total maximum marks: <strong>${test.totalMarks}</strong>.</div>
+                <div class="text-slate-700 mt-0.5 text-[10.5px] leading-tight font-medium">प्रत्येक सही उत्तर के लिए ${test.correctMarks} अंक (+${test.correctMarks}) दिए जाएंगे। कुल अधिकतम अंक: ${test.totalMarks}।</div>
+              </div>
+            </li>
+            <li class="flex items-start gap-2">
+              <span class="font-mono-code font-extrabold text-slate-950 text-[13px] shrink-0">3.</span>
+              <div>
+                <div class="font-semibold text-slate-950"><strong>${Math.abs(test.incorrectMarks)} mark will be deducted</strong> for each incorrect response (-${Math.abs(test.incorrectMarks)}). No penalty for unattempted questions.</div>
+                <div class="text-slate-700 mt-0.5 text-[10.5px] leading-tight font-medium">प्रत्येक गलत उत्तर के लिए ${Math.abs(test.incorrectMarks)} अंक (-${Math.abs(test.incorrectMarks)}) काटा जाएगा। अनुत्तरित प्रश्नों के लिए कोई अंक नहीं काटा जाएगा।</div>
+              </div>
+            </li>
+            <li class="flex items-start gap-2">
+              <span class="font-mono-code font-extrabold text-slate-950 text-[13px] shrink-0">4.</span>
+              <div>
+                <div class="font-semibold text-slate-950">Duration of the examination is <strong>${test.durationMin} minutes (${(test.durationMin / 60).toFixed(1)} Hours)</strong>.</div>
+                <div class="text-slate-700 mt-0.5 text-[10.5px] leading-tight font-medium">परीक्षा की कुल अवधि ${test.durationMin} मिनट (${(test.durationMin / 60).toFixed(1)} घंटे) है।</div>
+              </div>
+            </li>
+            <li class="flex items-start gap-2">
+              <span class="font-mono-code font-extrabold text-slate-950 text-[13px] shrink-0">5.</span>
+              <div>
+                <div class="font-semibold text-slate-950">Use <strong>Blue or Black Ballpoint Pen only</strong> for writing details and darkening OMR circles.</div>
+                <div class="text-slate-700 mt-0.5 text-[10.5px] leading-tight font-medium">विवरण भरने एवं OMR गोले काले/नीले करने के लिए केवल नीले या काले बॉलपॉइंट पेन का उपयोग करें।</div>
+              </div>
+            </li>
+            <li class="flex items-start gap-2">
+              <span class="font-mono-code font-extrabold text-slate-950 text-[13px] shrink-0">6.</span>
+              <div>
+                <div class="font-semibold text-slate-950">Darken only one circle completely for each question. Rough work must be done only in the booklet.</div>
+                <div class="text-slate-700 mt-0.5 text-[10.5px] leading-tight font-medium">प्रत्येक प्रश्न के लिए केवल एक वृत्त को पूरी तरह से गहरा करें। रफ कार्य केवल पुस्तिका में दिए गए स्थान पर करें।</div>
+              </div>
+            </li>
+            <li class="flex items-start gap-2">
+              <span class="font-mono-code font-extrabold text-slate-950 text-[13px] shrink-0">7.</span>
+              <div>
+                <div class="font-semibold text-slate-950">Verify that your Test Booklet Code and OMR Answer Sheet Code match before attempting.</div>
+                <div class="text-slate-700 mt-0.5 text-[10.5px] leading-tight font-medium">प्रश्न हल करने से पहले सुनिश्चित करें कि आपकी टेस्ट बुकलेट कोड और OMR शीट कोड समान हैं।</div>
+              </div>
+            </li>
+            <li class="flex items-start gap-2">
+              <span class="font-mono-code font-extrabold text-slate-950 text-[13px] shrink-0">8.</span>
+              <div>
+                <div class="font-semibold text-slate-950">Electronic devices, calculators, and mobile phones are strictly prohibited in the examination hall.</div>
+                <div class="text-slate-700 mt-0.5 text-[10.5px] leading-tight font-medium">परीक्षा कक्ष में इलेक्ट्रॉनिक उपकरण, कैलकुलेटर एवं मोबाइल फोन पूर्णतः वर्जित हैं।</div>
+              </div>
+            </li>
+          </ol>
+        </div>
+
+        <!-- CANDIDATE & EXAMINATION RECORD SECTION -->
+        <div class="border-2 border-slate-900 rounded-xs p-3 bg-white">
+          <div class="flex items-center justify-between border-b border-slate-300 pb-1.5 mb-2.5">
+            <div class="flex items-center gap-2">
+              <span class="bg-slate-900 text-white text-[8px] px-2 py-0.5 rounded-xs font-mono-code font-bold tracking-wide">MANDATORY</span>
+              <span class="font-heading font-extrabold text-[11px] text-slate-950 uppercase tracking-wider">CANDIDATE &amp; EXAMINATION RECORD</span>
+            </div>
+            <span class="text-[8px] text-slate-500 italic font-medium">Fill in using Blue/Black Ballpoint Pen only</span>
+          </div>
+          <div class="space-y-2.5 text-[11px] mb-3">
+            <div class="flex items-baseline">
+              <span class="font-bold text-slate-900 w-40 shrink-0">Student's Full Name:</span>
+              <span class="fill-line"></span>
+            </div>
+            <div class="grid grid-cols-2 gap-6">
+              <div class="flex items-baseline">
+                <span class="font-bold text-slate-900 w-40 shrink-0">Roll / Enrolment No.:</span>
+                <span class="fill-line"></span>
+              </div>
+              <div class="flex items-baseline">
+                <span class="font-bold text-slate-900 w-32 shrink-0">OMR Sheet No.:</span>
+                <span class="fill-line"></span>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-6">
+              <div class="flex items-baseline">
+                <span class="font-bold text-slate-900 w-40 shrink-0">Batch Name:</span>
+                <span class="fill-line"></span>
+              </div>
+              <div class="flex items-baseline">
+                <span class="font-bold text-slate-900 w-32 shrink-0">Center Code:</span>
+                <span class="fill-line"></span>
+              </div>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-6 pt-2 border-t border-slate-200">
+            <div class="flex flex-col items-center">
+              <div class="w-full h-14 border border-dashed border-slate-400 rounded-xs bg-slate-50/60"></div>
+              <span class="text-[9.5px] font-bold text-slate-900 mt-1 uppercase font-mono-code tracking-wider">CANDIDATE'S SIGNATURE</span>
+            </div>
+            <div class="flex flex-col items-center">
+              <div class="w-full h-14 border border-dashed border-slate-400 rounded-xs bg-slate-50/60"></div>
+              <span class="text-[9.5px] font-bold text-slate-900 mt-1 uppercase font-mono-code tracking-wider">INVIGILATOR'S SIGNATURE &amp; STAMP</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CLEAN AUTHENTIC FOOTER -->
+      <div class="pt-2 border-t-2 border-slate-900 mt-2">
+        <div class="flex items-center justify-between text-[8.5px] text-slate-600 font-mono-code">
+          <div class="flex items-center gap-2">
+            <strong class="text-slate-900 font-heading font-extrabold text-[9.5px]">ATOMIC PATHSHALA</strong>
+            <span class="text-slate-400">•</span>
+            <span>Official Test Booklet</span>
+            <span class="text-slate-400">•</span>
+            <span class="font-bold text-slate-800">${test.examType || "NEET-UG"}</span>
+          </div>
+          <div class="font-bold text-slate-900 bg-slate-100 px-2 py-0.5 border border-slate-300">
+            PAGE 1 OF ${totalPagesEstimated} (COVER)
+          </div>
         </div>
       </div>
     </div>
@@ -725,15 +892,17 @@ export function generateTestPaperHtml(
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${test.name} - ${test.code} | ${brandName}</title>
   
+  <!-- Tailwind CSS Engine for Exact Aesthetic Rendering -->
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css" crossorigin="anonymous">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=Noto+Sans+Devanagari:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Montserrat:wght@600;700;800;900&family=JetBrains+Mono:wght@500;600;700&family=Noto+Sans+Devanagari:wght@400;600;700&display=swap" rel="stylesheet">
 
   <style>
     @page {
       size: A4 portrait;
-      margin: 8mm 8mm 8mm 8mm;
+      margin: 0;
     }
 
     * {
@@ -744,24 +913,72 @@ export function generateTestPaperHtml(
 
     body {
       margin: 0;
-      padding: 0;
-      background: #e2e8f0;
-      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 24px 0;
+      background: #f1f5f9;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
       color: #0f172a;
       font-size: 11pt;
       line-height: 1.4;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .font-heading {
+      font-family: 'Montserrat', sans-serif;
+    }
+
+    .font-mono-code {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .fill-line {
+      border-bottom: 1.5px dotted #64748b;
+      flex-grow: 1;
+      height: 1.1em;
+      margin-left: 6px;
+    }
+
+    .omr-bubble {
+      width: 15px;
+      height: 15px;
+      border: 1.5px solid #1e293b;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+      font-weight: 700;
+      line-height: 1;
     }
 
     .doc-container {
       max-width: 210mm;
       margin: 0 auto;
-      background: white;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .a4-sheet {
+      width: 794px;
+      min-height: 1123px;
+      background: #ffffff;
+      padding: 28px 32px;
+      box-sizing: border-box;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      page-break-after: always;
+      break-after: page;
+      margin-bottom: 24px;
     }
 
     .page {
-      width: 210mm;
-      min-height: 297mm;
-      padding: 10mm 12mm;
+      width: 794px;
+      min-height: 1123px;
+      padding: 24px 28px;
       position: relative;
       background: white;
       page-break-after: always;
@@ -770,23 +987,30 @@ export function generateTestPaperHtml(
       flex-direction: column;
       justify-content: space-between;
       box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-      margin-bottom: 20px;
+      margin-bottom: 24px;
+      box-sizing: border-box;
     }
 
     @media print {
       body {
-        background: white;
+        background: transparent;
+        padding: 0;
       }
       .doc-container {
         max-width: none;
         margin: 0;
+        width: 100%;
       }
-      .page {
-        margin: 0;
+      .a4-sheet, .page {
         box-shadow: none;
         width: 100%;
         min-height: 100vh;
-        padding: 8mm 10mm;
+        padding: 20px 24px;
+        margin-bottom: 0;
+        border: none;
+      }
+      .cover-sheet {
+        border: 2px solid #0f172a !important;
       }
       .no-print {
         display: none !important;
@@ -1426,4 +1650,22 @@ export function generateTestPaperHtml(
 
 </body>
 </html>`;
+}
+
+/**
+ * Generates only the authentic Front Cover Page as standalone HTML.
+ */
+export function generateTestCoverPageOnlyHtml(
+  test: FormattedExportTest,
+  options: TestExportOptions
+): string {
+  const fullHtml = generateTestPaperHtml(test, { ...options, withSolution: false });
+  // Replace the document container to only contain the cover sheet
+  const coverMatch = fullHtml.match(/<div class="a4-sheet border-2 border-slate-900 rounded-xs cover-sheet">[\s\S]*?<\/div>\s*<\/div>/);
+  if (!coverMatch) return fullHtml;
+
+  const headerPart = fullHtml.split('<div class="doc-container">')[0];
+  const footerPart = "</body>\n</html>";
+
+  return `${headerPart}<div class="doc-container">\n${coverMatch[0]}\n</div>\n${footerPart}`;
 }

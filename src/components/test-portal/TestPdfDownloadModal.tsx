@@ -173,6 +173,20 @@ export function TestPdfDownloadModal({
                   <ExternalLink className="w-3.5 h-3.5 opacity-60" />
                 </button>
               </div>
+
+              {/* Cover Page Standalone Preview Quick Action */}
+              <div className="pt-1 flex items-center justify-between px-1">
+                <button
+                  type="button"
+                  onClick={() => window.open(`/api/tests/${testId}/export?type=cover`, "_blank")}
+                  className="inline-flex items-center gap-1.5 text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-semibold hover:underline"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Preview Authentic Front Cover (A4 Sheet AP-26)</span>
+                  <ExternalLink className="w-3 h-3 opacity-70" />
+                </button>
+                <span className="text-[10px] text-slate-400 font-mono">Bilingual (EN + HI)</span>
+              </div>
             </div>
 
             {/* Modal Footer */}
