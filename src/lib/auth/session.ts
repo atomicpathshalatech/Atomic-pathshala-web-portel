@@ -64,17 +64,18 @@ export async function requireStudentSession() {
  * 11 different roles — so this checks the TEAM_PORTAL_ACCESS permission via
  * RBAC rather than comparing role names, per the "no hardcoded role checks"
  * policy in permissions.ts.
+ *
+ * Fetches the User row ONCE and passes it into hasPermission() instead of
+ * letting hasPermission do its own separate findUnique for the same row —
+ * on a cross-region DB (Supabase ap-northeast-1 vs a Vercel function likely
+ * running elsewhere) every avoided round trip is real, measured latency:
+ * this page previously paid for the same User row twice, sequentially.
  */
 export async function requireTeamSession() {
   const session = await getServerSession(authOptions);
 
   if (!session?.user?.id) {
     redirect("/login");
-  }
-
-  const allowed = await hasPermission(session.user.id, PERMISSIONS.TEAM_PORTAL_ACCESS);
-  if (!allowed) {
-    redirect("/");
   }
 
   const user = await prisma.user.findUnique({
@@ -84,6 +85,11 @@ export async function requireTeamSession() {
 
   if (!user) {
     redirect("/login");
+  }
+
+  const allowed = await hasPermission(session.user.id, PERMISSIONS.TEAM_PORTAL_ACCESS, user);
+  if (!allowed) {
+    redirect("/");
   }
 
   return { session, user };

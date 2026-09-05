@@ -16,6 +16,18 @@ export class UnauthorizedError extends Error {
   }
 }
 
+/** The subset of User fields hasPermission() actually needs. Callers that
+ * already fetched the user this request (e.g. requireTeamSession) can pass
+ * it in via `preloadedUser` to skip hasPermission's own findUnique — on a
+ * cross-region DB (Supabase ap-northeast-1) each avoided round trip is real,
+ * measured latency, and this function used to be one of two places in the
+ * same request that fetched the identical User row. */
+type PreloadedUserForPermission = {
+  status: string;
+  contractEnd: Date | null;
+  role: { name: string };
+};
+
 /**
  * Checks whether the given user holds the given permission,
  * factoring in:
@@ -26,22 +38,25 @@ export class UnauthorizedError extends Error {
  */
 export async function hasPermission(
   userId: string,
-  permission: PermissionCode
+  permission: PermissionCode,
+  preloadedUser?: PreloadedUserForPermission | null
 ): Promise<boolean> {
   if (!userId) return false;
 
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      status: true,
-      contractEnd: true,
-      role: {
-        select: {
-          name: true,
+  const user =
+    preloadedUser ??
+    (await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        status: true,
+        contractEnd: true,
+        role: {
+          select: {
+            name: true,
+          },
         },
       },
-    },
-  });
+    }));
 
   if (!user) return false;
 
