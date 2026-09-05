@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
@@ -10,8 +11,17 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
  * Defense-in-depth alongside middleware.ts: middleware runs on the edge and
  * can only check the JWT, not query the DB. This does the real DB-backed
  * check and hands the page everything it needs in one call.
+ *
+ * Wrapped in React's cache() — both `(team)/team/layout.tsx` and every page
+ * under it call this same function once per request. Without caching, that
+ * meant the entire session+DB check (2-3 queries) ran TWICE, sequentially,
+ * for a single navigation. cache() dedupes it to one real call per request;
+ * every other caller in the same render gets the already-resolved result
+ * for free. Measured impact matters here specifically because the DB
+ * (Supabase ap-northeast-1) is cross-region from the Vercel function, so
+ * each avoided round trip is on the order of a second, not a few ms.
  */
-export async function requireStudentSession() {
+export const requireStudentSession = cache(async function requireStudentSession() {
   const session = await getServerSession(authOptions);
 
   if (!session?.user?.id) {
@@ -57,7 +67,7 @@ export async function requireStudentSession() {
   }
 
   return { session, student };
-}
+});
 
 /**
  * Team Portal gate. Unlike the student check (single role), team access spans
@@ -70,8 +80,16 @@ export async function requireStudentSession() {
  * on a cross-region DB (Supabase ap-northeast-1 vs a Vercel function likely
  * running elsewhere) every avoided round trip is real, measured latency:
  * this page previously paid for the same User row twice, sequentially.
+ *
+ * Also wrapped in React's cache() — see requireStudentSession's comment
+ * above, same reasoning: `(team)/team/layout.tsx` AND every page under it
+ * both call this, so without caching the full check (now 2 queries) ran
+ * twice per request. Confirmed via production timing: /team/my-schedule's
+ * document took 7.8s to finish streaming despite a 70ms TTFB, consistent
+ * with this exact double-auth-check plus the page's own queries, all
+ * sequential, all crossing to Tokyo.
  */
-export async function requireTeamSession() {
+export const requireTeamSession = cache(async function requireTeamSession() {
   const session = await getServerSession(authOptions);
 
   if (!session?.user?.id) {
@@ -93,4 +111,4 @@ export async function requireTeamSession() {
   }
 
   return { session, user };
-}
+});
