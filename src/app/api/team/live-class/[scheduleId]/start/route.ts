@@ -41,9 +41,33 @@ export async function POST(
       );
     }
 
-    const teacher = await prisma.teacher.findFirst({
+    let teacher = await prisma.teacher.findFirst({
       where: { userId: session.user.id },
     });
+
+    if (!teacher) {
+      // Check if user is an admin / super admin
+      const { hasPermission } = await import("@/lib/rbac/guard");
+      const { PERMISSIONS } = await import("@/lib/rbac/permissions");
+      const canManage = await hasPermission(session.user.id, PERMISSIONS.BATCH_UPDATE);
+      if (canManage) {
+        if (schedule.teacherId) {
+          teacher = await prisma.teacher.findUnique({ where: { id: schedule.teacherId } });
+        }
+        if (!teacher) {
+          const code = Date.now().toString().slice(-6);
+          teacher = await prisma.teacher.create({
+            data: {
+              userId: session.user.id,
+              employeeCode: `ADM-INST-${code}`,
+              department: "Academic Operations",
+              subjects: ["General", "All Subjects"],
+              bio: "Academic Administrator and Instructor",
+            },
+          });
+        }
+      }
+    }
 
     if (!teacher) return apiError("Teacher profile not found", 403);
 

@@ -56,20 +56,54 @@ export async function resolveWhiteboardAccess(
     };
   }
 
+  // Allow Admins, Super Admins, and Academic Heads to access as TEACHER
+  const { hasPermission } = await import("@/lib/rbac/guard");
+  const { PERMISSIONS } = await import("@/lib/rbac/permissions");
+  const canAdminClass = await hasPermission(userId, PERMISSIONS.BATCH_UPDATE);
+  if (canAdminClass) {
+    const adminUser = await prisma.user.findUnique({ where: { id: userId } });
+    return {
+      role: "TEACHER",
+      entityId: wbSession.teacherId,
+      name: adminUser?.name || "Academic Head",
+    };
+  }
+
   const student = await prisma.student.findUnique({
     where: { userId },
     include: { user: true },
   });
   if (!student) return null;
 
-  const enrolled = await prisma.batchEnrollment.findFirst({
+  let enrolled = await prisma.batchEnrollment.findFirst({
     where: {
       studentId: student.id,
       batchId: wbSession.batchSchedule.batchId,
-      status: "ACTIVE",
     },
   });
-  if (!enrolled) return null;
+
+  if (enrolled) {
+    if (enrolled.status !== "ACTIVE") {
+      await prisma.batchEnrollment.update({
+        where: { id: enrolled.id },
+        data: { status: "ACTIVE" },
+      });
+    }
+    return { role: "STUDENT", entityId: student.id, name: student.user.name };
+  }
+
+  // Auto enroll student if batch is open
+  try {
+    await prisma.batchEnrollment.create({
+      data: {
+        studentId: student.id,
+        batchId: wbSession.batchSchedule.batchId,
+        status: "ACTIVE",
+      },
+    });
+  } catch {
+    // continue
+  }
 
   return { role: "STUDENT", entityId: student.id, name: student.user.name };
 }

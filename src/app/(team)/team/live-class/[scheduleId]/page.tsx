@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 export default async function TeacherLiveClassPage({
   params,
 }: {
-  params: { scheduleId: string };
+  params: { scheduleId: string } | Promise<{ scheduleId: string }>;
 }) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) redirect("/login");
@@ -22,15 +22,19 @@ export default async function TeacherLiveClassPage({
   const canAccess = await hasPermission(session.user.id, PERMISSIONS.WHITEBOARD_ACCESS);
   if (!canAccess) redirect("/team");
 
+  const resolvedParams = await Promise.resolve(params);
+  const scheduleId = resolvedParams?.scheduleId;
+  if (!scheduleId) notFound();
+
   let schedule = await prisma.batchSchedule.findUnique({
-    where: { id: params.scheduleId },
+    where: { id: scheduleId },
     include: { batch: true },
   });
 
   // If not found by BatchSchedule id, check if it's a Lecture id
   if (!schedule) {
     const lecture = await prisma.lecture.findUnique({
-      where: { id: params.scheduleId },
+      where: { id: scheduleId },
       include: { chapter: true, teacher: true },
     });
 

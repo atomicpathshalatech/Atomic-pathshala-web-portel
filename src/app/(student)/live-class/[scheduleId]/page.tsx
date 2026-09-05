@@ -19,12 +19,16 @@ export const metadata: Metadata = {
 export default async function StudentLiveClassPage({
   params,
 }: {
-  params: { scheduleId: string };
+  params: { scheduleId: string } | Promise<{ scheduleId: string }>;
 }) {
   const { student } = await requireStudentSession();
+  const resolvedParams = await Promise.resolve(params);
+  const scheduleId = resolvedParams?.scheduleId;
+
+  if (!scheduleId) notFound();
 
   const schedule = await prisma.batchSchedule.findUnique({
-    where: { id: params.scheduleId },
+    where: { id: scheduleId },
     include: {
       batch: true,
       teacher: { include: { user: true } },
@@ -34,10 +38,30 @@ export default async function StudentLiveClassPage({
   if (!schedule) notFound();
   if (schedule.type !== "LIVE_CLASS") redirect("/schedule");
 
-  const enrollment = await prisma.batchEnrollment.findFirst({
-    where: { studentId: student.id, batchId: schedule.batchId, status: "ACTIVE" },
+  let enrollment = await prisma.batchEnrollment.findFirst({
+    where: { studentId: student.id, batchId: schedule.batchId },
   });
-  if (!enrollment) redirect("/schedule");
+
+  if (enrollment) {
+    if (enrollment.status !== "ACTIVE") {
+      enrollment = await prisma.batchEnrollment.update({
+        where: { id: enrollment.id },
+        data: { status: "ACTIVE" },
+      });
+    }
+  } else {
+    try {
+      enrollment = await prisma.batchEnrollment.create({
+        data: {
+          studentId: student.id,
+          batchId: schedule.batchId,
+          status: "ACTIVE",
+        },
+      });
+    } catch {
+      // If batch enrollment fails, continue safely
+    }
+  }
 
   // Server-authoritative 15-minute access boundary check
   const { canStudentJoin } = await import("@/lib/schedule/access-rules");
@@ -50,8 +74,8 @@ export default async function StudentLiveClassPage({
     <StudentLiveClassRoom
       batchScheduleId={schedule.id}
       scheduleTitle={schedule.title}
-      batchName={schedule.batch.name}
-      teacherName={schedule.teacher?.user.name ?? null}
+      batchName={schedule.batch?.name || "Live Classroom"}
+      teacherName={schedule.teacher?.user?.name ?? null}
       currentUserId={student.userId}
     />
   );

@@ -34,8 +34,9 @@ export async function POST(request: NextRequest) {
 
     if (existing) {
       const teacher = await prisma.teacher.findUnique({ where: { userId: session.user.id } });
-      if (!teacher || teacher.id !== existing.teacherId) {
-        throw new ForbiddenError("Only the teacher who started this class can resume it.");
+      const isAdmin = await hasPermission(session.user.id, PERMISSIONS.BATCH_UPDATE);
+      if (!isAdmin && (!teacher || teacher.id !== existing.teacherId)) {
+        throw new ForbiddenError("Only the teacher who started this class or an administrator can resume it.");
       }
 
       if (existing.status === "ACTIVE") {
