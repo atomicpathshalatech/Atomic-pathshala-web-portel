@@ -322,9 +322,42 @@ export function generateTestPaperHtml(
   const enSectionRange = sectionBreakdowns.map((sb) => `${sb.name}: ${sb.startQ}-${sb.endQ}`).join(", ") || `Physics: 1-45, Chemistry: 46-90, Biology: 91-180`;
   const hiSectionRange = sectionBreakdowns.map((sb) => `${sb.name}: ${sb.startQ} से ${sb.endQ}`).join(", ") || `भौतिक विज्ञान: 1 से 45, रसायन विज्ञान: 46 से 90, जीव विज्ञान: 91 से 180`;
 
-  // Estimate total pages: 1 Cover + Math.ceil(totalQuestions / 6) + 3 Rough + 1 Back Cover + (withSolution ? 1 + Math.ceil(totalQuestions / 4) : 0)
-  const questionPagesEst = Math.ceil(test.totalQuestions / 6);
-  const totalPagesEstimated = 1 + questionPagesEst + 3 + 1 + (withSolution ? Math.ceil(test.totalQuestions / 5) + 1 : 0);
+  // Helper to chunk questions into authentic pages of 3-4 questions each (matching ALLEN density)
+  function chunkQuestionsIntoPages(questions: FormattedExportQuestion[], maxWeight = 4): FormattedExportQuestion[][] {
+    const chunks: FormattedExportQuestion[][] = [];
+    let currentChunk: FormattedExportQuestion[] = [];
+    let currentWeight = 0;
+
+    for (const q of questions) {
+      let weight = 1.0;
+      if (q.imageUrl) weight += 0.5;
+      if ((q.statementEn && q.statementEn.length > 220) || (q.statementHi && q.statementHi.length > 220)) weight += 0.4;
+      
+      if (currentChunk.length > 0 && currentWeight + weight > maxWeight) {
+        chunks.push(currentChunk);
+        currentChunk = [q];
+        currentWeight = weight;
+      } else {
+        currentChunk.push(q);
+        currentWeight += weight;
+      }
+    }
+    if (currentChunk.length > 0) {
+      chunks.push(currentChunk);
+    }
+    return chunks;
+  }
+
+  let totalQuestionPagesCount = 0;
+  test.sections.forEach((sec) => {
+    totalQuestionPagesCount += chunkQuestionsIntoPages(sec.questions, 4).length;
+  });
+
+  const intermediateRoughCount = test.sections.length >= 3 ? 1 : 0;
+  const finalRoughCount = 2;
+  const backCoverCount = 1;
+  const solutionsPagesCount = withSolution ? 1 + Math.ceil(test.totalQuestions / 6) : 0;
+  const actualTotalPages = 1 + totalQuestionPagesCount + intermediateRoughCount + finalRoughCount + backCoverCount + solutionsPagesCount;
 
   // Render Front Cover (Exact User-Specified Authentic Layout)
   const frontCoverHtml = `
@@ -548,154 +581,227 @@ export function generateTestPaperHtml(
             <span class="font-bold text-slate-800">${test.examType || "NEET-UG"}</span>
           </div>
           <div class="font-bold text-slate-900 bg-slate-100 px-2 py-0.5 border border-slate-300">
-            PAGE 1 OF ${totalPagesEstimated} (COVER)
+            PAGE 1 OF ${actualTotalPages} (COVER)
           </div>
         </div>
       </div>
     </div>
   `;
 
-  // Render Questions Section-wise
+  // Render Questions Section-wise with Authentic Academic Two-Column Typesetting
+  let pageCounter = 2;
   let questionPagesHtml = "";
-  test.sections.forEach((section, sIdx) => {
-    const sectionBanner = `
-      <div class="section-divider-banner">
-        <div class="section-banner-title">${section.subject.toUpperCase()} — ${section.name.toUpperCase()}</div>
-        <div class="section-banner-meta">
-          <span>Questions: <strong>${section.questions.length}</strong></span>
-          <span>Correct: <strong>+${section.marksPerQuestion}</strong></span>
-          <span>Incorrect: <strong>-${section.negativeMarks}</strong></span>
-        </div>
+
+  // Helper to format options
+  const renderOptionItem = (opt: FormattedQuestionOption | undefined, idx: number, isHi: boolean) => {
+    if (!opt) return "";
+    const raw = isHi ? (opt.textHi || opt.textEn) : opt.textEn;
+    const rendered = renderFormulaContent(raw);
+    const label = `(${idx + 1})`;
+    return `
+      <div class="opt-box">
+        <span class="opt-label">${label}</span>
+        <span class="opt-value">${rendered}</span>
       </div>
     `;
+  };
 
-    const questionsChunkHtml = section.questions.map((q) => {
-      const statementEnHtml = renderFormulaContent(q.statementEn);
-      const statementHiHtml = renderFormulaContent(q.statementHi);
+  test.sections.forEach((section, sIdx) => {
+    const pagesForSection = chunkQuestionsIntoPages(section.questions, 4.0);
 
-      const optionsHtml = q.options.map((opt) => {
-        const optEn = renderFormulaContent(opt.textEn);
-        const optHi = renderFormulaContent(opt.textHi);
+    pagesForSection.forEach((questionsInPage) => {
+      const questionsChunkHtml = questionsInPage.map((q) => {
+        const statementEnHtml = renderFormulaContent(q.statementEn);
+        const statementHiHtml = renderFormulaContent(q.statementHi);
+
+        // Check if short options for 2x2 grid (matching Image 1)
+        const isShort = q.options.every((opt) => {
+          const lEn = (opt.textEn || "").length;
+          const lHi = (opt.textHi || opt.textEn || "").length;
+          return lEn <= 24 && lHi <= 24;
+        });
+
+        const optionsHiHtml = isShort && q.options.length === 4
+          ? `<div class="opts-grid-2">
+               ${renderOptionItem(q.options[0], 0, true)}
+               ${renderOptionItem(q.options[1], 1, true)}
+               ${renderOptionItem(q.options[2], 2, true)}
+               ${renderOptionItem(q.options[3], 3, true)}
+             </div>`
+          : `<div class="opts-stacked">${q.options.map((opt, i) => renderOptionItem(opt, i, true)).join("")}</div>`;
+
+        const optionsEnHtml = isShort && q.options.length === 4
+          ? `<div class="opts-grid-2">
+               ${renderOptionItem(q.options[0], 0, false)}
+               ${renderOptionItem(q.options[1], 1, false)}
+               ${renderOptionItem(q.options[2], 2, false)}
+               ${renderOptionItem(q.options[3], 3, false)}
+             </div>`
+          : `<div class="opts-stacked">${q.options.map((opt, i) => renderOptionItem(opt, i, false)).join("")}</div>`;
+
+        const diagramHi = q.imageUrl ? `
+          <div class="q-diagram-wrap">
+            <img src="${q.imageUrl}" alt="Diagram for Question ${q.number}" class="q-diagram-img" />
+          </div>
+        ` : "";
+
+        const diagramEn = q.imageUrl ? `
+          <div class="q-diagram-wrap">
+            <img src="${q.imageUrl}" alt="Diagram for Question ${q.number}" class="q-diagram-img" />
+          </div>
+        ` : "";
+
         return `
-          <div class="q-option-row">
-            <div class="q-option-col hi-opt">
-              <span class="opt-label">${opt.label}</span>
-              <span class="opt-text">${optHi}</span>
+          <div class="q-row-item" id="q-${q.number}">
+            <div class="q-side q-side-hi">
+              <div class="q-head-statement">
+                <span class="q-num-label">${q.number}.</span>
+                <div class="q-statement-body">${statementHiHtml}</div>
+              </div>
+              ${diagramHi}
+              <div class="q-opts-wrapper">
+                ${optionsHiHtml}
+              </div>
             </div>
-            <div class="q-option-col en-opt">
-              <span class="opt-label">${opt.label}</span>
-              <span class="opt-text">${optEn}</span>
+            <div class="q-side q-side-en">
+              <div class="q-head-statement">
+                <span class="q-num-label">${q.number}.</span>
+                <div class="q-statement-body">${statementEnHtml}</div>
+              </div>
+              ${diagramEn}
+              <div class="q-opts-wrapper">
+                ${optionsEnHtml}
+              </div>
             </div>
           </div>
         `;
       }).join("");
 
-      const imageHtml = q.imageUrl ? `
-        <div class="q-diagram-container">
-          <img src="${q.imageUrl}" alt="Diagram for Question ${q.number}" class="q-diagram-img" />
-        </div>
-      ` : "";
+      questionPagesHtml += `
+        <div class="page content-page">
+          <!-- Top Header: Brand, Page Number, [Hindi + English], Subject -->
+          <div class="test-page-header">
+            <div class="test-header-row-1">
+              <div class="test-header-brand">${brandName}</div>
+              <div class="test-header-page-no">${pageCounter}</div>
+              <div class="test-header-lang-badge">Hindi + English</div>
+            </div>
+            <div class="test-header-subject-row">
+              SUBJECT : ${section.subject.toUpperCase()}${section.name && section.name.toLowerCase() !== section.subject.toLowerCase() ? ` (${section.name.toUpperCase()})` : ""}
+            </div>
+            <div class="test-header-divider"></div>
+          </div>
+          
+          <!-- Content Body Starts Directly With ZERO Gap -->
+          <div class="content-body">
+            <div class="questions-stream">
+              ${questionsChunkHtml}
+            </div>
+          </div>
 
-      return `
-        <div class="question-block" id="q-${q.number}">
-          <div class="q-header-row">
-            <span class="q-num-badge">Q.${q.number}</span>
-          </div>
-          <div class="q-statement-row">
-            <div class="q-statement-col hi-text">
-              ${statementHiHtml}
+          <!-- Bottom Footer Matching Official Test Booklet -->
+          <div class="page-running-footer">
+            <div class="footer-phase-box">PHASE - ALL</div>
+            <div class="footer-meta-row">
+              <span class="footer-barcode">${test.code || "AP-TEST-BOOKLET"}</span>
+              <span class="footer-rough-note">SPACE FOR ROUGH WORK / रफ कार्य के लिए जगह</span>
+              <span class="footer-date">${currentDateStr}</span>
             </div>
-            <div class="q-statement-col en-text">
-              ${statementEnHtml}
-            </div>
-          </div>
-          ${imageHtml}
-          <div class="q-options-container">
-            ${optionsHtml}
           </div>
         </div>
       `;
-    }).join("");
 
-    questionPagesHtml += `
-      <div class="page content-page">
-        <div class="page-running-header">
-          <span class="header-left">SUBJECT : <strong>${section.subject.toUpperCase()}</strong></span>
-          <span class="header-center">${brandName} — ${test.examType}</span>
-          <span class="header-right">CODE : <strong>${test.code}</strong></span>
-        </div>
-        
-        <div class="content-body">
-          ${sectionBanner}
-          <div class="questions-stream">
-            ${questionsChunkHtml}
-          </div>
-        </div>
+      pageCounter++;
+    });
 
-        <div class="page-running-footer">
-          <span class="footer-left">${test.code} · ${currentDateStr}</span>
-          <span class="footer-center">SPACE FOR ROUGH WORK / रफ कार्य के लिए जगह</span>
-          <span class="footer-right">PHASE - ALL</span>
-        </div>
-      </div>
-    `;
-
-    // Add intermediate rough page after middle section
+    // Add intermediate rough page after middle section if >= 3 sections
     if (sIdx === 1 && test.sections.length >= 3) {
       questionPagesHtml += `
         <div class="page rough-page">
-          <div class="page-running-header">
-            <span class="header-left">${brandName}</span>
-            <span class="header-center">ROUGH WORK</span>
-            <span class="header-right">CODE : <strong>${test.code}</strong></span>
+          <div class="test-page-header">
+            <div class="test-header-row-1">
+              <div class="test-header-brand">${brandName}</div>
+              <div class="test-header-page-no">${pageCounter}</div>
+              <div class="test-header-lang-badge">Hindi + English</div>
+            </div>
+            <div class="test-header-subject-row">
+              SPACE FOR ROUGH WORK / रफ कार्य के लिए जगह
+            </div>
+            <div class="test-header-divider"></div>
           </div>
           <div class="rough-page-content">
             <div class="rough-watermark">SPACE FOR ROUGH WORK / रफ कार्य के लिए जगह</div>
             <div class="rough-grid-canvas"></div>
           </div>
           <div class="page-running-footer">
-            <span class="footer-left">${test.code} · ${currentDateStr}</span>
-            <span class="footer-center">SPACE FOR ROUGH WORK</span>
-            <span class="footer-right">ATOMIC PATHSHALA</span>
+            <div class="footer-phase-box">PHASE - ALL</div>
+            <div class="footer-meta-row">
+              <span class="footer-barcode">${test.code}</span>
+              <span class="footer-rough-note">SPACE FOR ROUGH WORK</span>
+              <span class="footer-date">${currentDateStr}</span>
+            </div>
           </div>
         </div>
       `;
+      pageCounter++;
     }
   });
 
   // Dedicated End-of-Paper Rough Pages (2 Pages)
+  const roughPage1No = pageCounter++;
+  const roughPage2No = pageCounter++;
+  const backCoverPageNo = pageCounter++;
+
   const finalRoughPagesHtml = `
     <div class="page rough-page">
-      <div class="page-running-header">
-        <span class="header-left">${brandName}</span>
-        <span class="header-center">SPACE FOR ROUGH WORK / रफ कार्य के लिए जगह</span>
-        <span class="header-right">CODE : <strong>${test.code}</strong></span>
+      <div class="test-page-header">
+        <div class="test-header-row-1">
+          <div class="test-header-brand">${brandName}</div>
+          <div class="test-header-page-no">${roughPage1No}</div>
+          <div class="test-header-lang-badge">Hindi + English</div>
+        </div>
+        <div class="test-header-subject-row">
+          SPACE FOR ROUGH WORK / रफ कार्य के लिए जगह
+        </div>
+        <div class="test-header-divider"></div>
       </div>
       <div class="rough-page-content">
         <div class="rough-watermark">SPACE FOR ROUGH WORK / रफ कार्य के लिए जगह</div>
         <div class="rough-grid-canvas"></div>
       </div>
       <div class="page-running-footer">
-        <span class="footer-left">${test.code}</span>
-        <span class="footer-center">SPACE FOR ROUGH WORK</span>
-        <span class="footer-right">ATOMIC PATHSHALA</span>
+        <div class="footer-phase-box">PHASE - ALL</div>
+        <div class="footer-meta-row">
+          <span class="footer-barcode">${test.code}</span>
+          <span class="footer-rough-note">SPACE FOR ROUGH WORK</span>
+          <span class="footer-date">${currentDateStr}</span>
+        </div>
       </div>
     </div>
 
     <div class="page rough-page">
-      <div class="page-running-header">
-        <span class="header-left">${brandName}</span>
-        <span class="header-center">SPACE FOR ROUGH WORK / रफ कार्य के लिए जगह</span>
-        <span class="header-right">CODE : <strong>${test.code}</strong></span>
+      <div class="test-page-header">
+        <div class="test-header-row-1">
+          <div class="test-header-brand">${brandName}</div>
+          <div class="test-header-page-no">${roughPage2No}</div>
+          <div class="test-header-lang-badge">Hindi + English</div>
+        </div>
+        <div class="test-header-subject-row">
+          SPACE FOR ROUGH WORK / रफ कार्य के लिए जगह
+        </div>
+        <div class="test-header-divider"></div>
       </div>
       <div class="rough-page-content">
         <div class="rough-watermark">SPACE FOR ROUGH WORK / रफ कार्य के लिए जगह</div>
         <div class="rough-grid-canvas"></div>
       </div>
       <div class="page-running-footer">
-        <span class="footer-left">${test.code}</span>
-        <span class="footer-center">SPACE FOR ROUGH WORK</span>
-        <span class="footer-right">ATOMIC PATHSHALA</span>
+        <div class="footer-phase-box">PHASE - ALL</div>
+        <div class="footer-meta-row">
+          <span class="footer-barcode">${test.code}</span>
+          <span class="footer-rough-note">SPACE FOR ROUGH WORK</span>
+          <span class="footer-date">${currentDateStr}</span>
+        </div>
       </div>
     </div>
   `;
@@ -897,7 +1003,7 @@ export function generateTestPaperHtml(
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css" crossorigin="anonymous">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Montserrat:wght@600;700;800;900&family=JetBrains+Mono:wght@500;600;700&family=Noto+Sans+Devanagari:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Montserrat:wght@600;700;800;900&family=JetBrains+Mono:wght@500;600;700&family=Noto+Serif+Devanagari:wght@400;500;600;700;800&family=PT+Serif:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
 
   <style>
     @page {
@@ -989,6 +1095,12 @@ export function generateTestPaperHtml(
       box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
       margin-bottom: 24px;
       box-sizing: border-box;
+    }
+
+    /* Content Page: Strictly Aligned At The Top, Zero Gap */
+    .page.content-page {
+      padding: 18px 26px 14px 26px !important;
+      justify-content: flex-start !important;
     }
 
     @media print {
@@ -1297,105 +1409,212 @@ export function generateTestPaperHtml(
       margin-top: 6px;
     }
 
-    .section-divider-banner {
-      background: #0f172a;
-      color: #fff;
-      padding: 4px 10px;
+    /* Authentic Academic Exam Typesetting (Matching ALLEN / NTA Official Standards) */
+    .test-page-header {
+      width: 100%;
+      margin-bottom: 0px;
+      padding-bottom: 0px;
+    }
+
+    .test-header-row-1 {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-size: 9pt;
-      font-weight: 800;
-      margin-bottom: 8px;
-      border-radius: 4px;
+      margin-bottom: 1px;
     }
-    .section-banner-meta {
+
+    .test-header-brand {
+      font-family: 'Montserrat', 'Times New Roman', sans-serif;
+      font-size: 14pt;
+      font-weight: 900;
+      letter-spacing: 0.5px;
+      color: #000000;
+    }
+
+    .test-header-page-no {
+      font-family: 'Times New Roman', 'PT Serif', serif;
+      font-size: 13.5pt;
+      font-weight: 700;
+      color: #000000;
+    }
+
+    .test-header-lang-badge {
+      border: 1px solid #000000;
+      padding: 1px 8px;
+      font-family: 'Times New Roman', 'PT Serif', serif;
       font-size: 8pt;
-      display: flex;
-      gap: 12px;
+      font-weight: 700;
+      color: #000000;
+      background: #ffffff;
     }
-    .question-block {
-      border-bottom: 1px solid #cbd5e1;
+
+    .test-header-subject-row {
+      text-align: center;
+      font-family: 'Times New Roman', 'PT Serif', serif;
+      font-size: 11pt;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      color: #000000;
+      margin-top: 1px;
+      margin-bottom: 3px;
+    }
+
+    .test-header-divider {
+      height: 1.5px;
+      background: #000000;
+      width: 100%;
+      margin-bottom: 3px;
+    }
+
+    .content-body {
+      flex: 1 0 auto;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      margin-top: 0px !important;
+      padding-top: 0px !important;
+    }
+
+    .questions-stream {
+      display: flex;
+      flex-direction: column;
+      margin-top: 0px !important;
+      padding-top: 0px !important;
+    }
+
+    /* Question Row: Two Equal Columns With Continuous Solid Center Line */
+    .q-row-item {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
       padding: 6px 0 8px 0;
+      border-bottom: 1px solid #cbd5e1;
       page-break-inside: avoid;
       break-inside: avoid;
     }
-    .q-header-row {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      margin-bottom: 3px;
-    }
-    .q-num-badge {
-      font-size: 9.5pt;
-      font-weight: 800;
-      color: #000;
-      background: #f1f5f9;
-      padding: 1px 6px;
-      border-radius: 4px;
-      border: 1px solid #94a3b8;
-    }
-    .q-statement-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-      font-size: 8.8pt;
-      line-height: 1.35;
-      margin-bottom: 4px;
-    }
-    .q-statement-col {
-      word-break: break-word;
-    }
-    .hi-text {
-      font-family: 'Noto Sans Devanagari', sans-serif;
-      border-right: 1px dashed #cbd5e1;
-      padding-right: 10px;
-    }
-    .en-text {
-      padding-left: 2px;
-    }
-    .q-diagram-container {
-      text-align: center;
-      margin: 4px 0;
-    }
-    .q-diagram-img {
-      max-width: 85%;
-      max-height: 140px;
-      object-fit: contain;
-      border: 1px solid #e2e8f0;
-      border-radius: 4px;
-    }
-    .q-options-container {
+
+    .q-side {
       display: flex;
       flex-direction: column;
-      gap: 2px;
-      margin-top: 3px;
     }
-    .q-option-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-      font-size: 8.5pt;
+
+    .q-side-hi {
+      padding-right: 14px;
+      border-right: 1.5px solid #000000;
     }
-    .q-option-col {
+
+    .q-side-en {
+      padding-left: 14px;
+    }
+
+    .q-head-statement {
       display: flex;
       align-items: baseline;
-      gap: 6px;
+      gap: 5px;
+      text-align: justify;
     }
-    .hi-opt {
-      font-family: 'Noto Sans Devanagari', sans-serif;
-      border-right: 1px dashed #cbd5e1;
-      padding-right: 10px;
-    }
-    .en-opt {
-      padding-left: 2px;
-    }
-    .opt-label {
-      font-weight: 700;
-      min-width: 20px;
-    }
-    .opt-text {
+
+    .q-statement-body {
       flex: 1;
+    }
+
+    /* UNIFIED SERIF FONT & EXACT SAME FONT SIZE FOR BOTH HINDI & ENGLISH */
+    .q-statement-body,
+    .q-statement-body p,
+    .q-statement-body span,
+    .opt-value,
+    .opt-value p,
+    .opt-value span {
+      font-family: 'Times New Roman', 'PT Serif', 'Noto Serif Devanagari', 'Cambria', Georgia, serif !important;
+      font-size: 10pt !important;
+      line-height: 1.38 !important;
+      color: #000000 !important;
+    }
+
+    .q-num-label {
+      font-family: 'Times New Roman', 'PT Serif', serif !important;
+      font-size: 10pt !important;
+      font-weight: 800 !important;
+      color: #000000 !important;
+      min-width: 18px;
+      flex-shrink: 0;
+    }
+
+    .q-opts-wrapper {
+      margin-top: 4px;
+    }
+
+    .opts-grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      column-gap: 12px;
+      row-gap: 3px;
+    }
+
+    .opts-stacked {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .opt-box {
+      display: flex;
+      align-items: baseline;
+      gap: 4px;
+    }
+
+    .opt-label {
+      font-family: 'Times New Roman', 'PT Serif', serif !important;
+      font-size: 10pt !important;
+      font-weight: 700 !important;
+      color: #000000 !important;
+      min-width: 22px;
+      flex-shrink: 0;
+    }
+
+    .q-diagram-wrap {
+      text-align: center;
+      margin: 4px 0 2px 0;
+    }
+
+    .q-diagram-img {
+      max-width: 88%;
+      max-height: 120px;
+      object-fit: contain;
+      display: inline-block;
+    }
+
+    /* Footer Styles */
+    .page-running-footer {
+      margin-top: auto;
+      padding-top: 4px;
+      width: 100%;
+    }
+
+    .footer-phase-box {
+      border: 1px solid #000000;
+      padding: 1px 6px;
+      font-family: 'Times New Roman', serif;
+      font-size: 7.5pt;
+      font-weight: 800;
+      width: fit-content;
+      margin-bottom: 2px;
+    }
+
+    .footer-meta-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-top: 1px solid #000000;
+      padding-top: 2px;
+      font-family: 'Times New Roman', 'JetBrains Mono', serif;
+      font-size: 8pt;
+      font-weight: 600;
+      color: #000000;
+    }
+
+    .footer-barcode {
+      font-family: 'JetBrains Mono', 'Times New Roman', monospace;
+      font-weight: 700;
     }
 
     .rough-page-content {
