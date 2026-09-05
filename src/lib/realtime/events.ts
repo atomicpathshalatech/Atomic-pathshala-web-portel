@@ -49,4 +49,9 @@ export const WB_EVENTS = {
   SESSION_EXTENDED: "session-extended",
   PRESENCE_EVENT: "presence-event",
   CONFIG_UPDATED: "config-updated",
+  // Hand Raise & Student Speaker Participation
+  HAND_RAISE_UPDATED: "hand-raise-updated",
+  SPEAKER_APPROVED: "speaker-approved",
+  SPEAKER_REVOKED: "speaker-revoked",
 } as const;
+

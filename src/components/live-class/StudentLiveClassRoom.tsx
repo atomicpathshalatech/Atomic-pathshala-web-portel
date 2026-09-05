@@ -7,6 +7,8 @@ import { sessionChannel, WB_EVENTS } from "@/lib/realtime/events";
 import { CanvasEngine, type StrokeObject } from "@/lib/canvas/canvas-engine";
 import { MessagesPanel } from "@/components/live-class/MessagesPanel";
 import { YouTubeLivePlayer } from "@/components/live-class/YouTubeLivePlayer";
+import { VideoStrip } from "@/components/live-class/VideoStrip";
+
 
 type QuizOption = { key: string; label: string };
 type LiveQuiz = {
@@ -83,6 +85,10 @@ export function StudentLiveClassRoom({
 
   const [handRaised, setHandRaised] = useState(false);
   const [handRaiseBusy, setHandRaiseBusy] = useState(false);
+  const [handRaiseModalOpen, setHandRaiseModalOpen] = useState(false);
+  const [participationType, setParticipationType] = useState<"CHAT" | "AUDIO" | "VIDEO">("AUDIO");
+  const [isApprovedSpeaker, setIsApprovedSpeaker] = useState(false);
+  const [speakerToken, setSpeakerToken] = useState<string | null>(null);
 
   const [quiz, setQuiz] = useState<LiveQuiz | null>(null);
   const [mySelection, setMySelection] = useState<string | null>(null);
@@ -181,7 +187,14 @@ export function StudentLiveClassRoom({
   useEffect(() => {
     if (!wbSession?.id) return;
     postJson(`/api/whiteboard/sessions/${wbSession.id}/join`).catch(() => {});
+
+    // Periodic attendance heartbeat while viewing class
+    const hbInterval = setInterval(() => {
+      fetch(`/api/whiteboard/sessions/${wbSession.id}/heartbeat`, { method: "POST" }).catch(() => {});
+    }, 25000);
+    return () => clearInterval(hbInterval);
   }, [wbSession?.id]);
+
 
   // Board mirror refresh
   async function refreshBoard() {
@@ -307,7 +320,28 @@ export function StudentLiveClassRoom({
       setQuiz((prev) => (prev && prev.id === data.id ? null : prev));
     });
 
+    // Handle teacher approving speaking permission for this student
+    channel.bind(
+      WB_EVENTS.SPEAKER_APPROVED,
+      (data: { studentUserId: string; requestType: "AUDIO" | "VIDEO"; speakerToken?: string }) => {
+        if (data.studentUserId === currentUserId) {
+          setIsApprovedSpeaker(true);
+          if (data.speakerToken) setSpeakerToken(data.speakerToken);
+        }
+      }
+    );
+
+    // Handle teacher revoking speaking permission
+    channel.bind(WB_EVENTS.SPEAKER_REVOKED, (data: { studentUserId: string }) => {
+      if (data.studentUserId === currentUserId) {
+        setIsApprovedSpeaker(false);
+        setSpeakerToken(null);
+        setHandRaised(false);
+      }
+    });
+
     // Check existing quiz
+
     fetch(`/api/whiteboard/sessions/${wbSession.id}/quiz`)
       .then((r) => r.json())
       .then((j) => {
@@ -335,23 +369,45 @@ export function StudentLiveClassRoom({
     return () => clearInterval(id);
   }, [quiz]);
 
-  async function toggleHandRaise() {
-    if (!wbSession?.id || handRaiseBusy) return;
-    setHandRaiseBusy(true);
-    try {
-      if (handRaised) {
+  async function handleRaiseHandClick() {
+    if (handRaised) {
+      // Lower hand directly
+      if (!wbSession?.id || handRaiseBusy) return;
+      setHandRaiseBusy(true);
+      try {
         await fetch(`/api/whiteboard/sessions/${wbSession.id}/hand-raise`, { method: "DELETE" });
         setHandRaised(false);
-      } else {
-        await postJson(`/api/whiteboard/sessions/${wbSession.id}/hand-raise`);
-        setHandRaised(true);
+        setIsApprovedSpeaker(false);
+      } catch {
+        // ignore
+      } finally {
+        setHandRaiseBusy(false);
       }
+    } else {
+      // Show participation choice modal
+      setHandRaiseModalOpen(true);
+    }
+  }
+
+  async function submitHandRaise(type: "CHAT" | "AUDIO" | "VIDEO") {
+    if (!wbSession?.id || handRaiseBusy) return;
+    setHandRaiseBusy(true);
+    setHandRaiseModalOpen(false);
+    try {
+      await postJson(`/api/whiteboard/sessions/${wbSession.id}/hand-raise`, { requestType: type });
+      setHandRaised(true);
+      setParticipationType(type);
     } catch {
       // ignore
     } finally {
       setHandRaiseBusy(false);
     }
   }
+
+  async function toggleHandRaise() {
+    return handleRaiseHandClick();
+  }
+
 
   async function submitAnswer(optionKey: string) {
     if (!wbSession?.id || !quiz || submittingAnswer || mySelection) return;
@@ -606,21 +662,27 @@ export function StudentLiveClassRoom({
           {!isYouTube && (
             <div className={`bg-[#10121d] border border-slate-800/80 rounded-2xl overflow-hidden shadow-xl shrink-0 ${isCameraCircle ? "p-3 flex items-center justify-center aspect-square" : ""}`}>
               <div className={`w-full overflow-hidden ${isCameraCircle ? "aspect-square rounded-full border-2 border-indigo-500 shadow-lg shadow-indigo-500/20" : "aspect-video rounded-xl"}`}>
-                <div className="relative w-full h-full bg-[#0a0b12] rounded-xl overflow-hidden border border-[#252836] flex flex-col items-center justify-center p-4 text-center">
-                  <div className="w-12 h-12 rounded-2xl bg-indigo-500/20 border border-indigo-500/40 text-indigo-400 flex items-center justify-center mb-2 shadow-md">
-                    <span className="material-symbols-outlined text-2xl">videocam</span>
-                  </div>
-                  <p className="text-xs font-bold text-white truncate max-w-full">
-                    {teacherName || "Instructor"}
-                  </p>
-                  <span className="text-[10px] text-indigo-300 font-medium mt-1 flex items-center gap-1.5">
-                    <span className={`w-1.5 h-1.5 rounded-full ${isLive ? "bg-rose-500 animate-ping" : "bg-amber-400 animate-pulse"}`} />
-                    {isLive ? "Live Teaching" : "Awaiting Class"}
-                  </span>
-                </div>
+                <VideoStrip
+                  whiteboardSessionId={wbSession?.id || batchScheduleId}
+                  variant="panel"
+                  role="STUDENT"
+                  teacherName={teacherName}
+                />
               </div>
             </div>
           )}
+
+          {/* Approved Speaker Live Indicator (when teacher grants speaking permission) */}
+          {isApprovedSpeaker && (
+            <div className="bg-emerald-950/80 border border-emerald-500/60 rounded-xl p-3 shadow-lg flex items-center justify-between text-xs text-white animate-in fade-in">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+                <span className="font-semibold text-emerald-200">You are an Approved Speaker</span>
+              </div>
+              <span className="text-[10px] text-emerald-400 font-mono">Microphone Active</span>
+            </div>
+          )}
+
 
 
           {/* Live Chat Panel */}
@@ -689,14 +751,16 @@ export function StudentLiveClassRoom({
 
               {/* Mobile PiP Teacher Video (Corner Preview) */}
               {!isYouTube && (
-                <div className="absolute top-2 right-2 w-28 xs:w-32 aspect-video rounded-lg overflow-hidden border border-indigo-500/60 shadow-xl bg-[#10121d] z-20 flex flex-col items-center justify-center">
-                  <span className="material-symbols-outlined text-base text-indigo-400">videocam</span>
-                  <span className={`text-[9px] text-indigo-300 mt-1 flex items-center gap-1`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${isLive ? "bg-rose-500 animate-ping" : "bg-amber-400 animate-pulse"}`} />
-                    {isLive ? "Live" : "Standby"}
-                  </span>
+                <div className="absolute top-2 right-2 w-28 xs:w-32 aspect-video rounded-lg overflow-hidden border border-indigo-500/60 shadow-xl bg-[#10121d] z-20">
+                  <VideoStrip
+                    whiteboardSessionId={wbSession?.id || batchScheduleId}
+                    variant="panel"
+                    role="STUDENT"
+                    teacherName={teacherName}
+                  />
                 </div>
               )}
+
             </div>
           )}
         </div>
@@ -865,6 +929,100 @@ export function StudentLiveClassRoom({
           </div>
         </div>
       </div>
+
+      {/* Student Hand Raise Participation Modal */}
+
+      {handRaiseModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl p-6 shadow-2xl space-y-4 text-white">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-amber-400 text-2xl">back_hand</span>
+                <h3 className="text-base font-bold">Ask Doubt / Participate</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHandRaiseModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+              >
+                <span className="material-symbols-outlined text-lg">close</span>
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-300">
+              Select how you would like to interact with the teacher once approved:
+            </p>
+
+            <div className="space-y-2.5">
+              <button
+                type="button"
+                onClick={() => submitHandRaise("AUDIO")}
+                disabled={handRaiseBusy}
+                className="w-full flex items-center gap-3 p-3.5 rounded-xl border border-slate-700 hover:border-indigo-500 bg-slate-800/60 hover:bg-indigo-950/30 text-left transition group"
+              >
+                <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
+                  <span className="material-symbols-outlined text-xl">mic</span>
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-white group-hover:text-indigo-300 transition">
+                    Request to Speak (Audio Only)
+                  </h4>
+                  <p className="text-[11px] text-slate-400">
+                    Your microphone will be enabled once teacher approves your request.
+                  </p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => submitHandRaise("VIDEO")}
+                disabled={handRaiseBusy}
+                className="w-full flex items-center gap-3 p-3.5 rounded-xl border border-slate-700 hover:border-purple-500 bg-slate-800/60 hover:bg-purple-950/30 text-left transition group"
+              >
+                <div className="w-10 h-10 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
+                  <span className="material-symbols-outlined text-xl">videocam</span>
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-white group-hover:text-purple-300 transition">
+                    Request Video + Audio
+                  </h4>
+                  <p className="text-[11px] text-slate-400">
+                    Join as a live video participant upon teacher approval.
+                  </p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => submitHandRaise("CHAT")}
+                disabled={handRaiseBusy}
+                className="w-full flex items-center gap-3 p-3.5 rounded-xl border border-slate-700 hover:border-slate-500 bg-slate-800/60 hover:bg-slate-800 text-left transition group"
+              >
+                <div className="w-10 h-10 rounded-xl bg-slate-700/50 text-slate-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
+                  <span className="material-symbols-outlined text-xl">chat</span>
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-white transition">Chat Queue Only</h4>
+                  <p className="text-[11px] text-slate-400">
+                    Alert the teacher to read your question in the classroom chat.
+                  </p>
+                </div>
+              </button>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setHandRaiseModalOpen(false)}
+                className="text-xs text-slate-400 hover:text-white px-3 py-1.5 rounded-lg hover:bg-slate-800 transition"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

@@ -17,7 +17,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
 
     const [queue, wbSession] = await Promise.all([
       prisma.handRaiseEvent.findMany({
-        where: { whiteboardSessionId: params.id, status: "PENDING" },
+        where: { whiteboardSessionId: params.id, status: { in: ["PENDING", "APPROVED"] } },
         include: { student: { include: { user: true } } },
         orderBy: { raisedAt: "asc" },
       }),
@@ -32,6 +32,9 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
         id: h.id,
         studentId: h.studentId,
         studentName: h.student.user.name,
+        requestType: h.requestType,
+        status: h.status,
+        liveKitGranted: h.liveKitGranted,
         raisedAt: h.raisedAt,
       })),
       handRaiseEnabled: wbSession?.handRaiseEnabled ?? true,
@@ -43,17 +46,24 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
 
 /**
  * Student raises their hand. Idempotent: a student who already has a
- * PENDING raise gets that same row back rather than a duplicate — matters
- * because a flaky connection can cause the client to retry the same tap.
- * Not audit-logged: a per-class, high-frequency student interaction, not an
- * accountable admin/team action (same reasoning as page autosave).
+ * PENDING or APPROVED raise gets that same row back rather than a duplicate.
  */
-export async function POST(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
     const access = await resolveWhiteboardAccess(session.user.id, params.id);
     if (!access || access.role !== "STUDENT") throw new ForbiddenError();
+
+    let requestType = "CHAT";
+    try {
+      const body = await request.json();
+      if (body?.requestType && ["CHAT", "AUDIO", "VIDEO"].includes(body.requestType)) {
+        requestType = body.requestType;
+      }
+    } catch {
+      // Body may be empty
+    }
 
     const wbSession = await prisma.whiteboardSession.findUnique({ where: { id: params.id } });
     if (!wbSession) return apiError("Whiteboard session not found", 404);
@@ -63,13 +73,18 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
     }
 
     const existing = await prisma.handRaiseEvent.findFirst({
-      where: { whiteboardSessionId: params.id, studentId: access.entityId, status: "PENDING" },
+      where: { whiteboardSessionId: params.id, studentId: access.entityId, status: { in: ["PENDING", "APPROVED"] } },
     });
 
     const handRaise =
       existing ??
       (await prisma.handRaiseEvent.create({
-        data: { whiteboardSessionId: params.id, studentId: access.entityId },
+        data: {
+          whiteboardSessionId: params.id,
+          studentId: access.entityId,
+          requestType,
+          status: "PENDING",
+        },
       }));
 
     if (!existing) await pushHandRaiseQueue(params.id);
@@ -79,6 +94,7 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
     return handleApiError(error);
   }
 }
+
 
 /** Student lowers their own hand (withdraws before the teacher acts on it). */
 export async function DELETE(_request: NextRequest, { params }: { params: { id: string } }) {

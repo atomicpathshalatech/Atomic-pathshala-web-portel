@@ -42,7 +42,16 @@ type WhiteboardSession = {
   totalExtendedMinutes?: number;
   pages: WhiteboardPage[];
 };
-type HandRaiseQueueItem = { id: string; studentId: string; studentName: string; raisedAt: string };
+type HandRaiseQueueItem = {
+  id: string;
+  studentId: string;
+  studentName: string;
+  raisedAt: string;
+  requestType?: "CHAT" | "AUDIO" | "VIDEO";
+  status?: "PENDING" | "APPROVED" | "REJECTED" | "RESOLVED";
+  liveKitGranted?: boolean;
+};
+
 type QuizOption = { key: string; label: string };
 type ActiveQuiz = {
   id: string;
@@ -817,6 +826,18 @@ export function TeacherLiveClassRoom({
     return () => clearInterval(interval);
   }, []);
 
+  // Periodic heartbeat while class is active
+  useEffect(() => {
+    if (!wbSession?.id) return;
+    const sendHeartbeat = () => {
+      fetch(`/api/whiteboard/sessions/${wbSession.id}/heartbeat`, { method: "POST" }).catch(() => {});
+    };
+    sendHeartbeat();
+    const hbInterval = setInterval(sendHeartbeat, 25000);
+    return () => clearInterval(hbInterval);
+  }, [wbSession?.id]);
+
+
   const scheduledStartMs = wbSession?.scheduledStart ? new Date(wbSession.scheduledStart).getTime() : 0;
   const scheduledEndMs = wbSession?.scheduledEnd
     ? new Date(wbSession.scheduledEnd).getTime()
@@ -862,15 +883,20 @@ export function TeacherLiveClassRoom({
     }
   }
 
-  // ---- Hand raise resolve ------------------------------------------------
-  async function resolveHandRaise(id: string) {
+  // ---- Hand raise actions: approve, reject, or clear ----------------------
+  async function handleHandRaiseAction(id: string, action: "approve" | "reject" | "clear") {
     if (!wbSession) return;
     try {
-      await patchJson(`/api/whiteboard/sessions/${wbSession.id}/hand-raise/${id}`, {});
+      await patchJson(`/api/whiteboard/sessions/${wbSession.id}/hand-raise/${id}`, { action });
     } catch {
       // queue re-syncs on the next Pusher push / manual refresh either way
     }
   }
+
+  async function resolveHandRaise(id: string) {
+    return handleHandRaiseAction(id, "clear");
+  }
+
 
   // ---- Quiz ------------------------------------------------------------------
   async function launchQuiz() {
@@ -1297,8 +1323,10 @@ export function TeacherLiveClassRoom({
             <HandRaisePanel
               queue={handRaiseQueue}
               onResolve={resolveHandRaise}
+              onAction={handleHandRaiseAction}
               enabled={wbSession.handRaiseEnabled}
             />
+
           )}
         </div>
       </aside>
@@ -2008,10 +2036,12 @@ function SaveIndicator({ state }: { state: "saved" | "saving" | "offline" }) {
 function HandRaisePanel({
   queue,
   onResolve,
+  onAction,
   enabled,
 }: {
   queue: HandRaiseQueueItem[];
   onResolve: (id: string) => void;
+  onAction?: (id: string, action: "approve" | "reject" | "clear") => void;
   enabled: boolean;
 }) {
   return (
@@ -2023,28 +2053,104 @@ function HandRaisePanel({
         </p>
       )}
       {queue.length === 0 ? (
-        <p className="text-sm text-gray-500 text-center mt-8">No raised hands right now.</p>
+        <div className="flex flex-col items-center justify-center h-48 text-center p-4">
+          <span className="material-symbols-outlined text-3xl text-gray-600 mb-2">front_hand</span>
+          <p className="text-sm text-gray-400 font-medium">No raised hands</p>
+          <p className="text-xs text-gray-600 mt-1">Student requests to speak will appear here in real-time.</p>
+        </div>
       ) : (
-        <ul className="space-y-2">
-          {queue.map((h, i) => (
-            <li
-              key={h.id}
-              className="flex items-center justify-between bg-[#10131b] border border-[#2d2e3b] rounded-lg px-3 py-2"
-            >
-              <div>
-                <span className="text-[10px] font-bold text-blue-400 mr-1.5">#{i + 1}</span>
-                <span className="text-sm font-medium text-gray-200">{h.studentName}</span>
-              </div>
-              <button type="button" onClick={() => onResolve(h.id)} className="text-sm text-blue-400 hover:underline">
-                Clear
-              </button>
-            </li>
-          ))}
+        <ul className="space-y-2.5">
+          {queue.map((h, i) => {
+            const isApproved = h.status === "APPROVED";
+            const reqIcon =
+              h.requestType === "VIDEO" ? "videocam" : h.requestType === "AUDIO" ? "mic" : "chat";
+            const reqLabel =
+              h.requestType === "VIDEO" ? "Video + Mic" : h.requestType === "AUDIO" ? "Mic Only" : "Chat Doubt";
+
+            return (
+              <li
+                key={h.id}
+                className={`flex flex-col bg-[#10131b] border rounded-xl p-3 gap-2 transition ${
+                  isApproved ? "border-emerald-500/50 bg-emerald-950/10" : "border-[#2d2e3b]"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-[10px] font-mono font-bold text-blue-400 bg-blue-950/60 border border-blue-800/40 px-1.5 py-0.5 rounded">
+                      #{i + 1}
+                    </span>
+                    <span className="text-sm font-semibold text-gray-100 truncate">{h.studentName}</span>
+                  </div>
+
+                  <span
+                    className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                      h.requestType === "VIDEO"
+                        ? "bg-purple-950/60 border-purple-700/50 text-purple-300"
+                        : h.requestType === "AUDIO"
+                        ? "bg-blue-950/60 border-blue-700/50 text-blue-300"
+                        : "bg-slate-800 border-slate-700 text-slate-300"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-xs">{reqIcon}</span>
+                    {reqLabel}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between pt-1 border-t border-[#1e202e]">
+                  <span className="text-[10px] text-gray-500">
+                    {isApproved ? (
+                      <span className="text-emerald-400 font-medium flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                        Speaking Permission Active
+                      </span>
+                    ) : (
+                      "Waiting for approval"
+                    )}
+                  </span>
+
+                  <div className="flex items-center gap-1.5">
+                    {!isApproved && onAction && (
+                      <button
+                        type="button"
+                        onClick={() => onAction(h.id, "approve")}
+                        className="flex items-center gap-1 text-xs font-bold text-emerald-300 bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-700/60 px-2.5 py-1 rounded-lg transition active:scale-95"
+                        title="Allow student to speak"
+                      >
+                        <span className="material-symbols-outlined text-xs">check</span>
+                        Approve
+                      </button>
+                    )}
+
+                    {!isApproved && onAction && (
+                      <button
+                        type="button"
+                        onClick={() => onAction(h.id, "reject")}
+                        className="flex items-center gap-1 text-xs font-medium text-rose-300 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/40 px-2 py-1 rounded-lg transition"
+                        title="Decline request"
+                      >
+                        <span className="material-symbols-outlined text-xs">close</span>
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => (onAction ? onAction(h.id, "clear") : onResolve(h.id))}
+                      className="text-xs text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-gray-800 transition"
+                      title={isApproved ? "Revoke speaking permission" : "Dismiss"}
+                    >
+                      {isApproved ? "End Turn" : "Clear"}
+                    </button>
+                  </div>
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
   );
 }
+
 
 function ToggleRow({
   label,

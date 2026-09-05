@@ -13,7 +13,7 @@ import { pusherServer, teacherChannel, WB_EVENTS } from "@/lib/realtime/pusher-s
  */
 export async function pushHandRaiseQueue(whiteboardSessionId: string) {
   const queue = await prisma.handRaiseEvent.findMany({
-    where: { whiteboardSessionId, status: "PENDING" },
+    where: { whiteboardSessionId, status: { in: ["PENDING", "APPROVED"] } },
     include: { student: { include: { user: true } } },
     orderBy: { raisedAt: "asc" },
   });
@@ -22,6 +22,9 @@ export async function pushHandRaiseQueue(whiteboardSessionId: string) {
     id: h.id,
     studentId: h.studentId,
     studentName: h.student.user.name,
+    requestType: h.requestType,
+    status: h.status,
+    liveKitGranted: h.liveKitGranted,
     raisedAt: h.raisedAt,
   }));
 
@@ -35,3 +38,4 @@ export async function pushHandRaiseQueue(whiteboardSessionId: string) {
 
   return payload;
 }
+

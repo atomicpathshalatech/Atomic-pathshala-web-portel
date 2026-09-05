@@ -1023,6 +1023,16 @@ model WhiteboardSession {
   extensionHistory     Json?    // Array of { addedMinutes: number, extendedAt: string, teacherId: string }
   cancellationReason   String?
 
+  // Teacher connection tracking — updated by teacher heartbeat every 30s while
+  // class is live. If null or stale for > 3 minutes, teacher may be disconnected.
+  lastHeartbeatAt      DateTime?
+
+  // Recording lifecycle — egressId is set the moment LiveKit egress starts;
+  // recordingStatus mirrors LiveKit egress status for display purposes.
+  // recordingStatus: NONE | STARTING | RECORDING | STOPPING | PROCESSING | READY | FAILED
+  recordingEgressId    String?
+  recordingStatus      String   @default("NONE")
+
   batchSchedule BatchSchedule        @relation(fields: [batchScheduleId], references: [id], onDelete: Cascade)
   teacher       Teacher              @relation(fields: [teacherId], references: [id], onDelete: Cascade)
   pages         WhiteboardPage[]
@@ -1122,8 +1132,14 @@ model HandRaiseEvent {
   whiteboardSessionId String
   studentId           String
   status              HandRaiseStatus @default(PENDING)
+  // What type of participation is being requested
+  requestType         String          @default("CHAT") // CHAT | AUDIO | VIDEO
   raisedAt            DateTime        @default(now())
   resolvedAt          DateTime?
+  approvedAt          DateTime?
+  rejectedAt          DateTime?
+  // Whether LiveKit publish permission was granted for this hand raise
+  liveKitGranted      Boolean         @default(false)
 
   whiteboardSession WhiteboardSession @relation(fields: [whiteboardSessionId], references: [id], onDelete: Cascade)
   student           Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
@@ -1916,6 +1932,10 @@ enum QuizSessionStatus {
 
 enum HandRaiseStatus {
   PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+  EXPIRED
   RESOLVED
 }
 
