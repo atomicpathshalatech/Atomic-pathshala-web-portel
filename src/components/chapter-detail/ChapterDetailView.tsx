@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ChapterThumbnailBanner } from "./ChapterThumbnailBanner";
 import { ChapterRoadmapTimeline, RoadmapTopicGroup } from "./ChapterRoadmapTimeline";
 import { ChapterReviewsSection, ChapterReviewItem } from "./ChapterReviewsSection";
+import { StudentChapterNoticeBoard, StudentNoticeItem } from "./StudentChapterNoticeBoard";
 
 export interface ChapterDetailData {
   id: string;
@@ -31,6 +32,7 @@ export interface ChapterDetailData {
   };
   roadmap: RoadmapTopicGroup[];
   reviews: ChapterReviewItem[];
+  notices?: StudentNoticeItem[];
   firstLectureId?: string | null;
   startHref?: string;
 }
@@ -45,7 +47,7 @@ export function ChapterDetailView({
   isTeacherView?: boolean;
 }) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"overview" | "teacher" | "roadmap" | "reviews">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "notices" | "teacher" | "roadmap" | "reviews">("overview");
 
   const totalLessons = data.totalLectures;
   const startDestination = data.startHref || (data.firstLectureId ? `#lecture-${data.firstLectureId}` : "#roadmap");
@@ -117,6 +119,26 @@ export function ChapterDetailView({
           >
             <span>Overview</span>
             {activeTab === "overview" && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("notices")}
+            className={`pb-2.5 transition relative whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+              activeTab === "notices"
+                ? "text-primary dark:text-primary-container font-bold"
+                : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+            }`}
+          >
+            <span>Notice Board</span>
+            {data.notices && data.notices.length > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black">
+                {data.notices.length}
+              </span>
+            )}
+            {activeTab === "notices" && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
             )}
           </button>
@@ -197,6 +219,35 @@ export function ChapterDetailView({
         {/* A. OVERVIEW TAB */}
         {(activeTab === "overview" || activeTab === "teacher") && (
           <div className="space-y-6 pt-2">
+            {/* Pinned / Latest Notice Spotlight Banner */}
+            {data.notices && data.notices.length > 0 && (
+              <div
+                onClick={() => setActiveTab("notices")}
+                className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-amber-500/5 border border-amber-300 dark:border-amber-700/60 flex items-start gap-3 cursor-pointer hover:bg-amber-500/20 transition shadow-xs group"
+              >
+                <div className="w-8 h-8 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center shrink-0 shadow-xs font-black text-sm">
+                  📌
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 dark:text-amber-400">
+                      {data.notices.find((n) => n.isPinned) ? "PINNED CHAPTER NOTICE" : "LATEST CHAPTER NOTICE"}
+                    </span>
+                    <span className="text-[10px] text-slate-400">&bull; Tap to view Notice Board</span>
+                  </div>
+                  <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white truncate mt-0.5">
+                    {(data.notices.find((n) => n.isPinned) || data.notices[0])?.title}
+                  </h4>
+                  <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-1 mt-0.5">
+                    {(data.notices.find((n) => n.isPinned) || data.notices[0])?.content}
+                  </p>
+                </div>
+                <span className="material-symbols-outlined text-slate-400 group-hover:translate-x-0.5 transition text-base shrink-0 mt-2">
+                  arrow_forward
+                </span>
+              </div>
+            )}
+
             {/* About the Chapter */}
             <div className="space-y-3">
               <h3 className="text-lg font-bold text-[#031635] dark:text-white tracking-tight">
@@ -274,6 +325,17 @@ export function ChapterDetailView({
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* NOTICE BOARD TAB VIEW */}
+        {activeTab === "notices" && (
+          <div className="pt-2">
+            <StudentChapterNoticeBoard
+              notices={data.notices || []}
+              chapterTitle={data.title}
+              subjectName={data.subjectName}
+            />
           </div>
         )}
 

@@ -1,6 +1,6 @@
-﻿"use client";
+"use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -21,7 +21,9 @@ import {
   CheckCircle2,
   FileText,
   ShieldCheck,
+  Bell,
 } from "lucide-react";
+import { TeacherChapterNoticeBoard } from "./TeacherChapterNoticeBoard";
 
 export interface TeacherChapterHeaderProps {
   chapterId: string;
@@ -67,6 +69,20 @@ export function TeacherChapterHeader({
   const router = useRouter();
   const [showFullDesc, setShowFullDesc] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [noticeBoardOpen, setNoticeBoardOpen] = useState(false);
+  const [noticeCount, setNoticeCount] = useState<number>(0);
+
+  // Fetch notice count for badge
+  useEffect(() => {
+    fetch(`/api/chapters/${chapterId}/notices`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && Array.isArray(data.notices)) {
+          setNoticeCount(data.notices.length);
+        }
+      })
+      .catch(() => {});
+  }, [chapterId]);
 
   const isApproved = status === "APPROVED" || status === "PUBLISHED";
   const isUnderReview = status === "UNDER_REVIEW";
@@ -232,15 +248,30 @@ export function TeacherChapterHeader({
               )}
             </div>
 
-            {/* Action Bar (Discussion Forum + Share + Three-Dot Menu) */}
-            <div className="flex items-center gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+            {/* Action Bar (Discussion Forum + Notice Board + Share + Three-Dot Menu) */}
+            <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
               <Link
                 href="/team/guru"
-                className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-extrabold shadow-md shadow-blue-500/20 transition-all flex items-center gap-2"
+                className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-extrabold shadow-md shadow-blue-500/20 transition-all flex items-center gap-2"
               >
                 <MessageSquare className="w-4 h-4" />
                 <span>Discussion Forum</span>
               </Link>
+
+              {/* Chapter Notice Board Button */}
+              <button
+                type="button"
+                onClick={() => setNoticeBoardOpen(true)}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 text-xs font-black shadow-md shadow-amber-500/20 transition-all flex items-center gap-2 cursor-pointer"
+              >
+                <Bell className="w-4 h-4 text-slate-950 fill-slate-950" />
+                <span>Notice Board</span>
+                {noticeCount > 0 && (
+                  <span className="px-1.5 py-0.5 rounded-full bg-slate-950 text-amber-300 text-[10px] font-black">
+                    {noticeCount}
+                  </span>
+                )}
+              </button>
 
               <button
                 type="button"
@@ -356,6 +387,16 @@ export function TeacherChapterHeader({
           </div>
         </div>
       </div>
+
+      {/* Chapter Notice Board Modal */}
+      <TeacherChapterNoticeBoard
+        chapterId={chapterId}
+        chapterTitle={chapterTitle}
+        isOpen={noticeBoardOpen}
+        onClose={() => setNoticeBoardOpen(false)}
+        canEdit={canEdit}
+        onNoticeCountChange={setNoticeCount}
+      />
     </div>
   );
 }

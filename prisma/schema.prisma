@@ -1436,6 +1436,7 @@ model Chapter {
   tests          Test[]
   batchSchedules BatchSchedule[]
   reviews        ChapterReview[]
+  notices        ChapterNotice[]
 
   @@index([subjectId])
   @@index([subjectId, title])
@@ -1480,6 +1481,26 @@ model ChapterReview {
   @@index([chapterId])
   @@index([actorId])
   @@map("chapter_reviews")
+}
+
+model ChapterNotice {
+  id          String   @id @default(cuid())
+  chapterId   String
+  title       String
+  content     String
+  category    String   @default("ANNOUNCEMENT") // ANNOUNCEMENT, IMPORTANT, EXAM, HOMEWORK, GENERAL
+  isPinned    Boolean  @default(false)
+  authorName  String   @default("Faculty")
+  authorRole  String   @default("TEACHER")
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  chapter     Chapter  @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  @@index([chapterId])
+  @@index([chapterId, isPinned, createdAt])
+  @@map("chapter_notices")
 }
 
 // State machine for the Chapter Management System — a chapter moves

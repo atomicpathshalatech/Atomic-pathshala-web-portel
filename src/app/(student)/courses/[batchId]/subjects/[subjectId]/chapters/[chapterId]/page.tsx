@@ -34,7 +34,7 @@ export default async function ChapterPage({
   const enrolled = await isEnrolledInCourse(student.id, chapter.subject.courseId);
   if (!enrolled) redirect("/courses");
 
-  const [lectures, dpps, tests] = await Promise.all([
+  const [lectures, dpps, tests, notices] = await Promise.all([
     prisma.lecture.findMany({
       where: { chapterId: chapter.id, status: "PUBLISHED" },
       orderBy: { order: "asc" },
@@ -48,6 +48,10 @@ export default async function ChapterPage({
     prisma.test.findMany({
       where: { chapterId: chapter.id, status: "PUBLISHED" },
       orderBy: { createdAt: "desc" },
+    }),
+    prisma.chapterNotice.findMany({
+      where: { chapterId: chapter.id },
+      orderBy: [{ isPinned: "desc" }, { createdAt: "desc" }],
     }),
   ]);
 
@@ -178,6 +182,17 @@ export default async function ChapterPage({
         date: "2 weeks ago",
       },
     ],
+    notices: notices.map((n) => ({
+      id: n.id,
+      chapterId: n.chapterId,
+      title: n.title,
+      content: n.content,
+      category: n.category,
+      isPinned: n.isPinned,
+      authorName: n.authorName,
+      authorRole: n.authorRole,
+      createdAt: n.createdAt.toISOString(),
+    })),
     firstLectureId: lectures[0]?.id || null,
     startHref,
   };
