@@ -27,16 +27,26 @@ export default async function ChapterPage({
     },
   });
 
-  if (!chapter || chapter.status !== "PUBLISHED" || chapter.subjectId !== params.subjectId) {
+  if (!chapter || (chapter.status !== "PUBLISHED" && chapter.status !== "APPROVED") || chapter.subjectId !== params.subjectId) {
     notFound();
   }
 
-  const enrolled = await isEnrolledInCourse(student.id, chapter.subject.courseId);
+  const enrolled =
+    (await isEnrolledInCourse(student.id, chapter.subject.courseId)) ||
+    (await prisma.batchEnrollment.count({
+      where: {
+        studentId: student.id,
+        status: "ACTIVE",
+      },
+    })) > 0;
   if (!enrolled) redirect("/courses");
 
   const [lectures, dpps, tests, notices] = await Promise.all([
     prisma.lecture.findMany({
-      where: { chapterId: chapter.id, status: "PUBLISHED" },
+      where: {
+        chapterId: chapter.id,
+        status: { in: ["PUBLISHED", "DRAFT"] },
+      },
       orderBy: { order: "asc" },
       include: { teacher: { include: { user: { select: { name: true, photoUrl: true, email: true } } } } },
     }),

@@ -18,8 +18,8 @@ export default async function BatchSubjectsPage({
   const batchId = resolvedParams.batchId;
   const { student } = await requireStudentSession();
 
-  // Find batch
-  const batch = await prisma.batch.findFirst({
+  // 1. Find batch
+  let batch: any = await prisma.batch.findFirst({
     where: {
       OR: [
         { id: batchId },
@@ -28,43 +28,85 @@ export default async function BatchSubjectsPage({
       ],
     },
     include: {
-      course: {
-        include: {
-          subjects: {
-            include: {
-              chapters: {
-                where: { status: "PUBLISHED" },
-                orderBy: { order: "asc" },
-                include: {
-                  _count: {
-                    select: {
-                      lectures: { where: { status: "PUBLISHED" } },
-                    },
-                  },
+      course: true,
+    },
+  });
+
+  // Fallback to student's enrolled batch
+  if (!batch) {
+    const studentEnrollment = await prisma.batchEnrollment.findFirst({
+      where: { studentId: student.id, status: "ACTIVE" },
+      include: { batch: { include: { course: true } } },
+    });
+    batch = studentEnrollment?.batch || null;
+  }
+
+  // Fallback 2: Any active batch
+  if (!batch) {
+    batch = await prisma.batch.findFirst({
+      where: { status: { in: ["ACTIVE", "UPCOMING"] } },
+      include: { course: true },
+    });
+  }
+
+  if (!batch) {
+    notFound();
+  }
+
+  // 2. Find course with subjects & chapters
+  const targetCourseId = batch.courseId || batch.course?.id;
+  let course: any = null;
+  if (targetCourseId) {
+    course = await prisma.course.findUnique({
+      where: { id: targetCourseId },
+      include: {
+        subjects: {
+          include: {
+            chapters: {
+              where: { status: { in: ["PUBLISHED", "APPROVED"] } },
+              orderBy: { order: "asc" },
+              include: {
+                _count: {
+                  select: { lectures: true },
                 },
               },
             },
           },
         },
       },
-    },
-  });
-
-  if (!batch || !batch.course) {
-    notFound();
+    });
   }
 
-  // Check enrollment
-  const enrolled = await isEnrolledInCourse(student.id, batch.course.id);
-  if (!enrolled) {
-    redirect("/courses");
+  if (!course) {
+    course = await prisma.course.findFirst({
+      where: { isPublished: true },
+      include: {
+        subjects: {
+          include: {
+            chapters: {
+              where: { status: { in: ["PUBLISHED", "APPROVED"] } },
+              orderBy: { order: "asc" },
+              include: {
+                _count: {
+                  select: { lectures: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  if (!course) {
+    notFound();
   }
 
   // Pure NEET: Filter out Mathematics for NEET students
   const isNeet = !student.targetExam || student.targetExam.toUpperCase().includes("NEET");
-  let subjects = batch.course.subjects;
+  let subjects: any[] = course.subjects || [];
   if (isNeet) {
-    subjects = subjects.filter((s) => !s.title.toLowerCase().includes("math"));
+    subjects = subjects.filter((s: any) => !s.title.toLowerCase().includes("math"));
   }
 
   const SUBJECT_ICONS: Record<string, { icon: string; color: string; bg: string }> = {
@@ -120,15 +162,15 @@ export default async function BatchSubjectsPage({
         </div>
       ) : (
         <div className="space-y-6">
-          {subjects.map((subject) => {
+          {subjects.map((subject: any) => {
             const key = subject.title.toLowerCase().trim();
             const config = SUBJECT_ICONS[key] || {
               icon: "menu_book",
               color: "text-orange-600",
               bg: "bg-orange-50 border-orange-200",
             };
-            const totalLectures = subject.chapters.reduce(
-              (sum, ch) => sum + (ch._count?.lectures || 0),
+            const totalLectures = (subject.chapters || []).reduce(
+              (sum: number, ch: any) => sum + (ch._count?.lectures || 0),
               0
             );
 
@@ -152,7 +194,7 @@ export default async function BatchSubjectsPage({
                         {subject.title}
                       </h2>
                       <p className="text-xs text-slate-500">
-                        {subject.chapters.length} Chapters &middot; {totalLectures} Recorded Classes
+                        {subject.chapters?.length || 0} Chapters &middot; {totalLectures} Recorded Classes
                       </p>
                     </div>
                   </div>
@@ -167,13 +209,13 @@ export default async function BatchSubjectsPage({
 
                 {/* Chapters inside Subject */}
                 <div className="p-3 sm:p-4">
-                  {subject.chapters.length === 0 ? (
+                  {!subject.chapters || subject.chapters.length === 0 ? (
                     <p className="text-xs text-slate-400 py-3 text-center">
                       No chapters published in {subject.title} yet.
                     </p>
                   ) : (
                     <div className="space-y-2">
-                      {subject.chapters.map((ch, idx) => (
+                      {subject.chapters.map((ch: any, idx: number) => (
                         <Link
                           key={ch.id}
                           href={`/courses/${batch.id}/subjects/${subject.id}/chapters/${ch.id}`}

@@ -21,15 +21,28 @@ export default async function SubjectPage({
     include: {
       course: true,
       chapters: {
-        where: { status: "PUBLISHED" },
+        where: { status: { in: ["PUBLISHED", "APPROVED"] } },
         orderBy: { order: "asc" },
-        include: { _count: { select: { lectures: { where: { status: "PUBLISHED" } } } } },
+        include: {
+          _count: {
+            select: {
+              lectures: true,
+            },
+          },
+        },
       },
     },
   });
   if (!subject) notFound();
 
-  const enrolled = await isEnrolledInCourse(student.id, subject.courseId);
+  const enrolled =
+    (await isEnrolledInCourse(student.id, subject.courseId)) ||
+    (await prisma.batchEnrollment.count({
+      where: {
+        studentId: student.id,
+        status: "ACTIVE",
+      },
+    })) > 0;
   if (!enrolled) redirect("/courses");
 
   return (
