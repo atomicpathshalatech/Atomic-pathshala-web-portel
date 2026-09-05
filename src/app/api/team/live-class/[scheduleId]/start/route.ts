@@ -83,6 +83,7 @@ export async function POST(
     try {
       await pusherServer.trigger(sessionChannel(wbSession.id), WB_EVENTS.LIVE_PHASE_CHANGED, {
         phase: "LIVE",
+        livePhase: "LIVE",
         actualStartedAt: now.toISOString(),
       });
     } catch (pushErr) {

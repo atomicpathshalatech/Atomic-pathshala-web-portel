@@ -5,7 +5,6 @@ import Link from "next/link";
 import { getPusherClient } from "@/lib/realtime/pusher-client";
 import { sessionChannel, WB_EVENTS } from "@/lib/realtime/events";
 import { CanvasEngine, type StrokeObject } from "@/lib/canvas/canvas-engine";
-import { VideoStrip } from "@/components/live-class/VideoStrip";
 import { MessagesPanel } from "@/components/live-class/MessagesPanel";
 import { YouTubeLivePlayer } from "@/components/live-class/YouTubeLivePlayer";
 
@@ -138,34 +137,37 @@ export function StudentLiveClassRoom({
         const res = await fetch(`/api/whiteboard/sessions/by-schedule/${batchScheduleId}`);
         const json = await res.json();
         if (!res.ok || !json.success) {
-          if (!cancelled) setError(json.error ?? "Could not check class status.");
+          // On error, keep retrying — don't surface the error yet, just wait
+          if (!cancelled) timer = setTimeout(poll, 3000);
           return;
         }
         if (json.data.schedule) {
           setScheduleTimes({
-            startTime: json.data.schedule.startTime,
-            endTime: json.data.schedule.endTime,
+            startTime: json.data.schedule.startsAt,
+            endTime: json.data.schedule.endsAt,
           });
         }
         const wb = json.data.whiteboardSession;
         if (cancelled) return;
+        if (wb && wb.status === "ENDED") {
+          setWbSession(wb);
+          setPhase("ended");
+          return; // class is over, stop polling
+        }
         if (wb && wb.status === "ACTIVE") {
           setWbSession(wb);
           if (wb.livePhase === "LIVE") {
             setPhase("live");
-            return; // stop polling once live
+            // Keep polling at a slower rate to catch ENDED state
+            if (!cancelled) timer = setTimeout(poll, 5000);
+            return;
           }
           setPhase("lobby");
         }
-        if (wb && wb.status === "ENDED") {
-          setWbSession(wb);
-          setPhase("ended");
-          return;
-        }
       } catch {
-        if (!cancelled) setError("Could not reach the server. Retrying…");
+        // Network error — keep retrying silently
       }
-      if (!cancelled) timer = setTimeout(poll, 4000);
+      if (!cancelled) timer = setTimeout(poll, 2000);
     }
 
     poll();
@@ -604,15 +606,22 @@ export function StudentLiveClassRoom({
           {!isYouTube && (
             <div className={`bg-[#10121d] border border-slate-800/80 rounded-2xl overflow-hidden shadow-xl shrink-0 ${isCameraCircle ? "p-3 flex items-center justify-center aspect-square" : ""}`}>
               <div className={`w-full overflow-hidden ${isCameraCircle ? "aspect-square rounded-full border-2 border-indigo-500 shadow-lg shadow-indigo-500/20" : "aspect-video rounded-xl"}`}>
-                <VideoStrip
-                  whiteboardSessionId={wbSession?.id || batchScheduleId}
-                  variant="panel"
-                  role="STUDENT"
-                  teacherName={teacherName}
-                />
+                <div className="relative w-full h-full bg-[#0a0b12] rounded-xl overflow-hidden border border-[#252836] flex flex-col items-center justify-center p-4 text-center">
+                  <div className="w-12 h-12 rounded-2xl bg-indigo-500/20 border border-indigo-500/40 text-indigo-400 flex items-center justify-center mb-2 shadow-md">
+                    <span className="material-symbols-outlined text-2xl">videocam</span>
+                  </div>
+                  <p className="text-xs font-bold text-white truncate max-w-full">
+                    {teacherName || "Instructor"}
+                  </p>
+                  <span className="text-[10px] text-indigo-300 font-medium mt-1 flex items-center gap-1.5">
+                    <span className={`w-1.5 h-1.5 rounded-full ${isLive ? "bg-rose-500 animate-ping" : "bg-amber-400 animate-pulse"}`} />
+                    {isLive ? "Live Teaching" : "Awaiting Class"}
+                  </span>
+                </div>
               </div>
             </div>
           )}
+
 
           {/* Live Chat Panel */}
           <div className="bg-[#10121d] border border-slate-800/80 rounded-2xl overflow-hidden shadow-xl flex-1 min-h-0 flex flex-col">
@@ -680,13 +689,12 @@ export function StudentLiveClassRoom({
 
               {/* Mobile PiP Teacher Video (Corner Preview) */}
               {!isYouTube && (
-                <div className="absolute top-2 right-2 w-28 xs:w-32 aspect-video rounded-lg overflow-hidden border border-indigo-500/60 shadow-xl bg-[#10121d] z-20">
-                  <VideoStrip
-                    whiteboardSessionId={wbSession?.id || batchScheduleId}
-                    variant="panel"
-                    role="STUDENT"
-                    teacherName={teacherName}
-                  />
+                <div className="absolute top-2 right-2 w-28 xs:w-32 aspect-video rounded-lg overflow-hidden border border-indigo-500/60 shadow-xl bg-[#10121d] z-20 flex flex-col items-center justify-center">
+                  <span className="material-symbols-outlined text-base text-indigo-400">videocam</span>
+                  <span className={`text-[9px] text-indigo-300 mt-1 flex items-center gap-1`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${isLive ? "bg-rose-500 animate-ping" : "bg-amber-400 animate-pulse"}`} />
+                    {isLive ? "Live" : "Standby"}
+                  </span>
                 </div>
               )}
             </div>
