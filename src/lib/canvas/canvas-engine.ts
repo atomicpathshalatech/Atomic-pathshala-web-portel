@@ -75,8 +75,14 @@ function isShapeTool(tool: CanvasTool): tool is ShapeKind {
 // path's `activePoints.length > 1` guard, just for the shape tools.
 const MIN_SHAPE_DRAG = 3;
 
-const ERASER_RADIUS = 14;
-const SELECT_HIT_RADIUS = 10;
+/** Standard 16:9 virtual canvas coordinate system so every device
+ * (teacher, student desktop, student tablet/mobile) sees the exact same
+ * slide size and stroke positioning. */
+export const VIRTUAL_WIDTH = 1920;
+export const VIRTUAL_HEIGHT = 1080;
+
+const ERASER_RADIUS = 24;
+const SELECT_HIT_RADIUS = 18;
 
 function uid() {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -284,30 +290,26 @@ export class CanvasEngine {
    * this with a matching scale-factor conversion the other direction. */
   public syncSize(): void {
     const dpr = window.devicePixelRatio || 1;
-    const width = this.activeCanvas.offsetWidth;
-    const height = this.activeCanvas.offsetHeight;
+    const width = this.activeCanvas.offsetWidth || 1;
+    const height = this.activeCanvas.offsetHeight || 1;
     for (const canvas of [this.baseCanvas, this.activeCanvas]) {
       canvas.width = Math.max(1, Math.round(width * dpr));
       canvas.height = Math.max(1, Math.round(height * dpr));
     }
-    this.baseCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    this.activeCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const scaleX = (width * dpr) / VIRTUAL_WIDTH;
+    const scaleY = (height * dpr) / VIRTUAL_HEIGHT;
+    this.baseCtx.setTransform(scaleX, 0, 0, scaleY, 0, 0);
+    this.activeCtx.setTransform(scaleX, 0, 0, scaleY, 0, 0);
     this.renderBase();
   }
 
   private getPoint(e: PointerEvent): StrokePoint {
-    // rect is the live, transform-inclusive visual box (so it shrinks/grows
-    // with zoom); offsetWidth/Height is the fixed logical box syncSize()
-    // sized the backing store against. Scaling by their ratio converts a
-    // real screen-space pointer position back into that fixed logical space
-    // regardless of the current zoom level — same pattern WhiteboardCanvas.
-    // tsx uses for devicePixelRatio, just driven by CSS transform here too.
     const rect = this.activeCanvas.getBoundingClientRect();
-    const scaleX = rect.width > 0 ? this.activeCanvas.offsetWidth / rect.width : 1;
-    const scaleY = rect.height > 0 ? this.activeCanvas.offsetHeight / rect.height : 1;
+    const relX = rect.width > 0 ? (e.clientX - rect.left) / rect.width : 0;
+    const relY = rect.height > 0 ? (e.clientY - rect.top) / rect.height : 0;
     return {
-      x: (e.clientX - rect.left) * scaleX,
-      y: (e.clientY - rect.top) * scaleY,
+      x: relX * VIRTUAL_WIDTH,
+      y: relY * VIRTUAL_HEIGHT,
       pressure: e.pressure && e.pressure > 0 ? e.pressure : 0.5,
     };
   }
@@ -448,7 +450,7 @@ export class CanvasEngine {
     this.dragSnapshot = null;
     this.shapeStart = null;
     this.shapeEnd = null;
-    this.activeCtx.clearRect(0, 0, this.activeCanvas.width, this.activeCanvas.height);
+    this.activeCtx.clearRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
   }
 
   private scheduleActiveRender(): void {
@@ -461,8 +463,7 @@ export class CanvasEngine {
   }
 
   private renderActiveStroke(): void {
-    const rect = this.activeCanvas.getBoundingClientRect();
-    this.activeCtx.clearRect(0, 0, rect.width, rect.height);
+    this.activeCtx.clearRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
 
     if (isShapeTool(this.currentTool)) {
       if (this.shapeStart && this.shapeEnd) {
@@ -516,8 +517,7 @@ export class CanvasEngine {
   }
 
   public renderBase(): void {
-    const rect = this.baseCanvas.getBoundingClientRect();
-    this.baseCtx.clearRect(0, 0, rect.width, rect.height);
+    this.baseCtx.clearRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
     for (const obj of this.objects) {
       if (obj.type === "stroke") {
         this.strokePath(this.baseCtx, obj.points, obj.color, obj.size, obj.tool === "highlighter");
@@ -597,18 +597,38 @@ export class CanvasEngine {
           segments[segments.length - 1]!.push(p);
         }
       }
+
       for (const seg of segments) {
-        if (seg.length > 1) {
-          next.push({ ...obj, id: seg === segments[0] ? obj.id : uid(), points: seg });
+        if (seg.length === 0) continue;
+        if (seg.length === 1) {
+          // Keep a single dot: duplicate the lone point so strokePath can
+          // draw a tiny segment instead of dropping it entirely.
+          next.push({
+            id: uid(),
+            type: "stroke",
+            points: [seg[0]!, { ...seg[0]!, x: seg[0]!.x + 0.1 }],
+            color: obj.color,
+            size: obj.size,
+            tool: obj.tool,
+          });
+        } else {
+          next.push({
+            id: uid(),
+            type: "stroke",
+            points: seg,
+            color: obj.color,
+            size: obj.size,
+            tool: obj.tool,
+          });
         }
       }
     }
 
-    if (changed) {
-      this.objects = next;
-      this.renderBase();
-      this.onCommit?.(this.objects);
-    }
+    if (!changed) return;
+    this.pushUndo();
+    this.objects = next;
+    this.renderBase();
+    this.onCommit?.(this.objects);
   }
 
   /** Removes handwriting/shapes but nothing else — the important guarantee
@@ -681,7 +701,42 @@ export class CanvasEngine {
   }
 
   public loadObjects(objects: StrokeObject[]): void {
-    this.objects = objects;
+    // Check if objects are from legacy unnormalized coordinate system (e.g. max coords < 1250)
+    let maxX = 0;
+    let maxY = 0;
+    for (const obj of objects) {
+      for (const p of representativePoints(obj)) {
+        if (p.x > maxX) maxX = p.x;
+        if (p.y > maxY) maxY = p.y;
+      }
+    }
+
+    // If strokes were created in legacy ~1000x560 canvas, scale them up to VIRTUAL 1920x1080
+    if (objects.length > 0 && maxX > 0 && maxX < 1250 && maxY < 750) {
+      const scaleX = VIRTUAL_WIDTH / 1000;
+      const scaleY = VIRTUAL_HEIGHT / 562.5;
+      this.objects = objects.map((obj) => {
+        if (obj.type === "stroke") {
+          return {
+            ...obj,
+            points: obj.points.map((p) => ({
+              ...p,
+              x: p.x * scaleX,
+              y: p.y * scaleY,
+            })),
+          };
+        } else {
+          return {
+            ...obj,
+            start: { x: obj.start.x * scaleX, y: obj.start.y * scaleY },
+            end: { x: obj.end.x * scaleX, y: obj.end.y * scaleY },
+          };
+        }
+      });
+    } else {
+      this.objects = objects;
+    }
+
     this.undoStack = [];
     this.redoStack = [];
     this.selectedId = null;

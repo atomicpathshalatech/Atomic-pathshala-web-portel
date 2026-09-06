@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db";
-import { pusherServer, teacherChannel, WB_EVENTS } from "@/lib/realtime/pusher-server";
+import { pusherServer, teacherChannel, sessionChannel, WB_EVENTS } from "@/lib/realtime/pusher-server";
 
 /**
  * Re-fetches the pending hand-raise queue for a session and pushes it to the
@@ -29,9 +29,14 @@ export async function pushHandRaiseQueue(whiteboardSessionId: string) {
   }));
 
   try {
-    await pusherServer.trigger(teacherChannel(whiteboardSessionId), WB_EVENTS.HAND_RAISE_LIST, {
-      queue: payload,
-    });
+    await Promise.all([
+      pusherServer.trigger(teacherChannel(whiteboardSessionId), WB_EVENTS.HAND_RAISE_LIST, {
+        queue: payload,
+      }),
+      pusherServer.trigger(sessionChannel(whiteboardSessionId), WB_EVENTS.HAND_RAISE_LIST, {
+        queue: payload,
+      }),
+    ]);
   } catch (err) {
     console.error("[pusher_trigger_error]", err);
   }

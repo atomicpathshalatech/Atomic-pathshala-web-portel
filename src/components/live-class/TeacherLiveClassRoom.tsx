@@ -544,9 +544,14 @@ export function TeacherLiveClassRoom({
     });
 
     const teacherCh = client.subscribe(teacherChannel(wbSession.id));
-    teacherCh.bind(WB_EVENTS.HAND_RAISE_LIST, (data: { queue: HandRaiseQueueItem[] }) => {
-      setHandRaiseQueue(data.queue);
-    });
+    const onHandRaiseUpdate = (data: { queue: HandRaiseQueueItem[] }) => {
+      if (Array.isArray(data?.queue)) {
+        setHandRaiseQueue(data.queue);
+      }
+    };
+    teacherCh.bind(WB_EVENTS.HAND_RAISE_LIST, onHandRaiseUpdate);
+    presence.bind(WB_EVENTS.HAND_RAISE_LIST, onHandRaiseUpdate);
+
     teacherCh.bind(
       WB_EVENTS.QUIZ_METRICS,
       (data: { quizSessionId: string; counts: Record<string, number>; totalResponses: number }) => {
@@ -556,11 +561,22 @@ export function TeacherLiveClassRoom({
     );
 
     // Initial hand-raise queue snapshot (Pusher only pushes on change).
-    getJson(`/api/whiteboard/sessions/${wbSession.id}/hand-raise`)
-      .then((data) => setHandRaiseQueue(data.queue))
-      .catch(() => {});
+    const refreshHandRaises = () => {
+      getJson(`/api/whiteboard/sessions/${wbSession.id}/hand-raise`)
+        .then((data) => {
+          if (Array.isArray(data?.queue)) {
+            setHandRaiseQueue(data.queue);
+          }
+        })
+        .catch(() => {});
+    };
+    refreshHandRaises();
+
+    // 3-second fallback interval so teacher never misses a hand raise due to socket latency
+    const handRaisePoll = setInterval(refreshHandRaises, 3000);
 
     return () => {
+      clearInterval(handRaisePoll);
       client.unsubscribe(sessionChannel(wbSession.id));
       client.unsubscribe(teacherChannel(wbSession.id));
     };
@@ -1248,7 +1264,7 @@ export function TeacherLiveClassRoom({
         style={{ gridColumn: "2", gridRow: "2" }}
       >
         <div
-          className="w-full h-full rounded-xl shadow-lg max-w-[1200px] relative overflow-hidden"
+          className="relative aspect-[16/9] w-full max-w-full max-h-full h-auto rounded-xl shadow-2xl overflow-hidden border border-slate-800/80"
           style={isBackgroundImageUrl(currentPage?.background) ? undefined : slideBackgroundStyle(currentPage?.background)}
         >
           {isBackgroundImageUrl(currentPage?.background) && (

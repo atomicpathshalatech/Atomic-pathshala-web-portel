@@ -76,18 +76,24 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       where: { whiteboardSessionId: params.id, studentId: access.entityId, status: { in: ["PENDING", "APPROVED"] } },
     });
 
-    const handRaise =
-      existing ??
-      (await prisma.handRaiseEvent.create({
+    let handRaise;
+    if (existing) {
+      handRaise = await prisma.handRaiseEvent.update({
+        where: { id: existing.id },
+        data: { requestType, status: "PENDING" },
+      });
+    } else {
+      handRaise = await prisma.handRaiseEvent.create({
         data: {
           whiteboardSessionId: params.id,
           studentId: access.entityId,
           requestType,
           status: "PENDING",
         },
-      }));
+      });
+    }
 
-    if (!existing) await pushHandRaiseQueue(params.id);
+    await pushHandRaiseQueue(params.id);
 
     return apiSuccess({ handRaise }, existing ? 200 : 201);
   } catch (error) {

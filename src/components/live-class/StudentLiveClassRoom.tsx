@@ -481,12 +481,12 @@ export function StudentLiveClassRoom({
     if (!wbSession?.id || handRaiseBusy) return;
     setHandRaiseBusy(true);
     setHandRaiseModalOpen(false);
+    setHandRaised(true);
+    setParticipationType(type);
     try {
       await postJson(`/api/whiteboard/sessions/${wbSession.id}/hand-raise`, { requestType: type });
-      setHandRaised(true);
-      setParticipationType(type);
     } catch {
-      // ignore
+      setHandRaised(false);
     } finally {
       setHandRaiseBusy(false);
     }

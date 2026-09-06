@@ -142,7 +142,18 @@ export function MessagesPanel({
     const client = getPusherClient();
     const channel = client.subscribe(sessionChannel(whiteboardSessionId));
     const handler = (msg: ChatMessage) => {
-      setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+      setMessages((prev) => {
+        // If this message already exists (either by real ID or matching optimistic content), replace or keep
+        const existingIdx = prev.findIndex(
+          (m) => m.id === msg.id || (m.id.startsWith("opt_") && m.authorUserId === msg.authorUserId && m.body === msg.body)
+        );
+        if (existingIdx !== -1) {
+          const next = [...prev];
+          next[existingIdx] = msg;
+          return next;
+        }
+        return [...prev, msg];
+      });
     };
     channel.bind(WB_EVENTS.MESSAGE_SENT, handler);
     return () => {
@@ -156,13 +167,36 @@ export function MessagesPanel({
 
   async function handleSend() {
     const body = draft.trim();
-    if (!body) return;
+    if (!body || sending) return;
+
+    // 1. Instant optimistic clear & local message insertion (0ms delay)
+    const optId = `opt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const optMessage: ChatMessage = {
+      id: optId,
+      authorRole: role,
+      authorUserId: currentUserId,
+      authorName: role === "TEACHER" ? "You (Teacher)" : "You",
+      body,
+      createdAt: new Date().toISOString(),
+    };
+
+    setDraft("");
+    setMessages((prev) => [...prev, optMessage]);
     setSending(true);
     setError(null);
+
     try {
-      await postJson(`/api/whiteboard/sessions/${whiteboardSessionId}/messages`, { body });
-      setDraft("");
+      const data = await postJson(`/api/whiteboard/sessions/${whiteboardSessionId}/messages`, { body });
+      if (data?.message) {
+        // Replace optimistic message with the server-persisted message
+        setMessages((prev) =>
+          prev.map((m) => (m.id === optId ? { ...data.message, createdAt: new Date(data.message.createdAt).toISOString() } : m))
+        );
+      }
     } catch (err) {
+      // Revert optimistic message if send failed
+      setMessages((prev) => prev.filter((m) => m.id !== optId));
+      setDraft(body);
       setError(err instanceof Error ? err.message : "Could not send that message.");
     } finally {
       setSending(false);
