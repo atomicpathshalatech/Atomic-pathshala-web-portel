@@ -445,13 +445,28 @@ export function TeacherLiveClassRoom({
       () => setUndoRedoTick((t) => t + 1)
     );
     engineRef.current = engine;
-    engine.syncSize();
     if (currentPage) engine.loadObjects(currentPage.objects ?? []);
 
-    const onResize = () => engine.syncSize();
-    window.addEventListener("resize", onResize);
+    // Keep the canvas backing store's pixel size synced to its actual
+    // rendered box at all times, not just on browser-window resize. A
+    // plain `window.resize` listener (the old approach) never fires for
+    // layout-only changes - the side panel opening/closing, this page's
+    // own initial layout still settling on mount, a PDF panel changing
+    // width - so the backing store could silently go stale relative to
+    // the visible card: strokes are stored correctly in virtual space
+    // (see canvas-engine.ts), but syncSize()'s scale transform and pixel
+    // buffer size were computed for whatever box existed the last time it
+    // ran, leaving part of the visible white card outside the actually
+    // synced/writable area. ResizeObserver catches every one of those
+    // cases (and fires once immediately with the settled size, so it also
+    // replaces the old synchronous syncSize() call that could run before
+    // layout had finished). The student board mirror already uses this
+    // same pattern for the same reason.
+    const ro = new ResizeObserver(() => engine.syncSize());
+    ro.observe(baseCanvasRef.current);
+
     return () => {
-      window.removeEventListener("resize", onResize);
+      ro.disconnect();
       engine.destroy();
       engineRef.current = null;
     };
@@ -1017,7 +1032,7 @@ export function TeacherLiveClassRoom({
     <div
       ref={containerRef}
       className="fixed inset-0 w-screen h-screen grid bg-[#10131b] text-white overflow-hidden select-none z-50"
-      style={{ gridTemplateColumns: "64px 1fr 320px", gridTemplateRows: "56px 1fr 64px" }}
+      style={{ gridTemplateColumns: "64px minmax(0, 1fr) 320px", gridTemplateRows: "56px 1fr 64px" }}
     >
       <input
         ref={backgroundFileInputRef}
@@ -1374,13 +1389,13 @@ export function TeacherLiveClassRoom({
 
       {/* Bottom toolbar */}
       <footer
-        className="flex items-center justify-between px-6 border-t border-[#2d2e3b] bg-[#1a1b23] relative"
+        className="flex items-center justify-between px-6 border-t border-[#2d2e3b] bg-[#1a1b23] relative min-w-0"
         style={{ gridColumn: "2", gridRow: "3" }}
       >
         {openPopup && <div className="fixed inset-0 z-30" onClick={() => setOpenPopup(null)} />}
 
         {/* Tools group */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 overflow-x-auto min-w-0">
           {/* Pen tool with Screenshot 5 customizer */}
           <div className="relative">
             <ToolbarBtn
@@ -1465,7 +1480,10 @@ export function TeacherLiveClassRoom({
                   <div className="bg-[#10111a] border border-[#242634] rounded-xl p-3 flex flex-col justify-between">
                     <div>
                       <span className="text-xs font-semibold text-gray-400 block mb-2 text-center">Color</span>
-                      <div className="grid grid-cols-3 gap-2.5 justify-items-center">
+                      {/* Vertical stack, not a horizontal/wrapped grid - a
+                          single click here must read as one clear column of
+                          choices rather than a row a pointer can overshoot. */}
+                      <div className="flex flex-col gap-2 items-center max-h-40 overflow-y-auto pr-1">
                         {PEN_PALETTE_COLORS.map((c) => (
                           <button
                             key={c}
