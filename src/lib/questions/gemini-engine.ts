@@ -202,6 +202,30 @@ CRITICAL EXTRACTION RULES:
    - If marked in the image (ticked, circled, or key visible), set "correctAnswer": ["A"|"B"|"C"|"D"].
    - If not visibly marked, solve the question and provide the scientifically verified correct answer.
 
+6. SOLUTION FORMAT SPECIFICATION (CRITICAL):
+   Structure "solutionEn" EXACTLY in these 4 labeled sections:
+   Explaining : [1-2 sentences stating given parameters and what we need to calculate/find]
+   Concept : This question is based on [Specific scientific law, theorem, formula, or concept name]
+   Solution :
+   [If calculation: Line-by-line derivation with LaTeX formulas $...$, values substitution, intermediate steps, and final value with units]
+   [If conceptual/statements: Point-by-point breakdown evaluating each option or statement with authentic NCERT reason]
+   Final Answer : Option (X)
+
+   Structure "solutionHi" with matching Devanagari translation:
+   कथन (Explaining) : [...]
+   सिद्धांत (Concept) : यह प्रश्न [...] पर आधारित है।
+   हल (Solution) : [...]
+   अंतिम उत्तर (Final Answer) : विकल्प (X)
+
+7. CURRICULUM METADATA INFERENCE:
+   Accurately infer:
+   - "subject": "Physics" | "Chemistry" | "Biology" | "Mathematics"
+   - "chapter": Exact official NCERT chapter title (e.g. "Solutions", "Cell: The Unit of Life", "Current Electricity", "Ray Optics and Optical Instruments")
+   - "topic": Exact core topic
+   - "subTopic": Specific subtopic
+   - "difficulty": "EASY" | "MEDIUM" | "HARD"
+   - "type": "SINGLE_CORRECT" | "MULTIPLE_CORRECT" | "NUMERICAL" | "ASSERTION_REASON" | "MATCH_THE_COLUMN"
+
 RETURN STRICT JSON SCHEMA:
 {
   "statementEn": "English question statement with LaTeX math (or empty string if Hindi only)",
@@ -219,8 +243,8 @@ RETURN STRICT JSON SCHEMA:
     "D": "Option D in Hindi or empty"
   },
   "correctAnswer": ["A"],
-  "solutionEn": "Step-by-step solution in English",
-  "solutionHi": "Step-by-step solution in Hindi",
+  "solutionEn": "Explaining : ...\\nConcept : ...\\nSolution : ...\\nFinal Answer : Option (A)",
+  "solutionHi": "कथन (Explaining) : ...\\nसिद्धांत (Concept) : ...\\nहल (Solution) : ...\\nअंतिम उत्तर (Final Answer) : विकल्प (A)",
   "hasFigure": true,
   "figureCaption": "Description of the diagram",
   "subject": "Physics",
@@ -359,6 +383,30 @@ CRITICAL EXTRACTION RULES:
 4. CORRECT ANSWER DEDUCTION:
    - Deduce the scientifically correct option ("A", "B", "C", or "D") and place inside correctAnswer array.
 
+5. SOLUTION FORMAT SPECIFICATION (CRITICAL):
+   Structure "solutionEn" EXACTLY in these 4 labeled sections:
+   Explaining : [1-2 sentences stating given parameters and what we need to calculate/find]
+   Concept : This question is based on [Specific scientific law, theorem, formula, or concept name]
+   Solution :
+   [If calculation: Line-by-line derivation with LaTeX formulas $...$, values substitution, intermediate steps, and final value with units]
+   [If conceptual/statements: Point-by-point breakdown evaluating each option or statement with authentic NCERT reason]
+   Final Answer : Option (X)
+
+   Structure "solutionHi" with matching Devanagari translation:
+   कथन (Explaining) : [...]
+   सिद्धांत (Concept) : यह प्रश्न [...] पर आधारित है।
+   हल (Solution) : [...]
+   अंतिम उत्तर (Final Answer) : विकल्प (X)
+
+6. CURRICULUM METADATA INFERENCE:
+   Accurately infer:
+   - "subject": "${subjectContext || ""}" (or infer: "Physics" | "Chemistry" | "Biology" | "Mathematics")
+   - "chapter": "${chapterContext || ""}" (or infer exact official NCERT chapter title)
+   - "topic": "${topicContext || ""}" (or infer exact core topic)
+   - "subTopic": Specific subtopic
+   - "difficulty": "EASY" | "MEDIUM" | "HARD"
+   - "type": "SINGLE_CORRECT" | "MULTIPLE_CORRECT" | "NUMERICAL" | "ASSERTION_REASON" | "MATCH_THE_COLUMN"
+
 Raw text:
 """
 ${rawText}
@@ -371,9 +419,12 @@ RETURN STRICT JSON SCHEMA:
   "optionsEn": { "A": "...", "B": "...", "C": "...", "D": "..." },
   "optionsHi": { "A": "...", "B": "...", "C": "...", "D": "..." },
   "correctAnswer": ["A"],
+  "solutionEn": "Explaining : ...\\nConcept : ...\\nSolution : ...\\nFinal Answer : Option (A)",
+  "solutionHi": "कथन (Explaining) : ...\\nसिद्धांत (Concept) : ...\\nहल (Solution) : ...\\nअंतिम उत्तर (Final Answer) : विकल्प (A)",
   "subject": "${subjectContext || "Biology"}",
   "chapter": "${chapterContext || "General"}",
   "topic": "${topicContext || "Core Concept"}",
+  "subTopic": "Specific subtopic",
   "difficulty": "${difficultyContext || "MEDIUM"}",
   "type": "SINGLE_CORRECT"
 }`;
@@ -399,12 +450,13 @@ RETURN STRICT JSON SCHEMA:
         D: parsed.optionsHi?.D || "",
       },
       correctAnswer: Array.isArray(parsed.correctAnswer) ? parsed.correctAnswer : [parsed.correctAnswer || "A"],
-      solutionEn: "",
-      solutionHi: "",
+      solutionEn: parsed.solutionEn || "",
+      solutionHi: parsed.solutionHi || "",
       hasFigure: false,
       subject: parsed.subject || (subjectContext as any) || "Biology",
       chapter: parsed.chapter || chapterContext || "General",
       topic: parsed.topic || topicContext || "Core Concept",
+      subTopic: parsed.subTopic || undefined,
       difficulty: parsed.difficulty || (difficultyContext as any) || "MEDIUM",
       type: parsed.type || "SINGLE_CORRECT",
       category: "NCERT Canonical",
@@ -451,114 +503,68 @@ export async function generateSubjectAwareSolution({
       generationConfig: { responseMimeType: "application/json" },
     });
 
-    let formatInstructions = "";
+    const userSelectedPrompt = userSelectedAnswer ? `User Currently Selected Option: Option (${userSelectedAnswer})` : "";
+    const userReferencePrompt = userProvidedSolution ? `User Provided Draft Solution (for reference/polishing): "${userProvidedSolution}"` : "";
 
-    if (normSubject.includes("phys")) {
-      formatInstructions = `
-PHYSICS SOLUTION FORMAT REQUIREMENT:
-Structure solutionEn exactly as:
-EXPLAINING:
-[Short explanation of what the question is asking and the underlying physical reasoning.]
+    const prompt = `You are a Senior Academic Subject Expert for ${subject} at Atomic Pathshala (NEET & JEE Main Exam Board).
+Generate an authoritative, 100% accurate, high-precision step-by-step bilingual solution for this question.
 
-CONCEPT:
-[Relevant Physics concept/principle/law.]
-
-Solution:
-[Step-by-step derivation]
-[Equations with LaTeX $...$]
-[Substitution of numerical values]
-[Calculation]
-
-Final Answer: Option [X]
-
-Do NOT turn numerical physics solution into paragraph-only text. Use equations and units.
-Provide matching Hindi Devanagari version for solutionHi.`;
-    } else if (normSubject.includes("chem")) {
-      formatInstructions = `
-CHEMISTRY SOLUTION FORMAT REQUIREMENT:
-Structure solutionEn exactly as:
-Explaining:
-[What the question is asking.]
-
-Concept:
-[Relevant Chemistry concept/rule/periodic trend/reaction.]
-
-Solution:
-[Analyze the options/question]
-[Relevant chemical rule/order/reaction equation/calculation]
-[Correct reasoning for why correct option is right and others wrong]
-
-Final Answer: Option [X]
-
-Preserve chemical formulas (e.g. $\\text{H}_2\\text{SO}_4$, oxidation states, charges).
-Provide matching Hindi Devanagari version for solutionHi.`;
-    } else if (normSubject.includes("bio")) {
-      formatInstructions = `
-BIOLOGY SOLUTION FORMAT REQUIREMENT:
-Structure solutionEn exactly as:
-Explain Question:
-[What the question is asking.]
-
-Concept:
-[Relevant NCERT Biology concept.]
-
-Solution:
-[Evaluate the statements/options.]
-1. [Statement A] -> True/False + reason
-2. [Statement B] -> True/False + reason
-3. [Statement C] -> True/False + reason
-4. [Statement D] -> True/False + reason
-
-Final Answer: Option [X]
-
-Use NCERT-aligned terminology.
-Provide matching Hindi Devanagari version for solutionHi.`;
-    } else {
-      formatInstructions = `
-MATHEMATICS / GENERAL SOLUTION FORMAT REQUIREMENT:
-Structure solutionEn exactly as:
-Explaining:
-[Understanding what is required.]
-
-Concept:
-[Formula or theorem.]
-
-Solution:
-[Step-by-step mathematical derivation and calculations with LaTeX]
-
-Final Answer: Option [X]
-
-Provide matching Hindi Devanagari version for solutionHi.`;
-    }
-
-    const userReferencePrompt = userProvidedSolution?.trim()
-      ? `Teacher has provided an initial solution: "${userProvidedSolution}". Respect teacher's intent, preserve key steps, and refine it into the required format.`
-      : "";
-
-    const userSelectedPrompt = userSelectedAnswer
-      ? `Teacher has selected Option (${userSelectedAnswer}) as the intended answer.`
-      : "";
-
-    const prompt = `You are a Senior Academic Subject Expert for ${subject} at Atomic Pathshala.
-Generate a comprehensive, subject-aware bilingual solution for the following question.
-
+QUESTION DETAILS:
 Question (English): "${statementEn}"
 ${statementHi ? `Question (Hindi): "${statementHi}"` : ""}
 Options (English): ${JSON.stringify(optionsEn)}
 ${optionsHi ? `Options (Hindi): ${JSON.stringify(optionsHi)}` : ""}
-${correctAnswer ? `Target Correct Option: Option (${correctAnswer})` : ""}
+${correctAnswer ? `Target Reference Option: Option (${correctAnswer})` : ""}
 ${userSelectedPrompt}
 ${userReferencePrompt}
 
-${formatInstructions}
+CRITICAL ACCURACY & CALCULATION RULES:
+1. First solve the problem step-by-step with 100% arithmetic and algebraic rigor.
+2. Verify all numbers, units, exponents, signs, and constants (e.g. R, g, h, c, Avogadro's number).
+3. If it is a Biology question, adhere strictly to authentic NCERT Class 11 & 12 facts and terminology.
+4. The calculated or reasoned answer MUST match the deduced "recommendedAnswer" option ("A"|"B"|"C"|"D").
 
-Deduce the scientifically verified correct option ("A", "B", "C", or "D").
+MANDATORY SOLUTION STRUCTURE (EXACT FORMAT AS REQUIRED BY ATOMIC PATHSHALA):
+Structure "solutionEn" EXACTLY in these 4 labeled sections:
 
-RETURN STRICT JSON:
+Explaining : [1-2 sentences stating given parameters and what we need to calculate/find. e.g. "The mass of solute 'A' (mol mass = 40 g mol^-1) that should be added to 180 g of pure water in order to lower its vapour pressure to 4/5th of its original value :-"]
+
+Concept : This question is based on [Specific scientific law, theorem, formula, or concept name, e.g. "This question is based on RLVP", "This Question is based on phases of the Cell Cycle"]
+
+Solution :
+[If numerical / calculation (Physics / Chemistry / Mathematics):
+Provide step-by-step derivation with clean LaTeX formulas on separate lines:
+1. State the formula clearly: $\\frac{P_B^0 - P_B}{P_B^0} = \\frac{n_A}{n_A + n_B}$
+2. Substitute the values: $\\frac{P_B^0 - \\frac{4}{5}P_B^0}{P_B^0} = \\frac{n_A}{n_A + 10}$
+3. Simplify algebraically step-by-step:
+   $\\frac{1}{5} = \\frac{n_A}{n_A + 10}$
+   $n_A + 10 = 5n_A$
+   $4n_A = 10$
+   $n_A = \\frac{10}{4} = 2.5$
+4. Final calculation of mass or required physical quantity with units:
+   $\\frac{w_A}{40} = 2.5 \\implies w_A = 40 \\times 2.5 = 100\\text{ g}$.
+]
+[If biological / conceptual / sequence / matching / statements:
+Provide option-by-option or statement-by-statement breakdown with exact NCERT facts:
+e.g.
+Maximum Growth (A): Occurs during the G1 phase, where the cell grows in size and synthesizes proteins necessary for DNA replication.
+DNA Replication (B): Takes place during the S phase, where the cell duplicates its DNA to ensure each daughter cell receives an identical set.
+Tubulin Synthesis (C): Occurs during the G2 phase, where the cell synthesizes tubulin proteins required for forming the mitotic spindle during mitosis.
+]
+
+Final Answer : Option (X)
+
+Structure "solutionHi" with the matching Devanagari translation:
+कथन (Explaining) : [संक्षिप्त विवरण कि प्रश्न में क्या दिया गया है और क्या ज्ञात करना है]
+सिद्धांत (Concept) : यह प्रश्न [सिद्धांत/नियम का नाम] पर आधारित है।
+हल (Solution) : [चरण-दर-चरण गणितीय हल या प्रत्येक विकल्प का वैज्ञानिक विश्लेषण]
+अंतिम उत्तर (Final Answer) : विकल्प (X)
+
+RETURN STRICT JSON SCHEMA:
 {
   "recommendedAnswer": "A",
-  "solutionEn": "...",
-  "solutionHi": "..."
+  "solutionEn": "Explaining : ...\\nConcept : ...\\nSolution : ...\\nFinal Answer : Option (A)",
+  "solutionHi": "कथन (Explaining) : ...\\nसिद्धांत (Concept) : ...\\nहल (Solution) : ...\\nअंतिम उत्तर (Final Answer) : विकल्प (A)"
 }`;
 
     const response = await model.generateContent(prompt);

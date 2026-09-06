@@ -97,6 +97,50 @@ export function UnifiedQuestionEditor({
   // Validation Error Highlight Flags
   const [missingFieldErrors, setMissingFieldErrors] = useState<Record<string, boolean>>({});
 
+  // AI Suggested Curriculum Metadata (Pending user approval)
+  const [aiSuggestedMetadata, setAiSuggestedMetadata] = useState<{
+    subject?: string;
+    chapter?: string;
+    topic?: string;
+    subTopic?: string;
+    difficulty?: "EASY" | "MEDIUM" | "HARD" | "ULTRA";
+    type?: string;
+  } | null>(null);
+
+  const handleApplySuggestedMetadata = () => {
+    if (!aiSuggestedMetadata) return;
+
+    if (aiSuggestedMetadata.subject) {
+      setSubject(aiSuggestedMetadata.subject);
+    }
+    if (aiSuggestedMetadata.chapter) {
+      setChapter(aiSuggestedMetadata.chapter);
+    }
+    if (aiSuggestedMetadata.topic) {
+      setTopic(aiSuggestedMetadata.topic);
+    }
+    if (aiSuggestedMetadata.subTopic) {
+      setSubTopic(aiSuggestedMetadata.subTopic);
+    }
+    if (aiSuggestedMetadata.difficulty) {
+      setDifficulty(aiSuggestedMetadata.difficulty);
+    }
+    if (aiSuggestedMetadata.type) {
+      setQuestionType(aiSuggestedMetadata.type);
+    }
+
+    setMissingFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next.subject;
+      delete next.chapter;
+      delete next.topic;
+      return next;
+    });
+
+    toast.success("AI suggested curriculum metadata approved & applied!");
+    setAiSuggestedMetadata(null);
+  };
+
   // 2. QUESTION CONTENT STATES (Dual Column)
   const [statementEn, setStatementEn] = useState<string>(translationEn?.statement || initialQuestion?.statementEn || "");
   const [statementHi, setStatementHi] = useState<string>(translationHi?.statement || initialQuestion?.statementHi || "");
@@ -247,18 +291,6 @@ export function UnifiedQuestionEditor({
 
   // E. Automatic Image OCR Extraction (No manual button click needed)
   const handleImageUploadAndExtract = (file: File) => {
-    // 1. Mandatory Metadata Gate
-    if (!subject?.trim() || !chapter?.trim() || !topic?.trim()) {
-      const errs: Record<string, boolean> = {};
-      const missing: string[] = [];
-      if (!subject?.trim()) { errs.subject = true; missing.push("Subject"); }
-      if (!chapter?.trim()) { errs.chapter = true; missing.push("Chapter"); }
-      if (!topic?.trim()) { errs.topic = true; missing.push("Topic"); }
-      setMissingFieldErrors((prev) => ({ ...prev, ...errs }));
-      toast.error(`Please select mandatory metadata (${missing.join(", ")}) at the top before extracting.`);
-      return;
-    }
-
     if (!file.type.startsWith("image/")) {
       toast.error("Please upload an image file (PNG, JPG, WebP).");
       return;
@@ -270,7 +302,7 @@ export function UnifiedQuestionEditor({
       setDiagramUrl(base64Url);
 
       setIsExtracting(true);
-      toast.info("Extracting question, options, and formulas from image...");
+      toast.info("Extracting question, options, formulas & inferring curriculum metadata from image...");
 
       try {
         const res = await fetch("/api/team/questions/ai", {
@@ -281,10 +313,10 @@ export function UnifiedQuestionEditor({
             payload: {
               imageBase64: base64Url,
               mimeType: file.type,
-              subject,
-              chapter,
-              topic,
-              difficulty,
+              subject: subject || "Biology",
+              chapter: chapter || "",
+              topic: topic || "",
+              difficulty: difficulty || "MEDIUM",
             },
           }),
         });
@@ -323,11 +355,20 @@ export function UnifiedQuestionEditor({
         if (data.solutionEn) setSolutionEn(data.solutionEn);
         if (data.solutionHi) setSolutionHi(data.solutionHi);
 
-        if (data.subject && !subject) setSubject(data.subject);
-        if (data.chapter && !chapter) setChapter(data.chapter);
-        if (data.topic && !topic) setTopic(data.topic);
-
-        toast.success("Question and options extracted successfully!");
+        // Capture AI-suggested metadata for teacher approval
+        if (data.subject || data.chapter || data.topic) {
+          setAiSuggestedMetadata({
+            subject: data.subject || subject || "Biology",
+            chapter: data.chapter || "",
+            topic: data.topic || "",
+            subTopic: data.subTopic || "",
+            difficulty: (data.difficulty as any) || difficulty || "MEDIUM",
+            type: data.type || questionType || "SINGLE_CORRECT",
+          });
+          toast.success("Extracted! AI-suggested metadata is ready for approval above Section 1.");
+        } else {
+          toast.success("Question and options extracted successfully!");
+        }
       } catch (err: any) {
         toast.error(err.message || "Unable to extract this content. Please review or retry.");
       } finally {
@@ -339,20 +380,8 @@ export function UnifiedQuestionEditor({
 
   // F. Automatic Text Extraction
   const handleTextAutoExtract = async (rawText: string) => {
-    // 1. Mandatory Metadata Gate
-    if (!subject?.trim() || !chapter?.trim() || !topic?.trim()) {
-      const errs: Record<string, boolean> = {};
-      const missing: string[] = [];
-      if (!subject?.trim()) { errs.subject = true; missing.push("Subject"); }
-      if (!chapter?.trim()) { errs.chapter = true; missing.push("Chapter"); }
-      if (!topic?.trim()) { errs.topic = true; missing.push("Topic"); }
-      setMissingFieldErrors((prev) => ({ ...prev, ...errs }));
-      toast.error(`Please select mandatory metadata (${missing.join(", ")}) at the top before extracting.`);
-      return;
-    }
-
     setIsExtracting(true);
-    toast.info("Parsing pasted text into structured question format...");
+    toast.info("Parsing pasted text & inferring curriculum metadata...");
 
     try {
       const res = await fetch("/api/team/questions/ai", {
@@ -362,10 +391,10 @@ export function UnifiedQuestionEditor({
           action: "auto_extract",
           payload: {
             rawText,
-            subject,
-            chapter,
-            topic,
-            difficulty,
+            subject: subject || "Biology",
+            chapter: chapter || "",
+            topic: topic || "",
+            difficulty: difficulty || "MEDIUM",
           },
         }),
       });
@@ -400,7 +429,22 @@ export function UnifiedQuestionEditor({
         setCorrectOption(rec);
       }
 
-      toast.success("Text parsed into question and options successfully!");
+      if (data.solutionEn) setSolutionEn(data.solutionEn);
+      if (data.solutionHi) setSolutionHi(data.solutionHi);
+
+      if (data.subject || data.chapter || data.topic) {
+        setAiSuggestedMetadata({
+          subject: data.subject || subject || "Biology",
+          chapter: data.chapter || "",
+          topic: data.topic || "",
+          subTopic: data.subTopic || "",
+          difficulty: (data.difficulty as any) || difficulty || "MEDIUM",
+          type: data.type || questionType || "SINGLE_CORRECT",
+        });
+        toast.success("Text parsed! AI-suggested metadata is ready for approval above Section 1.");
+      } else {
+        toast.success("Text parsed into question and options successfully!");
+      }
     } catch (err: any) {
       toast.error(err.message || "Unable to parse this text. Please review.");
     } finally {
@@ -665,7 +709,7 @@ export function UnifiedQuestionEditor({
   };
 
   return (
-    <div className="space-y-6 select-none font-sans">
+    <div className="space-y-6 select-none font-sans pb-32">
       {/* 1. TOP CONTEXT & QUESTION ID BANNER */}
       <div className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1">
@@ -704,6 +748,86 @@ export function UnifiedQuestionEditor({
           <QuestionIdBadge questionCode={generatedCode} subjectName={subject} isSaving={isSaving} />
         </div>
       </div>
+
+      {/* AI SUGGESTED METADATA BANNER (Interactive Teacher Approval) */}
+      {aiSuggestedMetadata && (
+        <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border-2 border-indigo-300/80 rounded-3xl p-5 sm:p-6 shadow-md animate-in fade-in slide-in-from-top-3">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-xs font-black uppercase tracking-wider shadow-sm">
+                  <Sparkles className="w-3.5 h-3.5 animate-pulse" />
+                  ✨ AI Suggested Metadata
+                </span>
+                <span className="text-xs text-indigo-700 font-bold">
+                  Detected from question text/image
+                </span>
+              </div>
+              <p className="text-xs text-slate-600">
+                The AI engine analyzed your question and identified the recommended NCERT curriculum mapping. Click <strong>Approve & Apply</strong> to automatically set these fields:
+              </p>
+
+              {/* Badges preview */}
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                {aiSuggestedMetadata.subject && (
+                  <span className="px-3 py-1 bg-white border border-indigo-200 rounded-xl text-xs font-black text-indigo-900 shadow-xs">
+                    <span className="text-slate-400 font-medium mr-1.5">Subject:</span>
+                    {aiSuggestedMetadata.subject}
+                  </span>
+                )}
+                {aiSuggestedMetadata.chapter && (
+                  <span className="px-3 py-1 bg-white border border-indigo-200 rounded-xl text-xs font-bold text-slate-800 shadow-xs">
+                    <span className="text-slate-400 font-medium mr-1.5">Chapter:</span>
+                    {aiSuggestedMetadata.chapter}
+                  </span>
+                )}
+                {aiSuggestedMetadata.topic && (
+                  <span className="px-3 py-1 bg-white border border-indigo-200 rounded-xl text-xs font-bold text-slate-800 shadow-xs">
+                    <span className="text-slate-400 font-medium mr-1.5">Topic:</span>
+                    {aiSuggestedMetadata.topic}
+                  </span>
+                )}
+                {aiSuggestedMetadata.subTopic && (
+                  <span className="px-3 py-1 bg-white border border-indigo-200 rounded-xl text-xs font-bold text-slate-700 shadow-xs">
+                    <span className="text-slate-400 font-medium mr-1.5">Subtopic:</span>
+                    {aiSuggestedMetadata.subTopic}
+                  </span>
+                )}
+                {aiSuggestedMetadata.difficulty && (
+                  <span className="px-3 py-1 bg-white border border-amber-200 rounded-xl text-xs font-bold text-amber-800 shadow-xs">
+                    <span className="text-slate-400 font-medium mr-1.5">Level:</span>
+                    {aiSuggestedMetadata.difficulty}
+                  </span>
+                )}
+                {aiSuggestedMetadata.type && (
+                  <span className="px-3 py-1 bg-white border border-blue-200 rounded-xl text-xs font-bold text-blue-800 shadow-xs">
+                    <span className="text-slate-400 font-medium mr-1.5">Type:</span>
+                    {aiSuggestedMetadata.type}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 shrink-0 self-start md:self-center">
+              <button
+                type="button"
+                onClick={handleApplySuggestedMetadata}
+                className="px-5 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs sm:text-sm shadow-md shadow-emerald-600/25 flex items-center gap-2 transition"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Approve & Apply</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setAiSuggestedMetadata(null)}
+                className="px-3 py-2.5 rounded-2xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 font-bold text-xs transition"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 2. MANDATORY METADATA BAR AT THE TOP (Section 1) */}
       <div

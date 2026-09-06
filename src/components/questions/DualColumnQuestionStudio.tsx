@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Plus, Download, ChevronRight, ChevronDown, ArrowLeft, Save, Sliders, CheckCircle2, FileText, Search, Sparkles } from "lucide-react";
+import { Plus, Download, ChevronRight, ChevronDown, ArrowLeft, Save, Sliders, CheckCircle2, FileText, Search, Sparkles, PanelLeftClose, PanelLeftOpen, EyeOff } from "lucide-react";
 import { UnifiedQuestionEditor } from "./UnifiedQuestionEditor";
 
 export interface QuestionEntry {
@@ -62,10 +62,35 @@ export function DualColumnQuestionStudio({
   backHref = "/team/tests",
 }: DualColumnQuestionStudioProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [isSidebarHidden, setIsSidebarHidden] = useState(false);
   const [activeSubject, setActiveSubject] = useState(subjects[0]?.name || "Biology");
   const [currentQuestionNumber, setCurrentQuestionNumber] = useState(1);
   const [jumpInput, setJumpInput] = useState("1");
   const [viewMode, setViewMode] = useState<"side-by-side" | "hindi" | "english">("side-by-side");
+
+  // Keyboard shortcut: Ctrl + X / Cmd + X to toggle sidebar hide/show
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === "x" || e.key === "X")) {
+        const activeTag = document.activeElement?.tagName?.toLowerCase();
+        const hasSelection = (window.getSelection()?.toString().length ?? 0) > 0;
+        // Don't intercept if user is cutting text in an input/textarea
+        if ((activeTag === "input" || activeTag === "textarea") && hasSelection) {
+          return;
+        }
+
+        e.preventDefault();
+        setIsSidebarHidden((prev) => {
+          const next = !prev;
+          toast.info(next ? "Question sidebar hidden (Ctrl+X to restore)" : "Question sidebar restored (Ctrl+X)");
+          return next;
+        });
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   // State: whether editor form is active for the current question
   const [activeAuthoringSlots, setActiveAuthoringSlots] = useState<Record<number, boolean>>({});
@@ -151,6 +176,11 @@ export function DualColumnQuestionStudio({
     }
   };
 
+  const handleSelectQuestion = (qNum: number) => {
+    setCurrentQuestionNumber(qNum);
+    setJumpInput(String(qNum));
+  };
+
   // Import question by ID or Code
   const handleImportQuestionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -220,17 +250,37 @@ export function DualColumnQuestionStudio({
       {/* 1. LEFT DEEP-BLUE SIDEBAR (Matching Image 6) */}
       <aside
         className={`bg-[#0c3ea4] text-white flex flex-col justify-between shrink-0 transition-all duration-300 z-30 relative shadow-2xl ${
-          sidebarCollapsed ? "w-14" : "w-64"
+          isSidebarHidden
+            ? "w-0 p-0 overflow-hidden opacity-0 pointer-events-none"
+            : sidebarCollapsed
+            ? "w-14"
+            : "w-64"
         }`}
       >
         <div className="p-4 border-b border-white/10">
-          <Link
-            href={backHref}
-            className="flex items-center gap-1.5 text-xs font-bold text-blue-200 hover:text-white transition"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            {!sidebarCollapsed && <span>Back</span>}
-          </Link>
+          <div className="flex items-center justify-between">
+            <Link
+              href={backHref}
+              className="flex items-center gap-1.5 text-xs font-bold text-blue-200 hover:text-white transition"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              {!sidebarCollapsed && <span>Back</span>}
+            </Link>
+
+            {!sidebarCollapsed && (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSidebarHidden(true);
+                  toast.info("Sidebar hidden (Ctrl+X to show)");
+                }}
+                className="p-1 rounded-lg text-blue-200 hover:text-white hover:bg-white/10 transition"
+                title="Hide Sidebar (Ctrl+X)"
+              >
+                <PanelLeftClose className="w-4 h-4" />
+              </button>
+            )}
+          </div>
 
           {!sidebarCollapsed && (
             <div className="mt-3">
@@ -251,63 +301,64 @@ export function DualColumnQuestionStudio({
             ).length;
 
             return (
-              <div key={sub.name} className="space-y-2">
+              <div key={sub.name} className="space-y-1">
+                {/* Section Accordion Header */}
                 <button
                   type="button"
                   onClick={() => setActiveSubject(sub.name)}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-black transition ${
+                  className={`w-full flex items-center justify-between p-2 rounded-xl text-xs font-extrabold transition ${
                     isSubActive
-                      ? "bg-white/15 text-white shadow-inner"
+                      ? "bg-white text-[#0c3ea4] shadow-md"
                       : "text-blue-100 hover:bg-white/10"
                   }`}
                 >
-                  <span className="flex items-center gap-1.5">
-                    {isSubActive ? (
-                      <ChevronDown className="w-4 h-4 text-blue-200" />
-                    ) : (
-                      <ChevronRight className="w-4 h-4 text-blue-200" />
-                    )}
-                    {!sidebarCollapsed && <span>{sub.name}</span>}
-                  </span>
+                  <div className="flex items-center gap-2 truncate">
+                    <span className="truncate">{sub.name}</span>
+                  </div>
+
                   {!sidebarCollapsed && (
-                    <span className="text-[11px] font-mono text-blue-200">
-                      {subSaved}/{sub.total}
-                    </span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className="text-[11px] font-mono opacity-80">
+                        {subSaved}/{sub.total}
+                      </span>
+                      {isSubActive ? (
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      ) : (
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      )}
+                    </div>
                   )}
                 </button>
 
+                {/* Question Grid for Active Section */}
                 {isSubActive && !sidebarCollapsed && (
-                  <div className="bg-black/15 p-2.5 rounded-2xl border border-white/10 space-y-2">
-                    <div className="grid grid-cols-6 gap-1.5 max-h-56 overflow-y-auto pr-1">
-                      {Array.from({ length: sub.total || 45 }).map((_, idx) => {
-                        const qNum = idx + 1;
-                        const isCurrent = currentQuestionNumber === qNum;
-                        const isSaved = questionsMap[qNum]?.isSaved;
+                  <div className="grid grid-cols-5 gap-1.5 p-2 bg-[#092e7a]/50 rounded-2xl border border-white/5 animate-in fade-in">
+                    {Array.from({ length: sub.total }, (_, i) => {
+                      const qNum = i + 1;
+                      const q = questionsMap[qNum];
+                      const isCurrent = currentQuestionNumber === qNum;
+                      const isSaved = q?.isSaved;
 
-                        return (
-                          <button
-                            key={qNum}
-                            type="button"
-                            onClick={() => {
-                              setCurrentQuestionNumber(qNum);
-                              setJumpInput(String(qNum));
-                            }}
-                            className={`h-8 rounded-lg font-bold text-xs flex items-center justify-center transition ${
-                              isCurrent
-                                ? "bg-amber-400 text-slate-900 ring-2 ring-white font-black scale-105 shadow-md"
-                                : isSaved
-                                ? "bg-emerald-500 text-white hover:bg-emerald-600"
-                                : "bg-white text-rose-600 hover:bg-rose-50 shadow-sm border border-slate-200"
-                            }`}
-                          >
-                            {qNum}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <p className="text-[10px] text-center text-blue-200/80 italic pt-1">
-                      Scroll for more...
-                    </p>
+                      return (
+                        <button
+                          key={qNum}
+                          type="button"
+                          onClick={() => handleSelectQuestion(qNum)}
+                          className={`h-7 rounded-lg text-xs font-black transition relative flex items-center justify-center ${
+                            isCurrent
+                              ? "bg-white text-[#0c3ea4] ring-2 ring-blue-400 shadow-md scale-105 z-10"
+                              : isSaved
+                              ? "bg-emerald-500 text-white hover:bg-emerald-600"
+                              : "bg-[#0c3ea4] text-blue-200 border border-white/20 hover:bg-white/10"
+                          }`}
+                        >
+                          {qNum}
+                          {isSaved && !isCurrent && (
+                            <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 bg-white rounded-full" />
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -315,8 +366,8 @@ export function DualColumnQuestionStudio({
           })}
         </div>
 
-        {/* Sidebar Toggle */}
-        <div className="p-3 border-t border-white/10 flex items-center justify-between text-[11px] text-blue-200">
+        {/* Footer info and collapse toggle */}
+        <div className="p-3 border-t border-white/10 text-xs text-blue-200 flex items-center justify-between">
           {!sidebarCollapsed && (
             <div className="flex items-center gap-2">
               <span className="flex items-center gap-1">
@@ -333,17 +384,65 @@ export function DualColumnQuestionStudio({
             type="button"
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
             className="p-1 rounded-lg hover:bg-white/10 text-white"
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
             {sidebarCollapsed ? "→" : "←"}
           </button>
         </div>
       </aside>
 
+      {/* FLOATING TRIGGER TO RE-OPEN SIDEBAR WHEN HIDDEN */}
+      {isSidebarHidden && (
+        <button
+          type="button"
+          onClick={() => {
+            setIsSidebarHidden(false);
+            toast.info("Sidebar restored");
+          }}
+          className="fixed left-0 top-1/2 -translate-y-1/2 z-40 bg-[#0c3ea4] hover:bg-blue-700 text-white pl-2 pr-3 py-3 rounded-r-2xl shadow-2xl flex items-center gap-1.5 text-xs font-bold transition hover:scale-105 border-y border-r border-white/20"
+          title="Show Question Palette (Ctrl+X)"
+        >
+          <PanelLeftOpen className="w-4 h-4" />
+          <span className="text-[11px] font-black uppercase tracking-wider">
+            Questions
+          </span>
+          <kbd className="hidden sm:inline px-1 text-[9px] font-mono bg-blue-900 text-blue-200 rounded">
+            Ctrl+X
+          </kbd>
+        </button>
+      )}
+
       {/* 2. RIGHT MAIN WORKSPACE */}
       <div className="flex-1 flex flex-col h-full overflow-hidden">
         {/* Top Header Ribbon (Matching Image 6) */}
         <header className="bg-white border-b border-slate-200 px-6 py-3 shrink-0 flex items-center justify-between gap-4 shadow-sm">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Sidebar Hide/Show Toggle with Ctrl+X */}
+            <button
+              type="button"
+              onClick={() => {
+                setIsSidebarHidden(!isSidebarHidden);
+                toast.info(!isSidebarHidden ? "Sidebar hidden (Ctrl+X)" : "Sidebar restored (Ctrl+X)");
+              }}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-xs font-bold text-slate-700 transition shadow-xs"
+              title={isSidebarHidden ? "Show Question Sidebar (Ctrl+X)" : "Hide Question Sidebar (Ctrl+X)"}
+            >
+              {isSidebarHidden ? (
+                <>
+                  <PanelLeftOpen className="w-4 h-4 text-blue-600" />
+                  <span className="text-xs font-bold text-blue-700">Show Sidebar</span>
+                </>
+              ) : (
+                <>
+                  <PanelLeftClose className="w-4 h-4 text-slate-500" />
+                  <span className="hidden sm:inline text-xs text-slate-600">Hide</span>
+                </>
+              )}
+              <kbd className="hidden lg:inline-block px-1.5 py-0.5 text-[10px] font-mono bg-slate-100 border border-slate-200 text-slate-500 rounded font-semibold">
+                Ctrl+X
+              </kbd>
+            </button>
+
             <h3 className="font-extrabold text-base text-slate-900">{activeSubject}</h3>
 
             <span className="px-3 py-1 rounded-full bg-blue-50 text-[#0c3ea4] font-extrabold text-xs font-mono">
@@ -437,7 +536,7 @@ export function DualColumnQuestionStudio({
           </div>
         ) : (
           /* ACTIVE DUAL-COLUMN QUESTION BUILDER VIA UNIFIED QUESTION EDITOR */
-          <div className="flex-1 flex flex-col overflow-hidden animate-in fade-in">
+          <div className="flex-1 overflow-y-auto min-h-0 p-4 sm:p-6 lg:p-8 animate-in fade-in">
             <UnifiedQuestionEditor
               key={currentQuestionNumber}
               mode={mode}
