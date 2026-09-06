@@ -25,6 +25,11 @@ import {
   Square,
   Copy,
   ExternalLink,
+  ZoomIn,
+  Maximize2,
+  PlusCircle,
+  Wand2,
+  Tag,
 } from "lucide-react";
 import { EquationLivePreview } from "./EquationLivePreview";
 import { FormulaInsertToolbar } from "./FormulaInsertToolbar";
@@ -92,10 +97,129 @@ export function UnifiedQuestionEditor({
   // Taxonomy Lists (Dynamic from Master NCERT Catalog + Memory)
   const [subjectsList, setSubjectsList] = useState<Array<{ id: string; name: string }>>([]);
   const [chaptersList, setChaptersList] = useState<Array<{ id: string; title: string; displayTitle?: string }>>([]);
-  const [topicsList, setTopicsList] = useState<Array<{ id: string; title: string }>>([]);
+  const [topicsList, setTopicsList] = useState<Array<{ id: string; title: string; subtopics?: string[] }>>([]);
 
   // Validation Error Highlight Flags
   const [missingFieldErrors, setMissingFieldErrors] = useState<Record<string, boolean>>({});
+
+  // Dynamic Custom Topic & Subtopic Addition
+  const [isAddingCustomTopic, setIsAddingCustomTopic] = useState<boolean>(false);
+  const [customTopicInput, setCustomTopicInput] = useState<string>("");
+  const [isAddingCustomSubtopic, setIsAddingCustomSubtopic] = useState<boolean>(false);
+  const [customSubtopicInput, setCustomSubtopicInput] = useState<string>("");
+  const [isSavingTaxonomy, setIsSavingTaxonomy] = useState<boolean>(false);
+
+  // Solution Inbuilt AI Assistant & Diagram states
+  const [solutionRefinePrompt, setSolutionRefinePrompt] = useState<string>("");
+  const [isDiagramZoomed, setIsDiagramZoomed] = useState<boolean>(false);
+
+  // Helper: Persist New Topic to Master Catalog
+  const handleSaveNewTopic = async (overrideName?: string) => {
+    const titleToSave = (overrideName ?? customTopicInput).trim();
+    if (!titleToSave) {
+      toast.error("Please enter a topic name.");
+      return;
+    }
+    if (!subject || !chapter) {
+      toast.error("Please select a subject and chapter first.");
+      return;
+    }
+
+    setIsSavingTaxonomy(true);
+    try {
+      const res = await fetch("/api/team/ai-questions/taxonomy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subject,
+          chapter,
+          topicTitle: titleToSave,
+          subtopics: subTopic ? [subTopic] : [],
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error?.message || json.error || "Failed to save topic.");
+      }
+
+      const savedTopic = json.data?.topic;
+      const finalTitle = savedTopic?.title || titleToSave;
+
+      setTopicsList((prev) => {
+        const exists = prev.some((t) => t.title.toLowerCase() === finalTitle.toLowerCase());
+        if (!exists) {
+          return [...prev, { id: savedTopic?.id || finalTitle, title: finalTitle, subtopics: savedTopic?.subtopics || [] }];
+        }
+        return prev;
+      });
+
+      setTopic(finalTitle);
+      setCustomTopicInput("");
+      setIsAddingCustomTopic(false);
+      setMissingFieldErrors((prev) => {
+        const next = { ...prev };
+        delete next.topic;
+        return next;
+      });
+      toast.success(`Topic "${finalTitle}" saved to NCERT catalog permanently!`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to add topic.");
+    } finally {
+      setIsSavingTaxonomy(false);
+    }
+  };
+
+  // Helper: Persist New Subtopic to Master Catalog
+  const handleSaveNewSubtopic = async (overrideSubtopic?: string) => {
+    const subToSave = (overrideSubtopic ?? customSubtopicInput).trim();
+    if (!subToSave) {
+      toast.error("Please enter a subtopic name.");
+      return;
+    }
+    if (!subject || !chapter || !topic) {
+      toast.error("Please select a subject, chapter, and topic first.");
+      return;
+    }
+
+    setIsSavingTaxonomy(true);
+    try {
+      const res = await fetch("/api/team/ai-questions/taxonomy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subject,
+          chapter,
+          topicTitle: topic,
+          customSubtopic: subToSave,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error?.message || json.error || "Failed to save subtopic.");
+      }
+
+      setTopicsList((prev) =>
+        prev.map((t) => {
+          if (t.title.toLowerCase() === topic.toLowerCase()) {
+            const curSub = t.subtopics || [];
+            if (!curSub.includes(subToSave)) {
+              return { ...t, subtopics: [...curSub, subToSave] };
+            }
+          }
+          return t;
+        })
+      );
+
+      setSubTopic(subToSave);
+      setCustomSubtopicInput("");
+      setIsAddingCustomSubtopic(false);
+      toast.success(`Subtopic "${subToSave}" added to catalog permanently!`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to add subtopic.");
+    } finally {
+      setIsSavingTaxonomy(false);
+    }
+  };
 
   // AI Suggested Curriculum Metadata (Pending user approval)
   const [aiSuggestedMetadata, setAiSuggestedMetadata] = useState<{
@@ -107,27 +231,20 @@ export function UnifiedQuestionEditor({
     type?: string;
   } | null>(null);
 
-  const handleApplySuggestedMetadata = () => {
+  const handleApplySuggestedMetadata = async () => {
     if (!aiSuggestedMetadata) return;
 
-    if (aiSuggestedMetadata.subject) {
-      setSubject(aiSuggestedMetadata.subject);
-    }
-    if (aiSuggestedMetadata.chapter) {
-      setChapter(aiSuggestedMetadata.chapter);
-    }
-    if (aiSuggestedMetadata.topic) {
-      setTopic(aiSuggestedMetadata.topic);
-    }
-    if (aiSuggestedMetadata.subTopic) {
-      setSubTopic(aiSuggestedMetadata.subTopic);
-    }
-    if (aiSuggestedMetadata.difficulty) {
-      setDifficulty(aiSuggestedMetadata.difficulty);
-    }
-    if (aiSuggestedMetadata.type) {
-      setQuestionType(aiSuggestedMetadata.type);
-    }
+    const appliedSubject = aiSuggestedMetadata.subject || subject;
+    const appliedChapter = aiSuggestedMetadata.chapter || chapter;
+    const appliedTopic = aiSuggestedMetadata.topic || topic;
+    const appliedSubTopic = aiSuggestedMetadata.subTopic || subTopic;
+
+    if (aiSuggestedMetadata.subject) setSubject(aiSuggestedMetadata.subject);
+    if (aiSuggestedMetadata.chapter) setChapter(aiSuggestedMetadata.chapter);
+    if (aiSuggestedMetadata.topic) setTopic(aiSuggestedMetadata.topic);
+    if (aiSuggestedMetadata.subTopic) setSubTopic(aiSuggestedMetadata.subTopic);
+    if (aiSuggestedMetadata.difficulty) setDifficulty(aiSuggestedMetadata.difficulty);
+    if (aiSuggestedMetadata.type) setQuestionType(aiSuggestedMetadata.type);
 
     setMissingFieldErrors((prev) => {
       const next = { ...prev };
@@ -137,7 +254,36 @@ export function UnifiedQuestionEditor({
       return next;
     });
 
-    toast.success("AI suggested curriculum metadata approved & applied!");
+    // Auto-persist suggested topic/subtopic to database catalog
+    if (appliedSubject && appliedChapter && appliedTopic) {
+      try {
+        const res = await fetch("/api/team/ai-questions/taxonomy", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            subject: appliedSubject,
+            chapter: appliedChapter,
+            topicTitle: appliedTopic,
+            subtopics: appliedSubTopic ? [appliedSubTopic] : [],
+          }),
+        });
+        const json = await res.json();
+        if (json.success && json.data?.topic) {
+          const tData = json.data.topic;
+          setTopicsList((prev) => {
+            const exists = prev.some((t) => t.title.toLowerCase() === tData.title.toLowerCase());
+            if (!exists) {
+              return [...prev, { id: tData.id, title: tData.title, subtopics: tData.subtopics || [] }];
+            }
+            return prev;
+          });
+        }
+      } catch (err) {
+        console.warn("[Taxonomy] Auto-persist suggested taxonomy warning:", err);
+      }
+    }
+
+    toast.success("AI suggested curriculum metadata approved, applied & saved to catalog!");
     setAiSuggestedMetadata(null);
   };
 
@@ -515,15 +661,15 @@ export function UnifiedQuestionEditor({
     }
   };
 
-  // H. Action: SUBJECT-AWARE SOLUTION GENERATION
-  const handleGenerateSolution = async () => {
+  // H. Action: SUBJECT-AWARE SOLUTION GENERATION (Inbuilt AI Solution Assistant)
+  const handleGenerateSolution = async (customPrompt?: string) => {
     if (!statementEn && !statementHi) {
       toast.error("Please enter a question statement first.");
       return;
     }
 
     setIsGeneratingSolution(true);
-    toast.info(`Generating ${subject} format step-by-step solution...`);
+    toast.info(`Generating ${subject} 4-part authoritative solution...`);
 
     try {
       const res = await fetch("/api/team/questions/ai", {
@@ -540,6 +686,7 @@ export function UnifiedQuestionEditor({
             correctAnswer: correctOption,
             userSelectedAnswer: correctOption,
             userProvidedSolution: solutionEn || solutionHi,
+            customInstruction: customPrompt ?? solutionRefinePrompt,
           },
         }),
       });
@@ -563,7 +710,7 @@ export function UnifiedQuestionEditor({
           toast.warning(solData.mismatchWarning || "Answer mismatch detected.");
         } else {
           setAnswerMismatchWarning(null);
-          toast.success("Subject-aware solution generated successfully!");
+          toast.success("Solution generated successfully in 4-part format!");
         }
       }
     } catch (err: any) {
@@ -898,24 +1045,67 @@ export function UnifiedQuestionEditor({
 
           {/* Topic */}
           <div>
-            <label className="block font-bold text-slate-700 mb-1.5">
-              Topic <span className="text-rose-500">*</span>
-            </label>
-            <select
-              value={topic}
-              onChange={(e) => setTopic(e.target.value)}
-              disabled={!chapter}
-              className={`w-full px-3.5 py-2.5 bg-slate-50 border rounded-2xl font-semibold text-slate-800 outline-none transition focus:bg-white focus:border-blue-500 disabled:opacity-50 ${
-                missingFieldErrors.topic ? "border-rose-500 bg-rose-50" : "border-slate-200"
-              }`}
-            >
-              <option value="">-- Select Topic --</option>
-              {topicsList.map((t) => (
-                <option key={t.id || t.title} value={t.title}>
-                  {t.title}
-                </option>
-              ))}
-            </select>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="font-bold text-slate-700">
+                Topic <span className="text-rose-500">*</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => setIsAddingCustomTopic(!isAddingCustomTopic)}
+                className="text-[11px] font-bold text-blue-600 hover:text-blue-800 transition flex items-center gap-0.5 cursor-pointer"
+              >
+                {isAddingCustomTopic ? "✕ Cancel" : "+ Custom Topic"}
+              </button>
+            </div>
+
+            {isAddingCustomTopic ? (
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="text"
+                  placeholder="New Topic name..."
+                  value={customTopicInput}
+                  onChange={(e) => setCustomTopicInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleSaveNewTopic();
+                    }
+                  }}
+                  className="w-full px-3 py-2 bg-white border border-blue-400 rounded-xl font-semibold text-slate-900 outline-none text-xs"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleSaveNewTopic()}
+                  disabled={isSavingTaxonomy}
+                  className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shrink-0 transition cursor-pointer"
+                >
+                  {isSavingTaxonomy ? "..." : "Save"}
+                </button>
+              </div>
+            ) : (
+              <select
+                value={topic}
+                onChange={(e) => {
+                  if (e.target.value === "__NEW_TOPIC__") {
+                    setIsAddingCustomTopic(true);
+                  } else {
+                    setTopic(e.target.value);
+                  }
+                }}
+                disabled={!chapter}
+                className={`w-full px-3.5 py-2.5 bg-slate-50 border rounded-2xl font-semibold text-slate-800 outline-none transition focus:bg-white focus:border-blue-500 disabled:opacity-50 ${
+                  missingFieldErrors.topic ? "border-rose-500 bg-rose-50" : "border-slate-200"
+                }`}
+              >
+                <option value="">-- Select Topic --</option>
+                {topicsList.map((t) => (
+                  <option key={t.id || t.title} value={t.title}>
+                    {t.title}
+                  </option>
+                ))}
+                <option value="__NEW_TOPIC__">+ Add Custom Topic to Catalog...</option>
+              </select>
+            )}
           </div>
 
           {/* Question Type */}
@@ -979,16 +1169,62 @@ export function UnifiedQuestionEditor({
             </select>
           </div>
 
-          {/* Subtopic (Optional) */}
+          {/* Subtopic (Optional with Custom Add to Catalog) */}
           <div>
-            <label className="block font-bold text-slate-700 mb-1.5">Sub-topic (Optional)</label>
-            <input
-              type="text"
-              placeholder="e.g. Rate Law expression"
-              value={subTopic}
-              onChange={(e) => setSubTopic(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl font-medium text-slate-800 outline-none transition focus:bg-white focus:border-blue-500"
-            />
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="font-bold text-slate-700">Sub-topic (Optional)</label>
+              <button
+                type="button"
+                onClick={() => setIsAddingCustomSubtopic(!isAddingCustomSubtopic)}
+                className="text-[11px] font-bold text-blue-600 hover:text-blue-800 transition flex items-center gap-0.5 cursor-pointer"
+              >
+                {isAddingCustomSubtopic ? "✕ Cancel" : "+ Custom Subtopic"}
+              </button>
+            </div>
+
+            {isAddingCustomSubtopic ? (
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="text"
+                  placeholder="New Subtopic name..."
+                  value={customSubtopicInput}
+                  onChange={(e) => setCustomSubtopicInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleSaveNewSubtopic();
+                    }
+                  }}
+                  className="w-full px-3 py-2 bg-white border border-blue-400 rounded-xl font-medium text-slate-900 outline-none text-xs"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleSaveNewSubtopic()}
+                  disabled={isSavingTaxonomy}
+                  className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shrink-0 transition cursor-pointer"
+                >
+                  {isSavingTaxonomy ? "..." : "Save"}
+                </button>
+              </div>
+            ) : (
+              <div>
+                <input
+                  type="text"
+                  list="subtopics-datalist"
+                  placeholder="Select or enter sub-topic..."
+                  value={subTopic}
+                  onChange={(e) => setSubTopic(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl font-medium text-slate-800 outline-none transition focus:bg-white focus:border-blue-500"
+                />
+                <datalist id="subtopics-datalist">
+                  {topicsList
+                    .find((t) => t.title.toLowerCase() === topic.toLowerCase())
+                    ?.subtopics?.map((st) => (
+                      <option key={st} value={st} />
+                    ))}
+                </datalist>
+              </div>
+            )}
           </div>
 
           {/* Marks */}
@@ -1081,22 +1317,104 @@ export function UnifiedQuestionEditor({
           </div>
         )}
       </div>
+      {/* 3. PROMINENT QUESTION REFERENCE / DIAGRAM DOCK (Right below Ingestion) */}
+      {diagramUrl && (
+        <div className="bg-white border-2 border-indigo-200 rounded-3xl p-5 shadow-sm space-y-3 animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <span className="p-2 rounded-2xl bg-purple-100 text-purple-700">
+                <ImageIcon className="w-5 h-5" />
+              </span>
+              <div>
+                <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">
+                  Question Reference Diagram / Screenshot in View
+                </h4>
+                <p className="text-[11px] text-slate-500">
+                  Kept in direct view so you don't need to scroll down to check formulas or figures.
+                </p>
+              </div>
+            </div>
 
-      {/* 4. DUAL COLUMN BILINGUAL WORKSPACE (Section 3 — The Master Test Design) */}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsDiagramZoomed(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
+                title="View Full Size"
+              >
+                <ZoomIn className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Zoom Fullscreen</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-xl text-xs font-bold transition cursor-pointer"
+                title="Replace Diagram"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Replace</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setDiagramUrl(null)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold transition cursor-pointer"
+                title="Remove Diagram"
+              >
+                <XCircle className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Remove</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-center p-3 bg-slate-50 rounded-2xl border border-slate-200/80 max-h-64 overflow-hidden">
+            <img
+              src={diagramUrl}
+              alt="Question Diagram"
+              className="max-h-56 object-contain rounded-xl shadow-xs cursor-pointer hover:scale-102 transition"
+              onClick={() => setIsDiagramZoomed(true)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* FULLSCREEN DIAGRAM MODAL */}
+      {isDiagramZoomed && diagramUrl && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in"
+          onClick={() => setIsDiagramZoomed(false)}
+        >
+          <div className="relative max-w-4xl max-h-[90vh] bg-white rounded-3xl p-4 shadow-2xl space-y-3" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b pb-2">
+              <h3 className="text-xs font-black uppercase text-slate-800">Reference Diagram Full Size</h3>
+              <button
+                type="button"
+                onClick={() => setIsDiagramZoomed(false)}
+                className="p-1 text-slate-400 hover:text-slate-800 rounded-lg"
+              >
+                ✕ Close
+              </button>
+            </div>
+            <div className="flex items-center justify-center overflow-auto max-h-[75vh]">
+              <img src={diagramUrl} alt="Zoomed Diagram" className="max-h-[70vh] object-contain rounded-xl" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4. DUAL COLUMN BILINGUAL WORKSPACE (Section 2 — Clean Question & Options) */}
       <div className="space-y-4">
-        {/* Quick Toolbar (Check Translation & Solution Generation) */}
+        {/* Section 2 Header Bar */}
         <div className="bg-white border border-slate-200 rounded-3xl p-4 shadow-sm flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="text-xs font-black text-slate-700 uppercase tracking-wider">
-              2. Question &amp; Options Editor
+              2. Question Statement &amp; Options
             </span>
             <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 font-bold">
               Dual Column: हिंदी + English
             </span>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Primary Action 1: CHECK TRANSLATION */}
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={handleCheckTranslation}
@@ -1108,50 +1426,12 @@ export function UnifiedQuestionEditor({
               ) : (
                 <Sparkles className="w-3.5 h-3.5 text-purple-600" />
               )}
-              <span>Check Translation</span>
-            </button>
-
-            {/* Primary Action 2: GENERATE SUBJECT-AWARE SOLUTION */}
-            <button
-              type="button"
-              onClick={handleGenerateSolution}
-              disabled={isGeneratingSolution}
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl text-xs font-black text-indigo-800 shadow-sm transition disabled:opacity-50 cursor-pointer"
-            >
-              {isGeneratingSolution ? (
-                <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-600" />
-              ) : (
-                <FileText className="w-3.5 h-3.5 text-indigo-600" />
-              )}
-              <span>Generate {subject} Solution</span>
+              <span>Check Translation &amp; Alignment</span>
             </button>
           </div>
         </div>
 
-        {/* Answer Mismatch Conflict Alert (Section 11) */}
-        {answerMismatchWarning && (
-          <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-bold flex items-center justify-between gap-3 animate-in fade-in">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>{answerMismatchWarning}</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                if (aiRecommendedAnswer) {
-                  setCorrectOption(aiRecommendedAnswer);
-                  setAnswerMismatchWarning(null);
-                  toast.success(`Switched to AI recommended Option (${aiRecommendedAnswer})!`);
-                }
-              }}
-              className="px-3 py-1 bg-amber-600 text-white rounded-lg text-[11px] font-black hover:bg-amber-700 transition"
-            >
-              Use Option ({aiRecommendedAnswer})
-            </button>
-          </div>
-        )}
-
-        {/* SIDE-BY-SIDE COLUMNS */}
+        {/* SIDE-BY-SIDE CLEAN COLUMNS (Only Statements & Options) */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* COLUMN 1: HINDI (हिंदी) */}
           <div className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-sm space-y-5">
@@ -1170,7 +1450,7 @@ export function UnifiedQuestionEditor({
                 प्रश्न कथन (Statement in Hindi)
               </label>
               <textarea
-                rows={4}
+                rows={5}
                 placeholder="हिंदी में प्रश्न कथन यहाँ लिखें या इमेज पेस्ट करें..."
                 value={statementHi}
                 onChange={(e) => setStatementHi(e.target.value)}
@@ -1227,28 +1507,13 @@ export function UnifiedQuestionEditor({
                 );
               })}
             </div>
-
-            {/* Solution Hi */}
-            <div className="space-y-1.5 pt-2 border-t border-slate-100">
-              <label className="block text-xs font-bold text-slate-700">
-                विस्तृत व्याख्या / हल (Hindi Solution)
-              </label>
-              <textarea
-                rows={5}
-                placeholder="चरणबद्ध हल यहाँ लिखें..."
-                value={solutionHi}
-                onChange={(e) => setSolutionHi(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 rounded-2xl p-3.5 text-xs text-slate-900 outline-none resize-none leading-relaxed font-mono focus:bg-white focus:border-blue-500 transition"
-              />
-              <EquationLivePreview content={solutionHi} label="Hindi Solution Preview" />
-            </div>
           </div>
 
           {/* COLUMN 2: ENGLISH */}
           <div className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-sm space-y-5">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <span className="text-xs font-black text-blue-800 bg-blue-100 px-3 py-1 rounded-full">
-                English (English Statement &amp; Options)
+                English (Statement &amp; Options)
               </span>
               <FormulaInsertToolbar
                 onInsert={(snippet) => setStatementEn((prev) => (prev ? prev + " " + snippet : snippet))}
@@ -1261,7 +1526,7 @@ export function UnifiedQuestionEditor({
                 Question Statement (English)
               </label>
               <textarea
-                rows={4}
+                rows={5}
                 placeholder="Write question statement in English or paste screenshot..."
                 value={statementEn}
                 onChange={(e) => setStatementEn(e.target.value)}
@@ -1318,46 +1583,180 @@ export function UnifiedQuestionEditor({
                 );
               })}
             </div>
+          </div>
+        </div>
+      </div>
 
-            {/* Solution En */}
-            <div className="space-y-1.5 pt-2 border-t border-slate-100">
-              <label className="block text-xs font-bold text-slate-700">
-                Detailed Step-by-Step Solution (English)
-              </label>
-              <textarea
-                rows={5}
-                placeholder="Write step-by-step English solution..."
-                value={solutionEn}
-                onChange={(e) => setSolutionEn(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 rounded-2xl p-3.5 text-xs text-slate-900 outline-none resize-none leading-relaxed font-mono focus:bg-white focus:border-blue-500 transition"
-              />
-              <EquationLivePreview content={solutionEn} label="English Solution Preview" />
+      {/* 5. DEDICATED BILINGUAL SOLUTION STUDIO (Inbuilt AI Assistant & Regenerator) */}
+      <div className="bg-white border-2 border-indigo-200/80 rounded-3xl p-5 sm:p-6 shadow-sm space-y-5">
+        {/* Solution Header & Regenerate Button */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-indigo-600" />
+                3. Step-by-Step Bilingual Solution Studio
+              </span>
+              <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-800 font-extrabold">
+                Explaining • Concept • Solution • Final Answer
+              </span>
+              <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-200">
+                LaTeX Enabled
+              </span>
             </div>
+            <p className="text-xs text-slate-500">
+              Authoritative step-by-step NCERT solution. If the solution needs change, use the inbuilt AI regenerator below.
+            </p>
+          </div>
+
+          {/* Inbuilt AI Regenerate Action */}
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => handleGenerateSolution()}
+              disabled={isGeneratingSolution}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gradient-to-r from-indigo-600 via-blue-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black text-xs sm:text-sm shadow-md shadow-indigo-500/25 transition active:scale-95 disabled:opacity-50 cursor-pointer"
+            >
+              {isGeneratingSolution ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Regenerating Solution...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4" />
+                  <span>Regenerate Solution with AI</span>
+                </>
+              )}
+            </button>
           </div>
         </div>
 
-        {/* Attached Diagram / Image Preview (Preserved) */}
-        {diagramUrl && (
-          <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-3">
-            <div className="flex items-center justify-between">
-              <h4 className="text-xs font-black text-slate-800 flex items-center gap-2">
-                <ImageIcon className="w-4 h-4 text-purple-600" />
-                <span>Attached Question Diagram / Reference Image</span>
-              </h4>
-              <button
-                type="button"
-                onClick={() => setDiagramUrl(null)}
-                className="text-xs font-bold text-rose-600 hover:underline"
-              >
-                Remove Diagram
-              </button>
-            </div>
+        {/* Inbuilt AI Assistant Prompt Bar */}
+        <div className="p-4 rounded-2xl bg-slate-50 border border-indigo-100 space-y-3">
+          <div className="flex items-center gap-2">
+            <Wand2 className="w-4 h-4 text-indigo-600 shrink-0" />
+            <span className="text-xs font-black text-slate-800">
+              Inbuilt AI Solution Assistant:
+            </span>
+            <span className="text-[11px] text-slate-500 hidden sm:inline">
+              Type custom instructions to modify or refine the solution
+            </span>
+          </div>
 
-            <div className="max-w-md mx-auto p-2 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-center">
-              <img src={diagramUrl} alt="Question Diagram" className="max-h-60 rounded-xl object-contain" />
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              type="text"
+              placeholder="e.g. 'Show full algebraic derivation line-by-line', 'Explain why Option B is incorrect', 'Add NCERT Page reference'..."
+              value={solutionRefinePrompt}
+              onChange={(e) => setSolutionRefinePrompt(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleGenerateSolution(solutionRefinePrompt);
+                }
+              }}
+              className="flex-1 px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 outline-none focus:border-indigo-500 transition"
+            />
+            <button
+              type="button"
+              onClick={() => handleGenerateSolution(solutionRefinePrompt)}
+              disabled={isGeneratingSolution}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs rounded-xl shadow-xs transition disabled:opacity-50 shrink-0 cursor-pointer"
+            >
+              {isGeneratingSolution ? "Generating..." : "Apply AI Refinement"}
+            </button>
+          </div>
+
+          {/* Quick Prompt Pills */}
+          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+            <span className="text-[10px] font-bold text-slate-400">Quick prompts:</span>
+            {[
+              "Show full step-by-step mathematical substitution",
+              "Explain why incorrect options are wrong",
+              "Include NCERT Class 11/12 specific page reference",
+              "Make Hindi explanation simpler and clearer",
+            ].map((pill) => (
+              <button
+                key={pill}
+                type="button"
+                onClick={() => {
+                  setSolutionRefinePrompt(pill);
+                  handleGenerateSolution(pill);
+                }}
+                className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 text-[11px] text-slate-600 font-medium transition cursor-pointer"
+              >
+                + {pill}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Answer Mismatch Conflict Alert */}
+        {answerMismatchWarning && (
+          <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-bold flex items-center justify-between gap-3 animate-in fade-in">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>{answerMismatchWarning}</span>
             </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (aiRecommendedAnswer) {
+                  setCorrectOption(aiRecommendedAnswer);
+                  setAnswerMismatchWarning(null);
+                  toast.success(`Switched to AI recommended Option (${aiRecommendedAnswer})!`);
+                }
+              }}
+              className="px-3 py-1 bg-amber-600 text-white rounded-lg text-[11px] font-black hover:bg-amber-700 transition"
+            >
+              Use Option ({aiRecommendedAnswer})
+            </button>
           </div>
         )}
+
+        {/* SIDE-BY-SIDE SOLUTION TEXTAREAS */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Hindi Solution Card */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
+              <span className="text-xs font-black text-amber-900 bg-amber-100 px-3 py-1 rounded-full">
+                हिंदी हल (Hindi Solution)
+              </span>
+              <FormulaInsertToolbar
+                onInsert={(snippet) => setSolutionHi((prev) => (prev ? prev + " " + snippet : snippet))}
+              />
+            </div>
+            <textarea
+              rows={9}
+              placeholder="कथन : ... \n\nसिद्धांत : ... \n\nहल : ... \n\nअंतिम उत्तर : विकल्प (...)"
+              value={solutionHi}
+              onChange={(e) => setSolutionHi(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-2xl p-4 text-xs sm:text-sm text-slate-900 outline-none resize-none leading-relaxed font-mono focus:bg-white focus:border-indigo-500 transition"
+            />
+            <EquationLivePreview content={solutionHi} label="Hindi Solution KaTeX Preview" />
+          </div>
+
+          {/* English Solution Card */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
+              <span className="text-xs font-black text-blue-900 bg-blue-100 px-3 py-1 rounded-full">
+                English Solution (Detailed Derivation)
+              </span>
+              <FormulaInsertToolbar
+                onInsert={(snippet) => setSolutionEn((prev) => (prev ? prev + " " + snippet : snippet))}
+              />
+            </div>
+            <textarea
+              rows={9}
+              placeholder="Explaining : ... \n\nConcept : ... \n\nSolution : ... \n\nFinal Answer : Option (...)"
+              value={solutionEn}
+              onChange={(e) => setSolutionEn(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-2xl p-4 text-xs sm:text-sm text-slate-900 outline-none resize-none leading-relaxed font-mono focus:bg-white focus:border-indigo-500 transition"
+            />
+            <EquationLivePreview content={solutionEn} label="English Solution KaTeX Preview" />
+          </div>
+        </div>
       </div>
 
       {/* 5. STICKY BOTTOM ACTION BAR (Save & Slot Navigation) */}

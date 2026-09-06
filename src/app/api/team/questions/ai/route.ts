@@ -97,6 +97,7 @@ export async function POST(request: NextRequest) {
         correctAnswer: payload.correctAnswer,
         userSelectedAnswer: payload.userSelectedAnswer,
         userProvidedSolution: payload.userProvidedSolution,
+        customInstruction: payload.customInstruction || payload.regenerationPrompt || payload.prompt,
       });
       return apiSuccess({ solution: solutionResult });
     }

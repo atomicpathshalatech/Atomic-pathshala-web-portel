@@ -479,6 +479,7 @@ export async function generateSubjectAwareSolution({
   correctAnswer,
   userSelectedAnswer,
   userProvidedSolution,
+  customInstruction,
 }: {
   subject: string;
   statementEn: string;
@@ -488,6 +489,7 @@ export async function generateSubjectAwareSolution({
   correctAnswer?: string;
   userSelectedAnswer?: string;
   userProvidedSolution?: string;
+  customInstruction?: string;
 }): Promise<{
   solutionEn: string;
   solutionHi: string;
@@ -505,6 +507,7 @@ export async function generateSubjectAwareSolution({
 
     const userSelectedPrompt = userSelectedAnswer ? `User Currently Selected Option: Option (${userSelectedAnswer})` : "";
     const userReferencePrompt = userProvidedSolution ? `User Provided Draft Solution (for reference/polishing): "${userProvidedSolution}"` : "";
+    const userInstructionPrompt = customInstruction ? `TEACHER SPECIAL REFINEMENT REQUEST: "${customInstruction}". Follow this specific instruction strictly when producing or updating the solution.` : "";
 
     const prompt = `You are a Senior Academic Subject Expert for ${subject} at Atomic Pathshala (NEET & JEE Main Exam Board).
 Generate an authoritative, 100% accurate, high-precision step-by-step bilingual solution for this question.
@@ -517,6 +520,7 @@ ${optionsHi ? `Options (Hindi): ${JSON.stringify(optionsHi)}` : ""}
 ${correctAnswer ? `Target Reference Option: Option (${correctAnswer})` : ""}
 ${userSelectedPrompt}
 ${userReferencePrompt}
+${userInstructionPrompt}
 
 CRITICAL ACCURACY & CALCULATION RULES:
 1. First solve the problem step-by-step with 100% arithmetic and algebraic rigor.
