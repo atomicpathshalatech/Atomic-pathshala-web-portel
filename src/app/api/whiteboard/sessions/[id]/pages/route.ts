@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { UnauthorizedError, ForbiddenError } from "@/lib/rbac/guard";
 import { resolveWhiteboardAccess } from "@/lib/whiteboard/access";
+import { pushPageChanged } from "@/lib/whiteboard/board-mirror";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 
 const MAX_PAGES_PER_SESSION = 50;
@@ -55,6 +56,13 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
         data: { activePageNumber: nextPageNumber },
       }),
     ]);
+
+    // Without this, a student's view of "which page is the teacher on"
+    // only ever catches up via their 2.5s board-mirror poll fallback — fine
+    // for the rare case, but addPage is a common teacher action (every new
+    // slide/PDF page), so it deserves the same instant push the PATCH
+    // .../route.ts activePageNumber switch already gets.
+    await pushPageChanged(params.id, nextPageNumber);
 
     return apiSuccess({ page }, 201);
   } catch (error) {

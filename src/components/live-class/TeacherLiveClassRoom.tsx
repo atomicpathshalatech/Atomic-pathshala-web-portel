@@ -378,6 +378,14 @@ export function TeacherLiveClassRoom({
   const [undoRedoTick, setUndoRedoTick] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [uploadingBackground, setUploadingBackground] = useState(false);
+  // Surfaces real progress/errors for "load the uploaded presentation onto
+  // the board as pages" — deliberately visible state, not console.error,
+  // per the no-silent-failures requirement for this feature.
+  const [pdfLoadState, setPdfLoadState] = useState<{
+    loading: boolean;
+    progress: string | null;
+    error: string | null;
+  }>({ loading: false, progress: null, error: null });
   const [openPopup, setOpenPopup] = useState<PopupId>(null);
   const [themeModalOpen, setThemeModalOpen] = useState(false);
   const [sim3dOpen, setSim3dOpen] = useState(false);
@@ -768,6 +776,144 @@ export function TeacherLiveClassRoom({
       setLoadError(err instanceof Error ? err.message : "Could not upload the background.");
     } finally {
       setUploadingBackground(false);
+    }
+  }
+
+  /** Shared by handleLoadPresentationPdf: converts a rendered-page data URL
+   * into a File and posts it through the existing background-upload route
+   * — the same request handleBackgroundFileChange/handleInsertSimulationImage
+   * make, just parameterized on which page it targets. */
+  async function uploadPageBackgroundImage(sessionId: string, pageId: string, dataUrl: string): Promise<string> {
+    const blob = await (await fetch(dataUrl)).blob();
+    const file = new File([blob], `pdf-page-${Date.now()}.png`, { type: "image/png" });
+    const formData = new FormData();
+    formData.append("file", file);
+    const uploadRes = await fetch(`/api/whiteboard/sessions/${sessionId}/pages/${pageId}/background`, {
+      method: "POST",
+      body: formData,
+    });
+    const json = await uploadRes.json();
+    if (!uploadRes.ok || !json.success) {
+      throw new Error(json.error ?? "Could not upload the rendered page image.");
+    }
+    return json.data.page.background as string;
+  }
+
+  /**
+   * Pulls the PDF uploaded via the Pre-Flight "Material & Setup" wizard onto
+   * the board as real, annotatable pages — before this, `presentationUrl`
+   * was only ever shown as a filename badge in the header and never
+   * actually reached the canvas. Renders each page client-side with pdfjs
+   * (same proven approach as src/components/shared/WhiteboardCanvas.tsx's
+   * PDF import — dynamic import + the /public pdf.worker.min.mjs asset, so
+   * webpack/Terser never has to touch the worker's ES module code), then
+   * uploads each rendered page through the existing per-page background
+   * route so it persists and board-mirrors to students exactly like any
+   * other background image.
+   *
+   * Never silently swallows a failure: every error (download, corrupt PDF,
+   * page-cap, an individual upload) lands in pdfLoadState.error so the
+   * teacher sees it, instead of the page quietly staying blank.
+   */
+  async function handleLoadPresentationPdf() {
+    if (!wbSession) return;
+    const url = wbSession.presentationUrl;
+    const isPdf = !!url && (wbSession.presentationType === "PDF" || /\.pdf(\?|$)/i.test(url));
+    if (!url || !isPdf) {
+      setPdfLoadState({
+        loading: false,
+        progress: null,
+        error: "No PDF is set for this class yet — add one via Material & Setup first.",
+      });
+      return;
+    }
+
+    setOpenPopup(null);
+    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+    await flushAutosave();
+
+    setPdfLoadState({ loading: true, progress: "Downloading PDF…", error: null });
+    const sessionId = wbSession.id;
+    let firstNewPageNumber: number | null = null;
+
+    try {
+      const fileRes = await fetch(url);
+      if (!fileRes.ok) throw new Error(`Could not download the presentation file (HTTP ${fileRes.status}).`);
+      const arrayBuffer = await fileRes.arrayBuffer();
+
+      const pdfjsLib = await import("pdfjs-dist");
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+      const doc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+      const existingPageCount = wbSession.pages.length;
+      if (existingPageCount + doc.numPages > 50) {
+        throw new Error(
+          `This PDF has ${doc.numPages} pages, which would push the board past its 50-page-per-class limit (currently ${existingPageCount}).`
+        );
+      }
+
+      // Reuse the current page as slide 1's canvas only when it's the
+      // untouched default first page of a brand-new session — never
+      // silently overwrite a page the teacher has already drawn on.
+      const reuseCurrentPage =
+        existingPageCount === 1 &&
+        currentPage != null &&
+        (currentPage.objects?.length ?? 0) === 0 &&
+        !isBackgroundImageUrl(currentPage.background);
+
+      for (let i = 1; i <= doc.numPages; i++) {
+        setPdfLoadState({ loading: true, progress: `Rendering page ${i} of ${doc.numPages}…`, error: null });
+
+        const pdfPage = await doc.getPage(i);
+        const viewport = pdfPage.getViewport({ scale: 1 });
+        const scale = VIRTUAL_WIDTH / viewport.width;
+        const scaledViewport = pdfPage.getViewport({ scale });
+
+        const offscreen = document.createElement("canvas");
+        offscreen.width = VIRTUAL_WIDTH;
+        offscreen.height = VIRTUAL_HEIGHT;
+        const offCtx = offscreen.getContext("2d");
+        if (!offCtx) throw new Error("Could not prepare the page image (canvas unavailable).");
+        offCtx.fillStyle = "#ffffff";
+        offCtx.fillRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+        await pdfPage.render({ canvasContext: offCtx, viewport: scaledViewport }).promise;
+        const dataUrl = offscreen.toDataURL("image/png");
+
+        let targetPageId: string;
+        let targetPageNumber: number;
+        if (i === 1 && reuseCurrentPage) {
+          targetPageId = currentPage!.id;
+          targetPageNumber = currentPage!.pageNumber;
+        } else {
+          const data = await postJson(`/api/whiteboard/sessions/${sessionId}/pages`);
+          const newPage = data.page as WhiteboardPage;
+          setWbSession((prev) =>
+            prev ? { ...prev, pages: [...prev.pages, newPage], activePageNumber: newPage.pageNumber } : prev
+          );
+          targetPageId = newPage.id;
+          targetPageNumber = newPage.pageNumber;
+        }
+
+        setPdfLoadState({ loading: true, progress: `Uploading page ${i} of ${doc.numPages}…`, error: null });
+        const background = await uploadPageBackgroundImage(sessionId, targetPageId, dataUrl);
+        setWbSession((prev) =>
+          prev
+            ? { ...prev, pages: prev.pages.map((p) => (p.id === targetPageId ? { ...p, background } : p)) }
+            : prev
+        );
+
+        if (firstNewPageNumber === null) firstNewPageNumber = targetPageNumber;
+      }
+
+      if (firstNewPageNumber !== null) await switchToPage(firstNewPageNumber);
+      setPdfLoadState({ loading: false, progress: null, error: null });
+    } catch (err) {
+      if (firstNewPageNumber !== null) switchToPage(firstNewPageNumber).catch(() => undefined);
+      setPdfLoadState({
+        loading: false,
+        progress: null,
+        error: err instanceof Error ? err.message : "Could not load the presentation onto the board.",
+      });
     }
   }
 
@@ -1385,6 +1531,29 @@ export function TeacherLiveClassRoom({
         className="relative overflow-hidden bg-[#10131b] p-4 flex items-center justify-center"
         style={{ gridColumn: "2", gridRow: "2" }}
       >
+        {(pdfLoadState.loading || pdfLoadState.error) && (
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 max-w-md w-[92%]">
+            {pdfLoadState.loading ? (
+              <div className="flex items-center gap-2 bg-[#1a1b23] border border-indigo-500/40 text-indigo-200 text-xs px-4 py-2 rounded-xl shadow-2xl">
+                <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
+                <span className="truncate">{pdfLoadState.progress ?? "Loading presentation…"}</span>
+              </div>
+            ) : (
+              <div className="flex items-start gap-2 bg-red-950/90 border border-red-500/50 text-red-100 text-xs px-4 py-2.5 rounded-xl shadow-2xl">
+                <span className="material-symbols-outlined text-sm shrink-0">error</span>
+                <span className="flex-1">{pdfLoadState.error}</span>
+                <button
+                  type="button"
+                  onClick={() => setPdfLoadState({ loading: false, progress: null, error: null })}
+                  className="text-red-300 hover:text-white shrink-0"
+                  title="Dismiss"
+                >
+                  <span className="material-symbols-outlined text-sm">close</span>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
         <div
           className="relative aspect-[16/9] w-full max-w-full max-h-full h-auto rounded-xl shadow-2xl overflow-hidden border border-slate-800/80"
           style={isBackgroundImageUrl(currentPage?.background) ? undefined : slideBackgroundStyle(currentPage?.background)}
@@ -2063,6 +2232,15 @@ export function TeacherLiveClassRoom({
                   onClick={() => {
                     setOpenPopup(null);
                     backgroundFileInputRef.current?.click();
+                  }}
+                />
+                <MoreGridBtn
+                  icon={pdfLoadState.loading ? "hourglass_empty" : "picture_as_pdf"}
+                  label={pdfLoadState.loading ? "Loading…" : "Load Presentation"}
+                  disabled={pdfLoadState.loading || !wbSession.presentationUrl}
+                  onClick={() => {
+                    setOpenPopup(null);
+                    handleLoadPresentationPdf();
                   }}
                 />
                 <MoreGridBtn
