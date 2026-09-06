@@ -77,6 +77,8 @@ model User {
   accessRequests         AccessRequest[]
   doubtsResolved         Doubt[]        @relation("DoubtResolvedBy")
   notifications          Notification[]
+  devices                UserDevice[]
+  notificationPreference NotificationPreference?
   questionsCreated       Question[]     @relation("QuestionCreatedBy")
   questionsPublished     Question[]     @relation("QuestionPublishedBy")
   questionsReviewed1     Question[]     @relation("QuestionReview1By")
@@ -1722,17 +1724,82 @@ model Doubt {
 }
 
 model Notification {
-  id        String              @id @default(cuid())
-  userId    String
-  title     String
-  body      String
-  channel   NotificationChannel @default(IN_APP)
-  isRead    Boolean             @default(false)
-  createdAt DateTime            @default(now())
-  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String              @id @default(cuid())
+  userId         String
+  title          String
+  body           String
+  type           NotificationType    @default(GENERAL)
+  channel        NotificationChannel @default(IN_APP)
+  deepLink       String?
+  metadata       Json?
+  idempotencyKey String?             @unique
+  isRead         Boolean             @default(false)
+  readAt         DateTime?
+  createdAt      DateTime            @default(now())
+  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, isRead])
+  @@index([userId, createdAt])
+  @@index([type])
   @@map("notifications")
+}
+
+model UserDevice {
+  id         String         @id @default(cuid())
+  userId     String
+  fcmToken   String         @unique
+  platform   DevicePlatform @default(WEB)
+  deviceInfo Json?
+  isActive   Boolean        @default(true)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  lastUsedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isActive])
+  @@map("user_devices")
+}
+
+model ScheduledNotification {
+  id             String                      @id @default(cuid())
+  eventType      NotificationType
+  entityId       String?
+  targetType     NotificationTargetType      @default(USER)
+  targetId       String?
+  payload        Json
+  executeAt      DateTime
+  status         ScheduledNotificationStatus @default(PENDING)
+  idempotencyKey String?                     @unique
+  attemptCount   Int                         @default(0)
+  lastError      String?
+  createdAt      DateTime                    @default(now())
+  updatedAt      DateTime                    @updatedAt
+
+  @@index([status, executeAt])
+  @@index([eventType, entityId])
+  @@map("scheduled_notifications")
+}
+
+model NotificationPreference {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  classes           Boolean  @default(true)
+  tests             Boolean  @default(true)
+  dpps              Boolean  @default(true)
+  announcements     Boolean  @default(true)
+  dailyTargets      Boolean  @default(true)
+  pushEnabled       Boolean  @default(true)
+  inAppEnabled      Boolean  @default(true)
+  quietHoursEnabled Boolean  @default(false)
+  quietHoursStart   String?
+  quietHoursEnd     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
 }
 
 model AuditLog {
@@ -1919,8 +1986,54 @@ enum DoubtPriority {
 
 enum NotificationChannel {
   IN_APP
+  PUSH
   EMAIL
   WHATSAPP
+}
+
+enum NotificationType {
+  CLASS_SCHEDULED
+  CLASS_REMINDER_15_MIN
+  CLASS_LIVE
+  CLASS_RESCHEDULED
+  CLASS_CANCELLED
+  CLASS_DELETED
+  CLASS_ENDED
+  TEST_SCHEDULED
+  TEST_REMINDER_15_MIN
+  TEST_LIVE
+  TEST_ENDED
+  TEST_RESULT_AVAILABLE
+  DPP_UPLOADED
+  DPP_QUESTION_ADDED
+  DPP_SUBMITTED
+  PDF_UPLOADED
+  MODULE_UPLOADED
+  ANNOUNCEMENT_CREATED
+  NOTICE_CREATED
+  BATCH_UPDATE
+  DAILY_TARGET
+  GENERAL
+}
+
+enum DevicePlatform {
+  ANDROID
+  WEB
+  IOS
+}
+
+enum ScheduledNotificationStatus {
+  PENDING
+  PROCESSING
+  PROCESSED
+  CANCELLED
+  FAILED
+}
+
+enum NotificationTargetType {
+  USER
+  BATCH
+  ALL
 }
 
 enum BatchStatus {

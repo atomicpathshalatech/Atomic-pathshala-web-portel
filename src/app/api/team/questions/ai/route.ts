@@ -39,12 +39,16 @@ export async function POST(request: NextRequest) {
           solutionMimeType: payload.solutionMimeType || "image/png",
           subjectContext: payload.subject,
           chapterContext: payload.chapter,
+          topicContext: payload.topic,
+          difficultyContext: payload.difficulty,
         });
       } else if (payload.rawText?.trim()) {
         result = await extractBilingualQuestionFromText({
           rawText: payload.rawText.trim(),
           subjectContext: payload.subject,
           chapterContext: payload.chapter,
+          topicContext: payload.topic,
+          difficultyContext: payload.difficulty,
         });
       } else {
         return apiError("imageBase64 or rawText is required for auto extraction.", 400);
@@ -129,7 +133,9 @@ export async function POST(request: NextRequest) {
     }
 
     return apiError("Unknown AI action requested", 400);
-  } catch (error) {
-    return handleApiError(error);
+  } catch (error: any) {
+    console.error("[Questions AI Route] Execution Error:", error);
+    const msg = error?.message || (typeof error === "string" ? error : "AI extraction encountered an unexpected error.");
+    return apiError(msg, 500);
   }
 }

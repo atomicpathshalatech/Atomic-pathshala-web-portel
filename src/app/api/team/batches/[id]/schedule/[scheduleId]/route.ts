@@ -102,6 +102,51 @@ export async function PATCH(
       },
     });
 
+    // Central Notification Engine: Handle Reschedule & Cancellation
+    try {
+      const { triggerNotificationEvent } = await import("@/lib/notifications/engine");
+      const { cancelScheduledNotifications } = await import("@/lib/notifications/scheduler");
+      const { NotificationType } = await import("@/lib/notifications/types");
+
+      if (input.status === "CANCELLED") {
+        // Cancel all pending reminders for this class
+        await cancelScheduledNotifications(NotificationType.CLASS_REMINDER_15_MIN, schedule.id);
+
+        await triggerNotificationEvent({
+          eventType: NotificationType.CLASS_CANCELLED,
+          entityId: schedule.id,
+          classId: schedule.id,
+          batchId: params.id,
+          title: `Class Cancelled: ${schedule.title}`,
+          body: `Your class "${schedule.title}" has been cancelled. Please check your schedule for updates.`,
+          deepLink: `/batches/${params.id}`,
+        });
+      } else if (isLiveClassReschedule) {
+        // Invalidate old reminder jobs
+        await cancelScheduledNotifications(NotificationType.CLASS_REMINDER_15_MIN, schedule.id);
+
+        const timeStr = schedule.startsAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        const dateStr = schedule.startsAt.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
+
+        await triggerNotificationEvent({
+          eventType: NotificationType.CLASS_RESCHEDULED,
+          entityId: schedule.id,
+          classId: schedule.id,
+          batchId: params.id,
+          title: `Class Rescheduled: ${schedule.title}`,
+          body: `Your class has been rescheduled to ${dateStr} at ${timeStr}.`,
+          deepLink: `/batches/${params.id}`,
+          metadata: {
+            classId: schedule.id,
+            className: schedule.title,
+            startsAt: schedule.startsAt.toISOString(),
+          },
+        });
+      }
+    } catch (notifErr) {
+      console.warn("[Schedule Update Notification Warning]", notifErr);
+    }
+
     return apiSuccess({ schedule });
   } catch (error) {
     return handleApiError(error);
@@ -146,6 +191,14 @@ export async function DELETE(
         metadata: { scheduleId: params.scheduleId },
       },
     });
+
+    try {
+      const { cancelScheduledNotifications } = await import("@/lib/notifications/scheduler");
+      const { NotificationType } = await import("@/lib/notifications/types");
+      await cancelScheduledNotifications(NotificationType.CLASS_REMINDER_15_MIN, params.scheduleId);
+    } catch (notifErr) {
+      console.warn("[Schedule Delete Reminder Cancellation Warning]", notifErr);
+    }
 
     return apiSuccess({ removed: true });
   } catch (error) {

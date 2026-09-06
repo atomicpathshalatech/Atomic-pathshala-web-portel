@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/db";
 import { pusherServer } from "@/lib/realtime/pusher-server";
 import { resolveWhiteboardAccess } from "@/lib/whiteboard/access";
 import { apiError } from "@/lib/api/response";
@@ -44,6 +45,35 @@ export async function POST(request: NextRequest) {
     if (teacherMatch) {
       const access = await resolveWhiteboardAccess(session.user.id, teacherMatch[1]!);
       if (!access || access.role !== "TEACHER") return apiError("Forbidden", 403);
+
+      const authResponse = pusherServer.authorizeChannel(socketId, channelName);
+      return Response.json(authResponse);
+    }
+
+    const userMatch = channelName.match(/^private-user-(.+)$/);
+    const batchMatch = channelName.match(/^private-batch-(.+)$/);
+
+    if (userMatch) {
+      if (userMatch[1] !== session.user.id) {
+        return apiError("Forbidden", 403);
+      }
+      const authResponse = pusherServer.authorizeChannel(socketId, channelName);
+      return Response.json(authResponse);
+    }
+
+    if (batchMatch) {
+      const batchId = batchMatch[1]!;
+      const isEnrolled = await prisma.batchEnrollment.findFirst({
+        where: {
+          batchId,
+          status: "ACTIVE",
+          student: { userId: session.user.id },
+        },
+      });
+
+      if (!isEnrolled && session.user.role !== "ADMIN" && session.user.role !== "TEACHER") {
+        return apiError("Forbidden", 403);
+      }
 
       const authResponse = pusherServer.authorizeChannel(socketId, channelName);
       return Response.json(authResponse);

@@ -112,6 +112,27 @@ export async function POST(
           WB_EVENTS.LIVE_PHASE_CHANGED,
           { phase: "LIVE", actualStartedAt: now.toISOString() }
         );
+
+        // Dispatch authoritative CLASS_LIVE notification event to enrolled students
+        const { triggerNotificationEvent } = await import("@/lib/notifications/engine");
+        const { NotificationType } = await import("@/lib/notifications/types");
+
+        await triggerNotificationEvent({
+          eventType: NotificationType.CLASS_LIVE,
+          entityId: liveClass.batchScheduleId,
+          classId: liveClass.batchScheduleId,
+          title: "🔴 Class is LIVE Now",
+          body: "Your class is now live. Tap to join the live session!",
+          deepLink: `/live-class/${liveClass.batchScheduleId}`,
+          metadata: {
+            classId: liveClass.batchScheduleId,
+            liveStartedAt: now.toISOString(),
+          },
+          priority: "high",
+          idempotencyKey: `class-live:${liveClass.batchScheduleId}`,
+        }).catch((err) => {
+          console.error("[CLASS_LIVE notification error]", err);
+        });
       }
     } catch (pushErr) {
       console.warn("[LiveClass] Realtime broadcast warning:", pushErr);

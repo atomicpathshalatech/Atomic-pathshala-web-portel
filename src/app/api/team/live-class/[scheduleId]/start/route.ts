@@ -144,6 +144,31 @@ export async function POST(
       console.warn("Realtime broadcast warning:", pushErr);
     }
 
+    // Dispatch authoritative CLASS_LIVE notification event to enrolled students
+    if (!alreadyStarted) {
+      const { triggerNotificationEvent } = await import("@/lib/notifications/engine");
+      const { NotificationType } = await import("@/lib/notifications/types");
+
+      await triggerNotificationEvent({
+        eventType: NotificationType.CLASS_LIVE,
+        entityId: schedule.id,
+        classId: schedule.id,
+        batchId: schedule.batchId,
+        title: `🔴 Class is LIVE: ${schedule.title}`,
+        body: `Your live class has started. Join your classroom now!`,
+        deepLink: `/live-class/${schedule.id}`,
+        metadata: {
+          classId: schedule.id,
+          liveStartedAt: now.toISOString(),
+          batchId: schedule.batchId,
+        },
+        priority: "high",
+        idempotencyKey: `class-live:${schedule.id}`,
+      }).catch((err) => {
+        console.error("[CLASS_LIVE notification error]", err);
+      });
+    }
+
     return apiSuccess({
       message: "Class started successfully.",
       whiteboardSession: wbSession,

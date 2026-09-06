@@ -37,8 +37,13 @@ export interface ExtractedQuestionData {
   confidence: number;
 }
 
-// Model fallback list
-const GEMINI_MODELS = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"] as const;
+// Model fallback list with modern supported Gemini models
+const GEMINI_MODELS = [
+  "gemini-3.6-flash",
+  "gemini-3.5-flash",
+  "gemini-flash-latest",
+  "gemini-2.5-flash",
+] as const;
 const KEY_COOLDOWN_MS = 60_000;
 const keyCooldowns = new Map<string, number>();
 
@@ -49,15 +54,25 @@ export function getGeminiApiKeys(): string[] {
   const multi = process.env.GEMINI_API_KEYS?.trim();
   const single = process.env.GEMINI_API_KEY?.trim();
 
-  const keys: string[] = [];
+  const rawKeys: string[] = [];
   if (multi) {
-    keys.push(...multi.split(",").map((k) => k.trim()).filter(Boolean));
+    rawKeys.push(
+      ...multi
+        .split(",")
+        .map((k) => k.trim().replace(/^["']|["']$/g, ""))
+        .filter(Boolean)
+    );
   }
-  if (single && !keys.includes(single)) {
-    keys.push(single);
+  if (single) {
+    rawKeys.push(single.trim().replace(/^["']|["']$/g, ""));
   }
 
-  return keys.filter((k) => !k.includes("your_gemini_api_key") && k.length > 10);
+  // Filter out placeholders and long OAuth tokens (> 120 chars) that are incompatible with GoogleGenerativeAI
+  const validKeys = rawKeys.filter(
+    (k) => !k.includes("your_gemini_api_key") && k.length > 10 && k.length <= 120
+  );
+
+  return Array.from(new Set(validKeys));
 }
 
 /**
@@ -68,7 +83,7 @@ export async function executeGeminiWithFailover<T>(
 ): Promise<T> {
   const keys = getGeminiApiKeys();
   if (keys.length === 0) {
-    throw new Error("No Gemini API keys configured in environment (GEMINI_API_KEYS / GEMINI_API_KEY).");
+    throw new Error("No valid Gemini API keys configured in environment (GEMINI_API_KEYS / GEMINI_API_KEY).");
   }
 
   const now = Date.now();
@@ -87,9 +102,22 @@ export async function executeGeminiWithFailover<T>(
       } catch (err: any) {
         lastError = err;
         const msg = err?.message || String(err);
-        const isRateLimit = msg.includes("429") || msg.includes("quota") || msg.includes("ResourceExhausted");
+        const isAuthError =
+          msg.includes("401") ||
+          msg.includes("UNAUTHENTICATED") ||
+          msg.includes("invalid authentication credentials");
+        const isRateLimit =
+          msg.includes("429") ||
+          msg.includes("quota") ||
+          msg.includes("ResourceExhausted") ||
+          msg.includes("503") ||
+          msg.includes("high demand") ||
+          msg.includes("overloaded");
 
-        if (isRateLimit) {
+        if (isAuthError) {
+          // Permanently disable invalid key for current process lifecycle
+          keyCooldowns.set(key, Date.now() + 24 * 60 * 60 * 1000);
+        } else if (isRateLimit) {
           keyCooldowns.set(key, Date.now() + KEY_COOLDOWN_MS);
         }
 
@@ -111,6 +139,8 @@ export async function extractBilingualQuestionFromImage({
   solutionMimeType = "image/png",
   subjectContext,
   chapterContext,
+  topicContext,
+  difficultyContext,
 }: {
   imageBase64: string;
   mimeType?: string;
@@ -118,8 +148,12 @@ export async function extractBilingualQuestionFromImage({
   solutionMimeType?: string;
   subjectContext?: string;
   chapterContext?: string;
+  topicContext?: string;
+  difficultyContext?: string;
 }): Promise<ExtractedQuestionData> {
-  const cleanQuestionBase64 = imageBase64.replace(/^data:image\/[a-z]+;base64,/, "");
+  const cleanQuestionBase64 = imageBase64.includes(";base64,")
+    ? (imageBase64.split(";base64,")[1] ?? "").trim()
+    : imageBase64.replace(/^data:image\/[a-zA-Z0-9+.-]+;base64,/, "").trim();
 
   return executeGeminiWithFailover(async (client, modelName) => {
     const model = client.getGenerativeModel({
@@ -131,7 +165,7 @@ export async function extractBilingualQuestionFromImage({
     });
 
     const contextInstruction = subjectContext
-      ? `Teacher has confirmed Subject: "${subjectContext}" and Chapter: "${chapterContext || ""}". Use this context.`
+      ? `Teacher has confirmed Subject: "${subjectContext}", Chapter: "${chapterContext || ""}", Topic: "${topicContext || ""}"${difficultyContext ? `, Difficulty: "${difficultyContext}"` : ""}. Use this curriculum context.`
       : "";
 
     const systemPrompt = `You are the Master Question Extraction & Ingestion Engine for NEET, JEE Main, and NCERT Board exams (Atomic Pathshala).
@@ -141,22 +175,20 @@ YOUR TASK:
 Analyze the provided examination question image and extract text, mathematical formulas, chemical reactions, diagrams, and options with 100% precision into structured fields.
 
 CRITICAL EXTRACTION RULES:
-1. BILINGUAL RECOGNITION:
+1. BILINGUAL RECOGNITION & STRICT LANGUAGE ISOLATION:
    - If the image contains BOTH English and Hindi versions:
      * Extract English statement into statementEn, and Hindi statement into statementHi.
      * Extract English options into optionsEn.A, B, C, D.
      * Extract Hindi options into optionsHi.A, B, C, D.
-     * Ensure Hindi Option 1 maps to optionsHi.A, English Option 1 maps to optionsEn.A. Do NOT mix languages between fields.
-   - If the image is ONLY English:
-     * Extract English statement and options into statementEn and optionsEn.
-     * Leave statementHi as "" and optionsHi.A/B/C/D as "". Do NOT invent or auto-translate during extraction.
-   - If the image is ONLY Hindi:
-     * Extract Hindi statement and options into statementHi and optionsHi.
-     * Leave statementEn as "" and optionsEn.A/B/C/D as "". Do NOT invent or auto-translate during extraction.
+     * Maintain option mapping: Hindi Option 1 ↔ English Option 1, Hindi Option 2 ↔ English Option 2, Hindi Option 3 ↔ English Option 3, Hindi Option 4 ↔ English Option 4.
+     * Use language detection and structural matching. Do NOT rely only on line order.
+   - SINGLE-LANGUAGE RULE:
+     * If the image is ONLY English: Extract statementEn and optionsEn.A/B/C/D. Leave statementHi as "" and optionsHi.A/B/C/D as "". Do NOT invent or auto-translate during extraction.
+     * If the image is ONLY Hindi: Extract statementHi and optionsHi.A/B/C/D. Leave statementEn as "" and optionsEn.A/B/C/D as "". Do NOT invent or auto-translate during extraction.
 
 2. MATHEMATICAL & SCIENTIFIC PRECISION:
    - Use standard LaTeX notation for equations: $...$ for inline math, $$...$$ for block formulas.
-   - For chemical formulas, write formulas like $\\text{CaCO}_3$ or $\\text{H}_2\\text{SO}_4$.
+   - For chemical formulas, preserve subscripts and charges (e.g. $\\text{CaCO}_3$, $\\text{H}_2\\text{SO}_4$, $\\text{Fe}^{3+}$).
    - Preserve units, powers, fractions, vectors, superscripts and subscripts.
 
 3. OPTIONS SEPARATION:
@@ -215,7 +247,9 @@ RETURN STRICT JSON SCHEMA:
     ];
 
     if (solutionImageBase64) {
-      const cleanSolutionBase64 = solutionImageBase64.replace(/^data:image\/[a-z]+;base64,/, "");
+      const cleanSolutionBase64 = solutionImageBase64.includes(";base64,")
+        ? (solutionImageBase64.split(";base64,")[1] ?? "").trim()
+        : solutionImageBase64.replace(/^data:image\/[a-zA-Z0-9+.-]+;base64,/, "").trim();
       parts.push({
         text: "Below is the attached SOLUTION REFERENCE image for this question:",
       });
@@ -276,10 +310,14 @@ export async function extractBilingualQuestionFromText({
   rawText,
   subjectContext,
   chapterContext,
+  topicContext,
+  difficultyContext,
 }: {
   rawText: string;
   subjectContext?: string;
   chapterContext?: string;
+  topicContext?: string;
+  difficultyContext?: string;
 }): Promise<ExtractedQuestionData> {
   return executeGeminiWithFailover(async (client, modelName) => {
     const model = client.getGenerativeModel({
@@ -291,7 +329,7 @@ export async function extractBilingualQuestionFromText({
     });
 
     const contextInstruction = subjectContext
-      ? `Teacher has confirmed Subject: "${subjectContext}" and Chapter: "${chapterContext || ""}". Use this context.`
+      ? `Teacher has confirmed Subject: "${subjectContext}", Chapter: "${chapterContext || ""}", Topic: "${topicContext || ""}"${difficultyContext ? `, Difficulty: "${difficultyContext}"` : ""}. Use this curriculum context.`
       : "";
 
     const prompt = `You are the Master Question Extraction & Ingestion Engine for NEET, JEE Main, and NCERT Board exams (Atomic Pathshala).
@@ -299,13 +337,27 @@ ${contextInstruction}
 
 Analyze the following pasted examination question text and parse it into structured bilingual format.
 
-RULES:
-1. If text contains both Hindi and English, separate them into statementEn/optionsEn and statementHi/optionsHi.
-2. If text is English only, populate English fields and leave Hindi fields as "".
-3. If text is Hindi only, populate Hindi fields and leave English fields as "".
-4. Separate question statement from Options A, B, C, D. Map (1)/(2)/(3)/(4) or (A)/(B)/(C)/(D) to keys A, B, C, D.
-5. Deduce the correct answer option ("A"|"B"|"C"|"D").
-6. Convert mathematical and chemical formulas into LaTeX $...$.
+CRITICAL EXTRACTION RULES:
+1. BILINGUAL RECOGNITION & STRICT LANGUAGE ISOLATION:
+   - If text contains BOTH English and Hindi versions:
+     * Extract English statement into statementEn, and Hindi statement into statementHi.
+     * Extract English options into optionsEn.A, B, C, D.
+     * Extract Hindi options into optionsHi.A, B, C, D.
+     * Maintain option mapping: Hindi Option 1 ↔ English Option 1, Hindi Option 2 ↔ English Option 2, Hindi Option 3 ↔ English Option 3, Hindi Option 4 ↔ English Option 4.
+     * Use language detection and semantic matching. Do NOT rely only on physical line order.
+   - SINGLE-LANGUAGE RULE:
+     * If text is ONLY English: Extract statementEn and optionsEn.A/B/C/D. Leave statementHi as "" and optionsHi.A/B/C/D as "". Do NOT invent or auto-translate during extraction.
+     * If text is ONLY Hindi: Extract statementHi and optionsHi.A/B/C/D. Leave statementEn as "" and optionsEn.A/B/C/D as "". Do NOT invent or auto-translate during extraction.
+
+2. MATHEMATICAL & SCIENTIFIC PRECISION:
+   - Convert mathematical equations, symbols, fractions, and powers to standard LaTeX notation: $...$ for inline math, $$...$$ for block math.
+   - Preserve chemical equations and formulas verbatim (e.g. $\\text{H}_2\\text{SO}_4$).
+
+3. OPTION NUMBERING CONVERSION:
+   - Map (1)/(2)/(3)/(4) or (A)/(B)/(C)/(D) or (a)/(b)/(c)/(d) consistently to keys "A", "B", "C", "D".
+
+4. CORRECT ANSWER DEDUCTION:
+   - Deduce the scientifically correct option ("A", "B", "C", or "D") and place inside correctAnswer array.
 
 Raw text:
 """
@@ -320,9 +372,9 @@ RETURN STRICT JSON SCHEMA:
   "optionsHi": { "A": "...", "B": "...", "C": "...", "D": "..." },
   "correctAnswer": ["A"],
   "subject": "${subjectContext || "Biology"}",
-  "chapter": "${chapterContext || ""}",
-  "topic": "Topic name",
-  "difficulty": "MEDIUM",
+  "chapter": "${chapterContext || "General"}",
+  "topic": "${topicContext || "Core Concept"}",
+  "difficulty": "${difficultyContext || "MEDIUM"}",
   "type": "SINGLE_CORRECT"
 }`;
 
@@ -352,8 +404,8 @@ RETURN STRICT JSON SCHEMA:
       hasFigure: false,
       subject: parsed.subject || (subjectContext as any) || "Biology",
       chapter: parsed.chapter || chapterContext || "General",
-      topic: parsed.topic || "Core Concept",
-      difficulty: parsed.difficulty || "MEDIUM",
+      topic: parsed.topic || topicContext || "Core Concept",
+      difficulty: parsed.difficulty || (difficultyContext as any) || "MEDIUM",
       type: parsed.type || "SINGLE_CORRECT",
       category: "NCERT Canonical",
       tags: ["NEET", "NCERT"],

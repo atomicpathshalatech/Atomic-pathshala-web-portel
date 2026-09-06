@@ -59,7 +59,7 @@ export async function startGenerationJob(params: StartJobParams): Promise<{
       generationPlan: params.generationPlan as any,
       sourcePdfId: params.sourcePdfId || null,
       modelProvider: "Gemini",
-      modelName: "gemini-1.5-flash",
+      modelName: "gemini-3.6-flash",
       promptVersion: PROMPT_VERSION,
       costEstimate: {
         totalQuestions: params.totalQuestions,

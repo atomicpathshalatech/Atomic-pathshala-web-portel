@@ -243,10 +243,22 @@ export function UnifiedQuestionEditor({
 
     window.addEventListener("paste", handleGlobalPaste);
     return () => window.removeEventListener("paste", handleGlobalPaste);
-  }, [subject, chapter]);
+  }, [subject, chapter, topic, difficulty]);
 
   // E. Automatic Image OCR Extraction (No manual button click needed)
   const handleImageUploadAndExtract = (file: File) => {
+    // 1. Mandatory Metadata Gate
+    if (!subject?.trim() || !chapter?.trim() || !topic?.trim()) {
+      const errs: Record<string, boolean> = {};
+      const missing: string[] = [];
+      if (!subject?.trim()) { errs.subject = true; missing.push("Subject"); }
+      if (!chapter?.trim()) { errs.chapter = true; missing.push("Chapter"); }
+      if (!topic?.trim()) { errs.topic = true; missing.push("Topic"); }
+      setMissingFieldErrors((prev) => ({ ...prev, ...errs }));
+      toast.error(`Please select mandatory metadata (${missing.join(", ")}) at the top before extracting.`);
+      return;
+    }
+
     if (!file.type.startsWith("image/")) {
       toast.error("Please upload an image file (PNG, JPG, WebP).");
       return;
@@ -271,13 +283,15 @@ export function UnifiedQuestionEditor({
               mimeType: file.type,
               subject,
               chapter,
+              topic,
+              difficulty,
             },
           }),
         });
 
         const json = await res.json();
         if (!res.ok || !json.success) {
-          throw new Error(json.error?.message || "Extraction failed.");
+          throw new Error(typeof json.error === "string" ? json.error : json.error?.message || "Extraction failed.");
         }
 
         const data = json.data?.result;
@@ -325,6 +339,18 @@ export function UnifiedQuestionEditor({
 
   // F. Automatic Text Extraction
   const handleTextAutoExtract = async (rawText: string) => {
+    // 1. Mandatory Metadata Gate
+    if (!subject?.trim() || !chapter?.trim() || !topic?.trim()) {
+      const errs: Record<string, boolean> = {};
+      const missing: string[] = [];
+      if (!subject?.trim()) { errs.subject = true; missing.push("Subject"); }
+      if (!chapter?.trim()) { errs.chapter = true; missing.push("Chapter"); }
+      if (!topic?.trim()) { errs.topic = true; missing.push("Topic"); }
+      setMissingFieldErrors((prev) => ({ ...prev, ...errs }));
+      toast.error(`Please select mandatory metadata (${missing.join(", ")}) at the top before extracting.`);
+      return;
+    }
+
     setIsExtracting(true);
     toast.info("Parsing pasted text into structured question format...");
 
@@ -338,13 +364,15 @@ export function UnifiedQuestionEditor({
             rawText,
             subject,
             chapter,
+            topic,
+            difficulty,
           },
         }),
       });
 
       const json = await res.json();
       if (!res.ok || !json.success) {
-        throw new Error(json.error?.message || "Text extraction failed.");
+        throw new Error(typeof json.error === "string" ? json.error : json.error?.message || "Text extraction failed.");
       }
 
       const data = json.data?.result;
@@ -410,7 +438,7 @@ export function UnifiedQuestionEditor({
 
       const json = await res.json();
       if (!res.ok || !json.success) {
-        throw new Error(json.error?.message || "Translation check failed.");
+        throw new Error(typeof json.error === "string" ? json.error : json.error?.message || "Translation check failed.");
       }
 
       const resData = json.data?.result;
@@ -474,7 +502,7 @@ export function UnifiedQuestionEditor({
 
       const json = await res.json();
       if (!res.ok || !json.success) {
-        throw new Error(json.error?.message || "Solution generation failed.");
+        throw new Error(typeof json.error === "string" ? json.error : json.error?.message || "Solution generation failed.");
       }
 
       const solData = json.data?.solution;
@@ -867,7 +895,15 @@ export function UnifiedQuestionEditor({
       </div>
 
       {/* 3. AUTO-EXTRACT DROP & PASTE ZONE (Section 4 — No Manual Click Needed) */}
-      <div className="bg-gradient-to-r from-purple-50 via-indigo-50 to-blue-50 border border-indigo-200/80 rounded-3xl p-5 shadow-sm space-y-3">
+      <div
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          e.preventDefault();
+          const file = e.dataTransfer.files?.[0];
+          if (file) handleImageUploadAndExtract(file);
+        }}
+        className="bg-gradient-to-r from-purple-50 via-indigo-50 to-blue-50 border border-indigo-200/80 rounded-3xl p-5 shadow-sm space-y-3"
+      >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-purple-500/20">

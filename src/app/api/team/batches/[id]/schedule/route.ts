@@ -105,6 +105,33 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       },
     });
 
+    // Trigger CLASS_SCHEDULED notification & automatically queue 15m reminder
+    try {
+      const { triggerNotificationEvent } = await import("@/lib/notifications/engine");
+      const { NotificationType } = await import("@/lib/notifications/types");
+
+      const timeStr = schedule.startsAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      const dateStr = schedule.startsAt.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
+
+      await triggerNotificationEvent({
+        eventType: NotificationType.CLASS_SCHEDULED,
+        entityId: schedule.id,
+        classId: schedule.id,
+        batchId: params.id,
+        title: `Class Scheduled: ${schedule.title}`,
+        body: `Your ${schedule.subject || "live"} class is scheduled for ${dateStr} at ${timeStr}.`,
+        deepLink: `/batches/${params.id}`,
+        metadata: {
+          classId: schedule.id,
+          className: schedule.title,
+          startsAt: schedule.startsAt.toISOString(),
+        },
+        idempotencyKey: `class-scheduled:${schedule.id}`,
+      });
+    } catch (notifErr) {
+      console.warn("[CLASS_SCHEDULED Notification Warning]", notifErr);
+    }
+
     return apiSuccess({ schedule }, 201);
   } catch (error) {
     return handleApiError(error);

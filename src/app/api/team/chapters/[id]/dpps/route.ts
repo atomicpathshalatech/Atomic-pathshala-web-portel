@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -111,6 +111,29 @@ export async function POST(
         metadata: { chapterId: chapter.id, name: dpp.name, code: dpp.code },
       },
     });
+
+    // Central Notification Engine: Notify students of new DPP
+    try {
+      const { triggerNotificationEvent } = await import("@/lib/notifications/engine");
+      const { NotificationType } = await import("@/lib/notifications/types");
+
+      await triggerNotificationEvent({
+        eventType: NotificationType.DPP_UPLOADED,
+        entityId: dpp.id,
+        dppId: dpp.id,
+        chapterId: chapter.id,
+        title: `New DPP Added: ${dpp.name}`,
+        body: `A new daily practice problem sheet has been uploaded for ${chapter.title}. Attempt it now!`,
+        deepLink: `/student/practice`,
+        metadata: {
+          dppId: dpp.id,
+          chapterId: chapter.id,
+          chapterTitle: chapter.title,
+        },
+      });
+    } catch (notifErr) {
+      console.warn("[DPP Notification Warning]", notifErr);
+    }
 
     return apiSuccess(
       { dpp: { ...dpp, slot, slotLabel: `DPP ${slot}`, slotRequired: isDppSlotMandatory(slot), slotComplete: false } },

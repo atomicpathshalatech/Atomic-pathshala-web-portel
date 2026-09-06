@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LogoutButton } from "@/components/student/LogoutButton";
 import { GoalSelectionModal } from "@/components/student/GoalSelectionModal";
+import { NotificationBell } from "@/components/student/NotificationBell";
 
 export type StudentNavItem = {
   href: string;
@@ -310,26 +311,7 @@ export function StudentShell({
             </Link>
 
             {/* Notification Bell */}
-            <Link
-              href="/notifications"
-              aria-label="Notifications"
-              className="relative w-9 h-9 flex items-center justify-center rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 shadow-2xs hover:border-slate-300 transition-all focus:outline-none"
-            >
-              <svg
-                className="w-4.5 h-4.5 text-slate-600"
-                fill="none"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="1.8"
-                viewBox="0 0 24 24"
-              >
-                <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
-                <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
-              </svg>
-              {/* Notification Dot */}
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-orange-500 rounded-full ring-2 ring-white" />
-            </Link>
+            <NotificationBell />
 
             {/* User Profile Avatar with Dropdown Indicator */}
             <AccountMenu studentName={studentName} studentIdCode={studentIdCode} />

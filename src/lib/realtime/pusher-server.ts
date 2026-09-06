@@ -1,4 +1,3 @@
-import "server-only";
 import Pusher from "pusher";
 
 export { sessionChannel, teacherChannel, WB_EVENTS } from "./events";

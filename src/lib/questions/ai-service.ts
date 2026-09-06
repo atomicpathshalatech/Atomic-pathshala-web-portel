@@ -150,7 +150,7 @@ export async function extractFromImage(
     throw new Error("Gemini AI is not configured. Please set GEMINI_API_KEY in .env");
   }
 
-  const model = client.getGenerativeModel({ model: "gemini-1.5-flash" });
+  const model = client.getGenerativeModel({ model: "gemini-3.6-flash" });
 
   const prompt = `You are an expert exam question digitizer for Indian national competitive exams (NEET, JEE Main, CBSE).
 Analyze the provided question image and extract all elements with high precision.
@@ -219,7 +219,7 @@ export async function generateEducationalTranslation(
   const client = getGeminiClient();
   if (client) {
     try {
-      const model = client.getGenerativeModel({ model: "gemini-1.5-flash" });
+      const model = client.getGenerativeModel({ model: "gemini-3.6-flash" });
       const targetLang = sourceLanguage === "ENGLISH" ? "Hindi (Devanagari)" : "English";
 
       const prompt = `Translate the following scientific / mathematical exam content from ${sourceLanguage} to ${targetLang}.
@@ -276,7 +276,7 @@ export async function verifyTranslation(
   const client = getGeminiClient();
   if (client) {
     try {
-      const model = client.getGenerativeModel({ model: "gemini-1.5-flash" });
+      const model = client.getGenerativeModel({ model: "gemini-3.6-flash" });
       const prompt = `You are an NCERT Bilingual Examination Quality Auditor.
 Compare the English question and Hindi translation:
 English: "${englishText}"

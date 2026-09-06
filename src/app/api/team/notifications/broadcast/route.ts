@@ -81,14 +81,32 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Multi-channel dispatch (In-app, WhatsApp, Email)
-    for (const userId of recipientUserIds) {
-      await dispatchNotification({
-        userId,
-        title: input.title,
-        body: input.body,
-        channel: input.channel,
-      });
+    // Dispatch via Central Notification Engine (FCM, In-App, Pusher Realtime)
+    const { triggerNotificationEvent } = await import("@/lib/notifications/engine");
+    const { NotificationType } = await import("@/lib/notifications/types");
+
+    await triggerNotificationEvent({
+      eventType: NotificationType.ANNOUNCEMENT_CREATED,
+      entityId: broadcast.id,
+      recipientUserIds,
+      title: input.title,
+      body: input.body,
+      deepLink: "/notifications",
+      idempotencyKey: `broadcast:${broadcast.id}`,
+    }).catch((err) => {
+      console.error("[Broadcast Engine Dispatch Error]", err);
+    });
+
+    // If WhatsApp/Email channel was requested, also trigger external dispatch
+    if (input.channel === "WHATSAPP" || input.channel === "ALL_CHANNELS") {
+      for (const userId of recipientUserIds.slice(0, 100)) {
+        await dispatchNotification({
+          userId,
+          title: input.title,
+          body: input.body,
+          channel: input.channel,
+        }).catch(() => null);
+      }
     }
 
     await prisma.auditLog.create({

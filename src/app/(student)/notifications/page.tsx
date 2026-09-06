@@ -20,6 +20,9 @@ export default async function NotificationsPage() {
     id: n.id,
     title: n.title,
     body: n.body,
+    type: n.type,
+    deepLink: n.deepLink,
+    metadata: n.metadata,
     isRead: n.isRead,
     createdAt: n.createdAt.toISOString(),
   }));
