@@ -3,8 +3,9 @@ import Link from "next/link";
 import { requireStudentSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import type { BatchSchedule, Teacher, User } from "@prisma/client";
-import { NextClassCountdown } from "@/components/student/NextClassCountdown";
+import { NextClassCard } from "@/components/student/NextClassCard";
 import { FeatureCard } from "@/components/student/FeatureCard";
+import { getEffectiveScheduleStatus } from "@/lib/schedule/access-rules";
 
 export const metadata: Metadata = {
   title: "Student Hub — Home",
@@ -48,14 +49,36 @@ export default async function StudentDashboardPage() {
     .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
 
   const nextClass = allUpcoming[0] ?? null;
-  const FIFTEEN_MINS_MS = 15 * 60 * 1000;
-  const isClassLive = nextClass
-    ? nextClass.status === "LIVE" || (nextClass.startsAt <= now && nextClass.endsAt >= now)
-    : false;
-  const isWaitingRoomOpen = nextClass
-    ? (nextClass.startsAt.getTime() - now.getTime()) <= FIFTEEN_MINS_MS && nextClass.endsAt >= now
-    : false;
-  const canJoinClass = isClassLive || isWaitingRoomOpen;
+
+  // Authoritative T-15 / live / ended state for the "Next Scheduled
+  // Session" card - reuses the same state machine the live-class join
+  // flow and its by-schedule status API are built on
+  // (src/lib/schedule/access-rules.ts) rather than re-deriving the T-15
+  // boundary here, so the two can never disagree about whether a class is
+  // actually joinable or live yet.
+  const nextClassEffectiveStatus =
+    nextClass && nextClass.type === "LIVE_CLASS"
+      ? getEffectiveScheduleStatus(
+          {
+            id: nextClass.id,
+            startsAt: nextClass.startsAt,
+            endsAt: nextClass.endsAt,
+            status: nextClass.status,
+            type: nextClass.type,
+          },
+          now
+        )
+      : null;
+  const isClassLive = nextClassEffectiveStatus === "LIVE";
+  // A live class that already ended (or was auto-cancelled for not
+  // starting within the grace period) must not keep showing as the next
+  // scheduled live session.
+  const showNextClassCard =
+    !!nextClass &&
+    (nextClass.type !== "LIVE_CLASS" ||
+      (nextClassEffectiveStatus !== "COMPLETED" &&
+        nextClassEffectiveStatus !== "CANCELLED" &&
+        nextClassEffectiveStatus !== "NOT_CONDUCTED"));
 
   // 2. Fetch real counts for feature badges (Zero fake data)
   const [
@@ -145,41 +168,15 @@ export default async function StudentDashboardPage() {
       </section>
 
       {/* Up Next / Live Spotlight */}
-      {nextClass && (
-        <section className="bg-white border border-blue-200/80 rounded-2xl p-4 sm:p-5 shadow-2xs">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping" />
-                <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">
-                  Next Scheduled Session &middot; {nextClass.type.replace("_", " ")}
-                </span>
-              </div>
-              <h2 className="text-base sm:text-lg font-bold text-slate-900">
-                {nextClass.title}
-              </h2>
-              {nextClass.teacher && (
-                <p className="text-xs text-slate-500">
-                  Instructor: <b>{nextClass.teacher.user.name}</b>
-                </p>
-              )}
-              <div className="pt-0.5">
-                <NextClassCountdown startsAtIso={nextClass.startsAt.toISOString()} />
-              </div>
-            </div>
-
-            <Link
-              href={nextClass.type === "LIVE_CLASS" ? `/live-class/${nextClass.id}` : "/schedule"}
-              className="px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs shadow-2xs active:scale-95 transition-all text-center self-start sm:self-auto shrink-0"
-            >
-              {isClassLive
-                ? "Join Live Class Now"
-                : isWaitingRoomOpen
-                ? "Enter Waiting Room"
-                : "View Classroom"}
-            </Link>
-          </div>
-        </section>
+      {showNextClassCard && nextClass && (
+        <NextClassCard
+          scheduleId={nextClass.id}
+          type={nextClass.type}
+          title={nextClass.title}
+          teacherName={nextClass.teacher?.user.name ?? null}
+          startsAtIso={nextClass.startsAt.toISOString()}
+          initialStatus={nextClassEffectiveStatus ?? "SCHEDULED"}
+        />
       )}
 
       {/* SECTION 2 — LEARN */}
