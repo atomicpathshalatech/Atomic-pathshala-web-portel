@@ -16,10 +16,36 @@ const config: Config = {
   theme: {
     container: {
       center: true,
-      padding: "2rem",
+      // Was a flat "2rem": 32px of padding on each side even at 320px, i.e.
+      // 20% of a small phone's width spent on gutters. Scales with the
+      // viewport now, matching the PageContainer component's own scale.
+      padding: {
+        DEFAULT: "1rem",
+        sm: "1.5rem",
+        lg: "2rem",
+      },
       screens: { "2xl": "1400px" },
     },
     extend: {
+      // `xs` fills the gap below Tailwind's `sm` (640px). It was already
+      // referenced by StudentLiveClassRoom.tsx before it existed here, which
+      // silently produced dead classes (`hidden xs:flex` = permanently
+      // hidden, because `xs:flex` was never generated).
+      screens: {
+        xs: "480px",
+      },
+      // Named layer tokens so overlays stop competing on a flat `z-50`
+      // (82 elements used it). Numeric z-* utilities keep working; these are
+      // additive and give new/edited overlays a defined order.
+      zIndex: {
+        raised: "10",
+        sticky: "20",
+        header: "30",
+        drawer: "40",
+        modal: "50",
+        popover: "60",
+        toast: "70",
+      },
       colors: {
         "inverse-primary": "#b3c5ff",
         "surface-container-lowest": "#ffffff",
@@ -111,17 +137,26 @@ const config: Config = {
         "headline-md": ["Geist", "sans-serif"],
         "body-md": ["Inter", "sans-serif"],
       },
+      // Headings scale continuously instead of stepping between a desktop
+      // token and a hand-swapped `-mobile` token. Each clamp()'s upper bound
+      // is the previous fixed value, so desktop rendering is byte-identical;
+      // only the small-viewport end changes. Body/label sizes stay fixed --
+      // shrinking 16px body text below 16px hurts readability and triggers
+      // iOS input zoom.
       fontSize: {
-        "body-lg": ["18px", { lineHeight: "28px", fontWeight: "400" }],
+        "body-lg": ["clamp(1rem, 0.9375rem + 0.3125vw, 1.125rem)", { lineHeight: "1.55", fontWeight: "400" }],
         "label-sm": ["12px", { lineHeight: "16px", fontWeight: "500" }],
         "display-lg-mobile": [
           "36px",
           { lineHeight: "42px", letterSpacing: "-0.02em", fontWeight: "700" },
         ],
         "label-md": ["14px", { lineHeight: "20px", letterSpacing: "0.01em", fontWeight: "600" }],
-        "headline-lg": ["32px", { lineHeight: "40px", fontWeight: "600" }],
-        "display-lg": ["48px", { lineHeight: "56px", letterSpacing: "-0.02em", fontWeight: "700" }],
-        "headline-md": ["24px", { lineHeight: "32px", fontWeight: "600" }],
+        "headline-lg": ["clamp(1.5rem, 1.125rem + 1.875vw, 2rem)", { lineHeight: "1.25", fontWeight: "600" }],
+        "display-lg": [
+          "clamp(2.25rem, 1.5rem + 3.75vw, 3rem)",
+          { lineHeight: "1.15", letterSpacing: "-0.02em", fontWeight: "700" },
+        ],
+        "headline-md": ["clamp(1.25rem, 1.0625rem + 0.9375vw, 1.5rem)", { lineHeight: "1.3", fontWeight: "600" }],
         "body-md": ["16px", { lineHeight: "24px", fontWeight: "400" }],
       },
     },

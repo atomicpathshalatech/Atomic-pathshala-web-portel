@@ -8,12 +8,70 @@
   * {
     @apply border-outline-variant;
   }
+
+  /*
+   * Single source of truth for the app chrome's dimensions. Before this,
+   * three different hardcoded header heights were in circulation
+   * (TeamShell `top-[65px]`, StudentShell `h-[64px]`, and a `top-[73px]`
+   * elsewhere), so a sticky sidebar's offset silently disagreed with the
+   * actual header the moment it wrapped or the browser was zoomed.
+   */
+  :root {
+    --header-h: 4rem; /* 64px */
+    --sidebar-w: 16rem; /* 256px */
+  }
+
+  html {
+    /*
+     * Stops mobile Safari/Chrome from inflating text in landscape, which
+     * silently breaks otherwise-correct layouts.
+     */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
   body {
     @apply bg-background text-on-background;
   }
 }
 
 @layer utilities {
+  /*
+   * Height that respects the mobile browser's collapsing address bar.
+   * `100vh` on mobile is taller than the visible viewport, which is what
+   * pushes fixed bottom toolbars (the live-class toolbar in particular)
+   * underneath the browser UI. `dvh` tracks the real visible height, with
+   * a `vh` fallback for anything that does not support it.
+   */
+  .h-screen-safe {
+    height: 100vh;
+    height: 100dvh;
+  }
+  .min-h-screen-safe {
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  /*
+   * Height of the area below the app header. Replaces per-component
+   * `calc(100vh - 65px)` arithmetic that hardcoded a header height.
+   */
+  .h-below-header {
+    height: calc(100vh - var(--header-h));
+    height: calc(100dvh - var(--header-h));
+  }
+
+  /*
+   * Flex and grid children default to `min-width: auto`, so a long word, a
+   * wide table or a `whitespace-nowrap` row makes the *parent* grow instead
+   * of scrolling inside it -- the most common source of page-wide
+   * horizontal overflow. Applied opt-in per container rather than globally,
+   * so no existing layout that relies on intrinsic sizing is disturbed.
+   */
+  .flex-min-0 > * {
+    min-width: 0;
+  }
+
   .material-symbols-outlined {
     font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
     display: inline-block;
