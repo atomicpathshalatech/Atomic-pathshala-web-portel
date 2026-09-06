@@ -377,6 +377,10 @@ export function TeacherLiveClassRoom({
   } | null>(null);
   const [undoRedoTick, setUndoRedoTick] = useState(0);
   const [zoom, setZoom] = useState(1);
+  // Below lg the right panel slides in over the canvas rather than holding
+  // a fixed 320px column open on a phone. It is never unmounted - see the
+  // .live-panel rules in globals.css and the VideoStrip note below.
+  const [panelOpen, setPanelOpen] = useState(false);
   const mainCanvasContainerRef = useRef<HTMLElement>(null);
   const [stageDimensions, setStageDimensions] = useState<{ width: number; height: number }>({ width: 960, height: 540 });
 
@@ -1317,8 +1321,7 @@ export function TeacherLiveClassRoom({
   return (
     <div
       ref={containerRef}
-      className="fixed inset-0 w-screen h-screen grid bg-[#10131b] text-white overflow-hidden select-none z-50"
-      style={{ gridTemplateColumns: "64px minmax(0, 1fr) 320px", gridTemplateRows: "56px 1fr 64px" }}
+      className="live-shell fixed inset-0 bg-[#10131b] text-white overflow-hidden select-none z-modal"
     >
       <input
         ref={backgroundFileInputRef}
@@ -1329,10 +1332,7 @@ export function TeacherLiveClassRoom({
       />
 
       {/* Left rail */}
-      <aside
-        className="border-r border-[#2d2e3b] bg-[#1a1b23] flex flex-col items-center py-4"
-        style={{ gridColumn: "1", gridRow: "1 / 4" }}
-      >
+      <aside className="live-rail border-r border-[#2d2e3b] bg-[#1a1b23] flex-col items-center py-4">
         <button
           type="button"
           onClick={() => router.push("/team/batches")}
@@ -1348,10 +1348,7 @@ export function TeacherLiveClassRoom({
       </aside>
 
       {/* Header */}
-      <header
-        className="flex items-center justify-between gap-4 px-6 border-b border-[#2d2e3b] bg-[#1a1b23]"
-        style={{ gridColumn: "2 / 4", gridRow: "1" }}
-      >
+      <header className="live-header flex items-center justify-between gap-2 sm:gap-4 px-3 sm:px-4 lg:px-6 border-b border-[#2d2e3b] bg-[#1a1b23] min-w-0">
         <div className="min-w-0 flex items-center gap-3">
           <div>
             <p className="text-[11px] text-gray-500 truncate">{batchName}</p>
@@ -1571,8 +1568,7 @@ export function TeacherLiveClassRoom({
       {/* Main canvas area */}
       <main
         ref={mainCanvasContainerRef}
-        className="relative overflow-hidden bg-[#10131b] p-3 flex items-center justify-center min-w-0 min-h-0"
-        style={{ gridColumn: "2", gridRow: "2" }}
+        className="live-canvas relative overflow-hidden bg-[#10131b] p-2 sm:p-3 flex items-center justify-center min-w-0 min-h-0"
       >
         {(pdfLoadState.loading || pdfLoadState.error) && (
           <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 max-w-md w-[92%]">
@@ -1674,10 +1670,32 @@ export function TeacherLiveClassRoom({
         </div>
       </main>
 
+      {/* Panel toggle + scrim, below lg only. The panel itself is never
+          conditionally rendered: VideoStrip holds the room's single LiveKit
+          connection, and remounting it opens a second one under the same
+          identity, which puts the two into a reconnect loop. */}
+      <button
+        type="button"
+        onClick={() => setPanelOpen((o) => !o)}
+        className="lg:hidden fixed right-0 top-1/2 -translate-y-1/2 z-drawer w-9 h-16 rounded-l-xl bg-[#1a1b23] border border-r-0 border-[#2d2e3b] text-gray-300 hover:text-white flex items-center justify-center shadow-lg"
+        aria-label={panelOpen ? "Hide video and chat" : "Show video and chat"}
+        aria-expanded={panelOpen}
+      >
+        <span className="material-symbols-outlined text-xl">
+          {panelOpen ? "chevron_right" : "chevron_left"}
+        </span>
+      </button>
+      {panelOpen && (
+        <div
+          className="lg:hidden fixed inset-0 z-sticky bg-black/40"
+          onClick={() => setPanelOpen(false)}
+        />
+      )}
+
       {/* Right panel: video + Messages/Questions */}
       <aside
-        className="bg-[#1a1b23] border-l border-[#2d2e3b] flex flex-col min-h-0"
-        style={{ gridColumn: "3", gridRow: "2 / 4" }}
+        data-open={panelOpen ? "true" : "false"}
+        className="live-panel bg-[#1a1b23] border-l border-[#2d2e3b] flex flex-col min-h-0"
       >
         <div className="h-56 bg-black relative border-b border-[#2d2e3b] shrink-0">
           <VideoStrip whiteboardSessionId={wbSession.id} variant="panel" settingsPortalRef={settingsPortalRef} />
@@ -1743,10 +1761,7 @@ export function TeacherLiveClassRoom({
       </aside>
 
       {/* Bottom toolbar */}
-      <footer
-        className="flex items-center justify-between px-6 border-t border-[#2d2e3b] bg-[#1a1b23] relative min-w-0"
-        style={{ gridColumn: "2", gridRow: "3" }}
-      >
+      <footer className="live-toolbar flex items-center justify-between gap-1 px-2 sm:px-4 lg:px-6 border-t border-[#2d2e3b] bg-[#1a1b23] relative min-w-0">
         {openPopup && <div className="fixed inset-0 z-30" onClick={() => setOpenPopup(null)} />}
 
         {/* Tools group. relative + z-40: see the backdrop-stacking comment

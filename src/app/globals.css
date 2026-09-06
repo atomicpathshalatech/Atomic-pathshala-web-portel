@@ -111,6 +111,118 @@
 }
 
 /* ===========================================================
+   LIVE CLASS SHELL
+   -----------------------------------------------------------
+   The teacher room previously declared its grid inline:
+
+     style={{ gridTemplateColumns: "64px minmax(0, 1fr) 320px",
+              gridTemplateRows: "56px 1fr 64px" }}
+
+   Inline styles cannot be overridden by a breakpoint, so those track
+   sizes applied at every width: 384px of the viewport was reserved for
+   chrome whether the screen was 2560px or 375px wide. On a phone the
+   right panel alone was wider than the screen, so the canvas column
+   collapsed toward zero and the panel sat outside the viewport.
+
+   Named grid areas let each breakpoint re-arrange the same five children
+   without any of them knowing about breakpoints, and without ever
+   unmounting the panel (VideoStrip must keep exactly one LiveKit
+   connection - remounting it starts a second one).
+   =========================================================== */
+
+.live-shell {
+  --live-header-h: 3rem; /* 48px */
+  --live-toolbar-h: 3.5rem; /* 56px */
+  --live-rail-w: 4rem; /* 64px */
+  --live-panel-w: 20rem; /* 320px */
+
+  display: grid;
+  height: 100vh;
+  height: 100dvh; /* mobile browser chrome must not hide the toolbar */
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: var(--live-header-h) minmax(0, 1fr) var(--live-toolbar-h);
+  grid-template-areas:
+    "header"
+    "canvas"
+    "toolbar";
+}
+
+.live-rail {
+  grid-area: rail;
+}
+.live-header {
+  grid-area: header;
+}
+.live-canvas {
+  grid-area: canvas;
+}
+.live-toolbar {
+  grid-area: toolbar;
+}
+.live-panel {
+  grid-area: panel;
+}
+
+/* Below lg the panel is not part of the grid: it slides in over the
+   canvas instead of permanently eating a third of a small screen. It stays
+   mounted at all times - only `transform` changes. */
+@media (max-width: 1023.98px) {
+  .live-rail {
+    display: none;
+  }
+  .live-panel {
+    position: fixed;
+    top: var(--live-header-h);
+    right: 0;
+    bottom: var(--live-toolbar-h);
+    width: min(20rem, 85vw);
+    z-index: 40;
+    transform: translateX(101%);
+    transition: transform 0.2s ease;
+    will-change: transform;
+  }
+  .live-panel[data-open="true"] {
+    transform: translateX(0);
+    box-shadow: -12px 0 32px rgba(0, 0, 0, 0.45);
+  }
+}
+
+/* Tablet: the rail comes back, the panel is still an overlay. */
+@media (min-width: 768px) {
+  .live-shell {
+    --live-header-h: 3.5rem; /* 56px */
+    --live-toolbar-h: 4rem; /* 64px */
+    grid-template-columns: var(--live-rail-w) minmax(0, 1fr);
+    grid-template-areas:
+      "rail header"
+      "rail canvas"
+      "rail toolbar";
+  }
+  .live-rail {
+    display: flex;
+  }
+}
+
+/* Laptop: the panel joins the grid, slightly narrower than on desktop so
+   the board keeps a usable share of a 1024px screen. */
+@media (min-width: 1024px) {
+  .live-shell {
+    --live-panel-w: 17.5rem; /* 280px */
+    grid-template-columns: var(--live-rail-w) minmax(0, 1fr) var(--live-panel-w);
+    grid-template-areas:
+      "rail header header"
+      "rail canvas panel"
+      "rail toolbar panel";
+  }
+}
+
+@media (min-width: 1280px) {
+  .live-shell {
+    --live-panel-w: 20rem; /* 320px */
+  }
+}
+
+/* ===========================================================
    AI Chat / Atomic Guru (imported from _import_atomic-ai-chat)
    Scoped under .ai-chat-scope (applied by src/app/guru/layout.tsx)
    so this styling never leaks into the rest of atomic-ops. The
