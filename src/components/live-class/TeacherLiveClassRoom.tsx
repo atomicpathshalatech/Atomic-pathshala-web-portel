@@ -2,7 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CanvasEngine, type StrokeObject, type CanvasTool, type ShapeKind } from "@/lib/canvas/canvas-engine";
+import {
+  CanvasEngine,
+  type StrokeObject,
+  type CanvasTool,
+  type ShapeKind,
+  TEXT_FONT_SCALE,
+  VIRTUAL_WIDTH,
+  VIRTUAL_HEIGHT,
+} from "@/lib/canvas/canvas-engine";
 import { getPusherClient } from "@/lib/realtime/pusher-client";
 import { sessionChannel, teacherChannel, WB_EVENTS } from "@/lib/realtime/events";
 import { VideoStrip } from "@/components/live-class/VideoStrip";
@@ -343,6 +351,30 @@ export function TeacherLiveClassRoom({
   const [penStyle, setPenStyle] = useState<PenStyleId>("hard");
   const [color, setColor] = useState<string>(PEN_PALETTE_COLORS[0] ?? "#ef4444");
   const [size, setSize] = useState(5);
+  // Read inside the canvas engine's onTextRequested callback (bound once
+  // per session in the canvas-lifecycle effect below), which needs the
+  // CURRENT color/size, not a stale one captured when the engine was
+  // constructed — same reason rightTabRef exists for the Pusher handler
+  // further down this file.
+  const colorRef = useRef(color);
+  useEffect(() => {
+    colorRef.current = color;
+  }, [color]);
+  const sizeRef = useRef(size);
+  useEffect(() => {
+    sizeRef.current = size;
+  }, [size]);
+  // Text tool's on-canvas entry overlay. `id: null` = creating a brand-new
+  // text object; a non-null id = re-editing an existing one opened via
+  // double-click with the select tool (see handleCanvasDoubleClick).
+  const [textEditor, setTextEditor] = useState<{
+    id: string | null;
+    x: number;
+    y: number;
+    text: string;
+    fontSizePx: number;
+    color: string;
+  } | null>(null);
   const [undoRedoTick, setUndoRedoTick] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [uploadingBackground, setUploadingBackground] = useState(false);
@@ -445,6 +477,19 @@ export function TeacherLiveClassRoom({
       () => setUndoRedoTick((t) => t + 1)
     );
     engineRef.current = engine;
+    // The engine has no DOM of its own to render a text-entry UI, so on a
+    // "text" tool click it hands the click point back here and this opens
+    // a positioned <textarea> overlay instead.
+    engine.onTextRequested = (pt) => {
+      setTextEditor({
+        id: null,
+        x: pt.x,
+        y: pt.y,
+        text: "",
+        fontSizePx: sizeRef.current * TEXT_FONT_SCALE,
+        color: colorRef.current,
+      });
+    };
     if (currentPage) engine.loadObjects(currentPage.objects ?? []);
 
     // Keep the canvas backing store's pixel size synced to its actual
@@ -519,6 +564,59 @@ export function TeacherLiveClassRoom({
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [flushAutosave]);
+
+  // ---- Text tool overlay: commit / cancel / re-edit-on-double-click ------
+  // Commits whatever is in the overlay right now — new text via
+  // addTextObject, an in-place re-edit via updateTextObject — then always
+  // drops back to the select tool, matching "place text, done" rather than
+  // leaving the user in text mode where the next click would silently place
+  // another box. Everything it needs travels in `textEditor` itself or via
+  // stable refs, so it never goes stale and needs no dependency array.
+  const commitTextEditor = useCallback(() => {
+    setTextEditor((prev) => {
+      if (!prev) return null;
+      const engine = engineRef.current;
+      if (engine) {
+        if (prev.id) {
+          engine.updateTextObject(prev.id, prev.text);
+        } else {
+          engine.addTextObject(prev.text, { x: prev.x, y: prev.y }, prev.color, prev.fontSizePx);
+        }
+      }
+      return null;
+    });
+    setTool((t) => (t === "text" ? "select" : t));
+  }, []);
+
+  const cancelTextEditor = useCallback(() => {
+    setTextEditor(null);
+    setTool((t) => (t === "text" ? "select" : t));
+  }, []);
+
+  // Double-click an existing text object with the select tool active to
+  // re-open it for editing — otherwise a typo could only ever be fixed by
+  // deleting the whole object and retyping it.
+  const handleCanvasDoubleClick = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      if (tool !== "select" || !engineRef.current || !activeCanvasRef.current) return;
+      const rect = activeCanvasRef.current.getBoundingClientRect();
+      const relX = rect.width > 0 ? (e.clientX - rect.left) / rect.width : 0;
+      const relY = rect.height > 0 ? (e.clientY - rect.top) / rect.height : 0;
+      const pt = { x: relX * VIRTUAL_WIDTH, y: relY * VIRTUAL_HEIGHT };
+      const hit = engineRef.current.getTextObjectAt(pt);
+      if (hit) {
+        setTextEditor({
+          id: hit.id,
+          x: hit.position.x,
+          y: hit.position.y,
+          text: hit.text,
+          fontSizePx: hit.size,
+          color: hit.color,
+        });
+      }
+    },
+    [tool]
+  );
 
   // ---- Pusher: roster presence + teacher-only hand-raise/quiz channels ----
   useEffect(() => {
@@ -1314,7 +1412,52 @@ export function TeacherLiveClassRoom({
               so zooming never leaves a gap around a smaller-than-100% page. */}
           <div className="absolute inset-0" style={{ transform: `scale(${zoom})`, transformOrigin: "0 0" }}>
             <canvas ref={baseCanvasRef} className="absolute inset-0 w-full h-full" />
-            <canvas ref={activeCanvasRef} className="absolute inset-0 w-full h-full touch-none" />
+            <canvas
+              ref={activeCanvasRef}
+              className="absolute inset-0 w-full h-full touch-none"
+              onDoubleClick={handleCanvasDoubleClick}
+            />
+            {textEditor && (
+              <div
+                className="absolute z-30"
+                style={{
+                  left: `${(textEditor.x / VIRTUAL_WIDTH) * 100}%`,
+                  top: `${(textEditor.y / VIRTUAL_HEIGHT) * 100}%`,
+                }}
+              >
+                <textarea
+                  autoFocus
+                  value={textEditor.text}
+                  onChange={(e) =>
+                    setTextEditor((prev) => (prev ? { ...prev, text: e.target.value } : prev))
+                  }
+                  onBlur={commitTextEditor}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      cancelTextEditor();
+                    } else if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      commitTextEditor();
+                    }
+                  }}
+                  placeholder="Type text…"
+                  rows={1}
+                  className="min-w-[120px] min-h-[1.6em] bg-white/95 border-2 border-indigo-500 rounded px-1.5 py-1 outline-none resize shadow-lg"
+                  style={{
+                    color: textEditor.color,
+                    // Approximation only, purely for what the box looks
+                    // like while typing — the textarea has no way to know
+                    // the canvas's actual rendered pixel width here. The
+                    // committed object's on-canvas size is exact regardless
+                    // of this, since CanvasEngine.measureText() derives it
+                    // straight from fontSizePx in virtual coordinates.
+                    fontSize: `${textEditor.fontSizePx * zoom * 0.5}px`,
+                    fontFamily: '"Segoe UI", Arial, sans-serif',
+                  }}
+                />
+              </div>
+            )}
           </div>
         </div>
       </main>
@@ -1695,6 +1838,16 @@ export function TeacherLiveClassRoom({
 
           <div className="w-px h-6 bg-[#2d2e3b] mx-2" />
 
+          <button
+            type="button"
+            onClick={() => setTool("text")}
+            className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${
+              tool === "text" ? "text-blue-400 bg-blue-900/30" : "text-gray-400 hover:text-white hover:bg-gray-800"
+            }`}
+            title="Text"
+          >
+            <span className="material-symbols-outlined text-lg">text_fields</span>
+          </button>
           <button
             type="button"
             onClick={() => setTool("select")}

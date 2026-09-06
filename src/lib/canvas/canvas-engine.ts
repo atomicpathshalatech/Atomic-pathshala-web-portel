@@ -55,7 +55,25 @@ export interface ShapeObject {
   end: { x: number; y: number };
 }
 
-export type StrokeObject = FreehandObject | ShapeObject;
+export interface TextObject {
+  id: string;
+  type: "text";
+  text: string;
+  color: string;
+  /** Font size in virtual (1920x1080) pixels — independent of the pen
+   * tool's stroke-width `currentSize`; see TEXT_FONT_SCALE below for how a
+   * caller derives one from the other. */
+  size: number;
+  /** Top-left corner, virtual coordinates. */
+  position: { x: number; y: number };
+  /** Measured bounding box (virtual px) — cached at create/edit time via
+   * measureText() so hit-testing/selection/eraser don't need a live 2D
+   * context and stay in sync with whatever was actually rendered. */
+  width: number;
+  height: number;
+}
+
+export type StrokeObject = FreehandObject | ShapeObject | TextObject;
 
 export type CanvasTool =
   | "pen"
@@ -63,7 +81,13 @@ export type CanvasTool =
   | "stroke-eraser"
   | "object-eraser"
   | "select"
+  | "text"
   | ShapeKind;
+
+/** Font-size (virtual px) per unit of the shared pen `currentSize` control,
+ * so the same S/M/L size preset used for pen width gives sensible, readable
+ * text sizes on the 1920x1080 virtual canvas. */
+export const TEXT_FONT_SCALE = 8;
 
 const SHAPE_TOOLS: ShapeKind[] = ["line", "rectangle", "circle", "triangle", "arrow"];
 function isShapeTool(tool: CanvasTool): tool is ShapeKind {
@@ -100,6 +124,17 @@ function distance(a: { x: number; y: number }, b: { x: number; y: number }) {
  * though (like the freehand eraser) it's an outline test, not a fill test. */
 function representativePoints(obj: StrokeObject): { x: number; y: number }[] {
   if (obj.type === "stroke") return obj.points;
+  if (obj.type === "text") {
+    const { x, y } = obj.position;
+    const { width, height } = obj;
+    return [
+      { x, y },
+      { x: x + width, y },
+      { x, y: y + height },
+      { x: x + width, y: y + height },
+      { x: x + width / 2, y: y + height / 2 },
+    ];
+  }
   const { start, end, shape } = obj;
   switch (shape) {
     case "line":
@@ -137,12 +172,17 @@ function representativePoints(obj: StrokeObject): { x: number; y: number }[] {
 }
 
 function firstPoint(obj: StrokeObject): { x: number; y: number } | undefined {
-  return obj.type === "stroke" ? obj.points[0] : obj.start;
+  if (obj.type === "stroke") return obj.points[0];
+  if (obj.type === "text") return obj.position;
+  return obj.start;
 }
 
 function translateObject(obj: StrokeObject, dx: number, dy: number): StrokeObject {
   if (obj.type === "stroke") {
     return { ...obj, points: obj.points.map((p) => ({ ...p, x: p.x + dx, y: p.y + dy })) };
+  }
+  if (obj.type === "text") {
+    return { ...obj, position: { x: obj.position.x + dx, y: obj.position.y + dy } };
   }
   return {
     ...obj,
@@ -216,6 +256,13 @@ export class CanvasEngine {
   public currentTool: CanvasTool = "pen";
   public currentColor = "#1A1A1A";
   public currentSize = 3;
+
+  /** Set by the host component. Fired instead of starting a drag when the
+   * "text" tool is active on pointerdown — the engine has no DOM to render
+   * a text-entry overlay itself, so it hands the click point back to React,
+   * which positions an HTML textarea and calls addTextObject()/
+   * updateTextObject() on commit. */
+  public onTextRequested?: (pt: { x: number; y: number }) => void;
 
   private isPointerDown = false;
   private activePoints: StrokePoint[] = [];
@@ -323,6 +370,12 @@ export class CanvasEngine {
     this.activeCanvas.setPointerCapture(e.pointerId);
     this.isPointerDown = true;
     const pt = this.getPoint(e);
+
+    if (this.currentTool === "text") {
+      this.isPointerDown = false;
+      this.onTextRequested?.({ x: pt.x, y: pt.y });
+      return;
+    }
 
     if (this.currentTool === "pen" || this.currentTool === "highlighter") {
       this.activePoints = [pt];
@@ -521,6 +574,8 @@ export class CanvasEngine {
     for (const obj of this.objects) {
       if (obj.type === "stroke") {
         this.strokePath(this.baseCtx, obj.points, obj.color, obj.size, obj.tool === "highlighter");
+      } else if (obj.type === "text") {
+        this.drawText(this.baseCtx, obj);
       } else {
         drawShape(this.baseCtx, obj);
       }
@@ -528,6 +583,78 @@ export class CanvasEngine {
         this.drawSelectionBox(obj);
       }
     }
+  }
+
+  private textFont(sizePx: number): string {
+    return `${sizePx}px "Segoe UI", Arial, sans-serif`;
+  }
+
+  private drawText(ctx: CanvasRenderingContext2D, obj: TextObject): void {
+    ctx.save();
+    ctx.fillStyle = obj.color;
+    ctx.textBaseline = "top";
+    ctx.font = this.textFont(obj.size);
+    const lineHeight = obj.size * 1.25;
+    obj.text.split("\n").forEach((line, i) => {
+      ctx.fillText(line, obj.position.x, obj.position.y + i * lineHeight);
+    });
+    ctx.restore();
+  }
+
+  /** Measures text with the same font renderBase()/drawText() will actually
+   * draw with, so the stored width/height (used for hit-testing, the
+   * selection box, and the eraser) always match what's on screen. */
+  private measureText(text: string, sizePx: number): { width: number; height: number } {
+    this.baseCtx.save();
+    this.baseCtx.font = this.textFont(sizePx);
+    const lines = text.split("\n");
+    let maxWidth = 0;
+    for (const line of lines) {
+      const w = this.baseCtx.measureText(line.length > 0 ? line : " ").width;
+      if (w > maxWidth) maxWidth = w;
+    }
+    this.baseCtx.restore();
+    const lineHeight = sizePx * 1.25;
+    return { width: Math.max(maxWidth, sizePx * 0.5), height: Math.max(lines.length, 1) * lineHeight };
+  }
+
+  /** Commits a brand-new text object — mirrors the exact commit pattern used
+   * for strokes/shapes in onPointerUp (pushUndo → mutate → renderBase →
+   * onCommit), just triggered from the host's textarea overlay instead of a
+   * pointerup handler. Empty/whitespace-only text is a no-op, matching how
+   * the freehand path silently drops a stroke with < 2 points. */
+  public addTextObject(text: string, position: { x: number; y: number }, color: string, sizePx: number): void {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    this.pushUndo();
+    const { width, height } = this.measureText(trimmed, sizePx);
+    const obj: TextObject = { id: uid(), type: "text", text: trimmed, color, size: sizePx, position, width, height };
+    this.objects.push(obj);
+    this.renderBase();
+    this.onCommit?.(this.objects);
+  }
+
+  /** Re-edits an existing text object in place (double-click via the select
+   * tool). Clearing the text out entirely deletes the object, mirroring
+   * deleteSelected() rather than leaving an empty ghost object around. */
+  public updateTextObject(id: string, text: string): void {
+    const idx = this.objects.findIndex((o) => o.id === id && o.type === "text");
+    if (idx === -1) return;
+    const existing = this.objects[idx] as TextObject;
+    const trimmed = text.trim();
+    this.pushUndo();
+    if (!trimmed) {
+      this.objects = this.objects.filter((o) => o.id !== id);
+      if (this.selectedId === id) {
+        this.selectedId = null;
+        this.onSelectionChange?.(null);
+      }
+    } else {
+      const { width, height } = this.measureText(trimmed, existing.size);
+      this.objects[idx] = { ...existing, text: trimmed, width, height };
+    }
+    this.renderBase();
+    this.onCommit?.(this.objects);
   }
 
   private drawSelectionBox(obj: StrokeObject): void {
@@ -547,13 +674,27 @@ export class CanvasEngine {
     this.baseCtx.restore();
   }
 
-  private hitTest(pt: StrokePoint): StrokeObject | null {
+  private hitTest(pt: { x: number; y: number }): StrokeObject | null {
     for (let i = this.objects.length - 1; i >= 0; i--) {
       // Non-null: i is always a valid index of this.objects in this loop.
       const obj = this.objects[i]!;
+      // Text is naturally box-shaped and users expect click-anywhere-inside
+      // to select it, not just near the outline like a stroke/shape.
+      if (obj.type === "text") {
+        const { x, y } = obj.position;
+        if (pt.x >= x - 6 && pt.x <= x + obj.width + 6 && pt.y >= y - 6 && pt.y <= y + obj.height + 6) return obj;
+        continue;
+      }
       if (representativePoints(obj).some((p) => distance(p, pt) < SELECT_HIT_RADIUS)) return obj;
     }
     return null;
+  }
+
+  /** Public wrapper so the host component can find the text object under a
+   * double-click (to re-open it for editing) without engine internals. */
+  public getTextObjectAt(pt: { x: number; y: number }): TextObject | null {
+    const hit = this.hitTest(pt);
+    return hit && hit.type === "text" ? hit : null;
   }
 
   private eraseObjectAt(pt: StrokePoint): void {
@@ -577,7 +718,7 @@ export class CanvasEngine {
     const next: StrokeObject[] = [];
 
     for (const obj of this.objects) {
-      if (obj.type === "shape") {
+      if (obj.type === "shape" || obj.type === "text") {
         if (representativePoints(obj).some((p) => distance(p, pt) < ERASER_RADIUS)) {
           changed = true;
           continue;
@@ -663,11 +804,11 @@ export class CanvasEngine {
   }
 
   private cloneObjects(): StrokeObject[] {
-    return this.objects.map((o) =>
-      o.type === "stroke"
-        ? { ...o, points: o.points.map((p) => ({ ...p })) }
-        : { ...o, start: { ...o.start }, end: { ...o.end } }
-    );
+    return this.objects.map((o) => {
+      if (o.type === "stroke") return { ...o, points: o.points.map((p) => ({ ...p })) };
+      if (o.type === "text") return { ...o, position: { ...o.position } };
+      return { ...o, start: { ...o.start }, end: { ...o.end } };
+    });
   }
 
   private pushUndo(snapshot?: StrokeObject[]): void {
@@ -724,6 +865,17 @@ export class CanvasEngine {
               x: p.x * scaleX,
               y: p.y * scaleY,
             })),
+          };
+        } else if (obj.type === "text") {
+          // Text objects didn't exist when the legacy ~1000x560 format was
+          // in use, so this branch is currently unreachable in practice —
+          // handled anyway so the map stays exhaustive and type-safe.
+          return {
+            ...obj,
+            position: { x: obj.position.x * scaleX, y: obj.position.y * scaleY },
+            size: obj.size * scaleX,
+            width: obj.width * scaleX,
+            height: obj.height * scaleY,
           };
         } else {
           return {
