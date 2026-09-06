@@ -29,29 +29,30 @@ export async function POST(
       data: { status: "REVEALED", revealedAt: new Date() },
     });
 
-    const grouped = await prisma.quizResponse.groupBy({
-      by: ["selectedOption"],
-      where: { quizSessionId: quiz.id },
-      _count: { _all: true },
-    });
-    const totalResponses = await prisma.quizResponse.count({ where: { quizSessionId: quiz.id } });
-    const correctCount = quiz.correctOption
-      ? await prisma.quizResponse.count({
-          where: { quizSessionId: quiz.id, selectedOption: quiz.correctOption },
-        })
-      : null;
+    // Independent queries, run in parallel rather than three sequential
+    // round-trips — same reasoning as pushQuizMetrics in src/lib/whiteboard/
+    // quiz.ts: this is on the path from "teacher clicks Reveal" to students
+    // actually seeing the answer, so every avoidable round-trip here is
+    // latency the whole class sits through together.
+    const [grouped, totalResponses, correctCount] = await Promise.all([
+      prisma.quizResponse.groupBy({
+        by: ["selectedOption"],
+        where: { quizSessionId: quiz.id },
+        _count: { _all: true },
+      }),
+      prisma.quizResponse.count({ where: { quizSessionId: quiz.id } }),
+      quiz.correctOption
+        ? prisma.quizResponse.count({
+            where: { quizSessionId: quiz.id, selectedOption: quiz.correctOption },
+          })
+        : Promise.resolve(null),
+    ]);
     const counts = Object.fromEntries(grouped.map((r) => [r.selectedOption, r._count._all]));
 
-    await prisma.auditLog.create({
-      data: {
-        userId: session.user.id,
-        action: "WHITEBOARD_QUIZ_REVEALED",
-        entityType: "QuizSession",
-        entityId: quiz.id,
-        metadata: { whiteboardSessionId: params.id, totalResponses },
-      },
-    });
-
+    // Broadcast first, audit log fire-and-forget after — same reordering
+    // and reasoning as the quiz-launch route: an awaited audit-log write
+    // was sitting in front of every reveal reaching students, adding a
+    // full extra cross-region DB round-trip to what should be instant.
     try {
       await pusherServer.trigger(sessionChannel(params.id), WB_EVENTS.QUIZ_REVEALED, {
         id: quiz.id,
@@ -63,6 +64,18 @@ export async function POST(
     } catch (err) {
       console.error("[pusher_trigger_error]", err);
     }
+
+    prisma.auditLog
+      .create({
+        data: {
+          userId: session.user.id,
+          action: "WHITEBOARD_QUIZ_REVEALED",
+          entityType: "QuizSession",
+          entityId: quiz.id,
+          metadata: { whiteboardSessionId: params.id, totalResponses },
+        },
+      })
+      .catch((err) => console.error("[audit_log_error]", err));
 
     return apiSuccess({ quiz: updated, counts, totalResponses, correctCount });
   } catch (error) {

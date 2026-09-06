@@ -44,18 +44,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       },
     });
 
-    await prisma.auditLog.create({
-      data: {
-        userId: session.user.id,
-        action: "WHITEBOARD_QUIZ_LAUNCHED",
-        entityType: "QuizSession",
-        entityId: quiz.id,
-        metadata: { whiteboardSessionId: params.id, isQuickQuiz: quiz.isQuickQuiz },
-      },
-    });
-
     // Everyone in the session sees the question, options, and timer — never
-    // the correct answer, which stays server-side until reveal.
+    // the correct answer, which stays server-side until reveal. Fired
+    // BEFORE the audit log write (below), not after: this was previously
+    // ordered audit-log-then-broadcast, which meant every quiz launch paid
+    // for a full extra Postgres round-trip (cross-region Vercel<->Supabase,
+    // already the dominant latency cost elsewhere in this app) before any
+    // student even saw the question appear. The audit trail matters, but
+    // not enough to sit in front of "the quiz is live" for every student.
     try {
       await pusherServer.trigger(sessionChannel(params.id), WB_EVENTS.QUIZ_LAUNCHED, {
         id: quiz.id,
@@ -67,6 +63,22 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     } catch (err) {
       console.error("[pusher_trigger_error]", err);
     }
+
+    // Fire-and-forget: never block the response (or the broadcast above) on
+    // this — same "best effort, don't let a side-write stall the real
+    // action" pattern already used for cleanup writes elsewhere (e.g.
+    // deleteFile(...).catch(() => undefined) in the background-upload route).
+    prisma.auditLog
+      .create({
+        data: {
+          userId: session.user.id,
+          action: "WHITEBOARD_QUIZ_LAUNCHED",
+          entityType: "QuizSession",
+          entityId: quiz.id,
+          metadata: { whiteboardSessionId: params.id, isQuickQuiz: quiz.isQuickQuiz },
+        },
+      })
+      .catch((err) => console.error("[audit_log_error]", err));
 
     return apiSuccess({ quiz }, 201);
   } catch (error) {
