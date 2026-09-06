@@ -34,7 +34,21 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
       take: HISTORY_LIMIT,
     });
 
-    return apiSuccess({ messages, chatEnabled: wbSession.chatEnabled, role: access.role });
+    const userIds = Array.from(new Set(messages.map((m) => m.authorUserId)));
+    const users = userIds.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: userIds } },
+          select: { id: true, photoUrl: true },
+        })
+      : [];
+    const photoMap = new Map(users.map((u) => [u.id, u.photoUrl]));
+
+    const enrichedMessages = messages.map((m) => ({
+      ...m,
+      authorPhotoUrl: photoMap.get(m.authorUserId) || null,
+    }));
+
+    return apiSuccess({ messages: enrichedMessages, chatEnabled: wbSession.chatEnabled, role: access.role });
   } catch (error) {
     return handleApiError(error);
   }
@@ -63,6 +77,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     const input = messageCreateSchema.parse(await request.json());
 
+    const authorUser = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { photoUrl: true },
+    });
+    const authorPhotoUrl = authorUser?.photoUrl || null;
+
     const created = await prisma.whiteboardMessage.create({
       data: {
         whiteboardSessionId: params.id,
@@ -78,11 +98,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       authorRole: access.role,
       authorUserId: session.user.id,
       authorName: access.name,
+      authorPhotoUrl,
       body: created.body,
       createdAt: created.createdAt.toISOString(),
     });
 
-    return apiSuccess({ message: created }, 201);
+    return apiSuccess({ message: { ...created, authorPhotoUrl } }, 201);
   } catch (error) {
     return handleApiError(error);
   }

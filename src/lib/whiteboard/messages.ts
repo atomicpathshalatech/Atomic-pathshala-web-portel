@@ -6,6 +6,7 @@ export type WhiteboardMessagePayload = {
   authorRole: "TEACHER" | "STUDENT";
   authorUserId: string;
   authorName: string;
+  authorPhotoUrl?: string | null;
   body: string;
   createdAt: string;
   // True for server-generated announcements (e.g. "X has joined the class",

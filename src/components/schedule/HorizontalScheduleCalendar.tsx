@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import {
   formatISTTime,
   formatISTDate,
@@ -38,10 +40,14 @@ export interface ScheduleItem {
       image?: string | null;
     };
   } | null;
+  lectureId?: string | null;
+  lectureVideoUrl?: string | null;
   liveWhiteboardSession?: {
     id?: string;
     status?: string;
     livePhase?: string;
+    recordingStatus?: string | null;
+    recordingStorageKey?: string | null;
   } | null;
 }
 
@@ -591,8 +597,9 @@ function TimelineLectureRow({
                 Completed
               </span>
             ) : isCancelled ? (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 text-[10px] font-bold uppercase tracking-wide shrink-0">
-                Rescheduled
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 text-[10px] font-bold uppercase tracking-wide shrink-0">
+                <span className="material-symbols-outlined text-[12px]">cancel</span>
+                Class Cancelled
               </span>
             ) : (
               <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[10px] font-bold uppercase tracking-wide shrink-0">
@@ -625,6 +632,16 @@ function TimelineLectureRow({
             ) : isStartingSoon ? (
               <span className="text-amber-600 dark:text-amber-400 font-bold">
                 T-15 Active
+              </span>
+            ) : isCompleted ? (
+              <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-0.5">
+                <span className="material-symbols-outlined text-[13px]">check_circle</span>
+                Ended
+              </span>
+            ) : isCancelled ? (
+              <span className="text-rose-500 font-semibold flex items-center gap-0.5">
+                <span className="material-symbols-outlined text-[13px]">event_busy</span>
+                Cancelled
               </span>
             ) : (
               <span className="text-slate-400 flex items-center gap-0.5">
@@ -673,18 +690,46 @@ function TimelineLectureRow({
                 </Link>
               )
             ) : isCompleted ? (
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-1 py-1 px-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 rounded-lg text-[10px] font-bold transition"
-                >
-                  <span className="material-symbols-outlined text-[13px] text-[#a33900]">play_circle</span>
-                  <span>Watch Video</span>
-                </button>
-              </div>
+              (() => {
+                const hasRecording =
+                  item.liveWhiteboardSession?.recordingStatus === "READY" ||
+                  !!item.lectureVideoUrl;
+
+                if (hasRecording) {
+                  return (
+                    <Link
+                      href={`/watch/${item.lectureId || item.id}`}
+                      className="inline-flex items-center gap-1 py-1 px-3 bg-[#a33900] hover:bg-orange-800 text-white rounded-lg text-[11px] font-bold shadow-sm transition active:scale-95 shrink-0"
+                    >
+                      <span className="material-symbols-outlined text-[13px]">play_circle</span>
+                      <span>Watch Video</span>
+                    </Link>
+                  );
+                }
+
+                return (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      toast.info("Recording in process, will upload soon", {
+                        description:
+                          "Educator session recording is currently being processed and will be available to watch shortly.",
+                      });
+                    }}
+                    className="inline-flex items-center gap-1.5 py-1 px-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-amber-800 dark:text-amber-300 rounded-lg text-[10px] font-bold transition shrink-0"
+                    title="Recording in process, will upload soon"
+                  >
+                    <span className="material-symbols-outlined text-[13px] text-amber-600 animate-spin">
+                      sync
+                    </span>
+                    <span>Recording in Process</span>
+                  </button>
+                );
+              })()
             ) : isCancelled ? (
-              <span className="text-[10px] font-semibold text-rose-500">
-                Class Cancelled
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 text-[10px] font-bold border border-rose-200 dark:border-rose-900/50 shrink-0">
+                <span className="material-symbols-outlined text-[12px]">cancel</span>
+                <span>Class Cancelled</span>
               </span>
             ) : role === "STUDENT" ? (
               studentEval.allowed ? (

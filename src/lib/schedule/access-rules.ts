@@ -133,6 +133,23 @@ export function canStudentJoin(
     };
   }
 
+  // If 30 minutes have passed since scheduled startsAt and class hasn't started/live, it is CANCELLED
+  if (nowMs >= startsAt.getTime() + 30 * 60 * 1000) {
+    return {
+      allowed: false,
+      status: "CANCELLED",
+      reason: "Class cancelled (educator did not commence session within 30 minutes of scheduled start).",
+      opensAt,
+      startsAt,
+      endsAt,
+      isLive: false,
+      isCompleted: false,
+      isCancelled: true,
+      isWindowOpen: false,
+      secondsUntilWindowOpens: 0,
+    };
+  }
+
   // Allow entering Waiting Room on the scheduled day (within 12h of scheduled start)
   const isScheduledTodayOrSoon =
     Math.abs(nowMs - startsAt.getTime()) <= 12 * 60 * 60 * 1000 ||
@@ -217,6 +234,28 @@ export function canTeacherStart(
     };
   }
 
+  // Teacher cannot start a session if more than 30 minutes have passed without a live session
+  const hasActiveSession =
+    schedule.liveWhiteboardSession?.status === "ACTIVE" ||
+    schedule.liveWhiteboardSession?.livePhase === "LIVE" ||
+    schedule.status === "LIVE";
+
+  if (!hasActiveSession && serverNow.getTime() >= startsAt.getTime() + 30 * 60 * 1000) {
+    return {
+      allowed: false,
+      status: "CANCELLED",
+      reason: "Class window has expired (session was not started within 30 minutes of scheduled time).",
+      opensAt,
+      startsAt,
+      endsAt,
+      isLive: false,
+      isCompleted: false,
+      isCancelled: true,
+      isWindowOpen: false,
+      secondsUntilWindowOpens: 0,
+    };
+  }
+
   const isLive =
     schedule.status === "LIVE" ||
     schedule.liveWhiteboardSession?.livePhase === "LIVE";
@@ -268,8 +307,9 @@ export function getEffectiveScheduleStatus(
     return "LIVE";
   }
 
-  if (nowMs > endsAt.getTime() + 15 * 60 * 1000) {
-    return "NOT_CONDUCTED";
+  // If 30 minutes have passed since scheduled startsAt and class hasn't started/live, it is CANCELLED
+  if (nowMs >= startsAt.getTime() + 30 * 60 * 1000) {
+    return "CANCELLED";
   }
 
   if (nowMs >= opensAt.getTime()) {

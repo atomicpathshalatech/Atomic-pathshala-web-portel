@@ -7,6 +7,8 @@ import { requiredDppCountForPosition, getSubmittedLevel1DppCount } from "@/lib/c
 import { ChapterDetailView, ChapterDetailData } from "@/components/chapter-detail/ChapterDetailView";
 import { RoadmapTopicGroup } from "@/components/chapter-detail/ChapterRoadmapTimeline";
 
+import { getEffectiveScheduleStatus } from "@/lib/schedule/access-rules";
+
 export const metadata: Metadata = {
   title: "Chapter Detail",
 };
@@ -41,14 +43,49 @@ export default async function ChapterPage({
     })) > 0;
   if (!enrolled) redirect("/courses");
 
-  const [lectures, dpps, tests, notices] = await Promise.all([
+  const [lectures, standaloneSchedules, dpps, tests, notices] = await Promise.all([
     prisma.lecture.findMany({
       where: {
         chapterId: chapter.id,
         status: { in: ["PUBLISHED", "DRAFT"] },
       },
       orderBy: { order: "asc" },
-      include: { teacher: { include: { user: { select: { name: true, photoUrl: true, email: true } } } } },
+      include: {
+        teacher: { include: { user: { select: { name: true, photoUrl: true, email: true } } } },
+        batchSchedules: {
+          include: {
+            liveWhiteboardSession: {
+              select: {
+                id: true,
+                status: true,
+                livePhase: true,
+                recordingStatus: true,
+                recordingStorageKey: true,
+              },
+            },
+          },
+        },
+      },
+    }),
+    prisma.batchSchedule.findMany({
+      where: {
+        chapterId: chapter.id,
+        batchId: params.batchId,
+        lectureId: null,
+      },
+      orderBy: { startsAt: "asc" },
+      include: {
+        teacher: { include: { user: { select: { name: true, photoUrl: true, email: true } } } },
+        liveWhiteboardSession: {
+          select: {
+            id: true,
+            status: true,
+            livePhase: true,
+            recordingStatus: true,
+            recordingStorageKey: true,
+          },
+        },
+      },
     }),
     prisma.dpp.findMany({
       where: { chapterId: chapter.id, status: "ACTIVE" },
@@ -75,36 +112,91 @@ export default async function ChapterPage({
   const completedLectureIds = new Set(progressRows.map((p) => p.lectureId));
 
   // Build Teacher Info from first lecture or fallback
-  const firstLectureTeacher = lectures[0]?.teacher;
+  const firstLectureTeacher = lectures[0]?.teacher || standaloneSchedules[0]?.teacher;
   const teacherName = firstLectureTeacher?.user?.name || "Senior Subject Faculty";
   const teacherPhoto = firstLectureTeacher?.user?.photoUrl || null;
 
-  // Build 1-to-1 Roadmap steps: exactly 1 lecture per step
+  // Build 1-to-1 Roadmap steps: from lectures and standalone scheduled live classes
+  const lectureSteps: RoadmapTopicGroup[] = lectures.map((l, idx) => {
+    const matchedSchedule =
+      l.batchSchedules?.find((s) => s.batchId === params.batchId) ||
+      l.batchSchedules?.[0];
+
+    let isCancelled = false;
+    if (matchedSchedule) {
+      const effStatus = getEffectiveScheduleStatus(matchedSchedule);
+      if (
+        effStatus === "CANCELLED" ||
+        matchedSchedule.status === "CANCELLED" ||
+        matchedSchedule.liveWhiteboardSession?.livePhase === "CANCELLED"
+      ) {
+        if (!l.videoUrl && matchedSchedule.liveWhiteboardSession?.recordingStatus !== "READY") {
+          isCancelled = true;
+        }
+      }
+    }
+
+    return {
+      id: `step-${l.id}`,
+      stepNumber: l.order || idx + 1,
+      title: l.title || `${chapter.title} Lec : ${String(idx + 1).padStart(2, "0")}`,
+      lectures: [
+        {
+          id: l.id,
+          title: l.title,
+          order: l.order || idx + 1,
+          videoUrl: l.videoUrl,
+          notesUrl: l.slidesUrl,
+          slidesUrl: l.slidesUrl,
+          isCompleted: completedLectureIds.has(l.id),
+          isLocked: false,
+          isCancelled,
+        },
+      ],
+      notes: [
+        {
+          id: `notes-${l.id}`,
+          title: `${l.title} — Class Notes (PDF)`,
+          pdfUrl: l.slidesUrl || undefined,
+        },
+      ],
+    };
+  });
+
+  // Add any standalone batch schedules for this chapter
+  const standaloneSteps: RoadmapTopicGroup[] = standaloneSchedules.map((s, idx) => {
+    const effStatus = getEffectiveScheduleStatus(s);
+    const isCancelled =
+      (effStatus === "CANCELLED" ||
+        s.status === "CANCELLED" ||
+        s.liveWhiteboardSession?.livePhase === "CANCELLED") &&
+      s.liveWhiteboardSession?.recordingStatus !== "READY";
+
+    const stepNum = lectureSteps.length + idx + 1;
+    return {
+      id: `step-sched-${s.id}`,
+      stepNumber: stepNum,
+      title: s.title || `${chapter.title} Live Session : ${String(stepNum).padStart(2, "0")}`,
+      lectures: [
+        {
+          id: s.id,
+          title: s.title,
+          order: stepNum,
+          videoUrl: `/live-class/${s.id}`,
+          isCompleted: effStatus === "COMPLETED",
+          isLocked: false,
+          isCancelled,
+        },
+      ],
+      notes: [],
+    };
+  });
+
+  const combinedSteps = [...lectureSteps, ...standaloneSteps];
+
   const roadmapGroups: RoadmapTopicGroup[] =
-    lectures.length > 0
-      ? lectures.map((l, idx) => ({
-          id: `step-${l.id}`,
-          stepNumber: l.order || idx + 1,
-          title: l.title || `${chapter.title} Lec : ${String(idx + 1).padStart(2, "0")}`,
-          lectures: [
-            {
-              id: l.id,
-              title: l.title,
-              order: l.order || idx + 1,
-              videoUrl: l.videoUrl,
-              notesUrl: l.slidesUrl,
-              isCompleted: completedLectureIds.has(l.id),
-              isLocked: false,
-            },
-          ],
-          notes: [
-            {
-              id: `notes-${l.id}`,
-              title: `${l.title} — Class Notes (PDF)`,
-              pdfUrl: l.slidesUrl || undefined,
-            },
-          ],
-        }))
+    combinedSteps.length > 0
+      ? combinedSteps
       : [
           {
             id: "step-1",

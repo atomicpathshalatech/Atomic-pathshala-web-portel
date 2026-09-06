@@ -9,6 +9,7 @@ export type ChatMessage = {
   authorRole: "TEACHER" | "STUDENT";
   authorUserId: string;
   authorName: string;
+  authorPhotoUrl?: string | null;
   body: string;
   createdAt: string;
   // Server-generated announcements ("X has joined the class") — rendered as
@@ -63,7 +64,7 @@ const THEME = {
     error: "text-error",
     inputRow: "border-outline-variant/20",
     input: "border-outline-variant bg-surface-container-lowest text-on-surface placeholder:text-on-surface-variant",
-    sendBtn: "bg-primary text-on-primary disabled:opacity-40",
+    sendBtn: "bg-[#a33900] text-white disabled:opacity-40",
     quickBtn: "text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high",
     disabledNotice: "text-on-surface-variant border-outline-variant/20",
   },
@@ -95,18 +96,17 @@ export function MessagesPanel({
   whiteboardSessionId,
   currentUserId,
   role,
+  currentUserName,
+  currentUserPhotoUrl,
   theme = "light",
   showOwnToggle = true,
 }: {
   whiteboardSessionId: string;
   currentUserId: string;
   role: "TEACHER" | "STUDENT";
+  currentUserName?: string;
+  currentUserPhotoUrl?: string | null;
   theme?: "light" | "dark";
-  // When the parent owns a single source of truth for chatEnabled elsewhere
-  // (TeacherLiveClassRoom's Class Settings → Chat & Poll controls does this,
-  // reading straight off wbSession.chatEnabled), set this false so this
-  // panel doesn't also render its own toggle — two toggle controls for the
-  // same server state would just drift out of sync with each other.
   showOwnToggle?: boolean;
 }) {
   const t = THEME[theme];
@@ -175,7 +175,8 @@ export function MessagesPanel({
       id: optId,
       authorRole: role,
       authorUserId: currentUserId,
-      authorName: role === "TEACHER" ? "You (Teacher)" : "You",
+      authorName: currentUserName || (role === "TEACHER" ? "You (Teacher)" : "You"),
+      authorPhotoUrl: currentUserPhotoUrl || null,
       body,
       createdAt: new Date().toISOString(),
     };
@@ -233,7 +234,7 @@ export function MessagesPanel({
         </button>
       )}
 
-      <div ref={listRef} className="flex-1 overflow-y-auto space-y-2 min-h-0 pr-1">
+      <div ref={listRef} className="flex-1 overflow-y-auto space-y-1 min-h-0 pr-1">
         {loading ? (
           <p className={`text-sm text-center mt-8 ${t.loading}`}>Loading chat…</p>
         ) : messages.length === 0 ? (
@@ -242,25 +243,107 @@ export function MessagesPanel({
           messages.map((m) => {
             if (m.isSystemMessage) {
               return (
-                <div key={m.id} className="text-center">
-                  <span className={`text-xs italic ${t.authorLabel}`}>{m.body}</span>
+                <div key={m.id} className="text-center py-1">
+                  <span className={`text-[11px] italic ${t.authorLabel}`}>{m.body}</span>
                 </div>
               );
             }
             const mine = m.authorUserId === currentUserId;
+            const isTeacher = m.authorRole === "TEACHER";
+            const initial = (m.authorName || "S").trim().charAt(0).toUpperCase();
+
+            // Avatar color hash for students
+            const avatarBgColors = [
+              "bg-indigo-500",
+              "bg-emerald-600",
+              "bg-amber-600",
+              "bg-cyan-600",
+              "bg-rose-500",
+              "bg-purple-600",
+              "bg-teal-600",
+            ];
+            let hash = 0;
+            for (let i = 0; i < (m.authorUserId || "").length; i++) {
+              hash = (hash + m.authorUserId.charCodeAt(i)) % avatarBgColors.length;
+            }
+            const avatarBg = isTeacher ? "bg-[#a33900]" : mine ? "bg-blue-600" : avatarBgColors[hash];
+
+            const timeStr = m.createdAt
+              ? new Date(m.createdAt).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })
+              : "";
+
             return (
-              <div key={m.id} className={`flex flex-col ${mine ? "items-end" : "items-start"}`}>
-                <span className={`text-[10px] mb-0.5 ${t.authorLabel}`}>
-                  {m.authorName}
-                  {m.authorRole === "TEACHER" ? " · Teacher" : ""}
-                </span>
-                <span
-                  className={`max-w-[85%] rounded-lg px-3 py-1.5 text-sm break-words ${
-                    mine ? t.bubbleMine : t.bubbleTheirs
-                  }`}
-                >
-                  {m.body}
-                </span>
+              <div key={m.id} className="flex items-start gap-2.5 my-2.5 group">
+                {/* 1. Student / Educator Profile Photo */}
+                <div className="shrink-0 pt-0.5">
+                  {m.authorPhotoUrl ? (
+                    <img
+                      src={m.authorPhotoUrl}
+                      alt={m.authorName}
+                      className="w-8 h-8 rounded-full object-cover border border-slate-200 dark:border-slate-700 shadow-xs"
+                    />
+                  ) : (
+                    <div
+                      className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs text-white shadow-xs select-none ${avatarBg}`}
+                    >
+                      {initial}
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. Beside photo: Student name on top, message box underneath */}
+                <div className="flex-1 min-w-0">
+                  {/* Name line */}
+                  <div className="flex items-center gap-1.5 leading-none">
+                    <span
+                      className={`text-xs font-bold truncate ${
+                        isTeacher
+                          ? "text-[#a33900] dark:text-orange-400"
+                          : mine
+                          ? "text-blue-600 dark:text-blue-400"
+                          : "text-slate-800 dark:text-slate-200"
+                      }`}
+                    >
+                      {m.authorName}
+                    </span>
+
+                    {isTeacher && (
+                      <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-950/70 text-[#a33900] dark:text-orange-300 border border-orange-200 dark:border-orange-800/60 uppercase tracking-wider">
+                        Educator
+                      </span>
+                    )}
+
+                    {mine && (
+                      <span className="text-[10px] text-slate-400 font-medium">
+                        (You)
+                      </span>
+                    )}
+
+                    {timeStr && (
+                      <span className="text-[10px] text-slate-400 dark:text-slate-500 ml-auto tabular-nums">
+                        {timeStr}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* 3. Message box underneath the name */}
+                  <div
+                    className={`mt-1.5 rounded-2xl px-3.5 py-2 text-xs sm:text-sm break-words leading-relaxed shadow-xs ${
+                      isTeacher
+                        ? "bg-orange-50/80 dark:bg-orange-950/30 border border-orange-200/80 dark:border-orange-900/50 text-slate-900 dark:text-slate-100 rounded-tl-sm"
+                        : mine
+                        ? "bg-blue-50/80 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-900/50 text-slate-900 dark:text-slate-100 rounded-tl-sm"
+                        : theme === "dark"
+                        ? "bg-[#181a24] border border-[#2d2e3b] text-slate-200 rounded-tl-sm"
+                        : "bg-slate-100/90 border border-slate-200/90 text-slate-800 rounded-tl-sm"
+                    }`}
+                  >
+                    {m.body}
+                  </div>
+                </div>
               </div>
             );
           })

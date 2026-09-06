@@ -27,8 +27,17 @@ export default async function SchedulePage({
             include: {
               batch: true,
               teacher: { include: { user: true } },
+              lecture: {
+                select: { id: true, videoUrl: true, chapterId: true },
+              },
               liveWhiteboardSession: {
-                select: { id: true, status: true, livePhase: true },
+                select: {
+                  id: true,
+                  status: true,
+                  livePhase: true,
+                  recordingStatus: true,
+                  recordingStorageKey: true,
+                },
               },
             },
           },
@@ -89,11 +98,15 @@ export default async function SchedulePage({
             },
           }
         : null,
+      lectureId: s.lecture?.id || null,
+      lectureVideoUrl: s.lecture?.videoUrl || null,
       liveWhiteboardSession: s.liveWhiteboardSession
         ? {
             id: s.liveWhiteboardSession.id,
             status: s.liveWhiteboardSession.status,
             livePhase: s.liveWhiteboardSession.livePhase,
+            recordingStatus: s.liveWhiteboardSession.recordingStatus,
+            recordingStorageKey: s.liveWhiteboardSession.recordingStorageKey,
           }
         : null,
     }));

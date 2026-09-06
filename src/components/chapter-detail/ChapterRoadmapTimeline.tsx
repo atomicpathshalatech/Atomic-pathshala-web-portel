@@ -17,6 +17,8 @@ export interface RoadmapTopicGroup {
     slidesUrl?: string | null;
     isCompleted?: boolean;
     isLocked?: boolean;
+    isCancelled?: boolean;
+    cancellationReason?: string | null;
   }>;
   notes?: Array<{
     id: string;
@@ -60,6 +62,7 @@ export function ChapterRoadmapTimeline({
           const isOpen = openStep === step.stepNumber;
           const isLast = idx === visibleSteps.length - 1 && (!expanded || idx === roadmap.length - 1);
           const videoCount = step.lectures.length;
+          const isStepCancelled = step.lectures.some((l) => l.isCancelled);
 
           return (
             <div key={step.id} className="relative flex items-start gap-3.5">
@@ -69,7 +72,9 @@ export function ChapterRoadmapTimeline({
                   type="button"
                   onClick={() => setOpenStep(isOpen ? null : step.stepNumber)}
                   className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shadow-sm transition-all ${
-                    isOpen
+                    isStepCancelled
+                      ? "bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800"
+                      : isOpen
                       ? "bg-primary text-on-primary ring-4 ring-primary/20 scale-105"
                       : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700"
                   }`}
@@ -84,16 +89,26 @@ export function ChapterRoadmapTimeline({
               {/* Step Card (Clean Light / Dark Background) */}
               <div
                 className={`flex-1 rounded-2xl p-4 sm:p-5 border transition-all cursor-pointer ${
-                  isOpen
+                  isStepCancelled
+                    ? "bg-rose-50/30 dark:bg-rose-950/20 border-rose-200/80 dark:border-rose-900/50 hover:border-rose-300"
+                    : isOpen
                     ? "bg-white dark:bg-slate-900 border-primary/40 dark:border-primary/40 shadow-md"
                     : "bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 shadow-sm"
                 }`}
                 onClick={() => setOpenStep(isOpen ? null : step.stepNumber)}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <h4 className="text-sm sm:text-base font-bold text-[#031635] dark:text-white tracking-tight">
-                    {step.title}
-                  </h4>
+                  <div className="flex items-center gap-2 flex-wrap min-w-0">
+                    <h4 className="text-sm sm:text-base font-bold text-[#031635] dark:text-white tracking-tight">
+                      {step.title}
+                    </h4>
+                    {isStepCancelled && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 text-[10px] font-bold border border-rose-200 dark:border-rose-900/60 shrink-0">
+                        <span className="material-symbols-outlined text-[12px]">cancel</span>
+                        Class Cancelled
+                      </span>
+                    )}
+                  </div>
                   <span className="material-symbols-outlined text-sm text-slate-400">
                     {isOpen ? "expand_less" : "expand_more"}
                   </span>
@@ -125,13 +140,29 @@ export function ChapterRoadmapTimeline({
                       return (
                         <div
                           key={l.id}
-                          className="p-3 rounded-xl bg-slate-50/80 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700/60 flex items-center justify-between gap-2"
+                          className={`p-3 rounded-xl border flex items-center justify-between gap-2 ${
+                            l.isCancelled
+                              ? "bg-rose-50/50 dark:bg-rose-950/30 border-rose-200/80 dark:border-rose-900/40"
+                              : "bg-slate-50/80 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700/60"
+                          }`}
                         >
                           <div className="flex items-center gap-2.5 min-w-0">
-                            <span className="w-6 h-6 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center font-mono font-bold text-[11px] shrink-0">
+                            <span
+                              className={`w-6 h-6 rounded-lg flex items-center justify-center font-mono font-bold text-[11px] shrink-0 ${
+                                l.isCancelled
+                                  ? "bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300"
+                                  : "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                              }`}
+                            >
                               {l.order}
                             </span>
-                            <span className="text-slate-800 dark:text-slate-200 font-semibold line-clamp-1">
+                            <span
+                              className={`font-semibold line-clamp-1 ${
+                                l.isCancelled
+                                  ? "text-rose-800 dark:text-rose-200 line-through opacity-80"
+                                  : "text-slate-800 dark:text-slate-200"
+                              }`}
+                            >
                               {l.title}
                             </span>
                           </div>
@@ -150,13 +181,21 @@ export function ChapterRoadmapTimeline({
                                 <span>Slides</span>
                               </a>
                             )}
-                            <Link
-                              href={lectureHref}
-                              onClick={(e) => e.stopPropagation()}
-                              className="px-3 py-1.5 rounded-lg bg-amber-500 text-black font-bold text-xs hover:bg-amber-400 transition shadow-sm shrink-0"
-                            >
-                              Watch
-                            </Link>
+
+                            {l.isCancelled ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-100 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 font-bold text-xs border border-rose-200 dark:border-rose-900/60 shrink-0">
+                                <span className="material-symbols-outlined text-xs">cancel</span>
+                                <span>Class Cancelled</span>
+                              </span>
+                            ) : (
+                              <Link
+                                href={lectureHref}
+                                onClick={(e) => e.stopPropagation()}
+                                className="px-3 py-1.5 rounded-lg bg-amber-500 text-black font-bold text-xs hover:bg-amber-400 transition shadow-sm shrink-0"
+                              >
+                                Watch
+                              </Link>
+                            )}
                           </div>
                         </div>
                       );
