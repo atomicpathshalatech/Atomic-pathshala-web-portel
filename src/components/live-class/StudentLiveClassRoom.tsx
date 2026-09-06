@@ -40,6 +40,7 @@ interface WhiteboardSessionData {
   scheduledEnd?: string | null;
   actualStartedAt?: string | null;
   totalExtendedMinutes?: number;
+  chatEnabled?: boolean;
 }
 
 function isBackgroundImageUrl(background: string | undefined): background is string {
@@ -77,9 +78,38 @@ function StudentWhiteboardMirror({
   isLive: boolean;
   objects: StrokeObject[];
 }) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const baseRef = useRef<HTMLCanvasElement | null>(null);
   const activeRef = useRef<HTMLCanvasElement | null>(null);
   const engineRef = useRef<CanvasEngine | null>(null);
+  const [mirrorDim, setMirrorDim] = useState<{ width: number; height: number }>({ width: 960, height: 540 });
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const compute = () => {
+      const parent = containerRef.current?.parentElement;
+      if (!parent) return;
+      const { clientWidth, clientHeight } = parent;
+      if (clientWidth <= 0 || clientHeight <= 0) return;
+      const padW = 16;
+      const padH = 16;
+      const availW = Math.max(100, clientWidth - padW);
+      const availH = Math.max(100, clientHeight - padH);
+      let w = availW;
+      let h = Math.round(w * (9 / 16));
+      if (h > availH) {
+        h = availH;
+        w = Math.round(h * (16 / 9));
+      }
+      setMirrorDim({ width: w, height: h });
+    };
+    compute();
+    const ro = new ResizeObserver(compute);
+    if (containerRef.current.parentElement) {
+      ro.observe(containerRef.current.parentElement);
+    }
+    return () => ro.disconnect();
+  }, []);
 
   useEffect(() => {
     if (!baseRef.current || !activeRef.current) return;
@@ -90,24 +120,7 @@ function StudentWhiteboardMirror({
     engine.syncSize();
     engine.loadObjects(objects);
 
-    const onResize = () => {
-      engine.syncSize();
-      engine.loadObjects(objects);
-    };
-    window.addEventListener("resize", onResize);
-
-    let ro: ResizeObserver | null = null;
-    if (typeof ResizeObserver !== "undefined" && baseRef.current.parentElement) {
-      ro = new ResizeObserver(() => {
-        engine.syncSize();
-        engine.loadObjects(objects);
-      });
-      ro.observe(baseRef.current.parentElement);
-    }
-
     return () => {
-      window.removeEventListener("resize", onResize);
-      if (ro) ro.disconnect();
       engine.destroy();
       engineRef.current = null;
     };
@@ -119,10 +132,17 @@ function StudentWhiteboardMirror({
       engineRef.current.syncSize();
       engineRef.current.loadObjects(objects);
     }
-  }, [objects]);
+  }, [mirrorDim, objects]);
 
   return (
-    <div className={`relative aspect-[16/9] w-full max-w-full max-h-full h-auto overflow-hidden rounded-xl border border-slate-800/60 shadow-2xl ${boardBackground === "dark" ? "bg-[#10131d]" : "bg-white"}`}>
+    <div
+      ref={containerRef}
+      className={`relative overflow-hidden rounded-xl border border-slate-800/60 shadow-2xl shrink-0 transition-all ${boardBackground === "dark" ? "bg-[#10131d]" : "bg-white"}`}
+      style={{
+        width: `${mirrorDim.width}px`,
+        height: `${mirrorDim.height}px`,
+      }}
+    >
       {isBackgroundImageUrl(boardBackground) && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -333,12 +353,12 @@ export function StudentLiveClassRoom({
     }
   }
 
-  // Load board objects on mount or session change
+  // Load board objects only when class is LIVE (never before class starts)
   useEffect(() => {
-    if (wbSession?.id) {
+    if (wbSession?.id && phase === "live") {
       refreshBoard();
     }
-  }, [wbSession?.id]);
+  }, [wbSession?.id, phase]);
 
   // Periodic fallback sync while live to ensure board stays 100% synchronized
   useEffect(() => {
@@ -561,7 +581,167 @@ export function StudentLiveClassRoom({
     );
   }
 
-  // ---------------- COMPLETE WHITEBOARD STUDIO (ACTIVE FOR ALL STUDENTS) ----------------
+  // ---------------- WAITING ROOM (PRE-CLASS LOBBY) ----------------
+  // If the class has not started yet, students stay in this dedicated Waiting Room.
+  // The Whiteboard Canvas, video broadcast, and teacher slides are strictly NOT mounted or revealed
+  // until the educator starts the session (livePhase: "LIVE").
+  if (!isLive) {
+    const hours = Math.floor(Math.max(0, secondsUntilStart) / 3600);
+    const minutes = Math.floor((Math.max(0, secondsUntilStart) % 3600) / 60);
+    const seconds = Math.max(0, secondsUntilStart) % 60;
+
+    return (
+      <div className="min-h-screen bg-[#0b0d14] text-white flex flex-col justify-between select-none">
+        {/* Top Waiting Room Header */}
+        <header className="h-14 px-4 sm:px-6 shrink-0 flex items-center justify-between border-b border-slate-800/80 bg-[#10131d]">
+          <div className="flex items-center gap-3 min-w-0">
+            <Link
+              href="/schedule"
+              className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center shrink-0 transition shadow-xs"
+              title="Back to Schedule"
+            >
+              <span className="material-symbols-outlined text-base">arrow_back</span>
+            </Link>
+            <div className="w-8 h-8 rounded-xl overflow-hidden p-0.5 bg-white/5 border border-white/10 shrink-0 flex items-center justify-center">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/brand/logo.png" alt="Atomic Pathshala" className="w-full h-full object-contain" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 truncate leading-tight">{batchName}</p>
+              <h1 className="text-sm font-bold truncate max-w-xs sm:max-w-md text-white leading-tight">{scheduleTitle}</h1>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="flex items-center gap-1.5 text-xs font-bold text-amber-400 border border-amber-500/40 bg-amber-950/60 px-3 py-1 rounded-full shadow-xs">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+              WAITING ROOM
+            </span>
+          </div>
+        </header>
+
+        {/* Central Waiting Room Content */}
+        <main className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 flex flex-col lg:flex-row items-stretch justify-center gap-6 my-auto">
+          {/* Left Column: Hero & Countdown */}
+          <div className="flex-1 bg-[#121422] border border-slate-800 rounded-3xl p-6 sm:p-8 flex flex-col justify-between shadow-2xl space-y-6">
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 text-xs font-semibold">
+                <span className="material-symbols-outlined text-sm animate-spin">hourglass_top</span>
+                <span>Classroom is being prepared</span>
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-black text-white leading-tight">
+                {scheduleTitle}
+              </h2>
+              <p className="text-sm text-slate-400">
+                Batch: <span className="text-indigo-300 font-semibold">{batchName}</span>
+              </p>
+            </div>
+
+            {/* Countdown / Status Box */}
+            <div className="bg-[#181a2c] border border-slate-800/80 rounded-2xl p-5 text-center space-y-3">
+              {secondsUntilStart > 0 ? (
+                <>
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Class Starts In</p>
+                  <div className="flex items-center justify-center gap-3 font-mono">
+                    <div className="bg-[#0e0f1a] border border-slate-700/60 rounded-xl px-3 py-2 min-w-[60px]">
+                      <span className="text-2xl sm:text-3xl font-black text-white">{String(hours).padStart(2, "0")}</span>
+                      <span className="block text-[9px] uppercase tracking-wider text-slate-500 font-sans mt-0.5">Hours</span>
+                    </div>
+                    <span className="text-2xl font-bold text-slate-600">:</span>
+                    <div className="bg-[#0e0f1a] border border-slate-700/60 rounded-xl px-3 py-2 min-w-[60px]">
+                      <span className="text-2xl sm:text-3xl font-black text-white">{String(minutes).padStart(2, "0")}</span>
+                      <span className="block text-[9px] uppercase tracking-wider text-slate-500 font-sans mt-0.5">Mins</span>
+                    </div>
+                    <span className="text-2xl font-bold text-slate-600">:</span>
+                    <div className="bg-[#0e0f1a] border border-slate-700/60 rounded-xl px-3 py-2 min-w-[60px]">
+                      <span className="text-2xl sm:text-3xl font-black text-indigo-400">{String(seconds).padStart(2, "0")}</span>
+                      <span className="block text-[9px] uppercase tracking-wider text-slate-500 font-sans mt-0.5">Secs</span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-2 py-2">
+                  <div className="w-10 h-10 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center mx-auto border border-indigo-500/30">
+                    <span className="material-symbols-outlined text-xl animate-pulse">sensors</span>
+                  </div>
+                  <p className="text-base font-bold text-white">Starting Momentarily</p>
+                  <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                    Your educator is setting up the live canvas &amp; broadcast. You will be connected automatically when class begins.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Educator Card */}
+            <div className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-[#181a2c]/60 border border-slate-800">
+              <div className="w-12 h-12 rounded-xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center font-bold text-lg border border-indigo-500/30">
+                {teacherName ? teacherName.charAt(0).toUpperCase() : "E"}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <h4 className="text-sm font-bold text-white truncate">{teacherName || "Educator"}</h4>
+                  <span className="material-symbols-outlined text-xs text-indigo-400" title="Verified Educator">verified</span>
+                </div>
+                <p className="text-xs text-slate-400">Atomic Pathshala Faculty</p>
+              </div>
+            </div>
+
+            {/* Preparation Tips */}
+            <div className="grid grid-cols-2 gap-2 text-xs text-slate-400">
+              <div className="flex items-center gap-2 p-2 rounded-xl bg-slate-900/60 border border-slate-800/60">
+                <span className="material-symbols-outlined text-indigo-400 text-base">edit_note</span>
+                <span>Keep notebook &amp; pen ready</span>
+              </div>
+              <div className="flex items-center gap-2 p-2 rounded-xl bg-slate-900/60 border border-slate-800/60">
+                <span className="material-symbols-outlined text-emerald-400 text-base">wifi</span>
+                <span>Stable internet active</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column: Pre-Class Chat / Info Panel */}
+          {wbSession?.id && wbSession?.chatEnabled ? (
+            <div className="w-full lg:w-80 h-96 lg:h-auto flex flex-col bg-[#121422] border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
+              <div className="px-4 py-3 bg-[#0a0b12] border-b border-slate-800 flex items-center justify-between shrink-0">
+                <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-sm text-indigo-400">chat</span>
+                  Pre-Class Discussion
+                </span>
+                <span className="text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2 py-0.5 rounded-full font-semibold">
+                  Chat Open
+                </span>
+              </div>
+              <div className="flex-1 min-h-0">
+                <MessagesPanel
+                  whiteboardSessionId={wbSession.id}
+                  currentUserId={currentUserId}
+                  role="STUDENT"
+                  theme="dark"
+                  showOwnToggle={false}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="w-full lg:w-72 bg-[#121422] border border-slate-800 rounded-3xl p-6 flex flex-col justify-center items-center text-center space-y-3 shadow-2xl">
+              <div className="w-12 h-12 rounded-2xl bg-slate-800 text-slate-400 flex items-center justify-center">
+                <span className="material-symbols-outlined text-2xl">lock_clock</span>
+              </div>
+              <h3 className="text-sm font-bold text-white">Live Stage Locked</h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Strokes, presentation slides, quizzes, and live broadcast will unlock the instant the educator starts the session.
+              </p>
+            </div>
+          )}
+        </main>
+
+        <footer className="h-10 px-4 flex items-center justify-center text-[11px] text-slate-500 border-t border-slate-800/60 bg-[#0d0e17]">
+          <span>Atomic Pathshala Live Teaching Classroom • Stay on this screen for automatic entry</span>
+        </footer>
+      </div>
+    );
+  }
+
+  // ---------------- COMPLETE WHITEBOARD STUDIO (ACTIVE FOR ALL STUDENTS ONCE LIVE) ----------------
   return (
     <div className={`fixed inset-0 w-screen h-[100dvh] flex flex-col overflow-hidden select-none z-50 ${isThemeDark ? "bg-[#0b0d14] text-white" : "bg-slate-900 text-slate-100"}`}>
       {/* Top Authoritative Studio Header */}
@@ -739,7 +919,7 @@ export function StudentLiveClassRoom({
                         type="button"
                         disabled={Boolean(mySelection) || quiz.status !== "ACTIVE" || submittingAnswer}
                         onClick={() => submitAnswer(o.key)}
-                        className={`text-left px-3 py-2 rounded-xl border text-xs font-medium transition ${
+                        className={`text-left px-3 py-2 rounded-xl border text-xs font-medium transition active:scale-[0.98] touch-manipulation cursor-pointer ${
                           isCorrect
                             ? "border-emerald-500 bg-emerald-950/60 text-emerald-300 font-bold"
                             : selected
@@ -747,8 +927,8 @@ export function StudentLiveClassRoom({
                             : "border-slate-800 hover:bg-slate-800 text-slate-300"
                         } disabled:cursor-default`}
                       >
-                        <span className="font-mono font-bold mr-1.5 text-indigo-400">{o.key}.</span>
-                        <span className="truncate">{o.label}</span>
+                        <span className="font-mono font-bold mr-1.5 text-indigo-400 pointer-events-none">{o.key}.</span>
+                        <span className="truncate pointer-events-none">{o.label}</span>
                       </button>
                     );
                   })}
@@ -985,7 +1165,7 @@ export function StudentLiveClassRoom({
                             type="button"
                             disabled={Boolean(mySelection) || quiz.status !== "ACTIVE" || submittingAnswer}
                             onClick={() => submitAnswer(o.key)}
-                            className={`text-left px-4 py-3 rounded-xl border text-xs font-medium transition ${
+                            className={`text-left px-4 py-3 rounded-xl border text-xs font-medium transition active:scale-[0.98] touch-manipulation cursor-pointer ${
                               isCorrect
                                 ? "border-emerald-500 bg-emerald-950/60 text-emerald-300 font-bold"
                                 : selected
@@ -993,8 +1173,8 @@ export function StudentLiveClassRoom({
                                 : "border-slate-800 hover:bg-slate-800 text-slate-300"
                             } disabled:cursor-default`}
                           >
-                            <span className="font-mono font-bold mr-2 text-indigo-400">{o.key}.</span>
-                            {o.label}
+                            <span className="font-mono font-bold mr-2 text-indigo-400 pointer-events-none">{o.key}.</span>
+                            <span className="pointer-events-none">{o.label}</span>
                           </button>
                         );
                       })}

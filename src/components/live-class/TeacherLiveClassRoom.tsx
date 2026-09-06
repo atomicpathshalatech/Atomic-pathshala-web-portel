@@ -377,6 +377,33 @@ export function TeacherLiveClassRoom({
   } | null>(null);
   const [undoRedoTick, setUndoRedoTick] = useState(0);
   const [zoom, setZoom] = useState(1);
+  const mainCanvasContainerRef = useRef<HTMLElement>(null);
+  const [stageDimensions, setStageDimensions] = useState<{ width: number; height: number }>({ width: 960, height: 540 });
+
+  useEffect(() => {
+    if (!mainCanvasContainerRef.current) return;
+    const computeStage = () => {
+      const el = mainCanvasContainerRef.current;
+      if (!el) return;
+      const { clientWidth, clientHeight } = el;
+      if (clientWidth <= 0 || clientHeight <= 0) return;
+      const padW = 24;
+      const padH = 24;
+      const availW = Math.max(200, clientWidth - padW);
+      const availH = Math.max(150, clientHeight - padH);
+      let w = availW;
+      let h = Math.round(w * (9 / 16));
+      if (h > availH) {
+        h = availH;
+        w = Math.round(h * (16 / 9));
+      }
+      setStageDimensions({ width: w, height: h });
+    };
+    computeStage();
+    const ro = new ResizeObserver(computeStage);
+    ro.observe(mainCanvasContainerRef.current);
+    return () => ro.disconnect();
+  }, []);
   const [uploadingBackground, setUploadingBackground] = useState(false);
   // Surfaces real progress/errors for "load the uploaded presentation onto
   // the board as pages" — deliberately visible state, not console.error,
@@ -523,8 +550,14 @@ export function TeacherLiveClassRoom({
       engine.destroy();
       engineRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wbSession?.id]);
+
+  useEffect(() => {
+    if (engineRef.current) {
+      engineRef.current.syncSize();
+      if (currentPage) engineRef.current.loadObjects(currentPage.objects ?? []);
+    }
+  }, [stageDimensions, currentPage]);
 
   useEffect(() => {
     if (engineRef.current) {
@@ -865,9 +898,11 @@ export function TeacherLiveClassRoom({
         setPdfLoadState({ loading: true, progress: `Rendering page ${i} of ${doc.numPages}…`, error: null });
 
         const pdfPage = await doc.getPage(i);
-        const viewport = pdfPage.getViewport({ scale: 1 });
-        const scale = VIRTUAL_WIDTH / viewport.width;
-        const scaledViewport = pdfPage.getViewport({ scale });
+        const unscaledViewport = pdfPage.getViewport({ scale: 1 });
+        const scaleX = VIRTUAL_WIDTH / unscaledViewport.width;
+        const scaleY = VIRTUAL_HEIGHT / unscaledViewport.height;
+        const fitScale = Math.min(scaleX, scaleY);
+        const scaledViewport = pdfPage.getViewport({ scale: fitScale });
 
         const offscreen = document.createElement("canvas");
         offscreen.width = VIRTUAL_WIDTH;
@@ -876,7 +911,14 @@ export function TeacherLiveClassRoom({
         if (!offCtx) throw new Error("Could not prepare the page image (canvas unavailable).");
         offCtx.fillStyle = "#ffffff";
         offCtx.fillRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+
+        // Center the page horizontally and vertically on 1920x1080 slide
+        const offsetX = Math.round((VIRTUAL_WIDTH - scaledViewport.width) / 2);
+        const offsetY = Math.round((VIRTUAL_HEIGHT - scaledViewport.height) / 2);
+        offCtx.save();
+        offCtx.translate(offsetX, offsetY);
         await pdfPage.render({ canvasContext: offCtx, viewport: scaledViewport }).promise;
+        offCtx.restore();
         const dataUrl = offscreen.toDataURL("image/png");
 
         let targetPageId: string;
@@ -1528,7 +1570,8 @@ export function TeacherLiveClassRoom({
 
       {/* Main canvas area */}
       <main
-        className="relative overflow-hidden bg-[#10131b] p-4 flex items-center justify-center"
+        ref={mainCanvasContainerRef}
+        className="relative overflow-hidden bg-[#10131b] p-3 flex items-center justify-center min-w-0 min-h-0"
         style={{ gridColumn: "2", gridRow: "2" }}
       >
         {(pdfLoadState.loading || pdfLoadState.error) && (
@@ -1555,15 +1598,21 @@ export function TeacherLiveClassRoom({
           </div>
         )}
         <div
-          className="relative aspect-[16/9] w-full max-w-full max-h-full h-auto rounded-xl shadow-2xl overflow-hidden border border-slate-800/80"
-          style={isBackgroundImageUrl(currentPage?.background) ? undefined : slideBackgroundStyle(currentPage?.background)}
+          className="relative rounded-2xl shadow-2xl overflow-hidden border border-slate-800/80 shrink-0 transition-transform duration-75 select-none"
+          style={{
+            width: `${stageDimensions.width}px`,
+            height: `${stageDimensions.height}px`,
+            transform: zoom === 1 ? undefined : `scale(${zoom})`,
+            transformOrigin: "center center",
+            ...(isBackgroundImageUrl(currentPage?.background) ? undefined : slideBackgroundStyle(currentPage?.background)),
+          }}
         >
           {isBackgroundImageUrl(currentPage?.background) && (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={currentPage!.background}
               alt=""
-              className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+              className="absolute inset-0 w-full h-full object-contain pointer-events-none"
             />
           )}
           {currentPage?.background === "coordinate" && (
@@ -1572,14 +1621,8 @@ export function TeacherLiveClassRoom({
               <div className="absolute h-full w-[2px] bg-blue-500/70" />
             </div>
           )}
-          {/* Only the canvases themselves scale with zoom — a pure CSS
-              transform, origin top-left. Their backing-store resolution
-              stays pinned to their untransformed box (see
-              CanvasEngine.syncSize/getPoint), so zoom is purely visual and
-              never desyncs where a stroke lands. The slide background
-              (color/pattern/image) deliberately stays outside this wrapper
-              so zooming never leaves a gap around a smaller-than-100% page. */}
-          <div className="absolute inset-0" style={{ transform: `scale(${zoom})`, transformOrigin: "0 0" }}>
+          {/* Continuous Full-Size Canvas — covers 100% of visible card */}
+          <div className="absolute inset-0 w-full h-full">
             <canvas ref={baseCanvasRef} className="absolute inset-0 w-full h-full" />
             <canvas
               ref={activeCanvasRef}

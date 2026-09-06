@@ -23,7 +23,7 @@ const ALLOWED_TYPES: Record<string, string> = {
 // usage (per-slide images, not just once) — higher ceiling than the
 // profile-photo limiter, same AuditLog-backed pattern.
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
-const RATE_LIMIT_MAX = 30;
+const RATE_LIMIT_MAX = 150;
 
 /**
  * Teacher-only. Uploads an image and sets it as this page's background —

@@ -1,5 +1,6 @@
 import "server-only";
-import { EgressClient, EncodedFileOutput, EncodedFileType, S3Upload } from "livekit-server-sdk";
+import { EgressClient, EgressStatus, EncodedFileOutput, EncodedFileType, S3Upload } from "livekit-server-sdk";
+import { prisma } from "@/lib/db";
 
 /**
  * LiveKit Egress (server-side room recording) writing straight to the same
@@ -97,4 +98,85 @@ export async function startRoomRecording(roomName: string, storageKey: string) {
 export async function stopRoomRecording(egressId: string) {
   const client = getEgressClient();
   return client.stopEgress(egressId);
+}
+
+type RecordingFields = {
+  recordingStatus: string;
+  recordingStorageKey: string | null;
+  recordingDurationSeconds: number | null;
+};
+
+/**
+ * Fallback for the LiveKit `egress_ended` webhook
+ * (src/app/api/webhooks/livekit/route.ts) never arriving or failing signature
+ * verification - e.g. the LiveKit Cloud project's webhook URL still pointing
+ * at a stale/old deployment domain, or a dropped delivery (LiveKit does not
+ * retry a failed webhook). That webhook was previously the ONLY way a
+ * recording ever left "RECORDING"/"PROCESSING", so a single missed delivery
+ * left the session - and every student looking at it - stuck showing
+ * "Recording in Process" forever with no way to recover.
+ *
+ * Whenever a recording is read while still RECORDING/PROCESSING, this asks
+ * LiveKit directly (outbound call we already rely on to start/stop egress
+ * and mint join tokens, so it isn't subject to the same "did the inbound
+ * webhook reach us" failure mode) for the egress's real status via
+ * listEgress, and applies the same DB update the webhook would have. A
+ * missed webhook then self-heals on the very next read instead of needing a
+ * manual DB fix. Best-effort and side-effect-free on failure: never throws,
+ * so a call site can await it without risking the page/route it's part of.
+ */
+export async function reconcileRecordingStatus(
+  session: { id: string; recordingStatus: string; recordingEgressId: string | null }
+): Promise<RecordingFields | null> {
+  if (
+    (session.recordingStatus !== "RECORDING" && session.recordingStatus !== "PROCESSING") ||
+    !session.recordingEgressId
+  ) {
+    return null;
+  }
+
+  try {
+    const client = getEgressClient();
+    const results = await client.listEgress({ egressId: session.recordingEgressId });
+    const info = results?.[0];
+    if (!info) return null;
+
+    if (info.status === EgressStatus.EGRESS_COMPLETE) {
+      const file = info.fileResults?.[0];
+      return await prisma.whiteboardSession.update({
+        where: { id: session.id },
+        data: {
+          recordingStatus: "READY",
+          recordingStorageKey: file?.filename || undefined,
+          recordingDurationSeconds: file?.duration
+            ? Math.round(Number(file.duration) / 1_000_000_000)
+            : undefined,
+        },
+        select: {
+          recordingStatus: true,
+          recordingStorageKey: true,
+          recordingDurationSeconds: true,
+        },
+      });
+    }
+
+    if (info.status === EgressStatus.EGRESS_FAILED || info.status === EgressStatus.EGRESS_ABORTED) {
+      return await prisma.whiteboardSession.update({
+        where: { id: session.id },
+        data: { recordingStatus: "FAILED" },
+        select: {
+          recordingStatus: true,
+          recordingStorageKey: true,
+          recordingDurationSeconds: true,
+        },
+      });
+    }
+
+    // Still genuinely active/starting on LiveKit's side - nothing to
+    // reconcile yet, the webhook (or the next read) will catch it later.
+    return null;
+  } catch (err) {
+    console.error("[reconcileRecordingStatus] LiveKit lookup failed:", err);
+    return null;
+  }
 }

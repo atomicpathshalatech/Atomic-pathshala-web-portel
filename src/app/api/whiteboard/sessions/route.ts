@@ -169,12 +169,8 @@ export async function POST(request: NextRequest) {
       include: { pages: { orderBy: { pageNumber: "asc" } } },
     });
 
-    if (schedule.status === "SCHEDULED") {
-      await prisma.batchSchedule.update({
-        where: { id: schedule.id },
-        data: { status: "LIVE" },
-      });
-    }
+    // BatchSchedule.status remains SCHEDULED until teacher explicitly starts the class via /start endpoint
+
 
     await prisma.auditLog.create({
       data: {

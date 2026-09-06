@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { resolveWhiteboardAccess } from "@/lib/whiteboard/access";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { createPresignedDownloadUrl } from "@/lib/storage/r2-client";
+import { reconcileRecordingStatus } from "@/lib/livekit/egress";
 
 /**
  * Catch-up playback endpoint. Same access rule as every other
@@ -33,14 +34,27 @@ export async function GET(
         recordingStatus: true,
         recordingStorageKey: true,
         recordingDurationSeconds: true,
+        recordingEgressId: true,
       },
     });
 
     if (!wbSession) return apiError("Session not found", 404);
 
-    if (wbSession.recordingStatus !== "READY" || !wbSession.recordingStorageKey) {
+    // Self-heal a missed egress_ended webhook (see reconcileRecordingStatus)
+    // so a poller hitting this endpoint doesn't spin on "processing" forever
+    // over one dropped webhook delivery.
+    const reconciled = await reconcileRecordingStatus({
+      id: params.id,
+      recordingStatus: wbSession.recordingStatus,
+      recordingEgressId: wbSession.recordingEgressId,
+    });
+    const effective = reconciled
+      ? { ...wbSession, ...reconciled }
+      : wbSession;
+
+    if (effective.recordingStatus !== "READY" || !effective.recordingStorageKey) {
       return apiSuccess({
-        status: wbSession.recordingStatus,
+        status: effective.recordingStatus,
         available: false,
         url: null,
         durationSeconds: null,
@@ -48,7 +62,7 @@ export async function GET(
     }
 
     const url = await createPresignedDownloadUrl({
-      key: wbSession.recordingStorageKey,
+      key: effective.recordingStorageKey,
       expiresInSeconds: 3600,
     });
 
@@ -56,7 +70,7 @@ export async function GET(
       status: "READY",
       available: true,
       url,
-      durationSeconds: wbSession.recordingDurationSeconds,
+      durationSeconds: effective.recordingDurationSeconds,
     });
   } catch (error) {
     return handleApiError(error);

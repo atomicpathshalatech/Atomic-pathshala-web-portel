@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/db";
 import { AtomicVideoPlayer } from "@/components/student/AtomicVideoPlayer";
 import { createPresignedDownloadUrl } from "@/lib/storage/r2-client";
+import { reconcileRecordingStatus } from "@/lib/livekit/egress";
 
 export const metadata: Metadata = {
   title: "Lecture Video Player — Atomic Pathshala",
@@ -80,6 +81,13 @@ export default async function WatchLecturePage({ params }: { params?: { lectureI
       lecture = schedule.lecture;
     } else if (schedule) {
       let resolvedRecUrl = "";
+      if (schedule.liveWhiteboardSession) {
+        const updated = await reconcileRecordingStatus(schedule.liveWhiteboardSession);
+        if (updated) {
+          schedule.liveWhiteboardSession.recordingStatus = updated.recordingStatus;
+          schedule.liveWhiteboardSession.recordingStorageKey = updated.recordingStorageKey;
+        }
+      }
       if (
         schedule.liveWhiteboardSession?.recordingStorageKey &&
         schedule.liveWhiteboardSession.recordingStatus === "READY"
@@ -112,6 +120,16 @@ export default async function WatchLecturePage({ params }: { params?: { lectureI
 
     // If lecture.videoUrl is not set, check if any attached batchSchedule has a ready recording
     if (!resolvedVideoUrl) {
+      await Promise.all(
+        (lecture.batchSchedules || []).map(async (s) => {
+          if (!s.liveWhiteboardSession) return;
+          const updated = await reconcileRecordingStatus(s.liveWhiteboardSession);
+          if (updated) {
+            s.liveWhiteboardSession.recordingStatus = updated.recordingStatus;
+            s.liveWhiteboardSession.recordingStorageKey = updated.recordingStorageKey;
+          }
+        })
+      );
       const scheduleWithRec = lecture.batchSchedules?.find(
         (s) =>
           s.liveWhiteboardSession?.recordingStatus === "READY" &&

@@ -34,6 +34,7 @@ export interface QuestionRow {
   subTopic: string | null;
   type: string;
   difficulty: string;
+  category?: string | null;
   status: string; // DRAFT | REVIEW_1 | REVIEW_2 | PUBLISHED | REJECTED
   version: number;
   isPublished: boolean;
@@ -109,6 +110,7 @@ export function QuestionManagementTable({
   const [createdById, setCreatedById] = useState(searchParams.get("createdById") || "");
   const [reviewedById, setReviewedById] = useState(searchParams.get("reviewedById") || "");
   const [editedById, setEditedById] = useState(searchParams.get("editedById") || "");
+  const [source, setSource] = useState(searchParams.get("source") || "");
 
   // Modals
   const [reviewModalQuestion, setReviewModalQuestion] = useState<{
@@ -141,6 +143,7 @@ export function QuestionManagementTable({
     if (difficulty) params.set("difficulty", difficulty);
     if (type) params.set("type", type);
     if (status) params.set("status", status);
+    if (source) params.set("source", source);
     if (createdById) params.set("createdById", createdById);
     if (reviewedById) params.set("reviewedById", reviewedById);
     if (editedById) params.set("editedById", editedById);
@@ -156,6 +159,7 @@ export function QuestionManagementTable({
     setDifficulty("");
     setType("");
     setStatus("");
+    setSource("");
     setCreatedById("");
     setReviewedById("");
     setEditedById("");
@@ -398,8 +402,8 @@ export function QuestionManagementTable({
           </div>
         </div>
 
-        {/* Row 2: Difficulty, Question Type, Workflow Status, Created By, Reviewed By */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 pt-1 border-t border-slate-100">
+        {/* Row 2: Difficulty, Question Type, Workflow Status, Generation Source, Created By, Reviewed By */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-7 gap-3 pt-1 border-t border-slate-100">
           <div>
             <select
               value={difficulty}
@@ -435,12 +439,26 @@ export function QuestionManagementTable({
               onChange={(e) => setStatus(e.target.value)}
               className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 outline-none focus:border-blue-500"
             >
-              <option value="">All Workflow Status</option>
+              <option value="">All Status</option>
               <option value="DRAFT">Draft</option>
               <option value="REVIEW_1">Review 1 Pending</option>
               <option value="REVIEW_2">Review 2 Pending</option>
               <option value="PUBLISHED">Published (Verified)</option>
               <option value="REJECTED">Rejected</option>
+            </select>
+          </div>
+
+          <div>
+            <select
+              value={source}
+              onChange={(e) => setSource(e.target.value)}
+              className="w-full px-3 py-2 bg-purple-50/50 border border-purple-200 rounded-xl text-xs text-purple-900 font-semibold outline-none focus:border-purple-500"
+            >
+              <option value="">Source: All</option>
+              <option value="AI_ALL">✨ AI Generated (All)</option>
+              <option value="AI_ONLY">🤖 AI Mode</option>
+              <option value="PDF_ONLY">📄 PDF Mode</option>
+              <option value="MANUAL">✍️ Manual Authored</option>
             </select>
           </div>
 
@@ -528,6 +546,12 @@ export function QuestionManagementTable({
                           {q.translations.length > 1 && (
                             <span className="text-[10px] font-bold text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded">
                               Bilingual
+                            </span>
+                          )}
+                          {q.category?.startsWith("AI_GENERATED") && (
+                            <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded inline-flex items-center gap-1">
+                              <Sparkles className="w-2.5 h-2.5 text-purple-600" />
+                              <span>{q.category.includes("PDF") ? "PDF Generated" : "AI Generated"}</span>
                             </span>
                           )}
                         </div>

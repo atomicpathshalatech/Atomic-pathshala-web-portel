@@ -115,17 +115,21 @@ export function canStudentJoin(
     };
   }
 
-  if (hasActiveSession) {
-    const isLive =
-      schedule.status === "LIVE" ||
-      schedule.liveWhiteboardSession?.livePhase === "LIVE";
+  // A class is truly live only if livePhase is LIVE (never while PREPARING or unstarted)
+  const isClassLive =
+    schedule.liveWhiteboardSession?.livePhase === "LIVE" ||
+    (schedule.status === "LIVE" &&
+      schedule.liveWhiteboardSession?.livePhase !== "PREPARING" &&
+      schedule.liveWhiteboardSession?.livePhase !== "ENDED");
+
+  if (isClassLive) {
     return {
       allowed: true,
-      status: isLive ? "LIVE" : "STARTING_SOON",
+      status: "LIVE",
       opensAt,
       startsAt,
       endsAt,
-      isLive,
+      isLive: true,
       isCompleted: false,
       isCancelled: false,
       isWindowOpen: true,
@@ -257,8 +261,10 @@ export function canTeacherStart(
   }
 
   const isLive =
-    schedule.status === "LIVE" ||
-    schedule.liveWhiteboardSession?.livePhase === "LIVE";
+    schedule.liveWhiteboardSession?.livePhase === "LIVE" ||
+    (schedule.status === "LIVE" &&
+      schedule.liveWhiteboardSession?.livePhase !== "PREPARING" &&
+      schedule.liveWhiteboardSession?.livePhase !== "ENDED");
 
   return {
     allowed: true,
@@ -293,22 +299,24 @@ export function getEffectiveScheduleStatus(
   const { startsAt, endsAt, opensAt } = getScheduleWindowDates(schedule);
   const nowMs = serverNow.getTime();
 
+  // Authoritative check: Truly live only if teacher has started the session (livePhase is LIVE)
+  const isTrulyLive =
+    schedule.liveWhiteboardSession?.livePhase === "LIVE" ||
+    (schedule.status === "LIVE" &&
+      schedule.liveWhiteboardSession?.livePhase !== "PREPARING" &&
+      schedule.liveWhiteboardSession?.livePhase !== "ENDED");
+
+  if (isTrulyLive && nowMs <= endsAt.getTime() + 4 * 60 * 60 * 1000) {
+    return "LIVE";
+  }
+
   // If before T-15, it is strictly SCHEDULED (future)
   if (nowMs < opensAt.getTime()) {
     return "SCHEDULED";
   }
 
-  // If within window and live
-  if (
-    (schedule.status === "LIVE" ||
-      schedule.liveWhiteboardSession?.livePhase === "LIVE") &&
-    nowMs <= endsAt.getTime() + 4 * 60 * 60 * 1000
-  ) {
-    return "LIVE";
-  }
-
   // If 30 minutes have passed since scheduled startsAt and class hasn't started/live, it is CANCELLED
-  if (nowMs >= startsAt.getTime() + 30 * 60 * 1000) {
+  if (!isTrulyLive && nowMs >= startsAt.getTime() + 30 * 60 * 1000) {
     return "CANCELLED";
   }
 

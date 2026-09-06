@@ -86,6 +86,22 @@ export default async function QuestionBankPage({
     }
   }
 
+  const sourceFilter = (searchParams as any).source;
+  if (sourceFilter && sourceFilter !== "ALL") {
+    if (sourceFilter === "AI_ALL") {
+      where.category = { startsWith: "AI_GENERATED" };
+    } else if (sourceFilter === "AI_ONLY") {
+      where.category = "AI_GENERATED:AI";
+    } else if (sourceFilter === "PDF_ONLY") {
+      where.category = "AI_GENERATED:PDF";
+    } else if (sourceFilter === "MANUAL") {
+      where.OR = [
+        { category: null },
+        { category: { not: { startsWith: "AI_GENERATED" } } },
+      ];
+    }
+  }
+
   if (searchParams.createdById && searchParams.createdById !== "ALL") {
     where.createdById = searchParams.createdById;
   }
@@ -155,6 +171,14 @@ export default async function QuestionBankPage({
 
         {canCreate && (
           <div className="flex items-center gap-3">
+            <Link
+              href="/team/questions/ai-generated"
+              className="flex items-center gap-2 bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 text-white px-5 py-2.5 rounded-full font-bold text-xs hover:opacity-95 transition-all shadow-md shadow-purple-500/20 active:scale-95"
+              title="Generate production-grade questions via PDF grounding or AI syllabus engine"
+            >
+              <span className="material-symbols-outlined text-sm text-amber-300 animate-pulse">auto_awesome</span>
+              <span>AI Generated Questions</span>
+            </Link>
             <Link
               href="/team/question-bank-hierarchical"
               className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-5 py-2.5 rounded-full font-bold text-xs hover:opacity-95 transition-all shadow-md shadow-indigo-500/20"

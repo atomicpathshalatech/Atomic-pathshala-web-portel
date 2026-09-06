@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import Link from "next/link";
@@ -156,9 +156,10 @@ export function StudentPostClassFeedback({
                   key={star}
                   type="button"
                   onClick={() => setRating(star)}
-                  className="text-lg text-amber-400 hover:scale-110 transition"
+                  className="p-1 text-2xl text-amber-400 active:scale-95 transition-transform touch-manipulation cursor-pointer"
+                  title={`${star} star${star > 1 ? "s" : ""}`}
                 >
-                  <span className="material-symbols-outlined">
+                  <span className="material-symbols-outlined pointer-events-none select-none text-2xl">
                     {star <= rating ? "star" : "star_border"}
                   </span>
                 </button>

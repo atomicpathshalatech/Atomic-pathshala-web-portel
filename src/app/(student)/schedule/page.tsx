@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { requireStudentSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { HorizontalScheduleCalendar, type ScheduleItem, type BatchOption } from "@/components/schedule/HorizontalScheduleCalendar";
+import { reconcileRecordingStatus } from "@/lib/livekit/egress";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -37,6 +38,7 @@ export default async function SchedulePage({
                   livePhase: true,
                   recordingStatus: true,
                   recordingStorageKey: true,
+                  recordingEgressId: true,
                 },
               },
             },
@@ -73,9 +75,24 @@ export default async function SchedulePage({
   }));
 
   // Flatten all schedules WITHOUT filtering out past, completed or cancelled
-  const allSchedules: ScheduleItem[] = enrollments
-    .flatMap((e) => e.batch.schedules)
-    .map((s) => ({
+  const flatSchedules = enrollments.flatMap((e) => e.batch.schedules);
+
+  // Self-heal any recording whose egress_ended webhook never landed (see
+  // reconcileRecordingStatus) before rendering - otherwise a missed webhook
+  // leaves the student staring at "Recording in Process" indefinitely even
+  // though the class ended and the recording finished processing long ago.
+  await Promise.all(
+    flatSchedules.map(async (s) => {
+      if (!s.liveWhiteboardSession) return;
+      const updated = await reconcileRecordingStatus(s.liveWhiteboardSession);
+      if (updated) {
+        s.liveWhiteboardSession.recordingStatus = updated.recordingStatus;
+        s.liveWhiteboardSession.recordingStorageKey = updated.recordingStorageKey;
+      }
+    })
+  );
+
+  const allSchedules: ScheduleItem[] = flatSchedules.map((s) => ({
       id: s.id,
       title: s.title,
       subject: s.subject,
