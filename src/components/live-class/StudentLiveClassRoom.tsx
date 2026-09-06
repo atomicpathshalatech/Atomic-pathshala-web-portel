@@ -199,6 +199,9 @@ export function StudentLiveClassRoom({
 
   const [activeMobileTab, setActiveMobileTab] = useState<"chat" | "quiz" | "info">("chat");
   const [isFullscreen, setIsFullscreen] = useState(false);
+  // Governs the single merged teacher-video + chat popup on desktop (see
+  // the floating panel in the lg:flex branch below). Mobile's chat lives in
+  // its own always-visible tab and isn't gated by this.
   const [showChat, setShowChat] = useState(true);
 
   // Exactly one <VideoStrip> must ever be mounted per student: it opens its
@@ -633,16 +636,18 @@ export function StudentLiveClassRoom({
             <span className="hidden xs:inline">{handRaised ? "Raised" : "Raise"}</span>
           </button>
 
-          {/* Local Hide/Show Chat Toggle (Student Preference) */}
+          {/* Local Hide/Show Teacher-Video-&-Chat Popup (Student Preference).
+              Desktop-only: on mobile, video is a PiP corner overlay and chat
+              is its own always-visible tab, neither gated by this toggle. */}
           <button
             type="button"
             onClick={() => setShowChat((v) => !v)}
-            className={`flex items-center gap-1 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition shadow-sm border ${
+            className={`hidden lg:flex items-center gap-1 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition shadow-sm border ${
               showChat
                 ? "bg-slate-800 hover:bg-slate-700 text-indigo-300 border-indigo-500/40"
                 : "bg-slate-800/60 hover:bg-slate-700/80 text-slate-400 border-slate-700"
             }`}
-            title={showChat ? "Hide Chat Panel (distraction-free focus)" : "Show Chat Panel"}
+            title={showChat ? "Minimize teacher video & chat (distraction-free focus)" : "Show teacher video & chat"}
           >
             <span className="material-symbols-outlined text-sm">
               {showChat ? "chat" : "chat_bubble_outline"}
@@ -750,89 +755,104 @@ export function StudentLiveClassRoom({
                 </div>
               </div>
             )}
-          </div>
-        </div>
 
-        {/* Right Rail (Teacher Video + Live Chat) */}
-        <div className="w-80 xl:w-96 h-full flex flex-col gap-3 shrink-0">
-          {/* Teacher Video Box */}
-          {!isYouTube && (
-            <div className={`bg-[#10121d] border border-slate-800/80 rounded-2xl overflow-hidden shadow-xl shrink-0 ${isCameraCircle ? "p-3 flex items-center justify-center aspect-square" : ""}`}>
-              <div className={`w-full overflow-hidden ${isCameraCircle ? "aspect-square rounded-full border-2 border-indigo-500 shadow-lg shadow-indigo-500/20" : "aspect-video rounded-xl"}`}>
-                {isDesktopViewport && (
-                  <VideoStrip
-                    whiteboardSessionId={wbSession?.id || batchScheduleId}
-                    variant="panel"
-                    role="STUDENT"
-                    teacherName={teacherName}
-                  />
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Approved Speaker Live Indicator (when teacher grants speaking permission) */}
-          {isApprovedSpeaker && (
-            <div className="bg-emerald-950/80 border border-emerald-500/60 rounded-xl p-3 shadow-lg flex items-center justify-between text-xs text-white animate-in fade-in">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
-                <span className="font-semibold text-emerald-200">You are an Approved Speaker</span>
-              </div>
-              <span className="text-[10px] text-emerald-400 font-mono">Microphone Active</span>
-            </div>
-          )}
-
-
-
-          {/* Live Chat Panel (conditionally visible via student's local toggle) */}
-          {showChat ? (
-            <div className="bg-[#10121d] border border-slate-800/80 rounded-2xl overflow-hidden shadow-xl flex-1 min-h-0 flex flex-col">
-              <div className="px-4 py-2.5 bg-[#0a0b12] border-b border-slate-800 flex items-center justify-between shrink-0">
-                <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-sm text-indigo-400">chat</span>
-                  Classroom Live Chat
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setShowChat(false)}
-                  className="text-[10px] text-slate-400 hover:text-white flex items-center gap-0.5"
-                  title="Hide chat"
+            {/* Teacher Video + Live Chat — a single floating popup instead of
+                a permanently-reserved sidebar column, so the whiteboard uses
+                the full card width regardless of whether it's open. Anchored
+                top-right (not bottom, where the quiz drawer above already
+                spans the full width) inside this same relative canvas stage.
+                VideoStrip stays mounted continuously in both states — only
+                its container's size/shape changes — so minimizing this
+                never tears down and reopens the LiveKit connection (see the
+                isDesktopViewport-gated single-mount comment near the top of
+                this component for why that matters). */}
+            {!isYouTube && (
+              <div
+                className={`absolute z-40 top-3 right-3 bg-[#10121d]/95 backdrop-blur-md border border-slate-800/80 shadow-2xl overflow-hidden flex flex-col transition-all duration-200 ${
+                  showChat ? "w-72 xl:w-80 max-h-[420px] rounded-2xl" : "w-14 h-14 rounded-full"
+                }`}
+              >
+                <div
+                  className={`items-center justify-between px-3 py-2 bg-[#0a0b12] border-b border-slate-800 shrink-0 ${
+                    showChat ? "flex" : "hidden"
+                  }`}
                 >
-                  <span className="material-symbols-outlined text-xs">visibility_off</span>
-                  <span>Hide</span>
-                </button>
-              </div>
-              <div className="flex-1 min-h-0 p-2">
-                {wbSession?.id ? (
-                  <MessagesPanel
-                    whiteboardSessionId={wbSession.id}
-                    currentUserId={currentUserId}
-                    role="STUDENT"
-                    theme={isThemeDark ? "dark" : "light"}
-                  />
-                ) : (
-                  <div className="h-full flex items-center justify-center text-xs text-slate-500">
-                    Connecting chat...
+                  <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-sm text-indigo-400">group</span>
+                    Teacher &amp; Chat
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowChat(false)}
+                    className="text-slate-400 hover:text-white"
+                    title="Minimize (distraction-free focus)"
+                  >
+                    <span className="material-symbols-outlined text-base">remove</span>
+                  </button>
+                </div>
+
+                <div
+                  onClick={() => {
+                    if (!showChat) setShowChat(true);
+                  }}
+                  role={showChat ? undefined : "button"}
+                  tabIndex={showChat ? undefined : 0}
+                  title={showChat ? undefined : "Show teacher video & chat"}
+                  className={`relative shrink-0 ${showChat ? "" : "w-full h-full cursor-pointer"}`}
+                >
+                  <div
+                    className={`overflow-hidden ${
+                      showChat
+                        ? isCameraCircle
+                          ? "mx-auto mt-3 w-20 h-20 rounded-full border-2 border-indigo-500 shadow-lg shadow-indigo-500/20"
+                          : "w-full aspect-video"
+                        : "w-full h-full"
+                    }`}
+                  >
+                    {isDesktopViewport && (
+                      <VideoStrip
+                        whiteboardSessionId={wbSession?.id || batchScheduleId}
+                        variant="panel"
+                        role="STUDENT"
+                        teacherName={teacherName}
+                      />
+                    )}
+                  </div>
+                  {!showChat && (
+                    <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center border-2 border-[#0b0d14]">
+                      <span className="material-symbols-outlined text-[12px]">chat</span>
+                    </span>
+                  )}
+                </div>
+
+                {isApprovedSpeaker && (
+                  <div
+                    className={`mx-2 mt-2 bg-emerald-950/80 border border-emerald-500/60 rounded-lg px-2 py-1.5 items-center gap-1.5 text-[10px] text-emerald-200 ${
+                      showChat ? "flex" : "hidden"
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                    Approved Speaker · Mic Active
                   </div>
                 )}
+
+                <div className={`flex-1 min-h-0 p-2 ${showChat ? "block" : "hidden"}`}>
+                  {wbSession?.id ? (
+                    <MessagesPanel
+                      whiteboardSessionId={wbSession.id}
+                      currentUserId={currentUserId}
+                      role="STUDENT"
+                      theme={isThemeDark ? "dark" : "light"}
+                    />
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-xs text-slate-500">
+                      Connecting chat...
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          ) : (
-            <div className="bg-[#10121d] border border-slate-800/80 rounded-2xl p-4 shadow-xl flex-1 min-h-0 flex flex-col items-center justify-center text-center gap-2">
-              <span className="material-symbols-outlined text-slate-600 text-3xl">chat_bubble_outline</span>
-              <p className="text-xs font-bold text-slate-300">Chat is Hidden</p>
-              <p className="text-[11px] text-slate-500 max-w-[200px]">
-                You are in focus mode. Live chat continues in the background without distraction.
-              </p>
-              <button
-                type="button"
-                onClick={() => setShowChat(true)}
-                className="mt-2 px-3 py-1.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 text-xs font-bold transition border border-indigo-500/40"
-              >
-                Restore Chat
-              </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
 
