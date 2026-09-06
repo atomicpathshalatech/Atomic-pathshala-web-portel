@@ -28,7 +28,7 @@ interface Props {
   onSubjectChange: (s: string) => void;
   onChapterChange: (c: string) => void;
   subjectsList: Array<{ id: string; name: string }>;
-  chaptersList: Array<{ id: string; title: string }>;
+  chaptersList: Array<{ id: string; title: string; displayTitle?: string }>;
   topicsList: Array<{ id: string; title: string; subtopics: string[]; isCustom?: boolean }>;
   selectedTopics: string[];
   onSelectedTopicsChange: (t: string[]) => void;
@@ -44,7 +44,7 @@ interface Props {
   onTotalQuestionsChange: (n: number) => void;
   generationPlan: GenerationPlan;
   onGenerationPlanChange: (plan: GenerationPlan) => void;
-  onCustomTopicAdded: (newTopic: string) => Promise<void>;
+  onCustomTopicAdded: (newTopic: string, subtopics?: string[]) => Promise<void>;
 }
 
 export function TaxonomyConfigStep({
@@ -194,11 +194,18 @@ export function TaxonomyConfigStep({
   // Add Custom Topic submit
   const handleAddCustomTopicSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customTopicInput.trim()) return;
+    const cleanTopic = customTopicInput.trim();
+    if (!cleanTopic) {
+      toast.error("Please enter a topic name.");
+      return;
+    }
 
     setAddingCustom(true);
     try {
-      await onCustomTopicAdded(customTopicInput.trim());
+      await onCustomTopicAdded(
+        cleanTopic,
+        customSubtopicInput.trim() ? [customSubtopicInput.trim()] : []
+      );
       setShowAddCustomTopic(false);
       setCustomTopicInput("");
       setCustomSubtopicInput("");
@@ -258,7 +265,7 @@ export function TaxonomyConfigStep({
                 <option value="">-- Select Chapter --</option>
                 {chaptersList.map((c) => (
                   <option key={c.id} value={c.title}>
-                    {c.title}
+                    {c.displayTitle || c.title}
                   </option>
                 ))}
               </select>

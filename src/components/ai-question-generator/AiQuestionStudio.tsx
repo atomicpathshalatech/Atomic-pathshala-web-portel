@@ -44,7 +44,7 @@ export function AiQuestionStudio() {
 
   // Taxonomy Lists
   const [subjectsList, setSubjectsList] = useState<Array<{ id: string; name: string }>>([]);
-  const [chaptersList, setChaptersList] = useState<Array<{ id: string; title: string }>>([]);
+  const [chaptersList, setChaptersList] = useState<Array<{ id: string; title: string; displayTitle?: string }>>([]);
   const [topicsList, setTopicsList] = useState<
     Array<{ id: string; title: string; subtopics: string[]; isCustom?: boolean }>
   >([]);
@@ -181,7 +181,7 @@ export function AiQuestionStudio() {
   }, [subject, chapter]);
 
   // 4. Custom Topic Registration
-  const handleCustomTopicAdded = async (newTopic: string) => {
+  const handleCustomTopicAdded = async (newTopic: string, subtopics?: string[]) => {
     try {
       const res = await fetch("/api/team/ai-questions/taxonomy", {
         method: "POST",
@@ -189,7 +189,9 @@ export function AiQuestionStudio() {
         body: JSON.stringify({
           subject,
           chapter,
+          topicTitle: newTopic,
           customTopic: newTopic,
+          subtopics: subtopics || [],
         }),
       });
       const json = await res.json();
@@ -212,6 +214,7 @@ export function AiQuestionStudio() {
       }
     } catch (err: any) {
       toast.error(err.message || "Failed to register custom topic.");
+      throw err;
     }
   };
 

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { getMasterNcertTopics } from "@/lib/academic/master-ncert-catalog";
 
 /**
  * Normalizes topic names to prevent duplicate topics from spelling/formatting variations:
@@ -37,7 +38,26 @@ export async function getTopicsForSubjectAndChapter(
 
   const results: Map<string, ResolvedTaxonomyTopic> = new Map();
 
-  // 1. Fetch from Academic Hierarchy if available
+  // 1. Primary Source: Official Master NCERT Syllabus Catalog
+  try {
+    const masterTopics = getMasterNcertTopics(normSubject, normChapter);
+    for (const mt of masterTopics) {
+      const key = normalizeTopicName(mt.title);
+      results.set(key, {
+        id: mt.id,
+        title: mt.title,
+        titleHindi: mt.titleHindi,
+        subtopics: mt.subtopics,
+        isCustom: false,
+        isApproved: true,
+        frequency: 20,
+      });
+    }
+  } catch (err) {
+    console.warn("[TaxonomyMemory] Master NCERT catalog lookup warning:", err);
+  }
+
+  // 2. Fetch from Academic Hierarchy Database if available
   try {
     const academicChapter = await prisma.academicChapter.findFirst({
       where: {

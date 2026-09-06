@@ -1,4 +1,4 @@
-﻿import { prisma } from '@/lib/db';
+import { prisma } from '@/lib/db';
 import { ProgramName } from '@prisma/client';
 import c11Phys from './c11-physics.json';
 import c11Chem from './c11-chemistry.json';
@@ -139,72 +139,66 @@ export async function seedAcademicHierarchy() {
 
       const isNeetEligible = ['Physics', 'Chemistry', 'Biology'].includes(ds.name);
       if (isNeetEligible) {
-        await prisma.programMapping.upsert({
+        const existing = await prisma.programMapping.findFirst({
           where: {
-            programName_chapterId_topicId: {
-              programName: ProgramName.NEET,
-              chapterId: chapter.id,
-              topicId: '',
-            },
-          },
-          update: {
-            classId: academicClass.id,
-            subjectId: subject.id,
-          },
-          create: {
             programName: ProgramName.NEET,
-            classId: academicClass.id,
-            subjectId: subject.id,
             chapterId: chapter.id,
-            topicId: '',
+            topicId: null,
           },
         });
+        if (!existing) {
+          await prisma.programMapping.create({
+            data: {
+              programName: ProgramName.NEET,
+              classId: academicClass.id,
+              subjectId: subject.id,
+              chapterId: chapter.id,
+              topicId: null,
+            },
+          });
+        }
       }
 
       const isJeeEligible = ['Physics', 'Chemistry', 'Mathematics'].includes(ds.name);
       if (isJeeEligible) {
-        await prisma.programMapping.upsert({
+        const existing = await prisma.programMapping.findFirst({
           where: {
-            programName_chapterId_topicId: {
-              programName: ProgramName.JEE_MAIN,
-              chapterId: chapter.id,
-              topicId: '',
-            },
-          },
-          update: {
-            classId: academicClass.id,
-            subjectId: subject.id,
-          },
-          create: {
             programName: ProgramName.JEE_MAIN,
+            chapterId: chapter.id,
+            topicId: null,
+          },
+        });
+        if (!existing) {
+          await prisma.programMapping.create({
+            data: {
+              programName: ProgramName.JEE_MAIN,
+              classId: academicClass.id,
+              subjectId: subject.id,
+              chapterId: chapter.id,
+              topicId: null,
+            },
+          });
+        }
+      }
+
+      const existingCbse = await prisma.programMapping.findFirst({
+        where: {
+          programName: ProgramName.CBSE_BOARD,
+          chapterId: chapter.id,
+          topicId: null,
+        },
+      });
+      if (!existingCbse) {
+        await prisma.programMapping.create({
+          data: {
+            programName: ProgramName.CBSE_BOARD,
             classId: academicClass.id,
             subjectId: subject.id,
             chapterId: chapter.id,
-            topicId: '',
+            topicId: null,
           },
         });
       }
-
-      await prisma.programMapping.upsert({
-        where: {
-          programName_chapterId_topicId: {
-            programName: ProgramName.CBSE_BOARD,
-            chapterId: chapter.id,
-            topicId: '',
-          },
-        },
-        update: {
-          classId: academicClass.id,
-          subjectId: subject.id,
-        },
-        create: {
-          programName: ProgramName.CBSE_BOARD,
-          classId: academicClass.id,
-          subjectId: subject.id,
-          chapterId: chapter.id,
-          topicId: '',
-        },
-      });
     }
   }
 
