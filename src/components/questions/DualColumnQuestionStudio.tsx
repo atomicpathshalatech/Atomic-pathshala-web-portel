@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Plus, Download, ChevronRight, ChevronDown, ArrowLeft, Save, Sliders, CheckCircle2, FileText, Search, Sparkles } from "lucide-react";
+import { UnifiedQuestionEditor } from "./UnifiedQuestionEditor";
 
 export interface QuestionEntry {
   id?: string;
@@ -40,7 +41,7 @@ interface DualColumnQuestionStudioProps {
   testId?: string;
   dppId?: string;
   totalQuestionsCount?: number;
-  subjects?: { name: string; count: number; total: number }[];
+  subjects?: { name: string; count: number; total: number; sectionId?: string }[];
   initialQuestions?: QuestionEntry[];
   backHref?: string;
   onSave?: (question: QuestionEntry) => Promise<void>;
@@ -124,32 +125,7 @@ export function DualColumnQuestionStudio({
     (q) => q.subject === activeSubject && q.isSaved
   ).length;
 
-  const updateCurrentDraft = (fields: Partial<QuestionEntry>) => {
-    setQuestionsMap((prev) => ({
-      ...prev,
-      [currentQuestionNumber]: {
-        ...currentQ,
-        ...fields,
-        questionNumber: currentQuestionNumber,
-        subject: activeSubject,
-      },
-    }));
-  };
 
-  const handleSaveQuestion = () => {
-    if (!currentQ.statementEn && !currentQ.statementHi) {
-      toast.error("Please enter a question statement before saving.");
-      return;
-    }
-    setQuestionsMap((prev) => ({
-      ...prev,
-      [currentQuestionNumber]: {
-        ...currentQ,
-        isSaved: true,
-      },
-    }));
-    toast.success(`Question ${currentQuestionNumber} saved successfully!`);
-  };
 
   const handleNextQuestion = () => {
     if (currentQuestionNumber < totalQuestionsCount) {
@@ -175,73 +151,69 @@ export function DualColumnQuestionStudio({
     }
   };
 
-  // Import mock question by ID
-  const handleImportQuestionSubmit = (e: React.FormEvent) => {
+  // Import question by ID or Code
+  const handleImportQuestionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!importQuery.trim()) return;
 
-    setQuestionsMap((prev) => ({
-      ...prev,
-      [currentQuestionNumber]: {
-        questionNumber: currentQuestionNumber,
-        questionCode: importQuery.trim().toUpperCase(),
-        subject: activeSubject,
-        chapter: "Chemical Bonding and Molecular Structure",
-        topic: "Hybridization & VSEPR",
-        subTopic: "Dipole Moment",
-        difficulty: "MEDIUM",
-        type: "SINGLE_CORRECT",
-        marks: 4,
-        negativeMarks: 1,
-        statementHi: "निम्नलिखित में से किस अणु का द्विध्रुव आघूर्ण (Dipole moment) शून्य है?",
-        statementEn: "Which of the following molecules has zero dipole moment?",
-        optionAHi: "BF3",
-        optionAEn: "BF3",
-        optionBHi: "NH3",
-        optionBEn: "NH3",
-        optionCHi: "NF3",
-        optionCEn: "NF3",
-        optionDHi: "H2O",
-        optionDEn: "H2O",
-        correctOption: "A",
-        solutionHi: "BF3 अणु की ज्यामिति समतलीय त्रिकोणीय (Trigonal Planar) होती है, जिसके कारण तीनों B-F आबंध आघूर्ण एक दूसरे को निरस्त कर देते हैं। अतः इसका परिणामी द्विध्रुव आघूर्ण शून्य होता है।",
-        solutionEn: "BF3 has a symmetrical trigonal planar geometry with 120° bond angles. The three B-F bond dipole vectors cancel each other out completely, giving a net dipole moment of zero.",
-        isSaved: true,
-      },
-    }));
+    try {
+      const res = await fetch(`/api/team/questions/engine?query=${encodeURIComponent(importQuery.trim())}`);
+      const json = await res.json();
+      const question = json.data?.questions?.[0];
 
-    setActiveAuthoringSlots((prev) => ({ ...prev, [currentQuestionNumber]: true }));
-    setShowImportModal(false);
-    setImportQuery("");
-    toast.success(`Question imported into slot #${currentQuestionNumber}!`);
-  };
+      if (!question) {
+        toast.error(`No question found matching "${importQuery.trim()}".`);
+        return;
+      }
 
-  // Fast translation trigger
-  const handleSingleClickTranslate = () => {
-    if (currentQ.statementHi && !currentQ.statementEn) {
-      updateCurrentDraft({
-        statementEn: `[Auto-Translated] ${currentQ.statementHi}`,
-        optionAEn: currentQ.optionAHi ? `[Auto] ${currentQ.optionAHi}` : "",
-        optionBEn: currentQ.optionBHi ? `[Auto] ${currentQ.optionBHi}` : "",
-        optionCEn: currentQ.optionCHi ? `[Auto] ${currentQ.optionCHi}` : "",
-        optionDEn: currentQ.optionDHi ? `[Auto] ${currentQ.optionDHi}` : "",
-        solutionEn: currentQ.solutionHi ? `[Auto] ${currentQ.solutionHi}` : "",
-      });
-      toast.success("Hindi text auto-translated to English!");
-    } else if (currentQ.statementEn && !currentQ.statementHi) {
-      updateCurrentDraft({
-        statementHi: `[अनुवादित] ${currentQ.statementEn}`,
-        optionAHi: currentQ.optionAEn ? `[अनुवादित] ${currentQ.optionAEn}` : "",
-        optionBHi: currentQ.optionBEn ? `[अनुवादित] ${currentQ.optionBEn}` : "",
-        optionCHi: currentQ.optionCEn ? `[अनुवादित] ${currentQ.optionCEn}` : "",
-        optionDHi: currentQ.optionDEn ? `[अनुवादित] ${currentQ.optionDEn}` : "",
-        solutionHi: currentQ.solutionEn ? `[अनुवादित] ${currentQ.solutionEn}` : "",
-      });
-      toast.success("English text auto-translated to Hindi!");
-    } else {
-      toast.info("Both Hindi and English statements are already present.");
+      const trEn = question.translations?.find((t: any) => t.language === "ENGLISH");
+      const trHi = question.translations?.find((t: any) => t.language === "HINDI");
+      const optEn = (trEn?.options as any) || {};
+      const optHi = (trHi?.options as any) || {};
+      const correct = (trEn?.correctOptionIds as any)?.[0] || (trHi?.correctOptionIds as any)?.[0] || "A";
+
+      setQuestionsMap((prev) => ({
+        ...prev,
+        [currentQuestionNumber]: {
+          id: question.id,
+          questionNumber: currentQuestionNumber,
+          questionCode: question.questionCode,
+          subject: question.subject || activeSubject,
+          chapter: question.chapter || "",
+          topic: question.topic || "",
+          subTopic: question.subTopic || "",
+          difficulty: question.difficulty || "MEDIUM",
+          type: question.type || "SINGLE_CORRECT",
+          marks: question.marks || 4,
+          negativeMarks: question.negativeMarks || 1,
+          statementHi: trHi?.statement || "",
+          statementEn: trEn?.statement || "",
+          optionAHi: optHi.A || "",
+          optionAEn: optEn.A || "",
+          optionBHi: optHi.B || "",
+          optionBEn: optEn.B || "",
+          optionCHi: optHi.C || "",
+          optionCEn: optEn.C || "",
+          optionDHi: optHi.D || "",
+          optionDEn: optEn.D || "",
+          correctOption: correct,
+          solutionHi: trHi?.solution || "",
+          solutionEn: trEn?.solution || "",
+          imageUrl: question.figureUrl || question.referenceImageUrl || undefined,
+          isSaved: true,
+        },
+      }));
+
+      setActiveAuthoringSlots((prev) => ({ ...prev, [currentQuestionNumber]: true }));
+      setShowImportModal(false);
+      setImportQuery("");
+      toast.success(`Question ${question.questionCode} imported into slot #${currentQuestionNumber}!`);
+    } catch {
+      toast.error("Failed to import question from question bank.");
     }
   };
+
+
 
   return (
     <div className="flex h-screen w-full bg-[#f1f4fb] text-slate-900 overflow-hidden font-sans select-none">
@@ -464,197 +436,33 @@ export function DualColumnQuestionStudio({
             </div>
           </div>
         ) : (
-          /* ACTIVE DUAL-COLUMN QUESTION BUILDER */
+          /* ACTIVE DUAL-COLUMN QUESTION BUILDER VIA UNIFIED QUESTION EDITOR */
           <div className="flex-1 flex flex-col overflow-hidden animate-in fade-in">
-            {/* Quick Actions & AI Auto-Translate Bar */}
-            <div className="bg-white border-b border-slate-200 px-6 py-2 flex flex-wrap items-center justify-between gap-3 text-xs">
-              <div className="flex items-center gap-3">
-                <span className="text-slate-500 font-bold">Fast-Fill:</span>
-                <span className="px-3 py-1 rounded-xl bg-blue-50 text-blue-700 font-medium border border-blue-200">
-                  Paste screenshot (Ctrl+V) anywhere on canvas to OCR
-                </span>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleSingleClickTranslate}
-                className="px-3.5 py-1.5 rounded-xl bg-purple-100 hover:bg-purple-200 text-purple-900 font-extrabold text-xs transition flex items-center gap-1.5 shadow-sm"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-                <span>Single-Click Auto-Translate (Hindi ↔ English)</span>
-              </button>
-            </div>
-
-            {/* DUAL COLUMN INPUTS */}
-            <main className="flex-1 overflow-y-auto p-6 space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* HINDI COLUMN */}
-                <div className="space-y-4">
-                  <span className="text-xs font-black text-amber-700 bg-amber-100 px-2.5 py-0.5 rounded-full">
-                    हिंदी (Hindi Statement &amp; Options)
-                  </span>
-
-                  <div className="bg-white border border-slate-300 rounded-2xl p-3.5 shadow-sm focus-within:border-blue-600 transition">
-                    <textarea
-                      rows={3}
-                      placeholder="हिंदी में प्रश्न कथन लिखें..."
-                      value={currentQ.statementHi}
-                      onChange={(e) => updateCurrentDraft({ statementHi: e.target.value })}
-                      className="w-full text-xs sm:text-sm text-slate-900 outline-none resize-none font-sans leading-relaxed"
-                    />
-                  </div>
-
-                  {/* Hindi Options */}
-                  <div className="space-y-2">
-                    {(["A", "B", "C", "D"] as const).map((optKey) => {
-                      const fieldKey = `option${optKey}Hi` as keyof QuestionEntry;
-                      const isCorrect = currentQ.correctOption === optKey;
-
-                      return (
-                        <div
-                          key={optKey}
-                          className={`p-2.5 rounded-2xl border transition ${
-                            isCorrect ? "bg-emerald-50 border-emerald-500" : "bg-white border-slate-300"
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => updateCurrentDraft({ correctOption: optKey })}
-                              className={`w-6 h-6 rounded-full font-bold text-xs flex items-center justify-center transition ${
-                                isCorrect ? "bg-emerald-600 text-white shadow" : "bg-slate-100 text-slate-700"
-                              }`}
-                            >
-                              {optKey}
-                            </button>
-                            <input
-                              type="text"
-                              placeholder={`विकल्प (${optKey}) हिंदी पाठ...`}
-                              value={(currentQ[fieldKey] as string) || ""}
-                              onChange={(e) => updateCurrentDraft({ [fieldKey]: e.target.value })}
-                              className="flex-1 text-xs sm:text-sm text-slate-900 outline-none bg-transparent"
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Hindi Solution */}
-                  <div className="space-y-1 pt-1">
-                    <label className="text-xs font-bold text-amber-800">Detailed Solution (हिंदी)</label>
-                    <textarea
-                      rows={4}
-                      placeholder="हिंदी व्याख्या / हल यहाँ लिखें..."
-                      value={currentQ.solutionHi}
-                      onChange={(e) => updateCurrentDraft({ solutionHi: e.target.value })}
-                      className="w-full bg-white border border-slate-300 rounded-2xl p-3 text-xs text-slate-900 outline-none resize-none leading-relaxed"
-                    />
-                  </div>
-                </div>
-
-                {/* ENGLISH COLUMN */}
-                <div className="space-y-4">
-                  <span className="text-xs font-black text-blue-700 bg-blue-100 px-2.5 py-0.5 rounded-full">
-                    English (English Statement &amp; Options)
-                  </span>
-
-                  <div className="bg-white border border-slate-300 rounded-2xl p-3.5 shadow-sm focus-within:border-blue-600 transition">
-                    <textarea
-                      rows={3}
-                      placeholder="Write question statement in English..."
-                      value={currentQ.statementEn}
-                      onChange={(e) => updateCurrentDraft({ statementEn: e.target.value })}
-                      className="w-full text-xs sm:text-sm text-slate-900 outline-none resize-none font-sans leading-relaxed"
-                    />
-                  </div>
-
-                  {/* English Options */}
-                  <div className="space-y-2">
-                    {(["A", "B", "C", "D"] as const).map((optKey) => {
-                      const fieldKey = `option${optKey}En` as keyof QuestionEntry;
-                      const isCorrect = currentQ.correctOption === optKey;
-
-                      return (
-                        <div
-                          key={optKey}
-                          className={`p-2.5 rounded-2xl border transition ${
-                            isCorrect ? "bg-emerald-50 border-emerald-500" : "bg-white border-slate-300"
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => updateCurrentDraft({ correctOption: optKey })}
-                              className={`w-6 h-6 rounded-full font-bold text-xs flex items-center justify-center transition ${
-                                isCorrect ? "bg-emerald-600 text-white shadow" : "bg-slate-100 text-slate-700"
-                              }`}
-                            >
-                              {optKey}
-                            </button>
-                            <input
-                              type="text"
-                              placeholder={`Option (${optKey}) English text...`}
-                              value={(currentQ[fieldKey] as string) || ""}
-                              onChange={(e) => updateCurrentDraft({ [fieldKey]: e.target.value })}
-                              className="flex-1 text-xs sm:text-sm text-slate-900 outline-none bg-transparent"
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* English Solution */}
-                  <div className="space-y-1 pt-1">
-                    <label className="text-xs font-bold text-blue-800">Detailed Solution (English)</label>
-                    <textarea
-                      rows={4}
-                      placeholder="Write complete English solution and approach here..."
-                      value={currentQ.solutionEn}
-                      onChange={(e) => updateCurrentDraft({ solutionEn: e.target.value })}
-                      className="w-full bg-white border border-slate-300 rounded-2xl p-3 text-xs text-slate-900 outline-none resize-none leading-relaxed"
-                    />
-                  </div>
-                </div>
-              </div>
-            </main>
-
-            {/* STICKY BOTTOM NAVIGATION BAR */}
-            <footer className="bg-white border-t border-slate-200 px-6 py-3 shrink-0 flex items-center justify-between shadow-lg">
-              <button
-                type="button"
-                onClick={handlePrevQuestion}
-                disabled={currentQuestionNumber === 1}
-                className="px-5 py-2 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs disabled:opacity-40 transition"
-              >
-                ← Prev
-              </button>
-
-              <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
-                <span>Slot #{currentQuestionNumber} of {totalQuestionsCount}</span>
-              </div>
-
-              <div className="flex items-center gap-2.5">
-                <button
-                  type="button"
-                  onClick={handleSaveQuestion}
-                  className="px-6 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs shadow-md transition flex items-center gap-1.5"
-                >
-                  <Save className="w-4 h-4" />
-                  <span>Save Question</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleNextQuestion}
-                  disabled={currentQuestionNumber === totalQuestionsCount}
-                  className="px-5 py-2 rounded-xl bg-[#0c3ea4] hover:bg-blue-700 text-white font-extrabold text-xs shadow-md transition flex items-center gap-1 disabled:opacity-40"
-                >
-                  <span>Next →</span>
-                </button>
-              </div>
-            </footer>
+            <UnifiedQuestionEditor
+              key={currentQuestionNumber}
+              mode={mode}
+              testId={testId}
+              testSectionId={activeSubjectObj?.sectionId}
+              dppId={dppId}
+              slotNumber={currentQuestionNumber}
+              totalSlots={totalQuestionsCount}
+              initialQuestion={questionsMap[currentQuestionNumber] || {
+                subject: activeSubject,
+              }}
+              onSaveSuccess={(saved) => {
+                setQuestionsMap((prev) => ({
+                  ...prev,
+                  [currentQuestionNumber]: {
+                    ...currentQ,
+                    ...saved,
+                    isSaved: true,
+                  },
+                }));
+              }}
+              onNext={handleNextQuestion}
+              onPrev={handlePrevQuestion}
+              onCancelHref={backHref}
+            />
           </div>
         )}
       </div>

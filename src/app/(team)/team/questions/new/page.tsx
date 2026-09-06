@@ -1,13 +1,13 @@
-﻿import type { Metadata } from "next";
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
-import { AtomicQuestionEditor } from "@/components/questions/AtomicQuestionEditor";
+import { UnifiedQuestionEditor } from "@/components/questions/UnifiedQuestionEditor";
 
 export const metadata: Metadata = {
-  title: "Create Question — Universal Engine",
+  title: "Create Question — Unified Question Studio",
 };
 
 export default async function NewQuestionPage() {
@@ -18,8 +18,8 @@ export default async function NewQuestionPage() {
   if (!canCreate) redirect("/team/questions");
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
-      <AtomicQuestionEditor onCancelHref="/team/questions" />
+    <div className="w-full space-y-6">
+      <UnifiedQuestionEditor mode="bank" onCancelHref="/team/questions" />
     </div>
   );
 }

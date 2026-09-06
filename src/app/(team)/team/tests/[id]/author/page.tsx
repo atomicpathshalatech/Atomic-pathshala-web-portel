@@ -43,7 +43,51 @@ export default async function TestAuthorPage({ params }: { params: { id: string 
     name: sec.name || "Section",
     count: sec.questions.length,
     total: 45,
+    sectionId: sec.id,
   }));
+
+  const initialQuestions: import("@/components/questions/DualColumnQuestionStudio").QuestionEntry[] = [];
+  let slotIdx = 1;
+  for (const sec of test.sections) {
+    for (const sq of sec.questions) {
+      const q = sq.question;
+      const trEn = q.translations.find((t) => t.language === "ENGLISH");
+      const trHi = q.translations.find((t) => t.language === "HINDI");
+      const optEn = (trEn?.options as any) || {};
+      const optHi = (trHi?.options as any) || {};
+      const correct = (trEn?.correctOptionIds as any)?.[0] || (trHi?.correctOptionIds as any)?.[0] || "A";
+
+      initialQuestions.push({
+        id: q.id,
+        questionCode: q.questionCode || undefined,
+        questionNumber: slotIdx,
+        subject: q.subject,
+        chapter: q.chapter || "",
+        topic: q.topic || "",
+        subTopic: q.subTopic || "",
+        difficulty: q.difficulty as any,
+        type: q.type as any,
+        marks: 4,
+        negativeMarks: 1,
+        statementHi: trHi?.statement || "",
+        statementEn: trEn?.statement || "",
+        optionAHi: optHi.A || "",
+        optionAEn: optEn.A || "",
+        optionBHi: optHi.B || "",
+        optionBEn: optEn.B || "",
+        optionCHi: optHi.C || "",
+        optionCEn: optEn.C || "",
+        optionDHi: optHi.D || "",
+        optionDEn: optEn.D || "",
+        correctOption: correct,
+        solutionHi: trHi?.solution || "",
+        solutionEn: trEn?.solution || "",
+        imageUrl: q.imageUrl || undefined,
+        isSaved: true,
+      });
+      slotIdx++;
+    }
+  }
 
   const totalQuestions = test.sections.reduce(
     (acc) => acc + 45,
@@ -57,6 +101,7 @@ export default async function TestAuthorPage({ params }: { params: { id: string 
       testId={test.id}
       totalQuestionsCount={totalQuestions || 180}
       subjects={subjects.length > 0 ? subjects : undefined}
+      initialQuestions={initialQuestions.length > 0 ? initialQuestions : undefined}
       backHref={`/team/tests/${test.id}`}
     />
   );

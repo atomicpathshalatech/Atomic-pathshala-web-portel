@@ -72,10 +72,9 @@ export async function executeGeminiWithFailover<T>(
   }
 
   const now = Date.now();
-  // Filter out keys that are currently cooling down, unless all are cooling down
   let availableKeys = keys.filter((k) => (keyCooldowns.get(k) || 0) < now);
   if (availableKeys.length === 0) {
-    availableKeys = keys; // reset if all cooling down
+    availableKeys = keys;
   }
 
   let lastError: any = null;
@@ -103,20 +102,23 @@ export async function executeGeminiWithFailover<T>(
 }
 
 /**
- * Multimodal OCR: Extracts full structured bilingual question, options, math/LaTeX, and solution from image
+ * Multimodal OCR: Extracts full structured bilingual question, options, math/LaTeX, and diagrams from image
  */
 export async function extractBilingualQuestionFromImage({
   imageBase64,
   mimeType = "image/png",
   solutionImageBase64,
   solutionMimeType = "image/png",
+  subjectContext,
+  chapterContext,
 }: {
   imageBase64: string;
   mimeType?: string;
   solutionImageBase64?: string;
   solutionMimeType?: string;
+  subjectContext?: string;
+  chapterContext?: string;
 }): Promise<ExtractedQuestionData> {
-  // Clean base64 header if present
   const cleanQuestionBase64 = imageBase64.replace(/^data:image\/[a-z]+;base64,/, "");
 
   return executeGeminiWithFailover(async (client, modelName) => {
@@ -128,61 +130,67 @@ export async function extractBilingualQuestionFromImage({
       },
     });
 
-    const systemPrompt = `You are the Master Question Extraction & Ingestion Engine for NEET, JEE Main, JEE Advanced and NCERT Board exams (Atomic Pathshala).
+    const contextInstruction = subjectContext
+      ? `Teacher has confirmed Subject: "${subjectContext}" and Chapter: "${chapterContext || ""}". Use this context.`
+      : "";
+
+    const systemPrompt = `You are the Master Question Extraction & Ingestion Engine for NEET, JEE Main, and NCERT Board exams (Atomic Pathshala).
+${contextInstruction}
 
 YOUR TASK:
-Carefully analyze the provided examination question image and extract all text, mathematical formulas, chemical reactions, diagrams, and options with 100% precision.
+Analyze the provided examination question image and extract text, mathematical formulas, chemical reactions, diagrams, and options with 100% precision into structured fields.
 
-EXTRACTION INSTRUCTIONS:
+CRITICAL EXTRACTION RULES:
 1. BILINGUAL RECOGNITION:
-   - If the image contains both English and Hindi versions, extract English statement and options into statementEn/optionsEn, and Hindi statement and options into statementHi/optionsHi.
-   - If the image is ONLY English, extract into statementEn/optionsEn and leave statementHi/optionsHi empty (or perform NCERT aligned translation into Hindi).
-   - If the image is ONLY Hindi, extract into statementHi/optionsHi and leave statementEn/optionsEn empty (or perform translation into English).
+   - If the image contains BOTH English and Hindi versions:
+     * Extract English statement into statementEn, and Hindi statement into statementHi.
+     * Extract English options into optionsEn.A, B, C, D.
+     * Extract Hindi options into optionsHi.A, B, C, D.
+     * Ensure Hindi Option 1 maps to optionsHi.A, English Option 1 maps to optionsEn.A. Do NOT mix languages between fields.
+   - If the image is ONLY English:
+     * Extract English statement and options into statementEn and optionsEn.
+     * Leave statementHi as "" and optionsHi.A/B/C/D as "". Do NOT invent or auto-translate during extraction.
+   - If the image is ONLY Hindi:
+     * Extract Hindi statement and options into statementHi and optionsHi.
+     * Leave statementEn as "" and optionsEn.A/B/C/D as "". Do NOT invent or auto-translate during extraction.
 
 2. MATHEMATICAL & SCIENTIFIC PRECISION:
    - Use standard LaTeX notation for equations: $...$ for inline math, $$...$$ for block formulas.
-   - For chemical reactions, write formulas like $\\text{CaCO}_3 \\rightarrow \\text{CaO} + \\text{CO}_2$ or $\\text{H}_2\\text{SO}_4$.
-   - Preserve units (e.g. $\\text{m/s}^2$, $\\text{J}\\cdot\\text{mol}^{-1}$, $\\mu\\text{F}$, $\\Omega$).
-   - Never skip superscripts, subscripts, fractions, integrals, matrices, or radicals.
+   - For chemical formulas, write formulas like $\\text{CaCO}_3$ or $\\text{H}_2\\text{SO}_4$.
+   - Preserve units, powers, fractions, vectors, superscripts and subscripts.
 
-3. OPTIONS & ANSWER:
-   - Extract options A, B, C, D cleanly into their respective fields.
-   - If the correct option is marked (e.g. circled, ticked, or highlighted in the image or answer key), specify it in "correctAnswer" (e.g. ["A"]). If not clearly visible, deduce the correct answer.
+3. OPTIONS SEPARATION:
+   - Always separate question statement from options A, B, C, D. Never dump options into the statement field.
+   - Detect option formats: (A)/(B)/(C)/(D), (1)/(2)/(3)/(4), 1./2./3./4. Map 1->A, 2->B, 3->C, 4->D.
 
 4. DIAGRAM / FIGURE DETECTION:
    - If the question relies on a geometric diagram, electric circuit, graph, molecular structure, or organ diagram shown in the image, set "hasFigure": true and provide a descriptive "figureCaption".
 
-5. CURRICULUM CLASSIFICATION:
-   - Automatically identify Subject: "Physics" | "Chemistry" | "Biology" | "Mathematics" | "Science"
-   - Identify Chapter name (e.g. "Electrostatics", "Chemical Kinetics", "Thermodynamics", "Cell: The Unit of Life", "Definite Integrals")
-   - Identify Topic and Difficulty ("EASY", "MEDIUM", "HARD", "VERY_HARD")
-   - Identify Question Type ("SINGLE_CORRECT", "MULTI_CORRECT", "INTEGER", "ASSERTION_REASON", "MATCH_THE_COLUMN")
+5. CORRECT ANSWER:
+   - If marked in the image (ticked, circled, or key visible), set "correctAnswer": ["A"|"B"|"C"|"D"].
+   - If not visibly marked, solve the question and provide the scientifically verified correct answer.
 
-6. SOLUTION & EXPLANATION:
-   - If a solution is visible in the image (or in the attached solution image), extract it thoroughly with step-by-step reasoning into solutionEn and solutionHi.
-   - If no solution is visible, construct an accurate NCERT standard step-by-step solution.
-
-RETURN JSON SCHEMA:
+RETURN STRICT JSON SCHEMA:
 {
-  "statementEn": "English question statement with LaTeX math",
-  "statementHi": "Hindi question statement with Devanagari text and LaTeX math",
+  "statementEn": "English question statement with LaTeX math (or empty string if Hindi only)",
+  "statementHi": "Hindi question statement with Devanagari and LaTeX math (or empty string if English only)",
   "optionsEn": {
-    "A": "Option A in English",
-    "B": "Option B in English",
-    "C": "Option C in English",
-    "D": "Option D in English"
+    "A": "Option A in English or empty",
+    "B": "Option B in English or empty",
+    "C": "Option C in English or empty",
+    "D": "Option D in English or empty"
   },
   "optionsHi": {
-    "A": "Option A in Hindi",
-    "B": "Option B in Hindi",
-    "C": "Option C in Hindi",
-    "D": "Option D in Hindi"
+    "A": "Option A in Hindi or empty",
+    "B": "Option B in Hindi or empty",
+    "C": "Option C in Hindi or empty",
+    "D": "Option D in Hindi or empty"
   },
   "correctAnswer": ["A"],
-  "solutionEn": "Step-by-step solution in English with formulas and final answer",
-  "solutionHi": "Step-by-step solution in Hindi with formulas and final answer",
-  "hasFigure": true/false,
-  "figureCaption": "Caption or null",
+  "solutionEn": "Step-by-step solution in English",
+  "solutionHi": "Step-by-step solution in Hindi",
+  "hasFigure": true,
+  "figureCaption": "Description of the diagram",
   "subject": "Physics",
   "chapter": "Current Electricity",
   "topic": "Kirchhoff's Laws",
@@ -190,8 +198,8 @@ RETURN JSON SCHEMA:
   "difficulty": "MEDIUM",
   "type": "SINGLE_CORRECT",
   "category": "NCERT Canonical",
-  "pyqSource": "NEET 2022",
-  "tags": ["NEET", "NCERT", "Current Electricity"],
+  "pyqSource": "NEET 2023",
+  "tags": ["NEET", "NCERT"],
   "isBilingual": true,
   "confidence": 95
 }`;
@@ -244,8 +252,8 @@ RETURN JSON SCHEMA:
       solutionHi: parsed.solutionHi || "",
       hasFigure: Boolean(parsed.hasFigure),
       figureCaption: parsed.figureCaption || undefined,
-      subject: parsed.subject || "Physics",
-      chapter: parsed.chapter || "General",
+      subject: parsed.subject || (subjectContext as any) || "Physics",
+      chapter: parsed.chapter || chapterContext || "General",
       topic: parsed.topic || "Core Concept",
       subTopic: parsed.subTopic || undefined,
       difficulty: parsed.difficulty || "MEDIUM",
@@ -253,87 +261,334 @@ RETURN JSON SCHEMA:
       category: parsed.category || "NCERT Canonical",
       pyqSource: parsed.pyqSource || undefined,
       tags: Array.isArray(parsed.tags) ? parsed.tags : ["NEET", "NCERT"],
-      isBilingual: Boolean(parsed.isBilingual || (parsed.statementEn && parsed.statementHi)),
-      aiTranslatedHi: Boolean(parsed.aiTranslatedHi),
-      aiTranslatedEn: Boolean(parsed.aiTranslatedEn),
-      confidence: Number(parsed.confidence) || 90,
+      isBilingual: Boolean(parsed.statementEn && parsed.statementHi),
+      aiTranslatedHi: false,
+      aiTranslatedEn: false,
+      confidence: Number(parsed.confidence) || 92,
     };
   });
 }
 
 /**
- * NCERT Educational Translation for Scientific / Examination content
+ * Text OCR/Parser: Extracts structured question when pasted as raw text
  */
-export async function translateQuestionContent({
-  text,
-  targetLang,
-  subject,
+export async function extractBilingualQuestionFromText({
+  rawText,
+  subjectContext,
+  chapterContext,
 }: {
-  text: string;
-  targetLang: "ENGLISH" | "HINDI";
-  subject?: string;
-}): Promise<string> {
-  if (!text?.trim()) return "";
-
+  rawText: string;
+  subjectContext?: string;
+  chapterContext?: string;
+}): Promise<ExtractedQuestionData> {
   return executeGeminiWithFailover(async (client, modelName) => {
-    const model = client.getGenerativeModel({ model: modelName });
-    const targetDesc = targetLang === "HINDI" ? "Hindi (Devanagari script with NCERT terminology)" : "English (NCERT / CBSE standard)";
+    const model = client.getGenerativeModel({
+      model: modelName,
+      generationConfig: {
+        responseMimeType: "application/json",
+        temperature: 0.1,
+      },
+    });
 
-    const prompt = `You are a Senior Academic Subject Expert in ${subject || "Science/Mathematics"}.
-Translate the following examination question content to ${targetDesc}.
+    const contextInstruction = subjectContext
+      ? `Teacher has confirmed Subject: "${subjectContext}" and Chapter: "${chapterContext || ""}". Use this context.`
+      : "";
 
-CRITICAL RULES:
-1. Preserve all mathematical equations and LaTeX symbols ($...$, $$...$$, \\frac, \\sqrt, \\vec, etc.) EXACTLY as they are.
-2. Use authentic NCERT standard terminology for Hindi (e.g., 'अभिक्रिया की दर' for rate of reaction, 'विभवांतर' for potential difference, 'कोशिका विभाजन' for cell division).
-3. Do NOT invent new facts or alter any numbers, coefficients, or physical constants.
-4. Output ONLY the translated text without introductory remarks or markdown quotes.
+    const prompt = `You are the Master Question Extraction & Ingestion Engine for NEET, JEE Main, and NCERT Board exams (Atomic Pathshala).
+${contextInstruction}
 
-Content to translate:
-${text}`;
+Analyze the following pasted examination question text and parse it into structured bilingual format.
+
+RULES:
+1. If text contains both Hindi and English, separate them into statementEn/optionsEn and statementHi/optionsHi.
+2. If text is English only, populate English fields and leave Hindi fields as "".
+3. If text is Hindi only, populate Hindi fields and leave English fields as "".
+4. Separate question statement from Options A, B, C, D. Map (1)/(2)/(3)/(4) or (A)/(B)/(C)/(D) to keys A, B, C, D.
+5. Deduce the correct answer option ("A"|"B"|"C"|"D").
+6. Convert mathematical and chemical formulas into LaTeX $...$.
+
+Raw text:
+"""
+${rawText}
+"""
+
+RETURN STRICT JSON SCHEMA:
+{
+  "statementEn": "English question statement or empty string",
+  "statementHi": "Hindi question statement or empty string",
+  "optionsEn": { "A": "...", "B": "...", "C": "...", "D": "..." },
+  "optionsHi": { "A": "...", "B": "...", "C": "...", "D": "..." },
+  "correctAnswer": ["A"],
+  "subject": "${subjectContext || "Biology"}",
+  "chapter": "${chapterContext || ""}",
+  "topic": "Topic name",
+  "difficulty": "MEDIUM",
+  "type": "SINGLE_CORRECT"
+}`;
 
     const response = await model.generateContent(prompt);
-    return response.response.text().trim();
+    const text = response.response.text().trim();
+    const cleanJson = text.replace(/^```json\s*/i, "").replace(/\s*```$/i, "").trim();
+    const parsed = JSON.parse(cleanJson);
+
+    return {
+      statementEn: parsed.statementEn || "",
+      statementHi: parsed.statementHi || "",
+      optionsEn: {
+        A: parsed.optionsEn?.A || "",
+        B: parsed.optionsEn?.B || "",
+        C: parsed.optionsEn?.C || "",
+        D: parsed.optionsEn?.D || "",
+      },
+      optionsHi: {
+        A: parsed.optionsHi?.A || "",
+        B: parsed.optionsHi?.B || "",
+        C: parsed.optionsHi?.C || "",
+        D: parsed.optionsHi?.D || "",
+      },
+      correctAnswer: Array.isArray(parsed.correctAnswer) ? parsed.correctAnswer : [parsed.correctAnswer || "A"],
+      solutionEn: "",
+      solutionHi: "",
+      hasFigure: false,
+      subject: parsed.subject || (subjectContext as any) || "Biology",
+      chapter: parsed.chapter || chapterContext || "General",
+      topic: parsed.topic || "Core Concept",
+      difficulty: parsed.difficulty || "MEDIUM",
+      type: parsed.type || "SINGLE_CORRECT",
+      category: "NCERT Canonical",
+      tags: ["NEET", "NCERT"],
+      isBilingual: Boolean(parsed.statementEn && parsed.statementHi),
+      confidence: 90,
+    };
   });
 }
 
 /**
- * Generates an expanded step-by-step solution preserving original answer & facts
+ * Subject-Aware Solution Generator conforming strictly to Physics, Chemistry, and Biology formats
  */
-export async function generateExpandedSolution({
-  statement,
-  options,
-  correctAnswer,
+export async function generateSubjectAwareSolution({
   subject,
+  statementEn,
+  statementHi,
+  optionsEn,
+  optionsHi,
+  correctAnswer,
+  userSelectedAnswer,
+  userProvidedSolution,
 }: {
-  statement: string;
-  options?: Record<string, string>;
-  correctAnswer: string[];
-  subject?: string;
-}): Promise<{ solutionEn: string; solutionHi: string; stepByStep: string[] }> {
+  subject: string;
+  statementEn: string;
+  statementHi?: string;
+  optionsEn: Record<string, string>;
+  optionsHi?: Record<string, string>;
+  correctAnswer?: string;
+  userSelectedAnswer?: string;
+  userProvidedSolution?: string;
+}): Promise<{
+  solutionEn: string;
+  solutionHi: string;
+  recommendedAnswer: string;
+  answerMismatch: boolean;
+  mismatchWarning?: string;
+}> {
+  const normSubject = (subject || "").toLowerCase();
+
   return executeGeminiWithFailover(async (client, modelName) => {
     const model = client.getGenerativeModel({
       model: modelName,
       generationConfig: { responseMimeType: "application/json" },
     });
 
-    const prompt = `You are a Senior Faculty at Atomic Pathshala for ${subject || "NEET & JEE"}.
-Provide a crystal-clear, step-by-step examination solution for the following question.
+    let formatInstructions = "";
 
-Question: "${statement}"
-Options: ${JSON.stringify(options || {})}
-Correct Answer: Option (${correctAnswer.join(", ")})
+    if (normSubject.includes("phys")) {
+      formatInstructions = `
+PHYSICS SOLUTION FORMAT REQUIREMENT:
+Structure solutionEn exactly as:
+EXPLAINING:
+[Short explanation of what the question is asking and the underlying physical reasoning.]
 
-RULES:
-1. Explain the fundamental concept / formula first.
-2. Give step-by-step calculation / derivation.
-3. State why the correct option is right.
-4. Provide the solution in BOTH English and Hindi (Devanagari).
+CONCEPT:
+[Relevant Physics concept/principle/law.]
 
-Return JSON schema:
+Solution:
+[Step-by-step derivation]
+[Equations with LaTeX $...$]
+[Substitution of numerical values]
+[Calculation]
+
+Final Answer: Option [X]
+
+Do NOT turn numerical physics solution into paragraph-only text. Use equations and units.
+Provide matching Hindi Devanagari version for solutionHi.`;
+    } else if (normSubject.includes("chem")) {
+      formatInstructions = `
+CHEMISTRY SOLUTION FORMAT REQUIREMENT:
+Structure solutionEn exactly as:
+Explaining:
+[What the question is asking.]
+
+Concept:
+[Relevant Chemistry concept/rule/periodic trend/reaction.]
+
+Solution:
+[Analyze the options/question]
+[Relevant chemical rule/order/reaction equation/calculation]
+[Correct reasoning for why correct option is right and others wrong]
+
+Final Answer: Option [X]
+
+Preserve chemical formulas (e.g. $\\text{H}_2\\text{SO}_4$, oxidation states, charges).
+Provide matching Hindi Devanagari version for solutionHi.`;
+    } else if (normSubject.includes("bio")) {
+      formatInstructions = `
+BIOLOGY SOLUTION FORMAT REQUIREMENT:
+Structure solutionEn exactly as:
+Explain Question:
+[What the question is asking.]
+
+Concept:
+[Relevant NCERT Biology concept.]
+
+Solution:
+[Evaluate the statements/options.]
+1. [Statement A] -> True/False + reason
+2. [Statement B] -> True/False + reason
+3. [Statement C] -> True/False + reason
+4. [Statement D] -> True/False + reason
+
+Final Answer: Option [X]
+
+Use NCERT-aligned terminology.
+Provide matching Hindi Devanagari version for solutionHi.`;
+    } else {
+      formatInstructions = `
+MATHEMATICS / GENERAL SOLUTION FORMAT REQUIREMENT:
+Structure solutionEn exactly as:
+Explaining:
+[Understanding what is required.]
+
+Concept:
+[Formula or theorem.]
+
+Solution:
+[Step-by-step mathematical derivation and calculations with LaTeX]
+
+Final Answer: Option [X]
+
+Provide matching Hindi Devanagari version for solutionHi.`;
+    }
+
+    const userReferencePrompt = userProvidedSolution?.trim()
+      ? `Teacher has provided an initial solution: "${userProvidedSolution}". Respect teacher's intent, preserve key steps, and refine it into the required format.`
+      : "";
+
+    const userSelectedPrompt = userSelectedAnswer
+      ? `Teacher has selected Option (${userSelectedAnswer}) as the intended answer.`
+      : "";
+
+    const prompt = `You are a Senior Academic Subject Expert for ${subject} at Atomic Pathshala.
+Generate a comprehensive, subject-aware bilingual solution for the following question.
+
+Question (English): "${statementEn}"
+${statementHi ? `Question (Hindi): "${statementHi}"` : ""}
+Options (English): ${JSON.stringify(optionsEn)}
+${optionsHi ? `Options (Hindi): ${JSON.stringify(optionsHi)}` : ""}
+${correctAnswer ? `Target Correct Option: Option (${correctAnswer})` : ""}
+${userSelectedPrompt}
+${userReferencePrompt}
+
+${formatInstructions}
+
+Deduce the scientifically verified correct option ("A", "B", "C", or "D").
+
+RETURN STRICT JSON:
 {
-  "solutionEn": "Comprehensive English solution with formulas and steps",
-  "solutionHi": "Comprehensive Hindi solution with formulas and steps",
-  "stepByStep": ["Step 1: ...", "Step 2: ...", "Step 3: ..."]
+  "recommendedAnswer": "A",
+  "solutionEn": "...",
+  "solutionHi": "..."
+}`;
+
+    const response = await model.generateContent(prompt);
+    const jsonStr = response.response.text().replace(/^```json\s*/i, "").replace(/\s*```$/i, "").trim();
+    const parsed = JSON.parse(jsonStr);
+
+    const recommended = (parsed.recommendedAnswer || correctAnswer || "A").toUpperCase();
+    const userAns = (userSelectedAnswer || "").toUpperCase();
+    const hasMismatch = Boolean(userAns && userAns !== recommended);
+
+    return {
+      solutionEn: parsed.solutionEn || "",
+      solutionHi: parsed.solutionHi || "",
+      recommendedAnswer: recommended,
+      answerMismatch: hasMismatch,
+      mismatchWarning: hasMismatch
+        ? `⚠ Answer mismatch: AI recommends Option (${recommended}), but you selected Option (${userAns}) — please verify.`
+        : undefined,
+    };
+  });
+}
+
+/**
+ * CHECK TRANSLATION Action
+ * Translates missing language or validates bilingual parity for Question + Options + Solution
+ */
+export async function checkAndTranslateQuestion({
+  subject,
+  statementEn,
+  statementHi,
+  optionsEn,
+  optionsHi,
+  solutionEn,
+  solutionHi,
+}: {
+  subject: string;
+  statementEn: string;
+  statementHi?: string;
+  optionsEn: Record<string, string>;
+  optionsHi?: Record<string, string>;
+  solutionEn?: string;
+  solutionHi?: string;
+}): Promise<{
+  statementEn: string;
+  statementHi: string;
+  optionsEn: Record<string, string>;
+  optionsHi: Record<string, string>;
+  solutionEn: string;
+  solutionHi: string;
+  report: string;
+}> {
+  return executeGeminiWithFailover(async (client, modelName) => {
+    const model = client.getGenerativeModel({
+      model: modelName,
+      generationConfig: { responseMimeType: "application/json" },
+    });
+
+    const prompt = `You are a Senior Bilingual Academic Translator for NCERT examinations (${subject || "Science"}).
+
+Perform "CHECK TRANSLATION":
+1. If English exists and Hindi is missing: Translate statementEn, optionsEn (A, B, C, D), and solutionEn into authentic NCERT Hindi (Devanagari script).
+2. If Hindi exists and English is missing: Translate statementHi, optionsHi (A, B, C, D), and solutionHi into clear academic English.
+3. If both exist: Check alignment. Correct any discrepancies so Hindi Option A matches English Option A, terminology matches, and LaTeX formulas ($...$) are preserved identically.
+4. Never alter numerical values, constants, or option ordering.
+
+Current Inputs:
+Statement (En): "${statementEn || ""}"
+Statement (Hi): "${statementHi || ""}"
+Options (En): ${JSON.stringify(optionsEn || {})}
+Options (Hi): ${JSON.stringify(optionsHi || {})}
+Solution (En): "${solutionEn || ""}"
+Solution (Hi): "${solutionHi || ""}"
+
+RETURN STRICT JSON SCHEMA:
+{
+  "statementEn": "...",
+  "statementHi": "...",
+  "optionsEn": { "A": "...", "B": "...", "C": "...", "D": "..." },
+  "optionsHi": { "A": "...", "B": "...", "C": "...", "D": "..." },
+  "solutionEn": "...",
+  "solutionHi": "...",
+  "report": "Summary of translations generated or parity verified"
 }`;
 
     const response = await model.generateContent(prompt);
@@ -341,9 +596,60 @@ Return JSON schema:
     const parsed = JSON.parse(jsonStr);
 
     return {
-      solutionEn: parsed.solutionEn || "",
-      solutionHi: parsed.solutionHi || "",
-      stepByStep: Array.isArray(parsed.stepByStep) ? parsed.stepByStep : [],
+      statementEn: parsed.statementEn || statementEn || "",
+      statementHi: parsed.statementHi || statementHi || "",
+      optionsEn: {
+        A: parsed.optionsEn?.A || optionsEn?.A || "",
+        B: parsed.optionsEn?.B || optionsEn?.B || "",
+        C: parsed.optionsEn?.C || optionsEn?.C || "",
+        D: parsed.optionsEn?.D || optionsEn?.D || "",
+      },
+      optionsHi: {
+        A: parsed.optionsHi?.A || optionsHi?.A || "",
+        B: parsed.optionsHi?.B || optionsHi?.B || "",
+        C: parsed.optionsHi?.C || optionsHi?.C || "",
+        D: parsed.optionsHi?.D || optionsHi?.D || "",
+      },
+      solutionEn: parsed.solutionEn || solutionEn || "",
+      solutionHi: parsed.solutionHi || solutionHi || "",
+      report: parsed.report || "Translation checked and aligned successfully.",
     };
+  });
+}
+
+/**
+ * Legacy translation helper wrapper
+ */
+export async function translateQuestionContent({
+  text,
+  targetLang = "HINDI",
+  subject = "Science",
+}: {
+  text: string;
+  targetLang?: string;
+  subject?: string;
+}): Promise<string> {
+  const isTargetHindi = targetLang.toUpperCase() === "HINDI";
+  const res = await checkAndTranslateQuestion({
+    subject: subject || "Science",
+    statementEn: isTargetHindi ? text : "",
+    statementHi: isTargetHindi ? "" : text,
+    optionsEn: { A: "", B: "", C: "", D: "" },
+    optionsHi: { A: "", B: "", C: "", D: "" },
+  });
+  return isTargetHindi ? res.statementHi : res.statementEn;
+}
+
+/**
+ * Legacy expanded solution generator wrapper
+ */
+export async function generateExpandedSolution(payload: any): Promise<any> {
+  return generateSubjectAwareSolution({
+    subject: payload.subject || "Biology",
+    statementEn: payload.statementEn || payload.statement || "",
+    statementHi: payload.statementHi || "",
+    optionsEn: payload.optionsEn || payload.options || {},
+    optionsHi: payload.optionsHi || {},
+    correctAnswer: payload.correctAnswer || "A",
   });
 }

@@ -1,9 +1,9 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AtomicQuestionEditor } from "@/components/questions/AtomicQuestionEditor";
+import { UnifiedQuestionEditor } from "@/components/questions/UnifiedQuestionEditor";
 
 type QuestionApiRow = {
   id: string;
@@ -241,15 +241,19 @@ export function DppQuestionPicker({
         </div>
       ) : (
         <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800">
-          <AtomicQuestionEditor
+          <UnifiedQuestionEditor
+            mode="dpp"
             dppId={dppId}
-            initialSubject={dppSubject || "Chemistry"}
-            initialChapter={dppChapter || ""}
-            onSuccess={() => {
+            initialQuestion={{
+              subject: dppSubject || "Chemistry",
+              chapter: dppChapter || "",
+            }}
+            onSaveSuccess={() => {
               toast.success("Question created and attached to DPP!");
               setActiveMode("search");
               router.refresh();
             }}
+            onCancelHref="#"
           />
         </div>
       )}

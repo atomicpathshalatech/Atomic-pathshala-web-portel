@@ -5,10 +5,10 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
-import { AtomicQuestionEditor } from "@/components/questions/AtomicQuestionEditor";
+import { UnifiedQuestionEditor } from "@/components/questions/UnifiedQuestionEditor";
 
 export const metadata: Metadata = {
-  title: "Edit Question — Unified Engine",
+  title: "Edit Question (Bilingual) — Unified Question Studio",
 };
 
 export default async function EditBilingualQuestionPage({ params }: { params: { id: string } }) {
@@ -38,8 +38,9 @@ export default async function EditBilingualQuestionPage({ params }: { params: { 
   };
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
-      <AtomicQuestionEditor
+    <div className="w-full space-y-6">
+      <UnifiedQuestionEditor
+        mode="bank"
         questionId={question.id}
         initialQuestion={initialQuestion}
         onCancelHref="/team/questions"

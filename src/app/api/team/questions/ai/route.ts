@@ -7,6 +7,9 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import {
   extractBilingualQuestionFromImage,
+  extractBilingualQuestionFromText,
+  generateSubjectAwareSolution,
+  checkAndTranslateQuestion,
   translateQuestionContent,
   generateExpandedSolution,
 } from "@/lib/questions/gemini-engine";
@@ -25,29 +28,34 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { action, payload = {} } = body;
 
-    if (action === "extract") {
-      const result = parseQuestionFromRawText(payload.rawText || "");
-      return apiSuccess({ result });
-    }
-
-    if (action === "ocr_image") {
-      if (!payload.imageBase64) {
-        return apiError("imageBase64 is required for OCR extraction", 400);
+    // 1. Unified Auto-Extract (Image OCR or Raw Text)
+    if (action === "auto_extract" || action === "ocr_image") {
+      let result;
+      if (payload.imageBase64) {
+        result = await extractBilingualQuestionFromImage({
+          imageBase64: payload.imageBase64,
+          mimeType: payload.mimeType || "image/png",
+          solutionImageBase64: payload.solutionImageBase64,
+          solutionMimeType: payload.solutionMimeType || "image/png",
+          subjectContext: payload.subject,
+          chapterContext: payload.chapter,
+        });
+      } else if (payload.rawText?.trim()) {
+        result = await extractBilingualQuestionFromText({
+          rawText: payload.rawText.trim(),
+          subjectContext: payload.subject,
+          chapterContext: payload.chapter,
+        });
+      } else {
+        return apiError("imageBase64 or rawText is required for auto extraction.", 400);
       }
 
-      const result = await extractBilingualQuestionFromImage({
-        imageBase64: payload.imageBase64,
-        mimeType: payload.mimeType || "image/png",
-        solutionImageBase64: payload.solutionImageBase64,
-        solutionMimeType: payload.solutionMimeType || "image/png",
-      });
-
-      // Audit log the OCR extraction
+      // Audit log the extraction
       await prisma.auditLog.create({
         data: {
           userId: session.user.id,
-          action: "QUESTION_OCR_EXTRACT",
-          entityType: "QuestionOCR",
+          action: "QUESTION_AUTO_EXTRACT",
+          entityType: "QuestionExtract",
           metadata: {
             confidence: result.confidence,
             isBilingual: result.isBilingual,
@@ -55,8 +63,43 @@ export async function POST(request: NextRequest) {
             hasFigure: result.hasFigure,
           },
         },
-      });
+      }).catch(() => {});
 
+      return apiSuccess({ result });
+    }
+
+    // 2. CHECK TRANSLATION Action (Aligns & translates missing language)
+    if (action === "check_translation") {
+      const result = await checkAndTranslateQuestion({
+        subject: payload.subject || "Biology",
+        statementEn: payload.statementEn || "",
+        statementHi: payload.statementHi || "",
+        optionsEn: payload.optionsEn || {},
+        optionsHi: payload.optionsHi || {},
+        solutionEn: payload.solutionEn || "",
+        solutionHi: payload.solutionHi || "",
+      });
+      return apiSuccess({ result });
+    }
+
+    // 3. Subject-Aware Solution Generation
+    if (action === "solution" || action === "generate_solution" || action === "generate_subject_solution") {
+      const solutionResult = await generateSubjectAwareSolution({
+        subject: payload.subject || "Biology",
+        statementEn: payload.statementEn || "",
+        statementHi: payload.statementHi || "",
+        optionsEn: payload.optionsEn || {},
+        optionsHi: payload.optionsHi || {},
+        correctAnswer: payload.correctAnswer,
+        userSelectedAnswer: payload.userSelectedAnswer,
+        userProvidedSolution: payload.userProvidedSolution,
+      });
+      return apiSuccess({ solution: solutionResult });
+    }
+
+    // 4. Legacy actions preserved for backwards compatibility
+    if (action === "extract") {
+      const result = parseQuestionFromRawText(payload.rawText || "");
       return apiSuccess({ result });
     }
 
@@ -83,16 +126,6 @@ export async function POST(request: NextRequest) {
         payload.options
       );
       return apiSuccess({ metadata });
-    }
-
-    if (action === "solution") {
-      const solution = await generateExpandedSolution({
-        statement: payload.statement || "",
-        options: payload.options || {},
-        correctAnswer: Array.isArray(payload.correctAnswer) ? payload.correctAnswer : [payload.correctAnswer || "A"],
-        subject: payload.subject,
-      });
-      return apiSuccess({ solution });
     }
 
     return apiError("Unknown AI action requested", 400);

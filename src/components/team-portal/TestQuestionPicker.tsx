@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AtomicQuestionEditor } from "@/components/questions/AtomicQuestionEditor";
+import { UnifiedQuestionEditor } from "@/components/questions/UnifiedQuestionEditor";
 
 type BankQuestion = {
   id: string;
@@ -282,10 +282,14 @@ export function TestQuestionPicker({
               </button>
             </div>
 
-            <AtomicQuestionEditor
-              initialSubject={testSubject || "Chemistry"}
-              initialChapter={testChapter || ""}
-              onSuccess={(createdQuestion) => {
+            <UnifiedQuestionEditor
+              mode="test"
+              testId={testId}
+              initialQuestion={{
+                subject: testSubject || "Biology",
+                chapter: testChapter || "",
+              }}
+              onSaveSuccess={(createdQuestion) => {
                 toast.success("Question created and submitted for centralized review!");
                 if (createdQuestion?.id) {
                   addQuestion(createdQuestion.id);
@@ -293,6 +297,7 @@ export function TestQuestionPicker({
                 setActiveMode("search");
                 router.refresh();
               }}
+              onCancelHref="#"
             />
           </div>
         )

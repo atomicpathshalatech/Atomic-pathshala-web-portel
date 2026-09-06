@@ -34,6 +34,47 @@ export default async function DppAuthorPage({ params }: { params: { id: string }
 
   if (!dpp) notFound();
 
+  const initialQuestions: import("@/components/questions/DualColumnQuestionStudio").QuestionEntry[] = [];
+  let slotIdx = 1;
+  for (const dq of dpp.questions) {
+    const q = dq.question;
+    const trEn = q.translations.find((t) => t.language === "ENGLISH");
+    const trHi = q.translations.find((t) => t.language === "HINDI");
+    const optEn = (trEn?.options as any) || {};
+    const optHi = (trHi?.options as any) || {};
+    const correct = (trEn?.correctOptionIds as any)?.[0] || (trHi?.correctOptionIds as any)?.[0] || "A";
+
+    initialQuestions.push({
+      id: q.id,
+      questionCode: q.questionCode || undefined,
+      questionNumber: slotIdx,
+      subject: q.subject,
+      chapter: q.chapter || "",
+      topic: q.topic || "",
+      subTopic: q.subTopic || "",
+      difficulty: q.difficulty as any,
+      type: q.type as any,
+      marks: 4,
+      negativeMarks: 1,
+      statementHi: trHi?.statement || "",
+      statementEn: trEn?.statement || "",
+      optionAHi: optHi.A || "",
+      optionAEn: optEn.A || "",
+      optionBHi: optHi.B || "",
+      optionBEn: optEn.B || "",
+      optionCHi: optHi.C || "",
+      optionCEn: optEn.C || "",
+      optionDHi: optHi.D || "",
+      optionDEn: optEn.D || "",
+      correctOption: correct,
+      solutionHi: trHi?.solution || "",
+      solutionEn: trEn?.solution || "",
+      imageUrl: q.imageUrl || undefined,
+      isSaved: true,
+    });
+    slotIdx++;
+  }
+
   const subjects = [
     {
       name: dpp.subject || "Subject",
@@ -49,6 +90,7 @@ export default async function DppAuthorPage({ params }: { params: { id: string }
       dppId={dpp.id}
       totalQuestionsCount={dpp.questionTargetCount || 15}
       subjects={subjects}
+      initialQuestions={initialQuestions.length > 0 ? initialQuestions : undefined}
       backHref={`/team/dpp/${dpp.id}`}
     />
   );
