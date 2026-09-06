@@ -1706,8 +1706,11 @@ export function TeacherLiveClassRoom({
       >
         {openPopup && <div className="fixed inset-0 z-30" onClick={() => setOpenPopup(null)} />}
 
-        {/* Tools group */}
-        <div className="flex items-center gap-1 overflow-x-auto min-w-0">
+        {/* Tools group. relative + z-40: see the backdrop-stacking comment
+            above the backdrop div — without this, every button here (and
+            in the Navigation/Action groups below) needed two clicks
+            whenever a popup was already open. */}
+        <div className="relative z-40 flex items-center gap-1 overflow-x-auto min-w-0">
           {/* Pen tool with Screenshot 5 customizer */}
           <div className="relative">
             <ToolbarBtn
@@ -2062,7 +2065,7 @@ export function TeacherLiveClassRoom({
         </div>
 
         {/* Navigation group */}
-        <div className="flex items-center gap-1">
+        <div className="relative z-40 flex items-center gap-1">
           <button
             type="button"
             disabled={!canGoPrev}
@@ -2124,7 +2127,7 @@ export function TeacherLiveClassRoom({
         </div>
 
         {/* Action group */}
-        <div className="flex items-center gap-1">
+        <div className="relative z-40 flex items-center gap-1">
           {/* Poll Button with Screenshot 3 Popover Menu */}
           <div className="relative">
             <ToolbarBtn
