@@ -99,7 +99,9 @@ export function StudentPostClassFeedback({
           {/* 1. Concept Understanding */}
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-slate-300">Concept Understanding</label>
-            <div className="grid grid-cols-4 gap-2">
+            {/* 4 across is ~70px per cell on a 360px phone, which clips
+                "Crystal Clear". Two rows of two below sm. */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {[
                 { key: "POOR", label: "Difficult" },
                 { key: "AVERAGE", label: "Okay" },
