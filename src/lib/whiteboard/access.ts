@@ -56,10 +56,29 @@ export async function resolveWhiteboardAccess(
     };
   }
 
-  // Allow Admins, Super Admins, and Academic Heads to access as TEACHER
-  const { hasPermission } = await import("@/lib/rbac/guard");
-  const { PERMISSIONS } = await import("@/lib/rbac/permissions");
-  const canAdminClass = await hasPermission(userId, PERMISSIONS.BATCH_UPDATE);
+  // Every non-owning-teacher call (which, in practice, is nearly every
+  // student action — sending a chat message, answering a quiz, raising a
+  // hand) used to pay for this admin-permission check and the student
+  // lookup as two SEQUENTIAL round-trips before finding out the caller was
+  // just a plain student. That's the actual reason student-initiated
+  // realtime actions (chat especially) measured slower than the teacher's:
+  // the teacher branch above resolves with zero extra queries, while every
+  // student request was paying ~2 extra round-trips it didn't need to pay
+  // sequentially. Neither query depends on the other's result, so run them
+  // together instead.
+  const [canAdminClass, student] = await Promise.all([
+    (async () => {
+      // Allow Admins, Super Admins, and Academic Heads to access as TEACHER
+      const { hasPermission } = await import("@/lib/rbac/guard");
+      const { PERMISSIONS } = await import("@/lib/rbac/permissions");
+      return hasPermission(userId, PERMISSIONS.BATCH_UPDATE);
+    })(),
+    prisma.student.findUnique({
+      where: { userId },
+      include: { user: true },
+    }),
+  ]);
+
   if (canAdminClass) {
     const adminUser = await prisma.user.findUnique({ where: { id: userId } });
     return {
@@ -69,10 +88,6 @@ export async function resolveWhiteboardAccess(
     };
   }
 
-  const student = await prisma.student.findUnique({
-    where: { userId },
-    include: { user: true },
-  });
   if (!student) return null;
 
   let enrolled = await prisma.batchEnrollment.findFirst({

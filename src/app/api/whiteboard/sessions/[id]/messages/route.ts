@@ -67,7 +67,15 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const access = await resolveWhiteboardAccess(session.user.id, params.id);
     if (!access) throw new ForbiddenError();
 
-    const wbSession = await prisma.whiteboardSession.findUnique({ where: { id: params.id } });
+    const input = messageCreateSchema.parse(await request.json());
+
+    // Independent of each other — the session status/chatEnabled check and
+    // the sender's own photoUrl lookup — so run them together instead of
+    // as two sequential round-trips on every single chat message send.
+    const [wbSession, authorUser] = await Promise.all([
+      prisma.whiteboardSession.findUnique({ where: { id: params.id } }),
+      prisma.user.findUnique({ where: { id: session.user.id }, select: { photoUrl: true } }),
+    ]);
     if (!wbSession) return apiError("Whiteboard session not found", 404);
     if (wbSession.status === "ENDED") return apiError("This class has ended.", 409);
 
@@ -75,12 +83,6 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return apiError("The teacher has turned off chat for this class.", 403);
     }
 
-    const input = messageCreateSchema.parse(await request.json());
-
-    const authorUser = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { photoUrl: true },
-    });
     const authorPhotoUrl = authorUser?.photoUrl || null;
 
     const created = await prisma.whiteboardMessage.create({
