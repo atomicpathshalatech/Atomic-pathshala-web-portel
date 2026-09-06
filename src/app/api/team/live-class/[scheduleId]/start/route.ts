@@ -6,6 +6,8 @@ import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { pusherServer, sessionChannel, WB_EVENTS } from "@/lib/realtime/pusher-server";
+import { videoRoomName } from "@/lib/livekit/server";
+import { startRoomRecording, recordingStorageKey } from "@/lib/livekit/egress";
 
 export async function POST(
   _request: NextRequest,
@@ -102,6 +104,27 @@ export async function POST(
       where: { id: params.scheduleId },
       data: { status: "LIVE" },
     });
+
+    // Start recording this session (Room Composite Egress -> R2). Best-effort:
+    // a recording failure (LiveKit/R2 misconfigured, quota, etc.) must never
+    // block the class itself from starting - the teacher and students don't
+    // care why catch-up playback won't be available today, only that class
+    // starting on time is not held hostage by it.
+    if (wbSession.recordingStatus === "NONE" || !wbSession.recordingEgressId) {
+      try {
+        const storageKey = recordingStorageKey(wbSession.id);
+        const egress = await startRoomRecording(videoRoomName(wbSession.id), storageKey);
+        await prisma.whiteboardSession.update({
+          where: { id: wbSession.id },
+          data: { recordingEgressId: egress.egressId, recordingStatus: "RECORDING" },
+        });
+      } catch (recordingError) {
+        console.error("[live_class_recording_start_error]", recordingError);
+        await prisma.whiteboardSession
+          .update({ where: { id: wbSession.id }, data: { recordingStatus: "FAILED" } })
+          .catch(() => null);
+      }
+    }
 
     // Notify all participants that class is now LIVE
     try {

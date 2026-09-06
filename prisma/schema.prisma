@@ -1033,6 +1033,12 @@ model WhiteboardSession {
   // recordingStatus: NONE | STARTING | RECORDING | STOPPING | PROCESSING | READY | FAILED
   recordingEgressId    String?
   recordingStatus      String   @default("NONE")
+  // Where the finished file actually lives once LiveKit Egress uploads it to
+  // R2 (see src/lib/livekit/egress.ts) - set by the egress webhook handler
+  // on egress_ended, not at record-start time (the exact filename/duration
+  // aren't known until the file is finalized).
+  recordingStorageKey      String?
+  recordingDurationSeconds Int?
 
   batchSchedule BatchSchedule        @relation(fields: [batchScheduleId], references: [id], onDelete: Cascade)
   teacher       Teacher              @relation(fields: [teacherId], references: [id], onDelete: Cascade)
