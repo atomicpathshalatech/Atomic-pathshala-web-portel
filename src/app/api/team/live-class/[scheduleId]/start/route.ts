@@ -27,6 +27,14 @@ export async function POST(
 
     const now = new Date();
 
+    // A class already has an actualStartedAt once /start has ever succeeded
+    // for it. Re-invoking /start after that (teacher reconnects, retries
+    // after an error, clicks Start again) must NOT reset it - the Elapsed
+    // timer is derived from actualStartedAt, so overwriting it here made
+    // Elapsed jump backwards on every re-start while Remaining (derived
+    // from the untouched scheduledEnd) kept counting down normally.
+    const alreadyStarted = Boolean(schedule.liveWhiteboardSession?.actualStartedAt);
+
     const { canTeacherStart } = await import("@/lib/schedule/access-rules");
     const evaluation = canTeacherStart(schedule, now);
     if (!evaluation.allowed) {
@@ -78,8 +86,7 @@ export async function POST(
       update: {
         livePhase: "LIVE",
         status: "ACTIVE",
-        actualStartedAt: now,
-        startedAt: now,
+        ...(alreadyStarted ? {} : { actualStartedAt: now, startedAt: now }),
       },
       create: {
         batchScheduleId: schedule.id,

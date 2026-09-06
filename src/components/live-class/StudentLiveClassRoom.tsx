@@ -100,6 +100,24 @@ export function StudentLiveClassRoom({
   const [activeMobileTab, setActiveMobileTab] = useState<"chat" | "quiz" | "info">("chat");
   const [isFullscreen, setIsFullscreen] = useState(false);
 
+  // Exactly one <VideoStrip> must ever be mounted per student: it opens its
+  // own LiveKit connection using this student's fixed participant identity,
+  // and LiveKit only allows one live connection per identity per room - a
+  // second one joining makes the server boot the first ("client leave
+  // request received"), which immediately reconnects and boots the new one
+  // right back, forever. The desktop/mobile layouts below are pure CSS
+  // toggles (hidden lg:flex / lg:hidden) so both are always mounted in
+  // React - track the viewport ourselves so only the visible layout's
+  // VideoStrip actually renders.
+  const [isDesktopViewport, setIsDesktopViewport] = useState(true);
+  useEffect(() => {
+    const mql = window.matchMedia("(min-width: 1024px)");
+    setIsDesktopViewport(mql.matches);
+    const handler = (e: MediaQueryListEvent) => setIsDesktopViewport(e.matches);
+    mql.addEventListener("change", handler);
+    return () => mql.removeEventListener("change", handler);
+  }, []);
+
   // Time & countdown state
   const [currentTimeMs, setCurrentTimeMs] = useState(Date.now());
   const [scheduleTimes, setScheduleTimes] = useState<{ startTime?: string; endTime?: string } | null>(null);
@@ -668,12 +686,14 @@ export function StudentLiveClassRoom({
           {!isYouTube && (
             <div className={`bg-[#10121d] border border-slate-800/80 rounded-2xl overflow-hidden shadow-xl shrink-0 ${isCameraCircle ? "p-3 flex items-center justify-center aspect-square" : ""}`}>
               <div className={`w-full overflow-hidden ${isCameraCircle ? "aspect-square rounded-full border-2 border-indigo-500 shadow-lg shadow-indigo-500/20" : "aspect-video rounded-xl"}`}>
-                <VideoStrip
-                  whiteboardSessionId={wbSession?.id || batchScheduleId}
-                  variant="panel"
-                  role="STUDENT"
-                  teacherName={teacherName}
-                />
+                {isDesktopViewport && (
+                  <VideoStrip
+                    whiteboardSessionId={wbSession?.id || batchScheduleId}
+                    variant="panel"
+                    role="STUDENT"
+                    teacherName={teacherName}
+                  />
+                )}
               </div>
             </div>
           )}
@@ -758,12 +778,14 @@ export function StudentLiveClassRoom({
               {/* Mobile PiP Teacher Video (Corner Preview) */}
               {!isYouTube && (
                 <div className="absolute top-2 right-2 w-28 xs:w-32 aspect-video rounded-lg overflow-hidden border border-indigo-500/60 shadow-xl bg-[#10121d] z-20">
-                  <VideoStrip
-                    whiteboardSessionId={wbSession?.id || batchScheduleId}
-                    variant="panel"
-                    role="STUDENT"
-                    teacherName={teacherName}
-                  />
+                  {!isDesktopViewport && (
+                    <VideoStrip
+                      whiteboardSessionId={wbSession?.id || batchScheduleId}
+                      variant="panel"
+                      role="STUDENT"
+                      teacherName={teacherName}
+                    />
+                  )}
                 </div>
               )}
 
