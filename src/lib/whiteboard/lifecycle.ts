@@ -52,16 +52,12 @@ export async function endWhiteboardSession(
     });
   }
 
-  await prisma.auditLog.create({
-    data: {
-      userId: opts.endedByUserId,
-      action: opts.reason === "manual" ? "WHITEBOARD_SESSION_ENDED" : "WHITEBOARD_SESSION_AUTO_ENDED",
-      entityType: "WhiteboardSession",
-      entityId: sessionId,
-      metadata: { batchScheduleId: existing.batchScheduleId, reason: opts.reason },
-    },
-  });
-
+  // Broadcast BEFORE the audit log write, not after: every student is
+  // sitting on this exact event to flip from "live class" to the feedback
+  // screen, so an awaited AuditLog insert in front of it was adding a full
+  // extra cross-region DB round-trip to the one moment everyone in the
+  // class is simultaneously waiting on. Same reordering already applied to
+  // the quiz launch/reveal routes, for the same reason.
   try {
     await pusherServer.trigger(sessionChannel(sessionId), WB_EVENTS.SESSION_ENDED, {});
     await pusherServer.trigger(teacherChannel(sessionId), WB_EVENTS.SESSION_ENDED, {});
@@ -70,6 +66,20 @@ export async function endWhiteboardSession(
     // that misses this will still see status: "ENDED" on its next fetch.
     console.error("[pusher_trigger_error]", err);
   }
+
+  // Fire-and-forget: never let the audit trail stall the broadcast above,
+  // or the response back to the teacher who just clicked "End Class".
+  prisma.auditLog
+    .create({
+      data: {
+        userId: opts.endedByUserId,
+        action: opts.reason === "manual" ? "WHITEBOARD_SESSION_ENDED" : "WHITEBOARD_SESSION_AUTO_ENDED",
+        entityType: "WhiteboardSession",
+        entityId: sessionId,
+        metadata: { batchScheduleId: existing.batchScheduleId, reason: opts.reason },
+      },
+    })
+    .catch((err) => console.error("[audit_log_error]", err));
 
   // Trigger background slide generation & R2 upload (PDF & PPTX with watermark)
   import("@/lib/whiteboard/finalization")
