@@ -40,14 +40,16 @@ export async function generateWhiteboardPdf(
     const p = pages[i]!;
 
     // 1. Draw Background
-    drawSlideBackground(doc, p.background, pdfWidth, pdfHeight);
+    await drawSlideBackground(doc, p.background, pdfWidth, pdfHeight);
 
-    // 2. Render all strokes & shapes
+    // 2. Render all strokes, shapes, and text
     for (const obj of p.objects || []) {
       if (obj.type === "stroke") {
         renderStroke(doc, obj, scale);
       } else if (obj.type === "shape") {
         renderShape(doc, obj, scale);
+      } else if (obj.type === "text") {
+        renderText(doc, obj, scale);
       }
     }
 
@@ -92,7 +94,46 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } {
   };
 }
 
-function drawSlideBackground(doc: jsPDF, bg: string, w: number, h: number) {
+/** Fetches an uploaded background image (page background URL, including
+ * PDF pages loaded via "Load Presentation") and returns it as a data URI
+ * jsPDF's addImage can embed directly. Returns null on any failure — the
+ * caller falls back to a plain white background rather than aborting the
+ * whole multi-page export over one bad image. */
+async function fetchBackgroundImage(
+  url: string
+): Promise<{ dataUrl: string; format: "PNG" | "JPEG" | "WEBP" } | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const contentType = res.headers.get("content-type") || "";
+    const arrayBuffer = await res.arrayBuffer();
+    const base64 = Buffer.from(arrayBuffer).toString("base64");
+    let format: "PNG" | "JPEG" | "WEBP" = "PNG";
+    if (contentType.includes("jpeg") || /\.jpe?g(\?|$)/i.test(url)) format = "JPEG";
+    else if (contentType.includes("webp") || /\.webp(\?|$)/i.test(url)) format = "WEBP";
+    return { dataUrl: `data:${contentType || "image/png"};base64,${base64}`, format };
+  } catch (err) {
+    console.warn("[PDF Generator] Could not fetch background image:", err);
+    return null;
+  }
+}
+
+async function drawSlideBackground(doc: jsPDF, bg: string, w: number, h: number): Promise<void> {
+  if (/^https?:\/\//.test(bg)) {
+    const img = await fetchBackgroundImage(bg);
+    if (img) {
+      try {
+        doc.addImage(img.dataUrl, img.format, 0, 0, w, h);
+        return;
+      } catch (err) {
+        console.warn("[PDF Generator] Background addImage failed, falling back to white:", err);
+      }
+    }
+    doc.setFillColor(255, 255, 255);
+    doc.rect(0, 0, w, h, "F");
+    return;
+  }
+
   if (bg === "dark" || bg === "atomic_dark") {
     doc.setFillColor(18, 20, 30);
     doc.rect(0, 0, w, h, "F");
@@ -137,6 +178,29 @@ function renderStroke(doc: jsPDF, stroke: any, scale: number) {
     const p2 = points[i + 1];
     doc.line(p1.x * scale, p1.y * scale, p2.x * scale, p2.y * scale);
   }
+}
+
+/** Mirrors CanvasEngine.drawText()/measureText() in canvas-engine.ts — same
+ * left-anchored top-baseline per-line layout — so a text object looks the
+ * same in the exported PDF as it did on the live board. */
+function renderText(doc: jsPDF, textObj: any, scale: number) {
+  const { text, color, size, position } = textObj;
+  if (!text || !position) return;
+
+  const { r, g, b } = hexToRgb(color || "#1A1A1A");
+  doc.setTextColor(r, g, b);
+  doc.setFont("helvetica", "normal");
+  const fontSizePt = Math.max(4, (size || 32) * scale);
+  doc.setFontSize(fontSizePt);
+
+  const lineHeight = fontSizePt * 1.25;
+  const lines = String(text).split("\n");
+  lines.forEach((line: string, i: number) => {
+    // jsPDF's default text baseline is "alphabetic", not "top" — offset by
+    // one line-height's worth of ascent so line 1 lands where the canvas
+    // engine's textBaseline: "top" would have put it, not above the page.
+    doc.text(line, position.x * scale, position.y * scale + lineHeight * (i + 1) * 0.8);
+  });
 }
 
 function renderShape(doc: jsPDF, shapeObj: any, scale: number) {
