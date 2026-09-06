@@ -14,6 +14,7 @@ export interface RoadmapTopicGroup {
     order: number;
     videoUrl: string;
     notesUrl?: string | null;
+    slidesUrl?: string | null;
     isCompleted?: boolean;
     isLocked?: boolean;
   }>;
@@ -135,13 +136,28 @@ export function ChapterRoadmapTimeline({
                             </span>
                           </div>
 
-                          <Link
-                            href={lectureHref}
-                            onClick={(e) => e.stopPropagation()}
-                            className="px-3 py-1.5 rounded-lg bg-amber-500 text-black font-bold text-xs hover:bg-amber-400 transition shadow-sm shrink-0"
-                          >
-                            Watch
-                          </Link>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {l.slidesUrl && (
+                              <a
+                                href={l.slidesUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="px-2.5 py-1.5 rounded-lg bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-600 dark:text-indigo-400 font-bold text-xs border border-indigo-500/30 transition flex items-center gap-1"
+                                title="View & Download Class Notes PDF"
+                              >
+                                <span className="material-symbols-outlined text-xs">description</span>
+                                <span>Slides</span>
+                              </a>
+                            )}
+                            <Link
+                              href={lectureHref}
+                              onClick={(e) => e.stopPropagation()}
+                              className="px-3 py-1.5 rounded-lg bg-amber-500 text-black font-bold text-xs hover:bg-amber-400 transition shadow-sm shrink-0"
+                            >
+                              Watch
+                            </Link>
+                          </div>
                         </div>
                       );
                     })}

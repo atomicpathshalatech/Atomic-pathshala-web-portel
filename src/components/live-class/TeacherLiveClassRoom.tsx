@@ -10,6 +10,7 @@ import { MessagesPanel } from "@/components/live-class/MessagesPanel";
 import { Simulation3DModal } from "@/components/live-class/Simulation3DModal";
 import { ScienceLabsModal } from "@/components/live-class/ScienceLabsModal";
 import { PreFlightSetupWizard, type PreFlightConfig } from "@/components/live-class/PreFlightSetupWizard";
+import { TeacherPostClassModal } from "@/components/live-class/TeacherPostClassModal";
 import { GRACE_PERIOD_MINUTES, END_WARNING_MINUTES } from "@/lib/whiteboard/constants";
 
 type WhiteboardPage = { id: string; pageNumber: number; objects: StrokeObject[]; background: string };
@@ -361,6 +362,7 @@ export function TeacherLiveClassRoom({
   const [saveState, setSaveState] = useState<"saved" | "saving" | "offline">("saved");
   const [confirmingEnd, setConfirmingEnd] = useState(false);
   const [ending, setEnding] = useState(false);
+  const [showPostClassModal, setShowPostClassModal] = useState(false);
   const [startingClass, setStartingClass] = useState(false);
   const [startClassError, setStartClassError] = useState<string | null>(null);
 
@@ -901,10 +903,13 @@ export function TeacherLiveClassRoom({
     setEnding(true);
     try {
       await postJson(`/api/whiteboard/sessions/${wbSession.id}/end`);
-      router.push(`/team/batches`);
+      setWbSession((prev) => (prev ? { ...prev, status: "ENDED", livePhase: "ENDED" } : prev));
+      setShowPostClassModal(true);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Could not end the class.");
+    } finally {
       setEnding(false);
+      setConfirmingEnd(false);
     }
   }
 
@@ -1985,6 +1990,16 @@ export function TeacherLiveClassRoom({
             setShowPreFlightWizard(false);
           }}
           onCancel={() => setShowPreFlightWizard(false)}
+        />
+      )}
+
+      {/* Post-Class Slide Downloads & Technical Feedback Modal */}
+      {showPostClassModal && wbSession && (
+        <TeacherPostClassModal
+          sessionId={wbSession.id}
+          batchScheduleId={batchScheduleId}
+          sessionTitle={scheduleTitle}
+          onClose={() => setShowPostClassModal(false)}
         />
       )}
     </div>

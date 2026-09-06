@@ -446,6 +446,18 @@ export function LecturePlayer({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          {slidesUrl && (
+            <a
+              href={slidesUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1.5 px-3 h-9 rounded-full bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30 text-label-sm font-label-sm font-bold transition shadow-xs"
+              title="View & Download Official Class Slides PDF"
+            >
+              <span className="material-symbols-outlined text-base">description</span>
+              <span>Class Slides (PDF)</span>
+            </a>
+          )}
           <button
             type="button"
             onClick={markComplete}

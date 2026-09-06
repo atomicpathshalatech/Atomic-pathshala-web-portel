@@ -71,5 +71,10 @@ export async function endWhiteboardSession(
     console.error("[pusher_trigger_error]", err);
   }
 
+  // Trigger background slide generation & R2 upload (PDF & PPTX with watermark)
+  import("@/lib/whiteboard/finalization")
+    .then(({ finalizeWhiteboardSlides }) => finalizeWhiteboardSlides(sessionId))
+    .catch((err) => console.error("[finalizeWhiteboardSlides_trigger_error]", err));
+
   return ended;
 }

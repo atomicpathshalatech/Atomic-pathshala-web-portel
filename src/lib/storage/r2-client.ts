@@ -19,6 +19,7 @@ export type R2FolderPrefix =
   | "profile-images"
   | "course-thumbnails"
   | "whiteboard"
+  | "slides"
   | "documents"
   | "exports";
 
@@ -201,4 +202,29 @@ export async function deleteR2Object(key: string): Promise<void> {
   } catch (err) {
     console.warn("[R2] Delete warning for key:", key, err);
   }
+}
+
+/**
+ * Directly uploads an in-memory Buffer/Uint8Array to Cloudflare R2.
+ * Used by server-side background generators (e.g. Slide PDF / PPTX exporter).
+ */
+export async function uploadBufferToR2(params: {
+  key: string;
+  buffer: Buffer | Uint8Array;
+  contentType: string;
+  metadata?: Record<string, string>;
+}): Promise<{ key: string }> {
+  const { bucketName } = getR2Credentials();
+  const client = getR2Client();
+
+  const command = new PutObjectCommand({
+    Bucket: bucketName,
+    Key: params.key,
+    Body: params.buffer,
+    ContentType: params.contentType,
+    Metadata: params.metadata,
+  });
+
+  await client.send(command);
+  return { key: params.key };
 }

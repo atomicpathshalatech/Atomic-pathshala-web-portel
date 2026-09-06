@@ -9,6 +9,7 @@ import { MessagesPanel } from "@/components/live-class/MessagesPanel";
 import { YouTubeLivePlayer } from "@/components/live-class/YouTubeLivePlayer";
 import { VideoStrip } from "@/components/live-class/VideoStrip";
 import { RecordingPlayer } from "@/components/live-class/RecordingPlayer";
+import { StudentPostClassFeedback } from "@/components/live-class/StudentPostClassFeedback";
 
 
 type QuizOption = { key: string; label: string };
@@ -198,6 +199,7 @@ export function StudentLiveClassRoom({
 
   const [activeMobileTab, setActiveMobileTab] = useState<"chat" | "quiz" | "info">("chat");
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showChat, setShowChat] = useState(true);
 
   // Exactly one <VideoStrip> must ever be mounted per student: it opens its
   // own LiveKit connection using this student's fixed participant identity,
@@ -536,27 +538,16 @@ export function StudentLiveClassRoom({
   const isYouTube = wbSession?.videoTransport === "YOUTUBE";
 
   // ---------------- CLASS ENDED ----------------
+  // Students see ONLY "Class Ended" + Student Learning Feedback.
+  // Strictly NO PDF or PPTX download buttons appear on this immediate post-class screen.
   if (phase === "ended") {
     return (
-      <div className="max-w-2xl mx-auto mt-16 p-8 bg-slate-900 text-white rounded-3xl border border-slate-800 text-center space-y-4 shadow-2xl">
-        <div className="w-16 h-16 rounded-2xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center mx-auto">
-          <span className="material-symbols-outlined text-3xl">event_busy</span>
-        </div>
-        <h2 className="text-2xl font-bold text-white">This Class Has Ended</h2>
-        <p className="text-xs text-slate-400">
-          The teacher has concluded this live teaching session. Catch up below, at your own pace.
-        </p>
-        {wbSession?.id && (
-          <div className="text-left">
-            <RecordingPlayer whiteboardSessionId={wbSession.id} />
-          </div>
-        )}
-        <Link
-          href="/schedule"
-          className="inline-block mt-4 px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-lg shadow-indigo-600/30"
-        >
-          &larr; Return to Schedule
-        </Link>
+      <div className="min-h-screen bg-[#0b0d14] flex flex-col justify-center px-4">
+        <StudentPostClassFeedback
+          sessionId={wbSession?.id || batchScheduleId}
+          sessionTitle={scheduleTitle}
+          teacherName={teacherName}
+        />
       </div>
     );
   }
@@ -627,6 +618,23 @@ export function StudentLiveClassRoom({
           >
             <span className="material-symbols-outlined text-sm">back_hand</span>
             <span className="hidden xs:inline">{handRaised ? "Raised" : "Raise"}</span>
+          </button>
+
+          {/* Local Hide/Show Chat Toggle (Student Preference) */}
+          <button
+            type="button"
+            onClick={() => setShowChat((v) => !v)}
+            className={`flex items-center gap-1 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition shadow-sm border ${
+              showChat
+                ? "bg-slate-800 hover:bg-slate-700 text-indigo-300 border-indigo-500/40"
+                : "bg-slate-800/60 hover:bg-slate-700/80 text-slate-400 border-slate-700"
+            }`}
+            title={showChat ? "Hide Chat Panel (distraction-free focus)" : "Show Chat Panel"}
+          >
+            <span className="material-symbols-outlined text-sm">
+              {showChat ? "chat" : "chat_bubble_outline"}
+            </span>
+            <span className="hidden xs:inline">{showChat ? "Chat" : "Chat Off"}</span>
           </button>
 
           {/* Fullscreen Toggle */}
@@ -763,30 +771,55 @@ export function StudentLiveClassRoom({
 
 
 
-          {/* Live Chat Panel */}
-          <div className="bg-[#10121d] border border-slate-800/80 rounded-2xl overflow-hidden shadow-xl flex-1 min-h-0 flex flex-col">
-            <div className="px-4 py-2.5 bg-[#0a0b12] border-b border-slate-800 flex items-center justify-between shrink-0">
-              <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-sm text-indigo-400">chat</span>
-                Classroom Live Chat
-              </span>
-              <span className="text-[10px] text-slate-400 font-mono">Real-time</span>
+          {/* Live Chat Panel (conditionally visible via student's local toggle) */}
+          {showChat ? (
+            <div className="bg-[#10121d] border border-slate-800/80 rounded-2xl overflow-hidden shadow-xl flex-1 min-h-0 flex flex-col">
+              <div className="px-4 py-2.5 bg-[#0a0b12] border-b border-slate-800 flex items-center justify-between shrink-0">
+                <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-sm text-indigo-400">chat</span>
+                  Classroom Live Chat
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowChat(false)}
+                  className="text-[10px] text-slate-400 hover:text-white flex items-center gap-0.5"
+                  title="Hide chat"
+                >
+                  <span className="material-symbols-outlined text-xs">visibility_off</span>
+                  <span>Hide</span>
+                </button>
+              </div>
+              <div className="flex-1 min-h-0 p-2">
+                {wbSession?.id ? (
+                  <MessagesPanel
+                    whiteboardSessionId={wbSession.id}
+                    currentUserId={currentUserId}
+                    role="STUDENT"
+                    theme={isThemeDark ? "dark" : "light"}
+                  />
+                ) : (
+                  <div className="h-full flex items-center justify-center text-xs text-slate-500">
+                    Connecting chat...
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="flex-1 min-h-0 p-2">
-              {wbSession?.id ? (
-                <MessagesPanel
-                  whiteboardSessionId={wbSession.id}
-                  currentUserId={currentUserId}
-                  role="STUDENT"
-                  theme={isThemeDark ? "dark" : "light"}
-                />
-              ) : (
-                <div className="h-full flex items-center justify-center text-xs text-slate-500">
-                  Connecting chat...
-                </div>
-              )}
+          ) : (
+            <div className="bg-[#10121d] border border-slate-800/80 rounded-2xl p-4 shadow-xl flex-1 min-h-0 flex flex-col items-center justify-center text-center gap-2">
+              <span className="material-symbols-outlined text-slate-600 text-3xl">chat_bubble_outline</span>
+              <p className="text-xs font-bold text-slate-300">Chat is Hidden</p>
+              <p className="text-[11px] text-slate-500 max-w-[200px]">
+                You are in focus mode. Live chat continues in the background without distraction.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowChat(true)}
+                className="mt-2 px-3 py-1.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 text-xs font-bold transition border border-indigo-500/40"
+              >
+                Restore Chat
+              </button>
             </div>
-          </div>
+          )}
         </div>
       </div>
 

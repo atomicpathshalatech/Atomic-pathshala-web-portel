@@ -240,6 +240,7 @@ model Student {
   bookmarks Bookmark[]
   lectureProgress LectureProgress[]
   teacherFollows  TeacherFollow[]
+  classFeedbacks  StudentClassFeedback[]
 
   @@index([city, state])
   @@index([targetExam])
@@ -303,6 +304,7 @@ model Teacher {
   liveWhiteboardSessions WhiteboardSession[]
   lectures         Lecture[]
   followers        TeacherFollow[]
+  classFeedbacks   TeacherClassFeedback[]
   user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([department])
@@ -425,6 +427,9 @@ model BatchSchedule {
 
   chapterId         String?
   chapter           Chapter?              @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+
+  lectureId         String?
+  lecture           Lecture?              @relation(fields: [lectureId], references: [id], onDelete: SetNull)
 
   liveWhiteboardSession WhiteboardSession?
   test                  Test?
@@ -1040,6 +1045,18 @@ model WhiteboardSession {
   recordingStorageKey      String?
   recordingDurationSeconds Int?
 
+  // Slide Finalization & R2 Export Lifecycle
+  // status: NONE | PENDING | GENERATING | READY | FAILED
+  pdfStatus           String    @default("NONE")
+  pptxStatus          String    @default("NONE")
+  pdfStorageKey       String?
+  pptxStorageKey      String?
+  pdfFileAssetId      String?
+  pptxFileAssetId     String?
+  pdfError            String?
+  pptxError           String?
+  finalizedAt         DateTime?
+
   batchSchedule BatchSchedule        @relation(fields: [batchScheduleId], references: [id], onDelete: Cascade)
   teacher       Teacher              @relation(fields: [teacherId], references: [id], onDelete: Cascade)
   pages         WhiteboardPage[]
@@ -1049,6 +1066,8 @@ model WhiteboardSession {
   messages      WhiteboardMessage[]
   attendances   LiveClassAttendance[]
   doubts        Doubt[]
+  teacherFeedback TeacherClassFeedback?
+  studentFeedbacks StudentClassFeedback[]
 
   @@index([teacherId])
   @@index([status])
@@ -2191,6 +2210,7 @@ model Lecture {
   issueReports LectureIssueReport[]
   notes        LectureNote[]
   progress     LectureProgress[]
+  batchSchedules BatchSchedule[]
 
   @@index([chapterId])
   @@index([status])
@@ -3729,4 +3749,44 @@ model LiveChatMessage {
   @@index([userId])
   @@index([createdAt])
   @@map("live_chat_messages")
+}
+
+model TeacherClassFeedback {
+  id                   String            @id @default(cuid())
+  whiteboardSessionId  String            @unique
+  teacherId            String
+  networkOk            Boolean           @default(true)
+  audioOk              Boolean           @default(true)
+  videoOk              Boolean           @default(true)
+  whiteboardOk         Boolean           @default(true)
+  engagementOk         Boolean           @default(true)
+  issueDescription     String?
+  rating               Int?              @default(5)
+  createdAt            DateTime          @default(now())
+
+  whiteboardSession    WhiteboardSession @relation(fields: [whiteboardSessionId], references: [id], onDelete: Cascade)
+  teacher              Teacher           @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@index([teacherId])
+  @@map("teacher_class_feedback")
+}
+
+model StudentClassFeedback {
+  id                   String            @id @default(cuid())
+  whiteboardSessionId  String
+  studentId            String
+  understandingLevel   String            // POOR, AVERAGE, GOOD, EXCELLENT
+  contentHelpfulness   String            // NOT_HELPFUL, SOMEWHAT, HELPFUL, VERY_HELPFUL
+  doubtStatus          String            // NONE, ALL_RESOLVED, SOME_UNRESOLVED
+  liked                Boolean           @default(true)
+  rating               Int?              @default(5)
+  comment              String?
+  createdAt            DateTime          @default(now())
+
+  whiteboardSession    WhiteboardSession @relation(fields: [whiteboardSessionId], references: [id], onDelete: Cascade)
+  student              Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([whiteboardSessionId, studentId])
+  @@index([studentId])
+  @@map("student_class_feedback")
 }

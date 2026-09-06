@@ -340,20 +340,28 @@ function VideoStripInner({
           primary.publication && !primary.publication.isMuted ? (
             <VideoTrack trackRef={primary} className="w-full h-full object-cover" />
           ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center bg-black gap-2 text-center p-4">
-              <span className="material-symbols-outlined text-gray-600 text-4xl">videocam_off</span>
-              <span className="text-xs text-gray-400">{teacherName || "Instructor"} camera is muted</span>
+            <div className="w-full h-full flex flex-col items-center justify-center bg-[#0e101a] gap-2.5 text-center p-4">
+              <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 flex items-center justify-center shadow-inner">
+                <span className="material-symbols-outlined text-3xl">account_circle</span>
+              </div>
+              <div>
+                <span className="text-xs font-bold text-gray-200 block">{teacherName || "Educator"}</span>
+                <span className="text-[10px] text-indigo-300/80 mt-0.5 flex items-center justify-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Educator camera is off • Microphone active
+                </span>
+              </div>
             </div>
           )
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center bg-[#0d0f18] p-4 text-center">
-            <div className="w-12 h-12 rounded-2xl bg-indigo-500/20 border border-indigo-500/40 text-indigo-400 flex items-center justify-center mb-2 shadow-md">
-              <span className="material-symbols-outlined text-2xl">person</span>
+            <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 flex items-center justify-center mb-2 shadow-inner">
+              <span className="material-symbols-outlined text-3xl">account_circle</span>
             </div>
-            <span className="text-xs font-bold text-white">{teacherName || "Instructor"}</span>
+            <span className="text-xs font-bold text-white">{teacherName || "Educator"}</span>
             <span className="text-[10px] text-indigo-300 mt-1 flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-              {role === "TEACHER" && camError ? camError : "Camera Feed Standby"}
+              {role === "TEACHER" && camError ? camError : "Educator camera is off • Microphone active"}
             </span>
             {role === "TEACHER" && camError && (
               <button
