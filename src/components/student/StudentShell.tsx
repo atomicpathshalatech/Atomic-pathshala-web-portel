@@ -225,32 +225,13 @@ export function StudentShell({
             <Link
               href="/dashboard"
               aria-label="Home"
-              className="group relative flex items-center justify-center w-10 h-10 rounded-xl bg-white border border-slate-200/80 shadow-2xs hover:shadow-xs transition-all duration-200"
+              className="group relative flex items-center justify-center w-10 h-10 rounded-xl bg-white border border-slate-200/80 shadow-2xs hover:shadow-xs transition-all duration-200 p-1"
             >
-              <svg
-                className="w-7 h-7 transition-transform group-hover:scale-105 duration-200"
-                fill="none"
-                viewBox="0 0 48 48"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                {/* Stylized dynamic orange orbital swoosh */}
-                <path
-                  d="M7 35.5C8.8 38.2 13 40.5 20.5 37C32.5 31.5 43.5 17 40.5 12C37.8 7.5 26.5 12.5 16 23.5"
-                  stroke="#F97316"
-                  strokeDasharray="100"
-                  strokeDashoffset="0"
-                  strokeLinecap="round"
-                  strokeWidth="2.5"
-                />
-                {/* Orbital particle point */}
-                <circle cx="39.5" cy="12.5" fill="#F97316" r="2.2" />
-                {/* Bold Stylized Letter 'A' */}
-                <path d="M24 8L13 36H19.5L21.8 29.8H26.2L28.5 36H35L24 8Z" fill="#0F172A" />
-                {/* Inner A cutout arrow accent */}
-                <polygon fill="#FFFFFF" points="24,14.5 21,24.5 27,24.5" />
-                {/* Sharp upward accent bar in orange */}
-                <path d="M19 27.5L24 16.5L29 27.5H23.5L19 27.5Z" fill="#EA580C" />
-              </svg>
+              <img
+                src="/brand/logo.png"
+                alt="Atomic Pathshala Logo"
+                className="w-full h-full object-contain transition-transform group-hover:scale-105 duration-200"
+              />
             </Link>
 
             {/* Subtle Vertical Separator */}
@@ -373,10 +354,12 @@ export function StudentShell({
             <div>
               <div className="p-4 border-b border-slate-100 flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                  <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-orange-50 border border-orange-200/80 shadow-2xs">
-                    <span className="material-symbols-outlined text-orange-600 text-xl font-bold">
-                      local_fire_department
-                    </span>
+                  <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-orange-50 border border-orange-200/80 shadow-2xs overflow-hidden p-1">
+                    <img
+                      src="/brand/logo.png"
+                      alt="Atomic Pathshala Logo"
+                      className="w-full h-full object-contain"
+                    />
                   </div>
                   <div>
                     <h2 className="text-sm font-extrabold text-slate-900 tracking-tight">

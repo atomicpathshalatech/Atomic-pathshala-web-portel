@@ -56,11 +56,20 @@ export function LoginForm() {
 
   return (
     <div className="w-full max-w-md glass-card rounded-2xl p-8 md:p-10 space-y-6">
-      <div className="space-y-2 text-center">
-        <h1 className="font-headline-lg text-headline-lg text-on-surface">Welcome back</h1>
-        <p className="font-body-md text-body-md text-on-surface-variant">
-          Log in to continue your preparation
-        </p>
+      <div className="space-y-3 text-center flex flex-col items-center">
+        <div className="w-14 h-14 rounded-2xl overflow-hidden p-1 bg-white border border-slate-200/80 shadow-sm flex items-center justify-center">
+          <img
+            src="/brand/logo.png"
+            alt="Atomic Pathshala Logo"
+            className="w-full h-full object-contain"
+          />
+        </div>
+        <div>
+          <h1 className="font-headline-lg text-headline-lg text-on-surface">Welcome back</h1>
+          <p className="font-body-md text-body-md text-on-surface-variant">
+            Log in to continue your preparation
+          </p>
+        </div>
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>

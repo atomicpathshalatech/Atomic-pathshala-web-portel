@@ -1035,10 +1035,14 @@ export function TeacherLiveClassRoom({
         <button
           type="button"
           onClick={() => router.push("/team/batches")}
-          className="text-blue-500 hover:text-blue-400 transition-colors"
+          className="w-10 h-10 rounded-xl overflow-hidden p-1 hover:opacity-85 transition-opacity"
           title="Atomic Pathshala"
         >
-          <span className="material-symbols-outlined text-3xl">hub</span>
+          <img
+            src="/brand/logo.png"
+            alt="Atomic Pathshala Logo"
+            className="w-full h-full object-contain"
+          />
         </button>
       </aside>
 

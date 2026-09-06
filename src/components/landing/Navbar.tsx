@@ -30,10 +30,12 @@ export function Navbar() {
   return (
     <nav className="fixed top-0 w-full z-50 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 shadow-sm">
       <div className="flex justify-between items-center w-full px-4 sm:px-6 lg:px-8 py-3.5 max-w-7xl mx-auto">
-        <Link href="/" className="font-extrabold text-lg sm:text-xl tracking-tight text-[#031635] dark:text-white flex items-center gap-2">
-          <span className="w-8 h-8 rounded-xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white flex items-center justify-center text-sm font-black shadow-sm">
-            A
-          </span>
+        <Link href="/" className="font-extrabold text-lg sm:text-xl tracking-tight text-[#031635] dark:text-white flex items-center gap-2.5">
+          <img
+            src="/brand/logo.png"
+            alt="Atomic Pathshala Logo"
+            className="w-8 h-8 rounded-lg object-contain"
+          />
           <span>Atomic Pathshala</span>
         </Link>
 

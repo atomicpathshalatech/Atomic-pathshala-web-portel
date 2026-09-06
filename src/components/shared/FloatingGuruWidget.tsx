@@ -217,8 +217,12 @@ export function FloatingGuruWidget() {
           {/* Header */}
           <div className="bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 p-3.5 text-white flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center font-black text-xs">
-                🤖
+              <div className="w-7 h-7 rounded-xl bg-white p-0.5 shadow-sm flex items-center justify-center shrink-0">
+                <img
+                  src="/brand/logo.png"
+                  alt="Atomic Guru"
+                  className="w-full h-full object-contain"
+                />
               </div>
               <div>
                 <h3 className="font-bold text-xs tracking-wide">Atomic Guru</h3>
@@ -330,8 +334,12 @@ export function FloatingGuruWidget() {
       >
         {/* Animated Mascot Head (Compact 24px) */}
         <div className="relative flex items-center justify-center shrink-0">
-          <div className="w-6 h-6 rounded-full bg-white text-slate-900 flex items-center justify-center text-xs shadow-inner group-hover:rotate-12 transition-transform">
-            🤖
+          <div className="w-6 h-6 rounded-full bg-white p-0.5 flex items-center justify-center shadow-inner group-hover:rotate-12 transition-transform overflow-hidden">
+            <img
+              src="/brand/logo.png"
+              alt="Atomic Logo"
+              className="w-full h-full object-contain"
+            />
           </div>
           {/* Pulsing Online Dot */}
           <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 border border-orange-500 animate-pulse" />

@@ -565,6 +565,13 @@ export function StudentLiveClassRoom({
           >
             <span className="material-symbols-outlined text-base">arrow_back</span>
           </Link>
+          <div className="w-8 h-8 rounded-xl overflow-hidden p-0.5 bg-white/5 border border-white/10 shrink-0 hidden xs:flex items-center justify-center">
+            <img
+              src="/brand/logo.png"
+              alt="Atomic Pathshala Logo"
+              className="w-full h-full object-contain"
+            />
+          </div>
           <div className="min-w-0">
             <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400 truncate leading-tight">{batchName}</p>
             <h1 className="text-xs sm:text-sm font-bold truncate max-w-[140px] xs:max-w-[200px] sm:max-w-md text-white leading-tight">{scheduleTitle}</h1>

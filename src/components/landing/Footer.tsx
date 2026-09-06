@@ -52,8 +52,13 @@ export function Footer() {
     <footer className="bg-inverse-surface text-surface-variant py-stack-lg border-t border-outline-variant/10">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-gutter px-margin-mobile md:px-margin-desktop max-w-container-max mx-auto">
         <div className="col-span-2 md:col-span-1 space-y-4">
-          <div className="font-headline-md text-headline-md font-bold text-surface-container-lowest">
-            Atomic Pathshala
+          <div className="flex items-center gap-2.5 font-headline-md text-headline-md font-bold text-surface-container-lowest">
+            <img
+              src="/brand/logo.png"
+              alt="Atomic Pathshala Logo"
+              className="w-8 h-8 rounded-lg object-contain bg-white/10 p-0.5"
+            />
+            <span>Atomic Pathshala</span>
           </div>
           <p className="text-label-sm font-label-sm opacity-70">
             Empowering future doctors and engineers with high-performance learning
