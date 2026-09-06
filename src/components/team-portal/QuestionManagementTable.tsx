@@ -78,6 +78,7 @@ interface Props {
     review1: number;
     review2: number;
     draft: number;
+    aiDraft?: number;
   };
   usersList: Array<{ id: string; name: string | null; email: string }>;
   canCreate: boolean;
@@ -277,7 +278,7 @@ export function QuestionManagementTable({
   return (
     <div className="space-y-6">
       {/* 1. TOP SUMMARY STAT CARDS */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <button
           type="button"
           onClick={() => handleQuickStatusTab("")}
@@ -349,6 +350,25 @@ export function QuestionManagementTable({
           <p className="text-xs font-bold text-slate-500">Drafts / Changes</p>
           <h3 className="text-2xl font-black text-slate-700 mt-1">{counts.draft}</h3>
         </button>
+
+        <Link
+          href="/team/questions/drafts"
+          className="p-4 rounded-2xl border bg-gradient-to-br from-purple-50 to-indigo-50/50 border-purple-200 hover:border-purple-400 text-left transition group shadow-xs cursor-pointer flex flex-col justify-between"
+          title="Open Dedicated AI Drafts Folder"
+        >
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-black text-purple-900 flex items-center gap-1">
+              <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+              AI Drafts
+            </p>
+            <span className="text-[10px] font-bold text-purple-700 bg-purple-100 group-hover:bg-purple-200 px-2 py-0.5 rounded-full transition">
+              Open ➔
+            </span>
+          </div>
+          <h3 className="text-2xl font-black text-purple-900 mt-1">
+            {counts.aiDraft ?? counts.draft}
+          </h3>
+        </Link>
       </div>
 
       {/* 2. STRUCTURED FILTER BAR (Comprehensive yet clean) */}

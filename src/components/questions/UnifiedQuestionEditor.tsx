@@ -330,6 +330,8 @@ export function UnifiedQuestionEditor({
   // Save State
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [generatedCode, setGeneratedCode] = useState<string | null>(initialQuestion?.questionCode || null);
+  const [currentDraftId, setCurrentDraftId] = useState<string | null>(questionId || null);
+  const [isAutoDraftSaved, setIsAutoDraftSaved] = useState<boolean>(Boolean(initialQuestion?.id));
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -385,6 +387,48 @@ export function UnifiedQuestionEditor({
         }
         return;
       }
+    }
+  };
+
+  // Auto-Draft Ingestion Helper (Guarantees zero data loss as soon as question is generated/extracted)
+  const triggerAutoDraft = async (extracted: any, imgUrl?: string | null, source = "DIRECT_OCR") => {
+    try {
+      const res = await fetch("/api/team/questions/auto-draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          existingQuestionId: currentDraftId || (questionId ? questionId : undefined),
+          statementEn: extracted.statementEn || "",
+          statementHi: extracted.statementHi || "",
+          optionsEn: extracted.optionsEn || { A: optionAEn, B: optionBEn, C: optionCEn, D: optionDEn },
+          optionsHi: extracted.optionsHi || { A: optionAHi, B: optionBHi, C: optionCHi, D: optionDHi },
+          correctAnswer: extracted.correctAnswer || [correctOption || "A"],
+          solutionEn: extracted.solutionEn || "",
+          solutionHi: extracted.solutionHi || "",
+          subject: extracted.subject || subject || "Biology",
+          chapter: extracted.chapter || chapter || "",
+          topic: extracted.topic || topic || "",
+          subTopic: extracted.subTopic || subTopic || "",
+          difficulty: extracted.difficulty || difficulty || "MEDIUM",
+          type: extracted.type || questionType || "SINGLE_CORRECT",
+          referenceImageUrl: imgUrl || diagramUrl || undefined,
+          solutionImageUrl: solutionImageUrl || undefined,
+          source,
+        }),
+      });
+      const json = await res.json();
+      if (json.success && json.data?.questionId) {
+        setCurrentDraftId(json.data.questionId);
+        if (json.data.questionCode) {
+          setGeneratedCode(json.data.questionCode);
+        }
+        setIsAutoDraftSaved(true);
+        toast.success(`⚡ Auto-saved to AI Drafts (#${json.data.questionCode || json.data.questionId})!`, {
+          duration: 3500,
+        });
+      }
+    } catch (e) {
+      console.warn("[Auto-Draft] Background save note:", e);
     }
   };
 
@@ -579,6 +623,9 @@ export function UnifiedQuestionEditor({
         } else {
           toast.success("Question and options extracted successfully!");
         }
+
+        // INSTANT AUTO-DRAFT: Save to database immediately to guarantee zero data loss
+        triggerAutoDraft(data, base64Url, "DIRECT_OCR");
       } catch (err: any) {
         toast.error(err.message || "Unable to extract this content. Please review or retry.");
       } finally {
@@ -655,6 +702,9 @@ export function UnifiedQuestionEditor({
       } else {
         toast.success("Text parsed into question and options successfully!");
       }
+
+      // INSTANT AUTO-DRAFT: Save to database immediately to guarantee zero data loss
+      triggerAutoDraft(data, null, "DIRECT_TEXT");
     } catch (err: any) {
       toast.error(err.message || "Unable to parse this text. Please review.");
     } finally {
@@ -877,11 +927,12 @@ export function UnifiedQuestionEditor({
       };
 
       let res;
-      if (questionId) {
+      const targetId = questionId || currentDraftId;
+      if (targetId) {
         res = await fetch("/api/team/questions/engine", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ questionId, ...payload }),
+          body: JSON.stringify({ questionId: targetId, ...payload }),
         });
       } else {
         res = await fetch("/api/team/questions/engine", {
@@ -944,6 +995,13 @@ export function UnifiedQuestionEditor({
             {(mode === "test" || mode === "dpp") && (
               <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-800 font-bold font-mono">
                 Slot #{slotNumber} of {totalSlots}
+              </span>
+            )}
+
+            {isAutoDraftSaved && (
+              <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-300 text-emerald-800 font-bold flex items-center gap-1.5 animate-in fade-in">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span>⚡ Auto-saved to AI Drafts</span>
               </span>
             )}
           </div>

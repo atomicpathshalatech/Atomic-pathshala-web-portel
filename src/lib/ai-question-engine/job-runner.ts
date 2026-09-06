@@ -2,6 +2,8 @@ import crypto from "crypto";
 import { prisma } from "@/lib/db";
 import { defaultAiProvider } from "./gemini-provider";
 import { runQuestionValidationPipeline } from "./validator-pipeline";
+import { generateQuestionId } from "@/lib/questions/id-generator";
+import { QuestionType, Difficulty } from "@prisma/client";
 import {
   GenerationLanguage,
   GenerationPlan,
@@ -9,6 +11,24 @@ import {
   RawAiGeneratedQuestion,
 } from "./types";
 import { PROMPT_VERSION } from "./prompt-templates";
+
+function mapQuestionType(t?: string): QuestionType {
+  const upper = (t || "").toUpperCase();
+  if (upper.includes("MULTI") && upper.includes("CORRECT")) return QuestionType.MULTIPLE_CORRECT;
+  if (upper.includes("INTEGER")) return QuestionType.INTEGER;
+  if (upper.includes("NUMERICAL")) return QuestionType.NUMERICAL;
+  if (upper.includes("STATEMENT")) return QuestionType.STATEMENT_BASED;
+  if (upper.includes("MATCH")) return QuestionType.MATCH_COLUMN;
+  if (upper.includes("ASSERTION")) return QuestionType.ASSERTION_REASON;
+  return QuestionType.SINGLE_CORRECT;
+}
+
+function mapDifficulty(d?: string): Difficulty {
+  const upper = (d || "").toUpperCase();
+  if (upper === "EASY") return Difficulty.EASY;
+  if (upper === "HARD" || upper === "ULTRA") return Difficulty.HARD;
+  return Difficulty.MEDIUM;
+}
 
 export function generateBatchCode(): string {
   const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, "");
@@ -185,7 +205,74 @@ async function runGenerationJobWorker(batchId: string, params: StartJobParams): 
         if (matchingImg) imageUrl = matchingImg.publicUrl;
       }
 
-      // Persist generated question item in DB immediately
+      // Also persist to canonical Question Bank as auto-saved DRAFT immediately (Zero Data Loss)
+      try {
+        const questionCode = await generateQuestionId(prisma as any, q.subject);
+        const methodTag = params.method === "PDF" ? "PDF" : "AI";
+        const category = `AI_GENERATED:${methodTag}`;
+        const autoTags = `AI_AUTO_DRAFT, METHOD_${methodTag}, BATCH_${batchId}, ${q.difficulty}`;
+
+        const translationsToCreate: any[] = [];
+        if (q.statementEn?.trim()) {
+          translationsToCreate.push({
+            language: "ENGLISH",
+            statement: q.statementEn.trim(),
+            options: q.optionsEn as any,
+            correctOptionIds: q.correctAnswer,
+            solution: q.solutionEn || null,
+          });
+        }
+        if (q.statementHi?.trim()) {
+          translationsToCreate.push({
+            language: "HINDI",
+            statement: q.statementHi.trim(),
+            options: (q.optionsHi as any) || {},
+            correctOptionIds: q.correctAnswer,
+            solution: q.solutionHi || null,
+          });
+        }
+
+        const canonicalQ = await prisma.question.create({
+          data: {
+            questionCode,
+            subject: q.subject,
+            chapter: q.chapter,
+            topic: q.topic,
+            subTopic: q.subTopic || null,
+            type: mapQuestionType(q.questionType),
+            difficulty: mapDifficulty(q.difficulty),
+            category,
+            status: "DRAFT",
+            isPublished: false,
+            imageUrl,
+            solution: q.solutionEn || q.solutionHi || null,
+            tags: autoTags,
+            createdById: params.userId,
+            translations: {
+              create: translationsToCreate,
+            },
+          },
+        });
+
+        if (imageUrl) {
+          await prisma.questionAsset.create({
+            data: {
+              questionId: canonicalQ.id,
+              type: "REFERENCE",
+              storageKey: `batch-ref-${canonicalQ.id}`,
+              publicUrl: imageUrl,
+              originalName: `question-ref-${questionCode}.png`,
+              mimeType: "image/png",
+              sizeBytes: 1024,
+              createdById: params.userId,
+            },
+          }).catch(() => null);
+        }
+      } catch (err) {
+        console.warn(`[JobRunner] Auto-draft question sync note for batch ${batchId}:`, err);
+      }
+
+      // Persist generated question item in DB immediately (with isSavedToDraft = true)
       await prisma.aiGeneratedQuestion.create({
         data: {
           batchId,
@@ -213,7 +300,7 @@ async function runGenerationJobWorker(batchId: string, params: StartJobParams): 
           validationStatus: report.validationStatus,
           validationReport: report as any,
           qualityScore: scores as any,
-          isSavedToDraft: false,
+          isSavedToDraft: true,
         },
       });
 

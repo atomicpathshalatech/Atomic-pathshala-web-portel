@@ -138,6 +138,7 @@ export default async function QuestionBankPage({
     review1Count,
     review2Count,
     draftCount,
+    aiDraftCount,
     usersList,
   ] = await Promise.all([
     prisma.question.findMany({
@@ -159,6 +160,18 @@ export default async function QuestionBankPage({
     prisma.question.count({ where: { status: "REVIEW_1" } }),
     prisma.question.count({ where: { status: "REVIEW_2" } }),
     prisma.question.count({ where: { status: "DRAFT" } }),
+    prisma.question.count({
+      where: {
+        status: "DRAFT",
+        OR: [
+          { category: { startsWith: "AI" } },
+          { category: { contains: "ATOMIC_GURU" } },
+          { tags: { contains: "AI_AUTO_DRAFT" } },
+          { tags: { contains: "AI_GENERATED" } },
+          { tags: { contains: "ATOMIC_GURU" } },
+        ],
+      },
+    }),
     prisma.user.findMany({
       where: { status: "ACTIVE" },
       select: { id: true, name: true, email: true },
@@ -183,23 +196,34 @@ export default async function QuestionBankPage({
         </div>
 
         {canCreate && (
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <Link
+              href="/team/questions/drafts"
+              className="flex items-center gap-2 bg-gradient-to-r from-purple-700 via-indigo-700 to-purple-800 text-white px-5 py-2.5 rounded-full font-bold text-xs hover:opacity-95 transition-all shadow-md shadow-purple-600/20 active:scale-95"
+              title="Open Dedicated AI Auto-Saved Drafts Folder"
+            >
+              <span className="material-symbols-outlined text-sm text-amber-300">folder_special</span>
+              <span>AI Drafts Folder ({aiDraftCount})</span>
+            </Link>
+
             <Link
               href="/team/questions/ai-generated"
               className="flex items-center gap-2 bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 text-white px-5 py-2.5 rounded-full font-bold text-xs hover:opacity-95 transition-all shadow-md shadow-purple-500/20 active:scale-95"
               title="Generate production-grade questions via PDF grounding or AI syllabus engine"
             >
               <span className="material-symbols-outlined text-sm text-amber-300 animate-pulse">auto_awesome</span>
-              <span>AI Generated Questions</span>
+              <span>AI Question Studio</span>
             </Link>
+
             <Link
               href="/team/question-bank-hierarchical"
               className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-5 py-2.5 rounded-full font-bold text-xs hover:opacity-95 transition-all shadow-md shadow-indigo-500/20"
               title="Hierarchical Question Bank with Class, Subject, Chapter, Topic taxonomy and Revision Hub"
             >
               <span className="material-symbols-outlined text-base">account_tree</span>
-              <span>Hierarchy &amp; Revision Hub</span>
+              <span>Hierarchy &amp; Revision</span>
             </Link>
+
             <Link
               href="/team/questions/new"
               className="flex items-center gap-2 bg-blue-600 text-white px-6 py-2.5 rounded-full font-bold text-xs shadow-md shadow-blue-500/20 hover:bg-blue-500 active:scale-95 transition-all"
@@ -226,6 +250,7 @@ export default async function QuestionBankPage({
           review1: review1Count,
           review2: review2Count,
           draft: draftCount,
+          aiDraft: aiDraftCount,
         }}
         usersList={usersList}
         canCreate={canCreate}
