@@ -195,17 +195,17 @@ export function StudentShell({
 
   if (isExamAttempt || isLiveClass) {
     return (
-      <div className="fixed inset-0 w-screen h-[100dvh] overflow-hidden bg-[#0b0d14]">
+      <div className="fixed inset-0 overflow-hidden bg-[#0b0d14]">
         {children}
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-white text-slate-800 flex flex-col selection:bg-orange-100 selection:text-orange-900 font-sans antialiased">
+    <div className="min-h-screen-safe bg-white text-slate-800 flex flex-col selection:bg-orange-100 selection:text-orange-900 font-sans antialiased">
       {/* BEGIN: MainHeader */}
-      <header className="sticky top-0 z-40 w-full bg-white border-b border-slate-200/80 shadow-2xs transition-all">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-[64px] flex items-center justify-between">
+      <header className="sticky top-0 z-header w-full bg-white border-b border-slate-200/80 shadow-2xs transition-all">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-[var(--header-h)] flex items-center justify-between">
           {/* Left: 3-Lines Hamburger Menu + Brand & Goal Selector */}
           <div className="flex items-center gap-2.5 sm:gap-3.5 shrink-0">
             {/* 3-Lines Hamburger Pop-up Trigger Button */}
@@ -537,7 +537,7 @@ export function StudentShell({
       )}
 
       {/* Mobile & Tablet Bottom Navigation Dock (Responsive, with 3-Lines Menu Trigger) */}
-      <div className="lg:hidden fixed bottom-3 left-0 right-0 max-w-lg mx-auto px-3 z-40 pointer-events-auto">
+      <div className="lg:hidden fixed bottom-3 left-0 right-0 max-w-lg mx-auto px-3 z-header pointer-events-auto pb-[env(safe-area-inset-bottom)]">
         <nav
           id="bottom-dock-nav"
           className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200/90 dark:border-slate-800 shadow-2xl rounded-2xl p-1.5 flex items-center justify-around gap-1"
