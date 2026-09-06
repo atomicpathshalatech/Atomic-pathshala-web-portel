@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/ai-chat/auth";
 import { getPrisma } from "@/lib/ai-chat/prisma";
 import { awardXp, registerDailyActivity } from "@/lib/ai-chat/gamification";
+import { finalizeQuizAttempt } from "@/lib/ai-chat/atomicGuruPipeline";
 import { Prisma } from "@prisma/client";
 
 export const runtime = "nodejs";
@@ -14,6 +15,9 @@ export async function POST(request: Request) {
     }
 
     const body = (await request.json()) as {
+      action?: "start" | "finalize";
+      attemptId?: string;
+      quizId?: string;
       subject?: string;
       topic?: string;
       totalQuestions?: number;
@@ -26,6 +30,43 @@ export async function POST(request: Request) {
       breakdown?: Record<string, unknown>;
     };
 
+    const prisma = getPrisma();
+
+    // 1. Action: start new attempt to get attemptId for real-time answer persistence
+    if (body.action === "start") {
+      const attempt = await prisma.quizAttempt.create({
+        data: {
+          userId: user.id,
+          quizId: body.quizId || null,
+          subject: body.subject || "NEET Practice",
+          topic: body.topic ?? null,
+          totalQuestions: body.totalQuestions || 0,
+          correct: 0,
+          wrong: 0,
+          unattempted: body.totalQuestions || 0,
+          score: 0,
+          accuracy: 0,
+          timeTakenSec: 0,
+        },
+      });
+      return NextResponse.json({ attemptId: attempt.id, attempt }, { status: 201 });
+    }
+
+    // 2. Authoritative finalization if attemptId already exists
+    if (body.attemptId) {
+      try {
+        const finalResult = await finalizeQuizAttempt({
+          attemptId: body.attemptId,
+          userId: user.id,
+          timeTakenSec: body.timeTakenSec,
+        });
+        return NextResponse.json(finalResult, { status: 200 });
+      } catch (finalizeErr) {
+        console.warn("[finalizeQuizAttempt warning, falling back]", finalizeErr);
+      }
+    }
+
+    // 3. Fallback: create attempt record on the fly
     if (
       !body.subject ||
       body.totalQuestions === undefined ||
@@ -38,11 +79,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing quiz attempt fields." }, { status: 400 });
     }
 
-    const prisma = getPrisma();
-
     const attempt = await prisma.quizAttempt.create({
       data: {
         userId: user.id,
+        quizId: body.quizId || null,
         subject: body.subject,
         topic: body.topic ?? null,
         totalQuestions: body.totalQuestions,
@@ -56,13 +96,6 @@ export async function POST(request: Request) {
       },
     });
 
-    // Streak + XP: the source app updated currentStreak/longestStreak/
-    // lastActivityDate/totalXp directly on User. Those fields weren't
-    // carried over onto atomic-ops's User (see the schema's AI Chat
-    // integration comment) — UserProfile.xp/currentStreak/longestStreak is
-    // the one gamification store now (same one dashboardStats.ts reads),
-    // so route the same "correct*10 + wrong*2" XP formula through it via
-    // gamification.ts instead of writing to fields that no longer exist.
     await registerDailyActivity(user.id);
     const xpGained = body.correct * 10 + body.wrong * 2;
     await awardXp(user.id, xpGained);

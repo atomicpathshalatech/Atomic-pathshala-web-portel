@@ -114,6 +114,12 @@ export interface QuizQuestion {
   imageRequired?: boolean; // diagram_based, figure_table, graph_based, image_statement
   imageDescription?: string; // precise description of the required diagram/graph/figure
   explanationSteps?: string[]; // point-wise solution steps (preferred over the plain "explanation" paragraph)
+
+  // 4-Part Structured Solution Fields (Explain Question, Concept, Solution, Final Answer)
+  explainQuestion?: string;
+  concept?: string;
+  solution?: string;
+  finalAnswer?: string;
 }
 
 export interface QuizAnswer {
@@ -265,16 +271,20 @@ ${levelRules}
 ${QUESTION_FORMAT_ENGINE}
 
 SOLUTION FORMAT RULE (mandatory — applies to every question):
-- Do NOT write the explanation as one merged paragraph. Populate "explanationSteps" as an array of clear, numbered points (minimum 2, typically 3-5), for example: ["Step 1: identify the relevant formula/concept.", "Step 2: substitute the given values.", "Step 3: solve and match with the verified correct option."].
-- Each entry in "explanationSteps" must be a complete, self-contained point — do not split one sentence across two array entries.
-- Also populate "explanation" with the same content joined into a short paragraph, purely as a fallback for any legacy display — but "explanationSteps" is the primary field and must always be present and complete.
+- You MUST provide the complete, authoritative 4-part structured solution:
+  1. "explainQuestion": What the question asks (e.g. "The question asks to identify...").
+  2. "concept": Core NCERT scientific principle/formula/law.
+  3. "solution": Detailed step-by-step reasoning, calculations, or option-by-option analysis.
+  4. "finalAnswer": Explicit final answer declaration, e.g. "Option (B)".
+- Populate "explanationSteps" as an array of clear, numbered steps.
+- Also populate "explanation" with the joined explanation text.
 
 Question quality requirements (apply to every question regardless of type):
 - Exactly one option must be scientifically/mathematically correct.
 - Distractors must be genuinely plausible (common misconceptions, near-miss numbers, subtly altered facts), not obviously silly.
 - Do not reveal the answer through wording or option length.
 - Follow the latest NCERT and NTA NEET syllabus only. Never use deleted or outdated NCERT content. Never invent fake facts.
-- Formatting inside "text", "statements", column items, etc.: use actual \\n newline characters to separate distinct lines/statements — never run multiple statements or an Assertion+Reason pair into one paragraph.
+- Formatting inside "text", "statements", column items, etc.: use actual \n newline characters to separate distinct lines/statements — never run multiple statements or an Assertion+Reason pair into one paragraph.
 
 STRICT ACCURACY RULES (mandatory — apply before including ANY question in your output):
 - Independently verify the question, options, correct answer, and explanation/solution before including it.
@@ -296,6 +306,10 @@ Return ONLY the following JSON, wrapped exactly like this, nothing else - no mar
       "text": "question text or lead-in instruction (may include \\n for multi-line content); leave empty ONLY for assertion_reason type",
       "options": ["option A", "option B", "option C", "option D"],
       "correctIndex": 0,
+      "explainQuestion": "Clear breakdown of what the question is asking",
+      "concept": "Core NCERT concept / law / formula",
+      "solution": "Step-by-step reasoning or calculation",
+      "finalAnswer": "Option (A)",
       "explanation": "short fallback paragraph version of the solution",
       "explanationSteps": ["Step 1: ...", "Step 2: ...", "Step 3: ..."],
       "chapter": "broad NCERT chapter name, e.g. Human Reproduction, Thermodynamics",
@@ -367,4 +381,54 @@ export function parseQuizJson(content: string): QuizQuestion[] | null {
   } catch {
     return null;
   }
+}
+
+export interface StructuredSolution {
+  explainQuestion: string;
+  concept: string;
+  solution: string;
+  finalAnswer: string;
+}
+
+/**
+ * Ensures any QuizQuestion is presented in the canonical 4-part solution format:
+ * 1. EXPLAIN QUESTION / EXPLAINING
+ * 2. CONCEPT
+ * 3. SOLUTION
+ * 4. FINAL ANSWER
+ */
+export function formatStructuredSolution(q: QuizQuestion): StructuredSolution {
+  const correctLetter = String.fromCharCode(65 + Math.max(0, Math.min(3, q.correctIndex ?? 0)));
+  const correctOptionText = q.options?.[q.correctIndex] ?? "";
+
+  const explainQuestion =
+    q.explainQuestion?.trim() ||
+    `The question evaluates knowledge of ${q.subject}${q.chapter ? ` in "${q.chapter}"` : ""}${q.topic ? ` (${q.topic})` : ""}.`;
+
+  const concept =
+    q.concept?.trim() ||
+    [q.subject, q.chapter, q.topic].filter(Boolean).join(" · ") ||
+    "NCERT Fundamental Concept";
+
+  let solution = q.solution?.trim();
+  if (!solution) {
+    if (q.explanationSteps && q.explanationSteps.length > 0) {
+      solution = q.explanationSteps.join("\n\n");
+    } else if (q.explanation?.trim()) {
+      solution = q.explanation.trim();
+    } else {
+      solution = `Evaluating the options according to NCERT syllabus: Option (${correctLetter}) correctly satisfies the criteria.`;
+    }
+  }
+
+  const finalAnswer =
+    q.finalAnswer?.trim() ||
+    (correctOptionText ? `(${correctLetter}) ${correctOptionText}` : `Option (${correctLetter})`);
+
+  return {
+    explainQuestion,
+    concept,
+    solution,
+    finalAnswer,
+  };
 }

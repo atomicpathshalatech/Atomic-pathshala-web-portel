@@ -4,24 +4,30 @@ import {
   ArrowLeft,
   BookMarked,
   BookOpen,
+  Check,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Clock3,
   ClipboardList,
   History,
   Search,
+  Sparkles,
+  X,
+  XCircle,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MathText } from "@/components/ai-chat/MathText";
-import type {
-  QuizConfigEntry,
-  QuizAnswer,
-  QuizQuestion,
-  QuizSubject,
-  QuizLevel,
-  QuestionType,
+import {
+  formatStructuredSolution,
+  QUESTION_TYPE_LABELS,
+  type QuizConfigEntry,
+  type QuizAnswer,
+  type QuizQuestion,
+  type QuizSubject,
+  type QuizLevel,
+  type QuestionType,
 } from "@/lib/ai-chat/quiz";
-import { QUESTION_TYPE_LABELS } from "@/lib/ai-chat/quiz";
 import { PYQ_AVAILABLE_YEARS } from "@/lib/ai-chat/pyqBank";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas-pro";
@@ -48,6 +54,7 @@ interface SubjectTally {
 }
 interface QuizModeProps {
   onClose: () => void;
+  showInstantFeedback?: boolean;
 }
 const SUBJECT_OPTIONS: { value: QuizSubject; label: string }[] = [
   { value: "Biology", label: "Biology Quiz (20 Q)" },
@@ -352,7 +359,7 @@ function PdfQuestionBlock({
   );
 }
 
-export function QuizMode({ onClose }: QuizModeProps) {
+export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps) {
   const [stage, setStage] = useState<QuizStage>("modeSelect");
   const [subject, setSubject] = useState<QuizSubject>("Biology");
   const [quizLanguage, setQuizLanguage] = useState<QuizLanguage>("english");
@@ -387,6 +394,11 @@ export function QuizMode({ onClose }: QuizModeProps) {
   const [testName, setTestName] = useState("");
   const [quizId, setQuizId] = useState("");
   const [pdfSpacers, setPdfSpacers] = useState<Record<string, number>>({});
+  const [dbQuizId, setDbQuizId] = useState<string | null>(null);
+  const [attemptId, setAttemptId] = useState<string | null>(null);
+  const dbQuizIdRef = useRef<string | null>(null);
+  const attemptIdRef = useRef<string | null>(null);
+  const questionStartTimeRef = useRef<number>(Date.now());
   const resultSubmittedRef = useRef(false);
   const reviewRef = useRef<HTMLDivElement>(null);
   const coverRef = useRef<HTMLDivElement>(null);
@@ -395,6 +407,10 @@ export function QuizMode({ onClose }: QuizModeProps) {
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const currentQuestion = questions[currentIndex] ?? null;
   const isLastQuestion = currentIndex === questions.length - 1;
+
+  useEffect(() => {
+    questionStartTimeRef.current = Date.now();
+  }, [currentIndex]);
 
   const orderedAnswers = useMemo<QuizAnswer[]>(
     () =>
@@ -423,6 +439,8 @@ export function QuizMode({ onClose }: QuizModeProps) {
         const data = (await response.json()) as {
           questions?: QuizQuestion[];
           entries?: QuizConfigEntry[];
+          quizId?: string;
+          generationJobId?: string;
           error?: string;
         };
         if (!response.ok || !data.questions || !data.entries) {
@@ -434,6 +452,38 @@ export function QuizMode({ onClose }: QuizModeProps) {
         setEntries(data.entries);
         setAnswersByIndex({});
         setCurrentIndex(0);
+        questionStartTimeRef.current = Date.now();
+
+        const activeDbQuizId = data.quizId || null;
+        setDbQuizId(activeDbQuizId);
+        dbQuizIdRef.current = activeDbQuizId;
+
+        // Initialize attempt record for real-time answer persistence
+        try {
+          const subjectSet = new Set(data.questions.map((q) => q.subject));
+          const attemptSubjectLabel = subjectSet.size === 1 ? Array.from(subjectSet)[0] : "Full NEET";
+          const initRes = await fetch("/api/ai-chat/quiz/attempt", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "start",
+              quizId: activeDbQuizId,
+              subject: attemptSubjectLabel,
+              topic: typeof body.topic === "string" ? body.topic : undefined,
+              totalQuestions: data.questions.length,
+            }),
+          });
+          if (initRes.ok) {
+            const initJson = await initRes.json();
+            if (initJson.attemptId) {
+              setAttemptId(initJson.attemptId);
+              attemptIdRef.current = initJson.attemptId;
+            }
+          }
+        } catch (initErr) {
+          console.warn("[Attempt init error]", initErr);
+        }
+
         const totalSeconds = data.entries.reduce(
           (sum, entry) => sum + entry.questionCount * entry.timerSeconds,
           0
@@ -458,6 +508,7 @@ export function QuizMode({ onClose }: QuizModeProps) {
       language: quizLanguage,
       level: subjectLevel,
       format: subjectFormat || undefined,
+      sourceModule: "NEET_QUIZ",
     });
   }, [quizLanguage, runQuizRequest, subject, subjectLevel, subjectFormat]);
   const startTopicQuiz = useCallback(() => {
@@ -480,6 +531,7 @@ export function QuizMode({ onClose }: QuizModeProps) {
       questionCount: topicQuestionCount,
       level: topicLevel,
       format: topicFormat || undefined,
+      sourceModule: "TOPIC_WISE_QUIZ",
     });
   }, [
     runQuizRequest,
@@ -502,6 +554,7 @@ export function QuizMode({ onClose }: QuizModeProps) {
       subject: pyqSubject,
       years: pyqYear === "all" ? undefined : [Number(pyqYear)],
       questionCount: pyqQuestionCount,
+      sourceModule: "PYQ_PRACTICE",
     });
   }, [runQuizRequest, pyqSubject, pyqYear, pyqQuestionCount]);
 
@@ -523,6 +576,7 @@ export function QuizMode({ onClose }: QuizModeProps) {
       questionCount: ncertQuestionCount,
       level: ncertLevel,
       format: ncertFormat || undefined,
+      sourceModule: "NCERT_QUIZ",
     });
   }, [
     runQuizRequest,
@@ -563,6 +617,9 @@ export function QuizMode({ onClose }: QuizModeProps) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            action: "finalize",
+            attemptId: attemptIdRef.current || undefined,
+            quizId: dbQuizIdRef.current || undefined,
             subject: attemptSubjectLabel,
             topic: topicText.trim() || undefined,
             totalQuestions: finalAnswers.length,
@@ -585,17 +642,46 @@ export function QuizMode({ onClose }: QuizModeProps) {
   const selectOption = useCallback(
     (optionIndex: number) => {
       if (!currentQuestion) return;
+      // Answer Locking: once answered, the question is locked (no manipulation)
+      if (answersByIndex[currentIndex]?.selectedIndex !== undefined && answersByIndex[currentIndex]?.selectedIndex !== null) {
+        return;
+      }
+
+      const isCorrect = optionIndex === currentQuestion.correctIndex;
+      const timeSpent = Math.max(
+        1,
+        questionStartTimeRef.current ? Math.round((Date.now() - questionStartTimeRef.current) / 1000) : 0
+      );
+
+      // Instant local feedback state
       setAnswersByIndex((prev) => ({
         ...prev,
         [currentIndex]: {
           questionId: currentQuestion.id,
           selectedIndex: optionIndex,
-          correct: optionIndex === currentQuestion.correctIndex,
-          timeTakenSeconds: 0,
+          correct: isCorrect,
+          timeTakenSeconds: timeSpent,
         },
       }));
+
+      // Asynchronously persist per-question answer to server
+      if (attemptIdRef.current || dbQuizIdRef.current) {
+        fetch("/api/ai-chat/quiz/answer", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            attemptId: attemptIdRef.current,
+            quizId: dbQuizIdRef.current,
+            questionId: currentQuestion.id,
+            selectedIndex: optionIndex,
+            timeTakenSec: timeSpent,
+          }),
+        }).catch((err) => {
+          console.warn("[Answer persistence warning]", err);
+        });
+      }
     },
-    [currentQuestion, currentIndex]
+    [currentQuestion, currentIndex, answersByIndex]
   );
 
   const goPrev = useCallback(() => {
@@ -779,8 +865,22 @@ export function QuizMode({ onClose }: QuizModeProps) {
       const idPart = quizId || generateQuizId();
       const chapterPart = (chapterLabel || "Full Syllabus").trim();
       const topicPart = (topicLabel || "General").trim();
+      const pdfFileName = `Quiz-${idPart} : ${chapterPart}(${topicPart})-Atomic_Pathshala.pdf`;
 
-      pdf.save(`Quiz-${idPart} : ${chapterPart}(${topicPart})-Atomic_Pathshala.pdf`);
+      pdf.save(pdfFileName);
+
+      if (dbQuizIdRef.current) {
+        fetch("/api/ai-chat/quiz/pdf", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            quizId: dbQuizIdRef.current,
+            fileName: pdfFileName,
+          }),
+        }).catch((pdfErr) => {
+          console.warn("[PDF Record persistence warning]", pdfErr);
+        });
+      }
     } catch (err) {
       alert("PDF Error: " + String(err));
       setError("Could not generate PDF. Please try again.");
@@ -1713,26 +1813,133 @@ export function QuizMode({ onClose }: QuizModeProps) {
             <div className="space-y-2.5">
               {currentQuestion.options.map((option, index) => {
                 const isSelected = selectedIndexForCurrent === index;
+                const isAnswerLocked = selectedIndexForCurrent !== null;
+                const isCorrectOption = index === currentQuestion.correctIndex;
+                const isIncorrectSelection = isSelected && !isCorrectOption;
+
+                let optionStyle =
+                  "border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800";
+                let badge = null;
+
+                if (isAnswerLocked && showInstantFeedback) {
+                  if (isCorrectOption) {
+                    optionStyle =
+                      "border-emerald-500 bg-emerald-50/90 text-emerald-950 dark:bg-emerald-950/40 dark:text-emerald-100 dark:border-emerald-500 font-semibold ring-1 ring-emerald-400";
+                    badge = (
+                      <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800 dark:bg-emerald-900/80 dark:text-emerald-200">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                        {isSelected ? "Correct" : "Correct Answer"}
+                      </span>
+                    );
+                  } else if (isIncorrectSelection) {
+                    optionStyle =
+                      "border-rose-500 bg-rose-50/90 text-rose-950 dark:bg-rose-950/40 dark:text-rose-100 dark:border-rose-500 font-semibold ring-1 ring-rose-400";
+                    badge = (
+                      <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-bold text-rose-800 dark:bg-rose-900/80 dark:text-rose-200">
+                        <XCircle className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400" />
+                        Incorrect
+                      </span>
+                    );
+                  } else {
+                    optionStyle =
+                      "border-slate-200/50 text-slate-400 opacity-40 dark:border-slate-800 dark:text-slate-500 cursor-not-allowed";
+                  }
+                } else if (isSelected) {
+                  optionStyle =
+                    "border-atomic-orange bg-orange-50 text-atomic-orange dark:bg-orange-950/20";
+                }
 
                 return (
                   <button
                     key={index}
                     type="button"
+                    disabled={isAnswerLocked}
+                    aria-label={`Option ${String.fromCharCode(65 + index)}: ${option}`}
+                    aria-pressed={isSelected}
                     onClick={() => selectOption(index)}
-                    className={`flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left text-sm transition ${
-                      isSelected
-                        ? "border-atomic-orange bg-orange-50 text-atomic-orange dark:bg-orange-950/20"
-                        : "border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                    }`}
+                    className={`flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left text-sm transition ${optionStyle}`}
                   >
-                    <span>
+                    <span className="flex-1">
                       <strong className="mr-2">{String.fromCharCode(65 + index)}.</strong>
                       <MathText text={option} />
                     </span>
+                    {badge}
                   </button>
                 );
               })}
             </div>
+
+            {/* Instant Feedback 4-Part Solution Box */}
+            {selectedIndexForCurrent !== null && showInstantFeedback && (() => {
+              const structured = formatStructuredSolution(currentQuestion);
+              const isCurrentCorrect = selectedIndexForCurrent === currentQuestion.correctIndex;
+
+              return (
+                <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/60 animate-fadeIn">
+                  <div className="mb-3 flex items-center justify-between border-b border-slate-200/80 pb-2.5 dark:border-slate-700/80">
+                    <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                      <Sparkles className="h-4 w-4 text-atomic-orange" />
+                      Instant Solution & Concept
+                    </div>
+                    <span
+                      className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
+                        isCurrentCorrect
+                          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                          : "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300"
+                      }`}
+                    >
+                      {isCurrentCorrect ? "✓ +4 Marks (Correct)" : "✕ -1 Mark (Incorrect)"}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2.5 text-xs leading-relaxed text-slate-700 dark:text-slate-300">
+                    {/* Part 1: Explain Question */}
+                    {structured.explainQuestion && (
+                      <div className="rounded-xl border border-blue-100 bg-white p-3 dark:border-blue-900/40 dark:bg-slate-800/90">
+                        <p className="mb-1 flex items-center gap-1.5 font-bold text-blue-600 dark:text-blue-400">
+                          🔍 EXPLAIN QUESTION:
+                        </p>
+                        <div className="text-slate-700 dark:text-slate-200">
+                          <MathText text={structured.explainQuestion} />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Part 2: Concept */}
+                    {structured.concept && (
+                      <div className="rounded-xl border border-purple-100 bg-white p-3 dark:border-purple-900/40 dark:bg-slate-800/90">
+                        <p className="mb-1 flex items-center gap-1.5 font-bold text-purple-600 dark:text-purple-400">
+                          💡 CONCEPT:
+                        </p>
+                        <div className="text-slate-700 dark:text-slate-200">
+                          <MathText text={structured.concept} />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Part 3: Step-by-Step Solution */}
+                    <div className="rounded-xl border border-amber-100 bg-white p-3 dark:border-amber-900/40 dark:bg-slate-800/90">
+                      <p className="mb-1 flex items-center gap-1.5 font-bold text-amber-600 dark:text-amber-400">
+                        📝 STEP-BY-STEP SOLUTION:
+                      </p>
+                      <div className="whitespace-pre-line text-slate-700 dark:text-slate-200">
+                        <MathText text={structured.solution} />
+                      </div>
+                    </div>
+
+                    {/* Part 4: Final Answer */}
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 dark:border-emerald-900/40 dark:bg-emerald-950/40">
+                      <p className="mb-0.5 font-bold text-emerald-800 dark:text-emerald-300">
+                        🎯 FINAL ANSWER:
+                      </p>
+                      <div className="font-semibold text-emerald-950 dark:text-emerald-100">
+                        <MathText text={structured.finalAnswer} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             <div className="mt-4 flex items-center gap-2">
               <button

@@ -456,6 +456,7 @@ export function QuestionManagementTable({
             >
               <option value="">Source: All</option>
               <option value="AI_ALL">✨ AI Generated (All)</option>
+              <option value="ATOMIC_GURU">🧠 Atomic Guru Generated</option>
               <option value="AI_ONLY">🤖 AI Mode</option>
               <option value="PDF_ONLY">📄 PDF Mode</option>
               <option value="MANUAL">✍️ Manual Authored</option>
@@ -552,6 +553,12 @@ export function QuestionManagementTable({
                             <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded inline-flex items-center gap-1">
                               <Sparkles className="w-2.5 h-2.5 text-purple-600" />
                               <span>{q.category.includes("PDF") ? "PDF Generated" : "AI Generated"}</span>
+                            </span>
+                          )}
+                          {(q.category === "ATOMIC_GURU" || q.category?.includes("ATOMIC_GURU")) && (
+                            <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded inline-flex items-center gap-1">
+                              <Sparkles className="w-2.5 h-2.5 text-amber-600" />
+                              <span>Atomic Guru Draft</span>
                             </span>
                           )}
                         </div>

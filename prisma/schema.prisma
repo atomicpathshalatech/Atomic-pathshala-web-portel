@@ -139,6 +139,9 @@ model User {
   aiChatTestAttempts     TestAttempt[]
   aiChatUsageEvents      UsageEvent[]
   quizAttempts           QuizAttempt[]
+  practiceQuizzes        PracticeQuiz[]
+  practiceQuizPdfs       PracticeQuizPdf[]
+  generationJobs         GenerationJob[]
   answerReports          AnswerReport[]
   aiChatPasswordResetTokens PasswordResetToken[]
   revisionItems          RevisionItem[]
@@ -3229,8 +3232,9 @@ model ClassSchedule {
 }
 
 model QuizAttempt {
-  id             String   @id @default(cuid())
+  id             String               @id @default(cuid())
   userId         String
+  quizId         String?
   subject        String
   topic          String?
   totalQuestions Int
@@ -3241,11 +3245,14 @@ model QuizAttempt {
   accuracy       Int
   timeTakenSec   Int?
   breakdown      Json?
-  createdAt      DateTime @default(now())
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt      DateTime             @default(now())
+  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quiz           PracticeQuiz?        @relation(fields: [quizId], references: [id], onDelete: SetNull)
+  answers        QuizAttemptAnswer[]
 
   @@index([userId, createdAt])
   @@index([userId, subject])
+  @@index([quizId])
   @@map("ai_chat_quiz_attempts")
 }
 
@@ -3966,5 +3973,128 @@ model TaxonomyTopicMemory {
   @@unique([subject, chapter, normalizedTopic])
   @@index([subject, chapter])
   @@map("taxonomy_topic_memories")
+}
+
+// ============================================================
+// STUDENT QUESTION PRACTICE & ATOMIC GURU QUIZ PIPELINE
+// ============================================================
+
+model PracticeQuiz {
+  id              String                 @id @default(cuid())
+  quizCode        String                 @unique // e.g. 6-digit or QUIZ-xxxx
+  userId          String
+  sourceModule    String                 // "NEET_QUIZ" | "TOPIC_WISE_QUIZ" | "PYQ_PRACTICE" | "NCERT_QUIZ"
+  subject         String
+  chapter         String?
+  topic           String?
+  subTopic        String?
+  questionCount   Int
+  difficulty      String                 @default("Medium")
+  questionTypes   Json?                  // String[]
+  language        String                 @default("english")
+  status          String                 @default("COMPLETED") // PENDING | COMPLETED
+  generationJobId String?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  user            User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questions       PracticeQuizQuestion[]
+  attempts        QuizAttempt[]
+  pdfs            PracticeQuizPdf[]
+
+  @@index([userId, createdAt])
+  @@index([sourceModule])
+  @@map("practice_quizzes")
+}
+
+model PracticeQuizQuestion {
+  id              String       @id @default(cuid())
+  quizId          String
+  questionId      String       // Question Bank or unique identifier
+  order           Int
+  subject         String
+  text            String       @db.Text
+  options         Json         // string[]
+  correctIndex    Int
+  explanation     String       @db.Text
+  explainQuestion String?      @db.Text
+  concept         String?      @db.Text
+  solution        String?      @db.Text
+  finalAnswer     String?
+  chapter         String?
+  topic           String?
+  difficulty      String?
+  questionType    String?
+  snapshot        Json?        // Full immutable snapshot of the question as presented to student
+  createdAt       DateTime     @default(now())
+
+  quiz            PracticeQuiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  @@unique([quizId, order])
+  @@index([quizId])
+  @@map("practice_quiz_questions")
+}
+
+model PracticeQuizPdf {
+  id              String       @id @default(cuid())
+  quizId          String
+  userId          String
+  generationJobId String?
+  storageKey      String?
+  fileName        String
+  mimeType        String       @default("application/pdf")
+  fileSizeBytes   Int          @default(0)
+  publicUrl       String?
+  createdAt       DateTime     @default(now())
+
+  quiz            PracticeQuiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([quizId])
+  @@index([userId])
+  @@map("practice_quiz_pdfs")
+}
+
+model QuizAttemptAnswer {
+  id             String      @id @default(cuid())
+  attemptId      String
+  quizId         String?
+  questionId     String
+  selectedIndex  Int?
+  selectedAnswer String?
+  correctAnswer  String?
+  isCorrect      Boolean
+  timeTakenSec   Int         @default(0)
+  answeredAt     DateTime    @default(now())
+
+  attempt        QuizAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  @@unique([attemptId, questionId])
+  @@index([attemptId])
+  @@index([questionId])
+  @@map("quiz_attempt_answers")
+}
+
+model GenerationJob {
+  id                      String    @id @default(cuid())
+  userId                  String
+  sourceModule            String    // "NEET_QUIZ" | "TOPIC_WISE_QUIZ" | "NCERT_QUIZ"
+  subject                 String
+  chapter                 String?
+  topic                   String?
+  requestedQuestionCount  Int
+  successfulQuestionCount Int       @default(0)
+  failedQuestionCount     Int       @default(0)
+  status                  String    @default("COMPLETED") // QUEUED | PROCESSING | COMPLETED | PARTIAL | FAILED
+  errorDetails            String?
+  startedAt               DateTime  @default(now())
+  completedAt             DateTime?
+  createdAt               DateTime  @default(now())
+
+  user                    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([sourceModule])
+  @@map("generation_jobs")
 }
 

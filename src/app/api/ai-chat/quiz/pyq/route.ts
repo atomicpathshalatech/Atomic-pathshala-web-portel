@@ -97,7 +97,27 @@ export async function POST(request: NextRequest) {
       await recordQuestionUsage(user.id);
     }
 
-    return NextResponse.json({ questions, entries });
+    let dbQuizId: string | undefined;
+    try {
+      const { persistPracticeQuiz } = await import("@/lib/ai-chat/atomicGuruPipeline");
+      const quizCode = `PYQ-${Math.floor(100000 + Math.random() * 900000)}`;
+      const practiceQuiz = await persistPracticeQuiz({
+        quizCode,
+        userId: user?.id,
+        sourceModule: "PYQ_PRACTICE",
+        subject,
+        questionCount: questions.length,
+        difficulty: "Hard",
+        questions,
+      });
+      if (practiceQuiz) {
+        dbQuizId = practiceQuiz.id;
+      }
+    } catch (pqErr) {
+      console.warn("[AtomicGuru] PYQ PracticeQuiz persistence warning:", pqErr);
+    }
+
+    return NextResponse.json({ questions, entries, quizId: dbQuizId });
   } catch (error) {
     console.error("[PYQ Quiz API]", error);
     return NextResponse.json({ error: "Could not load PYQ questions." }, { status: 500 });

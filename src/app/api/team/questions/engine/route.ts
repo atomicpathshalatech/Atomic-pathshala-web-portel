@@ -21,6 +21,8 @@ export async function GET(request: NextRequest) {
     const chapter = searchParams.get("chapter")?.trim();
     const difficulty = searchParams.get("difficulty")?.trim();
     const type = searchParams.get("type")?.trim();
+    const category = searchParams.get("category")?.trim();
+    const source = searchParams.get("source")?.trim();
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
     const limit = Math.min(50, Math.max(1, parseInt(searchParams.get("limit") || "20", 10)));
     const skip = (page - 1) * limit;
@@ -38,6 +40,14 @@ export async function GET(request: NextRequest) {
     }
     if (type && type !== "ALL") {
       where.type = type as QuestionType;
+    }
+    if (source === "ATOMIC_GURU" || category === "ATOMIC_GURU") {
+      where.OR = [
+        { category: { contains: "ATOMIC_GURU", mode: "insensitive" } },
+        { tags: { contains: "ATOMIC_GURU", mode: "insensitive" } },
+      ];
+    } else if (category && category !== "ALL") {
+      where.category = { contains: category, mode: "insensitive" };
     }
 
     if (query) {

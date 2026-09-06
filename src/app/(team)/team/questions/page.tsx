@@ -89,7 +89,16 @@ export default async function QuestionBankPage({
   const sourceFilter = (searchParams as any).source;
   if (sourceFilter && sourceFilter !== "ALL") {
     if (sourceFilter === "AI_ALL") {
-      where.category = { startsWith: "AI_GENERATED" };
+      where.OR = [
+        { category: { startsWith: "AI_GENERATED" } },
+        { category: { contains: "ATOMIC_GURU" } },
+        { tags: { contains: "ATOMIC_GURU" } },
+      ];
+    } else if (sourceFilter === "ATOMIC_GURU") {
+      where.OR = [
+        { category: { contains: "ATOMIC_GURU" } },
+        { tags: { contains: "ATOMIC_GURU" } },
+      ];
     } else if (sourceFilter === "AI_ONLY") {
       where.category = "AI_GENERATED:AI";
     } else if (sourceFilter === "PDF_ONLY") {
@@ -97,7 +106,11 @@ export default async function QuestionBankPage({
     } else if (sourceFilter === "MANUAL") {
       where.OR = [
         { category: null },
-        { category: { not: { startsWith: "AI_GENERATED" } } },
+        {
+          category: {
+            notIn: ["AI_GENERATED:AI", "AI_GENERATED:PDF", "ATOMIC_GURU"],
+          },
+        },
       ];
     }
   }
