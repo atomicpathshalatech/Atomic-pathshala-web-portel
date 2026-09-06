@@ -437,7 +437,7 @@ export function StudentLiveClassRoom({
       .then((j) => {
         if (j.success && j.data?.quiz && j.data.quiz.status !== "CLOSED") {
           setQuiz(j.data.quiz);
-          if (j.data.hasResponded) setMySelection("__submitted__");
+          setMySelection(j.data.mySelection ?? null);
         }
       })
       .catch(() => {});
@@ -503,10 +503,16 @@ export function StudentLiveClassRoom({
     if (!wbSession?.id || !quiz || submittingAnswer || mySelection) return;
     setSubmittingAnswer(true);
     setQuizError(null);
+    // Optimistic: lock the button in immediately so one tap reads as one
+    // tap. If the request turns out to have failed, mySelection is cleared
+    // again below so the (still-ACTIVE) quiz becomes answerable once more.
+    setMySelection(optionKey);
     try {
-      await postJson(`/api/whiteboard/sessions/${wbSession.id}/quiz/${quiz.id}/respond`, { optionKey });
-      setMySelection(optionKey);
+      await postJson(`/api/whiteboard/sessions/${wbSession.id}/quiz/${quiz.id}/respond`, {
+        optionKey,
+      });
     } catch (err: any) {
+      setMySelection(null);
       setQuizError(err instanceof Error ? err.message : "Could not submit your answer.");
     } finally {
       setSubmittingAnswer(false);

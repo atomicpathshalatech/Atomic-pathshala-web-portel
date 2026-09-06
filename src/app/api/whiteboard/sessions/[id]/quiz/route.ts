@@ -120,6 +120,12 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
         correctOption: quiz.status === "REVEALED" ? quiz.correctOption : undefined,
       },
       hasResponded: quiz.status === "ACTIVE" ? Boolean(myResponse) : undefined,
+      // The actual option the student picked — previously only a boolean
+      // was returned, so a student who refreshed or rejoined mid-quiz saw
+      // every option unhighlighted (buttons disabled via hasResponded, but
+      // nothing showing *which* one they'd picked) even though the correct
+      // answer was sitting right there in myResponse.selectedOption.
+      mySelection: quiz.status === "ACTIVE" ? myResponse?.selectedOption ?? null : null,
     });
   } catch (error) {
     return handleApiError(error);
