@@ -52,8 +52,107 @@ function formatHms(totalSec: number) {
   const m = Math.floor((abs % 3600) / 60);
   const s = abs % 60;
   const pad = (n: number) => n.toString().padStart(2, "0");
-  if (h > 0) return `${isNeg ? "-" : ""}${pad(h)}:${pad(m)}:${pad(s)}`;
-  return `${isNeg ? "-" : ""}${pad(m)}:${pad(s)}`;
+  return `${isNeg ? "-" : ""}${pad(h)}:${pad(m)}:${pad(s)}`;
+}
+
+function formatDurationFriendly(totalSec: number) {
+  const abs = Math.abs(totalSec);
+  const h = Math.floor(abs / 3600);
+  const m = Math.floor((abs % 3600) / 60);
+  const s = abs % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+function StudentWhiteboardMirror({
+  boardBackground,
+  boardEmpty,
+  isLive,
+  objects,
+}: {
+  boardBackground: string;
+  boardEmpty: boolean;
+  isLive: boolean;
+  objects: StrokeObject[];
+}) {
+  const baseRef = useRef<HTMLCanvasElement | null>(null);
+  const activeRef = useRef<HTMLCanvasElement | null>(null);
+  const engineRef = useRef<CanvasEngine | null>(null);
+
+  useEffect(() => {
+    if (!baseRef.current || !activeRef.current) return;
+    const engine = new CanvasEngine(baseRef.current, activeRef.current, undefined, undefined, {
+      readOnly: true,
+    });
+    engineRef.current = engine;
+    engine.syncSize();
+    engine.loadObjects(objects);
+
+    const onResize = () => {
+      engine.syncSize();
+      engine.loadObjects(objects);
+    };
+    window.addEventListener("resize", onResize);
+
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined" && baseRef.current.parentElement) {
+      ro = new ResizeObserver(() => {
+        engine.syncSize();
+        engine.loadObjects(objects);
+      });
+      ro.observe(baseRef.current.parentElement);
+    }
+
+    return () => {
+      window.removeEventListener("resize", onResize);
+      if (ro) ro.disconnect();
+      engine.destroy();
+      engineRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (engineRef.current) {
+      engineRef.current.syncSize();
+      engineRef.current.loadObjects(objects);
+    }
+  }, [objects]);
+
+  return (
+    <div className={`relative aspect-[16/9] w-full max-w-full max-h-full h-auto overflow-hidden rounded-xl border border-slate-800/60 shadow-2xl ${boardBackground === "dark" ? "bg-[#10131d]" : "bg-white"}`}>
+      {isBackgroundImageUrl(boardBackground) && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={boardBackground}
+          alt=""
+          className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+        />
+      )}
+      <canvas ref={baseRef} className="absolute inset-0 w-full h-full" />
+      <canvas ref={activeRef} className="absolute inset-0 w-full h-full pointer-events-none" />
+
+      {/* Standby Watermark */}
+      {boardEmpty && !isBackgroundImageUrl(boardBackground) && (
+        <div className={`absolute inset-0 flex flex-col items-center justify-center gap-2 pointer-events-none text-center p-6 ${
+          boardBackground === "dark"
+            ? "bg-gradient-to-b from-transparent via-[#10131d]/40 to-[#10131d]/80 text-slate-300"
+            : "bg-gradient-to-b from-transparent via-slate-100/40 to-slate-200/80 text-slate-700"
+        }`}>
+          <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-500 flex items-center justify-center mb-1">
+            <span className="material-symbols-outlined text-2xl">draw</span>
+          </div>
+          <p className="text-sm font-bold">Atomic Whiteboard Studio Connected</p>
+          <p className="text-xs text-slate-500 max-w-md">
+            {isLive
+              ? "Teacher canvas is active. Slides, notes, and strokes appear here in real time."
+              : "Waiting for teacher to start presentation. You are connected to the live studio canvas."}
+          </p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 async function postJson(url: string, body?: unknown) {
@@ -123,11 +222,9 @@ export function StudentLiveClassRoom({
   const [scheduleTimes, setScheduleTimes] = useState<{ startTime?: string; endTime?: string } | null>(null);
 
   // Board mirror (read-only)
-  const boardBaseRef = useRef<HTMLCanvasElement>(null);
-  const boardActiveRef = useRef<HTMLCanvasElement>(null);
-  const boardEngineRef = useRef<CanvasEngine | null>(null);
   const [boardEmpty, setBoardEmpty] = useState(true);
   const [boardBackground, setBoardBackground] = useState<string>("blank");
+  const [boardObjects, setBoardObjects] = useState<StrokeObject[]>([]);
 
   // Keep local clock ticking for authoritative UI timers
   useEffect(() => {
@@ -217,14 +314,13 @@ export function StudentLiveClassRoom({
 
   // Board mirror refresh
   async function refreshBoard() {
-    if (!wbSession?.id || !boardEngineRef.current) return;
+    if (!wbSession?.id) return;
     try {
       const res = await fetch(`/api/whiteboard/sessions/${wbSession.id}/board`);
       const json = await res.json();
       if (!res.ok || !json.success) return;
       const objects: StrokeObject[] = json.data.page?.objects ?? [];
-      boardEngineRef.current.syncSize();
-      boardEngineRef.current.loadObjects(objects);
+      setBoardObjects(objects);
       setBoardEmpty(objects.length === 0);
       setBoardBackground(json.data.page?.background ?? "blank");
     } catch {
@@ -232,39 +328,12 @@ export function StudentLiveClassRoom({
     }
   }
 
-  // Mount read-only board-mirror canvas whenever room is open
+  // Load board objects on mount or session change
   useEffect(() => {
-    if (phase === "ended" || !boardBaseRef.current || !boardActiveRef.current) return;
-    const engine = new CanvasEngine(boardBaseRef.current, boardActiveRef.current, undefined, undefined, {
-      readOnly: true,
-    });
-    boardEngineRef.current = engine;
-    engine.syncSize();
-    refreshBoard();
-
-    const onResize = () => {
-      engine.syncSize();
+    if (wbSession?.id) {
       refreshBoard();
-    };
-    window.addEventListener("resize", onResize);
-
-    let ro: ResizeObserver | null = null;
-    if (typeof ResizeObserver !== "undefined" && boardBaseRef.current.parentElement) {
-      ro = new ResizeObserver(() => {
-        engine.syncSize();
-        refreshBoard();
-      });
-      ro.observe(boardBaseRef.current.parentElement);
     }
-
-    return () => {
-      window.removeEventListener("resize", onResize);
-      if (ro) ro.disconnect();
-      engine.destroy();
-      boardEngineRef.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, wbSession?.id]);
+  }, [wbSession?.id]);
 
   // Periodic fallback sync while live to ensure board stays 100% synchronized
   useEffect(() => {
@@ -527,12 +596,20 @@ export function StudentLiveClassRoom({
 
           {/* Dynamic Timers */}
           {isLive ? (
-            <span className="hidden sm:inline-flex text-xs font-mono font-semibold px-2 py-0.5 rounded-md bg-slate-800/90 border border-slate-700 text-slate-200">
-              {formatHms(elapsedSeconds)}
+            <span
+              className="hidden sm:inline-flex items-center gap-1 text-xs font-mono font-semibold px-2.5 py-1 rounded-md bg-slate-800/90 border border-slate-700 text-slate-200"
+              title={`Class runtime: ${formatDurationFriendly(elapsedSeconds)} since start`}
+            >
+              <span className="material-symbols-outlined text-xs text-emerald-400">schedule</span>
+              Elapsed: {formatHms(elapsedSeconds)} <span className="text-[10px] text-slate-400 font-normal">({formatDurationFriendly(elapsedSeconds)})</span>
             </span>
           ) : secondsUntilStart > 0 ? (
-            <span className="hidden sm:inline-flex text-xs font-mono font-semibold px-2 py-0.5 rounded-md bg-indigo-950/60 border border-indigo-500/40 text-indigo-300">
-              Starts: {formatHms(secondsUntilStart)}
+            <span
+              className="hidden sm:inline-flex items-center gap-1 text-xs font-mono font-semibold px-2.5 py-1 rounded-md bg-indigo-950/60 border border-indigo-500/40 text-indigo-300"
+              title="Time until scheduled class start"
+            >
+              <span className="material-symbols-outlined text-xs">hourglass_top</span>
+              Starts in: {formatDurationFriendly(secondsUntilStart)} ({formatHms(secondsUntilStart)})
             </span>
           ) : null}
 
@@ -601,39 +678,14 @@ export function StudentLiveClassRoom({
                   livePhase={isLive ? "LIVE" : "PREPARING"}
                 />
               </div>
-            ) : (
-              <div className={`relative aspect-[16/9] w-full max-w-full max-h-full h-auto overflow-hidden rounded-xl border border-slate-800/60 shadow-2xl ${boardBackground === "dark" ? "bg-[#10131d]" : "bg-white"}`}>
-                {isBackgroundImageUrl(boardBackground) && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={boardBackground}
-                    alt=""
-                    className="absolute inset-0 w-full h-full object-contain pointer-events-none"
-                  />
-                )}
-                <canvas ref={boardBaseRef} className="absolute inset-0 w-full h-full" />
-                <canvas ref={boardActiveRef} className="absolute inset-0 w-full h-full pointer-events-none" />
-
-                {/* Standby Watermark */}
-                {boardEmpty && !isBackgroundImageUrl(boardBackground) && (
-                  <div className={`absolute inset-0 flex flex-col items-center justify-center gap-2 pointer-events-none text-center p-6 ${
-                    boardBackground === "dark"
-                      ? "bg-gradient-to-b from-transparent via-[#10131d]/40 to-[#10131d]/80 text-slate-300"
-                      : "bg-gradient-to-b from-transparent via-slate-100/40 to-slate-200/80 text-slate-700"
-                  }`}>
-                    <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-500 flex items-center justify-center mb-1">
-                      <span className="material-symbols-outlined text-2xl">draw</span>
-                    </div>
-                    <p className="text-sm font-bold">Atomic Whiteboard Studio Connected</p>
-                    <p className="text-xs text-slate-500 max-w-md">
-                      {isLive
-                        ? "Teacher canvas is active. Slides, notes, and strokes appear here in real time."
-                        : "Waiting for teacher to start presentation. You are connected to the live studio canvas."}
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
+            ) : isDesktopViewport ? (
+              <StudentWhiteboardMirror
+                boardBackground={boardBackground}
+                boardEmpty={boardEmpty}
+                isLive={isLive}
+                objects={boardObjects}
+              />
+            ) : null}
 
             {/* Desktop Quiz / Poll Floating Drawer */}
             {quiz && (
@@ -751,46 +803,27 @@ export function StudentLiveClassRoom({
               subject={batchName}
               livePhase={isLive ? "LIVE" : "PREPARING"}
             />
-          ) : (
-            <div className={`relative aspect-[16/9] w-full h-full max-w-full max-h-full overflow-hidden ${boardBackground === "dark" ? "bg-[#10131d]" : "bg-white"}`}>
-              {isBackgroundImageUrl(boardBackground) && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={boardBackground}
-                  alt=""
-                  className="absolute inset-0 w-full h-full object-contain pointer-events-none"
-                />
-              )}
-              <canvas ref={boardBaseRef} className="absolute inset-0 w-full h-full" />
-              <canvas ref={boardActiveRef} className="absolute inset-0 w-full h-full pointer-events-none" />
-
-              {/* Watermark */}
-              {boardEmpty && !isBackgroundImageUrl(boardBackground) && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-center p-4 bg-gradient-to-b from-transparent via-[#10131d]/50 to-[#10131d]/90">
-                  <span className="material-symbols-outlined text-xl text-indigo-400">draw</span>
-                  <p className="text-xs font-bold text-slate-300">Whiteboard Canvas Connected</p>
-                  <p className="text-[10px] text-slate-500">
-                    {isLive ? "Notes and drawings sync live from teacher." : "Waiting for teacher to start class."}
-                  </p>
-                </div>
-              )}
-
+          ) : !isDesktopViewport ? (
+            <div className="relative aspect-[16/9] w-full h-full max-w-full max-h-full overflow-hidden">
+              <StudentWhiteboardMirror
+                boardBackground={boardBackground}
+                boardEmpty={boardEmpty}
+                isLive={isLive}
+                objects={boardObjects}
+              />
               {/* Mobile PiP Teacher Video (Corner Preview) */}
               {!isYouTube && (
                 <div className="absolute top-2 right-2 w-28 xs:w-32 aspect-video rounded-lg overflow-hidden border border-indigo-500/60 shadow-xl bg-[#10121d] z-20">
-                  {!isDesktopViewport && (
-                    <VideoStrip
-                      whiteboardSessionId={wbSession?.id || batchScheduleId}
-                      variant="panel"
-                      role="STUDENT"
-                      teacherName={teacherName}
-                    />
-                  )}
+                  <VideoStrip
+                    whiteboardSessionId={wbSession?.id || batchScheduleId}
+                    variant="panel"
+                    role="STUDENT"
+                    teacherName={teacherName}
+                  />
                 </div>
               )}
-
             </div>
-          )}
+          ) : null}
         </div>
 
         {/* Bottom Interactive Area (Tabs: Chat | Quiz | Details) */}

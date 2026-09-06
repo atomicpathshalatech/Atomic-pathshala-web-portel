@@ -73,11 +73,15 @@ export function canStudentJoin(
   const isCancelled = schedule.status === "CANCELLED";
   const isCompleted =
     schedule.status === "COMPLETED" ||
-    schedule.liveWhiteboardSession?.status === "ENDED" ||
-    schedule.liveWhiteboardSession?.livePhase === "ENDED";
+    (schedule.liveWhiteboardSession?.status === "ENDED" &&
+      schedule.liveWhiteboardSession?.livePhase === "ENDED");
 
-  const isWindowOpen = nowMs >= opensAt.getTime();
-  const secondsUntilWindowOpens = Math.max(0, Math.ceil((opensAt.getTime() - nowMs) / 1000));
+  // If session is ACTIVE or teacher is in waiting room / live, always allow student in!
+  const hasActiveSession =
+    schedule.liveWhiteboardSession?.status === "ACTIVE" ||
+    schedule.liveWhiteboardSession?.livePhase === "LIVE" ||
+    schedule.liveWhiteboardSession?.livePhase === "PREPARING" ||
+    schedule.status === "LIVE";
 
   if (isCancelled) {
     return {
@@ -95,7 +99,7 @@ export function canStudentJoin(
     };
   }
 
-  if (isCompleted) {
+  if (isCompleted && !hasActiveSession) {
     return {
       allowed: false,
       status: "COMPLETED",
@@ -111,37 +115,17 @@ export function canStudentJoin(
     };
   }
 
-  // Future class before T-15 window: CANNOT BE ACCESSED
-  if (!isWindowOpen) {
-    return {
-      allowed: false,
-      status: "SCHEDULED",
-      reason: `Class access opens exactly 15 minutes before scheduled start time (${opensAt.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", minute: "2-digit", hour12: true })}).`,
-      opensAt,
-      startsAt,
-      endsAt,
-      isLive: false,
-      isCompleted: false,
-      isCancelled: false,
-      isWindowOpen: false,
-      secondsUntilWindowOpens,
-    };
-  }
-
-  // Window is open: check if live
-  const isLive =
-    (schedule.status === "LIVE" ||
-      schedule.liveWhiteboardSession?.livePhase === "LIVE") &&
-    nowMs <= endsAt.getTime() + 4 * 60 * 60 * 1000;
-
-  if (isLive) {
+  if (hasActiveSession) {
+    const isLive =
+      schedule.status === "LIVE" ||
+      schedule.liveWhiteboardSession?.livePhase === "LIVE";
     return {
       allowed: true,
-      status: "LIVE",
+      status: isLive ? "LIVE" : "STARTING_SOON",
       opensAt,
       startsAt,
       endsAt,
-      isLive: true,
+      isLive,
       isCompleted: false,
       isCancelled: false,
       isWindowOpen: true,
@@ -149,58 +133,57 @@ export function canStudentJoin(
     };
   }
 
-  // If past scheduled end time + 15m grace period and not live
-  if (nowMs > endsAt.getTime() + 15 * 60 * 1000) {
+  // Allow entering Waiting Room on the scheduled day (within 12h of scheduled start)
+  const isScheduledTodayOrSoon =
+    Math.abs(nowMs - startsAt.getTime()) <= 12 * 60 * 60 * 1000 ||
+    (nowMs >= startsAt.getTime() - 60 * 60 * 1000 && nowMs <= endsAt.getTime() + 4 * 60 * 60 * 1000);
+
+  if (isScheduledTodayOrSoon) {
     return {
-      allowed: false,
-      status: "NOT_CONDUCTED",
-      reason: "Scheduled class time has passed.",
+      allowed: true,
+      status: "STARTING_SOON",
       opensAt,
       startsAt,
       endsAt,
       isLive: false,
       isCompleted: false,
       isCancelled: false,
-      isWindowOpen: false,
-      secondsUntilWindowOpens: 0,
+      isWindowOpen: true,
+      secondsUntilWindowOpens: Math.max(0, Math.ceil((startsAt.getTime() - nowMs) / 1000)),
     };
   }
 
-  // Window is open (T-15 onward)
+  // Far-future class (more than 12 hours away)
   return {
-    allowed: true,
-    status: "STARTING_SOON",
+    allowed: false,
+    status: "SCHEDULED",
+    reason: `Class access will open on ${startsAt.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short" })} at ${startsAt.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", minute: "2-digit", hour12: true })}.`,
     opensAt,
     startsAt,
     endsAt,
     isLive: false,
     isCompleted: false,
     isCancelled: false,
-    isWindowOpen: true,
-    secondsUntilWindowOpens: 0,
+    isWindowOpen: false,
+    secondsUntilWindowOpens: Math.max(0, Math.ceil((startsAt.getTime() - nowMs) / 1000)),
   };
 }
 
 /**
  * Authoritative Teacher Start Class Access Check
- * Rule: Teacher can only start/pre-flight if (currentServerTime >= startsAt - 15 min) AND not cancelled/completed.
- * Future classes (now < startsAt - 15 min) CANNOT be started.
+ * Rule: Teacher can start/pre-flight whenever ready unless the class is explicitly cancelled or ended.
  */
 export function canTeacherStart(
   schedule: ScheduleAccessTarget,
   serverNow: Date = new Date()
 ): AccessEvaluation {
   const { startsAt, endsAt, opensAt } = getScheduleWindowDates(schedule);
-  const nowMs = serverNow.getTime();
 
   const isCancelled = schedule.status === "CANCELLED";
   const isCompleted =
     schedule.status === "COMPLETED" ||
-    schedule.liveWhiteboardSession?.status === "ENDED" ||
-    schedule.liveWhiteboardSession?.livePhase === "ENDED";
-
-  const isWindowOpen = nowMs >= opensAt.getTime();
-  const secondsUntilWindowOpens = Math.max(0, Math.ceil((opensAt.getTime() - nowMs) / 1000));
+    (schedule.liveWhiteboardSession?.status === "ENDED" &&
+      schedule.liveWhiteboardSession?.livePhase === "ENDED");
 
   if (isCancelled) {
     return {
@@ -234,67 +217,17 @@ export function canTeacherStart(
     };
   }
 
-  // Future class before T-15 window: CANNOT BE STARTED
-  if (!isWindowOpen) {
-    return {
-      allowed: false,
-      status: "SCHEDULED",
-      reason: `Live class can only be started within 15 minutes of scheduled time (from ${opensAt.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", minute: "2-digit", hour12: true })}).`,
-      opensAt,
-      startsAt,
-      endsAt,
-      isLive: false,
-      isCompleted: false,
-      isCancelled: false,
-      isWindowOpen: false,
-      secondsUntilWindowOpens,
-    };
-  }
-
   const isLive =
-    (schedule.status === "LIVE" ||
-      schedule.liveWhiteboardSession?.livePhase === "LIVE") &&
-    nowMs <= endsAt.getTime() + 4 * 60 * 60 * 1000;
-
-  if (isLive) {
-    return {
-      allowed: true,
-      status: "LIVE",
-      opensAt,
-      startsAt,
-      endsAt,
-      isLive: true,
-      isCompleted: false,
-      isCancelled: false,
-      isWindowOpen: true,
-      secondsUntilWindowOpens: 0,
-    };
-  }
-
-  // If past scheduled end time + 15m grace period
-  if (nowMs > endsAt.getTime() + 15 * 60 * 1000) {
-    return {
-      allowed: false,
-      status: "NOT_CONDUCTED",
-      reason: "Scheduled class time has passed.",
-      opensAt,
-      startsAt,
-      endsAt,
-      isLive: false,
-      isCompleted: false,
-      isCancelled: false,
-      isWindowOpen: false,
-      secondsUntilWindowOpens: 0,
-    };
-  }
+    schedule.status === "LIVE" ||
+    schedule.liveWhiteboardSession?.livePhase === "LIVE";
 
   return {
     allowed: true,
-    status: "STARTING_SOON",
+    status: isLive ? "LIVE" : "STARTING_SOON",
     opensAt,
     startsAt,
     endsAt,
-    isLive: false,
+    isLive,
     isCompleted: false,
     isCancelled: false,
     isWindowOpen: true,

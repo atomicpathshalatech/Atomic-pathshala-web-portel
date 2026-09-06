@@ -279,8 +279,17 @@ function formatHms(totalSec: number) {
   const m = Math.floor((abs % 3600) / 60);
   const s = abs % 60;
   const pad = (n: number) => n.toString().padStart(2, "0");
-  if (h > 0) return `${isNeg ? "-" : ""}${pad(h)}:${pad(m)}:${pad(s)}`;
-  return `${isNeg ? "-" : ""}${pad(m)}:${pad(s)}`;
+  return `${isNeg ? "-" : ""}${pad(h)}:${pad(m)}:${pad(s)}`;
+}
+
+function formatDurationFriendly(totalSec: number) {
+  const abs = Math.abs(totalSec);
+  const h = Math.floor(abs / 3600);
+  const m = Math.floor((abs % 3600) / 60);
+  const s = abs % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
 }
 
 type SettingsTab = "audio" | "chatpoll" | "broadcast" | "shortcuts";
@@ -428,7 +437,7 @@ export function TeacherLiveClassRoom({
         pendingObjectsRef.current = objects;
         setSaveState("saving");
         if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
-        autosaveTimer.current = setTimeout(() => flushAutosaveRef.current(), 1500);
+        autosaveTimer.current = setTimeout(() => flushAutosaveRef.current(), 300);
         setUndoRedoTick((t) => t + 1);
       },
       () => setUndoRedoTick((t) => t + 1)
@@ -1053,14 +1062,20 @@ export function TeacherLiveClassRoom({
               </span>
 
               {/* Elapsed Time */}
-              <span className="text-xs font-mono font-semibold text-gray-300 bg-black/40 border border-gray-700/60 px-2.5 py-1 rounded-md">
-                Elapsed: {formatHms(elapsedSeconds)}
+              <span
+                className="text-xs font-mono font-semibold text-gray-300 bg-black/40 border border-gray-700/60 px-2.5 py-1 rounded-md"
+                title={`Class runtime: ${formatDurationFriendly(elapsedSeconds)} since start`}
+              >
+                Elapsed: {formatHms(elapsedSeconds)} <span className="text-[10px] text-gray-400 font-normal">({formatDurationFriendly(elapsedSeconds)})</span>
               </span>
 
               {/* Remaining / Grace Period Timer */}
               {isInGracePeriod ? (
                 <div className="relative flex items-center gap-1.5">
-                  <span className="flex items-center gap-1 text-xs font-mono font-bold text-rose-300 bg-rose-950/80 border border-rose-500/60 px-2.5 py-1 rounded-md animate-pulse">
+                  <span
+                    className="flex items-center gap-1 text-xs font-mono font-bold text-rose-300 bg-rose-950/80 border border-rose-500/60 px-2.5 py-1 rounded-md animate-pulse"
+                    title="Scheduled class duration completed. Grace period active before auto-close."
+                  >
                     <span className="material-symbols-outlined text-xs text-rose-400">warning</span>
                     Grace Period: {formatHms(graceSecondsLeft)}
                   </span>
@@ -1101,10 +1116,11 @@ export function TeacherLiveClassRoom({
                         ? "text-amber-300 bg-amber-950/60 border-amber-500/50 animate-pulse"
                         : "text-gray-300 bg-black/40 border-gray-700/60"
                     }`}
+                    title={`Time left until scheduled end (${new Date(scheduledEndMs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})`}
                   >
                     <span className="material-symbols-outlined text-xs">timer</span>
-                    {remainingSeconds <= 300 ? "5m Warning: " : "Rem: "}
-                    {formatHms(remainingSeconds)}
+                    {remainingSeconds <= 300 ? "5m Warning: " : "Time Left: "}
+                    {formatHms(remainingSeconds)} <span className="text-[10px] text-gray-400 font-normal">({formatDurationFriendly(remainingSeconds)} left)</span>
                   </span>
                   {/* Add Time Menu Button */}
                   <div className="relative">

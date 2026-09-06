@@ -28,7 +28,7 @@ export default async function TeacherLiveClassPage({
 
   let schedule = await prisma.batchSchedule.findUnique({
     where: { id: scheduleId },
-    include: { batch: true },
+    include: { batch: true, liveWhiteboardSession: true },
   });
 
   // If not found by BatchSchedule id, check if it's a Lecture id
@@ -73,12 +73,12 @@ export default async function TeacherLiveClassPage({
               endsAt,
               createdById: session.user.id,
             },
-            include: { batch: true },
+            include: { batch: true, liveWhiteboardSession: true },
           });
         } catch {
           schedule = await prisma.batchSchedule.findFirst({
             where: { id: lecture.id },
-            include: { batch: true },
+            include: { batch: true, liveWhiteboardSession: true },
           });
         }
       }
