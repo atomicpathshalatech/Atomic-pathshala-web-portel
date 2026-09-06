@@ -1,10 +1,10 @@
 import katex from "katex";
 
-type Segment = { type: "text" | "inline" | "block" | "image" | "bold"; content: string };
+type Segment = { type: "text" | "inline" | "block" | "image" | "bold"; content: string; width?: string };
 
 function parseSegments(input: string): Segment[] {
   const segments: Segment[] = [];
-  const regex = /!\[\]\((.+?)\)|\$\$(.+?)\$\$|\$(.+?)\$|\*\*(.+?)\*\*/gs;
+  const regex = /!\[(.*?)\]\((.+?)\)|\$\$(.+?)\$\$|\$(.+?)\$|\*\*(.+?)\*\*/gs;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
@@ -12,14 +12,14 @@ function parseSegments(input: string): Segment[] {
     if (match.index > lastIndex) {
       segments.push({ type: "text", content: input.slice(lastIndex, match.index) });
     }
-    if (match[1] !== undefined) {
-      segments.push({ type: "image", content: match[1] });
-    } else if (match[2] !== undefined) {
-      segments.push({ type: "block", content: match[2] });
+    if (match[2] !== undefined && match[1] !== undefined) {
+      segments.push({ type: "image", content: match[2], width: match[1] });
     } else if (match[3] !== undefined) {
-      segments.push({ type: "inline", content: match[3] });
+      segments.push({ type: "block", content: match[3] });
     } else if (match[4] !== undefined) {
-      segments.push({ type: "bold", content: match[4] });
+      segments.push({ type: "inline", content: match[4] });
+    } else if (match[5] !== undefined) {
+      segments.push({ type: "bold", content: match[5] });
     }
     lastIndex = regex.lastIndex;
   }
@@ -50,7 +50,14 @@ export function renderFormulaContent(input: string): string {
         return `<strong>${escapeHtml(seg.content).replace(/\n/g, "<br/>")}</strong>`;
       }
       if (seg.type === "image") {
-        return `<img src="${escapeHtml(seg.content)}" style="max-width:100%;max-height:240px;display:block;margin:8px 0;border-radius:8px;" />`;
+        let width = "60%";
+        const rawWidth = (seg.width || "").trim();
+        if (/^\d+%?$/.test(rawWidth)) {
+          width = rawWidth.endsWith("%") ? rawWidth : `${rawWidth}%`;
+        } else if (/^\d+px$/.test(rawWidth)) {
+          width = rawWidth;
+        }
+        return `<img src="${escapeHtml(seg.content)}" style="width:${width};max-width:100%;height:auto;display:block;margin:8px 0;border-radius:8px;" alt="Diagram" />`;
       }
       try {
         const cleanFormula = seg.content.replace(/\\\\/g, "\\");

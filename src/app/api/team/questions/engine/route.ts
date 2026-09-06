@@ -460,9 +460,41 @@ export async function PUT(request: NextRequest) {
       },
       include: {
         translations: true,
+        assets: true,
         createdBy: { select: { name: true, email: true } },
       },
     });
+
+    if (solutionImageUrl !== undefined) {
+      if (solutionImageUrl?.trim()) {
+        const existingSolAsset = await prisma.questionAsset.findFirst({
+          where: { questionId, type: "SOLUTION" },
+        });
+        if (existingSolAsset) {
+          await prisma.questionAsset.update({
+            where: { id: existingSolAsset.id },
+            data: { publicUrl: solutionImageUrl.trim(), sizeBytes: solutionImageUrl.length },
+          }).catch((e) => console.warn("[Question Asset] Solution update warning:", e));
+        } else {
+          await prisma.questionAsset.create({
+            data: {
+              questionId,
+              type: "SOLUTION",
+              storageKey: `sol-${questionId}`,
+              publicUrl: solutionImageUrl.trim(),
+              originalName: `solution-reference-${updated.questionCode}.png`,
+              mimeType: "image/png",
+              sizeBytes: solutionImageUrl.length,
+              createdById: session.user.id,
+            },
+          }).catch((e) => console.warn("[Question Asset] Solution create warning:", e));
+        }
+      } else {
+        await prisma.questionAsset.deleteMany({
+          where: { questionId, type: "SOLUTION" },
+        }).catch((e) => console.warn("[Question Asset] Solution delete warning:", e));
+      }
+    }
 
     // 4. Audit Log
     await prisma.auditLog.create({

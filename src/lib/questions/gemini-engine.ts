@@ -306,8 +306,8 @@ RETURN STRICT JSON SCHEMA:
         D: parsed.optionsHi?.D || "",
       },
       correctAnswer: Array.isArray(parsed.correctAnswer) ? parsed.correctAnswer : [parsed.correctAnswer || "A"],
-      solutionEn: parsed.solutionEn || "",
-      solutionHi: parsed.solutionHi || "",
+      solutionEn: formatSolutionSpacing(parsed.solutionEn || ""),
+      solutionHi: formatSolutionSpacing(parsed.solutionHi || ""),
       hasFigure: Boolean(parsed.hasFigure),
       figureCaption: parsed.figureCaption || undefined,
       subject: parsed.subject || (subjectContext as any) || "Physics",
@@ -529,7 +529,7 @@ CRITICAL ACCURACY & CALCULATION RULES:
 4. The calculated or reasoned answer MUST match the deduced "recommendedAnswer" option ("A"|"B"|"C"|"D").
 
 MANDATORY SOLUTION STRUCTURE (EXACT FORMAT AS REQUIRED BY ATOMIC PATHSHALA):
-Structure "solutionEn" EXACTLY in these 4 labeled sections:
+Structure "solutionEn" EXACTLY in these 4 labeled sections, with blank lines (\n\n) separating each section and each calculation step:
 
 Explaining : [1-2 sentences stating given parameters and what we need to calculate/find. e.g. "The mass of solute 'A' (mol mass = 40 g mol^-1) that should be added to 180 g of pure water in order to lower its vapour pressure to 4/5th of its original value :-"]
 
@@ -537,38 +537,52 @@ Concept : This question is based on [Specific scientific law, theorem, formula, 
 
 Solution :
 [If numerical / calculation (Physics / Chemistry / Mathematics):
-Provide step-by-step derivation with clean LaTeX formulas on separate lines:
-1. State the formula clearly: $\\frac{P_B^0 - P_B}{P_B^0} = \\frac{n_A}{n_A + n_B}$
-2. Substitute the values: $\\frac{P_B^0 - \\frac{4}{5}P_B^0}{P_B^0} = \\frac{n_A}{n_A + 10}$
-3. Simplify algebraically step-by-step:
-   $\\frac{1}{5} = \\frac{n_A}{n_A + 10}$
-   $n_A + 10 = 5n_A$
-   $4n_A = 10$
-   $n_A = \\frac{10}{4} = 2.5$
-4. Final calculation of mass or required physical quantity with units:
-   $\\frac{w_A}{40} = 2.5 \\implies w_A = 40 \\times 2.5 = 100\\text{ g}$.
+Provide step-by-step derivation with clean LaTeX formulas, WITH A BLANK LINE BETWEEN EACH STEP:
+
+Formula used:
+$\\frac{P_B^0 - P_B}{P_B^0} = \\frac{n_A}{n_A + n_B}$
+
+Substituting the given values:
+$\\frac{P_B^0 - \\frac{4}{5}P_B^0}{P_B^0} = \\frac{n_A}{n_A + 10}$
+
+Simplifying algebraically:
+$\\frac{1}{5} = \\frac{n_A}{n_A + 10}$
+
+$n_A + 10 = 5n_A \\implies 4n_A = 10 \\implies n_A = 2.5$
+
+Calculating required mass with units:
+$\\frac{w_A}{40} = 2.5 \\implies w_A = 40 \\times 2.5 = 100\\text{ g}$
 ]
 [If biological / conceptual / sequence / matching / statements:
-Provide option-by-option or statement-by-statement breakdown with exact NCERT facts:
-e.g.
+Provide option-by-option or statement-by-statement breakdown with exact NCERT facts, WITH BLANK LINES BETWEEN OPTIONS:
+
 Maximum Growth (A): Occurs during the G1 phase, where the cell grows in size and synthesizes proteins necessary for DNA replication.
+
 DNA Replication (B): Takes place during the S phase, where the cell duplicates its DNA to ensure each daughter cell receives an identical set.
+
 Tubulin Synthesis (C): Occurs during the G2 phase, where the cell synthesizes tubulin proteins required for forming the mitotic spindle during mitosis.
 ]
 
 Final Answer : Option (X)
 
-Structure "solutionHi" with the matching Devanagari translation:
+Structure "solutionHi" with the matching Devanagari translation and same vertical spacing:
 कथन (Explaining) : [संक्षिप्त विवरण कि प्रश्न में क्या दिया गया है और क्या ज्ञात करना है]
+
 सिद्धांत (Concept) : यह प्रश्न [सिद्धांत/नियम का नाम] पर आधारित है।
-हल (Solution) : [चरण-दर-चरण गणितीय हल या प्रत्येक विकल्प का वैज्ञानिक विश्लेषण]
+
+हल (Solution) :
+[चरण-दर-चरण गणितीय हल या प्रत्येक विकल्प का वैज्ञानिक विश्लेषण, प्रत्येक चरण के बीच खाली पंक्ति के साथ]
+
 अंतिम उत्तर (Final Answer) : विकल्प (X)
+
+CRITICAL FORMATTING INSTRUCTION:
+Do NOT squish lines together. Ensure distinct vertical spacing with blank lines (\n\n) between Explaining, Concept, Solution steps, and Final Answer.
 
 RETURN STRICT JSON SCHEMA:
 {
   "recommendedAnswer": "A",
-  "solutionEn": "Explaining : ...\\nConcept : ...\\nSolution : ...\\nFinal Answer : Option (A)",
-  "solutionHi": "कथन (Explaining) : ...\\nसिद्धांत (Concept) : ...\\nहल (Solution) : ...\\nअंतिम उत्तर (Final Answer) : विकल्प (A)"
+  "solutionEn": "Explaining : ...\\n\\nConcept : ...\\n\\nSolution :\\n...\\n\\nFinal Answer : Option (A)",
+  "solutionHi": "कथन (Explaining) : ...\\n\\nसिद्धांत (Concept) : ...\\n\\nहल (Solution) :\\n...\\n\\nअंतिम उत्तर (Final Answer) : विकल्प (A)"
 }`;
 
     const response = await model.generateContent(prompt);
@@ -579,9 +593,12 @@ RETURN STRICT JSON SCHEMA:
     const userAns = (userSelectedAnswer || "").toUpperCase();
     const hasMismatch = Boolean(userAns && userAns !== recommended);
 
+    const cleanSolEn = formatSolutionSpacing(parsed.solutionEn || "");
+    const cleanSolHi = formatSolutionSpacing(parsed.solutionHi || "");
+
     return {
-      solutionEn: parsed.solutionEn || "",
-      solutionHi: parsed.solutionHi || "",
+      solutionEn: cleanSolEn,
+      solutionHi: cleanSolHi,
       recommendedAnswer: recommended,
       answerMismatch: hasMismatch,
       mismatchWarning: hasMismatch
@@ -589,6 +606,19 @@ RETURN STRICT JSON SCHEMA:
         : undefined,
     };
   });
+}
+
+/**
+ * Normalizes vertical spacing in solutions ensuring clean double-newlines between sections
+ */
+export function formatSolutionSpacing(sol: string): string {
+  if (!sol) return "";
+  let formatted = sol.trim();
+  // Ensure double newlines before main sections
+  formatted = formatted.replace(/([^\n])\s*\n\s*(Concept\s*:|सिद्धांत(\s*\(Concept\))?\s*:)/gi, "$1\n\n$2");
+  formatted = formatted.replace(/([^\n])\s*\n\s*(Solution\s*:|हल(\s*\(Solution\))?\s*:)/gi, "$1\n\n$2");
+  formatted = formatted.replace(/([^\n])\s*\n\s*(Final Answer\s*:|अंतिम उत्तर(\s*\(Final Answer\))?\s*:)/gi, "$1\n\n$2");
+  return formatted;
 }
 
 /**

@@ -20,7 +20,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
 
     const question = await prisma.question.findUnique({
       where: { id: params.id },
-      include: { translations: true },
+      include: { translations: true, assets: true },
     });
     if (!question) return apiError("Question not found", 404);
 

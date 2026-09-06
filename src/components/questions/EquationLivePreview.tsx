@@ -21,7 +21,8 @@ function renderMathAndText(text: string): string {
   // If text has raw exponents or subscripts without $ (e.g. {GSHSAU}^2 or H_2SO_4 or 1/2), prepare for KaTeX
   const hasUnwrappedMath =
     /[_{}\^]|\\[a-zA-Z]+|\b(sqrt|alpha|beta|theta|pi|lambda|Delta|rightarrow)\b/i.test(processed) &&
-    !processed.includes("$");
+    !processed.includes("$") &&
+    !processed.includes("![");
 
   if (hasUnwrappedMath) {
     // Normalization for standalone math expression
@@ -57,12 +58,27 @@ function renderMathAndText(text: string): string {
           const math = part.slice(1, -1).trim();
           return katex.renderToString(math, { throwOnError: false, displayMode: false });
         } else {
-          // Normal text: preserve spaces and newlines
-          return part
+          // Normal text: handle embedded markdown images ![width](url)
+          let textPart = part
             .replace(/&/g, "&amp;")
             .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/\n/g, "<br/>");
+            .replace(/>/g, "&gt;");
+
+          textPart = textPart.replace(
+            /!\[([^\]]*)\]\((https?:\/\/[^\s\)]+|data:image\/[^\s\)]+|\/uploads\/[^\s\)]+|[^\s\)]+)\)/gi,
+            (_match, widthParam, url) => {
+              let width = "60%";
+              const trimmed = (widthParam || "").trim();
+              if (/^\d+%?$/.test(trimmed)) {
+                width = trimmed.endsWith("%") ? trimmed : `${trimmed}%`;
+              } else if (/^\d+px$/.test(trimmed)) {
+                width = trimmed;
+              }
+              return `<img src="${url}" style="width:${width};max-width:100%;height:auto;border-radius:8px;margin:8px 0;display:block;" alt="Figure" />`;
+            }
+          );
+
+          return textPart.replace(/\n/g, "<br/>");
         }
       })
       .join("");
@@ -78,11 +94,14 @@ export function EquationLivePreview({
 }: EquationLivePreviewProps) {
   const html = useMemo(() => renderMathAndText(content), [content]);
 
-  // Only render preview box if there is actual content and either math/chemistry symbols exist
+  // Only render preview box if there is actual content and either math/chemistry symbols or images exist
   const hasMathOrFormula = useMemo(() => {
     if (!content || !content.trim()) return false;
-    return /[_{}\^\\\$]|->|=>|→|⇌|√|\/|[0-9]+[+-]|\b(frac|sqrt|alpha|beta|theta|pi|lambda|Delta|sin|cos|tan)\b/i.test(
-      content
+    return (
+      /!\[.*?\]\(.*?\)/.test(content) ||
+      /[_{}\^\\\$]|->|=>|→|⇌|√|\/|[0-9]+[+-]|\b(frac|sqrt|alpha|beta|theta|pi|lambda|Delta|sin|cos|tan)\b/i.test(
+        content
+      )
     );
   }, [content]);
 

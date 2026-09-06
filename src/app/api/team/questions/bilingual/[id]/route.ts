@@ -26,6 +26,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
       where: { id: params.id },
       include: {
         translations: true,
+        assets: true,
         createdBy: { select: { id: true, name: true } },
         editedBy: { select: { id: true, name: true } },
         review1By: { select: { id: true, name: true } },

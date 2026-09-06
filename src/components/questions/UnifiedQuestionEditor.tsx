@@ -305,10 +305,20 @@ export function UnifiedQuestionEditor({
   const [solutionEn, setSolutionEn] = useState<string>(translationEn?.solution || initialQuestion?.solutionEn || "");
   const [solutionHi, setSolutionHi] = useState<string>(translationHi?.solution || initialQuestion?.solutionHi || "");
 
-  // Diagram / Reference Image
+  // Diagram / Reference Image (Question Diagram)
   const [diagramUrl, setDiagramUrl] = useState<string | null>(
     initialQuestion?.imageUrl || initialQuestion?.figureUrl || null
   );
+
+  // Dedicated Solution Diagram / Image (Independent from Question Diagram)
+  const initialSolImg =
+    initialQuestion?.solutionImageUrl ||
+    initialQuestion?.assets?.find((a: any) => a.type === "SOLUTION")?.publicUrl ||
+    null;
+  const [solutionImageUrl, setSolutionImageUrl] = useState<string | null>(initialSolImg);
+  const [isUploadingSolImg, setIsUploadingSolImg] = useState<boolean>(false);
+  const [isSolutionImgZoomed, setIsSolutionImgZoomed] = useState<boolean>(false);
+  const solutionFileInputRef = useRef<HTMLInputElement>(null);
 
   // 3. AI PIPELINE STATES
   const [isExtracting, setIsExtracting] = useState<boolean>(false);
@@ -322,6 +332,61 @@ export function UnifiedQuestionEditor({
   const [generatedCode, setGeneratedCode] = useState<string | null>(initialQuestion?.questionCode || null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Helper: Upload file to /api/upload and return permanent public/relative URL
+  const uploadImageFile = async (file: File): Promise<string | null> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch("/api/upload", {
+      method: "POST",
+      body: formData,
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) {
+      throw new Error(json.error?.message || json.error || "Failed to upload image.");
+    }
+    return json.data?.url || null;
+  };
+
+  // Helper: In-field image paste handler for Textareas & Inputs (Statement, Options, Solution)
+  const handleFieldImagePaste = async (
+    e: React.ClipboardEvent<HTMLTextAreaElement | HTMLInputElement>,
+    setter: React.Dispatch<React.SetStateAction<string>>
+  ) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item && item.type.startsWith("image/")) {
+        e.preventDefault();
+        e.stopPropagation();
+        const file = item.getAsFile();
+        if (!file) return;
+
+        const target = e.currentTarget;
+        const start = target.selectionStart ?? target.value.length;
+        const end = target.selectionEnd ?? target.value.length;
+        const origVal = target.value;
+
+        const toastId = toast.loading("Uploading pasted image...");
+        try {
+          const url = await uploadImageFile(file);
+          if (url) {
+            const markdownImg = `\n![60%](${url})\n`;
+            const newVal = origVal.slice(0, start) + markdownImg + origVal.slice(end);
+            setter(newVal);
+            toast.success("Image embedded (default 60% width)!", { id: toastId });
+          } else {
+            toast.error("Could not obtain image URL.", { id: toastId });
+          }
+        } catch (err: any) {
+          toast.error(err.message || "Failed to upload image.", { id: toastId });
+        }
+        return;
+      }
+    }
+  };
 
   // A. Fetch Master Subjects
   useEffect(() => {
@@ -401,9 +466,10 @@ export function UnifiedQuestionEditor({
   // D. Global Paste (Ctrl+V) handler for automatic extraction
   useEffect(() => {
     const handleGlobalPaste = (e: ClipboardEvent) => {
-      // If user is typing inside an input or textarea, let default typing happen
+      // If user is focused inside an input or textarea, let the field handle image pasting or normal typing
       const activeEl = document.activeElement;
       const isInput = activeEl?.tagName === "INPUT" || activeEl?.tagName === "TEXTAREA";
+      if (isInput) return;
 
       const items = e.clipboardData?.items;
       if (!items) return;
@@ -421,13 +487,11 @@ export function UnifiedQuestionEditor({
         }
       }
 
-      // 2. Check for text in clipboard (only if not focused in a specific text field)
-      if (!isInput) {
-        const text = e.clipboardData.getData("text");
-        if (text && text.trim().length > 30) {
-          e.preventDefault();
-          handleTextAutoExtract(text.trim());
-        }
+      // 2. Check for text in clipboard
+      const text = e.clipboardData.getData("text");
+      if (text && text.trim().length > 30) {
+        e.preventDefault();
+        handleTextAutoExtract(text.trim());
       }
     };
 
@@ -805,6 +869,7 @@ export function UnifiedQuestionEditor({
         solutionHi: solutionHi.trim() || undefined,
         figureUrl: diagramUrl || undefined,
         referenceImageUrl: diagramUrl || undefined,
+        solutionImageUrl: solutionImageUrl || undefined,
         dppId,
         testSectionId,
         isPublished: false,
@@ -1451,9 +1516,10 @@ export function UnifiedQuestionEditor({
               </label>
               <textarea
                 rows={5}
-                placeholder="हिंदी में प्रश्न कथन यहाँ लिखें या इमेज पेस्ट करें..."
+                placeholder="हिंदी में प्रश्न कथन यहाँ लिखें या इमेज पेस्ट करें (Ctrl+V)..."
                 value={statementHi}
                 onChange={(e) => setStatementHi(e.target.value)}
+                onPaste={(e) => handleFieldImagePaste(e, setStatementHi)}
                 className="w-full bg-slate-50 border border-slate-300 rounded-2xl p-3.5 text-xs sm:text-sm text-slate-900 outline-none resize-none leading-relaxed focus:bg-white focus:border-blue-500 transition"
               />
               <EquationLivePreview content={statementHi} label="Hindi Statement KaTeX" />
@@ -1462,7 +1528,7 @@ export function UnifiedQuestionEditor({
             {/* Hindi Options A, B, C, D */}
             <div className="space-y-2.5">
               <label className="block text-xs font-bold text-slate-700">
-                विकल्प (Options in Hindi) — Click circle to select correct answer
+                विकल्प (Options in Hindi) — Click circle to select correct answer (Ctrl+V image paste supported)
               </label>
 
               {[
@@ -1497,9 +1563,10 @@ export function UnifiedQuestionEditor({
 
                       <input
                         type="text"
-                        placeholder={`विकल्प (${opt.key}) हिंदी पाठ...`}
+                        placeholder={`विकल्प (${opt.key}) हिंदी पाठ या Ctrl+V इमेज...`}
                         value={opt.val}
                         onChange={(e) => opt.setVal(e.target.value)}
+                        onPaste={(e) => handleFieldImagePaste(e, opt.setVal)}
                         className="flex-1 bg-transparent text-xs sm:text-sm text-slate-900 font-medium outline-none"
                       />
                     </div>
@@ -1527,9 +1594,10 @@ export function UnifiedQuestionEditor({
               </label>
               <textarea
                 rows={5}
-                placeholder="Write question statement in English or paste screenshot..."
+                placeholder="Write question statement in English or paste image (Ctrl+V)..."
                 value={statementEn}
                 onChange={(e) => setStatementEn(e.target.value)}
+                onPaste={(e) => handleFieldImagePaste(e, setStatementEn)}
                 className="w-full bg-slate-50 border border-slate-300 rounded-2xl p-3.5 text-xs sm:text-sm text-slate-900 outline-none resize-none leading-relaxed focus:bg-white focus:border-blue-500 transition"
               />
               <EquationLivePreview content={statementEn} label="English Statement KaTeX" />
@@ -1538,7 +1606,7 @@ export function UnifiedQuestionEditor({
             {/* English Options A, B, C, D */}
             <div className="space-y-2.5">
               <label className="block text-xs font-bold text-slate-700">
-                Options (English) — Click circle to select correct answer
+                Options (English) — Click circle to select correct answer (Ctrl+V image paste supported)
               </label>
 
               {[
@@ -1573,9 +1641,10 @@ export function UnifiedQuestionEditor({
 
                       <input
                         type="text"
-                        placeholder={`Option (${opt.key}) English text...`}
+                        placeholder={`Option (${opt.key}) English text or Ctrl+V image...`}
                         value={opt.val}
                         onChange={(e) => opt.setVal(e.target.value)}
+                        onPaste={(e) => handleFieldImagePaste(e, opt.setVal)}
                         className="flex-1 bg-transparent text-xs sm:text-sm text-slate-900 font-medium outline-none"
                       />
                     </div>
@@ -1715,6 +1784,138 @@ export function UnifiedQuestionEditor({
           </div>
         )}
 
+        {/* DEDICATED SOLUTION DIAGRAM / FIGURE DOCK */}
+        <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-4 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <span className="p-2 rounded-xl bg-indigo-100 text-indigo-700">
+                <ImageIcon className="w-4 h-4" />
+              </span>
+              <div>
+                <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                  Dedicated Solution Figure / Working Diagram
+                  <span className="text-[10px] px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-bold border border-indigo-200">
+                    Independent
+                  </span>
+                </h4>
+                <p className="text-[11px] text-slate-500">
+                  Paste or upload a dedicated step-by-step visual, circuit diagram, or graph specifically for the solution.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="file"
+                ref={solutionFileInputRef}
+                accept="image/*"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    setIsUploadingSolImg(true);
+                    const toastId = toast.loading("Uploading solution figure...");
+                    try {
+                      const url = await uploadImageFile(file);
+                      if (url) {
+                        setSolutionImageUrl(url);
+                        toast.success("Solution diagram uploaded!", { id: toastId });
+                      }
+                    } catch (err: any) {
+                      toast.error(err.message || "Failed to upload solution image.", { id: toastId });
+                    } finally {
+                      setIsUploadingSolImg(false);
+                      if (solutionFileInputRef.current) solutionFileInputRef.current.value = "";
+                    }
+                  }
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => solutionFileInputRef.current?.click()}
+                disabled={isUploadingSolImg}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>
+                  {isUploadingSolImg
+                    ? "Uploading..."
+                    : solutionImageUrl
+                    ? "Replace Solution Figure"
+                    : "Upload / Paste Solution Figure"}
+                </span>
+              </button>
+
+              {solutionImageUrl && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setIsSolutionImgZoomed(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
+                    title="Zoom Full Size"
+                  >
+                    <ZoomIn className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Zoom</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSolutionImageUrl(null)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold transition cursor-pointer"
+                    title="Remove Solution Figure"
+                  >
+                    <XCircle className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Remove</span>
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {solutionImageUrl && (
+            <div className="flex items-center justify-center p-3 bg-white rounded-xl border border-slate-200 max-h-56 overflow-hidden">
+              <img
+                src={solutionImageUrl}
+                alt="Solution Figure"
+                className="max-h-52 object-contain rounded-lg shadow-xs cursor-pointer hover:scale-102 transition"
+                onClick={() => setIsSolutionImgZoomed(true)}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* FULLSCREEN SOLUTION DIAGRAM MODAL */}
+        {isSolutionImgZoomed && solutionImageUrl && (
+          <div
+            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in"
+            onClick={() => setIsSolutionImgZoomed(false)}
+          >
+            <div
+              className="relative max-w-4xl max-h-[90vh] bg-white rounded-3xl p-4 shadow-2xl space-y-3"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b pb-2">
+                <h3 className="text-xs font-black uppercase text-slate-800">
+                  Solution Figure Full Size
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setIsSolutionImgZoomed(false)}
+                  className="p-1 text-slate-400 hover:text-slate-800 rounded-lg font-bold"
+                >
+                  ✕ Close
+                </button>
+              </div>
+              <div className="flex items-center justify-center overflow-auto max-h-[75vh]">
+                <img
+                  src={solutionImageUrl}
+                  alt="Zoomed Solution Figure"
+                  className="max-h-[70vh] object-contain rounded-xl"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* SIDE-BY-SIDE SOLUTION TEXTAREAS */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Hindi Solution Card */}
@@ -1732,6 +1933,7 @@ export function UnifiedQuestionEditor({
               placeholder="कथन : ... \n\nसिद्धांत : ... \n\nहल : ... \n\nअंतिम उत्तर : विकल्प (...)"
               value={solutionHi}
               onChange={(e) => setSolutionHi(e.target.value)}
+              onPaste={(e) => handleFieldImagePaste(e, setSolutionHi)}
               className="w-full bg-slate-50 border border-slate-300 rounded-2xl p-4 text-xs sm:text-sm text-slate-900 outline-none resize-none leading-relaxed font-mono focus:bg-white focus:border-indigo-500 transition"
             />
             <EquationLivePreview content={solutionHi} label="Hindi Solution KaTeX Preview" />
@@ -1752,6 +1954,7 @@ export function UnifiedQuestionEditor({
               placeholder="Explaining : ... \n\nConcept : ... \n\nSolution : ... \n\nFinal Answer : Option (...)"
               value={solutionEn}
               onChange={(e) => setSolutionEn(e.target.value)}
+              onPaste={(e) => handleFieldImagePaste(e, setSolutionEn)}
               className="w-full bg-slate-50 border border-slate-300 rounded-2xl p-4 text-xs sm:text-sm text-slate-900 outline-none resize-none leading-relaxed font-mono focus:bg-white focus:border-indigo-500 transition"
             />
             <EquationLivePreview content={solutionEn} label="English Solution KaTeX Preview" />
