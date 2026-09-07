@@ -68,7 +68,12 @@ export async function PATCH(
       select: { activePageNumber: true },
     });
     if (wbSessionForBroadcast && wbSessionForBroadcast.activePageNumber === updated.pageNumber) {
-      await pushBoardUpdated(params.id, updated.pageNumber);
+      await pushBoardUpdated(
+        params.id,
+        updated.pageNumber,
+        updated.objects as any[],
+        updated.background
+      );
     }
 
     return apiSuccess({ page: updated });

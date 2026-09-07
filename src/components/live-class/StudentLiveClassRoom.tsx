@@ -10,6 +10,7 @@ import { YouTubeLivePlayer } from "@/components/live-class/YouTubeLivePlayer";
 import { VideoStrip } from "@/components/live-class/VideoStrip";
 import { RecordingPlayer } from "@/components/live-class/RecordingPlayer";
 import { StudentPostClassFeedback } from "@/components/live-class/StudentPostClassFeedback";
+import { DraggableFloatingCamera } from "@/components/live-class/DraggableFloatingCamera";
 
 
 type QuizOption = { key: string; label: string };
@@ -413,7 +414,18 @@ export function StudentLiveClassRoom({
       );
     });
 
-    channel.bind(WB_EVENTS.BOARD_UPDATED, () => refreshBoard());
+    channel.bind(
+      WB_EVENTS.BOARD_UPDATED,
+      (data?: { pageNumber?: number; objects?: StrokeObject[]; background?: string }) => {
+        if (data?.objects && Array.isArray(data.objects)) {
+          setBoardObjects(data.objects);
+          setBoardEmpty(data.objects.length === 0);
+          if (data.background) setBoardBackground(data.background);
+        } else {
+          refreshBoard();
+        }
+      }
+    );
     channel.bind(WB_EVENTS.PAGE_CHANGED, () => refreshBoard());
 
     channel.bind(WB_EVENTS.QUIZ_LAUNCHED, (data: LiveQuiz) => {
@@ -532,6 +544,7 @@ export function StudentLiveClassRoom({
     setMySelection(optionKey);
     try {
       await postJson(`/api/whiteboard/sessions/${wbSession.id}/quiz/${quiz.id}/respond`, {
+        selectedOption: optionKey,
         optionKey,
       });
     } catch (err: any) {
@@ -946,17 +959,26 @@ export function StudentLiveClassRoom({
                 never tears down and reopens the LiveKit connection (see the
                 isDesktopViewport-gated single-mount comment near the top of
                 this component for why that matters). */}
-            {!isYouTube && (
-              <div
-                className={`absolute z-40 top-3 right-3 bg-[#10121d]/95 backdrop-blur-md border border-slate-800/80 shadow-2xl overflow-hidden flex flex-col transition-all duration-200 ${
-                  showChat ? "w-72 xl:w-80 max-h-[420px] rounded-2xl" : "w-14 h-14 rounded-full"
-                }`}
+            {!isYouTube && isDesktopViewport && !showChat && (
+              <DraggableFloatingCamera
+                title={teacherName || "Educator"}
+                isLive={isLive}
+                onExpand={() => setShowChat(true)}
+                storageKey={`atomic_cam_pos_${currentUserId}`}
+                sizePx={130}
               >
-                <div
-                  className={`items-center justify-between px-3 py-2 bg-[#0a0b12] border-b border-slate-800 shrink-0 ${
-                    showChat ? "flex" : "hidden"
-                  }`}
-                >
+                <VideoStrip
+                  whiteboardSessionId={wbSession?.id || batchScheduleId}
+                  variant="panel"
+                  role="STUDENT"
+                  teacherName={teacherName}
+                />
+              </DraggableFloatingCamera>
+            )}
+
+            {!isYouTube && showChat && (
+              <div className="absolute z-40 top-3 right-3 w-72 xl:w-80 max-h-[420px] bg-[#10121d]/95 backdrop-blur-md border border-slate-800/80 shadow-2xl rounded-2xl overflow-hidden flex flex-col transition-all duration-200">
+                <div className="flex items-center justify-between px-3 py-2 bg-[#0a0b12] border-b border-slate-800 shrink-0">
                   <span className="text-xs font-bold text-white flex items-center gap-1.5">
                     <span className="material-symbols-outlined text-sm text-indigo-400">group</span>
                     Teacher &amp; Chat
@@ -964,29 +986,19 @@ export function StudentLiveClassRoom({
                   <button
                     type="button"
                     onClick={() => setShowChat(false)}
-                    className="text-slate-400 hover:text-white"
-                    title="Minimize (distraction-free focus)"
+                    className="text-slate-400 hover:text-white flex items-center justify-center p-1 rounded hover:bg-slate-800"
+                    title="Minimize to floating draggable camera (distraction-free focus)"
                   >
-                    <span className="material-symbols-outlined text-base">remove</span>
+                    <span className="material-symbols-outlined text-base">close_fullscreen</span>
                   </button>
                 </div>
 
-                <div
-                  onClick={() => {
-                    if (!showChat) setShowChat(true);
-                  }}
-                  role={showChat ? undefined : "button"}
-                  tabIndex={showChat ? undefined : 0}
-                  title={showChat ? undefined : "Show teacher video & chat"}
-                  className={`relative shrink-0 ${showChat ? "" : "w-full h-full cursor-pointer"}`}
-                >
+                <div className="relative shrink-0 p-2">
                   <div
                     className={`overflow-hidden ${
-                      showChat
-                        ? isCameraCircle
-                          ? "mx-auto mt-3 w-20 h-20 rounded-full border-2 border-indigo-500 shadow-lg shadow-indigo-500/20"
-                          : "w-full aspect-video"
-                        : "w-full h-full"
+                      isCameraCircle
+                        ? "mx-auto w-24 h-24 rounded-full border-2 border-indigo-500 shadow-lg shadow-indigo-500/20"
+                        : "w-full aspect-video rounded-xl border border-slate-800"
                     }`}
                   >
                     {isDesktopViewport && (
@@ -998,25 +1010,16 @@ export function StudentLiveClassRoom({
                       />
                     )}
                   </div>
-                  {!showChat && (
-                    <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center border-2 border-[#0b0d14]">
-                      <span className="material-symbols-outlined text-[12px]">chat</span>
-                    </span>
-                  )}
                 </div>
 
                 {isApprovedSpeaker && (
-                  <div
-                    className={`mx-2 mt-2 bg-emerald-950/80 border border-emerald-500/60 rounded-lg px-2 py-1.5 items-center gap-1.5 text-[10px] text-emerald-200 ${
-                      showChat ? "flex" : "hidden"
-                    }`}
-                  >
+                  <div className="mx-2 mb-2 bg-emerald-950/80 border border-emerald-500/60 rounded-lg px-2 py-1.5 flex items-center gap-1.5 text-[10px] text-emerald-200">
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
                     Approved Speaker · Mic Active
                   </div>
                 )}
 
-                <div className={`flex-1 min-h-0 p-2 ${showChat ? "block" : "hidden"}`}>
+                <div className="flex-1 min-h-0 p-2 border-t border-slate-800/60">
                   {wbSession?.id ? (
                     <MessagesPanel
                       whiteboardSessionId={wbSession.id}

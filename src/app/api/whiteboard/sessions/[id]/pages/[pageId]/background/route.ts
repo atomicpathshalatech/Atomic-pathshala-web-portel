@@ -91,7 +91,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       select: { activePageNumber: true },
     });
     if (wbSession && wbSession.activePageNumber === updated.pageNumber) {
-      await pushBoardUpdated(params.id, updated.pageNumber);
+      await pushBoardUpdated(
+        params.id,
+        updated.pageNumber,
+        updated.objects as any[],
+        updated.background
+      );
     }
 
     return apiSuccess({ page: updated });

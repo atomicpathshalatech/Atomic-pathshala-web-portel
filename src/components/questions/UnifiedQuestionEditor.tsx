@@ -332,6 +332,15 @@ export function UnifiedQuestionEditor({
   const [generatedCode, setGeneratedCode] = useState<string | null>(initialQuestion?.questionCode || null);
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(questionId || null);
   const [isAutoDraftSaved, setIsAutoDraftSaved] = useState<boolean>(Boolean(initialQuestion?.id));
+  const [aiCostInfo, setAiCostInfo] = useState<{
+    costPaise: number;
+    isFreeTier: boolean;
+    tier: "FREE" | "PAID";
+    keyMasked: string;
+    totalTokens: number;
+    inputTokens?: number;
+    outputTokens?: number;
+  } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -544,101 +553,116 @@ export function UnifiedQuestionEditor({
   }, [subject, chapter, topic, difficulty]);
 
   // E. Automatic Image OCR Extraction (No manual button click needed)
-  const handleImageUploadAndExtract = (file: File) => {
+  const handleImageUploadAndExtract = async (file: File) => {
     if (!file.type.startsWith("image/")) {
       toast.error("Please upload an image file (PNG, JPG, WebP).");
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const base64Url = reader.result as string;
-      setDiagramUrl(base64Url);
+    setIsExtracting(true);
+    const toastId = toast.loading("Uploading image & executing all-in-one extraction...");
 
-      setIsExtracting(true);
-      toast.info("Extracting question, options, formulas & inferring curriculum metadata from image...");
-
+    try {
+      // 1. Upload file first to get clean short URL (e.g. /uploads/questions/q_xxx.png)
+      let shortUrl: string | null = null;
       try {
-        const res = await fetch("/api/team/questions/ai", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "auto_extract",
-            payload: {
-              imageBase64: base64Url,
-              mimeType: file.type,
-              subject: subject || "Biology",
-              chapter: chapter || "",
-              topic: topic || "",
-              difficulty: difficulty || "MEDIUM",
-            },
-          }),
-        });
-
-        const json = await res.json();
-        if (!res.ok || !json.success) {
-          throw new Error(typeof json.error === "string" ? json.error : json.error?.message || "Extraction failed.");
+        shortUrl = await uploadImageFile(file);
+        if (shortUrl) {
+          setDiagramUrl(shortUrl);
         }
-
-        const data = json.data?.result;
-        if (!data) throw new Error("No data returned from extraction.");
-
-        // Populate fields
-        if (data.statementEn) setStatementEn(data.statementEn);
-        if (data.statementHi) setStatementHi(data.statementHi);
-
-        if (data.optionsEn) {
-          setOptionAEn(data.optionsEn.A || "");
-          setOptionBEn(data.optionsEn.B || "");
-          setOptionCEn(data.optionsEn.C || "");
-          setOptionDEn(data.optionsEn.D || "");
-        }
-        if (data.optionsHi) {
-          setOptionAHi(data.optionsHi.A || "");
-          setOptionBHi(data.optionsHi.B || "");
-          setOptionCHi(data.optionsHi.C || "");
-          setOptionDHi(data.optionsHi.D || "");
-        }
-
-        if (data.correctAnswer?.[0]) {
-          const rec = data.correctAnswer[0].toUpperCase();
-          setAiRecommendedAnswer(rec);
-          setCorrectOption(rec);
-        }
-
-        if (data.solutionEn) setSolutionEn(data.solutionEn);
-        if (data.solutionHi) setSolutionHi(data.solutionHi);
-
-        // Capture AI-suggested metadata for teacher approval
-        if (data.subject || data.chapter || data.topic) {
-          setAiSuggestedMetadata({
-            subject: data.subject || subject || "Biology",
-            chapter: data.chapter || "",
-            topic: data.topic || "",
-            subTopic: data.subTopic || "",
-            difficulty: (data.difficulty as any) || difficulty || "MEDIUM",
-            type: data.type || questionType || "SINGLE_CORRECT",
-          });
-          toast.success("Extracted! AI-suggested metadata is ready for approval above Section 1.");
-        } else {
-          toast.success("Question and options extracted successfully!");
-        }
-
-        // INSTANT AUTO-DRAFT: Save to database immediately to guarantee zero data loss
-        triggerAutoDraft(data, base64Url, "DIRECT_OCR");
-      } catch (err: any) {
-        toast.error(err.message || "Unable to extract this content. Please review or retry.");
-      } finally {
-        setIsExtracting(false);
+      } catch (uploadErr) {
+        console.warn("Upload warning, proceeding with extraction:", uploadErr);
       }
-    };
-    reader.readAsDataURL(file);
+
+      // 2. Read image as base64 for multimodal extraction
+      const base64Url = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const res = await fetch("/api/team/questions/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "auto_extract",
+          payload: {
+            imageBase64: base64Url,
+            mimeType: file.type,
+            subject: subject || "Biology",
+            chapter: chapter || "",
+            topic: topic || "",
+            difficulty: difficulty || "MEDIUM",
+          },
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(typeof json.error === "string" ? json.error : json.error?.message || "Extraction failed.");
+      }
+
+      const data = json.data?.result;
+      if (!data) throw new Error("No data returned from extraction.");
+
+      // Populate fields for both languages simultaneously
+      if (data.statementEn) setStatementEn(data.statementEn);
+      if (data.statementHi) setStatementHi(data.statementHi);
+
+      if (data.optionsEn) {
+        setOptionAEn(data.optionsEn.A || "");
+        setOptionBEn(data.optionsEn.B || "");
+        setOptionCEn(data.optionsEn.C || "");
+        setOptionDEn(data.optionsEn.D || "");
+      }
+      if (data.optionsHi) {
+        setOptionAHi(data.optionsHi.A || "");
+        setOptionBHi(data.optionsHi.B || "");
+        setOptionCHi(data.optionsHi.C || "");
+        setOptionDHi(data.optionsHi.D || "");
+      }
+
+      if (data.correctAnswer?.[0]) {
+        const rec = data.correctAnswer[0].toUpperCase();
+        setAiRecommendedAnswer(rec);
+        setCorrectOption(rec);
+      }
+
+      if (data.solutionEn) setSolutionEn(data.solutionEn);
+      if (data.solutionHi) setSolutionHi(data.solutionHi);
+
+      // Capture AI-suggested metadata for teacher approval
+      if (data.subject || data.chapter || data.topic) {
+        setAiSuggestedMetadata({
+          subject: data.subject || subject || "Biology",
+          chapter: data.chapter || "",
+          topic: data.topic || "",
+          subTopic: data.subTopic || "",
+          difficulty: (data.difficulty as any) || difficulty || "MEDIUM",
+          type: data.type || questionType || "SINGLE_CORRECT",
+        });
+      }
+
+      // Record AI Cost in Paise
+      if (data.costEstimate) {
+        setAiCostInfo(data.costEstimate);
+      }
+
+      // INSTANT AUTO-DRAFT: Save with short URL
+      triggerAutoDraft(data, shortUrl || base64Url, "DIRECT_OCR");
+      toast.success("✨ Extracted, translated & solved in 1 call!", { id: toastId });
+    } catch (err: any) {
+      toast.error(err.message || "Unable to extract this content. Please review or retry.", { id: toastId });
+    } finally {
+      setIsExtracting(false);
+    }
   };
 
   // F. Automatic Text Extraction
   const handleTextAutoExtract = async (rawText: string) => {
     setIsExtracting(true);
-    toast.info("Parsing pasted text & inferring curriculum metadata...");
+    const toastId = toast.loading("Parsing text, translating & solving in 1 call...");
 
     try {
       const res = await fetch("/api/team/questions/ai", {
@@ -698,15 +722,17 @@ export function UnifiedQuestionEditor({
           difficulty: (data.difficulty as any) || difficulty || "MEDIUM",
           type: data.type || questionType || "SINGLE_CORRECT",
         });
-        toast.success("Text parsed! AI-suggested metadata is ready for approval above Section 1.");
-      } else {
-        toast.success("Text parsed into question and options successfully!");
       }
 
-      // INSTANT AUTO-DRAFT: Save to database immediately to guarantee zero data loss
+      if (data.costEstimate) {
+        setAiCostInfo(data.costEstimate);
+      }
+
+      // INSTANT AUTO-DRAFT: Save to database immediately
       triggerAutoDraft(data, null, "DIRECT_TEXT");
+      toast.success("✨ Text parsed, translated & classified in 1 call!", { id: toastId });
     } catch (err: any) {
-      toast.error(err.message || "Unable to parse this text. Please review.");
+      toast.error(err.message || "Unable to parse this text. Please review.", { id: toastId });
     } finally {
       setIsExtracting(false);
     }
@@ -1002,6 +1028,22 @@ export function UnifiedQuestionEditor({
               <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-300 text-emerald-800 font-bold flex items-center gap-1.5 animate-in fade-in">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                 <span>⚡ Auto-saved to AI Drafts</span>
+              </span>
+            )}
+
+            {aiCostInfo && (
+              <span
+                title={`Tokens: ${aiCostInfo.totalTokens} (In: ${aiCostInfo.inputTokens}, Out: ${aiCostInfo.outputTokens}) | Key: ${aiCostInfo.keyMasked} (${aiCostInfo.tier} Tier)`}
+                className={`text-[11px] px-2.5 py-0.5 rounded-full font-mono font-bold flex items-center gap-1.5 animate-in fade-in ${
+                  aiCostInfo.isFreeTier
+                    ? "bg-emerald-50 border border-emerald-300 text-emerald-800"
+                    : "bg-blue-50 border border-blue-300 text-blue-800"
+                }`}
+              >
+                <span>🪙 AI Cost:</span>
+                <span className="font-extrabold">
+                  {aiCostInfo.isFreeTier ? "0.00 Paise (Free Tier)" : `${aiCostInfo.costPaise} Paise`}
+                </span>
               </span>
             )}
           </div>

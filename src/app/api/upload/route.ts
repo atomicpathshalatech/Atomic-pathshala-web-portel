@@ -15,6 +15,8 @@ const ALLOWED_MIME_TYPES: Record<string, string> = {
   "image/jpeg": "jpg",
   "image/png": "png",
   "image/webp": "webp",
+  "image/gif": "gif",
+  "image/svg+xml": "svg",
 };
 
 export async function POST(request: NextRequest) {
@@ -26,6 +28,7 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData();
     const file = formData.get("file");
+    const targetFolder = (formData.get("folder") as string) || "questions";
 
     if (!(file instanceof File)) {
       return apiError("No file uploaded", 400);
@@ -44,17 +47,27 @@ export async function POST(request: NextRequest) {
       else if (name.endsWith(".ppt")) ext = "ppt";
       else if (name.endsWith(".png")) ext = "png";
       else if (name.endsWith(".jpg") || name.endsWith(".jpeg")) ext = "jpg";
+      else if (name.endsWith(".webp")) ext = "webp";
     }
 
     if (!ext) {
-      return apiError("Unsupported file type. Please upload a PDF, PPT, or PPTX file.", 400);
+      return apiError("Unsupported file type. Please upload an image, PDF, PPT, or PPTX file.", 400);
     }
 
+    const isImage = ["jpg", "png", "webp", "gif", "svg"].includes(ext);
     const buffer = Buffer.from(await file.arrayBuffer());
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const key = `live-presentations/${Date.now()}-${safeName}`;
 
-    // 1. Try cloud storage first
+    // Generate clean, short unique filename (e.g. q_lh8w2_7a9f.png)
+    const shortRandom = Math.random().toString(36).substring(2, 7);
+    const shortTime = Date.now().toString(36);
+    const shortFileName = isImage
+      ? `q_${shortTime}_${shortRandom}.${ext}`
+      : `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+
+    const subDir = isImage ? "questions" : targetFolder === "presentations" ? "presentations" : "files";
+    const key = `${subDir}/${shortFileName}`;
+
+    // 1. Try cloud storage first if configured
     try {
       if (
         process.env.STORAGE_ENDPOINT &&
@@ -66,12 +79,12 @@ export async function POST(request: NextRequest) {
         const publicUrl = await uploadFile({
           key,
           body: buffer,
-          contentType: file.type || "application/octet-stream",
+          contentType: file.type || (isImage ? `image/${ext}` : "application/octet-stream"),
         });
 
         return apiSuccess({
           url: publicUrl,
-          name: file.name,
+          name: shortFileName,
           type: ext.toUpperCase(),
           size: file.size,
         });
@@ -80,34 +93,24 @@ export async function POST(request: NextRequest) {
       console.warn("Cloud storage upload warning, falling back to local storage:", cloudErr);
     }
 
-    // 2. Fallback to local server filesystem storage
+    // 2. Save to local server filesystem storage (clean short URL)
     try {
-      const uploadsDir = path.join(process.cwd(), "public", "uploads", "presentations");
+      const uploadsDir = path.join(process.cwd(), "public", "uploads", subDir);
       await mkdir(uploadsDir, { recursive: true });
-      const fileName = `${Date.now()}-${safeName}`;
-      const filePath = path.join(uploadsDir, fileName);
+      const filePath = path.join(uploadsDir, shortFileName);
       await writeFile(filePath, buffer);
 
-      const localUrl = `/uploads/presentations/${fileName}`;
+      const localUrl = `/uploads/${subDir}/${shortFileName}`;
       return apiSuccess({
         url: localUrl,
-        name: file.name,
+        name: shortFileName,
         type: ext.toUpperCase(),
         size: file.size,
       });
     } catch (localWriteErr) {
-      console.error("Local filesystem write warning, using inline data url:", localWriteErr);
+      console.error("Local filesystem write error:", localWriteErr);
+      return apiError("Failed to save uploaded file locally", 500);
     }
-
-    // 3. Fallback to inline Base64 data URL
-    const base64Data = buffer.toString("base64");
-    const dataUrl = `data:${file.type || "application/pdf"};base64,${base64Data}`;
-    return apiSuccess({
-      url: dataUrl,
-      name: file.name,
-      type: ext.toUpperCase(),
-      size: file.size,
-    });
   } catch (error) {
     return handleApiError(error);
   }

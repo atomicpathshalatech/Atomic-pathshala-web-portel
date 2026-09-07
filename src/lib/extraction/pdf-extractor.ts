@@ -59,11 +59,7 @@ export interface RawExtractedQuestion {
   reviewReasons: string[];
 }
 
-function getGeminiClient(): GoogleGenerativeAI | null {
-  const apiKey = (process.env.GEMINI_API_KEYS?.split(",")[0] || process.env.GEMINI_API_KEY)?.trim();
-  if (!apiKey || apiKey.includes("your_gemini_api_key")) return null;
-  return new GoogleGenerativeAI(apiKey);
-}
+import { geminiKeyManager } from "@/lib/ai/gemini-key-manager";
 
 /**
  * Strips recurring exam headers, footers, and page counters

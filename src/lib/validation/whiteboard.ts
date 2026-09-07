@@ -63,9 +63,18 @@ export const quizLaunchSchema = z
     path: ["correctOption"],
   });
 
-export const quizResponseSchema = z.object({
-  selectedOption: z.string().min(1).max(4),
-});
+export const quizResponseSchema = z
+  .object({
+    selectedOption: z.string().min(1).max(4).optional(),
+    optionKey: z.string().min(1).max(4).optional(),
+  })
+  .transform((data) => ({
+    selectedOption: (data.selectedOption || data.optionKey || "").trim(),
+  }))
+  .refine((data) => data.selectedOption.length > 0, {
+    message: "selectedOption is required",
+    path: ["selectedOption"],
+  });
 
 export const messageCreateSchema = z.object({
   body: z.string().min(1, "Message cannot be empty").max(2000),

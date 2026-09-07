@@ -123,24 +123,38 @@ export function RecordingPlayer({ whiteboardSessionId }: { whiteboardSessionId: 
           if (videoRef.current) videoRef.current.playbackRate = speed;
         }}
       />
-      <div className="flex items-center gap-1.5 px-3 py-2 bg-[#12131c] border-t border-[#252836] overflow-x-auto">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 mr-1 shrink-0">
-          Speed
-        </span>
-        {SPEEDS.map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => setSpeed(s)}
-            className={`shrink-0 px-2.5 py-1 rounded-full text-xs font-bold transition ${
-              speed === s
-                ? "bg-indigo-500 text-white"
-                : "bg-[#1a1b23] text-gray-400 hover:bg-[#22232e] hover:text-gray-200"
-            }`}
-          >
-            {s}x
-          </button>
-        ))}
+      <div className="flex items-center justify-between gap-3 px-3 py-2 bg-[#12131c] border-t border-[#252836] overflow-x-auto">
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 mr-1 shrink-0">
+            Speed
+          </span>
+          {SPEEDS.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setSpeed(s)}
+              className={`shrink-0 px-2.5 py-1 rounded-full text-xs font-bold transition ${
+                speed === s
+                  ? "bg-indigo-500 text-white"
+                  : "bg-[#1a1b23] text-gray-400 hover:bg-[#22232e] hover:text-gray-200"
+              }`}
+            >
+              {s}x
+            </button>
+          ))}
+        </div>
+
+        <a
+          href={`/api/whiteboard/sessions/${whiteboardSessionId}/slides?format=pdf`}
+          target="_blank"
+          rel="noopener noreferrer"
+          download
+          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition shadow-sm shrink-0"
+          title="Download Board Notes PDF"
+        >
+          <span className="material-symbols-outlined text-sm">picture_as_pdf</span>
+          <span>Download PDF (नोट्स)</span>
+        </a>
       </div>
     </div>
   );

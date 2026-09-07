@@ -510,7 +510,7 @@ export function TeacherLiveClassRoom({
         pendingObjectsRef.current = objects;
         setSaveState("saving");
         if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
-        autosaveTimer.current = setTimeout(() => flushAutosaveRef.current(), 300);
+        autosaveTimer.current = setTimeout(() => flushAutosaveRef.current(), 50);
         setUndoRedoTick((t) => t + 1);
       },
       () => setUndoRedoTick((t) => t + 1)

@@ -2,31 +2,11 @@ import "server-only";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { ModuleElementInput } from "@/lib/validation/module";
 import { MODULE_ELEMENT_TYPES } from "@/lib/validation/module";
+import { geminiKeyManager } from "@/lib/ai/gemini-key-manager";
 
-// Same fallback model chain as the AI-chat feature (src/lib/ai-chat/gemini.ts)
-// but deliberately NOT importing from there — that module's retry/cooldown
-// machinery and types are built around the chat request/response shape.
-// This is a much lower-volume, one-shot structured-extraction call, so a
-// simpler single-pass-with-one-fallback is enough rather than reusing that
-// heavier apparatus.
-const MODEL_FALLBACKS = ["gemini-3.1-flash-lite", "gemini-3.5-flash"] as const;
+const MODEL_FALLBACKS = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-flash-latest"] as const;
 
-// Text-extractable element types only — IMAGE/DIAGRAM/CHEMICAL_STRUCTURE and
-// pure layout shapes (SHAPE/LINE/RECTANGLE/CIRCLE/ARROW/TEXT_BOX/
-// PAGE_BACKGROUND) need real image/layout analysis this pipeline doesn't do
-// (see pdf-text.ts) — asking the model to pick from those anyway would just
-// invite it to guess.
 const TEXT_ELEMENT_TYPES = MODULE_ELEMENT_TYPES;
-
-function getApiKey(): string {
-  const multi = process.env.GEMINI_API_KEYS?.trim();
-  const single = process.env.GEMINI_API_KEY?.trim();
-  const first = (multi ? multi.split(",")[0] : single)?.trim();
-  if (!first) {
-    throw new Error("GEMINI_API_KEY is not configured — add GEMINI_API_KEYS or GEMINI_API_KEY to .env.local.");
-  }
-  return first;
-}
 
 const SYSTEM_PROMPT = `You structure raw text extracted from one page of an educational study-module PDF (NEET/JEE coaching material) into a flat, ordered list of content blocks.
 
@@ -43,44 +23,42 @@ Return ONLY a JSON array of {"type": "<one of the allowed types>", "content": "<
 export type ExtractionResult = { elements: ModuleElementInput[]; usedFallback: boolean; error: string | null };
 
 /**
- * Structures one page's raw extracted text into typed content blocks via
- * Gemini. Real model call, not a stub — but a genuinely best-effort first
- * pass: every page this touches is stored with needsReview: true so a human
- * always checks it before the module is marked READY, same as this app's
- * existing AI-assisted flows (e.g. Question Bank verification) never
- * auto-trust a model's first output.
+ * Structures one page's raw extracted text into typed content blocks via Gemini with Key Rotation.
  */
 export async function structurePageText(pageText: string): Promise<ExtractionResult> {
-  const apiKey = getApiKey();
-  const genAI = new GoogleGenerativeAI(apiKey);
+  return geminiKeyManager.executeWithRotation(async (genAI: GoogleGenerativeAI) => {
+    let lastError: string | null = null;
+    for (let i = 0; i < MODEL_FALLBACKS.length; i++) {
+      const modelName = MODEL_FALLBACKS[i]!;
+      try {
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+          systemInstruction: SYSTEM_PROMPT,
+          generationConfig: { maxOutputTokens: 4096, temperature: 0.1, responseMimeType: "application/json" },
+        });
+        const result = await model.generateContent(pageText);
+        const raw = result.response.text();
+        const parsed = JSON.parse(raw) as { type: string; content: string }[];
 
-  let lastError: string | null = null;
-  for (let i = 0; i < MODEL_FALLBACKS.length; i++) {
-    const modelName = MODEL_FALLBACKS[i]!;
-    try {
-      const model = genAI.getGenerativeModel({
-        model: modelName,
-        systemInstruction: SYSTEM_PROMPT,
-        generationConfig: { maxOutputTokens: 4096, temperature: 0.1, responseMimeType: "application/json" },
-      });
-      const result = await model.generateContent(pageText);
-      const raw = result.response.text();
-      const parsed = JSON.parse(raw) as { type: string; content: string }[];
+        const elements: ModuleElementInput[] = parsed
+          .filter((el) => (TEXT_ELEMENT_TYPES as readonly string[]).includes(el.type) && typeof el.content === "string" && el.content.trim().length > 0)
+          .map((el, idx) => ({
+            id: `${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 8)}`,
+            type: el.type as ModuleElementInput["type"],
+            order: idx,
+            content: el.content,
+          }));
 
-      const elements: ModuleElementInput[] = parsed
-        .filter((el) => (TEXT_ELEMENT_TYPES as readonly string[]).includes(el.type) && typeof el.content === "string" && el.content.trim().length > 0)
-        .map((el, idx) => ({
-          id: `${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 8)}`,
-          type: el.type as ModuleElementInput["type"],
-          order: idx,
-          content: el.content,
-        }));
-
-      return { elements, usedFallback: i > 0, error: null };
-    } catch (err) {
-      lastError = err instanceof Error ? err.message : "Unknown error";
+        return { elements, usedFallback: i > 0, error: null };
+      } catch (err: any) {
+        lastError = err instanceof Error ? err.message : "Unknown error";
+        const msg = (err?.message || String(err)).toLowerCase();
+        if (msg.includes("429") || msg.includes("quota") || msg.includes("401")) {
+          throw err;
+        }
+      }
     }
-  }
 
-  return { elements: [], usedFallback: true, error: lastError };
+    return { elements: [], usedFallback: true, error: lastError };
+  });
 }

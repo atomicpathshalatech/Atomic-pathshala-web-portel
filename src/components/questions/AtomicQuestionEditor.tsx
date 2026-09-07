@@ -34,15 +34,25 @@ function FieldImageUploadButton({
   onInsertImage: (imgMarkdown: string) => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      onInsertImage(`\n![](${reader.result as string})\n`);
-      toast.success("Image attached to field!");
-    };
-    reader.readAsDataURL(file);
+
+    const toastId = toast.loading("Uploading image...");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/upload", { method: "POST", body: formData });
+      const json = await res.json();
+      if (res.ok && json.success && json.data?.url) {
+        onInsertImage(`\n![60%](${json.data.url})\n`);
+        toast.success("Image attached to field!", { id: toastId });
+      } else {
+        throw new Error(json.error || "Upload failed");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to upload image", { id: toastId });
+    }
   };
 
   return (
@@ -318,35 +328,61 @@ export function AtomicQuestionEditor({
     }
   };
 
-  const handleQuestionFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleQuestionFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setQuestionImageFile(file);
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = reader.result as string;
-      setQuestionImagePreview(base64);
-      triggerOcrExtraction(base64, file.type);
-    };
-    reader.readAsDataURL(file);
+    const toastId = toast.loading("Uploading reference image & extracting...");
+    try {
+      // 1. Upload for short URL
+      const formData = new FormData();
+      formData.append("file", file);
+      const uploadRes = await fetch("/api/upload", { method: "POST", body: formData });
+      const uploadJson = await uploadRes.json();
+      if (uploadJson.success && uploadJson.data?.url) {
+        setQuestionImagePreview(uploadJson.data.url);
+      }
+
+      // 2. Base64 for OCR extraction
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      await triggerOcrExtraction(base64, file.type);
+      toast.success("Question image uploaded & extracted in 1 call!", { id: toastId });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to process question image", { id: toastId });
+    }
   };
 
-  const handleSolutionFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSolutionFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setSolutionImageFile(file);
-    const reader = new FileReader();
-    reader.onload = () => {
-      setSolutionImagePreview(reader.result as string);
-      toast.success("Solution reference image attached!");
-    };
-    reader.readAsDataURL(file);
+    const toastId = toast.loading("Uploading solution image...");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const uploadRes = await fetch("/api/upload", { method: "POST", body: formData });
+      const uploadJson = await uploadRes.json();
+      if (uploadJson.success && uploadJson.data?.url) {
+        setSolutionImagePreview(uploadJson.data.url);
+        toast.success("Solution reference image attached!", { id: toastId });
+      } else {
+        throw new Error(uploadJson.error || "Upload failed");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to upload solution image", { id: toastId });
+    }
   };
 
   // Direct in-field image paste handler (Ctrl+V directly into Statement or Options)
-  const handlePasteImageToField = (
+  const handlePasteImageToField = async (
     e: React.ClipboardEvent,
     appendValue: (imgMarkdown: string) => void
   ) => {
@@ -358,13 +394,21 @@ export function AtomicQuestionEditor({
         const file = item.getAsFile();
         if (file) {
           e.preventDefault();
-          const reader = new FileReader();
-          reader.onload = () => {
-            const base64 = reader.result as string;
-            appendValue(`\n![](${base64})\n`);
-            toast.success("Image pasted directly into question field!");
-          };
-          reader.readAsDataURL(file);
+          const toastId = toast.loading("Uploading pasted image...");
+          try {
+            const formData = new FormData();
+            formData.append("file", file);
+            const res = await fetch("/api/upload", { method: "POST", body: formData });
+            const json = await res.json();
+            if (res.ok && json.success && json.data?.url) {
+              appendValue(`\n![60%](${json.data.url})\n`);
+              toast.success("Image embedded with short URL!", { id: toastId });
+            } else {
+              throw new Error(json.error || "Upload failed");
+            }
+          } catch (err: any) {
+            toast.error(err.message || "Failed to upload pasted image", { id: toastId });
+          }
           return;
         }
       }

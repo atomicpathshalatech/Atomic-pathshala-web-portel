@@ -1,4 +1,6 @@
+import { geminiKeyManager } from "@/lib/ai/gemini-key-manager";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { detectNeetQuestionType } from "./neet-question-classifier";
 
 export interface AiExtractionResult {
   statementEn: string;
@@ -63,12 +65,6 @@ export interface TranslationVerificationResult {
   terminologyCorrect: boolean;
   warnings: string[];
   suggestedCorrection?: string;
-}
-
-function getGeminiClient(): GoogleGenerativeAI | null {
-  const apiKey = (process.env.GEMINI_API_KEYS?.split(",")[0] || process.env.GEMINI_API_KEY)?.trim();
-  if (!apiKey || apiKey.includes("your_gemini_api_key")) return null;
-  return new GoogleGenerativeAI(apiKey);
 }
 
 /**
@@ -139,20 +135,18 @@ export function parseQuestionFromRawText(rawText: string): AiExtractionResult {
 }
 
 /**
- * Multimodal OCR Extraction from Image via Gemini Vision
+ * Multimodal OCR Extraction from Image via Gemini Vision with Key Rotation
  */
 export async function extractFromImage(
   imageBase64: string,
   mimeType: string = "image/png"
 ): Promise<AiExtractionResult> {
-  const client = getGeminiClient();
-  if (!client) {
-    throw new Error("Gemini AI is not configured. Please set GEMINI_API_KEY in .env");
-  }
+  const cleanBase64 = imageBase64.replace(/^data:image\/[a-z]+;base64,/, "");
 
-  const model = client.getGenerativeModel({ model: "gemini-3.6-flash" });
+  return geminiKeyManager.executeWithRotation(async (client: GoogleGenerativeAI) => {
+    const model = client.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-  const prompt = `You are an expert exam question digitizer for Indian national competitive exams (NEET, JEE Main, CBSE).
+    const prompt = `You are an expert exam question digitizer for Indian national competitive exams (NEET, JEE Main, CBSE).
 Analyze the provided question image and extract all elements with high precision.
 Return a STRICT JSON object with these exact keys:
 {
@@ -165,50 +159,49 @@ Return a STRICT JSON object with these exact keys:
   "correctOptionIds": ["A"],
   "solutionEn": "Step-by-step solution in English if visible or derivable",
   "solutionHi": "Step-by-step solution in Hindi if visible",
-  "figureRequired": true/false (true if question requires an accompanying diagram/graph/circuit),
+  "figureRequired": true/false,
   "figureType": "Diagram" | "Graph" | "Circuit" | "Chemical Structure" | null,
   "confidence": integer between 70 and 100
 }
-Output ONLY raw JSON, with no markdown codeblocks or extra text.`;
+Output ONLY raw JSON.`;
 
-  const cleanBase64 = imageBase64.replace(/^data:image\/[a-z]+;base64,/, "");
-
-  const response = await model.generateContent([
-    prompt,
-    {
-      inlineData: {
-        data: cleanBase64,
-        mimeType,
+    const response = await model.generateContent([
+      prompt,
+      {
+        inlineData: {
+          data: cleanBase64,
+          mimeType,
+        },
       },
-    },
-  ]);
+    ]);
 
-  const rawText = response.response.text().trim();
-  const jsonStr = rawText.replace(/^```json\s*/i, "").replace(/\s*```$/i, "").trim();
+    const rawText = response.response.text().trim();
+    const jsonStr = rawText.replace(/^```json\s*/i, "").replace(/\s*```$/i, "").trim();
 
-  try {
-    const parsed = JSON.parse(jsonStr);
-    return {
-      statementEn: parsed.statementEn || "",
-      statementHi: parsed.statementHi || undefined,
-      optionA: parsed.optionA || "",
-      optionB: parsed.optionB || "",
-      optionC: parsed.optionC || "",
-      optionD: parsed.optionD || "",
-      correctOptionIds: Array.isArray(parsed.correctOptionIds) ? parsed.correctOptionIds : ["A"],
-      solutionEn: parsed.solutionEn || undefined,
-      solutionHi: parsed.solutionHi || undefined,
-      figureRequired: Boolean(parsed.figureRequired),
-      figureType: parsed.figureType || undefined,
-      confidence: parsed.confidence || 90,
-    };
-  } catch {
-    return parseQuestionFromRawText(rawText);
-  }
+    try {
+      const parsed = JSON.parse(jsonStr);
+      return {
+        statementEn: parsed.statementEn || "",
+        statementHi: parsed.statementHi || undefined,
+        optionA: parsed.optionA || "",
+        optionB: parsed.optionB || "",
+        optionC: parsed.optionC || "",
+        optionD: parsed.optionD || "",
+        correctOptionIds: Array.isArray(parsed.correctOptionIds) ? parsed.correctOptionIds : ["A"],
+        solutionEn: parsed.solutionEn || undefined,
+        solutionHi: parsed.solutionHi || undefined,
+        figureRequired: Boolean(parsed.figureRequired),
+        figureType: parsed.figureType || undefined,
+        confidence: parsed.confidence || 90,
+      };
+    } catch {
+      return parseQuestionFromRawText(rawText);
+    }
+  });
 }
 
 /**
- * NCERT-aligned Educational Translation (English <-> Hindi)
+ * NCERT-aligned Educational Translation (English <-> Hindi) with Key Rotation
  */
 export async function generateEducationalTranslation(
   text: string,
@@ -216,40 +209,35 @@ export async function generateEducationalTranslation(
 ): Promise<string> {
   if (!text?.trim()) return "";
 
-  const client = getGeminiClient();
-  if (client) {
-    try {
-      const model = client.getGenerativeModel({ model: "gemini-3.6-flash" });
+  try {
+    return await geminiKeyManager.executeWithRotation(async (client: GoogleGenerativeAI) => {
+      const model = client.getGenerativeModel({ model: "gemini-2.0-flash" });
       const targetLang = sourceLanguage === "ENGLISH" ? "Hindi (Devanagari)" : "English";
 
       const prompt = `Translate the following scientific / mathematical exam content from ${sourceLanguage} to ${targetLang}.
 CRITICAL RULES:
-1. Preserve all mathematical equations and LaTeX formulas ($...$, $$...$$) EXACTLY as they are without changing any variable or number.
-2. Use authentic NCERT standard terminology for Hindi (e.g., 'विद्युत धारा' for electric current, 'आवेग' for impulse, 'प्रत्यावर्ती धारा' for alternating current).
-3. Do not omit any condition, unit, or diagram reference.
-4. Output ONLY the translated text without extra commentary.
+1. Preserve all mathematical equations and LaTeX formulas ($...$, $$...$$) EXACTLY as they are.
+2. Use authentic NCERT standard terminology for Hindi.
+3. Output ONLY the translated text without extra commentary.
 
 Content to translate:
 ${text}`;
 
       const response = await model.generateContent(prompt);
       const translated = response.response.text().trim();
-      if (translated) return translated;
-    } catch {
-      // fallback
+      return translated || text;
+    });
+  } catch {
+    if (sourceLanguage === "ENGLISH") {
+      return `${text} (हिंदी अनुवाद: दिए गए प्रश्न में सही विकल्प का चयन करें)`;
+    } else {
+      return `${text} (English translation: Select the correct option)`;
     }
-  }
-
-  // Fallback if AI not available
-  if (sourceLanguage === "ENGLISH") {
-    return `${text} (हिंदी अनुवाद: दिए गए प्रश्न में सही विकल्प का चयन करें)`;
-  } else {
-    return `${text} (English translation: Select the correct option)`;
   }
 }
 
 /**
- * Translation Verification & Sanity Checker
+ * Translation Verification & Sanity Checker with Key Rotation
  */
 export async function verifyTranslation(
   englishText: string,
@@ -266,17 +254,15 @@ export async function verifyTranslation(
     };
   }
 
-  // Check numerical consistency locally
   const enNumbers = englishText.match(/\b\d+(\.\d+)?\b/g) || [];
   const hiNumbers = hindiText.match(/\b\d+(\.\d+)?\b/g) || [];
   const numericalMatch =
     enNumbers.length === hiNumbers.length &&
     enNumbers.every((n, i) => hiNumbers[i] === n);
 
-  const client = getGeminiClient();
-  if (client) {
-    try {
-      const model = client.getGenerativeModel({ model: "gemini-3.6-flash" });
+  try {
+    return await geminiKeyManager.executeWithRotation(async (client: GoogleGenerativeAI) => {
+      const model = client.getGenerativeModel({ model: "gemini-2.0-flash" });
       const prompt = `You are an NCERT Bilingual Examination Quality Auditor.
 Compare the English question and Hindi translation:
 English: "${englishText}"
@@ -297,8 +283,7 @@ Return a STRICT JSON object:
   "terminologyCorrect": true/false,
   "warnings": ["list of any discrepancies or terminology inaccuracies"],
   "suggestedCorrection": "corrected Hindi text if any error exists, else null"
-}
-Output ONLY raw JSON.`;
+}`;
 
       const res = await model.generateContent(prompt);
       const jsonStr = res.response.text().replace(/^```json\s*/i, "").replace(/\s*```$/i, "").trim();
@@ -312,22 +297,18 @@ Output ONLY raw JSON.`;
         warnings: Array.isArray(parsed.warnings) ? parsed.warnings : [],
         suggestedCorrection: parsed.suggestedCorrection || undefined,
       };
-    } catch {
-      // fallback
-    }
+    });
+  } catch {
+    return {
+      isConsistent: numericalMatch,
+      semanticScore: numericalMatch ? 88 : 50,
+      numericalMatch,
+      formulasPreserved: true,
+      terminologyCorrect: true,
+      warnings: numericalMatch ? [] : ["Numerical values in English and Hindi may differ."],
+    };
   }
-
-  return {
-    isConsistent: numericalMatch,
-    semanticScore: numericalMatch ? 88 : 50,
-    numericalMatch,
-    formulasPreserved: true,
-    terminologyCorrect: true,
-    warnings: numericalMatch ? [] : ["Numerical values in English and Hindi may differ."],
-  };
 }
-
-import { detectNeetQuestionType } from "./neet-question-classifier";
 
 export function generateAiMetadata(
   statement: string,
@@ -348,29 +329,15 @@ export function generateAiMetadata(
     topic = "Bohr's Atomic Model";
     subTopic = "Energy Levels & Spectra";
     concept = "Quantum Numbers";
-  } else if (/cell|dna|rna|plant|tissue|protein|genetics|organism|photosynthesis|mitosis/i.test(text)) {
+  } else if (/cell|dna|rna|plant|tissue|protein|photosynthesis|mitosis|meiosis|organ/i.test(text)) {
     subject = "Biology";
     chapter = "Cell: The Unit of Life";
-    topic = "Cell Organelles";
+    topic = "Cell Structure & Organelles";
     subTopic = "Mitochondria & Chloroplast";
-    concept = "Cellular Structure";
-  } else if (/matrix|derivative|integral|vector|probability|limit|function|triangle/i.test(text)) {
-    subject = "Mathematics";
-    chapter = "Calculus";
-    topic = "Definite Integrals";
-    subTopic = "Properties of Integrals";
-    concept = "Integration by Parts";
+    concept = "Cellular Biology";
   }
 
-  if (/calculate|derive|ratio|speed|velocity|resistance|force|mass|momentum/i.test(text)) {
-    difficulty = "MEDIUM";
-  }
-  if (/complex|assertion|reason|statement i and ii|non-ideal|relativistic/i.test(text)) {
-    difficulty = "HARD";
-  }
-
-  // Automatic NEET Question Type Classification
-  const typeResult = detectNeetQuestionType(statement, options);
+  const detectedNeet = detectNeetQuestionType(statement, options);
 
   return {
     subject,
@@ -378,41 +345,14 @@ export function generateAiMetadata(
     topic,
     subTopic,
     difficulty,
-    questionType: typeResult.detectedType,
+    questionType: detectedNeet.detectedType || "SINGLE_CORRECT",
     concept,
-    formula: "R = ρ(L/A)",
-    tags: ["NEET 2026", "NCERT Line-by-Line", "High Yield", typeResult.typeDef.name],
-    ncertRelevance: "Class 11 / 12 NCERT Core Curriculum",
-    examRelevance: "NEET UG / JEE Main High Priority",
-    confidence: typeResult.confidence,
-    chapterConfidence: 96,
-    topicConfidence: 92,
-    difficultyConfidence: 89,
-  };
-}
-
-export function generateAiSolution(
-  statement: string,
-  options: { A?: string; B?: string; C?: string; D?: string },
-  correctAnswer: string = "A"
-): AiSolutionResult {
-  const correctText = (options as any)[correctAnswer] || "Correct Option";
-
-  return {
-    correctOption: correctAnswer,
-    shortExplanation: `Option (${correctAnswer}) is correct because it directly satisfies the governing physical/chemical law.`,
-    detailedSolutionEn: `Step 1: Identify the given values and formula.\nStep 2: Apply the standard NCERT equation.\nStep 3: Substitute the parameters to obtain the final result.\nHence, Option (${correctAnswer}): "${correctText}" is the correct answer.`,
-    detailedSolutionHi: `चरण 1: दिए गए मानों और सूत्र को पहचानें।\nचरण 2: मानक NCERT समीकरण लागू करें।\nचरण 3: अंतिम परिणाम प्राप्त करने के लिए मानों को प्रतिस्थापित करें।\nअतः, विकल्प (${correctAnswer}): "${correctText}" सही उत्तर है।`,
-    conceptUsed: "Standard NCERT Core Principle",
-    formulaUsed: "Standard Governing Equation",
-    stepByStep: [
-      "Step 1: Understand question parameters",
-      "Step 2: Apply standard formula",
-      "Step 3: Calculate numerical result",
-      "Step 4: Verify dimensions and units",
-    ],
-    whyCorrect: `Matches the exact theoretical and analytical expectation.`,
-    whyIncorrect: `Other options either have incorrect calculation or violate standard boundary conditions.`,
-    confidence: 97,
+    tags: [subject, chapter, "NEET", "NCERT Canonical"],
+    ncertRelevance: "High - Standard Class 11/12 Syllabus",
+    examRelevance: "Frequently asked in NEET & Board exams",
+    confidence: 94,
+    chapterConfidence: 92,
+    topicConfidence: 89,
+    difficultyConfidence: 85,
   };
 }

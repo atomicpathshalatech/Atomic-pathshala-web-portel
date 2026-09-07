@@ -10,10 +10,17 @@ import { pusherServer, sessionChannel, WB_EVENTS } from "@/lib/realtime/pusher-s
  * that decides how "board changed" gets announced.
  */
 
-export async function pushBoardUpdated(whiteboardSessionId: string, pageNumber: number) {
+export async function pushBoardUpdated(
+  whiteboardSessionId: string,
+  pageNumber: number,
+  objects?: any[],
+  background?: string
+) {
   try {
     await pusherServer.trigger(sessionChannel(whiteboardSessionId), WB_EVENTS.BOARD_UPDATED, {
       pageNumber,
+      objects,
+      background,
     });
   } catch (err) {
     console.error("[pusher_trigger_error]", err);

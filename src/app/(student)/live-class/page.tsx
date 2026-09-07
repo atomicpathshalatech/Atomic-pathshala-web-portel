@@ -11,6 +11,13 @@ export const metadata: Metadata = {
 type ScheduleWithRefs = BatchSchedule & {
   teacher: (Teacher & { user: User }) | null;
   batch: Batch;
+  liveWhiteboardSession: {
+    id: string;
+    pdfStatus: string;
+    pdfStorageKey: string | null;
+    recordingStatus: string;
+    recordingStorageKey: string | null;
+  } | null;
 };
 
 /**
@@ -41,7 +48,19 @@ export default async function LiveClassesListPage() {
           endsAt: { gte: dayAgo },
         },
         orderBy: { startsAt: "asc" },
-        include: { teacher: { include: { user: true } }, batch: true },
+        include: {
+          teacher: { include: { user: true } },
+          batch: true,
+          liveWhiteboardSession: {
+            select: {
+              id: true,
+              pdfStatus: true,
+              pdfStorageKey: true,
+              recordingStatus: true,
+              recordingStorageKey: true,
+            },
+          },
+        },
       })) as ScheduleWithRefs[];
 
   const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
@@ -49,9 +68,10 @@ export default async function LiveClassesListPage() {
   const upcoming = schedules.filter((s) => !live.includes(s) && s.startsAt > now);
   const recentlyEnded = schedules.filter((s) => !live.includes(s) && s.endsAt < now);
 
-  function ScheduleRow({ s, isLive }: { s: ScheduleWithRefs; isLive: boolean }) {
+  function ScheduleRow({ s, isLive, isEnded = false }: { s: ScheduleWithRefs; isLive: boolean; isEnded?: boolean }) {
     const isWaitingRoomOpen = (s.startsAt.getTime() - now.getTime()) <= FIFTEEN_MINUTES_MS && s.endsAt >= now;
     const canJoin = isLive || isWaitingRoomOpen;
+    const wb = s.liveWhiteboardSession;
 
     return (
       <div
@@ -71,6 +91,11 @@ export default async function LiveClassesListPage() {
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
                 Waiting Room Open (15m window)
               </span>
+            ) : isEnded ? (
+              <span className="flex items-center gap-1 bg-slate-500/10 text-slate-400 text-[10px] font-bold uppercase px-2 py-0.5 rounded border border-slate-700/50">
+                <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                Recorded / Completed
+              </span>
             ) : (
               <span className="text-label-sm text-on-surface-variant">
                 {s.startsAt.toLocaleDateString(undefined, { day: "numeric", month: "short" })} ·{" "}
@@ -84,16 +109,53 @@ export default async function LiveClassesListPage() {
             {s.teacher ? ` · ${s.teacher.user.name}` : ""}
           </p>
         </div>
-        <Link
-          href={`/live-class/${s.id}`}
-          className={`shrink-0 text-center px-5 py-2 rounded-full font-label-md text-label-md transition-colors ${
-            canJoin
-              ? "bg-primary text-on-primary hover:opacity-90 shadow-sm"
-              : "border border-outline-variant/50 text-on-surface-variant hover:bg-surface-container-high"
-          }`}
-        >
-          {isLive ? "Join Class" : isWaitingRoomOpen ? "Enter Waiting Room" : "View Details"}
-        </Link>
+
+        {isEnded ? (
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Play Class Button */}
+            <Link
+              href={`/live-class/${s.id}`}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full font-label-md text-label-md bg-indigo-600 hover:bg-indigo-500 text-white transition shadow-sm"
+              title="Play Recorded Class"
+            >
+              <span className="material-symbols-outlined text-base">play_circle</span>
+              <span>Play Class (प्ले क्लास)</span>
+            </Link>
+
+            {/* Download PDF Notes Button */}
+            {wb?.id ? (
+              <a
+                href={`/api/whiteboard/sessions/${wb.id}/slides?format=pdf`}
+                target="_blank"
+                rel="noopener noreferrer"
+                download
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full font-label-md text-label-md border border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-slate-200 transition shadow-sm"
+                title="Download Board Notes PDF"
+              >
+                <span className="material-symbols-outlined text-base text-rose-400">picture_as_pdf</span>
+                <span>Download PDF (डाउनलोड पीडीएफ)</span>
+              </a>
+            ) : (
+              <Link
+                href={`/live-class/${s.id}`}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full font-label-md text-label-md border border-slate-700 text-slate-400 hover:text-slate-200"
+              >
+                <span>View Details</span>
+              </Link>
+            )}
+          </div>
+        ) : (
+          <Link
+            href={`/live-class/${s.id}`}
+            className={`shrink-0 text-center px-5 py-2 rounded-full font-label-md text-label-md transition-colors ${
+              canJoin
+                ? "bg-primary text-on-primary hover:opacity-90 shadow-sm"
+                : "border border-outline-variant/50 text-on-surface-variant hover:bg-surface-container-high"
+            }`}
+          >
+            {isLive ? "Join Class" : isWaitingRoomOpen ? "Enter Waiting Room" : "View Details"}
+          </Link>
+        )}
       </div>
     );
   }
@@ -130,10 +192,10 @@ export default async function LiveClassesListPage() {
             </section>
           )}
           {recentlyEnded.length > 0 && (
-            <section className="space-y-3 opacity-70">
-              <h2 className="font-headline-md text-headline-md text-on-surface">Recently Ended</h2>
+            <section className="space-y-3">
+              <h2 className="font-headline-md text-headline-md text-on-surface">Recently Ended / Recorded</h2>
               {recentlyEnded.map((s) => (
-                <ScheduleRow key={s.id} s={s} isLive={false} />
+                <ScheduleRow key={s.id} s={s} isLive={false} isEnded={true} />
               ))}
             </section>
           )}
