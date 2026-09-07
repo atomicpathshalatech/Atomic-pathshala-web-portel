@@ -453,3 +453,100 @@ export async function generateBoardExamContent(promptText: string): Promise<stri
 
   throw mapGeminiError(lastError);
 }
+
+const STUDY_PLAN_SYSTEM_INSTRUCTION = `You are Atomic Pathshala's study-plan engine for NEET/JEE aspirants. Given a student's real performance snapshot (accuracy, streak, weak/strong subjects, recent activity, upcoming classes/tests), output ONLY valid JSON matching the exact schema requested by the user message. No markdown, no headings, no code fences, no commentary before or after the JSON. Ground every task in the snapshot you were given — more time on subjects/chapters flagged weak, lighter touch on subjects already strong, and never invent chapters or events the student wasn't told about. Keep each task description short and actionable (one line, e.g. "Revise Thermodynamics — First Law numericals" not a paragraph). If the student has no history yet, give a sensible generic NEET/JEE starter week instead of guessing at weaknesses.`;
+
+export async function generateStudyPlanContent(promptText: string): Promise<string> {
+  const apiKeys = getApiKeys();
+  let lastError: unknown;
+
+  for (const modelName of MODEL_FALLBACKS) {
+    const availableKeys = availableKeysForModel(modelName, apiKeys);
+
+    for (let i = 0; i < availableKeys.length; i++) {
+      const apiKey = availableKeys[i]!;
+      try {
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+          systemInstruction: STUDY_PLAN_SYSTEM_INSTRUCTION,
+          generationConfig: {
+            maxOutputTokens: 4096,
+            temperature: 0.3,
+            topP: 0.95,
+            responseMimeType: "application/json",
+          },
+        });
+
+        const result = await model.generateContent(promptText);
+        const text = result.response.text();
+        assertNonEmptyResponse(text, result.response.promptFeedback?.blockReason);
+
+        return text.trim();
+      } catch (error) {
+        lastError = error;
+
+        if (!isRetryableGeminiError(error)) {
+          throw mapGeminiError(error);
+        }
+
+        markRetryableFailure(modelName, apiKey, error);
+
+        const isLastKeyForModel = i === availableKeys.length - 1;
+        if (!isLastKeyForModel) {
+          await sleep(RETRY_BASE_DELAY_MS);
+        }
+      }
+    }
+  }
+
+  throw mapGeminiError(lastError);
+}
+
+const COACH_SYSTEM_INSTRUCTION = `You are the Atomic Guru Progress Coach — a warm, direct NEET/JEE prep mentor having an ongoing conversation with one student about their preparation, not a doubt-solver. Every message you receive starts with a "Progress snapshot" block built from the student's real data (accuracy, streak, weak/strong subjects, study-plan completion, upcoming classes/tests) — ground your reply in those actual numbers and subject names instead of generic motivation. Keep replies conversational and fairly short (a few sentences to a short paragraph, occasionally a short list) — this is a chat, not an exam answer, so do not use the Subject/Chapter/Topic/Solution section format. Be encouraging but honest: if a number is weak, say so plainly and suggest one or two concrete next steps: which subject/chapter to prioritize, or from the current study plan. You may reference and discuss the student's study plan tasks when relevant, and you can suggest they regenerate it if their situation has clearly changed, but you cannot alter the plan yourself. Respond in the same language style (English, Hindi, or Hinglish) the student writes in.`;
+
+export async function generateCoachReply(promptText: string): Promise<string> {
+  const apiKeys = getApiKeys();
+  let lastError: unknown;
+
+  for (const modelName of MODEL_FALLBACKS) {
+    const availableKeys = availableKeysForModel(modelName, apiKeys);
+
+    for (let i = 0; i < availableKeys.length; i++) {
+      const apiKey = availableKeys[i]!;
+      try {
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+          systemInstruction: COACH_SYSTEM_INSTRUCTION,
+          generationConfig: {
+            maxOutputTokens: 1024,
+            temperature: 0.6,
+            topP: 0.95,
+          },
+        });
+
+        const result = await model.generateContent(promptText);
+        const text = result.response.text();
+        assertNonEmptyResponse(text, result.response.promptFeedback?.blockReason);
+
+        return text.trim();
+      } catch (error) {
+        lastError = error;
+
+        if (!isRetryableGeminiError(error)) {
+          throw mapGeminiError(error);
+        }
+
+        markRetryableFailure(modelName, apiKey, error);
+
+        const isLastKeyForModel = i === availableKeys.length - 1;
+        if (!isLastKeyForModel) {
+          await sleep(RETRY_BASE_DELAY_MS);
+        }
+      }
+    }
+  }
+
+  throw mapGeminiError(lastError);
+}

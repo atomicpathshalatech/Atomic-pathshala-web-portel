@@ -147,6 +147,8 @@ model User {
   answerReports          AnswerReport[]
   aiChatPasswordResetTokens PasswordResetToken[]
   revisionItems          RevisionItem[]
+  aiChatStudyPlan        StudyPlan?
+  aiChatCoachConversation CoachConversation?
 
   @@index([roleId])
   @@index([status])
@@ -4211,3 +4213,64 @@ model GenerationJob {
   @@map("generation_jobs")
 }
 
+// ============================================================
+// ATOMIC GURU — STUDY PLAN + PROGRESS COACH
+// Parallel, User-keyed (aiChat* convention) — not Test Portal's
+// Attempt/Student-keyed models. Generated/updated by Gemini via
+// src/lib/ai-chat/coach.ts, reading computeDashboardStats() +
+// recent TestAttempt/UsageEvent history for real grounding.
+// ============================================================
+
+model StudyPlan {
+  id          String          @id @default(cuid())
+  userId      String          @unique
+  summary     String          @db.Text // short coach note on the week's focus
+  generatedAt DateTime        @default(now())
+
+  user  User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tasks StudyPlanTask[]
+
+  @@map("study_plans")
+}
+
+model StudyPlanTask {
+  id          String    @id @default(cuid())
+  planId      String
+  date        DateTime // the calendar day this task targets
+  subject     String
+  description String
+  taskType    String // REVISE | PRACTICE | TEST | CLASS
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  plan StudyPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId, date])
+  @@map("study_plan_tasks")
+}
+
+model CoachConversation {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages CoachMessage[]
+
+  @@map("coach_conversations")
+}
+
+model CoachMessage {
+  id             String      @id @default(cuid())
+  conversationId String
+  role           MessageRole
+  content        String      @db.Text
+  createdAt      DateTime    @default(now())
+
+  conversation CoachConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("coach_messages")
+}

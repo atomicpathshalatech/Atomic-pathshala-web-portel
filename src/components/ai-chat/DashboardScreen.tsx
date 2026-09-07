@@ -7,6 +7,7 @@ import {
   BookOpen,
   CheckCircle2,
   Flame,
+  MessageCircle,
   Sparkles,
   Target,
   TrendingUp,
@@ -295,6 +296,20 @@ export function DashboardScreen() {
               >
                 <Award className="h-4 w-4" />
                 View class schedule
+              </Link>
+              <Link
+                href="/guru/study-plan"
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+              >
+                <Target className="h-4 w-4" />
+                Study plan
+              </Link>
+              <Link
+                href="/guru/coach"
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+              >
+                <MessageCircle className="h-4 w-4" />
+                Talk to your coach
               </Link>
             </div>
           </div>
