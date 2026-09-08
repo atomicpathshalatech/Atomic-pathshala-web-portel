@@ -1,9 +1,18 @@
 ﻿import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { AcademicHierarchyQuerySchema } from '@/lib/validation/academic';
 
 export async function GET(request: NextRequest) {
   try {
+    // Syllabus taxonomy — reference data for both students and the team
+    // authoring UI, but not for anonymous scraping.
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const parsed = AcademicHierarchyQuerySchema.safeParse({
       classId: searchParams.get('classId') || undefined,

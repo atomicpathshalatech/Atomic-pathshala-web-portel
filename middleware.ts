@@ -12,10 +12,17 @@ const STUDENT_PATHS = [
   "/schedule",
   "/doubts",
   "/subscription",
+  "/practice",
   "/practice-board",
   "/live-class",
   "/settings",
   "/leaderboard",
+  "/watch",
+  "/mistakes",
+  "/bookmarks",
+  "/predictor",
+  "/profile",
+  "/rewards",
 ];
 const NON_TEAM_ROLES = new Set(["STUDENT", "PARENT", "GUEST"]);
 
@@ -46,7 +53,7 @@ export async function middleware(request: NextRequest) {
   }
 
   const isTeamPath = pathname.startsWith("/team");
-  const isStudentPath = STUDENT_PATHS.some((p) => pathname.startsWith(p));
+  const isStudentPath = STUDENT_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 
   if (isStudentPath && token.role !== "STUDENT" && token.role !== "PARENT") {
     return NextResponse.redirect(new URL("/team", request.url));
@@ -55,6 +62,11 @@ export async function middleware(request: NextRequest) {
   if (isTeamPath && NON_TEAM_ROLES.has(token.role as string)) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
+
+  // /guru (Atomic Guru) and /checkout are for any signed-in user — the
+  // `if (!token)` gate above is the whole check. /guru/admin stays gated at
+  // the page (buildAiChatUser + isAdmin). /parent is signed-in-only here;
+  // the (parent) layout enforces the PARENT/STUDENT role.
 
   return NextResponse.next();
 }
@@ -70,10 +82,21 @@ export const config = {
     "/schedule/:path*",
     "/doubts/:path*",
     "/subscription/:path*",
+    "/practice",
+    "/practice/:path*",
     "/practice-board/:path*",
     "/live-class/:path*",
     "/settings/:path*",
     "/leaderboard/:path*",
+    "/watch/:path*",
+    "/mistakes/:path*",
+    "/bookmarks/:path*",
+    "/predictor/:path*",
+    "/profile/:path*",
+    "/rewards/:path*",
+    "/guru/:path*",
+    "/parent/:path*",
+    "/checkout/:path*",
     "/team/:path*",
   ],
 };
