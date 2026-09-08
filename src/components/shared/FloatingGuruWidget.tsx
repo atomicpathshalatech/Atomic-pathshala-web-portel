@@ -25,20 +25,28 @@ export function FloatingGuruWidget() {
 
   // STRICT SCOPE: Only render on public homepage (/) and student dashboard (/dashboard).
   // Completely excluded from tests, live classes, DPPs, video players, and full Guru chat to prevent cheating and UI interference.
+  //
+  // NOTE: the `return null` for a disallowed page MUST stay below every hook
+  // (see the bottom of the component). This widget lives in the root layout,
+  // so the same instance re-renders as the route changes; an early return
+  // here changed the hook count between renders and threw "Rendered more
+  // hooks than during the previous render" on e.g. the /login -> /dashboard
+  // transition.
   const isAllowedPage = pathname === "/" || pathname === "/dashboard";
-  if (!isAllowedPage) return null;
 
   // Initialize position to bottom-right safely on client
   useEffect(() => {
+    if (!isAllowedPage) return;
     if (typeof window !== "undefined" && !position) {
       const defaultX = Math.max(16, window.innerWidth - 120);
       const defaultY = Math.max(16, window.innerHeight - 56);
       setPosition({ x: defaultX, y: defaultY });
     }
-  }, [position]);
+  }, [position, isAllowedPage]);
 
   // Adjust on screen resize
   useEffect(() => {
+    if (!isAllowedPage) return;
     const handleResize = () => {
       setPosition((prev) => {
         if (!prev || typeof window === "undefined") return null;
@@ -52,7 +60,7 @@ export function FloatingGuruWidget() {
     };
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, []);
+  }, [isAllowedPage]);
 
   const handlePointerDown = (e: React.PointerEvent) => {
     if (!position) return;
@@ -129,6 +137,10 @@ export function FloatingGuruWidget() {
   // Determine popup placement based on current widget position on screen
   const isNearTop = position ? position.y < 350 : false;
   const isNearLeft = position ? position.x < 320 : false;
+
+  // Render nothing outside the allowed pages — placed AFTER every hook so the
+  // hook count is identical on every render (see the note near isAllowedPage).
+  if (!isAllowedPage) return null;
 
   return (
     <aside
