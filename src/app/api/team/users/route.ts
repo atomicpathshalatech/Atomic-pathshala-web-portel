@@ -39,6 +39,8 @@ export async function GET(req: NextRequest) {
 
     if (role && role !== "ALL") {
       where.role = { name: role };
+    } else {
+      where.role = { name: { not: "STUDENT" } };
     }
 
     if (department && department !== "ALL") {

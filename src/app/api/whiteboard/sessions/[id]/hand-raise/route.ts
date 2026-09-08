@@ -111,7 +111,7 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
     if (!access || access.role !== "STUDENT") throw new ForbiddenError();
 
     const updated = await prisma.handRaiseEvent.updateMany({
-      where: { whiteboardSessionId: params.id, studentId: access.entityId, status: "PENDING" },
+      where: { whiteboardSessionId: params.id, studentId: access.entityId, status: { in: ["PENDING", "APPROVED"] } },
       data: { status: "RESOLVED", resolvedAt: new Date() },
     });
 

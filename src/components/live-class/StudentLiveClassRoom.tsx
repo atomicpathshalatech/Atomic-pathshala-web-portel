@@ -217,6 +217,17 @@ export function StudentLiveClassRoom({
   const [submittingAnswer, setSubmittingAnswer] = useState(false);
   const [remainingSec, setRemainingSec] = useState(0);
   const [quizError, setQuizError] = useState<string | null>(null);
+  const [quizDismissed, setQuizDismissed] = useState(false);
+
+  // Auto-dismiss quiz 5 seconds after results are revealed or closed
+  useEffect(() => {
+    if (quiz?.status === "REVEALED" || quiz?.status === "CLOSED") {
+      const t = setTimeout(() => {
+        setQuizDismissed(true);
+      }, 5000);
+      return () => clearTimeout(t);
+    }
+  }, [quiz?.status]);
 
   const [activeMobileTab, setActiveMobileTab] = useState<"chat" | "quiz" | "info">("chat");
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -440,6 +451,7 @@ export function StudentLiveClassRoom({
       setQuiz({ ...data, status: "ACTIVE" });
       setMySelection(null);
       setQuizError(null);
+      setQuizDismissed(false);
     });
 
     channel.bind(
@@ -871,10 +883,10 @@ export function StudentLiveClassRoom({
       </header>
 
       {/* ========================================================================= */}
-      {/* DESKTOP & LAPTOP VIEW (lg and up): 2-Column Split (Left Canvas, Right Feed/Chat) */}
+      {/* DESKTOP & LAPTOP VIEW (lg and up): Fixed 2-Column Split */}
       {/* ========================================================================= */}
       <div className="hidden lg:flex flex-1 min-h-0 flex-row p-3 gap-3 overflow-hidden bg-[#0b0d14]">
-        {/* Left Main Stage (Whiteboard Canvas / YouTube Player + Quiz Drawer) */}
+        {/* Left Main Stage (Whiteboard Canvas / YouTube Player + Overlaid Quiz Drawer) */}
         <div className="flex-1 min-w-0 h-full flex flex-col bg-[#10121d] rounded-2xl border border-slate-800/80 overflow-hidden relative shadow-2xl">
           {/* Presentation Title Banner */}
           <div className="flex items-center justify-between px-4 py-2 bg-[#0a0b12] border-b border-slate-800 text-xs text-slate-400 shrink-0">
@@ -914,141 +926,120 @@ export function StudentLiveClassRoom({
               />
             ) : null}
 
-            {/* Desktop Quiz / Poll Floating Drawer */}
-            {quiz && (
-              <div className="absolute bottom-4 left-4 right-4 max-w-2xl mx-auto bg-slate-900/95 backdrop-blur-md border border-indigo-500/60 rounded-2xl p-4 shadow-2xl space-y-2 z-30 animate-in slide-in-from-bottom duration-200">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-indigo-400 animate-ping" />
+            {/* Desktop Quiz / Poll Floating Drawer (High Contrast + Close Button + Auto-Dismiss) */}
+            {quiz && !quizDismissed && (
+              <div className="absolute bottom-4 left-4 right-4 max-w-2xl mx-auto bg-[#13172b]/95 backdrop-blur-md border-2 border-indigo-500 shadow-[0_0_35px_rgba(99,102,241,0.35)] rounded-2xl p-4 space-y-3 z-30 animate-in slide-in-from-bottom duration-200">
+                <div className="flex items-center justify-between pb-1 border-b border-indigo-900/60">
+                  <h3 className="text-sm font-black text-white flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-indigo-400 animate-ping" />
                     {quiz.questionText || "Live Class Quiz"}
                   </h3>
-                  {quiz.status === "ACTIVE" && (
-                    <span className="text-xs font-mono font-bold text-amber-400 bg-amber-950/60 border border-amber-800/60 px-2 py-0.5 rounded-full">
-                      {remainingSec}s
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {quiz.status === "ACTIVE" ? (
+                      <span className="text-xs font-mono font-black text-slate-950 bg-amber-400 border border-amber-300 px-2.5 py-0.5 rounded-full shadow">
+                        {remainingSec}s
+                      </span>
+                    ) : (
+                      <span className="text-xs font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-500/50 px-2.5 py-0.5 rounded-full">
+                        {quiz.status === "REVEALED" ? "Results Revealed" : "Quiz Closed"}
+                      </span>
+                    )}
+                    {/* Close (X) button */}
+                    <button
+                      type="button"
+                      onClick={() => setQuizDismissed(true)}
+                      className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+                      title="Dismiss Quiz"
+                    >
+                      <span className="material-symbols-outlined text-base">close</span>
+                    </button>
+                  </div>
                 </div>
-                {quizError && <p className="text-[11px] text-rose-400">{quizError}</p>}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {quizError && <p className="text-xs text-rose-400 font-medium">{quizError}</p>}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                   {quiz.options.map((o) => {
                     const selected = mySelection === o.key;
                     const revealed = quiz.status === "REVEALED";
                     const isCorrect = revealed && quiz.correctOption === o.key;
+                    const isWrong = revealed && selected && quiz.correctOption !== o.key;
                     return (
                       <button
                         key={o.key}
                         type="button"
                         disabled={Boolean(mySelection) || quiz.status !== "ACTIVE" || submittingAnswer}
                         onClick={() => submitAnswer(o.key)}
-                        className={`text-left px-3 py-2 rounded-xl border text-xs font-medium transition active:scale-[0.98] touch-manipulation cursor-pointer ${
+                        className={`text-left px-3.5 py-3 rounded-xl border-2 text-xs font-bold transition active:scale-[0.98] touch-manipulation cursor-pointer shadow-md ${
                           isCorrect
-                            ? "border-emerald-500 bg-emerald-950/60 text-emerald-300 font-bold"
+                            ? "border-emerald-400 bg-emerald-600 text-white shadow-emerald-500/50 ring-2 ring-emerald-300"
+                            : isWrong
+                            ? "border-rose-500 bg-rose-950/80 text-rose-200"
                             : selected
-                            ? "border-indigo-500 bg-indigo-950/60 text-white font-bold"
-                            : "border-slate-800 hover:bg-slate-800 text-slate-300"
+                            ? "border-white bg-indigo-600 text-white shadow-indigo-500/50 ring-2 ring-indigo-400 scale-[1.02]"
+                            : "bg-[#1a2038] hover:bg-[#252d4e] border-[#333d6b] hover:border-indigo-400 text-white"
                         } disabled:cursor-default`}
                       >
-                        <span className="font-mono font-bold mr-1.5 text-indigo-400 pointer-events-none">{o.key}.</span>
-                        <span className="truncate pointer-events-none">{o.label}</span>
+                        <span className={`font-mono font-black mr-2 text-sm pointer-events-none ${selected || isCorrect ? "text-white" : "text-indigo-400"}`}>{o.key}.</span>
+                        <span className="truncate pointer-events-none text-white">{o.label}</span>
                       </button>
                     );
                   })}
                 </div>
               </div>
             )}
+          </div>
+        </div>
 
-            {/* Teacher Video + Live Chat — a single floating popup instead of
-                a permanently-reserved sidebar column, so the whiteboard uses
-                the full card width regardless of whether it's open. Anchored
-                top-right (not bottom, where the quiz drawer above already
-                spans the full width) inside this same relative canvas stage.
-                VideoStrip stays mounted continuously in both states — only
-                its container's size/shape changes — so minimizing this
-                never tears down and reopens the LiveKit connection (see the
-                isDesktopViewport-gated single-mount comment near the top of
-                this component for why that matters). */}
-            {!isYouTube && isDesktopViewport && !showChat && (
-              <DraggableFloatingCamera
-                title={teacherName || "Educator"}
-                isLive={isLive}
-                onExpand={() => setShowChat(true)}
-                storageKey={`atomic_cam_pos_${currentUserId}`}
-                sizePx={130}
-              >
-                <VideoStrip
-                  whiteboardSessionId={wbSession?.id || batchScheduleId}
-                  variant="panel"
-                  role="STUDENT"
-                  teacherName={teacherName}
-                  isApprovedSpeaker={isApprovedSpeaker}
-                  speakerToken={speakerToken}
-                />
-              </DraggableFloatingCamera>
+        {/* Right Fixed Sidebar (Teacher Video on Top + Live Chat Console on Bottom) */}
+        <aside className="w-80 xl:w-88 h-full shrink-0 flex flex-col bg-[#10121d] rounded-2xl border border-slate-800/80 overflow-hidden shadow-2xl">
+          {/* Pinned Teacher Video on Top */}
+          <div className="h-48 sm:h-52 bg-black relative border-b border-slate-800 shrink-0">
+            {isDesktopViewport && (
+              <VideoStrip
+                whiteboardSessionId={wbSession?.id || batchScheduleId}
+                variant="panel"
+                role="STUDENT"
+                teacherName={teacherName}
+                isApprovedSpeaker={isApprovedSpeaker}
+                speakerToken={speakerToken}
+              />
             )}
+          </div>
 
-            {!isYouTube && showChat && (
-              <div className="absolute z-40 top-3 right-3 w-72 xl:w-80 max-h-[420px] bg-[#10121d]/95 backdrop-blur-md border border-slate-800/80 shadow-2xl rounded-2xl overflow-hidden flex flex-col transition-all duration-200">
-                <div className="flex items-center justify-between px-3 py-2 bg-[#0a0b12] border-b border-slate-800 shrink-0">
-                  <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                    <span className="material-symbols-outlined text-sm text-indigo-400">group</span>
-                    Teacher &amp; Chat
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setShowChat(false)}
-                    className="text-slate-400 hover:text-white flex items-center justify-center p-1 rounded hover:bg-slate-800"
-                    title="Minimize to floating draggable camera (distraction-free focus)"
-                  >
-                    <span className="material-symbols-outlined text-base">close_fullscreen</span>
-                  </button>
-                </div>
+          {/* Approved Speaker Banner */}
+          {isApprovedSpeaker && (
+            <div className="mx-3 my-2 bg-emerald-950/80 border border-emerald-500/60 rounded-xl px-3 py-1.5 flex items-center justify-between text-xs text-emerald-200 font-bold shrink-0">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                Speaking Active
+              </span>
+              <span className="text-[10px] text-emerald-400 font-normal">Mic Connected</span>
+            </div>
+          )}
 
-                <div className="relative shrink-0 p-2">
-                  <div
-                    className={`overflow-hidden ${
-                      isCameraCircle
-                        ? "mx-auto w-24 h-24 rounded-full border-2 border-indigo-500 shadow-lg shadow-indigo-500/20"
-                        : "w-full aspect-video rounded-xl border border-slate-800"
-                    }`}
-                  >
-                    {isDesktopViewport && (
-                      <VideoStrip
-                        whiteboardSessionId={wbSession?.id || batchScheduleId}
-                        variant="panel"
-                        role="STUDENT"
-                        teacherName={teacherName}
-                        isApprovedSpeaker={isApprovedSpeaker}
-                        speakerToken={speakerToken}
-                      />
-                    )}
-                  </div>
-                </div>
+          {/* Sidebar Header Tabs */}
+          <div className="flex border-b border-slate-800 px-3 pt-2 shrink-0 bg-[#0a0b12]">
+            <span className="px-3 py-2 text-xs font-bold text-indigo-400 border-b-2 border-indigo-500 flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-sm">chat</span>
+              Live Classroom Chat
+            </span>
+          </div>
 
-                {isApprovedSpeaker && (
-                  <div className="mx-2 mb-2 bg-emerald-950/80 border border-emerald-500/60 rounded-lg px-2 py-1.5 flex items-center gap-1.5 text-[10px] text-emerald-200">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                    Approved Speaker · Mic Active
-                  </div>
-                )}
-
-                <div className="flex-1 min-h-0 p-2 border-t border-slate-800/60">
-                  {wbSession?.id ? (
-                    <MessagesPanel
-                      whiteboardSessionId={wbSession.id}
-                      currentUserId={currentUserId}
-                      role="STUDENT"
-                      theme={isThemeDark ? "dark" : "light"}
-                    />
-                  ) : (
-                    <div className="h-full flex items-center justify-center text-xs text-slate-500">
-                      Connecting chat...
-                    </div>
-                  )}
-                </div>
+          {/* Fixed Scrollable Chat Console */}
+          <div className="flex-1 min-h-0 p-2 flex flex-col bg-[#0d0f18]">
+            {wbSession?.id ? (
+              <MessagesPanel
+                whiteboardSessionId={wbSession.id}
+                currentUserId={currentUserId}
+                role="STUDENT"
+                theme="dark"
+              />
+            ) : (
+              <div className="h-full flex items-center justify-center text-xs text-slate-500">
+                Connecting chat...
               </div>
             )}
           </div>
-        </div>
+        </aside>
       </div>
 
       {/* ========================================================================= */}
@@ -1158,40 +1149,47 @@ export function StudentLiveClassRoom({
             {activeMobileTab === "quiz" && (
               <div className="p-4 space-y-4">
                 {quiz ? (
-                  <div className="bg-slate-900 border border-indigo-500/50 rounded-2xl p-4 shadow-xl space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-indigo-400 animate-ping" />
+                  <div className="bg-[#13172b] border-2 border-indigo-500 rounded-2xl p-4 shadow-2xl space-y-3">
+                    <div className="flex items-center justify-between pb-1 border-b border-indigo-900/60">
+                      <h3 className="text-sm font-black text-white flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-indigo-400 animate-ping" />
                         {quiz.questionText || "Live Class Quiz"}
                       </h3>
-                      {quiz.status === "ACTIVE" && (
-                        <span className="text-xs font-mono font-bold text-amber-400 bg-amber-950/60 border border-amber-800/60 px-2.5 py-0.5 rounded-full">
+                      {quiz.status === "ACTIVE" ? (
+                        <span className="text-xs font-mono font-black text-slate-950 bg-amber-400 border border-amber-300 px-2.5 py-0.5 rounded-full shadow">
                           {remainingSec}s
+                        </span>
+                      ) : (
+                        <span className="text-xs font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-500/50 px-2.5 py-0.5 rounded-full">
+                          {quiz.status === "REVEALED" ? "Results Revealed" : "Closed"}
                         </span>
                       )}
                     </div>
-                    {quizError && <p className="text-xs text-rose-400">{quizError}</p>}
-                    <div className="grid grid-cols-1 gap-2">
+                    {quizError && <p className="text-xs text-rose-400 font-medium">{quizError}</p>}
+                    <div className="grid grid-cols-1 gap-2.5">
                       {quiz.options.map((o) => {
                         const selected = mySelection === o.key;
                         const revealed = quiz.status === "REVEALED";
                         const isCorrect = revealed && quiz.correctOption === o.key;
+                        const isWrong = revealed && selected && quiz.correctOption !== o.key;
                         return (
                           <button
                             key={o.key}
                             type="button"
                             disabled={Boolean(mySelection) || quiz.status !== "ACTIVE" || submittingAnswer}
                             onClick={() => submitAnswer(o.key)}
-                            className={`text-left px-4 py-3 rounded-xl border text-xs font-medium transition active:scale-[0.98] touch-manipulation cursor-pointer ${
+                            className={`text-left px-4 py-3 rounded-xl border-2 text-xs font-bold transition active:scale-[0.98] touch-manipulation cursor-pointer shadow-md ${
                               isCorrect
-                                ? "border-emerald-500 bg-emerald-950/60 text-emerald-300 font-bold"
+                                ? "border-emerald-400 bg-emerald-600 text-white shadow-emerald-500/50 ring-2 ring-emerald-300"
+                                : isWrong
+                                ? "border-rose-500 bg-rose-950/80 text-rose-200"
                                 : selected
-                                ? "border-indigo-500 bg-indigo-950/60 text-white font-bold"
-                                : "border-slate-800 hover:bg-slate-800 text-slate-300"
+                                ? "border-white bg-indigo-600 text-white shadow-indigo-500/50 ring-2 ring-indigo-400"
+                                : "bg-[#1a2038] hover:bg-[#252d4e] border-[#333d6b] text-white"
                             } disabled:cursor-default`}
                           >
-                            <span className="font-mono font-bold mr-2 text-indigo-400 pointer-events-none">{o.key}.</span>
-                            <span className="pointer-events-none">{o.label}</span>
+                            <span className={`font-mono font-black mr-2 text-sm pointer-events-none ${selected || isCorrect ? "text-white" : "text-indigo-400"}`}>{o.key}.</span>
+                            <span className="pointer-events-none text-white">{o.label}</span>
                           </button>
                         );
                       })}

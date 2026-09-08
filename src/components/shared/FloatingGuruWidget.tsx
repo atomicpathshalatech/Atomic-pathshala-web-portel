@@ -23,15 +23,10 @@ export function FloatingGuruWidget() {
   });
   const hasMovedRef = useRef(false);
 
-  // Hide on full Guru chat page, live studio, live class, and during live test attempts
-  const isGuruPage =
-    pathname === "/guru" ||
-    pathname?.startsWith("/guru/") ||
-    pathname === "/live-studio" ||
-    pathname?.includes("/live-studio") ||
-    pathname?.includes("/live-class") ||
-    pathname?.includes("/live/") ||
-    pathname?.includes("/attempt");
+  // STRICT SCOPE: Only render on public homepage (/) and student dashboard (/dashboard).
+  // Completely excluded from tests, live classes, DPPs, video players, and full Guru chat to prevent cheating and UI interference.
+  const isAllowedPage = pathname === "/" || pathname === "/dashboard";
+  if (!isAllowedPage) return null;
 
   // Initialize position to bottom-right safely on client
   useEffect(() => {
@@ -59,9 +54,6 @@ export function FloatingGuruWidget() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  if (isGuruPage) return null;
-
-  // Pointer/Touch Drag Handlers
   const handlePointerDown = (e: React.PointerEvent) => {
     if (!position) return;
     isDraggingRef.current = true;

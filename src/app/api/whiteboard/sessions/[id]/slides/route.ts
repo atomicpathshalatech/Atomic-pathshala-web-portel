@@ -60,6 +60,11 @@ async function resolveOriginalDownloadUrl(
     // ignore URL parse errors for relative paths
   }
 
+  // If the stored URL is a local blob, throw user-friendly error instead of navigating to dead tab
+  if (urlOrKey.startsWith("blob:")) {
+    throw new Error("The presentation material was not saved to permanent cloud storage. Please upload the document again in Material Setup.");
+  }
+
   // Fallback: return as-is
   return urlOrKey;
 }

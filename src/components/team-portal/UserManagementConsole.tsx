@@ -234,14 +234,21 @@ export function UserManagementConsole() {
             </span>
           </div>
           <h1 className="text-2xl font-black tracking-tight text-[#031635] dark:text-white">
-            User Management &amp; Access Control
+            Team &amp; Staff Management
           </h1>
           <p className="text-xs text-slate-500 max-w-2xl">
-            Create, manage roles, departments, positions, contract durations, granular permissions, and resource scopes across all Atomic OPS teams.
+            Internal faculty and staff provisioning. Register teachers, admins, SMEs, and creators internally and manage their operational permissions. (For enrolled students, visit <Link href="/team/students" className="text-blue-600 font-bold hover:underline">Student Management</Link>).
           </p>
         </div>
 
         <div className="flex items-center gap-2.5">
+          <Link
+            href="/team/students"
+            className="px-4 py-2.5 rounded-xl border border-blue-200 bg-blue-50 hover:bg-blue-100 text-xs font-bold text-blue-700 transition flex items-center gap-1.5 shadow-sm"
+          >
+            <span className="material-symbols-outlined text-base">school</span>
+            <span>Student Management</span>
+          </Link>
           <Link
             href="/team/roles"
             className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-purple-300 bg-white dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 transition flex items-center gap-1.5 shadow-sm"
@@ -262,7 +269,7 @@ export function UserManagementConsole() {
             className="px-5 py-2.5 rounded-xl bg-[#031635] dark:bg-purple-600 hover:opacity-90 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md"
           >
             <span className="material-symbols-outlined text-base">person_add</span>
-            <span>+ Add User</span>
+            <span>+ Add Team Member</span>
           </button>
         </div>
       </div>

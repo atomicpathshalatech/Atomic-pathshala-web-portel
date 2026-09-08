@@ -176,6 +176,11 @@ export const PEN_STYLES = [
 export type PenStyleId = typeof PEN_STYLES[number]["id"];
 
 const HIGHLIGHT_COLORS = ["#ef4444", "#eab308", "#22c55e", "#3b82f6"];
+export const LEFT_BAR_COLORS = [
+  "#ef4444", "#f97316", "#eab308",
+  "#22c55e", "#06b6d4", "#3b82f6",
+  "#ec4899", "#ffffff",
+];
 const SIZE_PRESETS: { label: string; value: number }[] = [
   { label: "S", value: 2 },
   { label: "M", value: 5 },
@@ -393,8 +398,9 @@ export function TeacherLiveClassRoom({
       if (!el) return;
       const { clientWidth, clientHeight } = el;
       if (clientWidth <= 0 || clientHeight <= 0) return;
-      const padW = 24;
-      const padH = 24;
+      // Maximize canvas drawing area to full available screen
+      const padW = 4;
+      const padH = 4;
       const availW = Math.max(200, clientWidth - padW);
       const availH = Math.max(150, clientHeight - padH);
       let w = availW;
@@ -486,15 +492,23 @@ export function TeacherLiveClassRoom({
       try {
         const data = await postJson("/api/whiteboard/sessions", { batchScheduleId });
         if (!cancelled) {
-          setWbSession(data.whiteboardSession);
+          const sess = data.whiteboardSession;
+          setWbSession(sess);
           if (
-            data.whiteboardSession?.livePhase === "ENDING" ||
-            data.whiteboardSession?.livePhase === "ENDED" ||
-            data.whiteboardSession?.status === "ENDED"
+            sess?.livePhase === "ENDING" ||
+            sess?.livePhase === "ENDED" ||
+            sess?.status === "ENDED"
           ) {
             setShowPostClassModal(true);
-          } else if (!data.whiteboardSession?.presentationUrl && data.whiteboardSession?.livePhase !== "LIVE") {
+          } else if (!sess?.presentationUrl && sess?.livePhase !== "LIVE") {
             setShowPreFlightWizard(true);
+          } else if (
+            sess?.presentationUrl &&
+            sess?.pages.length === 1 &&
+            !isBackgroundImageUrl(sess.pages[0]?.background)
+          ) {
+            // Auto-load PDF onto canvas pages when entering class
+            handleLoadPresentationPdf(sess);
           }
         }
 
@@ -567,12 +581,16 @@ export function TeacherLiveClassRoom({
     };
   }, [wbSession?.id]);
 
+  const lastLoadedPageIdRef = useRef<string | null>(null);
+
   useEffect(() => {
-    if (engineRef.current) {
-      engineRef.current.syncSize();
-      if (currentPage) engineRef.current.loadObjects(currentPage.objects ?? []);
+    if (!engineRef.current) return;
+    engineRef.current.syncSize();
+    if (currentPage && currentPage.id !== lastLoadedPageIdRef.current) {
+      lastLoadedPageIdRef.current = currentPage.id;
+      engineRef.current.loadObjects(currentPage.objects ?? []);
     }
-  }, [stageDimensions, currentPage]);
+  }, [stageDimensions, currentPage?.id]);
 
   useEffect(() => {
     if (engineRef.current) {
@@ -1013,10 +1031,11 @@ export function TeacherLiveClassRoom({
    * page-cap, an individual upload) lands in pdfLoadState.error so the
    * teacher sees it, instead of the page quietly staying blank.
    */
-  async function handleLoadPresentationPdf() {
-    if (!wbSession) return;
-    const url = wbSession.presentationUrl;
-    const isPdf = !!url && (wbSession.presentationType === "PDF" || /\.pdf(\?|$)/i.test(url));
+  async function handleLoadPresentationPdf(sessionArg?: WhiteboardSession) {
+    const activeSess = sessionArg || wbSession;
+    if (!activeSess) return;
+    const url = activeSess.presentationUrl;
+    const isPdf = !!url && (activeSess.presentationType === "PDF" || /\.pdf(\?|$)/i.test(url));
     if (!url || !isPdf) {
       setPdfLoadState({
         loading: false,
@@ -1031,7 +1050,7 @@ export function TeacherLiveClassRoom({
     await flushAutosave();
 
     setPdfLoadState({ loading: true, progress: "Downloading PDF…", error: null });
-    const sessionId = wbSession.id;
+    const sessionId = activeSess.id;
     let firstNewPageNumber: number | null = null;
 
     try {
@@ -1043,7 +1062,7 @@ export function TeacherLiveClassRoom({
       pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
       const doc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
-      const existingPageCount = wbSession.pages.length;
+      const existingPageCount = activeSess.pages.length;
       if (existingPageCount + doc.numPages > 50) {
         throw new Error(
           `This PDF has ${doc.numPages} pages, which would push the board past its 50-page-per-class limit (currently ${existingPageCount}).`
@@ -1053,11 +1072,12 @@ export function TeacherLiveClassRoom({
       // Reuse the current page as slide 1's canvas only when it's the
       // untouched default first page of a brand-new session — never
       // silently overwrite a page the teacher has already drawn on.
+      const currentPg = activeSess.pages.find((p) => p.pageNumber === activeSess.activePageNumber) ?? null;
       const reuseCurrentPage =
         existingPageCount === 1 &&
-        currentPage != null &&
-        (currentPage.objects?.length ?? 0) === 0 &&
-        !isBackgroundImageUrl(currentPage.background);
+        currentPg != null &&
+        (currentPg.objects?.length ?? 0) === 0 &&
+        !isBackgroundImageUrl(currentPg.background);
 
       for (let i = 1; i <= doc.numPages; i++) {
         setPdfLoadState({ loading: true, progress: `Rendering page ${i} of ${doc.numPages}…`, error: null });
@@ -1270,6 +1290,19 @@ export function TeacherLiveClassRoom({
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, []);
+
+  // Safety guard against accidental tab closing/navigation during live session
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (wbSession?.livePhase === "LIVE") {
+        e.preventDefault();
+        e.returnValue = "A live class is currently active. Are you sure you want to exit?";
+        return e.returnValue;
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [wbSession?.livePhase]);
 
   // ---- Start class (authoritative server validation) -------------------
   async function startClass() {
@@ -1528,12 +1561,26 @@ export function TeacherLiveClassRoom({
             <p className="text-[11px] text-gray-500 truncate">{batchName}</p>
             <h1 className="text-sm font-medium text-gray-200 truncate">{scheduleTitle}</h1>
           </div>
-          {wbSession.presentationName && (
+          {wbSession.presentationUrl ? (
+            <button
+              type="button"
+              disabled={pdfLoadState.loading}
+              onClick={() => handleLoadPresentationPdf()}
+              className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/40 transition active:scale-95 shadow cursor-pointer"
+              title="Click to load or reload PDF presentation onto whiteboard slides"
+            >
+              <span className="material-symbols-outlined text-xs">picture_as_pdf</span>
+              <span className="truncate max-w-[200px]">{wbSession.presentationName || "Presentation PDF"}</span>
+              <span className={`material-symbols-outlined text-xs text-indigo-400 ${pdfLoadState.loading ? "animate-spin" : ""}`}>
+                {pdfLoadState.loading ? "progress_activity" : "sync"}
+              </span>
+            </button>
+          ) : wbSession.presentationName ? (
             <span className="hidden lg:inline-flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded-md bg-indigo-500/10 text-indigo-300 border border-indigo-500/30">
               <span className="material-symbols-outlined text-xs">description</span>
               {wbSession.presentationName}
             </span>
-          )}
+          ) : null}
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
@@ -1742,7 +1789,7 @@ export function TeacherLiveClassRoom({
       {/* Main canvas area */}
       <main
         ref={mainCanvasContainerRef}
-        className="live-canvas relative overflow-hidden bg-[#10131b] p-2 sm:p-3 flex items-center justify-center min-w-0 min-h-0"
+        className="live-canvas relative overflow-hidden bg-[#10131b] p-1 sm:p-1.5 flex items-center justify-center min-w-0 min-h-0"
       >
         {(pdfLoadState.loading || pdfLoadState.error) && (
           <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 max-w-md w-[92%]">
@@ -1767,6 +1814,103 @@ export function TeacherLiveClassRoom({
             )}
           </div>
         )}
+
+        {/* Left Floating Quick Tool Palette Capsule (Screenshot 1) */}
+        <aside className="absolute left-2 sm:left-3.5 top-1/2 -translate-y-1/2 z-30 select-none pointer-events-auto">
+          <div className="flex flex-col items-center py-2 px-1.5 bg-[#141624]/95 backdrop-blur-md rounded-full border border-[#292d42] shadow-2xl gap-2">
+            {/* Active Tool Icon Indicator */}
+            <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-xs text-orange-400">
+              <span className="material-symbols-outlined text-sm">
+                {tool === "pen"
+                  ? (PEN_STYLES.find((s) => s.id === penStyle)?.icon || "edit")
+                  : tool === "highlighter"
+                  ? "border_color"
+                  : tool === "stroke-eraser" || tool === "object-eraser"
+                  ? "ink_eraser"
+                  : tool === "text"
+                  ? "text_fields"
+                  : tool === "fill"
+                  ? "format_color_fill"
+                  : tool === "select"
+                  ? "gesture"
+                  : "category"}
+              </span>
+            </div>
+
+            <div className="w-4 h-[1px] bg-gray-700/60" />
+
+            {/* Color Swatches (Screenshot 1 & 4) */}
+            <div className="flex flex-col gap-1.5">
+              {LEFT_BAR_COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setColor(c)}
+                  className={`w-4 h-4 rounded-full transition transform hover:scale-125 ${
+                    color.toLowerCase() === c.toLowerCase()
+                      ? "ring-2 ring-white ring-offset-1 ring-offset-[#141624]"
+                      : "opacity-85 hover:opacity-100"
+                  }`}
+                  style={{ backgroundColor: c }}
+                  title={c}
+                />
+              ))}
+            </div>
+
+            <div className="w-4 h-[1px] bg-gray-700/60" />
+
+            {/* 3 Size Dots (Screenshot 1 & 4) */}
+            <div className="flex flex-col gap-2 items-center py-1">
+              {[2, 5, 9].map((sz) => (
+                <button
+                  key={sz}
+                  type="button"
+                  onClick={() => setSize(sz)}
+                  className={`rounded-full transition flex items-center justify-center ${
+                    size === sz ? "ring-2 ring-blue-400 ring-offset-1 ring-offset-[#141624]" : ""
+                  }`}
+                  style={{
+                    width: `${Math.max(6, sz * 1.5)}px`,
+                    height: `${Math.max(6, sz * 1.5)}px`,
+                    backgroundColor: color,
+                  }}
+                  title={`${sz}px stroke size`}
+                />
+              ))}
+            </div>
+
+            <div className="w-4 h-[1px] bg-gray-700/60" />
+
+            {/* Paint Bucket (Color Fill) Tool Button */}
+            <button
+              type="button"
+              onClick={() => setTool("fill")}
+              className={`w-7 h-7 rounded-full flex items-center justify-center transition shadow ${
+                tool === "fill"
+                  ? "bg-amber-500 text-white ring-2 ring-amber-300"
+                  : "bg-white/10 text-gray-300 hover:text-white"
+              }`}
+              title="Paint Bucket (Color Fill Tool)"
+            >
+              <span className="material-symbols-outlined text-sm">format_color_fill</span>
+            </button>
+
+            {/* Freehand Lasso Selection Tool Button */}
+            <button
+              type="button"
+              onClick={() => setTool("select")}
+              className={`w-7 h-7 rounded-full flex items-center justify-center transition shadow ${
+                tool === "select"
+                  ? "bg-blue-600 text-white ring-2 ring-blue-400"
+                  : "bg-white/10 text-gray-300 hover:text-white"
+              }`}
+              title="Selection / Lasso Tool"
+            >
+              <span className="material-symbols-outlined text-sm">gesture</span>
+            </button>
+          </div>
+        </aside>
+
         <div
           className="relative rounded-2xl shadow-2xl overflow-hidden border border-slate-800/80 shrink-0 transition-transform duration-75 select-none"
           style={{
@@ -1777,6 +1921,32 @@ export function TeacherLiveClassRoom({
             ...(isBackgroundImageUrl(currentPage?.background) ? undefined : slideBackgroundStyle(currentPage?.background)),
           }}
         >
+          {/* Atomic Pathshala Brand Header (Screenshot 1) */}
+          {!isBackgroundImageUrl(currentPage?.background) && (
+            <div className="absolute top-2 left-3 right-3 z-10 flex items-center justify-between pointer-events-none select-none opacity-95">
+              {/* Atomic Logo Icon */}
+              <div className="w-9 h-9 bg-white rounded-xl shadow-md border border-slate-200/80 flex items-center justify-center p-1">
+                <span className="text-orange-500 font-extrabold text-base tracking-tighter">A</span>
+              </div>
+
+              {/* Horizontal Accent Line */}
+              <div className="flex-1 mx-4 h-[3px] bg-gradient-to-r from-orange-500 via-slate-900 to-black rounded-full" />
+
+              {/* Atomic Pathshala Logo */}
+              <div className="flex flex-col items-end pr-1">
+                <span className="text-xs font-black tracking-widest text-slate-900 leading-none">
+                  ATOMIC
+                </span>
+                <span className="text-[8px] font-bold tracking-wider text-orange-600 leading-tight">
+                  — PATHSHALA —
+                </span>
+                <span className="text-[6px] font-semibold tracking-tighter text-slate-500">
+                  LEARN • EXPLORE • EXCEL
+                </span>
+              </div>
+            </div>
+          )}
+
           {isBackgroundImageUrl(currentPage?.background) && (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -1959,7 +2129,7 @@ export function TeacherLiveClassRoom({
             in the Navigation/Action groups below) needed two clicks
             whenever a popup was already open. */}
         <div className="relative z-40 flex items-center gap-1 overflow-x-auto min-w-0">
-          {/* Pen tool with Screenshot 5 customizer */}
+          {/* Pen tool with Screenshot 3 customizer */}
           <div className="relative">
             <ToolbarBtn
               icon={PEN_STYLES.find((s) => s.id === penStyle)?.icon || "edit"}
@@ -1972,7 +2142,7 @@ export function TeacherLiveClassRoom({
             />
             {openPopup === "pen" && (
               <div className="absolute bottom-full left-0 mb-3 z-50 bg-[#161722] border border-[#2d2e3b] rounded-2xl p-4 shadow-2xl w-[32rem] flex flex-col gap-4 text-white">
-                {/* Header */}
+                {/* Header (Screenshot 3) */}
                 <div className="flex items-center justify-between border-b border-[#2d2e3b] pb-3">
                   <div className="flex items-center gap-2">
                     <span className="material-symbols-outlined text-blue-400 text-xl">
@@ -1991,7 +2161,7 @@ export function TeacherLiveClassRoom({
                   </button>
                 </div>
 
-                {/* Thickness Slider with Live Dot */}
+                {/* Thickness Slider with Live Dot (Screenshot 3) */}
                 <div className="bg-[#10111a] border border-[#242634] rounded-xl p-3 flex items-center justify-between gap-4">
                   <span className="text-xs text-gray-300 font-medium">Thickness</span>
                   <input
@@ -2015,7 +2185,7 @@ export function TeacherLiveClassRoom({
                   </div>
                 </div>
 
-                {/* Split: Pen Styles (Left) & Color Palette (Right) */}
+                {/* Split: Pen Styles (Left) & Color Palette 3x4 Grid (Right) (Screenshot 3) */}
                 <div className="grid grid-cols-2 gap-4">
                   {/* Left: Pen Styles */}
                   <div className="bg-[#10111a] border border-[#242634] rounded-xl p-3 flex flex-col gap-2">
@@ -2039,20 +2209,17 @@ export function TeacherLiveClassRoom({
                     </div>
                   </div>
 
-                  {/* Right: Color Grid */}
+                  {/* Right: 3x4 Color Grid (Screenshot 3) */}
                   <div className="bg-[#10111a] border border-[#242634] rounded-xl p-3 flex flex-col justify-between">
                     <div>
                       <span className="text-xs font-semibold text-gray-400 block mb-2 text-center">Color</span>
-                      {/* Vertical stack, not a horizontal/wrapped grid - a
-                          single click here must read as one clear column of
-                          choices rather than a row a pointer can overshoot. */}
-                      <div className="flex flex-col gap-2 items-center max-h-40 overflow-y-auto pr-1">
+                      <div className="grid grid-cols-3 gap-2 place-items-center">
                         {PEN_PALETTE_COLORS.map((c) => (
                           <button
                             key={c}
                             type="button"
                             onClick={() => setColor(c)}
-                            className={`w-7 h-7 rounded-xl border shadow-md transition transform hover:scale-105 ${
+                            className={`w-8 h-8 rounded-xl border shadow-md transition transform hover:scale-110 ${
                               color.toLowerCase() === c.toLowerCase()
                                 ? "ring-2 ring-blue-500 ring-offset-2 ring-offset-[#10111a] border-white"
                                 : "border-transparent"
@@ -2080,6 +2247,7 @@ export function TeacherLiveClassRoom({
             )}
           </div>
 
+          {/* Highlight tool with floating pill (Screenshot 4) */}
           <div className="relative">
             <ToolbarBtn
               icon="border_color"
@@ -2091,16 +2259,20 @@ export function TeacherLiveClassRoom({
               }}
             />
             {openPopup === "highlight" && (
-              <div className="absolute bottom-full left-0 mb-2 z-40 bg-[#1a1b23] border border-[#2d2e3b] rounded-lg p-3 shadow-2xl flex flex-row gap-2 min-w-max">
+              <div className="absolute bottom-full left-0 mb-3 z-40 bg-[#161722] border border-[#2d2e3b] rounded-2xl p-2.5 shadow-2xl flex flex-row items-center gap-2.5 min-w-max">
                 {HIGHLIGHT_COLORS.map((c) => (
                   <button
                     key={c}
                     type="button"
-                    onClick={() => setColor(c)}
-                    className={`w-6 h-6 rounded-full border shadow-sm ${
-                      color === c ? "ring-2 ring-white border-transparent" : "border-gray-600 hover:border-white"
+                    onClick={() => {
+                      setColor(c);
+                    }}
+                    className={`w-7 h-7 rounded-full border shadow-md transition transform hover:scale-110 ${
+                      color.toLowerCase() === c.toLowerCase()
+                        ? "ring-2 ring-white ring-offset-2 ring-offset-[#161722] border-transparent"
+                        : "border-gray-600/60 opacity-85 hover:opacity-100"
                     }`}
-                    style={{ backgroundColor: c, opacity: 0.65 }}
+                    style={{ backgroundColor: c }}
                     title={c}
                   />
                 ))}
@@ -2258,6 +2430,16 @@ export function TeacherLiveClassRoom({
 
           <div className="w-px h-6 bg-[#2d2e3b] mx-2" />
 
+          <button
+            type="button"
+            onClick={() => setTool("fill")}
+            className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${
+              tool === "fill" ? "text-amber-400 bg-amber-900/30 ring-1 ring-amber-500/50" : "text-gray-400 hover:text-white hover:bg-gray-800"
+            }`}
+            title="Paint Bucket (Color Fill Tool)"
+          >
+            <span className="material-symbols-outlined text-lg">format_color_fill</span>
+          </button>
           <button
             type="button"
             onClick={() => setTool("text")}
@@ -2580,19 +2762,23 @@ export function TeacherLiveClassRoom({
             cameraPosition: "UPPER_RIGHT",
           }}
           onComplete={(config: PreFlightConfig) => {
-            setWbSession((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    presentationUrl: config.presentationUrl,
-                    presentationName: config.presentationName,
-                    presentationType: config.presentationType,
-                    classroomTheme: config.classroomTheme,
-                    cameraShape: config.cameraShape,
-                  }
-                : prev
-            );
+            const updated = wbSession
+              ? {
+                  ...wbSession,
+                  presentationUrl: config.presentationUrl,
+                  presentationName: config.presentationName,
+                  presentationType: config.presentationType,
+                  classroomTheme: config.classroomTheme,
+                  cameraShape: config.cameraShape,
+                }
+              : null;
+            if (updated) {
+              setWbSession(updated);
+            }
             setShowPreFlightWizard(false);
+            if (config.presentationUrl && updated) {
+              handleLoadPresentationPdf(updated);
+            }
           }}
           onCancel={() => setShowPreFlightWizard(false)}
         />
@@ -2672,15 +2858,11 @@ function MoreGridBtn({
 }
 
 function SaveIndicator({ state }: { state: "saved" | "saving" | "offline" }) {
-  const config = {
-    saved: { dot: "bg-green-500", text: "Saved" },
-    saving: { dot: "bg-blue-500 animate-pulse", text: "Saving…" },
-    offline: { dot: "bg-red-500", text: "Offline — will retry" },
-  }[state];
+  if (state !== "offline") return null;
   return (
-    <span className="flex items-center gap-1.5 text-xs text-gray-400">
-      <span className={`w-2 h-2 rounded-full ${config.dot}`} />
-      {config.text}
+    <span className="flex items-center gap-1.5 text-xs text-amber-400 bg-amber-950/40 border border-amber-500/30 px-2.5 py-1 rounded-md">
+      <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+      Offline — reconnecting…
     </span>
   );
 }

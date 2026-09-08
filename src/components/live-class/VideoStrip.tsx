@@ -180,10 +180,11 @@ function VideoStripInner({
         }
       })();
     } else if (role === "STUDENT" && isApprovedSpeaker) {
-      // Student is approved to speak -> request microphone
+      // Student is approved to speak -> request microphone & video camera
       (async () => {
         try {
           await localParticipant.setMicrophoneEnabled(true);
+          await localParticipant.setCameraEnabled(true);
           if (!cancelled) setMicError(null);
         } catch (err) {
           if (!cancelled) setMicError(describeMediaError(err));
@@ -219,6 +220,9 @@ function VideoStripInner({
     role === "STUDENT"
       ? tracks.find((t) => t.source === Track.Source.Camera && !t.participant.isLocal)
       : tracks.find((t) => t.source === Track.Source.Camera && t.participant.isLocal) ?? tracks.find((t) => t.source === Track.Source.Camera);
+
+  // Find any active remote student video/audio tracks connected to the room
+  const remoteStudentVideoTracks = tracks.filter((t) => t.source === Track.Source.Camera && !t.participant.isLocal);
 
   // Fullscreen toggle
   const toggleFullscreen = () => {
@@ -310,6 +314,24 @@ function VideoStripInner({
                 Retry camera access
               </button>
             )}
+          </div>
+        )}
+
+        {/* Floating Live Student Video Call Tile (Picture-in-Picture on Teacher Screen) */}
+        {remoteStudentVideoTracks.length > 0 && (
+          <div className="absolute top-2 right-2 z-30 flex flex-col gap-1.5">
+            {remoteStudentVideoTracks.map((stTrack) => (
+              <div
+                key={stTrack.participant.identity}
+                className="w-36 sm:w-44 aspect-video rounded-xl overflow-hidden border-2 border-purple-500 shadow-2xl bg-slate-950 relative animate-in zoom-in-95 duration-200 ring-2 ring-purple-400/40"
+              >
+                <VideoTrack trackRef={stTrack} className="w-full h-full object-cover" />
+                <div className="absolute top-1 left-1 bg-black/80 backdrop-blur-sm px-1.5 py-0.5 rounded text-[9px] font-bold text-purple-200 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-ping" />
+                  <span className="truncate max-w-[80px]">{stTrack.participant.name || "Student"}</span>
+                </div>
+              </div>
+            ))}
           </div>
         )}
 

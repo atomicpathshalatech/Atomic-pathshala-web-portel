@@ -13,7 +13,8 @@ export const metadata: Metadata = {
 };
 
 const MODULE_CARDS = [
-  { href: "/team/users", label: "User Management & RBAC", icon: "manage_accounts", description: "Super Admin console for user directory, multi-team provisioning, and contracts.", permission: PERMISSIONS.USER_READ, available: true },
+  { href: "/team/students", label: "Student Management & Course Access", icon: "school", description: "Manage student directory, academic status, and grant/revoke batch and course access.", permission: PERMISSIONS.STUDENT_READ_ANY, available: true },
+  { href: "/team/users", label: "Team & Staff Management", icon: "badge", description: "Super Admin console for educator directory, staff provisioning, and role assignment.", permission: PERMISSIONS.USER_READ, available: true },
   { href: "/team/roles", label: "Roles & Permission Matrix", icon: "security", description: "Visual action-permission matrix across primary and custom roles.", permission: PERMISSIONS.ROLE_MANAGE, available: true },
   { href: "/team/departments", label: "Departments & Positions", icon: "corporate_fare", description: "Standardize organizational hierarchy, job titles, and default role suggestions.", permission: PERMISSIONS.DEPARTMENT_MANAGE, available: true },
   { href: "/team/live-studio", label: "Live Classroom (Whiteboard Studio)", icon: "videocam", description: "Start live whiteboard classes with webcam PiP, smart pen palette, slide themes, polls, and live doubt desk.", permission: PERMISSIONS.WHITEBOARD_ACCESS, available: true },

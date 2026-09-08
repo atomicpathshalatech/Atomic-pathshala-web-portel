@@ -53,6 +53,7 @@ export interface ShapeObject {
   size: number;
   start: { x: number; y: number };
   end: { x: number; y: number };
+  fill?: string;
 }
 
 export interface TextObject {
@@ -82,6 +83,7 @@ export type CanvasTool =
   | "object-eraser"
   | "select"
   | "text"
+  | "fill"
   | ShapeKind;
 
 /** Font-size (virtual px) per unit of the shared pen `currentSize` control,
@@ -247,14 +249,13 @@ function scaleObject(obj: StrokeObject, scaleX: number, scaleY: number, origin: 
  * rather than re-deriving the geometry a second time. */
 function drawShape(
   ctx: CanvasRenderingContext2D,
-  obj: { shape: ShapeKind; color: string; size: number; start: { x: number; y: number }; end: { x: number; y: number } }
+  obj: { shape: ShapeKind; color: string; size: number; start: { x: number; y: number }; end: { x: number; y: number }; fill?: string }
 ): void {
-  const { start, end, shape, color, size } = obj;
+  const { start, end, shape, color, size, fill } = obj;
   ctx.save();
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   ctx.strokeStyle = color;
-  ctx.fillStyle = color;
   ctx.lineWidth = size;
 
   if (shape === "line") {
@@ -263,6 +264,10 @@ function drawShape(
     ctx.lineTo(end.x, end.y);
     ctx.stroke();
   } else if (shape === "rectangle") {
+    if (fill) {
+      ctx.fillStyle = fill;
+      ctx.fillRect(start.x, start.y, end.x - start.x, end.y - start.y);
+    }
     ctx.strokeRect(start.x, start.y, end.x - start.x, end.y - start.y);
   } else if (shape === "circle") {
     const rx = Math.abs(end.x - start.x) / 2;
@@ -271,6 +276,10 @@ function drawShape(
     const cy = (start.y + end.y) / 2;
     ctx.beginPath();
     ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+    if (fill) {
+      ctx.fillStyle = fill;
+      ctx.fill();
+    }
     ctx.stroke();
   } else if (shape === "triangle") {
     ctx.beginPath();
@@ -278,6 +287,10 @@ function drawShape(
     ctx.lineTo(start.x, end.y);
     ctx.lineTo(end.x, end.y);
     ctx.closePath();
+    if (fill) {
+      ctx.fillStyle = fill;
+      ctx.fill();
+    }
     ctx.stroke();
   } else if (shape === "arrow") {
     ctx.beginPath();
@@ -292,9 +305,43 @@ function drawShape(
     ctx.lineTo(end.x - headLen * Math.cos(angle - Math.PI / 7), end.y - headLen * Math.sin(angle - Math.PI / 7));
     ctx.lineTo(end.x - headLen * Math.cos(angle + Math.PI / 7), end.y - headLen * Math.sin(angle + Math.PI / 7));
     ctx.closePath();
+    ctx.fillStyle = fill || color;
     ctx.fill();
   }
   ctx.restore();
+}
+
+function isInsideShape(obj: ShapeObject, pt: { x: number; y: number }): boolean {
+  const { start, end, shape } = obj;
+  if (shape === "rectangle") {
+    const minX = Math.min(start.x, end.x);
+    const maxX = Math.max(start.x, end.x);
+    const minY = Math.min(start.y, end.y);
+    const maxY = Math.max(start.y, end.y);
+    return pt.x >= minX && pt.x <= maxX && pt.y >= minY && pt.y <= maxY;
+  }
+  if (shape === "circle") {
+    const rx = Math.abs(end.x - start.x) / 2;
+    const ry = Math.abs(end.y - start.y) / 2;
+    const cx = (start.x + end.x) / 2;
+    const cy = (start.y + end.y) / 2;
+    if (rx === 0 || ry === 0) return false;
+    const normX = (pt.x - cx) / rx;
+    const normY = (pt.y - cy) / ry;
+    return normX * normX + normY * normY <= 1;
+  }
+  if (shape === "triangle") {
+    const p1 = { x: (start.x + end.x) / 2, y: start.y };
+    const p2 = { x: start.x, y: end.y };
+    const p3 = { x: end.x, y: end.y };
+    const d1 = (pt.x - p2.x) * (p1.y - p2.y) - (p1.x - p2.x) * (pt.y - p2.y);
+    const d2 = (pt.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (pt.y - p3.y);
+    const d3 = (pt.x - p1.x) * (p3.y - p1.y) - (p3.x - p1.x) * (pt.y - p1.y);
+    const hasNeg = d1 < 0 || d2 < 0 || d3 < 0;
+    const hasPos = d1 > 0 || d2 > 0 || d3 > 0;
+    return !(hasNeg && hasPos);
+  }
+  return false;
 }
 
 export class CanvasEngine {
@@ -442,6 +489,14 @@ export class CanvasEngine {
       this.activePointerId = null;
       this.activePointerType = null;
       this.onTextRequested?.({ x: pt.x, y: pt.y });
+      return;
+    }
+
+    if (this.currentTool === "fill") {
+      this.isPointerDown = false;
+      this.activePointerId = null;
+      this.activePointerType = null;
+      this.fillAtPoint(pt);
       return;
     }
 
@@ -899,6 +954,70 @@ export class CanvasEngine {
     this.objects = this.objects.filter((o) => o.id !== hit.id);
     this.renderBase();
     this.onCommit?.(this.objects);
+  }
+
+  /**
+   * Paint Bucket / Color Fill tool:
+   * Fills clicked shape or closed figure with `currentColor`, pushing an undo snapshot
+   * and committing the change for real-time synchronization with all students.
+   */
+  private fillAtPoint(pt: { x: number; y: number }): void {
+    // 1. Check if clicked inside any shape from top to bottom
+    for (let i = this.objects.length - 1; i >= 0; i--) {
+      const obj = this.objects[i]!;
+      if (obj.type === "shape" && isInsideShape(obj, pt)) {
+        this.pushUndo();
+        this.objects[i] = { ...obj, fill: this.currentColor };
+        this.renderBase();
+        this.onCommit?.(this.objects);
+        return;
+      }
+    }
+
+    // 2. Direct hit test for strokes, text, or shapes near boundary
+    const hit = this.hitTest(pt);
+    if (hit) {
+      this.pushUndo();
+      const idx = this.objects.findIndex((o) => o.id === hit.id);
+      if (idx !== -1) {
+        if (hit.type === "shape") {
+          this.objects[idx] = { ...hit, fill: this.currentColor };
+        } else if (hit.type === "stroke") {
+          this.objects[idx] = { ...hit, color: this.currentColor };
+        } else if (hit.type === "text") {
+          this.objects[idx] = { ...hit, color: this.currentColor };
+        }
+        this.renderBase();
+        this.onCommit?.(this.objects);
+        return;
+      }
+    }
+
+    // 3. Fallback: Find nearest shape within 80px and fill it
+    let nearestIdx = -1;
+    let minD = 80;
+    for (let i = this.objects.length - 1; i >= 0; i--) {
+      const obj = this.objects[i]!;
+      const pts = representativePoints(obj);
+      for (const p of pts) {
+        const d = distance(p, pt);
+        if (d < minD) {
+          minD = d;
+          nearestIdx = i;
+        }
+      }
+    }
+    if (nearestIdx !== -1) {
+      this.pushUndo();
+      const target = this.objects[nearestIdx]!;
+      if (target.type === "shape") {
+        this.objects[nearestIdx] = { ...target, fill: this.currentColor };
+      } else if (target.type === "stroke") {
+        this.objects[nearestIdx] = { ...target, color: this.currentColor };
+      }
+      this.renderBase();
+      this.onCommit?.(this.objects);
+    }
   }
 
   /** Partial/stroke eraser — removes only the points within the eraser

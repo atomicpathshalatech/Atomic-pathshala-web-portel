@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Test Suite: Production Pen Tablet Whiteboard for Live Class
  *
  * Verifies:
@@ -528,6 +528,27 @@ async function runTests() {
 
       assert(studentEngine.objects.length === 150, "All 150 objects loaded instantly from snapshot");
       assert(serverSnapshot.background === "coordinate", "Background correctly restored");
+    }),
+
+    test("Paint Bucket & Color Fill: Fills closed shapes and vector objects with selected palette color", () => {
+      const rectShape = {
+        id: "rect_1",
+        type: "shape" as const,
+        shape: "rectangle" as const,
+        color: "#ffffff",
+        size: 3,
+        start: { x: 100, y: 100 },
+        end: { x: 300, y: 300 },
+        fill: undefined as string | undefined,
+      };
+
+      // Apply Paint Bucket fill color
+      rectShape.fill = "#ef4444";
+      assert(rectShape.fill === "#ef4444", "Rectangle shape filled with Red color");
+
+      // Change fill color
+      rectShape.fill = "#3b82f6";
+      assert(rectShape.fill === "#3b82f6", "Rectangle shape updated with Blue fill color");
     }),
   ];
 

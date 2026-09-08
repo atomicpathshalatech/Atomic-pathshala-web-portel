@@ -228,20 +228,30 @@ export function PreFlightSetupWizard({
         onProgress: (p) => setUploadProgress(p),
       });
 
-      setPresentationUrl(result.url || URL.createObjectURL(file));
+      setPresentationUrl(result.url || `/api/files/${result.fileAssetId}/access`);
       setPresentationName(result.filename);
       setPresentationType(isPpt ? "PPTX" : "PDF");
       setUploadProgress(100);
     } catch (err: any) {
-      console.warn("Direct R2 upload fallback to local blob:", err);
+      console.warn("Direct R2 upload failed, attempting server upload endpoint:", err);
       try {
-        const localBlobUrl = URL.createObjectURL(file);
-        setPresentationUrl(localBlobUrl);
-        setPresentationName(file.name);
-        setPresentationType(isPpt ? "PPTX" : "PDF");
-        setUploadProgress(100);
-      } catch (blobErr) {
-        setError("Failed to load presentation file. Please try another file.");
+        const formData = new FormData();
+        formData.append("file", file);
+        const serverRes = await fetch(`/api/team/live-class/${scheduleId}/upload-presentation`, {
+          method: "POST",
+          body: formData,
+        });
+        const serverJson = await serverRes.json();
+        if (serverRes.ok && serverJson.success && serverJson.data?.url) {
+          setPresentationUrl(serverJson.data.url);
+          setPresentationName(serverJson.data.filename || file.name);
+          setPresentationType(serverJson.data.fileType || (isPpt ? "PPTX" : "PDF"));
+          setUploadProgress(100);
+        } else {
+          throw new Error(serverJson.error || "Failed to upload presentation to server");
+        }
+      } catch (serverErr: any) {
+        setError(serverErr?.message || "Failed to load presentation file. Please try another file.");
       }
     } finally {
       setUploadingFile(false);
