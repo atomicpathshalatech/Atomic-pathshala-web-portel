@@ -181,6 +181,7 @@ export const PERMISSIONS = {
   FAQ_MANAGE: "cms.faq.manage",
   TESTIMONIAL_MANAGE: "cms.testimonial.manage",
   SEO_MANAGE: "cms.seo.manage",
+  FOUNDER_MANAGE: "cms.founder.manage",
 
   // AI Chat / Atomic Guru
   AICHAT_ADMIN_ACCESS: "aichat.admin.access",
@@ -481,6 +482,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PermissionCode[]> = {
     PERMISSIONS.MEDIA_MANAGE,
     PERMISSIONS.FAQ_MANAGE,
     PERMISSIONS.TESTIMONIAL_MANAGE,
+    PERMISSIONS.FOUNDER_MANAGE,
   ],
   SUPPORT: [
     PERMISSIONS.TEAM_PORTAL_ACCESS,
@@ -516,6 +518,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PermissionCode[]> = {
     PERMISSIONS.NOTIFICATION_READ,
     PERMISSIONS.HOME_VIEW,
     PERMISSIONS.BANNER_MANAGE,
+    PERMISSIONS.FOUNDER_MANAGE,
   ],
   DEPARTMENT_HEAD: [
     PERMISSIONS.TEAM_PORTAL_ACCESS,
