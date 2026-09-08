@@ -107,6 +107,9 @@ export const requireTeamSession = cache(async function requireTeamSession() {
 
   const allowed = await hasPermission(session.user.id, PERMISSIONS.TEAM_PORTAL_ACCESS, user);
   if (!allowed) {
+    if (user.role.name === "STUDENT" || user.role.name === "PARENT") {
+      redirect("/dashboard");
+    }
     redirect("/");
   }
 

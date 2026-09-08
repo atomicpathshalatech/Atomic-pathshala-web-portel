@@ -1,6 +1,4 @@
-import { getServerSession } from "next-auth";
-import { redirect } from "next/navigation";
-import { authOptions } from "@/lib/auth";
+import { requireStudentSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { StudentShell } from "@/components/student/StudentShell";
 
@@ -9,22 +7,10 @@ export default async function StudentPortalLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const session = await getServerSession(authOptions);
+  const { session, student } = await requireStudentSession();
 
-  if (!session?.user?.id) {
-    redirect("/login");
-  }
-
-  // Look up student profile in database
-  let student = null;
   let hasActiveSubscription = false;
-
   try {
-    student = await prisma.student.findUnique({
-      where: { userId: session.user.id },
-      include: { user: true },
-    });
-
     if (student) {
       const subscription = await prisma.subscription.findUnique({
         where: { studentId: student.id },
@@ -33,7 +19,7 @@ export default async function StudentPortalLayout({
       hasActiveSubscription = subscription?.status === "ACTIVE";
     }
   } catch (error) {
-    console.error("Error loading student profile in layout:", error);
+    console.error("Error loading student subscription in layout:", error);
   }
 
   // Fallback safe values for admin/teacher preview or newly registered users
