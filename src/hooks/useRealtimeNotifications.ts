@@ -26,12 +26,11 @@ export function useRealtimeNotifications() {
   useEffect(() => {
     if (!session?.user?.id) return;
 
-    fetch("/api/notifications")
+    fetch("/api/notifications/unread-count")
       .then((res) => res.json())
       .then((data) => {
-        if (data?.data?.notifications) {
-          const count = data.data.notifications.filter((n: any) => !n.isRead).length;
-          setUnreadCount(count);
+        if (typeof data?.data?.count === "number") {
+          setUnreadCount(data.data.count);
         }
       })
       .catch(() => {});

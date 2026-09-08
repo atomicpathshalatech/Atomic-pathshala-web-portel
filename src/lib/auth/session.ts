@@ -32,9 +32,12 @@ export const requireStudentSession = cache(async function requireStudentSession(
     redirect("/team");
   }
 
+  // `subscription` is included here so the Student layout doesn't have to
+  // fire a second, sequential cross-region query for it on every load — the
+  // cached result is shared by the layout and every page in the same render.
   let student = await prisma.student.findUnique({
     where: { userId: session.user.id },
-    include: { user: true },
+    include: { user: true, subscription: { select: { status: true } } },
   });
 
   if (!student) {
@@ -55,7 +58,7 @@ export const requireStudentSession = cache(async function requireStudentSession(
           city: "New Delhi",
           state: "Delhi",
         },
-        include: { user: true },
+        include: { user: true, subscription: { select: { status: true } } },
       });
     } catch {
       redirect("/login");

@@ -88,8 +88,14 @@ const NAV_SECTIONS: { title?: string; items: { href: string; label: string; icon
 
 export default async function TeamPortalLayout({ children }: { children: React.ReactNode }) {
   const { user } = await requireTeamSession();
-  const permissions = await getUserPermissionCodes(user.id);
-  const hasTeacherProfile = (await prisma.teacher.count({ where: { userId: user.id } })) > 0;
+
+  // These two are independent — fetch them in parallel rather than paying
+  // two sequential cross-region Prisma round trips on every Team page load.
+  const [permissions, teacherProfileCount] = await Promise.all([
+    getUserPermissionCodes(user.id),
+    prisma.teacher.count({ where: { userId: user.id } }),
+  ]);
+  const hasTeacherProfile = teacherProfileCount > 0;
 
   const visibleSections: TeamNavSection[] = NAV_SECTIONS.map((section) => ({
     title: section.title,
