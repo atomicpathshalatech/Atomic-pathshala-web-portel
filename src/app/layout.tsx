@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { Toaster } from "sonner";
 import "./globals.css";
+import { AuthSessionProvider } from "@/components/providers/AuthSessionProvider";
+import { CapacitorProvider } from "@/components/providers/CapacitorProvider";
 
 /**
  * Inter is the app's body/label font (used on effectively every screen).
@@ -20,9 +22,6 @@ const inter = Inter({
   variable: "--font-inter",
   fallback: ["system-ui", "-apple-system", "Segoe UI", "Roboto", "sans-serif"],
 });
-import { AuthSessionProvider } from "@/components/providers/AuthSessionProvider";
-import { CapacitorProvider } from "@/components/providers/CapacitorProvider";
-import { FloatingGuruWidget } from "@/components/shared/FloatingGuruWidget";
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -67,7 +66,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AuthSessionProvider>
           <CapacitorProvider>
             {children}
-            <FloatingGuruWidget />
           </CapacitorProvider>
         </AuthSessionProvider>
         <Toaster richColors position="top-center" />

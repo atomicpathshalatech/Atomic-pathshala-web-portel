@@ -4,7 +4,7 @@ import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { hasPermission } from "@/lib/rbac/guard";
+import { getUserPermissionCodes } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 
 /**
@@ -99,22 +99,31 @@ export const requireTeamSession = cache(async function requireTeamSession() {
     redirect("/login");
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    include: { role: true },
-  });
+  // One pass for the whole permission set — the Team layout needs every
+  // code anyway to build its nav, and access == "does that set contain
+  // TEAM_PORTAL_ACCESS". Previously the layout ran hasPermission() here AND
+  // getUserPermissionCodes() separately, double-querying rolePermission +
+  // userPermissionOverride. cache() dedupes this across layout + pages.
+  const [user, permissions] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: session.user.id },
+      // `teacher` is a lightweight existence probe so the Team layout doesn't
+      // need a separate teacher.count() round trip for its "My Schedule" nav.
+      include: { role: true, teacher: { select: { id: true } } },
+    }),
+    getUserPermissionCodes(session.user.id),
+  ]);
 
   if (!user) {
     redirect("/login");
   }
 
-  const allowed = await hasPermission(session.user.id, PERMISSIONS.TEAM_PORTAL_ACCESS, user);
-  if (!allowed) {
+  if (!permissions.has(PERMISSIONS.TEAM_PORTAL_ACCESS)) {
     if (user.role.name === "STUDENT" || user.role.name === "PARENT") {
       redirect("/dashboard");
     }
     redirect("/");
   }
 
-  return { session, user };
+  return { session, user, permissions };
 });

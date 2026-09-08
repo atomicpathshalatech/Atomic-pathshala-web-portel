@@ -11,6 +11,7 @@ import { AnalyticsSection } from "@/components/landing/AnalyticsSection";
 import { TestimonialsSection } from "@/components/landing/TestimonialsSection";
 import { FAQSection } from "@/components/landing/FAQSection";
 import { Footer } from "@/components/landing/Footer";
+import { FloatingGuruWidget } from "@/components/shared/FloatingGuruWidget";
 
 export const revalidate = 60;
 
@@ -32,6 +33,7 @@ export default function HomePage() {
         <FAQSection />
       </main>
       <Footer />
+      <FloatingGuruWidget />
     </>
   );
 }

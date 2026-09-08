@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import type { BatchSchedule, Teacher, User } from "@prisma/client";
 import { NextClassCard } from "@/components/student/NextClassCard";
 import { FeatureCard } from "@/components/student/FeatureCard";
+import { FloatingGuruWidget } from "@/components/shared/FloatingGuruWidget";
 import { getEffectiveScheduleStatus } from "@/lib/schedule/access-rules";
 
 export const metadata: Metadata = {
@@ -137,6 +138,7 @@ export default async function StudentDashboardPage() {
   const greeting = hour < 12 ? "Good Morning" : hour < 17 ? "Good Afternoon" : "Good Evening";
 
   return (
+    <>
     <div className="space-y-6 max-w-7xl">
       {/* Welcome Strip Banner */}
       <section className="bg-white border border-slate-200/80 rounded-2xl p-4 sm:p-5 shadow-2xs flex flex-col md:flex-row md:items-center md:justify-between gap-4 relative overflow-hidden">
@@ -359,5 +361,7 @@ export default async function StudentDashboardPage() {
         </section>
       )}
     </div>
+    <FloatingGuruWidget />
+    </>
   );
 }

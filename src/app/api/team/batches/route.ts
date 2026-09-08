@@ -1,7 +1,9 @@
 import { NextRequest } from "next/server";
+import { revalidateTag } from "next/cache";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { COURSE_CATALOG_TAG } from "@/lib/courses/catalog";
 import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { batchCreateSchema } from "@/lib/validation/batch";
@@ -95,6 +97,7 @@ export async function POST(request: NextRequest) {
       return created;
     });
 
+    revalidateTag(COURSE_CATALOG_TAG);
     return apiSuccess({ batch }, 201);
   } catch (error) {
     return handleApiError(error);

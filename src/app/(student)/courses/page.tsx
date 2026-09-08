@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { prisma } from "@/lib/db";
+import { getActiveBatchCatalog } from "@/lib/courses/catalog";
 import { CourseListingMasterView } from "@/components/course-platform/CourseListingMasterView";
 import { CourseData } from "@/components/course-platform/CourseCard";
 
@@ -11,34 +11,7 @@ export const metadata: Metadata = {
 export default async function CoursesPage() {
   let dbBatches: any[] = [];
   try {
-    dbBatches = await prisma.batch.findMany({
-      where: {
-        status: { in: ["ACTIVE", "UPCOMING"] },
-      },
-      include: {
-        course: {
-          include: {
-            subjects: true,
-          },
-        },
-        teachers: {
-          include: {
-            teacher: {
-              include: {
-                user: { select: { name: true } },
-              },
-            },
-          },
-        },
-        _count: {
-          select: {
-            enrollments: true,
-            schedules: true,
-          },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-    });
+    dbBatches = await getActiveBatchCatalog();
   } catch (err) {
     console.error("Error fetching batches:", err);
   }

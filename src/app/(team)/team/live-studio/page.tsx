@@ -5,7 +5,6 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
-import { TeacherLiveClassRoom } from "@/components/live-class/TeacherLiveClassRoom";
 
 export const metadata: Metadata = {
   title: "Live Classroom Studio — Atomic Pathshala",
