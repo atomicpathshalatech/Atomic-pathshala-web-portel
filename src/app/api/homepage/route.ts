@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { getActiveFounder } from "@/lib/founder";
 import { apiSuccess, handleApiError } from "@/lib/api/response";
 
 /**
@@ -11,12 +12,16 @@ import { apiSuccess, handleApiError } from "@/lib/api/response";
  */
 export async function GET() {
   try {
-    const live = await prisma.homePageVersion.findFirst({
-      where: { unpublishedAt: null },
-      orderBy: { publishedAt: "desc" },
-    });
+    const [live, founder] = await Promise.all([
+      prisma.homePageVersion.findFirst({
+        where: { unpublishedAt: null },
+        orderBy: { publishedAt: "desc" },
+      }),
+      // Shared by website + app: same canonical founder record, no duplication.
+      getActiveFounder(),
+    ]);
 
-    if (!live) return apiSuccess({ published: false, sections: [] as unknown[] });
+    if (!live) return apiSuccess({ published: false, sections: [] as unknown[], founder });
 
     const sections = Array.isArray(live.sectionsSnapshot) ? live.sectionsSnapshot : [];
 
@@ -25,6 +30,7 @@ export async function GET() {
       versionNumber: live.versionNumber,
       publishedAt: live.publishedAt,
       sections,
+      founder,
     });
   } catch (error) {
     return handleApiError(error);

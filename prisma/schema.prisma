@@ -95,6 +95,7 @@ model User {
   homeSectionsCreated    HomePageSection[] @relation("HomeSectionCreatedBy")
   homeSectionsUpdated    HomePageSection[] @relation("HomeSectionUpdatedBy")
   homeVersionsPublished  HomePageVersion[]
+  founderUpdates         Founder[]         @relation("FounderUpdatedBy")
   bannersCreated         Banner[]
   mediaUploaded          MediaAsset[]
   testimonialsCreated    Testimonial[]
@@ -2665,6 +2666,43 @@ model PageSeo {
   updatedAt       DateTime @updatedAt
 
   @@map("page_seo")
+}
+
+// Singleton (id is always "singleton", fetched with findUnique) holding the
+// verified "About the Founder" profile shown on the homepage teaser section
+// and the dedicated /about-founder page. Every text field defaults to "" so
+// a brand-new row renders nothing until an admin fills it in — the code
+// must never invent founder credentials, degrees, achievements or claims.
+model Founder {
+  id                 String   @id @default("singleton")
+  name               String   @default("")
+  designation        String   @default("")
+  photoUrl           String?
+  mobilePhotoUrl     String?
+  shortBio           String   @default("") // concise homepage teaser
+  biography          String   @default("") // full multi-paragraph profile
+  education          String   @default("")
+  experience         String   @default("")
+  teachingPhilosophy String   @default("")
+  vision             String   @default("")
+  founderMessage     String   @default("")
+  // [{ "label": "LinkedIn", "url": "https://..." }] — only real, admin-entered profiles.
+  socialLinks        Json?
+  isActive           Boolean  @default(false)
+
+  // SEO metadata for the /about-founder page (admin-controlled; no auto claims).
+  seoTitle           String?
+  metaDescription    String?
+  ogImageUrl         String?
+  canonicalUrl       String?
+
+  updatedById        String?
+  updatedAt          DateTime @updatedAt
+  createdAt          DateTime @default(now())
+
+  updatedBy          User?    @relation("FounderUpdatedBy", fields: [updatedById], references: [id])
+
+  @@map("founder")
 }
 
 // ==========================================================================

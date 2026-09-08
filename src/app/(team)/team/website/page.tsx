@@ -53,6 +53,9 @@ export default async function HomeBuilderPage() {
           <Link href="/team/website/testimonials" className="text-label-sm text-primary hover:underline px-3 py-1.5 rounded-lg bg-primary/10">
             Testimonials
           </Link>
+          <Link href="/team/website/founder" className="text-label-sm text-primary hover:underline px-3 py-1.5 rounded-lg bg-primary/10">
+            About the Founder
+          </Link>
           <Link href="/team/website/faqs" className="text-label-sm text-primary hover:underline px-3 py-1.5 rounded-lg bg-primary/10">
             FAQs
           </Link>

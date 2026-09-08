@@ -7,6 +7,7 @@ import { TestSeriesShowcaseSection } from "@/components/landing/TestSeriesShowca
 import { AIBentoSection } from "@/components/landing/AIBentoSection";
 import { AtomicGuruLiveSection } from "@/components/landing/AtomicGuruLiveSection";
 import { FacultySection } from "@/components/landing/FacultySection";
+import { AboutFounderSection } from "@/components/landing/AboutFounderSection";
 import { AnalyticsSection } from "@/components/landing/AnalyticsSection";
 import { TestimonialsSection } from "@/components/landing/TestimonialsSection";
 import { FAQSection } from "@/components/landing/FAQSection";
@@ -28,6 +29,7 @@ export default function HomePage() {
         <AIBentoSection />
         <AtomicGuruLiveSection />
         <FacultySection />
+        <AboutFounderSection />
         <AnalyticsSection />
         <TestimonialsSection />
         <FAQSection />
