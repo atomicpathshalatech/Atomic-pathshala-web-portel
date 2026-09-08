@@ -11,6 +11,66 @@ export const metadata: Metadata = {
   title: "Atomic Test Series | Atomic Pathshala",
 };
 
+/**
+ * Classifies a Chemistry chapter into Physical, Inorganic, or Organic
+ */
+function detectChemistryBranch(title: string, subjTitle?: string): "PHYSICAL" | "INORGANIC" | "ORGANIC" {
+  const lowSubj = (subjTitle || "").toLowerCase();
+  if (lowSubj.includes("inorganic")) return "INORGANIC";
+  if (lowSubj.includes("organic")) return "ORGANIC";
+  if (lowSubj.includes("physical")) return "PHYSICAL";
+
+  const low = (title || "").toLowerCase();
+  if (
+    /mole|concept|basic concept|atomic structure|structure of atom|states of matter|gas|liquid|thermodynamics|energetics|thermochem|equilibrium|ionic equilibrium|chemical equilibrium|redox|oxidation|solution|colligative|electrochemistry|emf|kinetics|rate of reaction|surface chemistry|colloid|adsorption|solid state|crystal|physical/i.test(
+      low
+    )
+  ) {
+    return "PHYSICAL";
+  }
+  if (
+    /periodic|periodicity|classification of element|bonding|molecular structure|hybridization|hydrogen|s-block|alkali|alkaline|p-block|boron|carbon family|nitrogen family|oxygen family|halogen|noble gas|d-block|f-block|transition|lanthanoid|actinoid|coordination|complex|metallurgy|isolation|mineral|extraction|environmental chemistry|pollution|salt analysis|qualitative|inorganic/i.test(
+      low
+    )
+  ) {
+    return "INORGANIC";
+  }
+  if (
+    /organic|hydrocarbon|alkane|alkene|alkyne|aromatic|benzene|haloalkane|haloarene|alkyl halide|aryl halide|alcohol|phenol|ether|aldehyde|ketone|carboxylic|carbonyl|amine|diazonium|cyanide|isocyanide|biomolecule|carbohydrate|protein|amino acid|vitamin|nucleic acid|polymer|polymers|everyday life|drug|medicine|goc|isomerism|reaction mechanism|purification/i.test(
+      low
+    )
+  ) {
+    return "ORGANIC";
+  }
+  return "PHYSICAL";
+}
+
+/**
+ * Classifies a Biology chapter into Botany or Zoology
+ */
+function detectBiologyBranch(title: string, subjTitle?: string): "BOTANY" | "ZOOLOGY" {
+  const lowSubj = (subjTitle || "").toLowerCase();
+  if (lowSubj.includes("botany")) return "BOTANY";
+  if (lowSubj.includes("zoology")) return "ZOOLOGY";
+
+  const low = (title || "").toLowerCase();
+  if (
+    /plant|photosynthesis|respiration in plant|plant growth|morphology of flowering|anatomy of flowering|biological classification|living world|transport in plant|mineral nutrition|sexual reproduction in flowering|principles of inheritance|molecular basis|genetics|dna|rna|microbes in human welfare|organism and population|ecosystem|biodiversity|environmental issue|botany|chloroplast|cell/i.test(
+      low
+    )
+  ) {
+    return "BOTANY";
+  }
+  if (
+    /animal|human|digestion|breathing|respiration in animal|body fluid|circulation|heart|blood|excretory|urine|kidney|locomotion|movement|muscle|bone|neural|brain|neuron|chemical coordination|hormone|endocrine|human reproduction|reproductive health|evolution|human health|disease|immunity|biotechnology|zoology/i.test(
+      low
+    )
+  ) {
+    return "ZOOLOGY";
+  }
+  return "BOTANY";
+}
+
 export default async function StudentTestsPage() {
   const { student } = await requireStudentSession();
   const now = new Date();
@@ -47,36 +107,75 @@ export default async function StudentTestsPage() {
         },
       },
     });
-
-    // Exclude Mathematics if student is targeting NEET
-    const isNeet = !student.targetExam || student.targetExam.toUpperCase().includes("NEET");
-    if (isNeet) {
-      dbSubjects = dbSubjects.filter(
-        (s) => !s.title?.toLowerCase().includes("math")
-      );
-    }
   } catch (err) {
     console.error("Error fetching subject tests:", err);
   }
 
-  const SUBJECT_CONFIGS: Record<string, { icon: string; color: string; gradient: string }> = {
-    Physics: { icon: "bolt", color: "text-blue-500", gradient: "from-blue-600 to-indigo-600" },
-    Chemistry: { icon: "science", color: "text-amber-500", gradient: "from-amber-500 to-orange-600" },
-    Biology: { icon: "biotech", color: "text-emerald-500", gradient: "from-emerald-500 to-teal-600" },
-    Mathematics: { icon: "functions", color: "text-purple-500", gradient: "from-purple-600 to-indigo-600" },
+  // Canonical 3 NEET Subjects
+  const CANONICAL_SUBJECTS: Record<
+    "Physics" | "Chemistry" | "Biology",
+    {
+      id: string;
+      name: string;
+      icon: string;
+      color: string;
+      gradient: string;
+      chapters: any[];
+    }
+  > = {
+    Physics: {
+      id: "subj-physics",
+      name: "Physics",
+      icon: "bolt",
+      color: "text-blue-500",
+      gradient: "from-blue-600 to-indigo-600",
+      chapters: [],
+    },
+    Chemistry: {
+      id: "subj-chemistry",
+      name: "Chemistry",
+      icon: "science",
+      color: "text-amber-500",
+      gradient: "from-amber-500 to-orange-600",
+      chapters: [],
+    },
+    Biology: {
+      id: "subj-biology",
+      name: "Biology",
+      icon: "biotech",
+      color: "text-emerald-500",
+      gradient: "from-emerald-500 to-teal-600",
+      chapters: [],
+    },
   };
 
-  const subjectTestsMap: Record<string, SubjectChapterwiseTests> = {};
-
+  // Group chapters from DB into the 3 canonical subjects ONLY
   for (const subj of dbSubjects) {
-    const subjName = subj.title || "Physics";
-    const config = SUBJECT_CONFIGS[subjName] || {
-      icon: "science",
-      color: "text-primary",
-      gradient: "from-primary to-primary-container",
-    };
+    const rawTitle = (subj.title || "").trim();
+    const lowTitle = rawTitle.toLowerCase();
 
-    const chapters = (subj.chapters || []).map((ch: any, cIdx: number) => {
+    // STRICT NEET FILTER: Omit Science, Mental Ability, Mathematics, or other non-NEET subjects
+    if (
+      lowTitle.includes("mental") ||
+      lowTitle.includes("science") ||
+      lowTitle.includes("math") ||
+      lowTitle.includes("foundation")
+    ) {
+      continue;
+    }
+
+    let targetKey: "Physics" | "Chemistry" | "Biology" | null = null;
+    if (lowTitle.includes("physic")) {
+      targetKey = "Physics";
+    } else if (lowTitle.includes("chem")) {
+      targetKey = "Chemistry";
+    } else if (lowTitle.includes("bio") || lowTitle.includes("botany") || lowTitle.includes("zoology")) {
+      targetKey = "Biology";
+    }
+
+    if (!targetKey) continue;
+
+    for (const ch of subj.chapters || []) {
       const tests = (ch.tests || []).map((t: any) => {
         const attempt = t.attempts?.[0];
         const status: "PENDING" | "IN_PROGRESS" | "COMPLETED" = attempt
@@ -84,7 +183,8 @@ export default async function StudentTestsPage() {
             ? "IN_PROGRESS"
             : "COMPLETED"
           : "PENDING";
-        const qCount = t.sections?.reduce((sum: number, s: any) => sum + (s._count?.questions || 0), 0) || 15;
+        const qCount =
+          t.sections?.reduce((sum: number, s: any) => sum + (s._count?.questions || 0), 0) || 15;
 
         return {
           id: t.id,
@@ -97,23 +197,38 @@ export default async function StudentTestsPage() {
         };
       });
 
-      return {
-        id: ch.id || `ch-${cIdx}`,
-        chapterNumber: cIdx + 1,
-        title: ch.title,
-        tests,
-      };
-    });
+      let branch: "PHYSICAL" | "INORGANIC" | "ORGANIC" | "BOTANY" | "ZOOLOGY" | "GENERAL" = "GENERAL";
+      let branchLabel = "";
 
-    subjectTestsMap[subjName] = {
-      id: subj.id,
-      name: subjName,
-      icon: config.icon,
-      color: config.color,
-      gradient: config.gradient,
-      chapters,
-    };
+      if (targetKey === "Chemistry") {
+        branch = detectChemistryBranch(ch.title, rawTitle);
+        branchLabel =
+          branch === "PHYSICAL"
+            ? "Physical Chemistry"
+            : branch === "INORGANIC"
+            ? "Inorganic Chemistry"
+            : "Organic Chemistry";
+      } else if (targetKey === "Biology") {
+        branch = detectBiologyBranch(ch.title, rawTitle);
+        branchLabel = branch === "BOTANY" ? "Botany" : "Zoology";
+      }
+
+      CANONICAL_SUBJECTS[targetKey].chapters.push({
+        id: ch.id,
+        chapterNumber: CANONICAL_SUBJECTS[targetKey].chapters.length + 1,
+        title: ch.title,
+        branch,
+        branchLabel,
+        tests,
+      });
+    }
   }
+
+  const subjectTestsList: SubjectChapterwiseTests[] = [
+    CANONICAL_SUBJECTS.Physics,
+    CANONICAL_SUBJECTS.Chemistry,
+    CANONICAL_SUBJECTS.Biology,
+  ];
 
   // 3. Fetch Category 2: Test Series & Batch Test Series Boxes
   let dbTestSeries: any[] = [];
@@ -297,7 +412,7 @@ export default async function StudentTestsPage() {
 
       {/* 2-Category Interactive Arena */}
       <AtomicPracticeTestArena
-        subjectTests={Object.values(subjectTestsMap)}
+        subjectTests={subjectTestsList}
         testSeriesBoxes={testSeriesBoxes}
       />
     </div>

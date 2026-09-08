@@ -38,7 +38,17 @@ const PRIMARY_ROLES = [
   { value: "VIDEO_EDITOR", label: "Video Editor", badge: "bg-rose-100 text-rose-800 border-rose-300" },
 ];
 
-const SUBJECT_OPTIONS = ["Physics", "Chemistry", "Biology", "Mathematics", "Botany", "Zoology", "ALL"];
+const SUBJECT_OPTIONS = [
+  "Physics",
+  "Chemistry",
+  "Physical Chemistry",
+  "Inorganic Chemistry",
+  "Organic Chemistry",
+  "Biology",
+  "Botany",
+  "Zoology",
+  "ALL",
+];
 
 export function UserManagementConsole() {
   const [users, setUsers] = useState<UserItem[]>([]);

@@ -122,21 +122,37 @@ export default async function DppPortalPage() {
 
   // Pre-seed known DB chapters into the map
   for (const ch of dbChapters) {
-    const subjName = ch.subject?.title || "Physics";
-    if (!subjectMap[subjName]) subjectMap[subjName] = {};
-    if (!subjectMap[subjName][ch.title]) {
-      subjectMap[subjName][ch.title] = [];
+    const rawSubj = ch.subject?.title || "Physics";
+    const low = rawSubj.toLowerCase();
+    if (low.includes("mental") || low.includes("science") || low.includes("math")) continue;
+    let subjName = "Physics";
+    if (low.includes("chem")) subjName = "Chemistry";
+    else if (low.includes("bio") || low.includes("botany") || low.includes("zoology")) subjName = "Biology";
+
+    if (!subjectMap[subjName]) {
+      subjectMap[subjName] = {};
+    }
+    if (!subjectMap[subjName]![ch.title]) {
+      subjectMap[subjName]![ch.title] = [];
     }
   }
 
   // Insert real DPPs into their respective Subject and Chapter
   for (const d of dbDpps) {
-    const subjName = d.subject || "Physics";
+    const rawSubj = d.subject || "Physics";
+    const low = rawSubj.toLowerCase();
+    if (low.includes("mental") || low.includes("science") || low.includes("math")) continue;
+    let subjName = "Physics";
+    if (low.includes("chem")) subjName = "Chemistry";
+    else if (low.includes("bio") || low.includes("botany") || low.includes("zoology")) subjName = "Biology";
+
     const chapterName = d.chapter || d.chapterRef?.title || "General Practice";
 
-    if (!subjectMap[subjName]) subjectMap[subjName] = {};
-    if (!subjectMap[subjName][chapterName]) {
-      subjectMap[subjName][chapterName] = [];
+    if (!subjectMap[subjName]) {
+      subjectMap[subjName] = {};
+    }
+    if (!subjectMap[subjName]![chapterName]) {
+      subjectMap[subjName]![chapterName] = [];
     }
 
     const latestAttempt = d.attempts?.[0];
@@ -149,7 +165,7 @@ export default async function DppPortalPage() {
     const qCount = d.questions?.length || d.questionTargetCount || 15;
     const cMarks = d.correctMarks || 4;
 
-    subjectMap[subjName][chapterName].push({
+    subjectMap[subjName]![chapterName]!.push({
       id: d.id,
       code: d.code,
       title: d.name,
@@ -166,12 +182,20 @@ export default async function DppPortalPage() {
 
   // Insert Batch Schedule DPPs
   for (const b of batchDpps) {
-    const subjName = b.subject || "Physics";
+    const rawSubj = b.subject || "Physics";
+    const low = rawSubj.toLowerCase();
+    if (low.includes("mental") || low.includes("science") || low.includes("math")) continue;
+    let subjName = "Physics";
+    if (low.includes("chem")) subjName = "Chemistry";
+    else if (low.includes("bio") || low.includes("botany") || low.includes("zoology")) subjName = "Biology";
+
     const chapterName = b.notes || "Live Batch Practice";
 
-    if (!subjectMap[subjName]) subjectMap[subjName] = {};
-    if (!subjectMap[subjName][chapterName]) {
-      subjectMap[subjName][chapterName] = [];
+    if (!subjectMap[subjName]) {
+      subjectMap[subjName] = {};
+    }
+    if (!subjectMap[subjName]![chapterName]) {
+      subjectMap[subjName]![chapterName] = [];
     }
 
     const attempt = b.test?.attempts?.[0];
@@ -181,7 +205,7 @@ export default async function DppPortalPage() {
         : "COMPLETED"
       : "PENDING";
 
-    subjectMap[subjName][chapterName].push({
+    subjectMap[subjName]![chapterName]!.push({
       id: b.id,
       code: b.id.slice(-6).toUpperCase(),
       title: b.title,

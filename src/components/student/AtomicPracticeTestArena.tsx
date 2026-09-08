@@ -18,6 +18,8 @@ export interface ChapterGroupedTests {
   id: string;
   chapterNumber: number;
   title: string;
+  branch?: "PHYSICAL" | "INORGANIC" | "ORGANIC" | "BOTANY" | "ZOOLOGY" | "GENERAL";
+  branchLabel?: string;
   tests: ChapterwiseTestItem[];
 }
 
@@ -83,6 +85,7 @@ export function AtomicPracticeTestArena({
   // Chapterwise category state
   const defaultSubject = subjectTests[0]?.name || "Physics";
   const [selectedSubject, setSelectedSubject] = useState<string>(defaultSubject);
+  const [selectedBranch, setSelectedBranch] = useState<string>("ALL");
   const [expandedChapters, setExpandedChapters] = useState<Record<string, boolean>>({});
   const [chapterSearch, setChapterSearch] = useState("");
 
@@ -91,6 +94,11 @@ export function AtomicPracticeTestArena({
   const [seriesSearch, setSeriesSearch] = useState("");
 
   const activeSubjectData = subjectTests.find((s) => s.name === selectedSubject) || subjectTests[0];
+
+  const handleSubjectChange = (name: string) => {
+    setSelectedSubject(name);
+    setSelectedBranch("ALL");
+  };
 
   const toggleChapter = (chapterId: string) => {
     setExpandedChapters((prev) => ({ ...prev, [chapterId]: !prev[chapterId] }));
@@ -107,13 +115,18 @@ export function AtomicPracticeTestArena({
   );
   const totalSeriesTests = testSeriesBoxes.reduce((sum, box) => sum + box.tests.length, 0);
 
-  // Filtered Chapterwise Chapters
+  // Filtered Chapterwise Chapters by Search and Sub-branch
   const activeChaptersList = activeSubjectData?.chapters || [];
-  const filteredChapters = activeChaptersList.filter(
-    (ch) =>
+  const filteredChapters = activeChaptersList.filter((ch) => {
+    const matchesSearch =
       ch.title.toLowerCase().includes(chapterSearch.toLowerCase()) ||
-      ch.tests.some((t) => t.name.toLowerCase().includes(chapterSearch.toLowerCase()))
-  );
+      ch.tests.some((t) => t.name.toLowerCase().includes(chapterSearch.toLowerCase()));
+
+    if (!matchesSearch) return false;
+
+    if (selectedBranch === "ALL") return true;
+    return ch.branch === selectedBranch;
+  });
 
   // Filtered Test Series Boxes
   const filteredSeriesBoxes = testSeriesBoxes.filter(
@@ -185,11 +198,11 @@ export function AtomicPracticeTestArena({
                     0
                   );
 
-                  return (
+                    return (
                     <button
                       key={subj.id}
                       type="button"
-                      onClick={() => setSelectedSubject(subj.name)}
+                      onClick={() => handleSubjectChange(subj.name)}
                       className={`relative flex items-center justify-between p-2.5 sm:px-4 sm:py-3 rounded-xl transition-all duration-200 text-left cursor-pointer ${
                         isSelected
                           ? "bg-orange-500 text-white shadow-2xs"
@@ -209,7 +222,11 @@ export function AtomicPracticeTestArena({
                             {subj.name}
                           </h3>
                           <p className={`text-[10px] sm:text-[11px] ${isSelected ? "text-white/80" : "text-slate-500"}`}>
-                            {subj.chapters.length} Chapters &middot; {totalTests} Tests
+                            {subj.name === "Chemistry"
+                              ? "Physical · Inorganic · Organic"
+                              : subj.name === "Biology"
+                              ? "Botany · Zoology"
+                              : `${subj.chapters.length} Chapters`} &middot; {totalTests} Tests
                           </p>
                         </div>
                       </div>
@@ -228,6 +245,94 @@ export function AtomicPracticeTestArena({
             </div>
           )}
 
+          {/* Sub-branch Selector Pills (Only for Chemistry & Biology) */}
+          {selectedSubject === "Chemistry" && (
+            <div className="bg-amber-50/70 border border-amber-200/70 rounded-2xl p-2.5 shadow-2xs flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] font-bold text-amber-900 px-2 py-1 flex items-center gap-1">
+                <span className="material-symbols-outlined text-[16px] text-amber-600">tune</span>
+                Branch:
+              </span>
+              {[
+                { id: "ALL", label: "All Chemistry", icon: "science" },
+                { id: "PHYSICAL", label: "Physical Chemistry", icon: "hourglass_bottom" },
+                { id: "INORGANIC", label: "Inorganic Chemistry", icon: "hub" },
+                { id: "ORGANIC", label: "Organic Chemistry", icon: "grain" },
+              ].map((b) => {
+                const isBranchActive = selectedBranch === b.id;
+                const count =
+                  b.id === "ALL"
+                    ? activeSubjectData?.chapters.length || 0
+                    : activeSubjectData?.chapters.filter((c) => c.branch === b.id).length || 0;
+
+                return (
+                  <button
+                    key={b.id}
+                    type="button"
+                    onClick={() => setSelectedBranch(b.id)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      isBranchActive
+                        ? "bg-amber-600 text-white shadow-2xs"
+                        : "bg-white hover:bg-amber-100/60 text-slate-700 border border-amber-200/80"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[15px]">{b.icon}</span>
+                    <span>{b.label}</span>
+                    <span
+                      className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                        isBranchActive ? "bg-white/25 text-white" : "bg-amber-100 text-amber-800"
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {selectedSubject === "Biology" && (
+            <div className="bg-emerald-50/70 border border-emerald-200/70 rounded-2xl p-2.5 shadow-2xs flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] font-bold text-emerald-900 px-2 py-1 flex items-center gap-1">
+                <span className="material-symbols-outlined text-[16px] text-emerald-600">tune</span>
+                Branch:
+              </span>
+              {[
+                { id: "ALL", label: "All Biology", icon: "biotech" },
+                { id: "BOTANY", label: "Botany", icon: "eco" },
+                { id: "ZOOLOGY", label: "Zoology", icon: "pets" },
+              ].map((b) => {
+                const isBranchActive = selectedBranch === b.id;
+                const count =
+                  b.id === "ALL"
+                    ? activeSubjectData?.chapters.length || 0
+                    : activeSubjectData?.chapters.filter((c) => c.branch === b.id).length || 0;
+
+                return (
+                  <button
+                    key={b.id}
+                    type="button"
+                    onClick={() => setSelectedBranch(b.id)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      isBranchActive
+                        ? "bg-emerald-600 text-white shadow-2xs"
+                        : "bg-white hover:bg-emerald-100/60 text-slate-700 border border-emerald-200/80"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[15px]">{b.icon}</span>
+                    <span>{b.label}</span>
+                    <span
+                      className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                        isBranchActive ? "bg-white/25 text-white" : "bg-emerald-100 text-emerald-800"
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           {/* Search Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white border border-slate-200/80 rounded-2xl p-3.5 shadow-2xs">
             <div className="flex items-center gap-2.5">
@@ -236,7 +341,21 @@ export function AtomicPracticeTestArena({
               </span>
               <div>
                 <h2 className="text-sm sm:text-base font-bold text-slate-900 leading-snug">
-                  {activeSubjectData?.name || "Subject"} — Chapterwise Practice Tests
+                  {activeSubjectData?.name || "Subject"}{" "}
+                  {selectedBranch !== "ALL"
+                    ? `· ${
+                        selectedBranch === "PHYSICAL"
+                          ? "Physical Chemistry"
+                          : selectedBranch === "INORGANIC"
+                          ? "Inorganic Chemistry"
+                          : selectedBranch === "ORGANIC"
+                          ? "Organic Chemistry"
+                          : selectedBranch === "BOTANY"
+                          ? "Botany"
+                          : "Zoology"
+                      }`
+                    : ""}{" "}
+                  — Chapterwise Practice Tests
                 </h2>
                 <p className="text-[11px] text-slate-500">
                   Tests automatically added as chapters and subjects are created in your batch.
@@ -266,7 +385,9 @@ export function AtomicPracticeTestArena({
                 <p className="font-bold text-sm text-slate-800">
                   {chapterSearch
                     ? "No matching chapters found"
-                    : `No practice tests added in ${activeSubjectData?.name || "this subject"} yet`}
+                    : `No practice tests added in ${
+                        selectedBranch !== "ALL" ? selectedBranch : activeSubjectData?.name || "this subject"
+                      } yet`}
                 </p>
                 <p className="text-xs text-slate-400">
                   Practice tests will appear here as chapters are added to your batch courses.
@@ -292,9 +413,28 @@ export function AtomicPracticeTestArena({
                           {chapter.chapterNumber}
                         </span>
                         <div className="min-w-0">
-                          <h3 className="text-xs sm:text-sm font-bold text-slate-900 truncate">
-                            Chapter {chapter.chapterNumber}: {chapter.title}
-                          </h3>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="text-xs sm:text-sm font-bold text-slate-900 truncate">
+                              Chapter {chapter.chapterNumber}: {chapter.title}
+                            </h3>
+                            {chapter.branchLabel && (
+                              <span
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
+                                  chapter.branch === "PHYSICAL"
+                                    ? "bg-blue-50 text-blue-700 border-blue-200"
+                                    : chapter.branch === "INORGANIC"
+                                    ? "bg-purple-50 text-purple-700 border-purple-200"
+                                    : chapter.branch === "ORGANIC"
+                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                    : chapter.branch === "BOTANY"
+                                    ? "bg-green-50 text-green-700 border-green-200"
+                                    : "bg-teal-50 text-teal-700 border-teal-200"
+                                }`}
+                              >
+                                {chapter.branchLabel}
+                              </span>
+                            )}
+                          </div>
                           <p className="text-[11px] text-slate-500">
                             {chapter.tests.length} Test{chapter.tests.length === 1 ? "" : "s"} &middot; {completed}/{chapter.tests.length} Completed
                           </p>

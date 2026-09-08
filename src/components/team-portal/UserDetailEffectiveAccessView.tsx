@@ -538,7 +538,16 @@ export function UserDetailEffectiveAccessView({ userId }: { userId: string }) {
             <div>
               <label className="font-bold text-slate-700 dark:text-slate-300">Assigned Subjects</label>
               <div className="flex flex-wrap gap-2 mt-1.5">
-                {["Physics", "Chemistry", "Biology", "Mathematics", "Botany", "Zoology"].map((sub) => {
+                {[
+                  "Physics",
+                  "Chemistry",
+                  "Physical Chemistry",
+                  "Inorganic Chemistry",
+                  "Organic Chemistry",
+                  "Biology",
+                  "Botany",
+                  "Zoology",
+                ].map((sub) => {
                   const isChecked = user.subjectScope.includes(sub);
                   return (
                     <button
