@@ -25,7 +25,11 @@ const nextConfig = {
     ],
   },
   experimental: {
-    optimizePackageImports: ["lucide-react", "@heroicons/react", "date-fns"],
+    // `@heroicons/react` was listed but isn't a dependency — dropped.
+    // Both remaining entries are barrel-heavy packages imported across many
+    // client bundles; per-icon / per-function import rewriting keeps route
+    // chunks small.
+    optimizePackageImports: ["lucide-react", "date-fns"],
     serverActions: {
       bodySizeLimit: "10mb",
     },

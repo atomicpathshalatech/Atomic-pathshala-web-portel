@@ -13,9 +13,12 @@ export async function GET() {
       return apiError("Not authenticated", 401);
     }
 
+    // Bounded: the in-app feed only ever renders recent items. An
+    // unbounded findMany here grew without limit for long-lived accounts.
     const notifications = await prisma.notification.findMany({
       where: { userId: session.user.id },
       orderBy: { createdAt: "desc" },
+      take: 50,
     });
 
     return apiSuccess({ notifications });

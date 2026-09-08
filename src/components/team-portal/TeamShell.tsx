@@ -62,10 +62,10 @@ export function TeamShell({
               <span className="material-symbols-outlined text-2xl">menu</span>
             </button>
             <Link href="/team" className="flex items-center gap-2.5 font-headline-md text-headline-md font-bold text-primary min-w-0">
-              <img src="/brand/logo.png" alt="Atomic Logo" className="w-8 h-8 rounded-lg object-contain shrink-0" />
-              <span className="truncate">
-                Atomic Pathshala{" "}
-                <span className="hidden sm:inline text-on-surface-variant font-body-md text-body-md">Team</span>
+              <img src="/brand/logo.png" alt="Atomic OPS Logo" className="w-8 h-8 rounded-lg object-contain shrink-0" />
+              <span className="truncate flex items-center gap-1.5 font-black tracking-tight">
+                <span>ATOMIC</span>
+                <span className="px-1.5 py-0.5 rounded-md bg-orange-500 text-white text-xs font-black tracking-wider">OPS</span>
               </span>
             </Link>
 

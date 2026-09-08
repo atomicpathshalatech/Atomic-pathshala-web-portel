@@ -128,14 +128,17 @@ const config: Config = {
         "stack-sm": "8px",
       },
       fontFamily: {
-        "body-lg": ["Inter", "sans-serif"],
-        "label-sm": ["Inter", "sans-serif"],
-        "display-lg-mobile": ["Geist", "sans-serif"],
-        "label-md": ["Inter", "sans-serif"],
-        "headline-lg": ["Geist", "sans-serif"],
-        "display-lg": ["Geist", "sans-serif"],
-        "headline-md": ["Geist", "sans-serif"],
-        "body-md": ["Inter", "sans-serif"],
+        // `var(--font-inter)` is injected by next/font (see src/app/layout.tsx);
+        // "Inter" stays as a literal fallback. Geist still loads from the
+        // external stylesheet in the root layout.
+        "body-lg": ["var(--font-inter)", "Inter", "system-ui", "sans-serif"],
+        "label-sm": ["var(--font-inter)", "Inter", "system-ui", "sans-serif"],
+        "display-lg-mobile": ["Geist", "system-ui", "sans-serif"],
+        "label-md": ["var(--font-inter)", "Inter", "system-ui", "sans-serif"],
+        "headline-lg": ["Geist", "system-ui", "sans-serif"],
+        "display-lg": ["Geist", "system-ui", "sans-serif"],
+        "headline-md": ["Geist", "system-ui", "sans-serif"],
+        "body-md": ["var(--font-inter)", "Inter", "system-ui", "sans-serif"],
       },
       // Headings scale continuously instead of stepping between a desktop
       // token and a hand-swapped `-mobile` token. Each clamp()'s upper bound

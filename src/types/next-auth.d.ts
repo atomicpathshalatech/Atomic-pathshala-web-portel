@@ -24,5 +24,8 @@ declare module "next-auth/jwt" {
     id: string;
     role: string;
     deviceSessionId?: string | null;
+    // Throttled DeviceSession revalidation cache (see auth.ts jwt callback).
+    deviceValid?: boolean;
+    deviceCheckedAt?: number;
   }
 }

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { ModuleEditor } from "@/components/team-portal/ModuleEditor";
+import { ModuleEditorClient as ModuleEditor } from "@/components/team-portal/ModuleEditorClient";
 
 export const metadata: Metadata = { title: "Module" };
 

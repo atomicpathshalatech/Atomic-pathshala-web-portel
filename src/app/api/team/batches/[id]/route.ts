@@ -1,7 +1,9 @@
 import { NextRequest } from "next/server";
+import { revalidateTag } from "next/cache";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { COURSE_CATALOG_TAG } from "@/lib/courses/catalog";
 import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { batchUpdateSchema } from "@/lib/validation/batch";
@@ -79,6 +81,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       },
     });
 
+    revalidateTag(COURSE_CATALOG_TAG);
     return apiSuccess({ batch });
   } catch (error) {
     return handleApiError(error);
@@ -106,6 +109,7 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
       },
     });
 
+    revalidateTag(COURSE_CATALOG_TAG);
     return apiSuccess({ deleted: true });
   } catch (error) {
     return handleApiError(error);

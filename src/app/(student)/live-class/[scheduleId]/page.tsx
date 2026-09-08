@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { requireStudentSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
-import { StudentLiveClassRoom } from "@/components/live-class/StudentLiveClassRoom";
+import { StudentLiveClassRoomClient as StudentLiveClassRoom } from "@/components/live-class/StudentLiveClassRoomClient";
 
 export const metadata: Metadata = {
   title: "Live Class",

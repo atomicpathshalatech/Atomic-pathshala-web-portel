@@ -1,7 +1,5 @@
 import { requireTeamSession } from "@/lib/auth/session";
-import { getUserPermissionCodes } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
-import { prisma } from "@/lib/db";
 import { TeamShell, type TeamNavSection } from "@/components/team-portal/TeamShell";
 
 /**
@@ -87,9 +85,11 @@ const NAV_SECTIONS: { title?: string; items: { href: string; label: string; icon
 ];
 
 export default async function TeamPortalLayout({ children }: { children: React.ReactNode }) {
-  const { user } = await requireTeamSession();
-  const permissions = await getUserPermissionCodes(user.id);
-  const hasTeacherProfile = (await prisma.teacher.count({ where: { userId: user.id } })) > 0;
+  // `permissions` and the teacher-profile probe both come from
+  // requireTeamSession() now (cached, shared with every page in this render)
+  // — this layout makes zero additional DB round trips.
+  const { user, permissions } = await requireTeamSession();
+  const hasTeacherProfile = Boolean(user.teacher);
 
   const visibleSections: TeamNavSection[] = NAV_SECTIONS.map((section) => ({
     title: section.title,

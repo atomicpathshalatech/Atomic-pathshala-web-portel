@@ -69,28 +69,46 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
+    /**
+     * The DeviceSession revalidation used to run in the `session` callback,
+     * i.e. one cross-region Postgres round trip on EVERY `getServerSession()`
+     * — every page load and every one of the ~300 API routes. That check now
+     * lives here and is throttled: the result + a timestamp are cached on the
+     * (encrypted, httpOnly) JWT and the DB is only re-queried once the cache
+     * is older than DEVICE_CHECK_TTL_MS. Effect on the single-session policy:
+     * a revoked device is detected on its next request after the TTL window
+     * instead of literally the next request — a <=60s delay, not a hole.
+     */
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
         token.role = (user as { role: string }).role;
         token.deviceSessionId = (user as { deviceSessionId?: string | null }).deviceSessionId ?? null;
+        token.deviceValid = true;
+        token.deviceCheckedAt = Date.now();
+        return token;
+      }
+
+      const DEVICE_CHECK_TTL_MS = 60_000;
+      const checkedAt = typeof token.deviceCheckedAt === "number" ? token.deviceCheckedAt : 0;
+      if (Date.now() - checkedAt > DEVICE_CHECK_TTL_MS) {
+        try {
+          token.deviceValid = await isDeviceSessionValid(token.deviceSessionId ?? undefined);
+        } catch {
+          // never lock everyone out on a transient DB error
+          token.deviceValid = true;
+        }
+        token.deviceCheckedAt = Date.now();
       }
       return token;
     },
     async session({ session, token }) {
-      try {
-        const valid = await isDeviceSessionValid(token.deviceSessionId ?? undefined);
-        if (session.user && valid && token.id) {
-          session.user.id = token.id as string;
-          session.user.role = (token.role as string) || "STUDENT";
-        } else if (session.user && !valid) {
-          delete (session as any).user;
-        }
-      } catch {
-        if (session.user && token.id) {
-          session.user.id = token.id as string;
-          session.user.role = (token.role as string) || "STUDENT";
-        }
+      const valid = token.deviceValid !== false;
+      if (session.user && valid && token.id) {
+        session.user.id = token.id as string;
+        session.user.role = (token.role as string) || "STUDENT";
+      } else if (session.user && !valid) {
+        delete (session as any).user;
       }
       return session;
     },
