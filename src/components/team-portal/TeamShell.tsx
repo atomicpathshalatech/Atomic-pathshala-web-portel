@@ -38,7 +38,10 @@ export function TeamShell({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const pathname = usePathname();
   const isRootTeam = pathname === "/team";
-  const isLiveStudio = pathname?.startsWith("/team/live-class") || pathname?.startsWith("/team/live-studio");
+  const isLiveStudio =
+    pathname?.startsWith("/team/live-class") ||
+    pathname?.startsWith("/team/live-studio") ||
+    pathname?.startsWith("/team/whiteboard/test");
 
   if (isLiveStudio) {
     return (

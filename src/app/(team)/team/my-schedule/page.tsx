@@ -29,9 +29,11 @@ export default async function TeacherMySchedulePage() {
     );
   }
 
-  // Fetch all schedules for this teacher without filtering out past dates
+  // Fetch all schedules for this teacher without filtering out past dates.
+  // `isTest` rows (Whiteboard Test Lab) are never real classes — hidden here.
   const rawSchedules = await prisma.batchSchedule.findMany({
     where: {
+      isTest: false,
       OR: [
         { teacherId: teacher.id },
         { batch: { teachers: { some: { teacherId: teacher.id } } } },

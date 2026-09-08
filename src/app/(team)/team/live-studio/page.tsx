@@ -35,6 +35,7 @@ export default async function TeamLiveStudioPage({
   let schedule = await prisma.batchSchedule.findFirst({
     where: {
       type: "LIVE_CLASS",
+      isTest: false,
       ...(teacher ? { OR: [{ teacherId: teacher.id }, { batch: { teachers: { some: { teacherId: teacher.id } } } }] } : {}),
       status: { in: ["SCHEDULED", "LIVE"] },
     },
@@ -48,7 +49,7 @@ export default async function TeamLiveStudioPage({
 
   // If no specific schedule found, look for any live class schedule
   schedule = await prisma.batchSchedule.findFirst({
-    where: { type: "LIVE_CLASS" },
+    where: { type: "LIVE_CLASS", isTest: false },
     orderBy: { createdAt: "desc" },
     include: { batch: true },
   });

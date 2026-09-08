@@ -160,7 +160,7 @@ export async function getTeacherCommandCenterData(teacherId: string): Promise<Co
   // definition of "my batch".
   const [batchTeacherLinks, scheduleBatchLinks] = await Promise.all([
     prisma.batchTeacher.findMany({ where: { teacherId }, select: { batchId: true } }),
-    prisma.batchSchedule.findMany({ where: { teacherId }, select: { batchId: true }, distinct: ["batchId"] }),
+    prisma.batchSchedule.findMany({ where: { teacherId, isTest: false }, select: { batchId: true }, distinct: ["batchId"] }),
   ]);
   const batchIds = Array.from(
     new Set([...batchTeacherLinks.map((b) => b.batchId), ...scheduleBatchLinks.map((b) => b.batchId)])
