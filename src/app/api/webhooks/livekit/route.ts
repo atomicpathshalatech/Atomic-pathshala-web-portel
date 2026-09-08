@@ -1,18 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { WebhookReceiver, EgressStatus } from "livekit-server-sdk";
 import { prisma } from "@/lib/db";
+import { pusherServer, sessionChannel } from "@/lib/realtime/pusher-server";
 
 export const runtime = "nodejs";
 
 /**
- * LiveKit webhooks (configure in the LiveKit Cloud project dashboard ->
- * Settings -> Webhooks, pointing at `<domain>/api/webhooks/livekit`).
- * Only egress_* events are handled here - room/participant events aren't
- * needed since Pusher already carries those in realtime for this app.
- *
- * We only care about matching an egress back to the WhiteboardSession that
- * started it (via recordingEgressId) and recording where the finished file
- * landed. Everything else about the event is ignored.
+ * LiveKit webhooks (configured in LiveKit Cloud project dashboard -> Settings -> Webhooks).
+ * Egress events update WhiteboardSession and FileAsset records upon completion.
  */
 function getReceiver() {
   const apiKey = process.env.LIVEKIT_API_KEY;
@@ -44,22 +39,79 @@ export async function POST(request: NextRequest) {
       const info = event.egressInfo;
       const session = await prisma.whiteboardSession.findFirst({
         where: { recordingEgressId: info.egressId },
-        select: { id: true },
+        include: {
+          teacher: true,
+          batchSchedule: true,
+        },
       });
 
       if (session) {
         if (info.status === EgressStatus.EGRESS_COMPLETE) {
           const file = info.fileResults?.[0];
+          const storageKey = file?.filename || session.recordingStorageKey || `recordings/${session.id}/final.mp4`;
+          const durationSeconds = file?.duration
+            ? Math.round(Number(file.duration) / 1_000_000_000)
+            : undefined;
+
+          // 1. Create or update FileAsset record
+          const fileAsset = await prisma.fileAsset
+            .upsert({
+              where: { storageKey },
+              update: {
+                status: "ACTIVE",
+                sizeBytes: file?.size ? BigInt(file.size) : undefined,
+                metadata: {
+                  whiteboardSessionId: session.id,
+                  batchScheduleId: session.batchScheduleId,
+                  type: "LIVE_CLASS_RECORDING",
+                  durationSeconds,
+                  egressId: info.egressId,
+                },
+              },
+              create: {
+                ownerId: session.teacher?.userId || session.teacherId,
+                fileType: "VIDEO",
+                storageProvider: "r2",
+                storageKey,
+                originalFilename: `${(session.title || "Live_Class").replace(/[^a-zA-Z0-9_-]/g, "_")}_Recording.mp4`,
+                mimeType: "video/mp4",
+                sizeBytes: file?.size ? BigInt(file.size) : BigInt(0),
+                status: "ACTIVE",
+                visibility: "PROTECTED",
+                metadata: {
+                  whiteboardSessionId: session.id,
+                  batchScheduleId: session.batchScheduleId,
+                  type: "LIVE_CLASS_RECORDING",
+                  durationSeconds,
+                  egressId: info.egressId,
+                },
+              },
+            })
+            .catch((faErr) => {
+              console.warn("[livekit_webhook_fileasset_warning]", faErr);
+              return null;
+            });
+
+          // 2. Update WhiteboardSession
           await prisma.whiteboardSession.update({
             where: { id: session.id },
             data: {
               recordingStatus: "READY",
-              recordingStorageKey: file?.filename || undefined,
-              recordingDurationSeconds: file?.duration
-                ? Math.round(Number(file.duration) / 1_000_000_000)
-                : undefined,
+              recordingStorageKey: storageKey,
+              ...(durationSeconds !== undefined && { recordingDurationSeconds: durationSeconds }),
             },
           });
+
+          // 3. Realtime push notification
+          try {
+            await pusherServer.trigger(sessionChannel(session.id), "recording-ready", {
+              recordingStatus: "READY",
+              durationSeconds,
+              resourceId: fileAsset?.id || null,
+            });
+          } catch {
+            // non-blocking
+          }
         } else {
           await prisma.whiteboardSession.update({
             where: { id: session.id },
@@ -72,10 +124,9 @@ export async function POST(request: NextRequest) {
       }
     }
   } catch (error) {
-    // LiveKit doesn't retry webhooks on failure the way Razorpay does, but
-    // there's still nothing useful a 500 here does for us - log and move on.
     console.error("[livekit_webhook_handler_error]", error);
   }
 
   return NextResponse.json({ success: true });
 }
+

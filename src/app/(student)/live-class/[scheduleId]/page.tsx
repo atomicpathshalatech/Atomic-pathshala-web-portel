@@ -64,8 +64,8 @@ export default async function StudentLiveClassPage({
   }
 
   // Server-authoritative 15-minute access boundary check
-  const { canStudentJoin } = await import("@/lib/schedule/access-rules");
-  const accessEval = canStudentJoin(schedule, new Date());
+  const { canStudentJoinClass } = await import("@/lib/schedule/access-rules");
+  const accessEval = canStudentJoinClass(schedule, new Date());
   if (!accessEval.allowed) {
     redirect(`/schedule?blocked=1&reason=${encodeURIComponent(accessEval.reason || "Class is not accessible yet.")}`);
   }

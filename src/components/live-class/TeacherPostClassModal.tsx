@@ -1,6 +1,7 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 interface TeacherPostClassModalProps {
@@ -10,61 +11,86 @@ interface TeacherPostClassModalProps {
   onClose: () => void;
 }
 
+interface MaterialStatus {
+  pdfStatus: string;
+  pptxStatus: string;
+  pdfError?: string | null;
+  pptxError?: string | null;
+  hasOriginalPresentation?: boolean;
+  presentationType?: string | null;
+  presentationName?: string | null;
+  hasOriginalPpt?: boolean;
+  originalPptName?: string | null;
+  hasOriginalPdf?: boolean;
+  originalPdfName?: string | null;
+}
+
 export function TeacherPostClassModal({
   sessionId,
   batchScheduleId,
   sessionTitle,
   onClose,
 }: TeacherPostClassModalProps) {
-  // Slides download state
-  const [status, setStatus] = useState<{
-    pdfStatus: string;
-    pptxStatus: string;
-    pdfError?: string | null;
-    pptxError?: string | null;
-  }>({
+  const router = useRouter();
+
+  // Slides & presentation download state
+  const [status, setStatus] = useState<MaterialStatus>({
     pdfStatus: "GENERATING",
     pptxStatus: "GENERATING",
   });
-  const [downloadingPdf, setDownloadingPdf] = useState(false);
-  const [downloadingPptx, setDownloadingPptx] = useState(false);
+  const [recordingInfo, setRecordingInfo] = useState<{
+    status: string;
+    available: boolean;
+    durationSeconds: number | null;
+  }>({ status: "PROCESSING", available: false, durationSeconds: null });
 
-  // Technical Feedback Form State
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [downloadingOriginalPpt, setDownloadingOriginalPpt] = useState(false);
+  const [downloadingOriginalPdf, setDownloadingOriginalPdf] = useState(false);
+
+  // Technical Feedback & Notes State
   const [networkOk, setNetworkOk] = useState(true);
   const [audioOk, setAudioOk] = useState(true);
   const [videoOk, setVideoOk] = useState(true);
   const [whiteboardOk, setWhiteboardOk] = useState(true);
   const [engagementOk, setEngagementOk] = useState(true);
   const [issueDescription, setIssueDescription] = useState("");
+  const [tagsInput, setTagsInput] = useState("");
   const [rating, setRating] = useState(5);
-  const [submittingFeedback, setSubmittingFeedback] = useState(false);
-  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
+  const [submittingClass, setSubmittingClass] = useState(false);
+  const [finalized, setFinalized] = useState(false);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
 
-  // Poll slides generation status
+  // Poll materials and recording generation status
   useEffect(() => {
     let cancelled = false;
     let timer: NodeJS.Timeout | null = null;
 
     async function checkStatus() {
       try {
-        const res = await fetch(`/api/whiteboard/sessions/${sessionId}/slides?format=status`);
-        const json = await res.json();
-        if (!cancelled && json.success && json.data) {
-          setStatus(json.data);
-          // If both are finished (READY or FAILED), stop polling
-          if (
-            (json.data.pdfStatus === "READY" || json.data.pdfStatus === "FAILED") &&
-            (json.data.pptxStatus === "READY" || json.data.pptxStatus === "FAILED")
-          ) {
-            return;
-          }
+        const [slidesRes, recRes] = await Promise.all([
+          fetch(`/api/whiteboard/sessions/${sessionId}/slides?format=status`),
+          fetch(`/api/whiteboard/sessions/${sessionId}/recording`),
+        ]);
+
+        const slidesJson = await slidesRes.json();
+        const recJson = await recRes.json();
+
+        if (!cancelled && slidesJson.success && slidesJson.data) {
+          setStatus(slidesJson.data);
+        }
+        if (!cancelled && recJson.success && recJson.data) {
+          setRecordingInfo({
+            status: recJson.data.status,
+            available: recJson.data.available,
+            durationSeconds: recJson.data.durationSeconds,
+          });
         }
       } catch {
         // silent
       }
       if (!cancelled) {
-        timer = setTimeout(checkStatus, 3000);
+        timer = setTimeout(checkStatus, 4000);
       }
     }
 
@@ -75,9 +101,10 @@ export function TeacherPostClassModal({
     };
   }, [sessionId]);
 
-  async function handleDownload(format: "pdf" | "pptx") {
+  async function handleDownload(format: "pdf" | "original_ppt" | "original_pdf") {
     if (format === "pdf") setDownloadingPdf(true);
-    if (format === "pptx") setDownloadingPptx(true);
+    if (format === "original_ppt") setDownloadingOriginalPpt(true);
+    if (format === "original_pdf") setDownloadingOriginalPdf(true);
 
     try {
       const res = await fetch(`/api/whiteboard/sessions/${sessionId}/slides?format=${format}`);
@@ -85,23 +112,29 @@ export function TeacherPostClassModal({
       if (json.success && json.data?.downloadUrl) {
         window.open(json.data.downloadUrl, "_blank");
       } else {
-        alert(json.error || `Could not download ${format.toUpperCase()}.`);
+        alert(json.error || `Could not download requested file.`);
       }
     } catch {
-      alert(`Download request failed for ${format.toUpperCase()}.`);
+      alert(`Download request failed.`);
     } finally {
       if (format === "pdf") setDownloadingPdf(false);
-      if (format === "pptx") setDownloadingPptx(false);
+      if (format === "original_ppt") setDownloadingOriginalPpt(false);
+      if (format === "original_pdf") setDownloadingOriginalPdf(false);
     }
   }
 
-  async function handleSubmitFeedback(e: React.FormEvent) {
-    e.preventDefault();
-    setSubmittingFeedback(true);
+  async function handleSubmitClass(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    setSubmittingClass(true);
     setFeedbackError(null);
 
+    const tags = tagsInput
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+
     try {
-      const res = await fetch(`/api/whiteboard/sessions/${sessionId}/feedback/teacher`, {
+      const res = await fetch(`/api/whiteboard/sessions/${sessionId}/finalize`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -112,24 +145,28 @@ export function TeacherPostClassModal({
           engagementOk,
           issueDescription: issueDescription.trim() || undefined,
           rating,
+          tags: tags.length > 0 ? tags : undefined,
         }),
       });
 
       const json = await res.json();
       if (json.success) {
-        setFeedbackSubmitted(true);
+        setFinalized(true);
+        setTimeout(() => {
+          router.push("/team/batches");
+        }, 1200);
       } else {
-        setFeedbackError(json.error || "Could not submit feedback.");
+        setFeedbackError(json.error || "Could not finalize class.");
       }
     } catch {
-      setFeedbackError("Something went wrong. Please check your connection.");
+      setFeedbackError("Network error occurred while finalizing class.");
     } finally {
-      setSubmittingFeedback(false);
+      setSubmittingClass(false);
     }
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm overflow-y-auto">
       <div className="w-full max-w-2xl bg-[#161824] border border-[#2d2e3b] rounded-3xl p-6 sm:p-8 shadow-2xl text-white my-8">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[#2d2e3b] pb-4 mb-6">
@@ -138,47 +175,126 @@ export function TeacherPostClassModal({
               <span className="material-symbols-outlined text-xl">check_circle</span>
             </div>
             <div>
-              <h2 className="text-lg font-bold text-white">Live Class Concluded</h2>
+              <h2 className="text-lg font-bold text-white">Class Ended &amp; Finalization</h2>
               <p className="text-xs text-gray-400 truncate max-w-md">{sessionTitle}</p>
             </div>
           </div>
-          <Link
-            href="/team/batches"
+          <button
+            type="button"
+            onClick={onClose}
             className="w-8 h-8 rounded-full bg-[#202232] text-gray-400 hover:text-white flex items-center justify-center transition"
+            title="Close"
           >
             <span className="material-symbols-outlined text-sm">close</span>
-          </Link>
+          </button>
         </div>
 
-        {/* Section 1: Slide Exports */}
+        {/* Section 1: Teaching Materials & Recording Status */}
         <div className="bg-[#10121d] border border-[#262838] rounded-2xl p-5 mb-6">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-indigo-400 text-lg">download_for_offline</span>
-              <h3 className="text-sm font-bold text-gray-200">Teaching Materials &amp; Whiteboard Exports</h3>
+              <span className="material-symbols-outlined text-indigo-400 text-lg">folder_zip</span>
+              <h3 className="text-sm font-bold text-gray-200">Preserved Class Resources &amp; Recording</h3>
             </div>
-            <span className="text-[10px] text-gray-500 font-mono">16:9 HD Branded</span>
+
+            {/* Recording status badge */}
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono border bg-[#171926] border-[#2d2e3b]">
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  recordingInfo.status === "READY"
+                    ? "bg-emerald-400"
+                    : recordingInfo.status === "FAILED" || recordingInfo.status === "RECORDING_FAILED"
+                    ? "bg-rose-400"
+                    : "bg-amber-400 animate-ping"
+                }`}
+              />
+              <span className="text-gray-300">
+                {recordingInfo.status === "READY"
+                  ? "Recording Ready"
+                  : recordingInfo.status === "FAILED" || recordingInfo.status === "RECORDING_FAILED"
+                  ? "Recording Incomplete"
+                  : "Finalizing Recording..."}
+              </span>
+            </div>
           </div>
           <p className="text-xs text-gray-400 mb-4">
-            Authoritative class slides have been autosaved and formatted with the Atomic Pathshala watermark. Students receive view-only access to the PDF in their Class Notes roadmap.
+            Download your original teaching files and vector-annotated whiteboard notes. Student attendance and room logs have been preserved.
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* PDF Card */}
-            <div className="bg-[#171926] border border-[#2d2e3b] rounded-xl p-3.5 flex items-center justify-between">
-              <div>
+            {/* Card 1: Original Uploaded PPT Presentation (if uploaded) */}
+            {status.hasOriginalPpt && (
+              <div className="bg-[#171926] border border-[#2d2e3b] rounded-xl p-3.5 flex items-center justify-between">
+                <div className="min-w-0 pr-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-amber-300 truncate">Original PPT Presentation</span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-mono shrink-0">
+                      Original
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-gray-400 mt-0.5 truncate" title={status.originalPptName || "Presentation.pptx"}>
+                    {status.originalPptName || "Original uploaded PowerPoint"}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={downloadingOriginalPpt}
+                  onClick={() => handleDownload("original_ppt")}
+                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-sm shrink-0"
+                >
+                  <span className="material-symbols-outlined text-sm">download</span>
+                  {downloadingOriginalPpt ? "Opening..." : "Download Original PPT"}
+                </button>
+              </div>
+            )}
+
+            {/* Card 2: Original Uploaded PDF Document (if uploaded) */}
+            {status.hasOriginalPdf && (
+              <div className="bg-[#171926] border border-[#2d2e3b] rounded-xl p-3.5 flex items-center justify-between">
+                <div className="min-w-0 pr-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-sky-300 truncate">Original Teaching PDF</span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-300 font-mono shrink-0">
+                      Original
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-gray-400 mt-0.5 truncate" title={status.originalPdfName || "Document.pdf"}>
+                    {status.originalPdfName || "Original uploaded PDF"}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={downloadingOriginalPdf}
+                  onClick={() => handleDownload("original_pdf")}
+                  className="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-sm shrink-0"
+                >
+                  <span className="material-symbols-outlined text-sm">download</span>
+                  {downloadingOriginalPdf ? "Opening..." : "Download Original PDF"}
+                </button>
+              </div>
+            )}
+
+            {/* Card 3: Annotated Whiteboard Export (PDF) */}
+            <div
+              className={`bg-[#171926] border border-[#2d2e3b] rounded-xl p-3.5 flex items-center justify-between ${
+                !status.hasOriginalPpt && !status.hasOriginalPdf ? "sm:col-span-2" : ""
+              }`}
+            >
+              <div className="min-w-0 pr-2">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-bold text-white">Class Notes (PDF)</span>
-                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 font-mono">
-                    Public
+                  <span className="text-xs font-bold text-indigo-300 truncate">Export Whiteboard (PDF)</span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 font-mono shrink-0">
+                    Handwritten Notes
                   </span>
                 </div>
                 <p className="text-[11px] text-gray-400 mt-0.5">
                   {status.pdfStatus === "READY"
-                    ? "Ready to view & download"
+                    ? "Annotated board notes with all drawings & formulas"
                     : status.pdfStatus === "FAILED"
-                    ? "Generation error"
-                    : "Finalizing PDF..."}
+                    ? "Generation error (click retry to rebuild)"
+                    : "Finalizing whiteboard notes export..."}
                 </p>
               </div>
 
@@ -187,54 +303,24 @@ export function TeacherPostClassModal({
                   type="button"
                   disabled={downloadingPdf}
                   onClick={() => handleDownload("pdf")}
-                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-sm"
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-sm shrink-0"
                 >
                   <span className="material-symbols-outlined text-sm">download</span>
-                  {downloadingPdf ? "Opening..." : "Download"}
+                  {downloadingPdf ? "Opening..." : "Download Notes PDF"}
                 </button>
               ) : status.pdfStatus === "FAILED" ? (
-                <span className="text-xs text-rose-400 font-semibold">Failed</span>
-              ) : (
-                <div className="flex items-center gap-1.5 text-xs text-amber-400 font-mono">
-                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-                  Generating...
-                </div>
-              )}
-            </div>
-
-            {/* PPTX Card (Teacher Only) */}
-            <div className="bg-[#171926] border border-[#2d2e3b] rounded-xl p-3.5 flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-bold text-white">Presentation (PPTX)</span>
-                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-mono">
-                    Faculty Only
-                  </span>
-                </div>
-                <p className="text-[11px] text-gray-400 mt-0.5">
-                  {status.pptxStatus === "READY"
-                    ? "Ready for PowerPoint editing"
-                    : status.pptxStatus === "FAILED"
-                    ? "Generation error"
-                    : "Building presentation..."}
-                </p>
-              </div>
-
-              {status.pptxStatus === "READY" ? (
                 <button
                   type="button"
-                  disabled={downloadingPptx}
-                  onClick={() => handleDownload("pptx")}
-                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-sm"
+                  disabled={downloadingPdf}
+                  onClick={() => handleDownload("pdf")}
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-sm shrink-0"
                 >
-                  <span className="material-symbols-outlined text-sm">download</span>
-                  {downloadingPptx ? "Opening..." : "Download"}
+                  <span className="material-symbols-outlined text-sm">refresh</span>
+                  Retry Export
                 </button>
-              ) : status.pptxStatus === "FAILED" ? (
-                <span className="text-xs text-rose-400 font-semibold">Failed</span>
               ) : (
-                <div className="flex items-center gap-1.5 text-xs text-amber-400 font-mono">
-                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                <div className="flex items-center gap-1.5 text-xs text-indigo-400 font-mono shrink-0">
+                  <span className="w-2 h-2 rounded-full bg-indigo-400 animate-ping" />
                   Generating...
                 </div>
               )}
@@ -242,24 +328,24 @@ export function TeacherPostClassModal({
           </div>
         </div>
 
-        {/* Section 2: Technical Feedback Form */}
+        {/* Section 2: Technical Feedback & Notes Form */}
         <div className="bg-[#10121d] border border-[#262838] rounded-2xl p-5">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <span className="material-symbols-outlined text-emerald-400 text-lg">rate_review</span>
-              <h3 className="text-sm font-bold text-gray-200">Educator Technical &amp; Delivery Feedback</h3>
+              <h3 className="text-sm font-bold text-gray-200">Educator Technical Review &amp; Class Notes</h3>
             </div>
-            <span className="text-[10px] text-gray-400">Continuous Quality Check</span>
+            <span className="text-[10px] text-gray-400">Class Finalization</span>
           </div>
 
-          {feedbackSubmitted ? (
+          {finalized ? (
             <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-xl p-4 text-center my-4 space-y-1">
               <span className="material-symbols-outlined text-emerald-400 text-2xl">task_alt</span>
-              <p className="text-xs font-bold text-emerald-300">Thank you! Your feedback has been recorded.</p>
-              <p className="text-[11px] text-gray-400">Our engineering and academic team reviews this for continuous optimization.</p>
+              <p className="text-xs font-bold text-emerald-300">Class Successfully Finalized!</p>
+              <p className="text-[11px] text-gray-400">Attendance and resources have been completed. Redirecting to Batches...</p>
             </div>
           ) : (
-            <form onSubmit={handleSubmitFeedback} className="space-y-4 mt-3">
+            <form onSubmit={handleSubmitClass} className="space-y-4 mt-3">
               {feedbackError && (
                 <div className="text-xs text-rose-400 bg-rose-950/50 border border-rose-500/40 rounded-lg p-2.5">
                   {feedbackError}
@@ -305,7 +391,7 @@ export function TeacherPostClassModal({
                     onChange={(e) => setWhiteboardOk(e.target.checked)}
                     className="accent-indigo-500 rounded"
                   />
-                  <span>Whiteboard &amp; Tools Smooth</span>
+                  <span>Whiteboard Smooth</span>
                 </label>
 
                 <label className="flex items-center gap-2 p-2.5 rounded-xl bg-[#171926] border border-[#2d2e3b] cursor-pointer hover:border-gray-600 transition col-span-2 sm:col-span-1">
@@ -315,13 +401,13 @@ export function TeacherPostClassModal({
                     onChange={(e) => setEngagementOk(e.target.checked)}
                     className="accent-indigo-500 rounded"
                   />
-                  <span>Chat / Hand-Raise Active</span>
+                  <span>Student Active</span>
                 </label>
               </div>
 
               {/* Overall Rating */}
               <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-400">Session Overall Rating:</span>
+                <span className="text-xs text-gray-400">Class Delivery Rating:</span>
                 <div className="flex items-center gap-1">
                   {[1, 2, 3, 4, 5].map((star) => (
                     <button
@@ -338,46 +424,52 @@ export function TeacherPostClassModal({
                 </div>
               </div>
 
-              {/* Note / Issue description */}
+              {/* Note / Teacher notes */}
               <div>
                 <textarea
                   value={issueDescription}
                   onChange={(e) => setIssueDescription(e.target.value)}
-                  placeholder="Optional: Note down any student queries, connection drops, or topics to review next class..."
-                  className="w-full h-20 bg-[#171926] border border-[#2d2e3b] rounded-xl p-3 text-xs text-white placeholder-gray-500 outline-none focus:border-indigo-500 transition resize-none"
+                  placeholder="Teacher notes / Topics covered / Items to review in next lecture..."
+                  className="w-full h-16 bg-[#171926] border border-[#2d2e3b] rounded-xl p-3 text-xs text-white placeholder-gray-500 outline-none focus:border-indigo-500 transition resize-none"
                 />
               </div>
 
+              {/* Optional tags */}
+              <div>
+                <input
+                  type="text"
+                  value={tagsInput}
+                  onChange={(e) => setTagsInput(e.target.value)}
+                  placeholder="Optional tags (e.g. Thermodynamics, Class 12, DPP-04)..."
+                  className="w-full bg-[#171926] border border-[#2d2e3b] rounded-xl px-3 py-2 text-xs text-white placeholder-gray-500 outline-none focus:border-indigo-500 transition"
+                />
+              </div>
+
+              {/* Actions */}
               <div className="flex items-center justify-between pt-2">
-                <Link
-                  href="/team/batches"
-                  className="text-xs text-gray-400 hover:text-white transition underline underline-offset-4"
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="text-xs text-gray-400 hover:text-white transition px-2 py-1"
                 >
-                  Skip &amp; Return to Dashboard
-                </Link>
+                  Stay in Room
+                </button>
 
                 <button
                   type="submit"
-                  disabled={submittingFeedback}
-                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition shadow-lg disabled:opacity-60"
+                  disabled={submittingClass}
+                  className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-lg shadow-indigo-600/30 flex items-center gap-2 disabled:opacity-60"
                 >
-                  {submittingFeedback ? "Saving..." : "Submit Technical Review"}
+                  <span className="material-symbols-outlined text-sm">task_alt</span>
+                  <span>{submittingClass ? "Finalizing Class..." : "Submit Class"}</span>
                 </button>
               </div>
             </form>
           )}
         </div>
-
-        {/* Footer Return Button */}
-        <div className="mt-6 flex justify-end">
-          <Link
-            href="/team/batches"
-            className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-lg shadow-indigo-600/30"
-          >
-            Finish &amp; Go to Batches &rarr;
-          </Link>
-        </div>
       </div>
     </div>
   );
 }
+
+

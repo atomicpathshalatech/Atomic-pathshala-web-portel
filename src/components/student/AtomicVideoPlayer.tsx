@@ -215,7 +215,7 @@ export function AtomicVideoPlayer({
   }, [currentTime, duration, isPlaying, isMuted, volume]);
 
   return (
-    <div className="min-h-screen bg-[#031635] text-white flex flex-col font-sans">
+    <div className="min-h-screen-safe w-full bg-[#031635] text-white flex flex-col font-sans">
       {/* 1. Header Toolbar */}
       <header className="bg-[#031635]/90 border-b border-slate-800 px-4 sm:px-6 py-3 flex items-center justify-between z-30 shrink-0">
         <div className="flex items-center gap-3">

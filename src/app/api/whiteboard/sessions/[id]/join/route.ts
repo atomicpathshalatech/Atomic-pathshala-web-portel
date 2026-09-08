@@ -38,22 +38,28 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
     });
     if (!wbSession) return apiError("Whiteboard session not found", 404);
 
-    const { canStudentJoin } = await import("@/lib/schedule/access-rules");
+    if (wbSession.livePhase === "ENDING" || wbSession.livePhase === "ENDED" || wbSession.status === "ENDED") {
+      return apiError("Class has ended or is concluding. New student entries are closed.", 403, {
+        code: "CLASS_ALREADY_ENDED",
+      });
+    }
+
+    const { canStudentJoinClass } = await import("@/lib/schedule/access-rules");
     const scheduleTarget = wbSession.batchSchedule ?? {
       id: wbSession.id,
       startsAt: wbSession.scheduledStart ?? new Date(),
       endsAt: wbSession.scheduledEnd ?? new Date(Date.now() + 60 * 60 * 1000),
-      status: wbSession.status === "ENDED" ? "COMPLETED" : wbSession.livePhase === "LIVE" ? "LIVE" : "SCHEDULED",
+      status: (wbSession.livePhase === "LIVE" ? "LIVE" : "SCHEDULED") as "SCHEDULED" | "LIVE" | "COMPLETED" | "CANCELLED",
       liveWhiteboardSession: wbSession,
     };
 
-    const evaluation = canStudentJoin(scheduleTarget, new Date());
+    const evaluation = canStudentJoinClass(scheduleTarget, new Date());
     if (!evaluation.allowed) {
       return apiError(
         evaluation.reason || "Class is not accessible yet. Access opens 15 minutes before the scheduled start time.",
         403,
         {
-          code: "JOIN_WINDOW_NOT_OPEN",
+          code: evaluation.code || "JOIN_TOO_EARLY",
           details: {
             opensAt: evaluation.opensAt.toISOString(),
             secondsUntilWindowOpens: evaluation.secondsUntilWindowOpens,
@@ -61,6 +67,7 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
         }
       );
     }
+
 
     let firstJoin = false;
     try {

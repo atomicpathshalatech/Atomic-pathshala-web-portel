@@ -690,42 +690,32 @@ function TimelineLectureRow({
                 </Link>
               )
             ) : isCompleted ? (
-              (() => {
-                const hasRecording =
-                  item.liveWhiteboardSession?.recordingStatus === "READY" ||
-                  !!item.lectureVideoUrl;
+              <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+                {/* Watch Recorded Video Button */}
+                <Link
+                  href={`/live-class/${item.id}`}
+                  className="inline-flex items-center gap-1 py-1 px-2.5 bg-[#a33900] hover:bg-orange-800 text-white rounded-lg text-[11px] font-bold shadow-sm transition active:scale-95 shrink-0"
+                  title="Play Recorded Class"
+                >
+                  <span className="material-symbols-outlined text-[13px]">play_circle</span>
+                  <span>Watch Video</span>
+                </Link>
 
-                if (hasRecording) {
-                  return (
-                    <Link
-                      href={`/watch/${item.lectureId || item.id}`}
-                      className="inline-flex items-center gap-1 py-1 px-3 bg-[#a33900] hover:bg-orange-800 text-white rounded-lg text-[11px] font-bold shadow-sm transition active:scale-95 shrink-0"
-                    >
-                      <span className="material-symbols-outlined text-[13px]">play_circle</span>
-                      <span>Watch Video</span>
-                    </Link>
-                  );
-                }
-
-                return (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      toast.info("Recording in process, will upload soon", {
-                        description:
-                          "Educator session recording is currently being processed and will be available to watch shortly.",
-                      });
-                    }}
-                    className="inline-flex items-center gap-1.5 py-1 px-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-amber-800 dark:text-amber-300 rounded-lg text-[10px] font-bold transition shrink-0"
-                    title="Recording in process, will upload soon"
+                {/* Download PDF Notes Button */}
+                {item.liveWhiteboardSession?.id ? (
+                  <a
+                    href={`/api/whiteboard/sessions/${item.liveWhiteboardSession.id}/slides?format=pdf`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download
+                    className="inline-flex items-center gap-1 py-1 px-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 rounded-lg text-[11px] font-bold shadow-xs transition active:scale-95 shrink-0"
+                    title="Download Class Board Notes PDF"
                   >
-                    <span className="material-symbols-outlined text-[13px] text-amber-600 animate-spin">
-                      sync
-                    </span>
-                    <span>Recording in Process</span>
-                  </button>
-                );
-              })()
+                    <span className="material-symbols-outlined text-[13px] text-rose-500">picture_as_pdf</span>
+                    <span>PDF Notes</span>
+                  </a>
+                ) : null}
+              </div>
             ) : isCancelled ? (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 text-[10px] font-bold border border-rose-200 dark:border-rose-900/50 shrink-0">
                 <span className="material-symbols-outlined text-[12px]">cancel</span>

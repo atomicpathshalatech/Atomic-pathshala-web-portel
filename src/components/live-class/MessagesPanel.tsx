@@ -156,8 +156,17 @@ export function MessagesPanel({
       });
     };
     channel.bind(WB_EVENTS.MESSAGE_SENT, handler);
+
+    const configHandler = (cfg: { chatEnabled?: boolean }) => {
+      if (typeof cfg?.chatEnabled === "boolean") {
+        setChatEnabled(cfg.chatEnabled);
+      }
+    };
+    channel.bind(WB_EVENTS.CONFIG_UPDATED, configHandler);
+
     return () => {
       channel.unbind(WB_EVENTS.MESSAGE_SENT, handler);
+      channel.unbind(WB_EVENTS.CONFIG_UPDATED, configHandler);
     };
   }, [whiteboardSessionId]);
 

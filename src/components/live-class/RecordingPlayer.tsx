@@ -44,7 +44,12 @@ export function RecordingPlayer({ whiteboardSessionId }: { whiteboardSessionId: 
         setState(json.data);
         setError(null);
 
-        if (!json.data.available && json.data.status !== "FAILED" && json.data.status !== "NONE") {
+        if (
+          !json.data.available &&
+          json.data.status !== "FAILED" &&
+          json.data.status !== "RECORDING_FAILED" &&
+          json.data.status !== "NONE"
+        ) {
           timer = setTimeout(poll, 5000);
         }
       } catch {
@@ -90,7 +95,7 @@ export function RecordingPlayer({ whiteboardSessionId }: { whiteboardSessionId: 
     );
   }
 
-  if (state.status === "FAILED") {
+  if (state.status === "FAILED" || state.status === "RECORDING_FAILED") {
     return (
       <div className="flex flex-col items-center justify-center gap-2 p-8 text-center text-gray-400">
         <span className="material-symbols-outlined text-3xl text-amber-500">warning</span>
@@ -100,17 +105,23 @@ export function RecordingPlayer({ whiteboardSessionId }: { whiteboardSessionId: 
   }
 
   if (!state.available || !state.url) {
+    const isLiveRecording =
+      state.status === "RECORDING" ||
+      state.status === "RECORDING_STARTING" ||
+      state.status === "STARTING";
+
     return (
       <div className="flex flex-col items-center justify-center gap-2 p-8 text-center text-gray-400">
         <span className="w-3 h-3 rounded-full bg-amber-400 animate-pulse" />
         <span className="text-sm">
-          {state.status === "RECORDING"
-            ? "Still recording — catch-up will be ready shortly after class ends."
+          {isLiveRecording
+            ? "Class is currently recording — playback will be ready shortly after class concludes."
             : "Processing the recording — usually ready within a minute."}
         </span>
       </div>
     );
   }
+
 
   return (
     <div className="w-full rounded-xl overflow-hidden border border-[#252836] bg-black">

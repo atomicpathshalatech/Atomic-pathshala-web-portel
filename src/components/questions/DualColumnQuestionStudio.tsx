@@ -246,7 +246,7 @@ export function DualColumnQuestionStudio({
 
 
   return (
-    <div className="flex h-screen w-full bg-[#f1f4fb] text-slate-900 overflow-hidden font-sans select-none">
+    <div className="flex h-screen-safe w-full bg-[#f1f4fb] text-slate-900 overflow-hidden font-sans select-none">
       {/* 1. LEFT DEEP-BLUE SIDEBAR (Matching Image 6) */}
       <aside
         className={`bg-[#0c3ea4] text-white flex flex-col justify-between shrink-0 transition-all duration-300 z-30 relative shadow-2xl ${

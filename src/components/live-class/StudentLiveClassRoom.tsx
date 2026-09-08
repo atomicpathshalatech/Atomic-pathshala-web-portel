@@ -243,8 +243,9 @@ export function StudentLiveClassRoom({
     return () => mql.removeEventListener("change", handler);
   }, []);
 
-  // Time & countdown state
+  // Time & countdown state (Synchronized with authoritative server clock)
   const [currentTimeMs, setCurrentTimeMs] = useState(Date.now());
+  const serverTimeOffsetRef = useRef<number>(0);
   const [scheduleTimes, setScheduleTimes] = useState<{ startTime?: string; endTime?: string } | null>(null);
 
   // Board mirror (read-only)
@@ -252,9 +253,9 @@ export function StudentLiveClassRoom({
   const [boardBackground, setBoardBackground] = useState<string>("blank");
   const [boardObjects, setBoardObjects] = useState<StrokeObject[]>([]);
 
-  // Keep local clock ticking for authoritative UI timers
+  // Keep local clock ticking with server offset
   useEffect(() => {
-    const interval = setInterval(() => setCurrentTimeMs(Date.now()), 1000);
+    const interval = setInterval(() => setCurrentTimeMs(Date.now() + serverTimeOffsetRef.current), 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -288,6 +289,13 @@ export function StudentLiveClassRoom({
           // On error, keep retrying — don't surface the error yet, just wait
           if (!cancelled) timer = setTimeout(poll, 3000);
           return;
+        }
+        if (json.data?.serverTimeMs) {
+          serverTimeOffsetRef.current = json.data.serverTimeMs - Date.now();
+          setCurrentTimeMs(Date.now() + serverTimeOffsetRef.current);
+        } else if (json.data?.serverTime) {
+          serverTimeOffsetRef.current = new Date(json.data.serverTime).getTime() - Date.now();
+          setCurrentTimeMs(Date.now() + serverTimeOffsetRef.current);
         }
         if (json.data.schedule) {
           setScheduleTimes({
@@ -584,7 +592,7 @@ export function StudentLiveClassRoom({
   // Strictly NO PDF or PPTX download buttons appear on this immediate post-class screen.
   if (phase === "ended") {
     return (
-      <div className="min-h-screen bg-[#0b0d14] flex flex-col justify-center px-4">
+      <div className="min-h-screen-safe w-full bg-[#0b0d14] flex flex-col justify-center px-4">
         <StudentPostClassFeedback
           sessionId={wbSession?.id || batchScheduleId}
           sessionTitle={scheduleTitle}
@@ -604,7 +612,7 @@ export function StudentLiveClassRoom({
     const seconds = Math.max(0, secondsUntilStart) % 60;
 
     return (
-      <div className="min-h-screen bg-[#0b0d14] text-white flex flex-col justify-between select-none">
+      <div className="min-h-screen-safe w-full bg-[#0b0d14] text-white flex flex-col justify-between select-none">
         {/* Top Waiting Room Header */}
         <header className="h-14 px-4 sm:px-6 shrink-0 flex items-center justify-between border-b border-slate-800/80 bg-[#10131d]">
           <div className="flex items-center gap-3 min-w-0">
@@ -756,7 +764,7 @@ export function StudentLiveClassRoom({
 
   // ---------------- COMPLETE WHITEBOARD STUDIO (ACTIVE FOR ALL STUDENTS ONCE LIVE) ----------------
   return (
-    <div className={`fixed inset-0 w-screen h-[100dvh] flex flex-col overflow-hidden select-none z-50 ${isThemeDark ? "bg-[#0b0d14] text-white" : "bg-slate-900 text-slate-100"}`}>
+    <div className={`fixed inset-0 w-full h-full h-screen-safe flex flex-col overflow-hidden select-none z-50 ${isThemeDark ? "bg-[#0b0d14] text-white" : "bg-slate-900 text-slate-100"}`}>
       {/* Top Authoritative Studio Header */}
       <header className="h-12 sm:h-14 px-3 sm:px-4 shrink-0 flex items-center justify-between border-b border-slate-800/80 bg-[#10131d] z-20">
         <div className="flex items-center gap-2.5 min-w-0">
@@ -972,6 +980,8 @@ export function StudentLiveClassRoom({
                   variant="panel"
                   role="STUDENT"
                   teacherName={teacherName}
+                  isApprovedSpeaker={isApprovedSpeaker}
+                  speakerToken={speakerToken}
                 />
               </DraggableFloatingCamera>
             )}
@@ -1007,6 +1017,8 @@ export function StudentLiveClassRoom({
                         variant="panel"
                         role="STUDENT"
                         teacherName={teacherName}
+                        isApprovedSpeaker={isApprovedSpeaker}
+                        speakerToken={speakerToken}
                       />
                     )}
                   </div>
@@ -1042,9 +1054,9 @@ export function StudentLiveClassRoom({
       {/* ========================================================================= */}
       {/* MOBILE & TABLET VIEW (< lg): Top Video/Canvas Stage + Bottom Tabbed Console */}
       {/* ========================================================================= */}
-      <div className="lg:hidden flex-1 min-h-0 flex flex-col overflow-hidden bg-[#0b0d14]">
+      <div className="lg:hidden flex-1 min-h-0 flex flex-col landscape:flex-row overflow-hidden bg-[#0b0d14]">
         {/* Top Media Area: 16:9 Canvas or YouTube Player */}
-        <div className="w-full shrink-0 aspect-video max-h-[38dvh] sm:max-h-[45dvh] bg-black relative flex items-center justify-center overflow-hidden border-b border-slate-800/80">
+        <div className="w-full landscape:w-3/5 landscape:h-full shrink-0 aspect-video landscape:aspect-auto max-h-[38dvh] sm:max-h-[45dvh] landscape:max-h-full bg-black relative flex items-center justify-center overflow-hidden border-b landscape:border-b-0 landscape:border-r border-slate-800/80">
           {isYouTube ? (
             <YouTubeLivePlayer
               youtubeVideoId={wbSession?.youtubeVideoId ?? null}
@@ -1068,6 +1080,8 @@ export function StudentLiveClassRoom({
                     variant="panel"
                     role="STUDENT"
                     teacherName={teacherName}
+                    isApprovedSpeaker={isApprovedSpeaker}
+                    speakerToken={speakerToken}
                   />
                 </div>
               )}
@@ -1076,7 +1090,7 @@ export function StudentLiveClassRoom({
         </div>
 
         {/* Bottom Interactive Area (Tabs: Chat | Quiz | Details) */}
-        <div className="flex-1 min-h-0 flex flex-col bg-[#10121d] overflow-hidden">
+        <div className="flex-1 landscape:w-2/5 min-h-0 flex flex-col bg-[#10121d] overflow-hidden">
           {/* Tab Selection Bar */}
           <div className="flex items-center justify-around bg-[#0a0b12] border-b border-slate-800 shrink-0 px-2">
             <button

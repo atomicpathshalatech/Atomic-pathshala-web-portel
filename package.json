@@ -15,12 +15,28 @@
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
     "create-team-user": "tsx prisma/create-team-user.ts",
-    "postinstall": "prisma generate && node scripts/copy-pdf-worker.js"
+    "postinstall": "prisma generate && node scripts/copy-pdf-worker.js",
+    "cap:sync": "cap sync android",
+    "cap:open": "cap open android",
+    "cap:build": "npm run build && cap sync android",
+    "android:debug": "cd android && gradlew.bat assembleDebug",
+    "android:release": "cd android && gradlew.bat assembleRelease",
+    "android:bundle": "cd android && gradlew.bat bundleRelease"
   },
   "dependencies": {
     "@auth/prisma-adapter": "2.4.2",
     "@aws-sdk/client-s3": "^3.1115.0",
     "@aws-sdk/s3-request-presigner": "^3.1126.0",
+    "@capacitor/android": "^8.5.1",
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/browser": "^8.0.4",
+    "@capacitor/core": "^8.5.1",
+    "@capacitor/filesystem": "^8.1.3",
+    "@capacitor/haptics": "^8.0.2",
+    "@capacitor/keyboard": "^8.0.5",
+    "@capacitor/push-notifications": "^8.1.2",
+    "@capacitor/share": "^8.0.1",
+    "@capacitor/status-bar": "^8.0.3",
     "@google/generative-ai": "^0.24.0",
     "@hookform/resolvers": "3.9.0",
     "@livekit/components-react": "^2.9.24",
@@ -68,6 +84,7 @@
     "zustand": "4.5.4"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.1",
     "@tailwindcss/container-queries": "0.1.1",
     "@tailwindcss/forms": "0.5.7",
     "@types/bcryptjs": "2.4.6",

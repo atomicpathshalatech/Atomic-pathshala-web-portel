@@ -101,11 +101,11 @@ export default async function TeacherLiveClassPage({
     redirect("/team");
   }
 
-  // Check 15-minute start window
-  const { canTeacherStart } = await import("@/lib/schedule/access-rules");
-  const teacherEval = canTeacherStart(schedule, new Date());
+  // Check 15-minute teacher entry window (T-15)
+  const { canTeacherEnterClass } = await import("@/lib/schedule/access-rules");
+  const teacherEval = canTeacherEnterClass(schedule, new Date());
   if (!teacherEval.allowed) {
-    redirect(`/team/my-schedule?blocked=1&reason=${encodeURIComponent(teacherEval.reason || "Live class cannot be started yet.")}`);
+    redirect(`/team/my-schedule?blocked=1&reason=${encodeURIComponent(teacherEval.reason || "Pre-class room entry is not open yet.")}`);
   }
 
   return (

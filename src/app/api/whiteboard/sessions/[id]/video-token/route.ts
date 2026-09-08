@@ -43,7 +43,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     // For non-LIVE phases (pre-class prep), enforce the start window.
     // Once a class is LIVE, bypass the window — the session IS live.
     if (wbSession.livePhase !== "LIVE") {
-      const { canStudentJoin, canTeacherStart } = await import("@/lib/schedule/access-rules");
+      const { canStudentJoinClass, canTeacherEnterClass } = await import("@/lib/schedule/access-rules");
       const scheduleTarget = wbSession.batchSchedule ?? {
         id: wbSession.id,
         startsAt: wbSession.scheduledStart ?? new Date(),
@@ -54,15 +54,15 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
 
       const evaluation =
         access.role === "STUDENT"
-          ? canStudentJoin(scheduleTarget, new Date())
-          : canTeacherStart(scheduleTarget, new Date());
+          ? canStudentJoinClass(scheduleTarget, new Date())
+          : canTeacherEnterClass(scheduleTarget, new Date());
 
       if (!evaluation.allowed) {
         return apiError(
           evaluation.reason || "Video access is only allowed within 15 minutes of scheduled class start time.",
           403,
           {
-            code: "JOIN_WINDOW_NOT_OPEN",
+            code: evaluation.code || "JOIN_WINDOW_NOT_OPEN",
             details: {
               opensAt: evaluation.opensAt.toISOString(),
               secondsUntilWindowOpens: evaluation.secondsUntilWindowOpens,

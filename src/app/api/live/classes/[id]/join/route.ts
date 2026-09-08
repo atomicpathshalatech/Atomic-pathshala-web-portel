@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { createVideoAccessToken } from "@/lib/livekit/server";
+import { canStudentJoinClass } from "@/lib/schedule/access-rules";
 
 export async function POST(
   _request: NextRequest,
@@ -24,20 +25,37 @@ export async function POST(
       });
     }
 
-    if (!liveClass) {
-      // Check if it exists as BatchSchedule
-      const schedule = await prisma.batchSchedule.findUnique({
-        where: { id: params.id },
+    let schedule = null;
+    if (liveClass?.batchScheduleId) {
+      schedule = await prisma.batchSchedule.findUnique({
+        where: { id: liveClass.batchScheduleId },
+        include: { liveWhiteboardSession: true },
       });
-      if (!schedule) return apiError("Live class not found", 404);
+    } else {
+      schedule = await prisma.batchSchedule.findUnique({
+        where: { id: params.id },
+        include: { liveWhiteboardSession: true },
+      });
+    }
 
-      // Verify T-15 start window
-      const opensAt = new Date(schedule.startsAt.getTime() - 15 * 60 * 1000);
-      if (Date.now() < opensAt.getTime()) {
-        return apiError("Classroom access opens 15 minutes before scheduled start time.", 403, {
-          code: "JOIN_WINDOW_NOT_OPEN",
-          details: { opensAt: opensAt.toISOString() },
-        });
+    const now = new Date();
+
+    if (!liveClass && schedule) {
+      // Check if student is allowed to enter yet
+      const evaluation = canStudentJoinClass(schedule, now);
+      if (!evaluation.allowed) {
+        return apiError(
+          evaluation.reason || "Classroom access opens 15 minutes before scheduled start time.",
+          403,
+          {
+            code: evaluation.code || "JOIN_TOO_EARLY",
+            details: {
+              opensAt: evaluation.opensAt.toISOString(),
+              secondsUntilWindowOpens: evaluation.secondsUntilWindowOpens,
+              serverTime: now.toISOString(),
+            },
+          }
+        );
       }
 
       // Lookup linked room
@@ -50,17 +68,44 @@ export async function POST(
       }
     }
 
+    if (!liveClass) {
+      return apiError("Live class not found", 404);
+    }
+
+    const scheduleTarget = schedule ?? {
+      id: liveClass.id,
+      startsAt: liveClass.scheduledStart,
+      endsAt: liveClass.scheduledEnd,
+      status: liveClass.status,
+    };
+
+    const evaluation = canStudentJoinClass(scheduleTarget, now);
+    if (!evaluation.allowed) {
+      return apiError(
+        evaluation.reason || "Classroom access is not open yet.",
+        403,
+        {
+          code: evaluation.code || "JOIN_TOO_EARLY",
+          details: {
+            opensAt: evaluation.opensAt.toISOString(),
+            secondsUntilWindowOpens: evaluation.secondsUntilWindowOpens,
+            serverTime: now.toISOString(),
+          },
+        }
+      );
+    }
+
     if (liveClass.status === "ENDED") {
       return apiError("This live class has already concluded.", 410);
     }
 
     // Verify student enrollment if linked to a batch
     if (liveClass.batchScheduleId) {
-      const schedule = await prisma.batchSchedule.findUnique({
+      const parentSchedule = schedule || await prisma.batchSchedule.findUnique({
         where: { id: liveClass.batchScheduleId },
       });
 
-      if (schedule && session.user.role === "STUDENT") {
+      if (parentSchedule && session.user.role === "STUDENT") {
         const student = await prisma.student.findUnique({
           where: { userId: session.user.id },
         });
@@ -69,14 +114,16 @@ export async function POST(
 
         const enrollment = await prisma.batchEnrollment.findFirst({
           where: {
-            batchId: schedule.batchId,
+            batchId: parentSchedule.batchId,
             studentId: student.id,
             status: "ACTIVE",
           },
         });
 
         if (!enrollment) {
-          return apiError("You are not enrolled in the batch for this live class.", 403);
+          return apiError("You are not enrolled in the batch for this live class.", 403, {
+            code: "ENROLLMENT_REQUIRED",
+          });
         }
       }
     }
@@ -94,6 +141,7 @@ export async function POST(
       status: liveClass.status,
       token,
       url: process.env.NEXT_PUBLIC_LIVEKIT_URL || process.env.LIVEKIT_URL,
+      serverTime: now.toISOString(),
     });
   } catch (error) {
     return handleApiError(error);

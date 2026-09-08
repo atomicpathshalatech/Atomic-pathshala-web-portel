@@ -15,10 +15,12 @@ import { getPusherClient } from "@/lib/realtime/pusher-client";
 import { sessionChannel, teacherChannel, WB_EVENTS } from "@/lib/realtime/events";
 import { VideoStrip } from "@/components/live-class/VideoStrip";
 import { MessagesPanel } from "@/components/live-class/MessagesPanel";
+import { ParticipantsPanel } from "@/components/live-class/ParticipantsPanel";
 import { Simulation3DModal } from "@/components/live-class/Simulation3DModal";
 import { ScienceLabsModal } from "@/components/live-class/ScienceLabsModal";
 import { PreFlightSetupWizard, type PreFlightConfig } from "@/components/live-class/PreFlightSetupWizard";
 import { TeacherPostClassModal } from "@/components/live-class/TeacherPostClassModal";
+import { SlideTemplatesModal } from "@/components/live-class/SlideTemplatesModal";
 import { GRACE_PERIOD_MINUTES, END_WARNING_MINUTES } from "@/lib/whiteboard/constants";
 
 type WhiteboardPage = { id: string; pageNumber: number; objects: StrokeObject[]; background: string };
@@ -436,16 +438,18 @@ export function TeacherLiveClassRoom({
   const [showPostClassModal, setShowPostClassModal] = useState(false);
   const [startingClass, setStartingClass] = useState(false);
   const [startClassError, setStartClassError] = useState<string | null>(null);
+  const [slideTemplatesOpen, setSlideTemplatesOpen] = useState(false);
 
   // Pre-flight & Authoritative System State
   const [showPreFlightWizard, setShowPreFlightWizard] = useState(false);
   const [extendingTime, setExtendingTime] = useState(false);
   const [extensionMenuOpen, setExtensionMenuOpen] = useState(false);
   const [currentTimeMs, setCurrentTimeMs] = useState(Date.now());
+  const serverTimeOffsetRef = useRef<number>(0);
 
   const [studentCount, setStudentCount] = useState(0);
   const [handRaiseQueue, setHandRaiseQueue] = useState<HandRaiseQueueItem[]>([]);
-  const [rightTab, setRightTab] = useState<"messages" | "questions">("messages");
+  const [rightTab, setRightTab] = useState<"messages" | "questions" | "roster">("messages");
   const [unreadMessages, setUnreadMessages] = useState(0);
 
   const [activeQuiz, setActiveQuiz] = useState<ActiveQuiz | null>(null);
@@ -483,10 +487,17 @@ export function TeacherLiveClassRoom({
         const data = await postJson("/api/whiteboard/sessions", { batchScheduleId });
         if (!cancelled) {
           setWbSession(data.whiteboardSession);
-          if (!data.whiteboardSession?.presentationUrl && data.whiteboardSession?.livePhase !== "LIVE") {
+          if (
+            data.whiteboardSession?.livePhase === "ENDING" ||
+            data.whiteboardSession?.livePhase === "ENDED" ||
+            data.whiteboardSession?.status === "ENDED"
+          ) {
+            setShowPostClassModal(true);
+          } else if (!data.whiteboardSession?.presentationUrl && data.whiteboardSession?.livePhase !== "LIVE") {
             setShowPreFlightWizard(true);
           }
         }
+
       } catch (err) {
         if (!cancelled) setLoadError(err instanceof Error ? err.message : "Could not start the live class.");
       } finally {
@@ -769,6 +780,131 @@ export function TeacherLiveClassRoom({
     }
   }
 
+  async function handleAddPageWithTemplate(bgValue: string) {
+    if (!wbSession) return;
+    try {
+      const data = await postJson(`/api/whiteboard/sessions/${wbSession.id}/pages`);
+      const newPage = data.page as WhiteboardPage;
+      await patchJson(`/api/whiteboard/sessions/${wbSession.id}/pages/${newPage.id}`, {
+        background: bgValue,
+        objects: [],
+      });
+      const updatedPage = { ...newPage, background: bgValue };
+      setWbSession((prev) =>
+        prev
+          ? {
+              ...prev,
+              pages: [...prev.pages.filter((p) => p.id !== newPage.id), updatedPage],
+              activePageNumber: updatedPage.pageNumber,
+            }
+          : prev
+      );
+      engineRef.current?.loadObjects([]);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Could not add template page.");
+    }
+  }
+
+  // Global shortcuts for educator whiteboard: Ctrl+D for Templates, Ctrl+Z, Ctrl+Y, Shift+N, Shift+C
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger shortcuts if typing inside text area or text input
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
+        return;
+      }
+
+      // Ctrl+D or Cmd+D -> Open Inbuilt Slide Templates
+      if ((e.ctrlKey || e.metaKey) && (e.key === "d" || e.key === "D")) {
+        e.preventDefault();
+        e.stopPropagation();
+        setSlideTemplatesOpen((prev) => !prev);
+        return;
+      }
+
+      // Ctrl+Z -> Undo
+      if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z") && !e.shiftKey) {
+        e.preventDefault();
+        if (engineRef.current?.canUndo()) {
+          engineRef.current.undo();
+          setUndoRedoTick((t) => t + 1);
+        }
+        return;
+      }
+
+      // Ctrl+Y or Ctrl+Shift+Z -> Redo
+      if (
+        ((e.ctrlKey || e.metaKey) && (e.key === "y" || e.key === "Y")) ||
+        ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "z" || e.key === "Z"))
+      ) {
+        e.preventDefault();
+        if (engineRef.current?.canRedo()) {
+          engineRef.current.redo();
+          setUndoRedoTick((t) => t + 1);
+        }
+        return;
+      }
+
+      // Shift+N -> Add page
+      if (e.shiftKey && (e.key === "n" || e.key === "N")) {
+        e.preventDefault();
+        addPage();
+        return;
+      }
+
+      // Shift+C -> Clear page ink
+      if (e.shiftKey && (e.key === "c" || e.key === "C")) {
+        e.preventDefault();
+        engineRef.current?.clearInk();
+        return;
+      }
+
+      // Page navigation: PageDown / Alt+Right -> Next Page, PageUp / Alt+Left -> Prev Page
+      if (!e.ctrlKey && !e.metaKey && (e.key === "PageDown" || (e.altKey && e.key === "ArrowRight"))) {
+        if (wbSession && wbSession.activePageNumber < wbSession.pages.length) {
+          e.preventDefault();
+          switchToPage(wbSession.activePageNumber + 1);
+        }
+        return;
+      }
+
+      if (!e.ctrlKey && !e.metaKey && (e.key === "PageUp" || (e.altKey && e.key === "ArrowLeft"))) {
+        if (wbSession && wbSession.activePageNumber > 1) {
+          e.preventDefault();
+          switchToPage(wbSession.activePageNumber - 1);
+        }
+        return;
+      }
+
+      // Pen tablet quick tool shortcuts (1=Pen, 2=Highlighter, 3=Eraser, 4=Select, T=Text)
+      if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (e.key === "1" || e.key === "p" || e.key === "P") {
+          setTool("pen");
+          return;
+        }
+        if (e.key === "2" || e.key === "h" || e.key === "H") {
+          setTool("highlighter");
+          return;
+        }
+        if (e.key === "3" || e.key === "e" || e.key === "E") {
+          setTool("stroke-eraser");
+          return;
+        }
+        if (e.key === "4" || e.key === "s" || e.key === "S") {
+          setTool("select");
+          return;
+        }
+        if (e.key === "t" || e.key === "T") {
+          setTool("text");
+          return;
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [wbSession?.id, wbSession?.activePageNumber, wbSession?.pages.length]);
+
   async function deleteCurrentPage() {
     if (!wbSession || !currentPage || wbSession.pages.length <= 1) return;
     if (!window.confirm("Delete this page? This can't be undone.")) return;
@@ -786,6 +922,31 @@ export function TeacherLiveClassRoom({
       setLoadError(err instanceof Error ? err.message : "Could not delete this page.");
     }
   }
+
+  const exportBoardAsImage = useCallback(() => {
+    if (!baseCanvasRef.current) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = VIRTUAL_WIDTH;
+    canvas.height = VIRTUAL_HEIGHT;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    if (currentPage?.background === "dark") {
+      ctx.fillStyle = "#1a1b23";
+      ctx.fillRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+    } else {
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+    }
+
+    ctx.drawImage(baseCanvasRef.current, 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+
+    const link = document.createElement("a");
+    const safeTitle = (scheduleTitle || "Whiteboard").replace(/[^a-z0-9]/gi, "_");
+    link.download = `${safeTitle}_Slide_${currentPage?.pageNumber ?? 1}.png`;
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+  }, [currentPage, scheduleTitle]);
 
   // ---- Slide background (More menu / Theme modal) --------------------------
   async function handleBackgroundFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -1151,9 +1312,22 @@ export function TeacherLiveClassRoom({
   // ---- Authoritative Countdown, Grace Period & Timer State --------------
   const autoEndTriggeredRef = useRef(false);
 
+  // Fetch server time on mount to sync clock skew
+  useEffect(() => {
+    fetch("/api/time")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.serverTimeMs) {
+          serverTimeOffsetRef.current = data.serverTimeMs - Date.now();
+          setCurrentTimeMs(Date.now() + serverTimeOffsetRef.current);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     const interval = setInterval(() => {
-      setCurrentTimeMs(Date.now());
+      setCurrentTimeMs(Date.now() + serverTimeOffsetRef.current);
     }, 1000);
     return () => clearInterval(interval);
   }, []);
@@ -1180,10 +1354,10 @@ export function TeacherLiveClassRoom({
     ? new Date(wbSession.startedAt).getTime()
     : null;
 
-  // Waiting mode timing
+  // Waiting mode timing (Authoritative T-5 Rule: Start Class unlocks at T-5)
   const secondsUntilStart = scheduledStartMs > 0 ? Math.floor((scheduledStartMs - currentTimeMs) / 1000) : 0;
-  const isEarlyAllowed = scheduledStartMs === 0 || currentTimeMs >= scheduledStartMs - 15 * 60 * 1000;
-  const canStartClass = isEarlyAllowed && wbSession?.livePhase !== "LIVE";
+  const isStartWindowOpen = scheduledStartMs === 0 || currentTimeMs >= scheduledStartMs - 5 * 60 * 1000;
+  const canStartClass = isStartWindowOpen && wbSession?.livePhase !== "LIVE";
 
   // Live mode timing
   const elapsedSeconds = actualStartedAtMs ? Math.max(0, Math.floor((currentTimeMs - actualStartedAtMs) / 1000)) : 0;
@@ -1513,7 +1687,7 @@ export function TeacherLiveClassRoom({
                     ? "text-white bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/30 ring-2 ring-emerald-400/40 animate-pulse cursor-pointer"
                     : "text-gray-400 bg-gray-800 border border-gray-700 cursor-not-allowed opacity-60"
                 }`}
-                title={canStartClass ? "Start Live Teaching for all students" : "Class start unlocks within 15 minutes of scheduled time"}
+                title={canStartClass ? "Start Live Teaching for all students" : "Class start unlocks 5 minutes before scheduled start time"}
               >
                 <span className="material-symbols-outlined text-base">sensors</span>
                 {startingClass ? "Starting Live…" : canStartClass ? "Start Class" : "Scheduled Time Locked"}
@@ -1619,10 +1793,10 @@ export function TeacherLiveClassRoom({
           )}
           {/* Continuous Full-Size Canvas — covers 100% of visible card */}
           <div className="absolute inset-0 w-full h-full">
-            <canvas ref={baseCanvasRef} className="absolute inset-0 w-full h-full" />
+            <canvas ref={baseCanvasRef} className="absolute inset-0 w-full h-full select-none pointer-events-none" />
             <canvas
               ref={activeCanvasRef}
-              className="absolute inset-0 w-full h-full touch-none"
+              className="absolute inset-0 w-full h-full touch-none select-none cursor-crosshair"
               onDoubleClick={handleCanvasDoubleClick}
             />
             {textEditor && (
@@ -1701,14 +1875,14 @@ export function TeacherLiveClassRoom({
           <VideoStrip whiteboardSessionId={wbSession.id} variant="panel" settingsPortalRef={settingsPortalRef} />
         </div>
 
-        <div className="flex border-b border-[#2d2e3b] px-4 pt-3 shrink-0">
+        <div className="flex border-b border-[#2d2e3b] px-3 pt-3 shrink-0 gap-1 overflow-x-auto">
           <button
             type="button"
             onClick={() => {
               setRightTab("messages");
               setUnreadMessages(0);
             }}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors relative ${
+            className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors relative whitespace-nowrap ${
               rightTab === "messages" ? "border-white text-white" : "border-transparent text-gray-400 hover:text-white"
             }`}
           >
@@ -1722,7 +1896,7 @@ export function TeacherLiveClassRoom({
           <button
             type="button"
             onClick={() => setRightTab("questions")}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors relative ${
+            className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors relative whitespace-nowrap ${
               rightTab === "questions" ? "border-white text-white" : "border-transparent text-gray-400 hover:text-white"
             }`}
           >
@@ -1737,6 +1911,18 @@ export function TeacherLiveClassRoom({
               )
             )}
           </button>
+          <button
+            type="button"
+            onClick={() => setRightTab("roster")}
+            className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors relative whitespace-nowrap flex items-center gap-1.5 ${
+              rightTab === "roster" ? "border-white text-white" : "border-transparent text-gray-400 hover:text-white"
+            }`}
+          >
+            Students
+            <span className="bg-emerald-950/80 text-emerald-400 border border-emerald-800/40 text-[10px] px-1.5 py-0.5 rounded-full font-bold">
+              {studentCount}
+            </span>
+          </button>
         </div>
 
         <div className="flex-1 min-h-0 p-4 flex flex-col">
@@ -1748,14 +1934,18 @@ export function TeacherLiveClassRoom({
               theme="dark"
               showOwnToggle={false}
             />
-          ) : (
+          ) : rightTab === "questions" ? (
             <HandRaisePanel
               queue={handRaiseQueue}
               onResolve={resolveHandRaise}
               onAction={handleHandRaiseAction}
               enabled={wbSession.handRaiseEnabled}
             />
-
+          ) : (
+            <ParticipantsPanel
+              whiteboardSessionId={wbSession.id}
+              theme="dark"
+            />
           )}
         </div>
       </aside>
@@ -2175,6 +2365,7 @@ export function TeacherLiveClassRoom({
           </button>
           <div className="w-px h-6 bg-[#2d2e3b] mx-2" />
           <ToolbarBtn icon="add" label="Add" onClick={addPage} />
+          <ToolbarBtn icon="download" label="Export" onClick={exportBoardAsImage} title="Export current slide as PNG" />
           <ToolbarBtn
             icon="delete"
             label="Delete"

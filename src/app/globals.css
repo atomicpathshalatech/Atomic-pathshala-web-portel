@@ -10,34 +10,47 @@
   }
 
   /*
-   * Single source of truth for the app chrome's dimensions. Before this,
-   * three different hardcoded header heights were in circulation
-   * (TeamShell `top-[65px]`, StudentShell `h-[64px]`, and a `top-[73px]`
-   * elsewhere), so a sticky sidebar's offset silently disagreed with the
-   * actual header the moment it wrapped or the browser was zoomed.
+   * Single source of truth for the app chrome's dimensions and safe areas.
+   * Provides baseline support for desktop browsers, mobile browsers, and
+   * native Capacitor Android/iOS WebViews.
    */
   :root {
     --header-h: 4rem; /* 64px */
     --sidebar-w: 16rem; /* 256px */
+    --sat: env(safe-area-inset-top, 0px);
+    --sab: env(safe-area-inset-bottom, 0px);
+    --sal: env(safe-area-inset-left, 0px);
+    --sar: env(safe-area-inset-right, 0px);
   }
 
   html {
+    width: 100%;
+    min-height: 100%;
+    min-height: 100dvh;
     /*
      * Stops mobile Safari/Chrome from inflating text in landscape, which
      * silently breaks otherwise-correct layouts.
      */
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
+    overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
   }
 
   body {
+    width: 100%;
+    min-height: 100%;
+    min-height: 100dvh;
+    margin: 0;
+    padding: 0;
     @apply bg-background text-on-background;
+    overflow-x: hidden;
   }
 }
 
 @layer utilities {
   /*
-   * Height that respects the mobile browser's collapsing address bar.
+   * Height that respects the mobile browser's collapsing address bar and Android WebView.
    * `100vh` on mobile is taller than the visible viewport, which is what
    * pushes fixed bottom toolbars (the live-class toolbar in particular)
    * underneath the browser UI. `dvh` tracks the real visible height, with
@@ -50,6 +63,36 @@
   .min-h-screen-safe {
     min-height: 100vh;
     min-height: 100dvh;
+  }
+  .w-screen-safe {
+    width: 100%;
+    max-width: 100vw;
+  }
+
+  /* Safe Area Padding and Positioning */
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .pl-safe {
+    padding-left: env(safe-area-inset-left, 0px);
+  }
+  .pr-safe {
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+  .p-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-left: env(safe-area-inset-left, 0px);
+  }
+  .top-safe {
+    top: env(safe-area-inset-top, 0px);
+  }
+  .bottom-safe {
+    bottom: env(safe-area-inset-bottom, 0px);
   }
 
   /*
@@ -137,6 +180,8 @@
   --live-panel-w: 20rem; /* 320px */
 
   display: grid;
+  width: 100%;
+  max-width: 100vw;
   height: 100vh;
   height: 100dvh; /* mobile browser chrome must not hide the toolbar */
   grid-template-columns: minmax(0, 1fr);

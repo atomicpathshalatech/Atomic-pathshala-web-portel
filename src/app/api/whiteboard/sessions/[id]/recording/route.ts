@@ -8,14 +8,9 @@ import { createPresignedDownloadUrl } from "@/lib/storage/r2-client";
 import { reconcileRecordingStatus } from "@/lib/livekit/egress";
 
 /**
- * Catch-up playback endpoint. Same access rule as every other
- * /api/whiteboard/sessions/[id]/* route (resolveWhiteboardAccess) - anyone
- * who could join the live class can watch its recording, nobody else.
- *
- * Returns a short-lived presigned R2 GET url rather than a public one -
- * this bucket already serves protected assets the same way (see
- * createPresignedDownloadUrl's other callers) and recordings are class
- * content, not public marketing assets.
+ * Catch-up recording playback & metadata endpoint.
+ * Strict RBAC: Only authorized teachers, academic admins, and enrolled batch students
+ * can access live class recordings.
  */
 export async function GET(
   request: NextRequest,
@@ -26,23 +21,30 @@ export async function GET(
     if (!session?.user?.id) return apiError("Unauthorized", 401);
 
     const access = await resolveWhiteboardAccess(session.user.id, params.id);
-    if (!access) return apiError("Forbidden", 403);
+    if (!access) return apiError("Forbidden: You are not authorized to view this recording.", 403);
 
     const wbSession = await prisma.whiteboardSession.findUnique({
       where: { id: params.id },
       select: {
+        id: true,
+        title: true,
+        batchScheduleId: true,
+        teacherId: true,
         recordingStatus: true,
         recordingStorageKey: true,
         recordingDurationSeconds: true,
         recordingEgressId: true,
+        actualStartedAt: true,
+        startedAt: true,
+        actualEndedAt: true,
+        endedAt: true,
+        createdAt: true,
       },
     });
 
-    if (!wbSession) return apiError("Session not found", 404);
+    if (!wbSession) return apiError("Live class session not found", 404);
 
-    // Self-heal a missed egress_ended webhook (see reconcileRecordingStatus)
-    // so a poller hitting this endpoint doesn't spin on "processing" forever
-    // over one dropped webhook delivery.
+    // Self-heal a missed egress_ended webhook via LiveKit reconciliation
     const reconciled = await reconcileRecordingStatus({
       id: params.id,
       recordingStatus: wbSession.recordingStatus,
@@ -52,27 +54,41 @@ export async function GET(
       ? { ...wbSession, ...reconciled }
       : wbSession;
 
-    if (effective.recordingStatus !== "READY" || !effective.recordingStorageKey) {
-      return apiSuccess({
-        status: effective.recordingStatus,
-        available: false,
-        url: null,
-        durationSeconds: null,
+    // Look up FileAsset if storageKey exists
+    let fileAsset = null;
+    if (effective.recordingStorageKey) {
+      fileAsset = await prisma.fileAsset.findUnique({
+        where: { storageKey: effective.recordingStorageKey },
       });
     }
 
-    const url = await createPresignedDownloadUrl({
-      key: effective.recordingStorageKey,
-      expiresInSeconds: 3600,
-    });
+    const isReady = effective.recordingStatus === "READY" && Boolean(effective.recordingStorageKey);
+
+    let presignedUrl: string | null = null;
+    if (isReady && effective.recordingStorageKey) {
+      presignedUrl = await createPresignedDownloadUrl({
+        key: effective.recordingStorageKey,
+        expiresInSeconds: 3600, // 1 hour private playback token
+      });
+    }
 
     return apiSuccess({
-      status: "READY",
-      available: true,
-      url,
-      durationSeconds: effective.recordingDurationSeconds,
+      recordingId: fileAsset?.id || effective.id,
+      classId: effective.batchScheduleId,
+      liveSessionId: effective.id,
+      providerRecordingId: effective.recordingEgressId || null,
+      status: effective.recordingStatus,
+      available: isReady,
+      url: presignedUrl,
+      startedAt: effective.actualStartedAt || effective.startedAt,
+      stoppedAt: effective.actualEndedAt || effective.endedAt,
+      durationSeconds: effective.recordingDurationSeconds || null,
+      storagePath: effective.recordingStorageKey || null,
+      resourceId: fileAsset?.id || null,
+      createdAt: effective.createdAt,
     });
   } catch (error) {
     return handleApiError(error);
   }
 }
+

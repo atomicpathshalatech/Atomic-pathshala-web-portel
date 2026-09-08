@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { JOIN_WINDOW_MS } from "@/lib/schedule/access-rules";
+import { JOIN_WINDOW_MS, type NormalizedScheduleStatus } from "@/lib/schedule/access-rules";
 
-type LiveCardStatus = "SCHEDULED" | "STARTING_SOON" | "LIVE" | "COMPLETED" | "CANCELLED" | "NOT_CONDUCTED";
+type LiveCardStatus = NormalizedScheduleStatus;
 
 interface NextClassCardProps {
   scheduleId: string;
@@ -72,7 +72,7 @@ export function NextClassCard({
       if (status === "LIVE") {
         setTimeLabel("Live Now");
         setHintLabel(null);
-      } else if (status === "STARTING_SOON") {
+      } else if (status === "STARTING_SOON" || status === "TEACHER_ENTRY_OPEN" || status === "READY") {
         setTimeLabel(
           nowMs >= startsAtMs ? "Starting any moment" : `Starts in ${minutesUntil(startsAtMs, nowMs)} min`
         );

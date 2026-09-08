@@ -7,6 +7,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { resolveTeacherForSchedule } from "@/lib/whiteboard/access";
 import { whiteboardSessionStartSchema } from "@/lib/validation/whiteboard";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { canTeacherEnterClass } from "@/lib/schedule/access-rules";
 
 /**
  * Start-or-resume the live whiteboard for a scheduled class. There is at
@@ -29,7 +30,7 @@ export async function POST(request: NextRequest) {
 
     const existing = await prisma.whiteboardSession.findUnique({
       where: { batchScheduleId: input.batchScheduleId },
-      include: { pages: { orderBy: { pageNumber: "asc" } } },
+      include: { pages: { orderBy: { pageNumber: "asc" } }, batchSchedule: true },
     });
 
     if (existing) {
@@ -43,13 +44,26 @@ export async function POST(request: NextRequest) {
         return apiSuccess({ whiteboardSession: existing, resumed: true });
       }
 
+      // Check entry window before resuming
+      const now = new Date();
+      const enterEval = canTeacherEnterClass(existing.batchSchedule, now);
+      if (!enterEval.allowed) {
+        return apiError(
+          enterEval.reason || "Teacher entry opens 15 minutes before scheduled start time.",
+          403,
+          {
+            code: enterEval.code || "ENTRY_TOO_EARLY",
+            details: {
+              opensAt: enterEval.opensAt.toISOString(),
+              secondsUntilWindowOpens: enterEval.secondsUntilWindowOpens,
+              serverTime: now.toISOString(),
+            },
+          }
+        );
+      }
+
       const resumed = await prisma.whiteboardSession.update({
         where: { id: existing.id },
-        // Resuming a previously-ended session re-opens the pre-class lobby
-        // (livePhase: PREPARING) rather than dropping straight back into
-        // LIVE — the teacher explicitly re-confirms Start Class again, and
-        // students see the lobby (with chat) instead of jumping straight to
-        // a board/video that isn't actually ready yet.
         data: { status: "ACTIVE", endedAt: null, livePhase: "PREPARING" },
         include: { pages: { orderBy: { pageNumber: "asc" } } },
       });
@@ -122,6 +136,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Authoritative Teacher Entry Check (T-15)
+    const now = new Date();
+    const enterEval = canTeacherEnterClass(schedule, now);
+    if (!enterEval.allowed) {
+      return apiError(
+        enterEval.reason || "Teacher entry opens 15 minutes before scheduled start time.",
+        403,
+        {
+          code: enterEval.code || "ENTRY_TOO_EARLY",
+          details: {
+            opensAt: enterEval.opensAt.toISOString(),
+            secondsUntilWindowOpens: enterEval.secondsUntilWindowOpens,
+            serverTime: now.toISOString(),
+          },
+        }
+      );
+    }
+
     // Resolve teaching claim: assigned teacher first, then an
     // ACADEMIC_HEAD/admin override (BATCH_UPDATE) stepping in on behalf of
     // whichever teacher the batch/schedule already names.
@@ -159,18 +191,13 @@ export async function POST(request: NextRequest) {
         batchScheduleId: schedule.id,
         teacherId: teacher.id,
         title: schedule.title,
-        // Opening the room starts the pre-class lobby, not the live class
-        // itself — chat is already on so students who join early can talk,
-        // but the board/video only appear once the teacher explicitly hits
-        // Start Class (PATCH livePhase: "LIVE").
+        scheduledStart: schedule.startsAt ? new Date(schedule.startsAt) : now,
+        scheduledEnd: schedule.endsAt ? new Date(schedule.endsAt) : new Date(now.getTime() + 60 * 60 * 1000),
         livePhase: "PREPARING",
         pages: { create: { pageNumber: 1, objects: [] } },
       },
       include: { pages: { orderBy: { pageNumber: "asc" } } },
     });
-
-    // BatchSchedule.status remains SCHEDULED until teacher explicitly starts the class via /start endpoint
-
 
     await prisma.auditLog.create({
       data: {

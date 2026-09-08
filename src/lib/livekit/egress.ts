@@ -104,34 +104,31 @@ type RecordingFields = {
   recordingStatus: string;
   recordingStorageKey: string | null;
   recordingDurationSeconds: number | null;
+  resourceId?: string | null;
 };
 
 /**
  * Fallback for the LiveKit `egress_ended` webhook
  * (src/app/api/webhooks/livekit/route.ts) never arriving or failing signature
- * verification - e.g. the LiveKit Cloud project's webhook URL still pointing
- * at a stale/old deployment domain, or a dropped delivery (LiveKit does not
- * retry a failed webhook). That webhook was previously the ONLY way a
- * recording ever left "RECORDING"/"PROCESSING", so a single missed delivery
- * left the session - and every student looking at it - stuck showing
- * "Recording in Process" forever with no way to recover.
+ * verification.
  *
- * Whenever a recording is read while still RECORDING/PROCESSING, this asks
- * LiveKit directly (outbound call we already rely on to start/stop egress
- * and mint join tokens, so it isn't subject to the same "did the inbound
- * webhook reach us" failure mode) for the egress's real status via
- * listEgress, and applies the same DB update the webhook would have. A
- * missed webhook then self-heals on the very next read instead of needing a
- * manual DB fix. Best-effort and side-effect-free on failure: never throws,
- * so a call site can await it without risking the page/route it's part of.
+ * Whenever a recording is read while still STARTING/RECORDING/PROCESSING, this asks
+ * LiveKit directly for the egress's real status via listEgress, and applies the
+ * same DB update and FileAsset creation the webhook would have.
  */
 export async function reconcileRecordingStatus(
   session: { id: string; recordingStatus: string; recordingEgressId: string | null }
 ): Promise<RecordingFields | null> {
-  if (
-    (session.recordingStatus !== "RECORDING" && session.recordingStatus !== "PROCESSING") ||
-    !session.recordingEgressId
-  ) {
+  const activeStatuses = [
+    "RECORDING",
+    "RECORDING_STARTING",
+    "STARTING",
+    "RECORDING_STOPPING",
+    "STOPPING",
+    "PROCESSING",
+  ];
+
+  if (!activeStatuses.includes(session.recordingStatus) || !session.recordingEgressId) {
     return null;
   }
 
@@ -143,14 +140,64 @@ export async function reconcileRecordingStatus(
 
     if (info.status === EgressStatus.EGRESS_COMPLETE) {
       const file = info.fileResults?.[0];
-      return await prisma.whiteboardSession.update({
+      const storageKey = file?.filename || `recordings/${session.id}/final.mp4`;
+      const durationSeconds = file?.duration
+        ? Math.round(Number(file.duration) / 1_000_000_000)
+        : null;
+
+      const wbSession = await prisma.whiteboardSession.findUnique({
+        where: { id: session.id },
+        include: { teacher: true },
+      });
+
+      let resourceId: string | null = null;
+      if (wbSession) {
+        const fileAsset = await prisma.fileAsset
+          .upsert({
+            where: { storageKey },
+            update: {
+              status: "ACTIVE",
+              sizeBytes: file?.size ? BigInt(file.size) : undefined,
+              metadata: {
+                whiteboardSessionId: wbSession.id,
+                batchScheduleId: wbSession.batchScheduleId,
+                type: "LIVE_CLASS_RECORDING",
+                durationSeconds,
+                egressId: info.egressId,
+              },
+            },
+            create: {
+              ownerId: wbSession.teacher?.userId || wbSession.teacherId,
+              fileType: "VIDEO",
+              storageProvider: "r2",
+              storageKey,
+              originalFilename: `${(wbSession.title || "Live_Class").replace(/[^a-zA-Z0-9_-]/g, "_")}_Recording.mp4`,
+              mimeType: "video/mp4",
+              sizeBytes: file?.size ? BigInt(file.size) : BigInt(0),
+              status: "ACTIVE",
+              visibility: "PROTECTED",
+              metadata: {
+                whiteboardSessionId: wbSession.id,
+                batchScheduleId: wbSession.batchScheduleId,
+                type: "LIVE_CLASS_RECORDING",
+                durationSeconds,
+                egressId: info.egressId,
+              },
+            },
+          })
+          .catch((err) => {
+            console.warn("[reconcileRecordingStatus_fileAsset_warning]", err);
+            return null;
+          });
+        resourceId = fileAsset?.id || null;
+      }
+
+      const updated = await prisma.whiteboardSession.update({
         where: { id: session.id },
         data: {
           recordingStatus: "READY",
-          recordingStorageKey: file?.filename || undefined,
-          recordingDurationSeconds: file?.duration
-            ? Math.round(Number(file.duration) / 1_000_000_000)
-            : undefined,
+          recordingStorageKey: storageKey,
+          ...(durationSeconds !== null && { recordingDurationSeconds: durationSeconds }),
         },
         select: {
           recordingStatus: true,
@@ -158,6 +205,11 @@ export async function reconcileRecordingStatus(
           recordingDurationSeconds: true,
         },
       });
+
+      return {
+        ...updated,
+        resourceId,
+      };
     }
 
     if (info.status === EgressStatus.EGRESS_FAILED || info.status === EgressStatus.EGRESS_ABORTED) {
@@ -172,11 +224,10 @@ export async function reconcileRecordingStatus(
       });
     }
 
-    // Still genuinely active/starting on LiveKit's side - nothing to
-    // reconcile yet, the webhook (or the next read) will catch it later.
     return null;
   } catch (err) {
     console.error("[reconcileRecordingStatus] LiveKit lookup failed:", err);
     return null;
   }
 }
+

@@ -1,8 +1,18 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Toaster } from "sonner";
 import "./globals.css";
 import { AuthSessionProvider } from "@/components/providers/AuthSessionProvider";
+import { CapacitorProvider } from "@/components/providers/CapacitorProvider";
 import { FloatingGuruWidget } from "@/components/shared/FloatingGuruWidget";
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: "cover",
+  themeColor: "#090D16",
+  interactiveWidget: "resizes-content",
+};
 
 export const metadata: Metadata = {
   title: {
@@ -15,7 +25,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="scroll-smooth" suppressHydrationWarning>
+    <html lang="en" className="scroll-smooth w-full min-h-screen-safe" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
@@ -28,10 +38,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body className="bg-background text-on-background font-body-md overflow-x-hidden antialiased">
+      <body className="w-full min-h-screen-safe bg-background text-on-background font-body-md overflow-x-hidden antialiased">
         <AuthSessionProvider>
-          {children}
-          <FloatingGuruWidget />
+          <CapacitorProvider>
+            {children}
+            <FloatingGuruWidget />
+          </CapacitorProvider>
         </AuthSessionProvider>
         <Toaster richColors position="top-center" />
       </body>

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { createVideoAccessToken } from "@/lib/livekit/server";
 import { pusherServer, sessionChannel, WB_EVENTS } from "@/lib/realtime/pusher-server";
+import { canTeacherStartClass } from "@/lib/schedule/access-rules";
 import crypto from "crypto";
 
 export async function POST(
@@ -35,14 +36,48 @@ export async function POST(
       });
     }
 
-    // If still not found, check BatchSchedule to create/link LiveClass record
-    if (!liveClass) {
-      const schedule = await prisma.batchSchedule.findUnique({
-        where: { id: params.id },
+    let schedule = null;
+    if (liveClass?.batchScheduleId) {
+      schedule = await prisma.batchSchedule.findUnique({
+        where: { id: liveClass.batchScheduleId },
+        include: { liveWhiteboardSession: true },
       });
+    } else {
+      schedule = await prisma.batchSchedule.findUnique({
+        where: { id: params.id },
+        include: { liveWhiteboardSession: true },
+      });
+    }
 
-      if (!schedule) return apiError("Live class session not found", 404);
+    const now = new Date();
 
+    const scheduleTarget = schedule ?? {
+      id: liveClass?.id || params.id,
+      startsAt: liveClass?.scheduledStart || now,
+      endsAt: liveClass?.scheduledEnd || new Date(now.getTime() + 60 * 60 * 1000),
+      status: liveClass?.status || "SCHEDULED",
+    };
+
+    // Authoritative T-5 Window Validation
+    const evaluation = canTeacherStartClass(scheduleTarget, now);
+    if (!evaluation.allowed) {
+      return apiError(
+        evaluation.reason || "Live class cannot be started yet. Starting is allowed within 5 minutes of scheduled start time.",
+        403,
+        {
+          code: evaluation.code || "START_TOO_EARLY",
+          details: {
+            opensAt: evaluation.opensAt.toISOString(),
+            startOpensAt: evaluation.startOpensAt.toISOString(),
+            secondsUntilStartOpens: evaluation.secondsUntilStartOpens,
+            serverTime: now.toISOString(),
+          },
+        }
+      );
+    }
+
+    // If still not found, create/link LiveClass record
+    if (!liveClass && schedule) {
       const roomName = `atomic-live-${crypto.randomUUID()}`;
       liveClass = await prisma.liveClass.create({
         data: {
@@ -56,15 +91,8 @@ export async function POST(
       });
     }
 
-    const now = new Date();
-
-    // Verify T-15 start window
-    const opensAt = new Date(liveClass.scheduledStart.getTime() - 15 * 60 * 1000);
-    if (now.getTime() < opensAt.getTime()) {
-      return apiError("Live class can only be started within 15 minutes of scheduled start time.", 403, {
-        code: "START_WINDOW_NOT_OPEN",
-        details: { opensAt: opensAt.toISOString() },
-      });
+    if (!liveClass) {
+      return apiError("Live class session not found", 404);
     }
 
     // Transition state to LIVE
@@ -76,7 +104,7 @@ export async function POST(
       },
     });
 
-    // Also sync BatchSchedule & WhiteboardSession if linked
+    // Sync BatchSchedule & WhiteboardSession
     if (liveClass.batchScheduleId) {
       await prisma.batchSchedule.update({
         where: { id: liveClass.batchScheduleId },
@@ -97,7 +125,7 @@ export async function POST(
       }).catch(() => null);
     }
 
-    // Generate short-lived LiveKit access token
+    // Generate LiveKit access token
     const token = await createVideoAccessToken({
       identity: session.user.id,
       name: session.user.name || "Teacher",
@@ -110,29 +138,8 @@ export async function POST(
         await pusherServer.trigger(
           sessionChannel(liveClass.batchScheduleId),
           WB_EVENTS.LIVE_PHASE_CHANGED,
-          { phase: "LIVE", actualStartedAt: now.toISOString() }
+          { phase: "LIVE", actualStartedAt: now.toISOString(), serverTime: now.toISOString() }
         );
-
-        // Dispatch authoritative CLASS_LIVE notification event to enrolled students
-        const { triggerNotificationEvent } = await import("@/lib/notifications/engine");
-        const { NotificationType } = await import("@/lib/notifications/types");
-
-        await triggerNotificationEvent({
-          eventType: NotificationType.CLASS_LIVE,
-          entityId: liveClass.batchScheduleId,
-          classId: liveClass.batchScheduleId,
-          title: "🔴 Class is LIVE Now",
-          body: "Your class is now live. Tap to join the live session!",
-          deepLink: `/live-class/${liveClass.batchScheduleId}`,
-          metadata: {
-            classId: liveClass.batchScheduleId,
-            liveStartedAt: now.toISOString(),
-          },
-          priority: "high",
-          idempotencyKey: `class-live:${liveClass.batchScheduleId}`,
-        }).catch((err) => {
-          console.error("[CLASS_LIVE notification error]", err);
-        });
       }
     } catch (pushErr) {
       console.warn("[LiveClass] Realtime broadcast warning:", pushErr);
@@ -144,6 +151,7 @@ export async function POST(
       status: updatedClass.status,
       token,
       url: process.env.NEXT_PUBLIC_LIVEKIT_URL || process.env.LIVEKIT_URL,
+      serverTime: now.toISOString(),
     });
   } catch (error) {
     return handleApiError(error);

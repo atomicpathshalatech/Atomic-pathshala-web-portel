@@ -7,6 +7,9 @@ import { resolveWhiteboardAccess } from "@/lib/whiteboard/access";
 import { whiteboardSessionPatchSchema } from "@/lib/validation/whiteboard";
 import { pushPageChanged, pushLivePhaseChanged } from "@/lib/whiteboard/board-mirror";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { startRoomRecording, recordingStorageKey } from "@/lib/livekit/egress";
+import { pusherServer } from "@/lib/realtime/pusher-server";
+import { sessionChannel, WB_EVENTS } from "@/lib/realtime/events";
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -135,6 +138,40 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       }
     }
 
+    let recordingEgressId = existing.recordingEgressId;
+    let recordingStatus = existing.recordingStatus;
+
+    if (input.livePhase === "LIVE" && existing.livePhase !== "LIVE") {
+      const isAlreadyRecording =
+        existing.recordingStatus === "RECORDING" ||
+        existing.recordingStatus === "RECORDING_STARTING" ||
+        existing.recordingStatus === "STARTING" ||
+        Boolean(existing.recordingEgressId);
+
+      // Auto-start LiveKit room recording if LiveKit video is enabled
+      if (!isAlreadyRecording && (existing.videoTransport === "LIVEKIT" || existing.videoTransport === "BOTH")) {
+        try {
+          const { videoRoomName } = await import("@/lib/livekit/server");
+          const roomName = videoRoomName(existing.id);
+          const storageKey = recordingStorageKey(existing.id);
+          const egress = await startRoomRecording(roomName, storageKey);
+          if (egress?.egressId) {
+            recordingEgressId = egress.egressId;
+            recordingStatus = "RECORDING";
+          }
+        } catch (err) {
+          console.warn("[startRoomRecording_fallback]", err);
+          recordingStatus = "RECORDING_FAILED";
+        }
+      }
+
+      await prisma.batchSchedule.update({
+        where: { id: existing.batchScheduleId },
+        data: { status: "LIVE" },
+      }).catch(() => undefined);
+    }
+
+
     const updated = await prisma.whiteboardSession.update({
       where: { id: params.id },
       data: {
@@ -142,7 +179,11 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         ...(input.title !== undefined && { title: input.title }),
         ...(input.chatEnabled !== undefined && { chatEnabled: input.chatEnabled }),
         ...(input.handRaiseEnabled !== undefined && { handRaiseEnabled: input.handRaiseEnabled }),
-        ...(input.livePhase !== undefined && { livePhase: input.livePhase }),
+        ...(input.livePhase !== undefined && {
+          livePhase: input.livePhase,
+          ...(input.livePhase === "LIVE" && !existing.actualStartedAt && { actualStartedAt: new Date() }),
+        }),
+        ...(recordingEgressId && { recordingEgressId, recordingStatus }),
       },
     });
 
@@ -152,6 +193,13 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
     if (input.livePhase === "LIVE" && existing.livePhase !== "LIVE") {
       await pushLivePhaseChanged(params.id, "LIVE");
+    }
+
+    if (input.chatEnabled !== undefined || input.handRaiseEnabled !== undefined) {
+      await pusherServer.trigger(sessionChannel(params.id), WB_EVENTS.CONFIG_UPDATED, {
+        chatEnabled: updated.chatEnabled,
+        handRaiseEnabled: updated.handRaiseEnabled,
+      }).catch(() => undefined);
     }
 
     return apiSuccess({ whiteboardSession: updated });

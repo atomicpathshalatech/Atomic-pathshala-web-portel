@@ -191,6 +191,56 @@ function translateObject(obj: StrokeObject, dx: number, dy: number): StrokeObjec
   };
 }
 
+function getBoundingBox(obj: StrokeObject): { minX: number; minY: number; maxX: number; maxY: number } {
+  const pts = representativePoints(obj);
+  if (pts.length === 0) return { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+  const xs = pts.map((p) => p.x);
+  const ys = pts.map((p) => p.y);
+  return {
+    minX: Math.min(...xs) - 8,
+    minY: Math.min(...ys) - 8,
+    maxX: Math.max(...xs) + 8,
+    maxY: Math.max(...ys) + 8,
+  };
+}
+
+function scaleObject(obj: StrokeObject, scaleX: number, scaleY: number, origin: { x: number; y: number }): StrokeObject {
+  if (obj.type === "stroke") {
+    return {
+      ...obj,
+      points: obj.points.map((p) => ({
+        ...p,
+        x: origin.x + (p.x - origin.x) * scaleX,
+        y: origin.y + (p.y - origin.y) * scaleY,
+      })),
+    };
+  }
+  if (obj.type === "text") {
+    const scale = Math.max(0.2, (scaleX + scaleY) / 2);
+    return {
+      ...obj,
+      position: {
+        x: origin.x + (obj.position.x - origin.x) * scaleX,
+        y: origin.y + (obj.position.y - origin.y) * scaleY,
+      },
+      size: Math.max(8, Math.round(obj.size * scale)),
+      width: Math.max(10, Math.round(obj.width * scaleX)),
+      height: Math.max(10, Math.round(obj.height * scaleY)),
+    };
+  }
+  return {
+    ...obj,
+    start: {
+      x: origin.x + (obj.start.x - origin.x) * scaleX,
+      y: origin.y + (obj.start.y - origin.y) * scaleY,
+    },
+    end: {
+      x: origin.x + (obj.end.x - origin.x) * scaleX,
+      y: origin.y + (obj.end.y - origin.y) * scaleY,
+    },
+  };
+}
+
 /** Renders one shape (committed or in-progress preview) onto a context.
  * Math ported from src/components/shared/WhiteboardCanvas.tsx's shape
  * branches — that component proved these paths out first; this reuses them
@@ -275,6 +325,11 @@ export class CanvasEngine {
   private selectedId: string | null = null;
   private dragOrigin: { x: number; y: number } | null = null;
   private dragSnapshot: StrokeObject[] | null = null;
+  private resizeHandle: "tl" | "tr" | "br" | "bl" | null = null;
+  private resizeOpposite: { x: number; y: number } | null = null;
+  private resizeInitialBBox: { minX: number; minY: number; maxX: number; maxY: number } | null = null;
+  private activePointerId: number | null = null;
+  private activePointerType: string | null = null;
 
   private onCommit?: (objects: StrokeObject[]) => void;
   private onSelectionChange?: (id: string | null) => void;
@@ -362,17 +417,30 @@ export class CanvasEngine {
   }
 
   private onPointerDown(e: PointerEvent): void {
-    if (e.pointerType === "touch" && this.currentTool === "select") {
-      // allow pinch/two-finger pan gestures to pass through to the parent
-      // when in select mode with no single point drag in progress
+    // Palm rejection: If pen input is active, reject simultaneous accidental touch inputs
+    if (this.isPointerDown && this.activePointerType === "pen" && e.pointerType === "touch") {
+      return;
     }
+    // Palm rejection: reject broad touch blobs (e.g. resting palm or side of hand)
+    if (e.pointerType === "touch" && (e.width > 35 || e.height > 35)) {
+      return;
+    }
+
     e.preventDefault();
-    this.activeCanvas.setPointerCapture(e.pointerId);
+    try {
+      this.activeCanvas.setPointerCapture(e.pointerId);
+    } catch {
+      // Ignored if capture unsupported
+    }
     this.isPointerDown = true;
+    this.activePointerId = e.pointerId;
+    this.activePointerType = e.pointerType;
     const pt = this.getPoint(e);
 
     if (this.currentTool === "text") {
       this.isPointerDown = false;
+      this.activePointerId = null;
+      this.activePointerType = null;
       this.onTextRequested?.({ x: pt.x, y: pt.y });
       return;
     }
@@ -399,6 +467,29 @@ export class CanvasEngine {
     }
 
     if (this.currentTool === "select") {
+      if (this.selectedId) {
+        const selectedObj = this.objects.find((o) => o.id === this.selectedId);
+        if (selectedObj) {
+          const bbox = getBoundingBox(selectedObj);
+          const handleTolerance = 14;
+          const handles: { handle: "tl" | "tr" | "br" | "bl"; corner: { x: number; y: number }; opposite: { x: number; y: number } }[] = [
+            { handle: "tl", corner: { x: bbox.minX, y: bbox.minY }, opposite: { x: bbox.maxX, y: bbox.maxY } },
+            { handle: "tr", corner: { x: bbox.maxX, y: bbox.minY }, opposite: { x: bbox.minX, y: bbox.maxY } },
+            { handle: "br", corner: { x: bbox.maxX, y: bbox.maxY }, opposite: { x: bbox.minX, y: bbox.minY } },
+            { handle: "bl", corner: { x: bbox.minX, y: bbox.maxY }, opposite: { x: bbox.maxX, y: bbox.minY } },
+          ];
+
+          const hitHandle = handles.find((h) => distance(h.corner, pt) < handleTolerance);
+          if (hitHandle) {
+            this.resizeHandle = hitHandle.handle;
+            this.resizeOpposite = hitHandle.opposite;
+            this.resizeInitialBBox = bbox;
+            this.dragSnapshot = this.cloneObjects();
+            return;
+          }
+        }
+      }
+
       const hit = this.hitTest(pt);
       this.selectedId = hit?.id ?? null;
       this.onSelectionChange?.(this.selectedId);
@@ -412,59 +503,108 @@ export class CanvasEngine {
 
   private onPointerMove(e: PointerEvent): void {
     if (!this.isPointerDown) return;
-    const pt = this.getPoint(e);
+    if (this.activePointerId !== null && e.pointerId !== this.activePointerId) return;
 
-    if (this.currentTool === "pen" || this.currentTool === "highlighter") {
-      this.activePoints.push(pt);
-      this.scheduleActiveRender();
-      return;
-    }
+    // Read high-frequency coalesced events from pen tablet if available
+    const events: PointerEvent[] = typeof (e as any).getCoalescedEvents === "function"
+      ? (e as any).getCoalescedEvents()
+      : [e];
 
-    if (isShapeTool(this.currentTool) && this.shapeStart) {
-      this.shapeEnd = { x: pt.x, y: pt.y };
-      this.scheduleActiveRender();
-      return;
-    }
+    for (const evt of events) {
+      const pt = this.getPoint(evt);
 
-    if (this.currentTool === "stroke-eraser") {
-      this.eraseAtPoint(pt);
-      return;
-    }
-
-    if (this.currentTool === "select" && this.selectedId && this.dragOrigin) {
-      const dx = pt.x - this.dragOrigin.x;
-      const dy = pt.y - this.dragOrigin.y;
-      const idx = this.objects.findIndex((o) => o.id === this.selectedId);
-      const original = this.dragSnapshot?.find((o) => o.id === this.selectedId);
-      if (idx !== -1 && original) {
-        this.objects[idx] = translateObject(original, dx, dy);
-        this.renderBase();
+      if (this.currentTool === "pen" || this.currentTool === "highlighter") {
+        this.activePoints.push(pt);
+        continue;
       }
+
+      if (isShapeTool(this.currentTool) && this.shapeStart) {
+        this.shapeEnd = { x: pt.x, y: pt.y };
+        continue;
+      }
+
+      if (this.currentTool === "stroke-eraser") {
+        this.eraseAtPoint(pt);
+        continue;
+      }
+
+      if (this.currentTool === "select" && this.selectedId) {
+        if (this.resizeHandle && this.resizeOpposite && this.resizeInitialBBox) {
+          const origW = Math.max(10, this.resizeInitialBBox.maxX - this.resizeInitialBBox.minX);
+          const origH = Math.max(10, this.resizeInitialBBox.maxY - this.resizeInitialBBox.minY);
+          const newW = Math.max(10, Math.abs(pt.x - this.resizeOpposite.x));
+          const newH = Math.max(10, Math.abs(pt.y - this.resizeOpposite.y));
+          const scaleX = newW / origW;
+          const scaleY = newH / origH;
+          const original = this.dragSnapshot?.find((o) => o.id === this.selectedId);
+          if (original) {
+            const idx = this.objects.findIndex((o) => o.id === this.selectedId);
+            if (idx !== -1) {
+              this.objects[idx] = scaleObject(original, scaleX, scaleY, this.resizeOpposite);
+              this.renderBase();
+            }
+          }
+        } else if (this.dragOrigin) {
+          const dx = pt.x - this.dragOrigin.x;
+          const dy = pt.y - this.dragOrigin.y;
+          const idx = this.objects.findIndex((o) => o.id === this.selectedId);
+          const original = this.dragSnapshot?.find((o) => o.id === this.selectedId);
+          if (idx !== -1 && original) {
+            this.objects[idx] = translateObject(original, dx, dy);
+            this.renderBase();
+          }
+        }
+      }
+    }
+
+    if (this.currentTool === "pen" || this.currentTool === "highlighter" || (isShapeTool(this.currentTool) && this.shapeStart)) {
+      this.scheduleActiveRender();
     }
   }
 
   private onPointerUp(e: PointerEvent): void {
     if (!this.isPointerDown) return;
+    if (this.activePointerId !== null && e.pointerId !== this.activePointerId) return;
+
     this.isPointerDown = false;
+    this.activePointerId = null;
+    this.activePointerType = null;
     try {
       this.activeCanvas.releasePointerCapture(e.pointerId);
     } catch {
       // pointer already released — safe to ignore
     }
 
-    if ((this.currentTool === "pen" || this.currentTool === "highlighter") && this.activePoints.length > 1) {
-      this.pushUndo();
-      const stroke: StrokeObject = {
-        id: uid(),
-        type: "stroke",
-        tool: this.currentTool,
-        color: this.currentColor,
-        size: this.currentSize,
-        points: this.activePoints,
-      };
-      this.objects.push(stroke);
-      this.renderBase();
-      this.onCommit?.(this.objects);
+    if (this.currentTool === "pen" || this.currentTool === "highlighter") {
+      if (this.activePoints.length === 1) {
+        // Single tap dot
+        this.pushUndo();
+        const pt = this.activePoints[0]!;
+        const stroke: StrokeObject = {
+          id: uid(),
+          type: "stroke",
+          tool: this.currentTool,
+          color: this.currentColor,
+          size: this.currentSize,
+          points: [pt, { ...pt, x: pt.x + 0.1 }],
+        };
+        this.objects.push(stroke);
+        this.renderBase();
+        this.onCommit?.(this.objects);
+      } else if (this.activePoints.length > 1) {
+        this.pushUndo();
+        const stroke: StrokeObject = {
+          id: uid(),
+          type: "stroke",
+          tool: this.currentTool,
+          color: this.currentColor,
+          size: this.currentSize,
+          points: this.activePoints,
+        };
+        this.objects.push(stroke);
+        this.renderBase();
+        this.onCommit?.(this.objects);
+      }
     }
 
     if (isShapeTool(this.currentTool) && this.shapeStart && this.shapeEnd) {
@@ -485,22 +625,28 @@ export class CanvasEngine {
       }
     }
 
-    if (this.currentTool === "select" && this.dragOrigin && this.selectedId) {
-      // If it actually moved, the drag already mutated `objects` in place —
-      // just commit. If it didn't move, nothing changed, no-op commit skipped.
-      const moved = this.dragSnapshot?.find((o) => o.id === this.selectedId);
-      const now = this.objects.find((o) => o.id === this.selectedId);
-      const movedOrigin = moved && firstPoint(moved);
-      const nowOrigin = now && firstPoint(now);
-      if (movedOrigin && nowOrigin && (movedOrigin.x !== nowOrigin.x || movedOrigin.y !== nowOrigin.y)) {
+    if (this.currentTool === "select" && this.selectedId) {
+      if (this.resizeHandle) {
         this.pushUndo(this.dragSnapshot!);
         this.onCommit?.(this.objects);
+      } else if (this.dragOrigin) {
+        const moved = this.dragSnapshot?.find((o) => o.id === this.selectedId);
+        const now = this.objects.find((o) => o.id === this.selectedId);
+        const movedOrigin = moved && firstPoint(moved);
+        const nowOrigin = now && firstPoint(now);
+        if (movedOrigin && nowOrigin && (movedOrigin.x !== nowOrigin.x || movedOrigin.y !== nowOrigin.y)) {
+          this.pushUndo(this.dragSnapshot!);
+          this.onCommit?.(this.objects);
+        }
       }
     }
 
     this.activePoints = [];
     this.dragOrigin = null;
     this.dragSnapshot = null;
+    this.resizeHandle = null;
+    this.resizeOpposite = null;
+    this.resizeInitialBBox = null;
     this.shapeStart = null;
     this.shapeEnd = null;
     this.activeCtx.clearRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
@@ -542,7 +688,19 @@ export class CanvasEngine {
     size: number,
     isHighlighter: boolean
   ): void {
-    if (points.length < 2) return;
+    if (points.length === 0) return;
+    if (points.length === 1) {
+      ctx.save();
+      ctx.fillStyle = color;
+      ctx.globalAlpha = isHighlighter ? 0.35 : 1;
+      const r = (size * (isHighlighter ? 3.5 : 0.6 + points[0]!.pressure * 1.4)) / 2;
+      ctx.beginPath();
+      ctx.arc(points[0]!.x, points[0]!.y, Math.max(1, r), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
+
     ctx.save();
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
@@ -550,22 +708,42 @@ export class CanvasEngine {
     ctx.globalAlpha = isHighlighter ? 0.35 : 1;
     ctx.globalCompositeOperation = "source-over";
 
-    // Quadratic-through-midpoints smoothing — cheap and looks natural for
-    // handwriting without needing a full spline library.
-    ctx.beginPath();
-    // Non-null throughout: guarded above by `points.length < 2` returning
-    // early, and the loop bound (i < points.length - 1) keeps i/i+1 in range.
-    ctx.moveTo(points[0]!.x, points[0]!.y);
-    for (let i = 1; i < points.length - 1; i++) {
-      const p1 = points[i]!;
-      const p2 = points[i + 1]!;
-      const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
-      ctx.lineWidth = size * (isHighlighter ? 3 : 0.6 + p1.pressure * 1.4);
-      ctx.quadraticCurveTo(p1.x, p1.y, mid.x, mid.y);
+    if (isHighlighter || points.length === 2) {
+      ctx.beginPath();
+      ctx.moveTo(points[0]!.x, points[0]!.y);
+      if (points.length === 2) {
+        ctx.lineTo(points[1]!.x, points[1]!.y);
+      } else {
+        for (let i = 1; i < points.length - 1; i++) {
+          const p1 = points[i]!;
+          const p2 = points[i + 1]!;
+          const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+          ctx.quadraticCurveTo(p1.x, p1.y, mid.x, mid.y);
+        }
+        const last = points[points.length - 1]!;
+        ctx.lineTo(last.x, last.y);
+      }
+      ctx.lineWidth = size * (isHighlighter ? 3.5 : 1);
+      ctx.stroke();
+    } else {
+      // Smooth pressure-modulated Bézier segments for pen tablet writing
+      for (let i = 0; i < points.length - 1; i++) {
+        const p0 = i > 0 ? points[i - 1]! : points[0]!;
+        const p1 = points[i]!;
+        const p2 = points[i + 1]!;
+
+        const startPt = i === 0 ? p1 : { x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2 };
+        const endPt = i === points.length - 2 ? p2 : { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+
+        ctx.beginPath();
+        ctx.moveTo(startPt.x, startPt.y);
+        ctx.quadraticCurveTo(p1.x, p1.y, endPt.x, endPt.y);
+
+        const pressure = p1.pressure && p1.pressure > 0 ? p1.pressure : 0.5;
+        ctx.lineWidth = Math.max(0.75, size * (0.45 + pressure * 1.35));
+        ctx.stroke();
+      }
     }
-    const last = points[points.length - 1]!;
-    ctx.lineTo(last.x, last.y);
-    ctx.stroke();
     ctx.restore();
   }
 
@@ -671,6 +849,23 @@ export class CanvasEngine {
     this.baseCtx.setLineDash([4, 3]);
     this.baseCtx.lineWidth = 1.5;
     this.baseCtx.strokeRect(minX, minY, maxX - minX, maxY - minY);
+
+    // Corner resize handles
+    this.baseCtx.setLineDash([]);
+    this.baseCtx.fillStyle = "#ffffff";
+    this.baseCtx.strokeStyle = "#4F46E5";
+    this.baseCtx.lineWidth = 2;
+    const handleSize = 8;
+    const corners = [
+      { x: minX, y: minY },
+      { x: maxX, y: minY },
+      { x: maxX, y: maxY },
+      { x: minX, y: maxY },
+    ];
+    for (const c of corners) {
+      this.baseCtx.fillRect(c.x - handleSize / 2, c.y - handleSize / 2, handleSize, handleSize);
+      this.baseCtx.strokeRect(c.x - handleSize / 2, c.y - handleSize / 2, handleSize, handleSize);
+    }
     this.baseCtx.restore();
   }
 

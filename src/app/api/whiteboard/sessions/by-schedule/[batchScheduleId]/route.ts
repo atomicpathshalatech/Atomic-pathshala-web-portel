@@ -130,7 +130,12 @@ export async function GET(
       }
     }
 
-    const { canStudentJoin, canTeacherStart, getEffectiveScheduleStatus } = await import("@/lib/schedule/access-rules");
+    const {
+      canStudentJoinClass,
+      canTeacherEnterClass,
+      canTeacherStartClass,
+      getEffectiveScheduleStatus,
+    } = await import("@/lib/schedule/access-rules");
     const now = new Date();
     const scheduleTarget = {
       id: schedule.id,
@@ -141,13 +146,15 @@ export async function GET(
       liveWhiteboardSession: wbSession,
     };
 
-    const studentEval = canStudentJoin(scheduleTarget, now);
-    const teacherEval = canTeacherStart(scheduleTarget, now);
+    const studentEval = canStudentJoinClass(scheduleTarget, now);
+    const teacherEnterEval = canTeacherEnterClass(scheduleTarget, now);
+    const teacherStartEval = canTeacherStartClass(scheduleTarget, now);
     const effectiveStatus = getEffectiveScheduleStatus(scheduleTarget, now);
 
     return apiSuccess({
       whiteboardSession: wbSession ?? null,
       serverTime: now.toISOString(),
+      serverTimeMs: now.getTime(),
       schedule: {
         id: schedule.id,
         title: schedule.title,
@@ -158,10 +165,17 @@ export async function GET(
       },
       access: {
         canStudentJoin: studentEval.allowed,
-        canTeacherStart: teacherEval.allowed,
+        canTeacherEnter: teacherEnterEval.allowed,
+        canTeacherStart: teacherStartEval.allowed,
         studentReason: studentEval.reason,
-        teacherReason: teacherEval.reason,
+        teacherReason: teacherStartEval.reason,
+        teacherEnterReason: teacherEnterEval.reason,
         opensAt: studentEval.opensAt.toISOString(),
+        startOpensAt: teacherStartEval.startOpensAt.toISOString(),
+        startsAt: new Date(schedule.startsAt).toISOString(),
+        secondsUntilWindowOpens: studentEval.secondsUntilWindowOpens,
+        secondsUntilStartOpens: teacherStartEval.secondsUntilStartOpens,
+        secondsUntilStartsAt: teacherStartEval.secondsUntilStartsAt,
         isLive: studentEval.isLive,
         isCompleted: studentEval.isCompleted,
         isCancelled: studentEval.isCancelled,
