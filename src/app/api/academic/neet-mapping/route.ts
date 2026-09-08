@@ -1,9 +1,17 @@
 ﻿import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { ProgramName } from '@prisma/client';
 
 export async function GET(request: NextRequest) {
   try {
+    // Reference syllabus data — signed-in users only (not anonymous scraping).
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const lang = searchParams.get('lang') || 'en';
     const isHindi = lang === 'hi';
