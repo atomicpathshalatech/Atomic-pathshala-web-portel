@@ -21,6 +21,38 @@
     --sab: env(safe-area-inset-bottom, 0px);
     --sal: env(safe-area-inset-left, 0px);
     --sar: env(safe-area-inset-right, 0px);
+
+    /*
+     * Global brand color tokens (single source of truth for the color
+     * system). Values mirror the Material Design 3 palette already defined
+     * in tailwind.config.ts — kept in sync, referenced by name so no
+     * component needs a hard-coded hex.
+     *
+     *   BLUE  -> primary brand / UI / navigation / primary actions
+     *   WHITE -> content surfaces
+     *   ORANGE-> small brand accent, derived from the logo (<5% of the UI)
+     *   DARK  -> primary readable text
+     */
+    --color-primary: #0050cb;
+    --color-primary-dark: #084298;
+    --color-primary-light: #eaf2ff;
+    --color-brand-orange: #f97316;
+    --color-white: #ffffff;
+    --color-background: #faf8ff;
+    --color-surface: #ffffff;
+    --color-text-primary: #131b2e;
+    --color-text-secondary: #424656;
+    --color-border: #c2c6d8;
+    --color-success: #16794f;
+    --color-warning: #b7791f;
+    --color-error: #ba1a1a;
+
+    /* Premium blue sidebar surface + its on-color states (Parts 5–8, 24). */
+    --sidebar-bg: #0050cb;
+    --sidebar-fg: rgba(255, 255, 255, 0.85);
+    --sidebar-fg-muted: rgba(255, 255, 255, 0.55);
+    --sidebar-hover-bg: rgba(255, 255, 255, 0.1);
+    --sidebar-active-bg: rgba(255, 255, 255, 0.16);
   }
 
   html {

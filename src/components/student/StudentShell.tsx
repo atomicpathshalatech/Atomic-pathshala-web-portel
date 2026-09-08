@@ -339,12 +339,12 @@ export function StudentShell({
           />
 
           {/* Sliding Drawer Body */}
-          <aside className="relative w-80 max-w-[85vw] bg-white h-full shadow-2xl border-r border-slate-200/80 flex flex-col justify-between z-10 animate-in slide-in-from-left duration-200 overflow-y-auto">
+          <aside className="relative w-80 max-w-[85vw] bg-primary text-white h-full shadow-2xl border-r border-black/10 flex flex-col justify-between z-10 animate-in slide-in-from-left duration-200 overflow-y-auto">
             {/* Drawer Header */}
             <div>
-              <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+              <div className="p-4 border-b border-white/15 flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                  <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-orange-50 border border-orange-200/80 shadow-2xs overflow-hidden p-1">
+                  <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-white border border-white/25 shadow-2xs overflow-hidden p-1">
                     <img
                       src="/brand/logo.png"
                       alt="Atomic Pathshala Logo"
@@ -352,17 +352,17 @@ export function StudentShell({
                     />
                   </div>
                   <div>
-                    <h2 className="text-sm font-extrabold text-slate-900 tracking-tight">
+                    <h2 className="text-sm font-extrabold text-white tracking-tight">
                       Atomic Pathshala
                     </h2>
-                    <p className="text-[10px] text-slate-400 font-medium">Student Learning Portal</p>
+                    <p className="text-[10px] text-white/60 font-medium">Student Learning Portal</p>
                   </div>
                 </div>
 
                 <button
                   type="button"
                   onClick={() => setSidebarOpen(false)}
-                  className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors focus:outline-none cursor-pointer"
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors focus:outline-none cursor-pointer"
                   aria-label="Close Sidebar"
                 >
                   <span className="material-symbols-outlined text-xl">close</span>
@@ -371,15 +371,16 @@ export function StudentShell({
 
               {/* Student Profile Card inside Drawer */}
               <div className="p-3.5 pb-2">
-                <div className="bg-slate-50 border border-slate-200/70 rounded-xl p-3 flex items-center gap-2.5 shadow-2xs">
-                  <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-600 font-black text-sm flex items-center justify-center shrink-0 border border-indigo-200">
+                <div className="bg-white/10 border border-white/15 rounded-xl p-3 flex items-center gap-2.5 shadow-2xs">
+                  <div className="w-9 h-9 rounded-full bg-white/15 text-white font-black text-sm flex items-center justify-center shrink-0 border border-white/25">
                     {studentName.charAt(0).toUpperCase() || "A"}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-bold text-slate-900 truncate">{studentName}</p>
-                    <p className="text-[10px] text-slate-400 font-mono truncate">{studentIdCode}</p>
+                    <p className="text-xs font-bold text-white truncate">{studentName}</p>
+                    <p className="text-[10px] text-white/60 font-mono truncate">{studentIdCode}</p>
                   </div>
-                  <span className="text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-200 shrink-0">
+                  {/* the single orange brand accent kept in the student nav */}
+                  <span className="text-[10px] font-bold text-white bg-atomic-orange px-2 py-0.5 rounded-md shrink-0">
                     {activeGoal}
                   </span>
                 </div>
@@ -387,7 +388,7 @@ export function StudentShell({
 
               {/* Main Navigation Items */}
               <div className="p-3 pt-1 space-y-1">
-                <div className="px-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">
+                <div className="px-3 pb-1 text-[10px] font-bold text-white/50 uppercase tracking-wider font-mono">
                   Learning Hub
                 </div>
                 <nav className="space-y-1">
@@ -398,10 +399,10 @@ export function StudentShell({
                         key={item.href}
                         href={item.href}
                         onClick={() => setSidebarOpen(false)}
-                        className={`flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                        className={`relative flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
                           active
-                            ? "bg-orange-500 text-white shadow-2xs"
-                            : "text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                            ? "bg-white/[0.16] text-white before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-1 before:rounded-full before:bg-white"
+                            : "text-white/85 hover:bg-white/10 hover:text-white"
                         }`}
                       >
                         <span className="material-symbols-outlined text-[20px]">{item.icon}</span>
@@ -412,32 +413,32 @@ export function StudentShell({
                 </nav>
 
                 {/* Additional Student Features & Utilities */}
-                <div className="pt-3 mt-3 border-t border-slate-100 space-y-1">
-                  <div className="px-3 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">
+                <div className="pt-3 mt-3 border-t border-white/15 space-y-1">
+                  <div className="px-3 pb-1 text-[10px] font-bold text-white/50 uppercase tracking-wider font-mono">
                     Utilities &amp; Tools
                   </div>
                   <Link
                     href="/id-card"
                     onClick={() => setSidebarOpen(false)}
-                    className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition"
+                    className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-white/85 hover:bg-white/10 hover:text-white transition"
                   >
-                    <span className="material-symbols-outlined text-[18px] text-blue-500">badge</span>
+                    <span className="material-symbols-outlined text-[18px] text-white/70">badge</span>
                     <span>Profile &amp; ID Card</span>
                   </Link>
                   <Link
                     href="/leaderboard"
                     onClick={() => setSidebarOpen(false)}
-                    className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition"
+                    className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-white/85 hover:bg-white/10 hover:text-white transition"
                   >
-                    <span className="material-symbols-outlined text-[18px] text-amber-500">leaderboard</span>
+                    <span className="material-symbols-outlined text-[18px] text-white/70">leaderboard</span>
                     <span>Leaderboard</span>
                   </Link>
                   <Link
                     href="/settings"
                     onClick={() => setSidebarOpen(false)}
-                    className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition"
+                    className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-white/85 hover:bg-white/10 hover:text-white transition"
                   >
-                    <span className="material-symbols-outlined text-[18px] text-slate-400">settings</span>
+                    <span className="material-symbols-outlined text-[18px] text-white/70">settings</span>
                     <span>Settings</span>
                   </Link>
                 </div>
@@ -445,7 +446,7 @@ export function StudentShell({
             </div>
 
             {/* Drawer Bottom Footer (Logout) */}
-            <div className="p-3 border-t border-slate-100 bg-white">
+            <div className="p-3 border-t border-white/15 bg-primary [&_button]:!text-white/80 [&_button:hover]:!text-white">
               <LogoutButton />
             </div>
           </aside>

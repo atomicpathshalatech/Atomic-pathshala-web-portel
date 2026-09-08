@@ -82,7 +82,7 @@ export function TeamShell({
 
       <div className="flex">
         {/* Tablet icon rail (md) -> full sidebar (lg+) */}
-        <aside className="hidden md:block w-[4.5rem] lg:w-[var(--sidebar-w)] shrink-0 border-r border-outline-variant/20 bg-surface/60 sticky top-[var(--header-h)] h-below-header overflow-y-auto overflow-x-hidden transition-[width] duration-200">
+        <aside className="hidden md:block w-[4.5rem] lg:w-[var(--sidebar-w)] shrink-0 border-r border-primary-dark/40 bg-primary text-white sticky top-[var(--header-h)] h-below-header overflow-y-auto overflow-x-hidden transition-[width] duration-200">
           <SidebarNav sections={sections} collapsible />
         </aside>
 
@@ -90,13 +90,13 @@ export function TeamShell({
         {drawerOpen && (
           <div className="md:hidden fixed inset-0 z-drawer">
             <div className="absolute inset-0 bg-black/40" onClick={() => setDrawerOpen(false)} />
-            <aside className="absolute inset-y-0 left-0 w-72 max-w-[85vw] bg-surface shadow-xl overflow-y-auto">
-              <div className="flex items-center justify-between px-4 py-3.5 border-b border-outline-variant/20">
-                <span className="font-headline-md text-headline-md font-bold text-primary">Menu</span>
+            <aside className="absolute inset-y-0 left-0 w-72 max-w-[85vw] bg-primary text-white shadow-xl overflow-y-auto">
+              <div className="flex items-center justify-between px-4 py-3.5 border-b border-white/15">
+                <span className="font-headline-md text-headline-md font-bold text-white">Menu</span>
                 <button
                   type="button"
                   onClick={() => setDrawerOpen(false)}
-                  className="text-on-surface-variant hover:text-primary transition-colors"
+                  className="text-white/70 hover:text-white transition-colors"
                   aria-label="Close menu"
                 >
                   <span className="material-symbols-outlined text-2xl">close</span>
@@ -146,7 +146,7 @@ function SidebarNav({
         <div key={section.title ?? i}>
           {section.title && (
             <p
-              className={`px-3 mb-1.5 text-[11px] font-bold uppercase tracking-wide text-on-surface-variant ${
+              className={`px-3 mb-1.5 text-[11px] font-bold uppercase tracking-wide text-white/55 ${
                 collapsible ? "hidden lg:block" : ""
               }`}
             >
@@ -162,12 +162,12 @@ function SidebarNav({
                   href={item.href}
                   onClick={onNavigate}
                   title={item.label}
-                  className={`flex items-center gap-3 py-2 rounded-lg font-label-md text-label-md transition-colors ${
+                  className={`relative flex items-center gap-3 py-2 rounded-lg font-label-md text-label-md transition-colors ${
                     collapsible ? "justify-center lg:justify-start px-2 lg:px-3" : "px-3"
                   } ${
                     active
-                      ? "bg-primary/10 text-primary font-bold"
-                      : "text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
+                      ? "bg-white/[0.16] text-white font-bold before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-1 before:rounded-full before:bg-white"
+                      : "text-white/85 hover:bg-white/10 hover:text-white"
                   }`}
                 >
                   <span className="material-symbols-outlined text-lg shrink-0">{item.icon}</span>
@@ -179,7 +179,7 @@ function SidebarNav({
         </div>
       ))}
 
-      <div className="md:hidden px-3 pt-3 border-t border-outline-variant/20">
+      <div className="md:hidden px-3 pt-3 border-t border-white/15 [&_button]:!text-white/80 [&_button:hover]:!text-white">
         <LogoutButton />
       </div>
     </nav>
