@@ -15,6 +15,7 @@ import { prisma } from "@/lib/db";
 export const HOMEPAGE_BANNER_TAG = "homepage-banner";
 export const HOMEPAGE_TESTIMONIALS_TAG = "homepage-testimonials";
 export const HOMEPAGE_FAQS_TAG = "homepage-faqs";
+export const HOMEPAGE_FOOTER_TAG = "homepage-footer";
 
 export type HomepageBanner = {
   title: string;
@@ -127,4 +128,75 @@ export const getPublishedFaqs = unstable_cache(
   },
   ["homepage-published-faqs"],
   { revalidate: 60, tags: [HOMEPAGE_FAQS_TAG] }
+);
+
+export type FooterLinkItem = { label: string; url: string; icon: string | null; openNewTab: boolean };
+export type FooterColumnItem = { id: string; title: string; links: FooterLinkItem[] };
+export type FooterSocial = { label: string; url: string; icon: string | null };
+export type FooterData = {
+  columns: FooterColumnItem[];
+  logoUrl: string | null;
+  description: string | null;
+  copyrightText: string | null;
+  contactPhone: string | null;
+  contactEmail: string | null;
+  address: string | null;
+  social: FooterSocial[];
+};
+
+function parseSocial(raw: unknown): FooterSocial[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((x) => {
+      if (!x || typeof x !== "object") return null;
+      const o = x as Record<string, unknown>;
+      const url = typeof o.url === "string" ? o.url : "";
+      const label =
+        (typeof o.label === "string" && o.label) ||
+        (typeof o.platform === "string" && o.platform) ||
+        "";
+      if (!url || !label) return null;
+      return { label, url, icon: typeof o.icon === "string" ? o.icon : null };
+    })
+    .filter((x): x is FooterSocial => x !== null);
+}
+
+/** Footer columns + link lists + singleton settings. */
+export const getFooterData = unstable_cache(
+  async (): Promise<FooterData | null> => {
+    try {
+      const [columns, settings] = await Promise.all([
+        prisma.footerColumn.findMany({
+          orderBy: { order: "asc" },
+          include: { links: { orderBy: { order: "asc" } } },
+        }),
+        prisma.footerSettings.findFirst(),
+      ]);
+      if (columns.length === 0 && !settings) return null;
+      return {
+        columns: columns.map((c) => ({
+          id: c.id,
+          title: c.title,
+          links: c.links.map((l) => ({
+            label: l.label,
+            url: l.url,
+            icon: l.icon,
+            openNewTab: l.openNewTab,
+          })),
+        })),
+        logoUrl: settings?.logoUrl ?? null,
+        description: settings?.description ?? null,
+        copyrightText: settings?.copyrightText ?? null,
+        contactPhone: settings?.contactPhone ?? null,
+        contactEmail: settings?.contactEmail ?? null,
+        address: settings?.address ?? null,
+        social: parseSocial(settings?.socialLinks),
+      };
+    } catch (error) {
+      console.error("getFooterData failed, using default footer:", error);
+      return null;
+    }
+  },
+  ["homepage-footer"],
+  { revalidate: 60, tags: [HOMEPAGE_FOOTER_TAG] }
 );
