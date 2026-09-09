@@ -1498,6 +1498,7 @@ model Chapter {
   batchSchedules BatchSchedule[]
   reviews        ChapterReview[]
   notices        ChapterNotice[]
+  studyMaterials StudyMaterial[]
 
   @@index([subjectId])
   @@index([subjectId, title])
@@ -1509,6 +1510,44 @@ enum Medium {
   HINDI
   ENGLISH
   HINGLISH
+}
+
+// Downloadable chapter study resources uploaded by teachers/admins, browsed
+// by students under /study-material. One row per uploaded PDF, grouped in
+// the UI by `type`. `chapterId` gives the subject via Chapter.subjectId, so
+// the "Subject → Chapter → Type" picker needs no extra columns.
+enum StudyMaterialType {
+  MODULE
+  SHORT_NOTES
+  MIND_MAP
+  FORMULA_SHEET
+  NCERT_HIGHLIGHTED
+  NCERT_EXEMPLAR
+}
+
+model StudyMaterial {
+  id            String            @id @default(cuid())
+  chapterId     String
+  type          StudyMaterialType
+  title         String
+  fileUrl       String
+  fileName      String
+  sizeBytes     Int               @default(0)
+  mimeType      String            @default("application/pdf")
+  // Per-resource student download gate. Defaults on; when false the student
+  // can still open it in the in-app reader but not save the file.
+  allowDownload Boolean           @default(true)
+  isPublished   Boolean           @default(true)
+  order         Int               @default(0)
+  createdById   String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  chapter Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  @@index([chapterId])
+  @@index([chapterId, type])
+  @@map("study_materials")
 }
 
 // Append-only audit trail for the Chapter review workflow (SUBMITTED by the
