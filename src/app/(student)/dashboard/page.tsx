@@ -212,11 +212,11 @@ export default async function StudentDashboardPage() {
           />
           <FeatureCard
             title="Study Material"
-            description="Notes, PDFs and essential study resources"
+            description="Modules, notes, mind maps, formula sheets & NCERT"
             icon="menu_book"
             theme="cyan"
-            href="/rewards"
-            contextText="Handbooks &amp; Notes"
+            href="/study-material"
+            contextText="Chapter-wise PDFs"
           />
         </div>
       </section>

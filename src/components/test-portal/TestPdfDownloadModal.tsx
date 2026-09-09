@@ -125,7 +125,7 @@ export function TestPdfDownloadModal({
                   className="w-full py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-black dark:bg-blue-600 dark:hover:bg-blue-700 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>Download / Print Question Paper</span>
+                  <span>Open &amp; Save Question Paper as PDF</span>
                   <ExternalLink className="w-3.5 h-3.5 opacity-60" />
                 </button>
               </div>
@@ -169,7 +169,7 @@ export function TestPdfDownloadModal({
                   className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>Download / Print with Solutions</span>
+                  <span>Open &amp; Save with Solutions as PDF</span>
                   <ExternalLink className="w-3.5 h-3.5 opacity-60" />
                 </button>
               </div>

@@ -113,6 +113,12 @@ export const PERMISSIONS = {
   // review authority doesn't default onto every chapter-authoring role.
   CHAPTER_REVIEW: "chapter.review",
 
+  // Upload / manage the per-chapter Study Material library (modules, short
+  // notes, mind maps, formula sheets, highlighted NCERT, NCERT exemplar).
+  // Granted to every content-managing role below; Super Admin controls who
+  // else has it via the Roles UI.
+  STUDY_MATERIAL_MANAGE: "study_material.manage",
+
   // ID / KYC Document Management
   DOCUMENT_READ_SELF: "document.read.self",
   DOCUMENT_UPLOAD_SELF: "document.upload.self",
@@ -246,6 +252,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PermissionCode[]> = {
     PERMISSIONS.CHAPTER_READ,
     PERMISSIONS.CHAPTER_CREATE,
     PERMISSIONS.CHAPTER_UPDATE,
+    PERMISSIONS.STUDY_MATERIAL_MANAGE,
     PERMISSIONS.AICHAT_SCHEDULE_MANAGE,
     PERMISSIONS.AICHAT_QUESTION_BANK_VIEW,
     PERMISSIONS.DPP_READ,
@@ -274,6 +281,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PermissionCode[]> = {
     PERMISSIONS.CHAPTER_READ,
     PERMISSIONS.CHAPTER_CREATE,
     PERMISSIONS.CHAPTER_UPDATE,
+    PERMISSIONS.STUDY_MATERIAL_MANAGE,
   ],
   SME: [
     PERMISSIONS.TEAM_PORTAL_ACCESS,
@@ -377,6 +385,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PermissionCode[]> = {
     PERMISSIONS.CHAPTER_READ,
     PERMISSIONS.CHAPTER_CREATE,
     PERMISSIONS.CHAPTER_UPDATE,
+    PERMISSIONS.STUDY_MATERIAL_MANAGE,
     PERMISSIONS.CHAPTER_PUBLISH,
     PERMISSIONS.CHAPTER_REVIEW,
     PERMISSIONS.CHAPTER_DELETE,
@@ -453,6 +462,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PermissionCode[]> = {
     PERMISSIONS.CHAPTER_READ,
     PERMISSIONS.CHAPTER_CREATE,
     PERMISSIONS.CHAPTER_UPDATE,
+    PERMISSIONS.STUDY_MATERIAL_MANAGE,
     PERMISSIONS.DPP_READ,
     PERMISSIONS.DPP_CREATE,
     PERMISSIONS.DPP_UPDATE,
@@ -477,6 +487,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PermissionCode[]> = {
     PERMISSIONS.CHAPTER_READ,
     PERMISSIONS.CHAPTER_CREATE,
     PERMISSIONS.CHAPTER_UPDATE,
+    PERMISSIONS.STUDY_MATERIAL_MANAGE,
     PERMISSIONS.CHAPTER_PUBLISH,
     PERMISSIONS.HOME_VIEW,
     PERMISSIONS.MEDIA_MANAGE,

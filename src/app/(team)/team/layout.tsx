@@ -20,6 +20,7 @@ const NAV_SECTIONS: { title?: string; items: { href: string; label: string; icon
       { href: "/team/my-schedule", label: "My Schedule", icon: "calendar_month", permission: PERMISSIONS.WHITEBOARD_ACCESS },
       { href: "/team/batches", label: "Batches", icon: "groups", permission: PERMISSIONS.BATCH_READ },
       { href: "/team/chapters", label: "Chapters", icon: "auto_stories", permission: PERMISSIONS.CHAPTER_READ },
+      { href: "/team/study-material", label: "Study Material", icon: "folder_open", permission: PERMISSIONS.STUDY_MATERIAL_MANAGE },
       { href: "/team/tests", label: "Tests", icon: "quiz", permission: PERMISSIONS.TEST_READ },
       { href: "/team/test-series", label: "Test Series", icon: "collections_bookmark", permission: PERMISSIONS.TEST_READ },
       { href: "/team/whiteboard", label: "Whiteboard", icon: "draw", permission: PERMISSIONS.WHITEBOARD_ACCESS },
