@@ -308,7 +308,7 @@ export function AiDraftsFolderView({
           </div>
 
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-2.5">
-            <span className="p-2 rounded-2xl bg-gradient-to-tr from-blue-600 to-blue-600 text-white shadow-md shadow-blue-500/20">
+            <span className="p-2 rounded-2xl bg-blue-600 text-white shadow-md shadow-blue-500/20">
               <Sparkles className="w-6 h-6" />
             </span>
             <span>AI Drafts Folder (एआई ड्राफ्ट फोल्डर)</span>

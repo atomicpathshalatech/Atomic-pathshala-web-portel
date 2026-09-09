@@ -678,7 +678,7 @@ export function AiQuestionStudio() {
             <button
               onClick={handleStartGeneration}
               disabled={isGenerating || selectedTopics.length === 0 || (activeTab === "PDF" && !pdfResult)}
-              className="inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-600 hover:from-blue-700 hover:to-blue-700 text-white text-sm font-black shadow-lg shadow-blue-500/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              className="inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-black shadow-lg shadow-blue-500/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               {isGenerating ? (
                 <>
@@ -713,7 +713,7 @@ export function AiQuestionStudio() {
           {generatedQuestions.length > 0 && (
             <div className="space-y-6 pt-6">
               {/* Batch Info Header */}
-              <div className="bg-gradient-to-r from-blue-50 to-blue-50 border border-blue-200/80 rounded-3xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="bg-blue-50 border border-blue-200/80 rounded-3xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-black uppercase tracking-wider px-2.5 py-0.5 rounded-md bg-blue-600 text-white">
@@ -831,7 +831,7 @@ export function AiQuestionStudio() {
                     <button
                       onClick={() => handleBulkSave(true)}
                       disabled={isBulkSaving}
-                      className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-blue-600 hover:from-blue-700 hover:to-blue-700 text-white text-xs font-black shadow-sm transition disabled:opacity-50 cursor-pointer"
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black shadow-sm transition disabled:opacity-50 cursor-pointer"
                     >
                       <Send className="w-3.5 h-3.5" />
                       <span>Submit to Review (Stage 1)</span>

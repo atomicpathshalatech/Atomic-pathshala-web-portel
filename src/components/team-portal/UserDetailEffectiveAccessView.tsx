@@ -257,7 +257,7 @@ export function UserDetailEffectiveAccessView({ userId }: { userId: string }) {
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-blue-600 to-blue-600 text-white font-black text-xl flex items-center justify-center shadow-md">
+            <div className="w-14 h-14 rounded-2xl bg-blue-600 text-white font-black text-xl flex items-center justify-center shadow-md">
               {user.name.charAt(0).toUpperCase()}
             </div>
             <div>

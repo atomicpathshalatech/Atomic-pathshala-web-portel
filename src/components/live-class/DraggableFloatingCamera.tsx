@@ -122,7 +122,7 @@ export function DraggableFloatingCamera({
       className="fixed top-0 left-0 z-50 select-none cursor-grab active:cursor-grabbing group animate-in fade-in zoom-in-95 duration-150"
     >
       {/* Outer Halo Glow */}
-      <div className="relative w-full h-full rounded-full p-[3px] bg-gradient-to-tr from-blue-500 via-blue-500 to-pink-500 shadow-[0_8px_30px_rgb(0,0,0,0.6)] ring-2 ring-white/20">
+      <div className="relative w-full h-full rounded-full p-[3px] bg-blue-500 shadow-[0_8px_30px_rgb(0,0,0,0.6)] ring-2 ring-white/20">
         {/* Inner Video Container */}
         <div className="w-full h-full rounded-full overflow-hidden bg-slate-950 relative flex items-center justify-center">
           {children}

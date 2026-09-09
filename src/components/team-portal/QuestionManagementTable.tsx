@@ -353,7 +353,7 @@ export function QuestionManagementTable({
 
         <Link
           href="/team/questions/drafts"
-          className="p-4 rounded-2xl border bg-gradient-to-br from-blue-50 to-blue-50/50 border-blue-200 hover:border-blue-400 text-left transition group shadow-xs cursor-pointer flex flex-col justify-between"
+          className="p-4 rounded-2xl border bg-blue-50/50 border-blue-200 hover:border-blue-400 text-left transition group shadow-xs cursor-pointer flex flex-col justify-between"
           title="Open Dedicated AI Drafts Folder"
         >
           <div className="flex items-center justify-between">

@@ -264,7 +264,7 @@ export function PdfUploadStep({
                   type="button"
                   onClick={handleProcessPdf}
                   disabled={uploading}
-                  className="px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-600 hover:opacity-95 text-white font-bold text-xs rounded-xl shadow-md shadow-blue-500/20 active:scale-95 transition disabled:opacity-50"
+                  className="px-4 py-2 bg-blue-600 hover:opacity-95 text-white font-bold text-xs rounded-xl shadow-md shadow-blue-500/20 active:scale-95 transition disabled:opacity-50"
                 >
                   {uploading ? "Analyzing & Segmenting..." : "Process PDF"}
                 </button>
@@ -292,7 +292,7 @@ export function PdfUploadStep({
             </div>
             <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
               <div
-                className="bg-gradient-to-r from-blue-600 to-blue-600 h-full transition-all duration-300"
+                className="bg-blue-600 h-full transition-all duration-300"
                 style={{ width: `${uploadProgress}%` }}
               />
             </div>

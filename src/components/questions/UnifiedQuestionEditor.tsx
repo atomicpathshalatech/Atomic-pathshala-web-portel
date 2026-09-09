@@ -1063,11 +1063,11 @@ export function UnifiedQuestionEditor({
 
       {/* AI SUGGESTED METADATA BANNER (Interactive Teacher Approval) */}
       {aiSuggestedMetadata && (
-        <div className="bg-gradient-to-r from-blue-50 via-blue-50 to-blue-50 border-2 border-blue-300/80 rounded-3xl p-5 sm:p-6 shadow-md animate-in fade-in slide-in-from-top-3">
+        <div className="bg-blue-50 border-2 border-blue-300/80 rounded-3xl p-5 sm:p-6 shadow-md animate-in fade-in slide-in-from-top-3">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="space-y-2">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-blue-600 to-blue-600 text-white text-xs font-black uppercase tracking-wider shadow-sm">
+                <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-600 text-white text-xs font-black uppercase tracking-wider shadow-sm">
                   <Sparkles className="w-3.5 h-3.5 animate-pulse" />
                   ✨ AI Suggested Metadata
                 </span>
@@ -1427,7 +1427,7 @@ export function UnifiedQuestionEditor({
           const file = e.dataTransfer.files?.[0];
           if (file) handleImageUploadAndExtract(file);
         }}
-        className="bg-gradient-to-r from-blue-50 via-blue-50 to-blue-50 border border-blue-200/80 rounded-3xl p-5 shadow-sm space-y-3"
+        className="bg-blue-50 border border-blue-200/80 rounded-3xl p-5 shadow-sm space-y-3"
       >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
@@ -1784,7 +1784,7 @@ export function UnifiedQuestionEditor({
               type="button"
               onClick={() => handleGenerateSolution()}
               disabled={isGeneratingSolution}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gradient-to-r from-blue-600 via-blue-600 to-blue-600 hover:from-blue-700 hover:to-blue-700 text-white font-black text-xs sm:text-sm shadow-md shadow-blue-500/25 transition active:scale-95 disabled:opacity-50 cursor-pointer"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs sm:text-sm shadow-md shadow-blue-500/25 transition active:scale-95 disabled:opacity-50 cursor-pointer"
             >
               {isGeneratingSolution ? (
                 <>
@@ -2108,7 +2108,7 @@ export function UnifiedQuestionEditor({
             type="button"
             onClick={() => handleSaveQuestion(true)}
             disabled={isSaving}
-            className="inline-flex items-center gap-2 px-8 py-3 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-600 hover:from-blue-700 hover:to-blue-700 text-white font-black text-xs sm:text-sm shadow-md shadow-blue-500/25 transition disabled:opacity-50 cursor-pointer"
+            className="inline-flex items-center gap-2 px-8 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs sm:text-sm shadow-md shadow-blue-500/25 transition disabled:opacity-50 cursor-pointer"
           >
             <Save className="w-4 h-4" />
             <span>

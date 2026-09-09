@@ -151,7 +151,7 @@ export function TeacherChapterHeader({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
           {/* Chapter Thumbnail Poster */}
           <div className="lg:col-span-4">
-            <div className="relative aspect-[16/10] sm:aspect-[16/9] w-full rounded-2xl overflow-hidden bg-gradient-to-br from-blue-100 via-blue-100 to-blue-200 dark:from-blue-950 dark:via-blue-950 dark:to-slate-900 border border-blue-200/80 dark:border-blue-800/80 shadow-inner flex items-center justify-center p-4">
+            <div className="relative aspect-[16/10] sm:aspect-[16/9] w-full rounded-2xl overflow-hidden bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-950 dark:via-blue-950 dark:to-slate-900 border border-blue-200/80 dark:border-blue-800/80 shadow-inner flex items-center justify-center p-4">
               {/* Subtle Dotted Matrix Graphic */}
               <div
                 className="absolute inset-0 opacity-20 pointer-events-none"
@@ -262,7 +262,7 @@ export function TeacherChapterHeader({
               <button
                 type="button"
                 onClick={() => setNoticeBoardOpen(true)}
-                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 text-xs font-black shadow-md shadow-amber-500/20 transition-all flex items-center gap-2 cursor-pointer"
+                className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black shadow-md shadow-amber-500/20 transition-all flex items-center gap-2 cursor-pointer"
               >
                 <Bell className="w-4 h-4 text-slate-950 fill-slate-950" />
                 <span>Notice Board</span>

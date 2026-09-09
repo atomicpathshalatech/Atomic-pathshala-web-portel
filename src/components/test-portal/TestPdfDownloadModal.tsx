@@ -42,7 +42,7 @@ export function TestPdfDownloadModal({
         <button
           type="button"
           onClick={openModal}
-          className="inline-flex items-center gap-2 px-3.5 py-2 bg-gradient-to-r from-blue-600 to-blue-600 hover:from-blue-700 hover:to-blue-700 text-white rounded-xl text-xs font-bold shadow-sm transition hover:shadow"
+          className="inline-flex items-center gap-2 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm transition hover:shadow"
         >
           <FileText className="w-4 h-4" />
           <span>Download Test PDF</span>

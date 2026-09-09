@@ -1226,7 +1226,7 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
               <button
                 type="button"
                 onClick={() => setStage("topicForm")}
-                className="flex w-full items-center gap-4 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-600 p-4 text-left shadow-md transition hover:brightness-105 active:scale-[0.99]"
+                className="flex w-full items-center gap-4 rounded-2xl bg-blue-600 p-4 text-left shadow-md transition hover:brightness-105 active:scale-[0.99]"
               >
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/20 text-white">
                   <BookMarked className="h-5 w-5" />
@@ -1244,7 +1244,7 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
               <button
                 type="button"
                 onClick={() => setStage("pyqForm")}
-                className="flex w-full items-center gap-4 rounded-2xl bg-gradient-to-r from-blue-600 to-fuchsia-600 p-4 text-left shadow-md transition hover:brightness-105 active:scale-[0.99]"
+                className="flex w-full items-center gap-4 rounded-2xl bg-blue-600 p-4 text-left shadow-md transition hover:brightness-105 active:scale-[0.99]"
               >
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/20 text-white">
                   <History className="h-5 w-5" />

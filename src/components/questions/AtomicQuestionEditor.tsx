@@ -666,7 +666,7 @@ export function AtomicQuestionEditor({
             onClick={() => setEditorViewMode("NTA_PREVIEW")}
             className={`px-5 py-2.5 rounded-2xl text-xs font-black transition flex items-center gap-2 ${
               editorViewMode === "NTA_PREVIEW"
-                ? "bg-gradient-to-r from-blue-600 to-blue-600 text-white shadow-md shadow-blue-500/20"
+                ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
                 : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
             }`}
           >

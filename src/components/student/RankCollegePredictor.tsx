@@ -183,7 +183,7 @@ export function RankCollegePredictor() {
           {prediction && (
             <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800 animate-in fade-in duration-200">
               {/* Main Estimated Rank Banner */}
-              <div className="rounded-2xl p-6 bg-gradient-to-r from-blue-700 via-blue-700 to-blue-800 text-white space-y-4 shadow-xl border-2 border-blue-400/30">
+              <div className="rounded-2xl p-6 bg-gradient-to-r from-blue-700 to-blue-800 text-white space-y-4 shadow-xl border-2 border-blue-400/30">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <span className="text-xs uppercase tracking-widest font-mono font-bold text-blue-300">

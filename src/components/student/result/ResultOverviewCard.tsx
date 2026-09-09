@@ -23,7 +23,7 @@ export function ResultOverviewCard({
   return (
     <div className="space-y-6">
       {/* Top Banner: Score, Rank, Percentile, and NEET 2026 Prediction */}
-      <div className="rounded-3xl p-6 sm:p-8 bg-gradient-to-r from-blue-700 via-blue-700 to-blue-800 text-white shadow-xl shadow-blue-950/15 relative overflow-hidden border-2 border-blue-400/30">
+      <div className="rounded-3xl p-6 sm:p-8 bg-gradient-to-r from-blue-700 to-blue-800 text-white shadow-xl shadow-blue-950/15 relative overflow-hidden border-2 border-blue-400/30">
         {/* Subtle decorative circles */}
         <div className="absolute top-0 right-0 w-80 h-80 bg-white/10 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-60 h-60 bg-emerald-400/20 rounded-full blur-2xl pointer-events-none" />
@@ -122,7 +122,7 @@ export function ResultOverviewCard({
             <button
               type="button"
               onClick={onOpenLeaderboard}
-              className="px-5 py-3 rounded-2xl bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-500/25 transition flex items-center gap-2"
+              className="px-5 py-3 rounded-2xl bg-blue-500 hover:bg-blue-400 text-white font-bold text-xs shadow-lg shadow-blue-500/25 transition flex items-center gap-2"
             >
               <span className="material-symbols-outlined text-base">leaderboard</span>
               <span>Test Leaderboard</span>
