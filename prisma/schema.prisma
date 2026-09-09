@@ -102,6 +102,8 @@ model User {
   bannersCreated         Banner[]
   mediaUploaded          MediaAsset[]
   testimonialsCreated    Testimonial[]
+  staffInvitationsSent   StaffInvitation[] @relation("StaffInvitationInvitedBy")
+  staffInvitation        StaffInvitation?  @relation("StaffInvitationCreatedUser")
 
   // --- Test Portal integration (imported from Atomic Test Portal) --------
   createdTests           Test[]            @relation("TestCreatedBy")
@@ -1875,6 +1877,46 @@ model NotificationPreference {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("notification_preferences")
+}
+
+// Admin-initiated staff onboarding. The raw invite token is emailed / handed
+// to the invitee and NEVER stored — only its SHA-256 hash lives here, so a
+// DB leak can't be used to accept an invitation. Single-use, expirable,
+// server-validated on every step.
+enum StaffInvitationStatus {
+  PENDING // created, link not opened yet
+  OPENED // invitee opened the link
+  SUBMITTED // invitee filled the profile form -> User exists, APPROVAL_PENDING
+  APPROVED // admin approved -> User ACTIVE
+  REJECTED // admin rejected -> profile kept, no access
+  EXPIRED // timed out or superseded by a resend
+}
+
+model StaffInvitation {
+  id               String                @id @default(cuid())
+  email            String
+  phone            String
+  tokenHash        String                @unique
+  // Optional role the admin pre-authorises; applied automatically on approval.
+  intendedRoleName String?
+  status           StaffInvitationStatus  @default(PENDING)
+  invitedById      String
+  createdUserId    String?               @unique
+  openedAt         DateTime?
+  submittedAt      DateTime?
+  reviewedById     String?
+  reviewedAt       DateTime?
+  reviewNote       String?
+  expiresAt        DateTime
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  invitedBy   User  @relation("StaffInvitationInvitedBy", fields: [invitedById], references: [id])
+  createdUser User? @relation("StaffInvitationCreatedUser", fields: [createdUserId], references: [id])
+
+  @@index([email])
+  @@index([status])
+  @@map("staff_invitations")
 }
 
 model AuditLog {

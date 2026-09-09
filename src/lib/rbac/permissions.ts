@@ -157,6 +157,10 @@ export const PERMISSIONS = {
   POSITION_MANAGE: "admin.position.manage",
   ACCESS_REQUEST_MANAGE: "admin.access.request.manage",
   AUDIT_LOG_VIEW: "admin.audit.view",
+  // Invite a new staff/educator by email+phone, and approve/reject the
+  // profile they submit. Assigning them a role is still a separate action
+  // (USER_ROLE_ASSIGN).
+  STAFF_INVITE: "admin.staff.invite",
 
   // Design Studio
   DESIGN_READ: "design.read",
@@ -334,6 +338,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PermissionCode[]> = {
     PERMISSIONS.USER_READ,
     PERMISSIONS.USER_CREATE,
     PERMISSIONS.USER_UPDATE,
+    PERMISSIONS.STAFF_INVITE,
     PERMISSIONS.USER_STATUS_MANAGE,
     PERMISSIONS.USER_ROLE_ASSIGN,
     PERMISSIONS.DEPARTMENT_MANAGE,
@@ -512,6 +517,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PermissionCode[]> = {
     PERMISSIONS.TEACHER_READ,
     PERMISSIONS.TEACHER_CREATE,
     PERMISSIONS.TEACHER_UPDATE,
+    PERMISSIONS.STAFF_INVITE,
     PERMISSIONS.DOCUMENT_READ_ANY,
     PERMISSIONS.DOCUMENT_VERIFY,
     PERMISSIONS.ONBOARDING_REVIEW,
