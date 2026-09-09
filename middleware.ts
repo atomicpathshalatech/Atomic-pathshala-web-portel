@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
+import { AUTH_SECRET } from "@/lib/auth-secret";
 
 const STUDENT_PATHS = [
   "/dashboard",
@@ -43,7 +44,7 @@ const NON_TEAM_ROLES = new Set(["STUDENT", "PARENT", "GUEST"]);
  */
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const secret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET || "atomic-pathshala-production-enterprise-secret-key-2026-secure-jwt";
+  const secret = AUTH_SECRET;
   const token = await getToken({ req: request, secret });
 
   if (!token) {

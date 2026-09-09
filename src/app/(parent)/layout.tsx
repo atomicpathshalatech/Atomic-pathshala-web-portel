@@ -10,6 +10,12 @@ export default async function ParentLayout({ children }: { children: ReactNode }
   if (!session?.user?.id) {
     redirect("/login");
   }
+  // Guardian portal is for PARENT accounts (a student may also open it to
+  // view their own record). Every other role is bounced — it must never be
+  // a back door into another student's data.
+  if (session.user.role !== "PARENT" && session.user.role !== "STUDENT") {
+    redirect("/");
+  }
 
   return (
     <div className="min-h-screen bg-background text-on-surface flex flex-col font-sans">
