@@ -401,24 +401,39 @@ export function TeacherLiveClassRoom({
       if (!el) return;
       const { clientWidth, clientHeight } = el;
       if (clientWidth <= 0 || clientHeight <= 0) return;
-      // Maximize canvas drawing area to full available screen
-      const padW = 2;
-      const padH = 2;
-      const availW = Math.max(200, clientWidth - padW);
-      const availH = Math.max(150, clientHeight - padH);
+      // Largest 16:9 rectangle that fits the available canvas area, with only
+      // a hairline gap so the white board fills as much of the dark region
+      // as the aspect ratio allows.
+      const availW = Math.max(200, clientWidth - 2);
+      const availH = Math.max(150, clientHeight - 2);
       let w = availW;
       let h = Math.round(w * (9 / 16));
       if (h > availH) {
         h = availH;
         w = Math.round(h * (16 / 9));
       }
-      setStageDimensions({ width: w, height: h });
+      setStageDimensions((prev) =>
+        prev.width === w && prev.height === h ? prev : { width: w, height: h }
+      );
     };
+    // Recompute now, on the next frame, and again after layout settles — the
+    // grid tracks (rail / panel) can still be resolving on the first pass,
+    // which is what left the board smaller than its container.
     computeStage();
+    const raf = requestAnimationFrame(computeStage);
+    const t1 = window.setTimeout(computeStage, 150);
+    const t2 = window.setTimeout(computeStage, 500);
     const ro = new ResizeObserver(computeStage);
     ro.observe(mainCanvasContainerRef.current);
-    return () => ro.disconnect();
-  }, []);
+    window.addEventListener("resize", computeStage);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      window.removeEventListener("resize", computeStage);
+      ro.disconnect();
+    };
+  }, [panelOpen]);
   const [uploadingBackground, setUploadingBackground] = useState(false);
   // Surfaces real progress/errors for "load the uploaded presentation onto
   // the board as pages" — deliberately visible state, not console.error,
@@ -1822,7 +1837,7 @@ export function TeacherLiveClassRoom({
       {/* Main canvas area */}
       <main
         ref={mainCanvasContainerRef}
-        className="live-canvas relative overflow-hidden bg-[#10131b] p-0.5 flex items-center justify-center min-w-0 min-h-0"
+        className="live-canvas relative overflow-hidden bg-[#10131b] flex items-center justify-center min-w-0 min-h-0"
       >
         {(pdfLoadState.loading || pdfLoadState.error) && (
           <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 max-w-md w-[92%]">
