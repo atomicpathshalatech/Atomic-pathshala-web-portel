@@ -20,7 +20,7 @@ export async function POST() {
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.WHITEBOARD_ACCESS);
 
-    const { whiteboardSessionId } = await getOrCreateTestLab(session.user.id);
+    const { scheduleId, whiteboardSessionId } = await getOrCreateTestLab(session.user.id);
 
     const wb = await prisma.whiteboardSession.findUnique({
       where: { id: whiteboardSessionId },
@@ -36,11 +36,22 @@ export async function POST() {
       prisma.whiteboardSession.update({
         where: { id: whiteboardSessionId },
         data: {
+          // Reopen the room — a reset after "End Class" must actually make
+          // the Test Lab usable again, not just clear its pages.
+          status: "ACTIVE",
+          livePhase: "LIVE",
+          endedAt: null,
+          actualEndedAt: null,
           activePageNumber: 1,
           presentationUrl: null,
           presentationName: null,
           presentationType: null,
+          pages: { create: { pageNumber: 1, objects: [] } },
         },
+      }),
+      prisma.batchSchedule.update({
+        where: { id: scheduleId },
+        data: { status: "LIVE" },
       }),
     ]);
 

@@ -70,6 +70,15 @@ export async function getOrCreateTestLab(userId: string) {
         createdById: userId,
       },
     });
+  } else if (schedule.status !== "LIVE") {
+    // The Test Lab is an always-open practice room. If a previous "End
+    // Class" moved the schedule to COMPLETED/CANCELLED, canTeacherEnterClass
+    // would then reject every re-entry with "This live class has already
+    // concluded." Put it back to LIVE.
+    schedule = await prisma.batchSchedule.update({
+      where: { id: schedule.id },
+      data: { status: "LIVE", startsAt: farPast, endsAt: farFuture },
+    });
   }
 
   // 4 — its whiteboard session, already LIVE so the room opens straight in.
@@ -98,11 +107,30 @@ export async function getOrCreateTestLab(userId: string) {
       },
       include: { pages: true },
     });
-  } else if (wb.pages.length === 0) {
-    // Heal an earlier test session that was created before this fix.
-    await prisma.whiteboardPage.create({
-      data: { sessionId: wb.id, pageNumber: 1, objects: [] },
-    });
+  } else {
+    // Heal an earlier test session that was ended (manual "End Class" or the
+    // lazy auto-end): reopen it so the room starts straight into LIVE again
+    // instead of showing "This live class has already concluded."
+    const needsReopen =
+      wb.status !== "ACTIVE" || wb.livePhase !== "LIVE" || wb.endedAt !== null;
+    if (needsReopen) {
+      wb = await prisma.whiteboardSession.update({
+        where: { id: wb.id },
+        data: {
+          status: "ACTIVE",
+          livePhase: "LIVE",
+          endedAt: null,
+          actualEndedAt: null,
+          actualStartedAt: wb.actualStartedAt ?? now,
+        },
+        include: { pages: true },
+      });
+    }
+    if (wb.pages.length === 0) {
+      await prisma.whiteboardPage.create({
+        data: { sessionId: wb.id, pageNumber: 1, objects: [] },
+      });
+    }
   }
 
   return { scheduleId: schedule.id, whiteboardSessionId: wb.id, teacherId: teacher.id };
