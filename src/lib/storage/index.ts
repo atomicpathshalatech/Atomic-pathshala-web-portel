@@ -38,6 +38,10 @@ function getClient() {
     // Both R2 and Supabase Storage's S3-compatible endpoints expect
     // path-style requests (bucket in the path, not as a subdomain).
     forcePathStyle: true,
+    // Recent @aws-sdk/client-s3 adds a default CRC32 checksum that
+    // Cloudflare R2 rejects with a 410 + non-XML body (see r2-client.ts).
+    requestChecksumCalculation: "WHEN_REQUIRED",
+    responseChecksumValidation: "WHEN_REQUIRED",
   });
 }
 

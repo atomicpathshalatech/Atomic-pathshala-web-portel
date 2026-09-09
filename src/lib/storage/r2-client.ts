@@ -72,6 +72,13 @@ export function getR2Client(): S3Client {
     },
     // R2 supports path-style requests
     forcePathStyle: true,
+    // @aws-sdk/client-s3 >= 3.729 adds a default CRC32 integrity checksum
+    // (`x-amz-checksum-*`) to every PutObject. Cloudflare R2 rejects those
+    // with a 410 + a non-XML body, which the SDK then fails to deserialize
+    // ("AwsXmlParser.parse: unexpected content"). Restrict checksums to
+    // operations that actually require them so R2 uploads work again.
+    requestChecksumCalculation: "WHEN_REQUIRED",
+    responseChecksumValidation: "WHEN_REQUIRED",
   });
 
   return cachedClient;
