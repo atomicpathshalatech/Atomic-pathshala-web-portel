@@ -399,8 +399,8 @@ export function TeacherLiveClassRoom({
       const { clientWidth, clientHeight } = el;
       if (clientWidth <= 0 || clientHeight <= 0) return;
       // Maximize canvas drawing area to full available screen
-      const padW = 4;
-      const padH = 4;
+      const padW = 2;
+      const padH = 2;
       const availW = Math.max(200, clientWidth - padW);
       const availH = Math.max(150, clientHeight - padH);
       let w = availW;
@@ -1789,7 +1789,7 @@ export function TeacherLiveClassRoom({
       {/* Main canvas area */}
       <main
         ref={mainCanvasContainerRef}
-        className="live-canvas relative overflow-hidden bg-[#10131b] p-1 sm:p-1.5 flex items-center justify-center min-w-0 min-h-0"
+        className="live-canvas relative overflow-hidden bg-[#10131b] p-0.5 flex items-center justify-center min-w-0 min-h-0"
       >
         {(pdfLoadState.loading || pdfLoadState.error) && (
           <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 max-w-md w-[92%]">
@@ -1966,7 +1966,19 @@ export function TeacherLiveClassRoom({
             <canvas ref={baseCanvasRef} className="absolute inset-0 w-full h-full select-none pointer-events-none" />
             <canvas
               ref={activeCanvasRef}
-              className="absolute inset-0 w-full h-full touch-none select-none cursor-crosshair"
+              className="absolute inset-0 w-full h-full touch-none select-none"
+              style={{
+                cursor:
+                  tool === "select"
+                    ? "default"
+                    : tool === "text"
+                    ? "text"
+                    : tool === "fill"
+                    ? "cell"
+                    : tool === "stroke-eraser" || tool === "object-eraser"
+                    ? "crosshair"
+                    : "crosshair",
+              }}
               onDoubleClick={handleCanvasDoubleClick}
             />
             {textEditor && (
@@ -2128,7 +2140,11 @@ export function TeacherLiveClassRoom({
             above the backdrop div — without this, every button here (and
             in the Navigation/Action groups below) needed two clicks
             whenever a popup was already open. */}
-        <div className="relative z-40 flex items-center gap-1 overflow-x-auto min-w-0">
+        {/* No `overflow-x-auto` here: it makes `overflow-y` compute to auto
+            too, which clipped every tool's `bottom-full` popover (pen /
+            highlighter / eraser / shapes / fill). The row is a fixed set of
+            small buttons that fits any desktop width. */}
+        <div className="relative z-40 flex items-center gap-1 min-w-0 flex-wrap sm:flex-nowrap">
           {/* Pen tool with Screenshot 3 customizer */}
           <div className="relative">
             <ToolbarBtn

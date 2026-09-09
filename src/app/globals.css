@@ -284,7 +284,7 @@
    the board keeps a usable share of a 1024px screen. */
 @media (min-width: 1024px) {
   .live-shell {
-    --live-panel-w: 17.5rem; /* 280px */
+    --live-panel-w: 16rem; /* 256px — trimmed so the white board gets more width */
     grid-template-columns: var(--live-rail-w) minmax(0, 1fr) var(--live-panel-w);
     grid-template-areas:
       "rail header header"
