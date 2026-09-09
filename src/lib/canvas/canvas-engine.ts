@@ -136,6 +136,21 @@ function distance(a: { x: number; y: number }, b: { x: number; y: number }) {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
+/** Ray-casting point-in-polygon test — used by the lasso to decide which
+ * objects fall inside the drawn selection loop. */
+function pointInPolygon(pt: { x: number; y: number }, poly: { x: number; y: number }[]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i]!.x;
+    const yi = poly[i]!.y;
+    const xj = poly[j]!.x;
+    const yj = poly[j]!.y;
+    const intersect = yi > pt.y !== yj > pt.y && pt.x < ((xj - xi) * (pt.y - yi)) / (yj - yi) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
 /** Points used for hit-testing, selection bounding boxes, and the partial
  * eraser. For freehand strokes this is every recorded point; for shapes it's
  * a small set of boundary samples — enough to click/erase near the outline,
@@ -389,7 +404,12 @@ export class CanvasEngine {
   private undoStack: StrokeObject[][] = [];
   private redoStack: StrokeObject[][] = [];
 
-  private selectedId: string | null = null;
+  /** Multi-selection. Single click puts one id here; the lasso puts many. */
+  private selectedIds = new Set<string>();
+  /** In-progress lasso polygon (select tool, dragging over empty canvas). */
+  private lassoPath: { x: number; y: number }[] | null = null;
+  /** Internal object clipboard for Copy / Paste / Duplicate. */
+  private clipboard: StrokeObject[] = [];
   private dragOrigin: { x: number; y: number } | null = null;
   private dragSnapshot: StrokeObject[] | null = null;
   private resizeHandle: "tl" | "tr" | "br" | "bl" | null = null;
@@ -399,7 +419,30 @@ export class CanvasEngine {
   private activePointerType: string | null = null;
 
   private onCommit?: (objects: StrokeObject[]) => void;
-  private onSelectionChange?: (id: string | null) => void;
+  private onSelectionChange?: (ids: string[]) => void;
+
+  private get selectedId(): string | null {
+    return this.selectedIds.size ? [...this.selectedIds][0]! : null;
+  }
+  private emitSelection(): void {
+    this.onSelectionChange?.([...this.selectedIds]);
+  }
+  private selectionBBox(): { minX: number; minY: number; maxX: number; maxY: number } | null {
+    let box: { minX: number; minY: number; maxX: number; maxY: number } | null = null;
+    for (const o of this.objects) {
+      if (!this.selectedIds.has(o.id)) continue;
+      const b = getBoundingBox(o);
+      box = box
+        ? {
+            minX: Math.min(box.minX, b.minX),
+            minY: Math.min(box.minY, b.minY),
+            maxX: Math.max(box.maxX, b.maxX),
+            maxY: Math.max(box.maxY, b.maxY),
+          }
+        : b;
+    }
+    return box;
+  }
   private rafPending = false;
 
   private boundDown = this.onPointerDown.bind(this);
@@ -410,7 +453,7 @@ export class CanvasEngine {
     baseCanvas: HTMLCanvasElement,
     activeCanvas: HTMLCanvasElement,
     onCommit?: (objects: StrokeObject[]) => void,
-    onSelectionChange?: (id: string | null) => void,
+    onSelectionChange?: (ids: string[]) => void,
     options?: { readOnly?: boolean }
   ) {
     this.baseCanvas = baseCanvas;
@@ -553,7 +596,8 @@ export class CanvasEngine {
     }
 
     if (this.currentTool === "select") {
-      if (this.selectedId) {
+      // Resize handles — only for a single selected object.
+      if (this.selectedIds.size === 1) {
         const selectedObj = this.objects.find((o) => o.id === this.selectedId);
         if (selectedObj) {
           const bbox = getBoundingBox(selectedObj);
@@ -564,7 +608,6 @@ export class CanvasEngine {
             { handle: "br", corner: { x: bbox.maxX, y: bbox.maxY }, opposite: { x: bbox.minX, y: bbox.minY } },
             { handle: "bl", corner: { x: bbox.minX, y: bbox.maxY }, opposite: { x: bbox.maxX, y: bbox.minY } },
           ];
-
           const hitHandle = handles.find((h) => distance(h.corner, pt) < handleTolerance);
           if (hitHandle) {
             this.resizeHandle = hitHandle.handle;
@@ -576,13 +619,35 @@ export class CanvasEngine {
         }
       }
 
-      const hit = this.hitTest(pt);
-      this.selectedId = hit?.id ?? null;
-      this.onSelectionChange?.(this.selectedId);
-      if (hit) {
+      // Click/drag inside the current selection's bounding box => move it all.
+      const selBox = this.selectionBBox();
+      if (
+        this.selectedIds.size > 0 &&
+        selBox &&
+        pt.x >= selBox.minX - 6 &&
+        pt.x <= selBox.maxX + 6 &&
+        pt.y >= selBox.minY - 6 &&
+        pt.y <= selBox.maxY + 6
+      ) {
         this.dragOrigin = pt;
         this.dragSnapshot = this.cloneObjects();
+        return;
       }
+
+      const hit = this.hitTest(pt);
+      if (hit) {
+        this.selectedIds = new Set([hit.id]);
+        this.dragOrigin = pt;
+        this.dragSnapshot = this.cloneObjects();
+        this.emitSelection();
+        this.renderBase();
+        return;
+      }
+
+      // Empty canvas => start a lasso.
+      this.selectedIds.clear();
+      this.emitSelection();
+      this.lassoPath = [{ x: pt.x, y: pt.y }];
       this.renderBase();
     }
   }
@@ -620,8 +685,14 @@ export class CanvasEngine {
         continue;
       }
 
-      if (this.currentTool === "select" && this.selectedId) {
-        if (this.resizeHandle && this.resizeOpposite && this.resizeInitialBBox) {
+      if (this.currentTool === "select" && this.lassoPath) {
+        this.lassoPath.push({ x: pt.x, y: pt.y });
+        this.drawLasso();
+        continue;
+      }
+
+      if (this.currentTool === "select" && this.selectedIds.size > 0) {
+        if (this.resizeHandle && this.resizeOpposite && this.resizeInitialBBox && this.selectedIds.size === 1) {
           const origW = Math.max(10, this.resizeInitialBBox.maxX - this.resizeInitialBBox.minX);
           const origH = Math.max(10, this.resizeInitialBBox.maxY - this.resizeInitialBBox.minY);
           const newW = Math.max(10, Math.abs(pt.x - this.resizeOpposite.x));
@@ -639,12 +710,12 @@ export class CanvasEngine {
         } else if (this.dragOrigin) {
           const dx = pt.x - this.dragOrigin.x;
           const dy = pt.y - this.dragOrigin.y;
-          const idx = this.objects.findIndex((o) => o.id === this.selectedId);
-          const original = this.dragSnapshot?.find((o) => o.id === this.selectedId);
-          if (idx !== -1 && original) {
-            this.objects[idx] = translateObject(original, dx, dy);
-            this.renderBase();
+          for (const id of this.selectedIds) {
+            const idx = this.objects.findIndex((o) => o.id === id);
+            const original = this.dragSnapshot?.find((o) => o.id === id);
+            if (idx !== -1 && original) this.objects[idx] = translateObject(original, dx, dy);
           }
+          this.renderBase();
         }
       }
     }
@@ -731,17 +802,37 @@ export class CanvasEngine {
       }
     }
 
-    if (this.currentTool === "select" && this.selectedId) {
+    if (this.currentTool === "select" && this.lassoPath) {
+      const poly = this.lassoPath;
+      this.lassoPath = null;
+      this.activeCtx.clearRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+      if (poly.length >= 3) {
+        const ids = this.objects
+          .filter((o) => representativePoints(o).some((p) => pointInPolygon(p, poly)))
+          .map((o) => o.id);
+        this.selectedIds = new Set(ids);
+        this.emitSelection();
+      }
+      this.renderBase();
+    } else if (this.currentTool === "select" && this.selectedIds.size > 0) {
       if (this.resizeHandle) {
         this.pushUndo(this.dragSnapshot!);
         this.onCommit?.(this.objects);
-      } else if (this.dragOrigin) {
-        const moved = this.dragSnapshot?.find((o) => o.id === this.selectedId);
-        const now = this.objects.find((o) => o.id === this.selectedId);
-        const movedOrigin = moved && firstPoint(moved);
-        const nowOrigin = now && firstPoint(now);
-        if (movedOrigin && nowOrigin && (movedOrigin.x !== nowOrigin.x || movedOrigin.y !== nowOrigin.y)) {
-          this.pushUndo(this.dragSnapshot!);
+      } else if (this.dragOrigin && this.dragSnapshot) {
+        // Commit only if something actually moved.
+        let moved = false;
+        for (const id of this.selectedIds) {
+          const before = this.dragSnapshot.find((o) => o.id === id);
+          const after = this.objects.find((o) => o.id === id);
+          const b = before && firstPoint(before);
+          const a = after && firstPoint(after);
+          if (b && a && (b.x !== a.x || b.y !== a.y)) {
+            moved = true;
+            break;
+          }
+        }
+        if (moved) {
+          this.pushUndo(this.dragSnapshot);
           this.onCommit?.(this.objects);
         }
       }
@@ -995,8 +1086,21 @@ export class CanvasEngine {
       } else {
         drawShape(this.baseCtx, obj);
       }
-      if (obj.id === this.selectedId) {
+      if (this.selectedIds.has(obj.id)) {
         this.drawSelectionBox(obj);
+      }
+    }
+    // One outer bounding box around a multi-selection so it reads as a group.
+    if (this.selectedIds.size > 1) {
+      const b = this.selectionBBox();
+      if (b) {
+        const ctx = this.baseCtx;
+        ctx.save();
+        ctx.setLineDash([12, 8]);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "#2563eb";
+        ctx.strokeRect(b.minX - 8, b.minY - 8, b.maxX - b.minX + 16, b.maxY - b.minY + 16);
+        ctx.restore();
       }
     }
   }
@@ -1061,9 +1165,9 @@ export class CanvasEngine {
     this.pushUndo();
     if (!trimmed) {
       this.objects = this.objects.filter((o) => o.id !== id);
-      if (this.selectedId === id) {
-        this.selectedId = null;
-        this.onSelectionChange?.(null);
+      if (this.selectedIds.has(id)) {
+        this.selectedIds.clear();
+        this.emitSelection();
       }
     } else {
       const { width, height } = this.measureText(trimmed, existing.size);
@@ -1258,28 +1362,83 @@ export class CanvasEngine {
     if (this.objects.length === 0) return;
     this.pushUndo();
     this.objects = [];
-    this.selectedId = null;
+    this.selectedIds.clear();
     this.renderBase();
     this.onCommit?.(this.objects);
   }
 
   public setTool(tool: CanvasTool): void {
     this.currentTool = tool;
+    this.lassoPath = null;
     if (tool !== "select") {
-      this.selectedId = null;
-      this.onSelectionChange?.(null);
+      this.selectedIds.clear();
+      this.emitSelection();
       this.renderBase();
     }
   }
 
+  /** How many objects are currently selected — drives the action bar's enabled state. */
+  public getSelectionCount(): number {
+    return this.selectedIds.size;
+  }
+
   public deleteSelected(): void {
-    if (!this.selectedId) return;
+    if (this.selectedIds.size === 0) return;
     this.pushUndo();
-    this.objects = this.objects.filter((o) => o.id !== this.selectedId);
-    this.selectedId = null;
-    this.onSelectionChange?.(null);
+    this.objects = this.objects.filter((o) => !this.selectedIds.has(o.id));
+    this.selectedIds.clear();
+    this.emitSelection();
     this.renderBase();
     this.onCommit?.(this.objects);
+  }
+
+  /** Copy selection into the internal clipboard (no OS clipboard). */
+  public copySelected(): void {
+    const picked = this.objects.filter((o) => this.selectedIds.has(o.id));
+    this.clipboard = picked.map((o) => JSON.parse(JSON.stringify(o)) as StrokeObject);
+  }
+
+  /** Paste the internal clipboard back, offset so the copy is visible, and
+   * leave the new objects selected. Goes through pushUndo/onCommit. */
+  public pasteClipboard(): void {
+    if (this.clipboard.length === 0) return;
+    this.pushUndo();
+    const clones = this.clipboard.map((o) => {
+      const moved = translateObject(JSON.parse(JSON.stringify(o)) as StrokeObject, 24, 24);
+      return { ...moved, id: uid() } as StrokeObject;
+    });
+    this.objects.push(...clones);
+    this.selectedIds = new Set(clones.map((c) => c.id));
+    this.emitSelection();
+    this.renderBase();
+    this.onCommit?.(this.objects);
+  }
+
+  /** Copy + paste in one step. */
+  public duplicateSelected(): void {
+    if (this.selectedIds.size === 0) return;
+    this.copySelected();
+    this.pasteClipboard();
+  }
+
+  private drawLasso(): void {
+    if (!this.lassoPath || this.lassoPath.length < 2) return;
+    const ctx = this.activeCtx;
+    ctx.clearRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+    ctx.save();
+    ctx.setLineDash([10, 8]);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "#3b82f6";
+    ctx.fillStyle = "rgba(59,130,246,0.08)";
+    ctx.beginPath();
+    ctx.moveTo(this.lassoPath[0]!.x, this.lassoPath[0]!.y);
+    for (let i = 1; i < this.lassoPath.length; i++) {
+      ctx.lineTo(this.lassoPath[i]!.x, this.lassoPath[i]!.y);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
   }
 
   private cloneObjects(): StrokeObject[] {
@@ -1370,7 +1529,7 @@ export class CanvasEngine {
 
     this.undoStack = [];
     this.redoStack = [];
-    this.selectedId = null;
+    this.selectedIds.clear();
     this.renderBase();
   }
 

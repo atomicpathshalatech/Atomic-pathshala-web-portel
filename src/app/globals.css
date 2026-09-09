@@ -291,6 +291,14 @@
       "rail canvas panel"
       "rail toolbar panel";
   }
+  /* Video/chat panel closed => hand its whole column back to the canvas so
+     the white board is meaningfully larger (spec: increase working area). */
+  .live-shell[data-open="false"] {
+    grid-template-columns: var(--live-rail-w) minmax(0, 1fr) 0;
+  }
+  .live-shell[data-open="false"] .live-panel {
+    display: none;
+  }
 }
 
 @media (min-width: 1280px) {

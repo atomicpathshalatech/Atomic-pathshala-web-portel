@@ -358,6 +358,7 @@ export function TeacherLiveClassRoom({
   const [tool, setTool] = useState<CanvasTool>("pen");
   const [penStyle, setPenStyle] = useState<PenStyleId>("hard");
   const [eraserRadius, setEraserRadius] = useState<number>(26); // "M"
+  const [selectionCount, setSelectionCount] = useState(0);
   const [color, setColor] = useState<string>(PEN_PALETTE_COLORS[0] ?? "#ef4444");
   const [size, setSize] = useState(5);
   // Read inside the canvas engine's onTextRequested callback (bound once
@@ -540,7 +541,10 @@ export function TeacherLiveClassRoom({
         autosaveTimer.current = setTimeout(() => flushAutosaveRef.current(), 50);
         setUndoRedoTick((t) => t + 1);
       },
-      () => setUndoRedoTick((t) => t + 1)
+      (ids: string[]) => {
+        setSelectionCount(ids.length);
+        setUndoRedoTick((t) => t + 1);
+      }
     );
     engineRef.current = engine;
     // The engine has no DOM of its own to render a text-entry UI, so on a
@@ -837,6 +841,26 @@ export function TeacherLiveClassRoom({
       // Don't trigger shortcuts if typing inside text area or text input
       const target = e.target as HTMLElement | null;
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
+        return;
+      }
+
+      // Selection: Delete/Backspace removes it; Ctrl/Cmd+C / +V copy & paste.
+      if ((e.key === "Delete" || e.key === "Backspace") && engineRef.current?.getSelectionCount()) {
+        e.preventDefault();
+        engineRef.current.deleteSelected();
+        setUndoRedoTick((t) => t + 1);
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === "c" || e.key === "C") && engineRef.current?.getSelectionCount()) {
+        engineRef.current.copySelected();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === "v" || e.key === "V")) {
+        if (engineRef.current) {
+          e.preventDefault();
+          engineRef.current.pasteClipboard();
+          setUndoRedoTick((t) => t + 1);
+        }
         return;
       }
 
@@ -1536,6 +1560,7 @@ export function TeacherLiveClassRoom({
   return (
     <div
       ref={containerRef}
+      data-open={panelOpen ? "true" : "false"}
       className="live-shell fixed inset-0 bg-[#10131b] text-white overflow-hidden select-none z-modal"
     >
       <input
@@ -1918,6 +1943,43 @@ export function TeacherLiveClassRoom({
             >
               <span className="material-symbols-outlined text-sm">gesture</span>
             </button>
+
+            {/* Selection actions — only while something is selected */}
+            {selectionCount > 0 && (
+              <>
+                <div className="w-4 h-[1px] bg-gray-700/60" />
+                <button
+                  type="button"
+                  onClick={() => engineRef.current?.copySelected()}
+                  className="w-7 h-7 rounded-full flex items-center justify-center bg-white/10 text-gray-300 hover:text-white transition shadow"
+                  title={`Copy ${selectionCount} selected`}
+                >
+                  <span className="material-symbols-outlined text-sm">content_copy</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    engineRef.current?.duplicateSelected();
+                    setUndoRedoTick((t) => t + 1);
+                  }}
+                  className="w-7 h-7 rounded-full flex items-center justify-center bg-white/10 text-gray-300 hover:text-white transition shadow"
+                  title={`Duplicate ${selectionCount} selected`}
+                >
+                  <span className="material-symbols-outlined text-sm">library_add</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    engineRef.current?.deleteSelected();
+                    setUndoRedoTick((t) => t + 1);
+                  }}
+                  className="w-7 h-7 rounded-full flex items-center justify-center bg-red-500/20 text-red-300 hover:bg-red-500/30 hover:text-white transition shadow"
+                  title={`Delete ${selectionCount} selected`}
+                >
+                  <span className="material-symbols-outlined text-sm">delete</span>
+                </button>
+              </>
+            )}
           </div>
         </aside>
 
