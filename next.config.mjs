@@ -11,6 +11,18 @@ const nextConfig = {
         hostname: "**.r2.cloudflarestorage.com",
       },
       {
+        // Cloudflare R2 public dev subdomain (pub-xxxx.r2.dev)
+        protocol: "https",
+        hostname: "**.r2.dev",
+      },
+      {
+        // Atomic Pathshala's custom R2 CDN domain (STORAGE_PUBLIC_URL).
+        // Without this, next/image refuses to render uploaded question /
+        // profile / module images served from the bucket.
+        protocol: "https",
+        hostname: "assets.atomicpathshala.in",
+      },
+      {
         protocol: "https",
         hostname: "**.supabase.co",
       },

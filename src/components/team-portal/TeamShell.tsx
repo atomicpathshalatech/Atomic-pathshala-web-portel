@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { LogoutButton } from "@/components/student/LogoutButton";
 import { TeamProfileMenu } from "@/components/team-portal/TeamProfileMenu";
 import { OpsBackButton } from "@/components/common/OpsBackButton";
+import { GlobalSearchBar } from "@/components/search/GlobalSearchBar";
 
 export type TeamNavItem = { href: string; label: string; icon: string };
 export type TeamNavSection = { title?: string; items: TeamNavItem[] };
@@ -79,7 +80,16 @@ export function TeamShell({
             )}
           </div>
 
-          <TeamProfileMenu userName={userName} userRoleLabel={userRoleLabel} hasTeacherProfile={hasTeacherProfile} />
+          <div className="hidden md:flex flex-1 justify-center px-4 lg:px-8">
+            <GlobalSearchBar />
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <div className="md:hidden">
+              <GlobalSearchBar compact />
+            </div>
+            <TeamProfileMenu userName={userName} userRoleLabel={userRoleLabel} hasTeacherProfile={hasTeacherProfile} />
+          </div>
         </div>
       </header>
 

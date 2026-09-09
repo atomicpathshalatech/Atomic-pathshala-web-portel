@@ -27,6 +27,53 @@ function requiredEnv(name: string): string {
   return value;
 }
 
+const STORAGE_ENV_KEYS = [
+  "STORAGE_ENDPOINT",
+  "STORAGE_BUCKET_NAME",
+  "STORAGE_ACCESS_KEY_ID",
+  "STORAGE_SECRET_ACCESS_KEY",
+  "STORAGE_PUBLIC_URL",
+] as const;
+
+/**
+ * True only when every credential the S3 client needs is present. Callers
+ * use this to decide whether a cloud-upload failure is a real error to
+ * surface (storage IS configured, something went wrong) versus an expected
+ * "no bucket on this machine" that may fall back to local disk in dev.
+ */
+export function storageConfigured(): boolean {
+  return STORAGE_ENV_KEYS.every((k) => Boolean(process.env[k]));
+}
+
+/**
+ * Non-secret description of the bucket that is actually active — the
+ * endpoint host, bucket name and public URL base. Handy in logs and in the
+ * /api/upload debug payload when an upload lands somewhere unexpected
+ * (e.g. a stray duplicate STORAGE_* block in .env shadowing the real one).
+ */
+export function activeStorageInfo(): {
+  configured: boolean;
+  endpointHost: string | null;
+  bucket: string | null;
+  publicUrlBase: string | null;
+} {
+  const endpoint = process.env.STORAGE_ENDPOINT ?? null;
+  let endpointHost: string | null = null;
+  if (endpoint) {
+    try {
+      endpointHost = new URL(endpoint).host;
+    } catch {
+      endpointHost = endpoint;
+    }
+  }
+  return {
+    configured: storageConfigured(),
+    endpointHost,
+    bucket: process.env.STORAGE_BUCKET_NAME ?? null,
+    publicUrlBase: process.env.STORAGE_PUBLIC_URL ?? null,
+  };
+}
+
 function getClient() {
   return new S3Client({
     region: "auto",

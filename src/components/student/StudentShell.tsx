@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { LogoutButton } from "@/components/student/LogoutButton";
 import { GoalSelectionModal } from "@/components/student/GoalSelectionModal";
 import { NotificationBell } from "@/components/student/NotificationBell";
+import { GlobalSearchBar } from "@/components/search/GlobalSearchBar";
 
 export type StudentNavItem = {
   href: string;
@@ -274,8 +275,16 @@ export function StudentShell({
             </div>
           </div>
 
-          {/* Right Section (Streak, Wallet, Notification, Profile) */}
+          {/* Center: Global Search (desktop) */}
+          <div className="hidden lg:flex flex-1 justify-center px-6">
+            <GlobalSearchBar />
+          </div>
+
+          {/* Right Section (Search on mobile, Streak, Wallet, Notification, Profile) */}
           <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+            <div className="lg:hidden">
+              <GlobalSearchBar compact />
+            </div>
             {/* Streak Pill Badge */}
             <Link
               href="/leaderboard"

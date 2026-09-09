@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { LogoutButton } from "@/components/student/LogoutButton";
+import { GlobalSearchBar } from "@/components/search/GlobalSearchBar";
 
 export default async function ParentLayout({ children }: { children: ReactNode }) {
   const session = await getServerSession(authOptions);
@@ -27,7 +28,8 @@ export default async function ParentLayout({ children }: { children: ReactNode }
           </span>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          <GlobalSearchBar compact />
           <div className="text-right hidden sm:block">
             <p className="text-xs font-bold text-on-surface">{session.user.name}</p>
             <p className="text-[10px] text-on-surface-variant">Guardian / Parent</p>
