@@ -72,10 +72,14 @@ export async function getOrCreateTestLab(userId: string) {
     });
   }
 
-  // 4 — its whiteboard session, already LIVE so the room opens straight in
+  // 4 — its whiteboard session, already LIVE so the room opens straight in.
+  // Page 1 is created up front (same as POST /api/whiteboard/sessions) —
+  // without it the canvas has no active page and the room falls back to the
+  // pre-flight wizard.
   const now = new Date();
   let wb = await prisma.whiteboardSession.findUnique({
     where: { batchScheduleId: schedule.id },
+    include: { pages: true },
   });
   if (!wb) {
     wb = await prisma.whiteboardSession.create({
@@ -90,7 +94,14 @@ export async function getOrCreateTestLab(userId: string) {
         actualStartedAt: now,
         scheduledStart: farPast,
         scheduledEnd: farFuture,
+        pages: { create: { pageNumber: 1, objects: [] } },
       },
+      include: { pages: true },
+    });
+  } else if (wb.pages.length === 0) {
+    // Heal an earlier test session that was created before this fix.
+    await prisma.whiteboardPage.create({
+      data: { sessionId: wb.id, pageNumber: 1, objects: [] },
     });
   }
 
