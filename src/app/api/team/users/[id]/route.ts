@@ -243,6 +243,28 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
           },
         },
       });
+
+      // Dedicated, queryable role-change entries — every role assignment /
+      // removal records who did it, whose role, old -> new, and an optional
+      // reason (spec: role changes must be individually auditable).
+      if (auditChanges.role) {
+        const roleReason = typeof body.reason === "string" ? body.reason.trim() : null;
+        await prisma.auditLog.create({
+          data: {
+            userId: session.user.id,
+            action: auditChanges.role.new === null ? "ROLE_REMOVED" : "ROLE_ASSIGNED",
+            entityType: "USER",
+            entityId: userId,
+            metadata: {
+              targetUserName: updatedUser.name,
+              oldRole: auditChanges.role.old,
+              newRole: auditChanges.role.new,
+              resultingStatus: updatedUser.status,
+              reason: roleReason,
+            },
+          },
+        });
+      }
     }
 
     return NextResponse.json({
