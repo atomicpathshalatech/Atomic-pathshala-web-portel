@@ -1,7 +1,20 @@
 import { ScrollReveal } from "./ScrollReveal";
+import { getApprovedTestimonials } from "@/lib/homepage";
 
-const TESTIMONIALS = [
+type Card = {
+  key: string;
+  name: string;
+  cohort: string;
+  rank: string;
+  quote: string;
+  image: string;
+};
+
+// Shown only when an admin hasn't approved any testimonials yet. Once the
+// CMS has rows (Team → Website → Testimonials) they take over completely.
+const DEFAULT_TESTIMONIALS: Card[] = [
   {
+    key: "ananya",
     name: "Ananya Verma",
     cohort: "Class of 2024",
     rank: "AIR 12 (NEET)",
@@ -11,6 +24,7 @@ const TESTIMONIALS = [
       "https://lh3.googleusercontent.com/aida-public/AB6AXuCP5wJORw6Xxp0j9SDDBqbV88gXDlHN0F4ROpWCJobXQPyT28ABDpIF1_j8h7ZGdJYMy3SmTFa6DvSedoqSOzlScSxgXsi-MgbY7PIAXGzOtEezlTXAD1ysjRoYUMmNplCUflyy05UdLTIiUwt6Pdfo4m1uWSHXPZGBNupbeR6yNVOci7i089ylykVlcMJy-tNEi6al9led5x5ja_tD0kT0bc8tuZvGX_sDgtEHQv3W8EO6S-JDrxyFN498b4c53V3ri1v_tVNqh_g",
   },
   {
+    key: "rohit",
     name: "Rohit Mehra",
     cohort: "Class of 2024",
     rank: "AIR 45 (JEE)",
@@ -20,6 +34,7 @@ const TESTIMONIALS = [
       "https://lh3.googleusercontent.com/aida-public/AB6AXuCoe1Sna0wx-B58sHAC01T2tZOWfkS2a22d0eU03213dvDvCUE5b4au1L474Sd5vMi-jDTpp3zBaVRcAxlhT3DFeisUWqXet3TPStbnM_mYvVDMhaXwlH4D_J9ENhzTv66FvZzuaeojH2aJJvPGCfzVayI6n4RzMjaQgm8W7pbtvST_pXnHiQ0p2wvXiLg-i6oG-akfokxfQfFJIHcepuvOPtorke_1k7Ho7AYvr_WTek6gsmQQRALsCZYJxlei8HZGewmk1Jxi_jE",
   },
   {
+    key: "ishita",
     name: "Ishita Jain",
     cohort: "Class of 2024",
     rank: "AIR 102 (NEET)",
@@ -29,6 +44,7 @@ const TESTIMONIALS = [
       "https://lh3.googleusercontent.com/aida-public/AB6AXuCnUF0zGyVYvuumBXCbL8ueDDGnlp_Ka8hTw5eoWNHfV06moaoRhZrmmhRZkRSWs-1ZE8J30HW6_3ABwe2ah1N7WL7IRwztoo7FMzG0RzcI97mlnKgkaCNbhpAhycmFkFNjzm3DgweZVaMwXpVCER-S2y3ee03Byvk4juFRmqKf_kofTpgPMkQAquiSuThxbvV7ZKwiomXT_yLtdLsv1Y7fPKa2rdyo7C2IZLxRx9sRuhCSPKcrIbjJzGm-y8jkILmlzNFddrU4ep0",
   },
   {
+    key: "vikram",
     name: "Vikram Roy",
     cohort: "Class of 2024",
     rank: "AIR 210 (JEE)",
@@ -37,9 +53,25 @@ const TESTIMONIALS = [
     image:
       "https://lh3.googleusercontent.com/aida-public/AB6AXuDS4H4Zg3wgNbRSerBL9uqe-yVTvwsOJMW387mzf2DizruXRqQSdiyrn6RHuLyS43nuXP7NnGWKwYUlEr84rCGxef4yo459nnBT6U2fYmMY4MoVoOFeGYkdAq8UNBvM-2T59IqIL7-ng3J4XeWE4Pl67EWHeVFZPXVSaD9I_ZkSpLV5BL3muNBwKUT-34LWflusg0odCLPEgh-0732Vd6xmUHhBjhGB0SD9Y92UrYUR6ix1P8lO5W6WvGCISbUr9OUiwSdS5xa9v30",
   },
-] as const;
+];
 
-export function TestimonialsSection() {
+const AVATAR_FALLBACK =
+  "https://www.gstatic.com/labs-code/stitch/stitch-placeholder-300x300.svg";
+
+export async function TestimonialsSection() {
+  const cms = await getApprovedTestimonials();
+
+  const items: Card[] = cms.length
+    ? cms.map((t) => ({
+        key: t.id,
+        name: t.studentName,
+        cohort: t.studentClass || "Atomic Pathshala",
+        rank: t.targetExam || (t.rating ? `${t.rating}★` : "Verified"),
+        quote: t.quote,
+        image: t.photoUrl || AVATAR_FALLBACK,
+      }))
+    : DEFAULT_TESTIMONIALS;
+
   return (
     <section id="results" className="py-stack-lg px-margin-mobile md:px-margin-desktop max-w-container-max mx-auto">
       <ScrollReveal className="text-center mb-16">
@@ -49,8 +81,8 @@ export function TestimonialsSection() {
       </ScrollReveal>
 
       <ScrollReveal className="grid grid-cols-1 md:grid-cols-4 gap-stack-lg">
-        {TESTIMONIALS.map((t) => (
-          <div key={t.name} className="glass-card p-6 rounded-2xl relative">
+        {items.map((t) => (
+          <div key={t.key} className="glass-card p-6 rounded-2xl relative">
             <span className="absolute top-4 right-4 text-primary opacity-5 material-symbols-outlined text-6xl">
               format_quote
             </span>
@@ -59,7 +91,8 @@ export function TestimonialsSection() {
             </div>
             <div className="flex items-center gap-4 mb-4">
               <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-primary">
-                <img className="w-full h-full object-cover" alt={t.name} src={t.image} />
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img className="w-full h-full object-cover" alt={t.name} src={t.image} loading="lazy" decoding="async" />
               </div>
               <div>
                 <h4 className="font-label-md text-label-md">{t.name}</h4>
