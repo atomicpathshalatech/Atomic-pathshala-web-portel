@@ -41,6 +41,11 @@ export interface FreehandObject {
   color: string;
   size: number;
   points: StrokePoint[];
+  /** Which pen style this stroke was drawn with — kept per-stroke so
+   * switching the active pen later never restyles old strokes. One of the
+   * PEN_STYLES ids (hard | fountain | chisel | art | graphite | magic);
+   * absent / unknown renders as "hard". Highlighter ignores this. */
+  penStyle?: string;
 }
 
 export type ShapeKind = "line" | "rectangle" | "circle" | "triangle" | "arrow";
@@ -79,12 +84,24 @@ export type StrokeObject = FreehandObject | ShapeObject | TextObject;
 export type CanvasTool =
   | "pen"
   | "highlighter"
+  | "laser"
   | "stroke-eraser"
   | "object-eraser"
   | "select"
   | "text"
   | "fill"
   | ShapeKind;
+
+/** Eraser brush radii (virtual px) for the S / M / L / XL presets. */
+export const ERASER_SIZES: { id: "S" | "M" | "L" | "XL"; label: string; radius: number }[] = [
+  { id: "S", label: "S", radius: 14 },
+  { id: "M", label: "M", radius: 26 },
+  { id: "L", label: "L", radius: 44 },
+  { id: "XL", label: "XL", radius: 68 },
+];
+
+/** How long a laser stroke stays on screen before it has fully faded (ms). */
+export const LASER_DURATION_MS = 1400;
 
 /** Font-size (virtual px) per unit of the shared pen `currentSize` control,
  * so the same S/M/L size preset used for pen width gives sensible, readable
@@ -107,7 +124,6 @@ const MIN_SHAPE_DRAG = 3;
 export const VIRTUAL_WIDTH = 1920;
 export const VIRTUAL_HEIGHT = 1080;
 
-const ERASER_RADIUS = 24;
 const SELECT_HIT_RADIUS = 18;
 
 function uid() {
@@ -118,6 +134,21 @@ function uid() {
 
 function distance(a: { x: number; y: number }, b: { x: number; y: number }) {
   return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+/** Ray-casting point-in-polygon test — used by the lasso to decide which
+ * objects fall inside the drawn selection loop. */
+function pointInPolygon(pt: { x: number; y: number }, poly: { x: number; y: number }[]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i]!.x;
+    const yi = poly[i]!.y;
+    const xj = poly[j]!.x;
+    const yj = poly[j]!.y;
+    const intersect = yi > pt.y !== yj > pt.y && pt.x < ((xj - xi) * (pt.y - yi)) / (yj - yi) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
 }
 
 /** Points used for hit-testing, selection bounding boxes, and the partial
@@ -353,6 +384,10 @@ export class CanvasEngine {
   public currentTool: CanvasTool = "pen";
   public currentColor = "#1A1A1A";
   public currentSize = 3;
+  /** Active pen style id (PEN_STYLES); stamped onto each new pen stroke. */
+  public currentPenStyle = "hard";
+  /** Active eraser brush radius in virtual px (default = "M"). */
+  public eraserRadius = 26;
 
   /** Set by the host component. Fired instead of starting a drag when the
    * "text" tool is active on pointerdown — the engine has no DOM to render
@@ -369,7 +404,12 @@ export class CanvasEngine {
   private undoStack: StrokeObject[][] = [];
   private redoStack: StrokeObject[][] = [];
 
-  private selectedId: string | null = null;
+  /** Multi-selection. Single click puts one id here; the lasso puts many. */
+  private selectedIds = new Set<string>();
+  /** In-progress lasso polygon (select tool, dragging over empty canvas). */
+  private lassoPath: { x: number; y: number }[] | null = null;
+  /** Internal object clipboard for Copy / Paste / Duplicate. */
+  private clipboard: StrokeObject[] = [];
   private dragOrigin: { x: number; y: number } | null = null;
   private dragSnapshot: StrokeObject[] | null = null;
   private resizeHandle: "tl" | "tr" | "br" | "bl" | null = null;
@@ -379,7 +419,30 @@ export class CanvasEngine {
   private activePointerType: string | null = null;
 
   private onCommit?: (objects: StrokeObject[]) => void;
-  private onSelectionChange?: (id: string | null) => void;
+  private onSelectionChange?: (ids: string[]) => void;
+
+  private get selectedId(): string | null {
+    return this.selectedIds.size ? [...this.selectedIds][0]! : null;
+  }
+  private emitSelection(): void {
+    this.onSelectionChange?.([...this.selectedIds]);
+  }
+  private selectionBBox(): { minX: number; minY: number; maxX: number; maxY: number } | null {
+    let box: { minX: number; minY: number; maxX: number; maxY: number } | null = null;
+    for (const o of this.objects) {
+      if (!this.selectedIds.has(o.id)) continue;
+      const b = getBoundingBox(o);
+      box = box
+        ? {
+            minX: Math.min(box.minX, b.minX),
+            minY: Math.min(box.minY, b.minY),
+            maxX: Math.max(box.maxX, b.maxX),
+            maxY: Math.max(box.maxY, b.maxY),
+          }
+        : b;
+    }
+    return box;
+  }
   private rafPending = false;
 
   private boundDown = this.onPointerDown.bind(this);
@@ -390,7 +453,7 @@ export class CanvasEngine {
     baseCanvas: HTMLCanvasElement,
     activeCanvas: HTMLCanvasElement,
     onCommit?: (objects: StrokeObject[]) => void,
-    onSelectionChange?: (id: string | null) => void,
+    onSelectionChange?: (ids: string[]) => void,
     options?: { readOnly?: boolean }
   ) {
     this.baseCanvas = baseCanvas;
@@ -425,6 +488,10 @@ export class CanvasEngine {
     el.removeEventListener("pointerup", this.boundUp);
     el.removeEventListener("pointercancel", this.boundUp);
     el.removeEventListener("pointerleave", this.boundUp);
+    if (this.laserRaf) cancelAnimationFrame(this.laserRaf);
+    this.laserRaf = 0;
+    this.laserActive = null;
+    this.laserStrokes = [];
   }
 
   /** Resize the backing store to match the element's current CSS size at
@@ -500,6 +567,13 @@ export class CanvasEngine {
       return;
     }
 
+    if (this.currentTool === "laser") {
+      // Transient — never enters this.objects, undo, or export.
+      this.laserActive = [{ x: pt.x, y: pt.y }];
+      this.startLaserLoop();
+      return;
+    }
+
     if (this.currentTool === "pen" || this.currentTool === "highlighter") {
       this.activePoints = [pt];
       return;
@@ -522,7 +596,8 @@ export class CanvasEngine {
     }
 
     if (this.currentTool === "select") {
-      if (this.selectedId) {
+      // Resize handles — only for a single selected object.
+      if (this.selectedIds.size === 1) {
         const selectedObj = this.objects.find((o) => o.id === this.selectedId);
         if (selectedObj) {
           const bbox = getBoundingBox(selectedObj);
@@ -533,7 +608,6 @@ export class CanvasEngine {
             { handle: "br", corner: { x: bbox.maxX, y: bbox.maxY }, opposite: { x: bbox.minX, y: bbox.minY } },
             { handle: "bl", corner: { x: bbox.minX, y: bbox.maxY }, opposite: { x: bbox.maxX, y: bbox.minY } },
           ];
-
           const hitHandle = handles.find((h) => distance(h.corner, pt) < handleTolerance);
           if (hitHandle) {
             this.resizeHandle = hitHandle.handle;
@@ -545,13 +619,35 @@ export class CanvasEngine {
         }
       }
 
-      const hit = this.hitTest(pt);
-      this.selectedId = hit?.id ?? null;
-      this.onSelectionChange?.(this.selectedId);
-      if (hit) {
+      // Click/drag inside the current selection's bounding box => move it all.
+      const selBox = this.selectionBBox();
+      if (
+        this.selectedIds.size > 0 &&
+        selBox &&
+        pt.x >= selBox.minX - 6 &&
+        pt.x <= selBox.maxX + 6 &&
+        pt.y >= selBox.minY - 6 &&
+        pt.y <= selBox.maxY + 6
+      ) {
         this.dragOrigin = pt;
         this.dragSnapshot = this.cloneObjects();
+        return;
       }
+
+      const hit = this.hitTest(pt);
+      if (hit) {
+        this.selectedIds = new Set([hit.id]);
+        this.dragOrigin = pt;
+        this.dragSnapshot = this.cloneObjects();
+        this.emitSelection();
+        this.renderBase();
+        return;
+      }
+
+      // Empty canvas => start a lasso.
+      this.selectedIds.clear();
+      this.emitSelection();
+      this.lassoPath = [{ x: pt.x, y: pt.y }];
       this.renderBase();
     }
   }
@@ -559,6 +655,12 @@ export class CanvasEngine {
   private onPointerMove(e: PointerEvent): void {
     if (!this.isPointerDown) return;
     if (this.activePointerId !== null && e.pointerId !== this.activePointerId) return;
+
+    if (this.laserActive) {
+      const p = this.getPoint(e);
+      this.laserActive.push({ x: p.x, y: p.y });
+      return;
+    }
 
     // Read high-frequency coalesced events from pen tablet if available
     const events: PointerEvent[] = typeof (e as any).getCoalescedEvents === "function"
@@ -583,8 +685,14 @@ export class CanvasEngine {
         continue;
       }
 
-      if (this.currentTool === "select" && this.selectedId) {
-        if (this.resizeHandle && this.resizeOpposite && this.resizeInitialBBox) {
+      if (this.currentTool === "select" && this.lassoPath) {
+        this.lassoPath.push({ x: pt.x, y: pt.y });
+        this.drawLasso();
+        continue;
+      }
+
+      if (this.currentTool === "select" && this.selectedIds.size > 0) {
+        if (this.resizeHandle && this.resizeOpposite && this.resizeInitialBBox && this.selectedIds.size === 1) {
           const origW = Math.max(10, this.resizeInitialBBox.maxX - this.resizeInitialBBox.minX);
           const origH = Math.max(10, this.resizeInitialBBox.maxY - this.resizeInitialBBox.minY);
           const newW = Math.max(10, Math.abs(pt.x - this.resizeOpposite.x));
@@ -602,12 +710,12 @@ export class CanvasEngine {
         } else if (this.dragOrigin) {
           const dx = pt.x - this.dragOrigin.x;
           const dy = pt.y - this.dragOrigin.y;
-          const idx = this.objects.findIndex((o) => o.id === this.selectedId);
-          const original = this.dragSnapshot?.find((o) => o.id === this.selectedId);
-          if (idx !== -1 && original) {
-            this.objects[idx] = translateObject(original, dx, dy);
-            this.renderBase();
+          for (const id of this.selectedIds) {
+            const idx = this.objects.findIndex((o) => o.id === id);
+            const original = this.dragSnapshot?.find((o) => o.id === id);
+            if (idx !== -1 && original) this.objects[idx] = translateObject(original, dx, dy);
           }
+          this.renderBase();
         }
       }
     }
@@ -620,6 +728,18 @@ export class CanvasEngine {
   private onPointerUp(e: PointerEvent): void {
     if (!this.isPointerDown) return;
     if (this.activePointerId !== null && e.pointerId !== this.activePointerId) return;
+
+    if (this.laserActive) {
+      if (this.laserActive.length > 1) {
+        const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+        this.laserStrokes.push({ points: this.laserActive, born: now });
+      }
+      this.laserActive = null;
+      this.isPointerDown = false;
+      this.activePointerId = null;
+      this.activePointerType = null;
+      return;
+    }
 
     this.isPointerDown = false;
     this.activePointerId = null;
@@ -642,6 +762,7 @@ export class CanvasEngine {
           color: this.currentColor,
           size: this.currentSize,
           points: [pt, { ...pt, x: pt.x + 0.1 }],
+          penStyle: this.currentPenStyle,
         };
         this.objects.push(stroke);
         this.renderBase();
@@ -655,6 +776,7 @@ export class CanvasEngine {
           color: this.currentColor,
           size: this.currentSize,
           points: this.activePoints,
+          penStyle: this.currentPenStyle,
         };
         this.objects.push(stroke);
         this.renderBase();
@@ -680,17 +802,37 @@ export class CanvasEngine {
       }
     }
 
-    if (this.currentTool === "select" && this.selectedId) {
+    if (this.currentTool === "select" && this.lassoPath) {
+      const poly = this.lassoPath;
+      this.lassoPath = null;
+      this.activeCtx.clearRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+      if (poly.length >= 3) {
+        const ids = this.objects
+          .filter((o) => representativePoints(o).some((p) => pointInPolygon(p, poly)))
+          .map((o) => o.id);
+        this.selectedIds = new Set(ids);
+        this.emitSelection();
+      }
+      this.renderBase();
+    } else if (this.currentTool === "select" && this.selectedIds.size > 0) {
       if (this.resizeHandle) {
         this.pushUndo(this.dragSnapshot!);
         this.onCommit?.(this.objects);
-      } else if (this.dragOrigin) {
-        const moved = this.dragSnapshot?.find((o) => o.id === this.selectedId);
-        const now = this.objects.find((o) => o.id === this.selectedId);
-        const movedOrigin = moved && firstPoint(moved);
-        const nowOrigin = now && firstPoint(now);
-        if (movedOrigin && nowOrigin && (movedOrigin.x !== nowOrigin.x || movedOrigin.y !== nowOrigin.y)) {
-          this.pushUndo(this.dragSnapshot!);
+      } else if (this.dragOrigin && this.dragSnapshot) {
+        // Commit only if something actually moved.
+        let moved = false;
+        for (const id of this.selectedIds) {
+          const before = this.dragSnapshot.find((o) => o.id === id);
+          const after = this.objects.find((o) => o.id === id);
+          const b = before && firstPoint(before);
+          const a = after && firstPoint(after);
+          if (b && a && (b.x !== a.x || b.y !== a.y)) {
+            moved = true;
+            break;
+          }
+        }
+        if (moved) {
+          this.pushUndo(this.dragSnapshot);
           this.onCommit?.(this.objects);
         }
       }
@@ -733,7 +875,7 @@ export class CanvasEngine {
     }
 
     if (this.activePoints.length < 2) return;
-    this.strokePath(this.activeCtx, this.activePoints, this.currentColor, this.currentSize, this.currentTool === "highlighter");
+    this.strokePath(this.activeCtx, this.activePoints, this.currentColor, this.currentSize, this.currentTool === "highlighter", this.currentPenStyle);
   }
 
   private strokePath(
@@ -741,13 +883,14 @@ export class CanvasEngine {
     points: StrokePoint[],
     color: string,
     size: number,
-    isHighlighter: boolean
+    isHighlighter: boolean,
+    penStyle: string = "hard"
   ): void {
     if (points.length === 0) return;
     if (points.length === 1) {
       ctx.save();
       ctx.fillStyle = color;
-      ctx.globalAlpha = isHighlighter ? 0.35 : 1;
+      ctx.globalAlpha = isHighlighter ? 0.35 : penStyle === "graphite" ? 0.8 : 1;
       const r = (size * (isHighlighter ? 3.5 : 0.6 + points[0]!.pressure * 1.4)) / 2;
       ctx.beginPath();
       ctx.arc(points[0]!.x, points[0]!.y, Math.max(1, r), 0, Math.PI * 2);
@@ -757,7 +900,7 @@ export class CanvasEngine {
     }
 
     ctx.save();
-    ctx.lineCap = "round";
+    ctx.lineCap = penStyle === "chisel" ? "butt" : "round";
     ctx.lineJoin = "round";
     ctx.strokeStyle = color;
     ctx.globalAlpha = isHighlighter ? 0.35 : 1;
@@ -780,40 +923,184 @@ export class CanvasEngine {
       }
       ctx.lineWidth = size * (isHighlighter ? 3.5 : 1);
       ctx.stroke();
-    } else {
-      // Smooth pressure-modulated Bézier segments for pen tablet writing
-      for (let i = 0; i < points.length - 1; i++) {
-        const p0 = i > 0 ? points[i - 1]! : points[0]!;
-        const p1 = points[i]!;
-        const p2 = points[i + 1]!;
+      ctx.restore();
+      return;
+    }
 
-        const startPt = i === 0 ? p1 : { x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2 };
-        const endPt = i === points.length - 2 ? p2 : { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+    // ---- Pen styles: each computes a per-segment width / alpha / glow so
+    // the same test stroke renders visibly differently per pen. ----------
+    const CHISEL_NIB = Math.PI / 4; // fixed 45° nib
 
-        ctx.beginPath();
-        ctx.moveTo(startPt.x, startPt.y);
-        ctx.quadraticCurveTo(p1.x, p1.y, endPt.x, endPt.y);
-
-        const pressure = p1.pressure && p1.pressure > 0 ? p1.pressure : 0.5;
-        ctx.lineWidth = Math.max(0.75, size * (0.45 + pressure * 1.35));
-        ctx.stroke();
+    if (penStyle === "magic") {
+      // Glowing (but still permanent) ink: a soft wide halo pass then a
+      // bright core pass.
+      ctx.shadowColor = color;
+      for (const [pass, blur, widthMul, alpha] of [
+        ["halo", size * 2.4, 2.6, 0.35] as const,
+        ["core", size * 0.8, 0.9, 1] as const,
+      ]) {
+        void pass;
+        ctx.shadowBlur = blur;
+        ctx.globalAlpha = alpha;
+        for (let i = 0; i < points.length - 1; i++) {
+          const p1 = points[i]!;
+          const p2 = points[i + 1]!;
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.lineWidth = Math.max(0.6, size * widthMul);
+          ctx.stroke();
+        }
       }
+      ctx.restore();
+      return;
+    }
+
+    for (let i = 0; i < points.length - 1; i++) {
+      const p0 = i > 0 ? points[i - 1]! : points[0]!;
+      const p1 = points[i]!;
+      const p2 = points[i + 1]!;
+      const startPt = i === 0 ? p1 : { x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2 };
+      const endPt = i === points.length - 2 ? p2 : { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+      const pressure = p1.pressure && p1.pressure > 0 ? p1.pressure : 0.5;
+
+      let lineWidth: number;
+      let alpha = 1;
+      if (penStyle === "fountain") {
+        lineWidth = Math.max(0.4, size * (0.15 + pressure * 2.4));
+      } else if (penStyle === "chisel") {
+        const ang = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+        lineWidth = Math.max(1, size * (0.3 + 1.5 * Math.abs(Math.sin(ang - CHISEL_NIB))));
+      } else if (penStyle === "art") {
+        // brush: wider, feathered via a soft self-glow + reduced opacity
+        lineWidth = Math.max(1, size * (1.1 + pressure * 1.5));
+        alpha = 0.7;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = size * 0.9;
+      } else if (penStyle === "graphite") {
+        // pencil: thin + grainy alpha jitter
+        lineWidth = Math.max(0.5, size * (0.35 + pressure * 0.7));
+        alpha = 0.5 + Math.random() * 0.4;
+      } else {
+        // hard-tipped (default)
+        lineWidth = Math.max(0.75, size * (0.45 + pressure * 1.35));
+      }
+
+      ctx.globalAlpha = alpha;
+      ctx.beginPath();
+      ctx.moveTo(startPt.x, startPt.y);
+      ctx.quadraticCurveTo(p1.x, p1.y, endPt.x, endPt.y);
+      ctx.lineWidth = lineWidth;
+      ctx.stroke();
     }
     ctx.restore();
+  }
+
+  // ---- Transient laser overlay ------------------------------------------
+  private laserActive: { x: number; y: number }[] | null = null;
+  private laserStrokes: { points: { x: number; y: number }[]; born: number }[] = [];
+  private laserRaf = 0;
+
+  private startLaserLoop(): void {
+    if (this.laserRaf) return;
+    const tick = () => {
+      const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+      this.laserStrokes = this.laserStrokes.filter((s) => now - s.born < LASER_DURATION_MS);
+
+      // Nothing left to animate and no permanent stroke mid-draw -> stop and
+      // hand the active layer back.
+      if (this.laserStrokes.length === 0 && !this.laserActive) {
+        if (this.activePoints.length === 0) {
+          this.activeCtx.clearRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+        }
+        this.laserRaf = 0;
+        return;
+      }
+
+      if (this.activePoints.length === 0) {
+        this.activeCtx.clearRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+      }
+      for (const s of this.laserStrokes) {
+        const age = now - s.born;
+        const t = Math.min(1, age / LASER_DURATION_MS);
+        this.drawLaser(s.points, 1 - t * t);
+      }
+      if (this.laserActive) this.drawLaser(this.laserActive, 1);
+
+      this.laserRaf = requestAnimationFrame(tick);
+    };
+    this.laserRaf = requestAnimationFrame(tick);
+  }
+
+  private drawLaser(pts: { x: number; y: number }[], opacity: number): void {
+    if (pts.length < 1 || opacity <= 0) return;
+    const ctx = this.activeCtx;
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.globalCompositeOperation = "lighter"; // additive => bright on white
+    ctx.shadowColor = "rgba(255,60,60,0.95)";
+    // outer halo
+    ctx.strokeStyle = `rgba(255,80,80,${0.35 * opacity})`;
+    ctx.shadowBlur = 26;
+    ctx.lineWidth = 16;
+    this.laserPath(ctx, pts);
+    // mid glow
+    ctx.strokeStyle = `rgba(255,120,120,${0.6 * opacity})`;
+    ctx.shadowBlur = 14;
+    ctx.lineWidth = 8;
+    this.laserPath(ctx, pts);
+    // bright core
+    ctx.strokeStyle = `rgba(255,255,255,${0.95 * opacity})`;
+    ctx.shadowBlur = 6;
+    ctx.lineWidth = 3;
+    this.laserPath(ctx, pts);
+    ctx.restore();
+  }
+
+  private laserPath(ctx: CanvasRenderingContext2D, pts: { x: number; y: number }[]): void {
+    if (pts.length === 1) {
+      ctx.beginPath();
+      ctx.arc(pts[0]!.x, pts[0]!.y, ctx.lineWidth / 2, 0, Math.PI * 2);
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.fill();
+      return;
+    }
+    ctx.beginPath();
+    ctx.moveTo(pts[0]!.x, pts[0]!.y);
+    for (let i = 1; i < pts.length - 1; i++) {
+      const mid = { x: (pts[i]!.x + pts[i + 1]!.x) / 2, y: (pts[i]!.y + pts[i + 1]!.y) / 2 };
+      ctx.quadraticCurveTo(pts[i]!.x, pts[i]!.y, mid.x, mid.y);
+    }
+    ctx.lineTo(pts[pts.length - 1]!.x, pts[pts.length - 1]!.y);
+    ctx.stroke();
   }
 
   public renderBase(): void {
     this.baseCtx.clearRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
     for (const obj of this.objects) {
       if (obj.type === "stroke") {
-        this.strokePath(this.baseCtx, obj.points, obj.color, obj.size, obj.tool === "highlighter");
+        this.strokePath(this.baseCtx, obj.points, obj.color, obj.size, obj.tool === "highlighter", obj.penStyle);
       } else if (obj.type === "text") {
         this.drawText(this.baseCtx, obj);
       } else {
         drawShape(this.baseCtx, obj);
       }
-      if (obj.id === this.selectedId) {
+      if (this.selectedIds.has(obj.id)) {
         this.drawSelectionBox(obj);
+      }
+    }
+    // One outer bounding box around a multi-selection so it reads as a group.
+    if (this.selectedIds.size > 1) {
+      const b = this.selectionBBox();
+      if (b) {
+        const ctx = this.baseCtx;
+        ctx.save();
+        ctx.setLineDash([12, 8]);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "#2563eb";
+        ctx.strokeRect(b.minX - 8, b.minY - 8, b.maxX - b.minX + 16, b.maxY - b.minY + 16);
+        ctx.restore();
       }
     }
   }
@@ -878,9 +1165,9 @@ export class CanvasEngine {
     this.pushUndo();
     if (!trimmed) {
       this.objects = this.objects.filter((o) => o.id !== id);
-      if (this.selectedId === id) {
-        this.selectedId = null;
-        this.onSelectionChange?.(null);
+      if (this.selectedIds.has(id)) {
+        this.selectedIds.clear();
+        this.emitSelection();
       }
     } else {
       const { width, height } = this.measureText(trimmed, existing.size);
@@ -1015,7 +1302,7 @@ export class CanvasEngine {
 
     for (const obj of this.objects) {
       if (obj.type === "shape" || obj.type === "text") {
-        if (representativePoints(obj).some((p) => distance(p, pt) < ERASER_RADIUS)) {
+        if (representativePoints(obj).some((p) => distance(p, pt) < this.eraserRadius)) {
           changed = true;
           continue;
         }
@@ -1025,7 +1312,7 @@ export class CanvasEngine {
 
       const segments: StrokePoint[][] = [[]];
       for (const p of obj.points) {
-        if (distance(p, pt) < ERASER_RADIUS) {
+        if (distance(p, pt) < this.eraserRadius) {
           changed = true;
           // Non-null: segments starts as [[]] and only ever grows via
           // push([]), so the last element always exists.
@@ -1075,28 +1362,83 @@ export class CanvasEngine {
     if (this.objects.length === 0) return;
     this.pushUndo();
     this.objects = [];
-    this.selectedId = null;
+    this.selectedIds.clear();
     this.renderBase();
     this.onCommit?.(this.objects);
   }
 
   public setTool(tool: CanvasTool): void {
     this.currentTool = tool;
+    this.lassoPath = null;
     if (tool !== "select") {
-      this.selectedId = null;
-      this.onSelectionChange?.(null);
+      this.selectedIds.clear();
+      this.emitSelection();
       this.renderBase();
     }
   }
 
+  /** How many objects are currently selected — drives the action bar's enabled state. */
+  public getSelectionCount(): number {
+    return this.selectedIds.size;
+  }
+
   public deleteSelected(): void {
-    if (!this.selectedId) return;
+    if (this.selectedIds.size === 0) return;
     this.pushUndo();
-    this.objects = this.objects.filter((o) => o.id !== this.selectedId);
-    this.selectedId = null;
-    this.onSelectionChange?.(null);
+    this.objects = this.objects.filter((o) => !this.selectedIds.has(o.id));
+    this.selectedIds.clear();
+    this.emitSelection();
     this.renderBase();
     this.onCommit?.(this.objects);
+  }
+
+  /** Copy selection into the internal clipboard (no OS clipboard). */
+  public copySelected(): void {
+    const picked = this.objects.filter((o) => this.selectedIds.has(o.id));
+    this.clipboard = picked.map((o) => JSON.parse(JSON.stringify(o)) as StrokeObject);
+  }
+
+  /** Paste the internal clipboard back, offset so the copy is visible, and
+   * leave the new objects selected. Goes through pushUndo/onCommit. */
+  public pasteClipboard(): void {
+    if (this.clipboard.length === 0) return;
+    this.pushUndo();
+    const clones = this.clipboard.map((o) => {
+      const moved = translateObject(JSON.parse(JSON.stringify(o)) as StrokeObject, 24, 24);
+      return { ...moved, id: uid() } as StrokeObject;
+    });
+    this.objects.push(...clones);
+    this.selectedIds = new Set(clones.map((c) => c.id));
+    this.emitSelection();
+    this.renderBase();
+    this.onCommit?.(this.objects);
+  }
+
+  /** Copy + paste in one step. */
+  public duplicateSelected(): void {
+    if (this.selectedIds.size === 0) return;
+    this.copySelected();
+    this.pasteClipboard();
+  }
+
+  private drawLasso(): void {
+    if (!this.lassoPath || this.lassoPath.length < 2) return;
+    const ctx = this.activeCtx;
+    ctx.clearRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+    ctx.save();
+    ctx.setLineDash([10, 8]);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "#3b82f6";
+    ctx.fillStyle = "rgba(59,130,246,0.08)";
+    ctx.beginPath();
+    ctx.moveTo(this.lassoPath[0]!.x, this.lassoPath[0]!.y);
+    for (let i = 1; i < this.lassoPath.length; i++) {
+      ctx.lineTo(this.lassoPath[i]!.x, this.lassoPath[i]!.y);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
   }
 
   private cloneObjects(): StrokeObject[] {
@@ -1187,7 +1529,7 @@ export class CanvasEngine {
 
     this.undoStack = [];
     this.redoStack = [];
-    this.selectedId = null;
+    this.selectedIds.clear();
     this.renderBase();
   }
 
