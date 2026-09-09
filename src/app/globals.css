@@ -208,7 +208,7 @@
 .live-shell {
   --live-header-h: 3rem; /* 48px */
   --live-toolbar-h: 3.5rem; /* 56px */
-  --live-rail-w: 4rem; /* 64px */
+  --live-rail-w: 3.25rem; /* 52px */
   --live-panel-w: 20rem; /* 320px */
 
   display: grid;
@@ -284,20 +284,12 @@
    the board keeps a usable share of a 1024px screen. */
 @media (min-width: 1024px) {
   .live-shell {
-    --live-panel-w: 16rem; /* 256px — trimmed so the white board gets more width */
+    --live-panel-w: 15rem; /* 240px — trimmed so the white board gets more width */
     grid-template-columns: var(--live-rail-w) minmax(0, 1fr) var(--live-panel-w);
     grid-template-areas:
       "rail header header"
       "rail canvas panel"
       "rail toolbar panel";
-  }
-  /* Video/chat panel closed => hand its whole column back to the canvas so
-     the white board is meaningfully larger (spec: increase working area). */
-  .live-shell[data-open="false"] {
-    grid-template-columns: var(--live-rail-w) minmax(0, 1fr) 0;
-  }
-  .live-shell[data-open="false"] .live-panel {
-    display: none;
   }
 }
 
