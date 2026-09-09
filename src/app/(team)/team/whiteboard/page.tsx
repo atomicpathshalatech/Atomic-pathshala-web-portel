@@ -6,13 +6,20 @@ import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 
 export const metadata: Metadata = {
-  title: "Live Classroom Studio — Atomic Pathshala",
+  title: "Whiteboard — Atomic Pathshala",
 };
 
+/**
+ * The "Whiteboard" nav item used to redirect into /team/live-studio, which
+ * only worked if you had a Teacher profile AND an assigned live class AND
+ * were inside its T-15 window — otherwise it silently bounced to
+ * /team/my-schedule. It now opens the Whiteboard Test Lab: the real
+ * classroom engine, always available, with no scheduling.
+ */
 export default async function TeamWhiteboardPage({
   searchParams,
 }: {
-  searchParams?: { scheduleId?: string; lectureId?: string; chapterId?: string };
+  searchParams?: { scheduleId?: string; lectureId?: string };
 }) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) redirect("/login");
@@ -20,11 +27,9 @@ export default async function TeamWhiteboardPage({
   const canAccess = await hasPermission(session.user.id, PERMISSIONS.WHITEBOARD_ACCESS);
   if (!canAccess) redirect("/team");
 
-  const query = new URLSearchParams();
-  if (searchParams?.scheduleId) query.set("scheduleId", searchParams.scheduleId);
-  if (searchParams?.lectureId) query.set("lectureId", searchParams.lectureId);
-  if (searchParams?.chapterId) query.set("chapterId", searchParams.chapterId);
+  // A real class was explicitly requested — keep the existing live-class path.
+  const realId = searchParams?.scheduleId || searchParams?.lectureId;
+  if (realId) redirect(`/team/live-class/${realId}`);
 
-  const qs = query.toString();
-  redirect(qs ? `/team/live-studio?${qs}` : "/team/live-studio");
+  redirect("/team/whiteboard/test");
 }

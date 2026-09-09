@@ -87,6 +87,22 @@ export default async function TeacherLiveClassPage({
 
   if (!schedule) notFound();
 
+  // Whiteboard Test Lab room — the caller already passed WHITEBOARD_ACCESS
+  // above. A test session has no batch enrollment and no real start time, so
+  // the assignment + T-15 gates below don't apply. Strictly gated on
+  // `isTest` so a real class can never skip its checks.
+  if (schedule.isTest) {
+    return (
+      <TeacherLiveClassRoom
+        batchScheduleId={schedule.id}
+        scheduleTitle={schedule.title}
+        batchName={schedule.batch?.name || "Whiteboard Test Lab"}
+        currentUserId={session.user.id}
+        endsAt={schedule.endsAt.toISOString()}
+      />
+    );
+  }
+
   const teacher = await prisma.teacher.findUnique({ where: { userId: session.user.id } });
   const assignedViaSchedule = teacher ? schedule.teacherId === teacher.id : false;
   const assignedViaBatch =

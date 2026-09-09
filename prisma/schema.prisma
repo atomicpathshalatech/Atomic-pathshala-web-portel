@@ -419,6 +419,10 @@ model BatchSchedule {
   startsAt    DateTime
   endsAt      DateTime
   notes       String?
+  // Whiteboard Test Lab session — an always-open practice classroom for an
+  // Admin/Teacher, NOT a real scheduled class. Excluded from student "next
+  // class" feeds, /team/my-schedule, attendance and analytics.
+  isTest      Boolean               @default(false)
   createdById String
   createdAt   DateTime              @default(now())
   updatedAt   DateTime              @updatedAt
@@ -977,6 +981,10 @@ model WhiteboardSession {
   teacherId       String
   title           String
   status          WhiteboardSessionStatus @default(ACTIVE)
+  // Mirrors BatchSchedule.isTest — set when this is a Whiteboard Test Lab
+  // room. Every /api/whiteboard/sessions/[id]/* route keeps working; this
+  // only lets attendance/analytics/recording skip test rooms.
+  isTest          Boolean                 @default(false)
   activePageNumber Int                    @default(1)
   // Teacher-controlled from Class Settings → Chat & Poll. Teacher can always
   // send regardless of this flag; it only gates student sends (checked in
