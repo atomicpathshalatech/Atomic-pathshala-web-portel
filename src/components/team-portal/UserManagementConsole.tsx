@@ -526,6 +526,7 @@ export function UserManagementConsole() {
                 <th className="py-3.5 px-4">Department &amp; Position</th>
                 <th className="py-3.5 px-4">Subject</th>
                 <th className="py-3.5 px-4">Status</th>
+                <th className="py-3.5 px-4">Access</th>
                 <th className="py-3.5 px-4">Created</th>
                 <th className="py-3.5 px-4 text-right">Actions</th>
               </tr>
@@ -599,6 +600,21 @@ export function UserManagementConsole() {
                       >
                         {u.status}
                       </button>
+                    </td>
+
+                    <td className="py-3.5 px-4">
+                      {(() => {
+                        const roleless = u.role === "NONE";
+                        if (u.status === "EX_EDUCATOR" || u.status === "EX_TEAM_MEMBER")
+                          return <span className="text-[10px] font-bold text-slate-500">Former staff</span>;
+                        if (["SUSPENDED", "INACTIVE", "EXPIRED"].includes(u.status))
+                          return <span className="text-[10px] font-bold text-rose-600">Blocked</span>;
+                        if (["APPROVAL_PENDING", "PENDING_VERIFICATION", "INVITED"].includes(u.status))
+                          return <span className="text-[10px] font-bold text-amber-600">Pending</span>;
+                        if (roleless || u.status === "NO_ROLE")
+                          return <span className="text-[10px] font-bold text-amber-600">No role — no access</span>;
+                        return <span className="text-[10px] font-bold text-emerald-600">Full</span>;
+                      })()}
                     </td>
 
                     <td className="py-3.5 px-4 text-slate-400 text-[11px]">

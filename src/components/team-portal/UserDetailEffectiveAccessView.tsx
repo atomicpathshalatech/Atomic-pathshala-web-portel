@@ -3,8 +3,25 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { PERMISSIONS } from "@/lib/rbac/permissions";
+import { PERMISSIONS, ROLE_PERMISSION_DEFAULTS } from "@/lib/rbac/permissions";
 import { OpsBackButton } from "@/components/common/OpsBackButton";
+
+// Every real role from the RBAC catalogue (Phase 1), minus GUEST which is
+// never assigned. Used by the Assign-Role control.
+const ALL_ASSIGNABLE_ROLES = Object.keys(ROLE_PERMISSION_DEFAULTS).filter((r) => r !== "GUEST");
+
+const LIFECYCLE_STATUSES = [
+  "ACTIVE",
+  "APPROVAL_PENDING",
+  "PENDING_VERIFICATION",
+  "INVITED",
+  "NO_ROLE",
+  "SUSPENDED",
+  "INACTIVE",
+  "EXPIRED",
+  "EX_EDUCATOR",
+  "EX_TEAM_MEMBER",
+];
 
 const MODULES_MATRIX = [
   {
@@ -137,6 +154,8 @@ export function UserDetailEffectiveAccessView({ userId }: { userId: string }) {
   const [editContractType, setEditContractType] = useState("");
   const [editContractEnd, setEditContractEnd] = useState("");
   const [editContractNote, setEditContractNote] = useState("");
+  const [roleReason, setRoleReason] = useState("");
+  const [roleBusy, setRoleBusy] = useState(false);
 
   const loadUser = async () => {
     try {
@@ -222,6 +241,57 @@ export function UserDetailEffectiveAccessView({ userId }: { userId: string }) {
       loadUser();
     } catch (err: any) {
       toast.error(err.message);
+    }
+  };
+
+  // ---- Role assignment / removal — a controlled, audited operation -------
+  const assignRole = async () => {
+    if (!editRole || editRole === "NONE") {
+      toast.error("Pick a role, or use Remove role.");
+      return;
+    }
+    setRoleBusy(true);
+    try {
+      const res = await fetch(`/api/team/users/${userId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roleName: editRole, reason: roleReason || undefined }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || "Failed to assign role");
+      toast.success(`Role set to ${editRole.replace(/_/g, " ")}. Permissions recalculated.`);
+      setRoleReason("");
+      loadUser();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setRoleBusy(false);
+    }
+  };
+
+  const removeRole = async () => {
+    if (
+      !window.confirm(
+        "Remove this user's role?\n\nProfile, uploads, classes, attendance and history are all kept — the account just loses staff access until a role is assigned again."
+      )
+    )
+      return;
+    setRoleBusy(true);
+    try {
+      const res = await fetch(`/api/team/users/${userId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ removeRole: true, reason: roleReason || undefined }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || "Failed to remove role");
+      toast.success("Role removed — marked as former staff, profile preserved.");
+      setRoleReason("");
+      loadUser();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setRoleBusy(false);
     }
   };
 
@@ -450,6 +520,82 @@ export function UserDetailEffectiveAccessView({ userId }: { userId: string }) {
 
       {/* 5. TAB 3: PROFESSIONAL & CONTRACT DETAILS */}
       {activeTab === "professional" && (
+        <div className="space-y-4">
+        {/* Role & Access — the controlled, audited operation */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-sm space-y-4">
+          <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
+            <h3 className="font-extrabold text-sm text-[#031635] dark:text-white uppercase tracking-wider">
+              Role &amp; Access
+            </h3>
+            <p className="text-xs text-slate-500">
+              Current role: <b>{user.role === "NONE" ? "No role assigned" : user.role.replace(/_/g, " ")}</b> ·
+              Status: <b>{user.status}</b>. Assigning or removing a role recalculates permissions
+              immediately and is written to the audit trail. Removing a role never deletes the profile.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+            <div>
+              <label className="font-bold text-slate-700 dark:text-slate-300">Assign role</label>
+              <select
+                value={editRole === "NONE" ? "" : editRole}
+                onChange={(e) => setEditRole(e.target.value)}
+                className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold"
+              >
+                <option value="">— select a role —</option>
+                {ALL_ASSIGNABLE_ROLES.map((r) => (
+                  <option key={r} value={r}>
+                    {r.replace(/_/g, " ")}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="font-bold text-slate-700 dark:text-slate-300">Account status</label>
+              <select
+                value={editStatus}
+                onChange={(e) => setEditStatus(e.target.value)}
+                className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold"
+              >
+                {LIFECYCLE_STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="sm:col-span-2">
+              <label className="font-bold text-slate-700 dark:text-slate-300">Reason (recorded in the audit log)</label>
+              <input
+                type="text"
+                value={roleReason}
+                onChange={(e) => setRoleReason(e.target.value)}
+                placeholder="e.g. Promoted to Academic Head / Left the organisation on 12 Sep"
+                className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+              />
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 pt-1">
+            <button
+              type="button"
+              disabled={roleBusy}
+              onClick={assignRole}
+              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold disabled:opacity-50"
+            >
+              Assign / update role
+            </button>
+            {user.role !== "NONE" && (
+              <button
+                type="button"
+                disabled={roleBusy}
+                onClick={removeRole}
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold disabled:opacity-50"
+              >
+                Remove role (mark as former staff)
+              </button>
+            )}
+          </div>
+        </div>
+
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-sm space-y-4">
           <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
             <h3 className="font-extrabold text-sm text-[#031635] dark:text-white uppercase tracking-wider">
@@ -519,6 +665,7 @@ export function UserDetailEffectiveAccessView({ userId }: { userId: string }) {
               />
             </div>
           </div>
+        </div>
         </div>
       )}
 
