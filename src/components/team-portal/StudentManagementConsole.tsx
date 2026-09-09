@@ -333,12 +333,12 @@ export function StudentManagementConsole() {
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
+          <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
             <span className="material-symbols-outlined text-2xl">medical_services</span>
           </div>
           <div>
             <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">NEET Aspirants</p>
-            <p className="text-2xl font-bold text-purple-600">{stats.neetStudents}</p>
+            <p className="text-2xl font-bold text-blue-600">{stats.neetStudents}</p>
           </div>
         </div>
 
@@ -509,7 +509,7 @@ export function StudentManagementConsole() {
 
                     <td className="px-4 py-4">
                       <div className="flex flex-col gap-1">
-                        <span className="inline-flex items-center text-xs font-semibold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-full w-fit">
+                        <span className="inline-flex items-center text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full w-fit">
                           {student.targetExam}
                         </span>
                         <span className="text-xs text-gray-500">{student.class}</span>

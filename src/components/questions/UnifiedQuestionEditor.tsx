@@ -1008,12 +1008,12 @@ export function UnifiedQuestionEditor({
             </span>
 
             {testName && (
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold">
+              <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-700 font-bold">
                 Test: {testName}
               </span>
             )}
             {dppName && (
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-purple-50 border border-purple-200 text-purple-700 font-bold">
+              <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-700 font-bold">
                 DPP: {dppName}
               </span>
             )}
@@ -1063,15 +1063,15 @@ export function UnifiedQuestionEditor({
 
       {/* AI SUGGESTED METADATA BANNER (Interactive Teacher Approval) */}
       {aiSuggestedMetadata && (
-        <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border-2 border-indigo-300/80 rounded-3xl p-5 sm:p-6 shadow-md animate-in fade-in slide-in-from-top-3">
+        <div className="bg-blue-50 border-2 border-blue-300/80 rounded-3xl p-5 sm:p-6 shadow-md animate-in fade-in slide-in-from-top-3">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="space-y-2">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-xs font-black uppercase tracking-wider shadow-sm">
+                <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-600 text-white text-xs font-black uppercase tracking-wider shadow-sm">
                   <Sparkles className="w-3.5 h-3.5 animate-pulse" />
                   ✨ AI Suggested Metadata
                 </span>
-                <span className="text-xs text-indigo-700 font-bold">
+                <span className="text-xs text-blue-700 font-bold">
                   Detected from question text/image
                 </span>
               </div>
@@ -1082,25 +1082,25 @@ export function UnifiedQuestionEditor({
               {/* Badges preview */}
               <div className="flex flex-wrap items-center gap-2 pt-1">
                 {aiSuggestedMetadata.subject && (
-                  <span className="px-3 py-1 bg-white border border-indigo-200 rounded-xl text-xs font-black text-indigo-900 shadow-xs">
+                  <span className="px-3 py-1 bg-white border border-blue-200 rounded-xl text-xs font-black text-blue-900 shadow-xs">
                     <span className="text-slate-400 font-medium mr-1.5">Subject:</span>
                     {aiSuggestedMetadata.subject}
                   </span>
                 )}
                 {aiSuggestedMetadata.chapter && (
-                  <span className="px-3 py-1 bg-white border border-indigo-200 rounded-xl text-xs font-bold text-slate-800 shadow-xs">
+                  <span className="px-3 py-1 bg-white border border-blue-200 rounded-xl text-xs font-bold text-slate-800 shadow-xs">
                     <span className="text-slate-400 font-medium mr-1.5">Chapter:</span>
                     {aiSuggestedMetadata.chapter}
                   </span>
                 )}
                 {aiSuggestedMetadata.topic && (
-                  <span className="px-3 py-1 bg-white border border-indigo-200 rounded-xl text-xs font-bold text-slate-800 shadow-xs">
+                  <span className="px-3 py-1 bg-white border border-blue-200 rounded-xl text-xs font-bold text-slate-800 shadow-xs">
                     <span className="text-slate-400 font-medium mr-1.5">Topic:</span>
                     {aiSuggestedMetadata.topic}
                   </span>
                 )}
                 {aiSuggestedMetadata.subTopic && (
-                  <span className="px-3 py-1 bg-white border border-indigo-200 rounded-xl text-xs font-bold text-slate-700 shadow-xs">
+                  <span className="px-3 py-1 bg-white border border-blue-200 rounded-xl text-xs font-bold text-slate-700 shadow-xs">
                     <span className="text-slate-400 font-medium mr-1.5">Subtopic:</span>
                     {aiSuggestedMetadata.subTopic}
                   </span>
@@ -1309,7 +1309,7 @@ export function UnifiedQuestionEditor({
                         ? "bg-blue-600 text-white shadow-sm"
                         : d === "HARD"
                         ? "bg-amber-600 text-white shadow-sm"
-                        : "bg-purple-600 text-white shadow-sm"
+                        : "bg-blue-600 text-white shadow-sm"
                       : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
@@ -1427,11 +1427,11 @@ export function UnifiedQuestionEditor({
           const file = e.dataTransfer.files?.[0];
           if (file) handleImageUploadAndExtract(file);
         }}
-        className="bg-gradient-to-r from-purple-50 via-indigo-50 to-blue-50 border border-indigo-200/80 rounded-3xl p-5 shadow-sm space-y-3"
+        className="bg-blue-50 border border-blue-200/80 rounded-3xl p-5 shadow-sm space-y-3"
       >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-purple-500/20">
+            <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-500/20">
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
@@ -1439,7 +1439,7 @@ export function UnifiedQuestionEditor({
                 Auto-Extract Question (Paste Screenshot or Drop Image)
               </h4>
               <p className="text-[11px] text-slate-500">
-                Press <strong className="text-purple-700 font-mono">Ctrl + V</strong> anywhere on this screen to paste an image or raw text. Extraction begins automatically!
+                Press <strong className="text-blue-700 font-mono">Ctrl + V</strong> anywhere on this screen to paste an image or raw text. Extraction begins automatically!
               </p>
             </div>
           </div>
@@ -1461,7 +1461,7 @@ export function UnifiedQuestionEditor({
               disabled={isExtracting}
               className="inline-flex items-center gap-1.5 px-4 py-2 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-slate-700 shadow-sm transition active:scale-95 disabled:opacity-50 cursor-pointer"
             >
-              <Upload className="w-3.5 h-3.5 text-purple-600" />
+              <Upload className="w-3.5 h-3.5 text-blue-600" />
               <span>Browse Image</span>
             </button>
           </div>
@@ -1469,8 +1469,8 @@ export function UnifiedQuestionEditor({
 
         {/* Live Extraction Active State */}
         {isExtracting && (
-          <div className="p-4 rounded-2xl bg-white border border-purple-200 shadow-sm flex items-center gap-3 animate-in fade-in">
-            <RefreshCw className="w-5 h-5 text-purple-600 animate-spin" />
+          <div className="p-4 rounded-2xl bg-white border border-blue-200 shadow-sm flex items-center gap-3 animate-in fade-in">
+            <RefreshCw className="w-5 h-5 text-blue-600 animate-spin" />
             <div className="space-y-0.5">
               <p className="text-xs font-black text-slate-900">
                 Extracting bilingual question, options, math formulas &amp; diagrams...
@@ -1484,10 +1484,10 @@ export function UnifiedQuestionEditor({
       </div>
       {/* 3. PROMINENT QUESTION REFERENCE / DIAGRAM DOCK (Right below Ingestion) */}
       {diagramUrl && (
-        <div className="bg-white border-2 border-indigo-200 rounded-3xl p-5 shadow-sm space-y-3 animate-in fade-in slide-in-from-top-2">
+        <div className="bg-white border-2 border-blue-200 rounded-3xl p-5 shadow-sm space-y-3 animate-in fade-in slide-in-from-top-2">
           <div className="flex items-center justify-between pb-3 border-b border-slate-100">
             <div className="flex items-center gap-2">
-              <span className="p-2 rounded-2xl bg-purple-100 text-purple-700">
+              <span className="p-2 rounded-2xl bg-blue-100 text-blue-700">
                 <ImageIcon className="w-5 h-5" />
               </span>
               <div>
@@ -1513,7 +1513,7 @@ export function UnifiedQuestionEditor({
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-xl text-xs font-bold transition cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-xs font-bold transition cursor-pointer"
                 title="Replace Diagram"
               >
                 <Upload className="w-3.5 h-3.5" />
@@ -1584,12 +1584,12 @@ export function UnifiedQuestionEditor({
               type="button"
               onClick={handleCheckTranslation}
               disabled={isTranslating}
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-xl text-xs font-black text-purple-800 shadow-sm transition disabled:opacity-50 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl text-xs font-black text-blue-800 shadow-sm transition disabled:opacity-50 cursor-pointer"
             >
               {isTranslating ? (
-                <RefreshCw className="w-3.5 h-3.5 animate-spin text-purple-600" />
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-600" />
               ) : (
-                <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                <Sparkles className="w-3.5 h-3.5 text-blue-600" />
               )}
               <span>Check Translation &amp; Alignment</span>
             </button>
@@ -1757,16 +1757,16 @@ export function UnifiedQuestionEditor({
       </div>
 
       {/* 5. DEDICATED BILINGUAL SOLUTION STUDIO (Inbuilt AI Assistant & Regenerator) */}
-      <div className="bg-white border-2 border-indigo-200/80 rounded-3xl p-5 sm:p-6 shadow-sm space-y-5">
+      <div className="bg-white border-2 border-blue-200/80 rounded-3xl p-5 sm:p-6 shadow-sm space-y-5">
         {/* Solution Header & Regenerate Button */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-100">
           <div className="space-y-1">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                <Sparkles className="w-4 h-4 text-indigo-600" />
+                <Sparkles className="w-4 h-4 text-blue-600" />
                 3. Step-by-Step Bilingual Solution Studio
               </span>
-              <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-800 font-extrabold">
+              <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-800 font-extrabold">
                 Explaining • Concept • Solution • Final Answer
               </span>
               <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-200">
@@ -1784,7 +1784,7 @@ export function UnifiedQuestionEditor({
               type="button"
               onClick={() => handleGenerateSolution()}
               disabled={isGeneratingSolution}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gradient-to-r from-indigo-600 via-blue-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black text-xs sm:text-sm shadow-md shadow-indigo-500/25 transition active:scale-95 disabled:opacity-50 cursor-pointer"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs sm:text-sm shadow-md shadow-blue-500/25 transition active:scale-95 disabled:opacity-50 cursor-pointer"
             >
               {isGeneratingSolution ? (
                 <>
@@ -1802,9 +1802,9 @@ export function UnifiedQuestionEditor({
         </div>
 
         {/* Inbuilt AI Assistant Prompt Bar */}
-        <div className="p-4 rounded-2xl bg-slate-50 border border-indigo-100 space-y-3">
+        <div className="p-4 rounded-2xl bg-slate-50 border border-blue-100 space-y-3">
           <div className="flex items-center gap-2">
-            <Wand2 className="w-4 h-4 text-indigo-600 shrink-0" />
+            <Wand2 className="w-4 h-4 text-blue-600 shrink-0" />
             <span className="text-xs font-black text-slate-800">
               Inbuilt AI Solution Assistant:
             </span>
@@ -1825,13 +1825,13 @@ export function UnifiedQuestionEditor({
                   handleGenerateSolution(solutionRefinePrompt);
                 }
               }}
-              className="flex-1 px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 outline-none focus:border-indigo-500 transition"
+              className="flex-1 px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 outline-none focus:border-blue-500 transition"
             />
             <button
               type="button"
               onClick={() => handleGenerateSolution(solutionRefinePrompt)}
               disabled={isGeneratingSolution}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs rounded-xl shadow-xs transition disabled:opacity-50 shrink-0 cursor-pointer"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs rounded-xl shadow-xs transition disabled:opacity-50 shrink-0 cursor-pointer"
             >
               {isGeneratingSolution ? "Generating..." : "Apply AI Refinement"}
             </button>
@@ -1853,7 +1853,7 @@ export function UnifiedQuestionEditor({
                   setSolutionRefinePrompt(pill);
                   handleGenerateSolution(pill);
                 }}
-                className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 text-[11px] text-slate-600 font-medium transition cursor-pointer"
+                className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:border-blue-400 hover:bg-blue-50 text-[11px] text-slate-600 font-medium transition cursor-pointer"
               >
                 + {pill}
               </button>
@@ -1888,13 +1888,13 @@ export function UnifiedQuestionEditor({
         <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-4 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
-              <span className="p-2 rounded-xl bg-indigo-100 text-indigo-700">
+              <span className="p-2 rounded-xl bg-blue-100 text-blue-700">
                 <ImageIcon className="w-4 h-4" />
               </span>
               <div>
                 <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
                   Dedicated Solution Figure / Working Diagram
-                  <span className="text-[10px] px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-bold border border-indigo-200">
+                  <span className="text-[10px] px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 font-bold border border-blue-200">
                     Independent
                   </span>
                 </h4>
@@ -1934,7 +1934,7 @@ export function UnifiedQuestionEditor({
                 type="button"
                 onClick={() => solutionFileInputRef.current?.click()}
                 disabled={isUploadingSolImg}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
               >
                 <Upload className="w-3.5 h-3.5" />
                 <span>
@@ -2034,7 +2034,7 @@ export function UnifiedQuestionEditor({
               value={solutionHi}
               onChange={(e) => setSolutionHi(e.target.value)}
               onPaste={(e) => handleFieldImagePaste(e, setSolutionHi)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-2xl p-4 text-xs sm:text-sm text-slate-900 outline-none resize-none leading-relaxed font-mono focus:bg-white focus:border-indigo-500 transition"
+              className="w-full bg-slate-50 border border-slate-300 rounded-2xl p-4 text-xs sm:text-sm text-slate-900 outline-none resize-none leading-relaxed font-mono focus:bg-white focus:border-blue-500 transition"
             />
             <EquationLivePreview content={solutionHi} label="Hindi Solution KaTeX Preview" />
           </div>
@@ -2055,7 +2055,7 @@ export function UnifiedQuestionEditor({
               value={solutionEn}
               onChange={(e) => setSolutionEn(e.target.value)}
               onPaste={(e) => handleFieldImagePaste(e, setSolutionEn)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-2xl p-4 text-xs sm:text-sm text-slate-900 outline-none resize-none leading-relaxed font-mono focus:bg-white focus:border-indigo-500 transition"
+              className="w-full bg-slate-50 border border-slate-300 rounded-2xl p-4 text-xs sm:text-sm text-slate-900 outline-none resize-none leading-relaxed font-mono focus:bg-white focus:border-blue-500 transition"
             />
             <EquationLivePreview content={solutionEn} label="English Solution KaTeX Preview" />
           </div>
@@ -2108,7 +2108,7 @@ export function UnifiedQuestionEditor({
             type="button"
             onClick={() => handleSaveQuestion(true)}
             disabled={isSaving}
-            className="inline-flex items-center gap-2 px-8 py-3 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-black text-xs sm:text-sm shadow-md shadow-blue-500/25 transition disabled:opacity-50 cursor-pointer"
+            className="inline-flex items-center gap-2 px-8 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs sm:text-sm shadow-md shadow-blue-500/25 transition disabled:opacity-50 cursor-pointer"
           >
             <Save className="w-4 h-4" />
             <span>

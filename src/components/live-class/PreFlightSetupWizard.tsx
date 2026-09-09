@@ -307,7 +307,7 @@ export function PreFlightSetupWizard({
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/60">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/20">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/20">
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
@@ -330,7 +330,7 @@ export function PreFlightSetupWizard({
                 }}
                 className={`flex items-center justify-center w-8 h-8 rounded-full text-xs font-semibold transition-all ${
                   step === s
-                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/30 scale-105 ring-2 ring-indigo-400/50"
+                    ? "bg-blue-600 text-white shadow-md shadow-blue-500/30 scale-105 ring-2 ring-blue-400/50"
                     : step > s
                     ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
                     : "bg-slate-800 text-slate-400 border border-slate-700/50"
@@ -356,7 +356,7 @@ export function PreFlightSetupWizard({
             <div className="space-y-5 animate-in fade-in duration-150">
               <div>
                 <h3 className="text-base font-semibold text-white flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-indigo-400" />
+                  <FileText className="w-5 h-5 text-blue-400" />
                   Step 1: Select or Upload Teaching Material
                 </h3>
                 <p className="text-xs text-slate-400 mt-1">
@@ -367,7 +367,7 @@ export function PreFlightSetupWizard({
               {!presentationUrl ? (
                 <div
                   onClick={() => fileInputRef.current?.click()}
-                  className="border-2 border-dashed border-slate-700 hover:border-indigo-500/70 bg-slate-950/40 hover:bg-slate-800/30 rounded-2xl p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-all group"
+                  className="border-2 border-dashed border-slate-700 hover:border-blue-500/70 bg-slate-950/40 hover:bg-slate-800/30 rounded-2xl p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-all group"
                 >
                   <input
                     ref={fileInputRef}
@@ -379,7 +379,7 @@ export function PreFlightSetupWizard({
                       if (file) handleFileUpload(file);
                     }}
                   />
-                  <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 group-hover:bg-indigo-500/20 text-indigo-400 flex items-center justify-center mb-4 transition-all">
+                  <div className="w-16 h-16 rounded-2xl bg-blue-500/10 group-hover:bg-blue-500/20 text-blue-400 flex items-center justify-center mb-4 transition-all">
                     {uploadingFile ? (
                       <RefreshCw className="w-8 h-8 animate-spin" />
                     ) : (
@@ -395,7 +395,7 @@ export function PreFlightSetupWizard({
                   {uploadingFile && (
                     <div className="w-64 mt-4 bg-slate-800 rounded-full h-2 overflow-hidden">
                       <div
-                        className="bg-indigo-500 h-full transition-all duration-300"
+                        className="bg-blue-500 h-full transition-all duration-300"
                         style={{ width: `${uploadProgress}%` }}
                       />
                     </div>
@@ -405,7 +405,7 @@ export function PreFlightSetupWizard({
                 <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-5 space-y-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
-                      <div className="w-12 h-12 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+                      <div className="w-12 h-12 rounded-xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
                         <FileText className="w-6 h-6" />
                       </div>
                       <div>
@@ -413,7 +413,7 @@ export function PreFlightSetupWizard({
                           {presentationName || "Uploaded Presentation"}
                         </h4>
                         <div className="flex items-center gap-2 mt-1">
-                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wide uppercase bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wide uppercase bg-blue-500/20 text-blue-300 border border-blue-500/30">
                             {presentationType}
                           </span>
                           <span className="text-xs text-emerald-400 flex items-center gap-1 font-medium">
@@ -462,7 +462,7 @@ export function PreFlightSetupWizard({
             <div className="space-y-5 animate-in fade-in duration-150">
               <div>
                 <h3 className="text-base font-semibold text-white flex items-center gap-2">
-                  <Layers className="w-5 h-5 text-indigo-400" />
+                  <Layers className="w-5 h-5 text-blue-400" />
                   Step 2: Classroom Display Mode
                 </h3>
                 <p className="text-xs text-slate-400 mt-1">
@@ -476,7 +476,7 @@ export function PreFlightSetupWizard({
                   onClick={() => setClassroomTheme("LIGHT")}
                   className={`p-5 rounded-2xl border-2 cursor-pointer transition-all flex flex-col justify-between ${
                     classroomTheme === "LIGHT"
-                      ? "bg-slate-800/80 border-indigo-500 ring-2 ring-indigo-500/30 shadow-lg"
+                      ? "bg-slate-800/80 border-blue-500 ring-2 ring-blue-500/30 shadow-lg"
                       : "bg-slate-950/40 border-slate-800 hover:border-slate-700"
                   }`}
                 >
@@ -489,7 +489,7 @@ export function PreFlightSetupWizard({
                         <h4 className="text-sm font-bold text-white">Light Mode</h4>
                       </div>
                       {classroomTheme === "LIGHT" && (
-                        <CheckCircle2 className="w-5 h-5 text-indigo-400" />
+                        <CheckCircle2 className="w-5 h-5 text-blue-400" />
                       )}
                     </div>
                     <p className="text-xs text-slate-400">
@@ -506,20 +506,20 @@ export function PreFlightSetupWizard({
                   onClick={() => setClassroomTheme("DARK")}
                   className={`p-5 rounded-2xl border-2 cursor-pointer transition-all flex flex-col justify-between ${
                     classroomTheme === "DARK"
-                      ? "bg-slate-800/80 border-indigo-500 ring-2 ring-indigo-500/30 shadow-lg"
+                      ? "bg-slate-800/80 border-blue-500 ring-2 ring-blue-500/30 shadow-lg"
                       : "bg-slate-950/40 border-slate-800 hover:border-slate-700"
                   }`}
                 >
                   <div>
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center space-x-2">
-                        <div className="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-300 flex items-center justify-center">
+                        <div className="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-300 flex items-center justify-center">
                           <Moon className="w-5 h-5" />
                         </div>
                         <h4 className="text-sm font-bold text-white">Dark Mode</h4>
                       </div>
                       {classroomTheme === "DARK" && (
-                        <CheckCircle2 className="w-5 h-5 text-indigo-400" />
+                        <CheckCircle2 className="w-5 h-5 text-blue-400" />
                       )}
                     </div>
                     <p className="text-xs text-slate-400">
@@ -539,7 +539,7 @@ export function PreFlightSetupWizard({
             <div className="space-y-5 animate-in fade-in duration-150">
               <div>
                 <h3 className="text-base font-semibold text-white flex items-center gap-2">
-                  <Video className="w-5 h-5 text-indigo-400" />
+                  <Video className="w-5 h-5 text-blue-400" />
                   Step 3: Camera Shape & Placement
                 </h3>
                 <p className="text-xs text-slate-400 mt-1">
@@ -553,21 +553,21 @@ export function PreFlightSetupWizard({
                   onClick={() => setCameraShape("SQUARE")}
                   className={`p-5 rounded-2xl border-2 cursor-pointer transition-all ${
                     cameraShape === "SQUARE"
-                      ? "bg-slate-800/80 border-indigo-500 ring-2 ring-indigo-500/30"
+                      ? "bg-slate-800/80 border-blue-500 ring-2 ring-blue-500/30"
                       : "bg-slate-950/40 border-slate-800 hover:border-slate-700"
                   }`}
                 >
                   <div className="flex items-center justify-between mb-2">
                     <h4 className="text-sm font-bold text-white">Square Camera</h4>
                     {cameraShape === "SQUARE" && (
-                      <CheckCircle2 className="w-5 h-5 text-indigo-400" />
+                      <CheckCircle2 className="w-5 h-5 text-blue-400" />
                     )}
                   </div>
                   <p className="text-xs text-slate-400 mb-4">
                     Crisp 1:1 rounded square border with maximum framing area.
                   </p>
                   <div className="flex items-center justify-center py-4 bg-slate-950 rounded-xl">
-                    <div className="w-24 h-24 rounded-xl border-2 border-indigo-500 bg-slate-800 flex items-center justify-center text-xs text-indigo-300 font-semibold shadow-md shadow-indigo-500/20">
+                    <div className="w-24 h-24 rounded-xl border-2 border-blue-500 bg-slate-800 flex items-center justify-center text-xs text-blue-300 font-semibold shadow-md shadow-blue-500/20">
                       Square Feed
                     </div>
                   </div>
@@ -578,21 +578,21 @@ export function PreFlightSetupWizard({
                   onClick={() => setCameraShape("CIRCULAR")}
                   className={`p-5 rounded-2xl border-2 cursor-pointer transition-all ${
                     cameraShape === "CIRCULAR"
-                      ? "bg-slate-800/80 border-indigo-500 ring-2 ring-indigo-500/30"
+                      ? "bg-slate-800/80 border-blue-500 ring-2 ring-blue-500/30"
                       : "bg-slate-950/40 border-slate-800 hover:border-slate-700"
                   }`}
                 >
                   <div className="flex items-center justify-between mb-2">
                     <h4 className="text-sm font-bold text-white">Circular Camera</h4>
                     {cameraShape === "CIRCULAR" && (
-                      <CheckCircle2 className="w-5 h-5 text-indigo-400" />
+                      <CheckCircle2 className="w-5 h-5 text-blue-400" />
                     )}
                   </div>
                   <p className="text-xs text-slate-400 mb-4">
                     Smooth modern avatar circle with luminous boundary.
                   </p>
                   <div className="flex items-center justify-center py-4 bg-slate-950 rounded-xl">
-                    <div className="w-24 h-24 rounded-full border-2 border-indigo-500 bg-slate-800 flex items-center justify-center text-xs text-indigo-300 font-semibold shadow-md shadow-indigo-500/20">
+                    <div className="w-24 h-24 rounded-full border-2 border-blue-500 bg-slate-800 flex items-center justify-center text-xs text-blue-300 font-semibold shadow-md shadow-blue-500/20">
                       Circle Feed
                     </div>
                   </div>
@@ -606,7 +606,7 @@ export function PreFlightSetupWizard({
             <div className="space-y-5 animate-in fade-in duration-150">
               <div>
                 <h3 className="text-base font-semibold text-white flex items-center gap-2">
-                  <Mic className="w-5 h-5 text-indigo-400" />
+                  <Mic className="w-5 h-5 text-blue-400" />
                   Step 4: Device & Audio/Video Check
                 </h3>
                 <p className="text-xs text-slate-400 mt-1">
@@ -664,7 +664,7 @@ export function PreFlightSetupWizard({
                   <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3 space-y-1.5">
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-slate-400 font-medium flex items-center gap-1.5">
-                        <Mic className="w-3.5 h-3.5 text-indigo-400" /> Mic Input Level
+                        <Mic className="w-3.5 h-3.5 text-blue-400" /> Mic Input Level
                       </span>
                       <span className="text-slate-300 font-mono text-[11px]">{micLevel}%</span>
                     </div>
@@ -692,7 +692,7 @@ export function PreFlightSetupWizard({
                     <select
                       value={selectedVideoId}
                       onChange={(e) => setSelectedVideoId(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
                     >
                       {videoDevices.map((d, i) => (
                         <option key={d.deviceId || i} value={d.deviceId}>
@@ -710,7 +710,7 @@ export function PreFlightSetupWizard({
                     <select
                       value={selectedAudioId}
                       onChange={(e) => setSelectedAudioId(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
                     >
                       {audioDevices.map((d, i) => (
                         <option key={d.deviceId || i} value={d.deviceId}>
@@ -721,8 +721,8 @@ export function PreFlightSetupWizard({
                     </select>
                   </div>
 
-                  <div className="p-4 bg-indigo-950/30 border border-indigo-800/40 rounded-xl space-y-1">
-                    <p className="text-xs font-semibold text-indigo-300">Classroom Waiting Mode</p>
+                  <div className="p-4 bg-blue-950/30 border border-blue-800/40 rounded-xl space-y-1">
+                    <p className="text-xs font-semibold text-blue-300">Classroom Waiting Mode</p>
                     <p className="text-[11px] text-slate-400">
                       When you proceed, you will enter the classroom in <strong>Waiting State</strong>. You can review your slides and chat with arriving students before clicking <strong>Start Live Class</strong> when scheduled.
                     </p>
@@ -771,7 +771,7 @@ export function PreFlightSetupWizard({
                 className={`px-5 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2 transition ${
                   step === 1 && !presentationUrl
                     ? "bg-slate-800 text-slate-500 cursor-not-allowed"
-                    : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30"
+                    : "bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/30"
                 }`}
               >
                 Continue <ArrowRight className="w-3.5 h-3.5" />

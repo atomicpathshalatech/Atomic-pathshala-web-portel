@@ -63,7 +63,7 @@ export function QuestionTaxonomySidebar({
     <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm">
       <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+          <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center">
             <span className="material-symbols-outlined text-base">account_tree</span>
           </div>
           <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">
@@ -136,7 +136,7 @@ export function QuestionTaxonomySidebar({
               NEET Question Type *
             </label>
             {currentTypeDef && (
-              <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold font-mono">
+              <span className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold font-mono">
                 {currentTypeDef.badge}
               </span>
             )}
@@ -257,7 +257,7 @@ export function QuestionTaxonomySidebar({
             {tags.map((t) => (
               <span
                 key={t}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-mono text-[10px] font-bold"
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 font-mono text-[10px] font-bold"
               >
                 <span>{t}</span>
                 <button

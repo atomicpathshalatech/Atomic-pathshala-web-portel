@@ -115,7 +115,7 @@ export default async function LiveClassesListPage() {
             {/* Play Class Button */}
             <Link
               href={`/live-class/${s.id}`}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full font-label-md text-label-md bg-indigo-600 hover:bg-indigo-500 text-white transition shadow-sm"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full font-label-md text-label-md bg-blue-600 hover:bg-blue-500 text-white transition shadow-sm"
               title="Play Recorded Class"
             >
               <span className="material-symbols-outlined text-base">play_circle</span>

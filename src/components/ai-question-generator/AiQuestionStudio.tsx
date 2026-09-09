@@ -535,11 +535,11 @@ export function AiQuestionStudio() {
   return (
     <div className="space-y-8 pb-20">
       {/* Studio Banner */}
-      <div className="bg-gradient-to-r from-slate-900 via-purple-950 to-indigo-950 rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden">
-        <div className="absolute right-0 top-0 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-blue-950 rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden">
+        <div className="absolute right-0 top-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/20 border border-purple-400/30 text-purple-300 text-xs font-bold uppercase tracking-wider">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30 text-blue-300 text-xs font-bold uppercase tracking-wider">
               <Sparkles className="w-3.5 h-3.5" />
               <span>Production AI Question Engine</span>
             </div>
@@ -590,7 +590,7 @@ export function AiQuestionStudio() {
               onClick={() => setActiveTab("AI")}
               className={`flex items-center gap-2.5 px-6 py-3 rounded-2xl text-xs font-black transition-all ${
                 activeTab === "AI"
-                  ? "bg-purple-600 text-white shadow-md shadow-purple-500/20"
+                  ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
               }`}
             >
@@ -602,7 +602,7 @@ export function AiQuestionStudio() {
               onClick={() => setActiveTab("PDF")}
               className={`flex items-center gap-2.5 px-6 py-3 rounded-2xl text-xs font-black transition-all ${
                 activeTab === "PDF"
-                  ? "bg-purple-600 text-white shadow-md shadow-purple-500/20"
+                  ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
               }`}
             >
@@ -666,7 +666,7 @@ export function AiQuestionStudio() {
           <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h4 className="text-sm font-black text-slate-900 flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-purple-600" />
+                <Sparkles className="w-4 h-4 text-blue-600" />
                 <span>Ready to Generate</span>
               </h4>
               <p className="text-xs text-slate-500 mt-0.5">
@@ -678,7 +678,7 @@ export function AiQuestionStudio() {
             <button
               onClick={handleStartGeneration}
               disabled={isGenerating || selectedTopics.length === 0 || (activeTab === "PDF" && !pdfResult)}
-              className="inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-sm font-black shadow-lg shadow-purple-500/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              className="inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-black shadow-lg shadow-blue-500/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               {isGenerating ? (
                 <>
@@ -713,10 +713,10 @@ export function AiQuestionStudio() {
           {generatedQuestions.length > 0 && (
             <div className="space-y-6 pt-6">
               {/* Batch Info Header */}
-              <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200/80 rounded-3xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="bg-blue-50 border border-blue-200/80 rounded-3xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-black uppercase tracking-wider px-2.5 py-0.5 rounded-md bg-purple-600 text-white">
+                    <span className="text-xs font-black uppercase tracking-wider px-2.5 py-0.5 rounded-md bg-blue-600 text-white">
                       Active Batch
                     </span>
                     <span className="text-sm font-black text-slate-900 font-mono">
@@ -792,7 +792,7 @@ export function AiQuestionStudio() {
                         placeholder="Search question or topic..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/20 w-48 sm:w-60"
+                        className="pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 w-48 sm:w-60"
                       />
                     </div>
                   </div>
@@ -804,7 +804,7 @@ export function AiQuestionStudio() {
                       className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 transition cursor-pointer"
                     >
                       {selectedQuestionIds.length === filteredQuestions.length && filteredQuestions.length > 0 ? (
-                        <CheckSquare className="w-4 h-4 text-purple-600" />
+                        <CheckSquare className="w-4 h-4 text-blue-600" />
                       ) : (
                         <Square className="w-4 h-4 text-slate-400" />
                       )}
@@ -820,7 +820,7 @@ export function AiQuestionStudio() {
                       disabled={isBulkSaving}
                       className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-black shadow-sm transition disabled:opacity-50 cursor-pointer"
                     >
-                      <Save className="w-3.5 h-3.5 text-purple-300" />
+                      <Save className="w-3.5 h-3.5 text-blue-300" />
                       <span>
                         {selectedQuestionIds.length > 0
                           ? `Save Selected (${selectedQuestionIds.length}) to Draft`
@@ -831,7 +831,7 @@ export function AiQuestionStudio() {
                     <button
                       onClick={() => handleBulkSave(true)}
                       disabled={isBulkSaving}
-                      className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-xs font-black shadow-sm transition disabled:opacity-50 cursor-pointer"
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black shadow-sm transition disabled:opacity-50 cursor-pointer"
                     >
                       <Send className="w-3.5 h-3.5" />
                       <span>Submit to Review (Stage 1)</span>
@@ -865,14 +865,14 @@ export function AiQuestionStudio() {
                             title="Select question for bulk actions"
                           >
                             {isSelected ? (
-                              <CheckSquare className="w-4 h-4 text-purple-600" />
+                              <CheckSquare className="w-4 h-4 text-blue-600" />
                             ) : (
                               <Square className="w-4 h-4 text-slate-400" />
                             )}
                           </button>
                         </div>
 
-                        <div className={`transition-all ${isSelected ? "ring-2 ring-purple-600 rounded-3xl" : ""}`}>
+                        <div className={`transition-all ${isSelected ? "ring-2 ring-blue-600 rounded-3xl" : ""}`}>
                           <GeneratedQuestionCard
                             question={q}
                             pdfFileName={pdfResult?.fileName || activeBatchInfo?.sourcePdf?.fileName}

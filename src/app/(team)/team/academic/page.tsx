@@ -62,14 +62,14 @@ export default function AcademicManagementPage() {
             <button
               type="button"
               onClick={() => setLang('en')}
-              className={'px-3 py-1.5 rounded-md font-medium transition ' + (lang === 'en' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white')}
+              className={'px-3 py-1.5 rounded-md font-medium transition ' + (lang === 'en' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white')}
             >
               English
             </button>
             <button
               type="button"
               onClick={() => setLang('hi')}
-              className={'px-3 py-1.5 rounded-md font-medium transition ' + (lang === 'hi' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white')}
+              className={'px-3 py-1.5 rounded-md font-medium transition ' + (lang === 'hi' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white')}
             >
               हिन्दी
             </button>
@@ -111,7 +111,7 @@ export default function AcademicManagementPage() {
               <div className="text-xs text-slate-400 mt-0.5">NCERT Chapters</div>
             </div>
             <div className="bg-slate-900/60 border border-slate-800 p-4 rounded-xl text-center">
-              <div className="text-2xl font-black text-indigo-400">510</div>
+              <div className="text-2xl font-black text-blue-400">510</div>
               <div className="text-xs text-slate-400 mt-0.5">Official Topics</div>
             </div>
           </div>

@@ -203,7 +203,7 @@ export function FormulaInsertToolbar({ onInsert, title = "Insert Equation / Symb
               onClick={() => setActiveTab("PHYSICS")}
               className={`flex-1 py-1.5 rounded-xl transition flex items-center justify-center gap-1 ${
                 activeTab === "PHYSICS"
-                  ? "bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                  ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-sm"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               }`}
             >

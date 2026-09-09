@@ -100,13 +100,13 @@ export function HierarchicalMindmapView({
                   }}
                   className={`px-4 py-2.5 rounded-2xl border text-left transition flex items-center justify-between gap-4 ${
                     isSelected
-                      ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-500/20"
-                      : "bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-800 hover:border-indigo-300"
+                      ? "bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/20"
+                      : "bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-800 hover:border-blue-300"
                   }`}
                 >
                   <div>
                     <span className="text-xs font-black block">{sub.name}</span>
-                    <span className={`text-[10px] ${isSelected ? "text-indigo-100" : "text-slate-400"}`}>
+                    <span className={`text-[10px] ${isSelected ? "text-blue-100" : "text-slate-400"}`}>
                       {sub.counts.total} Qs • {sub.children?.length || 0} chs
                     </span>
                   </div>
@@ -134,8 +134,8 @@ export function HierarchicalMindmapView({
                   key={chap.id}
                   className={`p-3 rounded-2xl border transition flex items-center justify-between gap-3 min-w-[240px] ${
                     isSelected
-                      ? "bg-purple-600 text-white border-purple-600 shadow-md shadow-purple-500/20"
-                      : "bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-800 hover:border-purple-300"
+                      ? "bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/20"
+                      : "bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-800 hover:border-blue-300"
                   }`}
                 >
                   <button
@@ -144,7 +144,7 @@ export function HierarchicalMindmapView({
                     className="text-left flex-1 min-w-0"
                   >
                     <span className="text-xs font-bold block truncate">{chap.name}</span>
-                    <span className={`text-[10px] ${isSelected ? "text-purple-100" : "text-slate-400"}`}>
+                    <span className={`text-[10px] ${isSelected ? "text-blue-100" : "text-slate-400"}`}>
                       {chap.counts.total} Qs • {chap.children?.length || 0} topics
                     </span>
                   </button>
@@ -157,7 +157,7 @@ export function HierarchicalMindmapView({
                       chap.inRevision
                         ? "bg-emerald-500 text-white"
                         : isSelected
-                        ? "bg-purple-700 text-white"
+                        ? "bg-blue-700 text-white"
                         : "bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-emerald-600"
                     }`}
                   >

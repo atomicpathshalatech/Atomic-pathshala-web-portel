@@ -228,7 +228,7 @@ export function AtomicVideoPlayer({
           </Link>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-purple-900/60 text-purple-300 border border-purple-700/50">
+              <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-blue-900/60 text-blue-300 border border-blue-700/50">
                 {subjectTitle}
               </span>
               <span className="text-xs text-slate-400 font-medium">{chapterTitle}</span>
@@ -330,7 +330,7 @@ export function AtomicVideoPlayer({
                   onClick={() => setActiveTab(t.id as any)}
                   className={`flex-1 py-2 px-1.5 rounded-xl transition flex flex-col sm:flex-row items-center justify-center gap-1 ${
                     isActive
-                      ? "bg-purple-600 text-white shadow-sm"
+                      ? "bg-blue-600 text-white shadow-sm"
                       : "text-slate-400 hover:text-white hover:bg-slate-800/60"
                   }`}
                 >
@@ -353,7 +353,7 @@ export function AtomicVideoPlayer({
 
                 <div className="p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-10 h-10 rounded-full bg-purple-900/80 border border-purple-500/50 flex items-center justify-center font-bold text-sm text-purple-200">
+                    <div className="w-10 h-10 rounded-full bg-blue-900/80 border border-blue-500/50 flex items-center justify-center font-bold text-sm text-blue-200">
                       {educatorName.charAt(0)}
                     </div>
                     <div>
@@ -363,7 +363,7 @@ export function AtomicVideoPlayer({
                   </div>
                   <button
                     type="button"
-                    className="px-3 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-purple-300 font-bold text-xs transition"
+                    className="px-3 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-blue-300 font-bold text-xs transition"
                   >
                     Profile
                   </button>
@@ -375,15 +375,15 @@ export function AtomicVideoPlayer({
                   </h4>
                   <ul className="text-xs space-y-2 text-slate-300">
                     <li className="flex items-start gap-2 p-2 rounded-xl bg-slate-900/50 border border-slate-800/80">
-                      <span className="material-symbols-outlined text-purple-400 text-sm mt-0.5">check_circle</span>
+                      <span className="material-symbols-outlined text-blue-400 text-sm mt-0.5">check_circle</span>
                       <span>System, Surroundings & State Variables</span>
                     </li>
                     <li className="flex items-start gap-2 p-2 rounded-xl bg-slate-900/50 border border-slate-800/80">
-                      <span className="material-symbols-outlined text-purple-400 text-sm mt-0.5">check_circle</span>
+                      <span className="material-symbols-outlined text-blue-400 text-sm mt-0.5">check_circle</span>
                       <span>First Law of Thermodynamics (Q = ΔU + W)</span>
                     </li>
                     <li className="flex items-start gap-2 p-2 rounded-xl bg-slate-900/50 border border-slate-800/80">
-                      <span className="material-symbols-outlined text-purple-400 text-sm mt-0.5">check_circle</span>
+                      <span className="material-symbols-outlined text-blue-400 text-sm mt-0.5">check_circle</span>
                       <span>Work done in Isothermal Reversible vs Irreversible</span>
                     </li>
                   </ul>
@@ -402,12 +402,12 @@ export function AtomicVideoPlayer({
                       placeholder="Type important takeaway..."
                       value={noteText}
                       onChange={(e) => setNoteText(e.target.value)}
-                      className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-purple-500"
+                      className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-blue-500"
                     />
                     <button
                       type="button"
                       onClick={handleAddBookmark}
-                      className="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs transition flex items-center gap-1 shrink-0"
+                      className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs transition flex items-center gap-1 shrink-0"
                     >
                       <span className="material-symbols-outlined text-sm">bookmark_add</span>
                       <span>Save</span>
@@ -431,7 +431,7 @@ export function AtomicVideoPlayer({
                               setCurrentTime(bm.time);
                             }
                           }}
-                          className="font-mono text-xs font-bold text-purple-400 hover:underline flex items-center gap-1"
+                          className="font-mono text-xs font-bold text-blue-400 hover:underline flex items-center gap-1"
                         >
                           <span className="material-symbols-outlined text-sm">play_circle</span>
                           <span>{formatTime(bm.time)}</span>
@@ -450,7 +450,7 @@ export function AtomicVideoPlayer({
                 <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="material-symbols-outlined text-purple-400">assignment</span>
+                      <span className="material-symbols-outlined text-blue-400">assignment</span>
                       <span className="font-bold text-xs text-white">Daily Practice Problem (DPP 01)</span>
                     </div>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-900/60 text-emerald-300">
@@ -462,7 +462,7 @@ export function AtomicVideoPlayer({
                   </p>
                   <Link
                     href={`/team/dpp/${lectureId}/author`}
-                    className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs text-center block transition shadow"
+                    className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs text-center block transition shadow"
                   >
                     Start DPP #01
                   </Link>
@@ -498,7 +498,7 @@ export function AtomicVideoPlayer({
                     placeholder="Ask doubt from this video timestamp..."
                     value={doubtText}
                     onChange={(e) => setDoubtText(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-white outline-none focus:border-purple-500 resize-none"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-white outline-none focus:border-blue-500 resize-none"
                   />
                   <button
                     type="submit"
@@ -514,7 +514,7 @@ export function AtomicVideoPlayer({
                   {doubtsList.map((d) => (
                     <div key={d.id} className="p-3 rounded-2xl bg-slate-900 border border-slate-800 space-y-1">
                       <div className="flex items-center justify-between text-[11px]">
-                        <span className="font-bold text-purple-300">{d.author}</span>
+                        <span className="font-bold text-blue-300">{d.author}</span>
                         <span className="text-slate-500">{d.time}</span>
                       </div>
                       <p className="text-xs text-slate-200">{d.text}</p>

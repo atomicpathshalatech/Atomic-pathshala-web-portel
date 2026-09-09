@@ -23,7 +23,7 @@ export function ResultOverviewCard({
   return (
     <div className="space-y-6">
       {/* Top Banner: Score, Rank, Percentile, and NEET 2026 Prediction */}
-      <div className="rounded-3xl p-6 sm:p-8 bg-gradient-to-r from-blue-700 via-indigo-700 to-violet-800 text-white shadow-xl shadow-indigo-950/15 relative overflow-hidden border-2 border-indigo-400/30">
+      <div className="rounded-3xl p-6 sm:p-8 bg-gradient-to-r from-blue-700 to-blue-800 text-white shadow-xl shadow-blue-950/15 relative overflow-hidden border-2 border-blue-400/30">
         {/* Subtle decorative circles */}
         <div className="absolute top-0 right-0 w-80 h-80 bg-white/10 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-60 h-60 bg-emerald-400/20 rounded-full blur-2xl pointer-events-none" />
@@ -85,12 +85,12 @@ export function ResultOverviewCard({
             </div>
 
             {/* Estimated NEET 2026 AIR Card (Data-Backed from NTA PDF) */}
-            <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-900/60 to-purple-900/60 backdrop-blur-md border border-indigo-400/40 text-center min-w-[170px] shadow-lg">
+            <div className="p-4 rounded-2xl bg-gradient-to-br from-blue-900/60 to-blue-900/60 backdrop-blur-md border border-blue-400/40 text-center min-w-[170px] shadow-lg">
               <div className="flex items-center justify-center gap-1 mb-1">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-purple-200">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-blue-200">
                   Estimated NEET AIR
                 </span>
-                <span className="px-1.5 py-0.2 rounded bg-purple-500/30 text-purple-200 text-[9px] font-mono font-bold">
+                <span className="px-1.5 py-0.2 rounded bg-blue-500/30 text-blue-200 text-[9px] font-mono font-bold">
                   2026
                 </span>
               </div>
@@ -122,7 +122,7 @@ export function ResultOverviewCard({
             <button
               type="button"
               onClick={onOpenLeaderboard}
-              className="px-5 py-3 rounded-2xl bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-400 hover:to-indigo-500 text-white font-bold text-xs shadow-lg shadow-blue-500/25 transition flex items-center gap-2"
+              className="px-5 py-3 rounded-2xl bg-blue-500 hover:bg-blue-400 text-white font-bold text-xs shadow-lg shadow-blue-500/25 transition flex items-center gap-2"
             >
               <span className="material-symbols-outlined text-base">leaderboard</span>
               <span>Test Leaderboard</span>
@@ -200,9 +200,9 @@ export function ResultOverviewCard({
         <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between text-xs font-bold text-slate-500">
             <span>Accuracy</span>
-            <span className="material-symbols-outlined text-base text-indigo-500">target</span>
+            <span className="material-symbols-outlined text-base text-blue-500">target</span>
           </div>
-          <div className="mt-2 text-2xl font-black text-indigo-600 dark:text-indigo-400 font-mono">
+          <div className="mt-2 text-2xl font-black text-blue-600 dark:text-blue-400 font-mono">
             {analysis.accuracy}%
           </div>
           <span className="text-[10px] text-slate-400 font-medium">precision on attempted</span>

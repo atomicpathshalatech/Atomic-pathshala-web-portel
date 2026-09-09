@@ -43,7 +43,7 @@ export function HierarchicalSearchFilter({
           onClick={() => onViewModeChange("MINDMAP")}
           className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
             viewMode === "MINDMAP"
-              ? "bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm"
+              ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-sm"
               : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
           }`}
         >

@@ -105,7 +105,7 @@ export function DownloadCenterClient({ initialLogs }: { initialLogs: AuditLogIte
   return (
     <div className="space-y-8 max-w-6xl mx-auto">
       {/* 1. HERO SEARCH SECTION */}
-      <div className="bg-gradient-to-br from-blue-700 via-indigo-700 to-slate-900 rounded-3xl p-8 text-white shadow-xl relative overflow-hidden">
+      <div className="bg-gradient-to-br from-blue-700 to-slate-900 rounded-3xl p-8 text-white shadow-xl relative overflow-hidden">
         <div className="relative z-10 max-w-2xl space-y-4">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-xs font-bold backdrop-blur-sm">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />

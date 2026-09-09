@@ -80,7 +80,7 @@ export function RecordingPlayer({ whiteboardSessionId }: { whiteboardSessionId: 
   if (!state) {
     return (
       <div className="flex items-center justify-center gap-2 p-8 text-gray-400 text-sm">
-        <span className="w-3 h-3 rounded-full bg-indigo-400 animate-pulse" />
+        <span className="w-3 h-3 rounded-full bg-blue-400 animate-pulse" />
         Checking for a recording…
       </div>
     );
@@ -146,7 +146,7 @@ export function RecordingPlayer({ whiteboardSessionId }: { whiteboardSessionId: 
               onClick={() => setSpeed(s)}
               className={`shrink-0 px-2.5 py-1 rounded-full text-xs font-bold transition ${
                 speed === s
-                  ? "bg-indigo-500 text-white"
+                  ? "bg-blue-500 text-white"
                   : "bg-[#1a1b23] text-gray-400 hover:bg-[#22232e] hover:text-gray-200"
               }`}
             >
@@ -160,7 +160,7 @@ export function RecordingPlayer({ whiteboardSessionId }: { whiteboardSessionId: 
           target="_blank"
           rel="noopener noreferrer"
           download
-          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition shadow-sm shrink-0"
+          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white transition shadow-sm shrink-0"
           title="Download Board Notes PDF"
         >
           <span className="material-symbols-outlined text-sm">picture_as_pdf</span>

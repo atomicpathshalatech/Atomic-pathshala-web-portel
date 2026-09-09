@@ -171,7 +171,7 @@ export function SeriesTestsList({ tests, testSeriesId }: { tests: SeriesTestItem
                       onClick={() => handleDuplicateTest(t.id)}
                       className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-xl text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
                     >
-                      <Copy className="w-3.5 h-3.5 text-indigo-500" />
+                      <Copy className="w-3.5 h-3.5 text-blue-500" />
                       <span>Duplicate Test</span>
                     </button>
 

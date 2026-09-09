@@ -268,7 +268,7 @@ export function AcademicSelector({
             NCERT Academic Hierarchy
           </span>
           {program !== 'all' && (
-            <span className="px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-400 text-xs font-medium border border-indigo-500/30">
+            <span className="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 text-xs font-medium border border-blue-500/30">
               {program} Mapped
             </span>
           )}

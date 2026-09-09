@@ -11,7 +11,7 @@ export function ScheduleSection({ course }: { course?: any }) {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 className="text-lg sm:text-xl font-extrabold text-[#031635] dark:text-white flex items-center gap-2">
-            <span className="material-symbols-outlined text-indigo-600">calendar_month</span>
+            <span className="material-symbols-outlined text-blue-600">calendar_month</span>
             <span>Batch Class Schedule</span>
           </h2>
           <p className="text-xs text-slate-500 mt-1">

@@ -513,7 +513,7 @@ export function DualColumnQuestionStudio({
                 onClick={() => setActiveAuthoringSlots((prev) => ({ ...prev, [currentQuestionNumber]: true }))}
                 className="flex-1 bg-white hover:bg-slate-50 border border-slate-200/80 rounded-3xl p-8 text-center shadow-lg hover:shadow-xl transition-all group flex flex-col items-center justify-center h-60 w-full"
               >
-                <div className="w-14 h-14 rounded-2xl bg-purple-100 text-purple-600 group-hover:scale-110 transition flex items-center justify-center mb-3">
+                <div className="w-14 h-14 rounded-2xl bg-blue-100 text-blue-600 group-hover:scale-110 transition flex items-center justify-center mb-3">
                   <Plus className="w-8 h-8 stroke-[2.5]" />
                 </div>
                 <h3 className="font-extrabold text-base text-slate-900">Add New Question</h3>

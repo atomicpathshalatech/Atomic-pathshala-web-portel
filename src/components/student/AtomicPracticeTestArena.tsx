@@ -165,7 +165,7 @@ export function AtomicPracticeTestArena({
           onClick={() => setActiveCategory("TEST_SERIES")}
           className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer ${
             activeCategory === "TEST_SERIES"
-              ? "bg-purple-600 text-white shadow-2xs"
+              ? "bg-blue-600 text-white shadow-2xs"
               : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
           }`}
         >
@@ -423,7 +423,7 @@ export function AtomicPracticeTestArena({
                                   chapter.branch === "PHYSICAL"
                                     ? "bg-blue-50 text-blue-700 border-blue-200"
                                     : chapter.branch === "INORGANIC"
-                                    ? "bg-purple-50 text-purple-700 border-purple-200"
+                                    ? "bg-blue-50 text-blue-700 border-blue-200"
                                     : chapter.branch === "ORGANIC"
                                     ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                                     : chapter.branch === "BOTANY"
@@ -517,7 +517,7 @@ export function AtomicPracticeTestArena({
                                         title="Download Test PDF"
                                         className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition shadow-2xs cursor-pointer"
                                       >
-                                        <span className="material-symbols-outlined text-[16px] text-indigo-600">picture_as_pdf</span>
+                                        <span className="material-symbols-outlined text-[16px] text-blue-600">picture_as_pdf</span>
                                         <span>Download PDF</span>
                                       </button>
                                     }
@@ -557,7 +557,7 @@ export function AtomicPracticeTestArena({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white border border-slate-200/80 rounded-2xl p-3.5 shadow-2xs">
             <div>
               <h2 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-2">
-                <span className="material-symbols-outlined text-purple-600">inventory_2</span>
+                <span className="material-symbols-outlined text-blue-600">inventory_2</span>
                 <span>Enrolled &amp; Batch Test Series Boxes</span>
               </h2>
               <p className="text-[11px] text-slate-500">
@@ -574,7 +574,7 @@ export function AtomicPracticeTestArena({
                 value={seriesSearch}
                 onChange={(e) => setSeriesSearch(e.target.value)}
                 placeholder="Search test series or test..."
-                className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/40"
+                className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
               />
             </div>
           </div>
@@ -582,7 +582,7 @@ export function AtomicPracticeTestArena({
           {/* Test Series Boxes List */}
           {filteredSeriesBoxes.length === 0 ? (
             <div className="bg-white rounded-2xl p-10 text-center text-slate-500 space-y-1.5 border border-slate-200/80">
-              <span className="material-symbols-outlined text-4xl text-purple-400">inventory_2</span>
+              <span className="material-symbols-outlined text-4xl text-blue-400">inventory_2</span>
               <h3 className="font-bold text-sm text-slate-800">No Test Series Boxes Found</h3>
               <p className="text-xs text-slate-400 max-w-md mx-auto">
                 {seriesSearch
@@ -605,7 +605,7 @@ export function AtomicPracticeTestArena({
                     <div className="p-3.5 sm:p-4 bg-slate-50/60 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200 text-[10px] font-bold uppercase tracking-wider">
+                          <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold uppercase tracking-wider">
                             Atomic Test Series Box
                           </span>
                           {box.examType && (
@@ -614,7 +614,7 @@ export function AtomicPracticeTestArena({
                             </span>
                           )}
                           {box.targetBatch && (
-                            <span className="text-xs font-bold text-purple-600">
+                            <span className="text-xs font-bold text-blue-600">
                               Batch: {box.targetBatch}
                             </span>
                           )}
@@ -669,7 +669,7 @@ export function AtomicPracticeTestArena({
                             {box.tests.map((t) => (
                               <div
                                 key={t.id}
-                                className="p-3 sm:px-4 sm:py-2.5 rounded-xl bg-white border border-slate-200/90 hover:border-purple-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all shadow-2xs"
+                                className="p-3 sm:px-4 sm:py-2.5 rounded-xl bg-white border border-slate-200/90 hover:border-blue-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all shadow-2xs"
                               >
                                 <div className="space-y-0.5 flex-1 min-w-0">
                                   <div className="flex items-center gap-2 flex-wrap">
@@ -709,7 +709,7 @@ export function AtomicPracticeTestArena({
                                         title="Download Test PDF"
                                         className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition shadow-2xs cursor-pointer"
                                       >
-                                        <span className="material-symbols-outlined text-[16px] text-indigo-600">picture_as_pdf</span>
+                                        <span className="material-symbols-outlined text-[16px] text-blue-600">picture_as_pdf</span>
                                         <span>Download PDF</span>
                                       </button>
                                     }
@@ -718,14 +718,14 @@ export function AtomicPracticeTestArena({
                                   {t.canAttempt || t.canResume ? (
                                     <Link
                                       href={`/tests/${t.id}/attempt`}
-                                      className="px-4 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-2xs transition text-center active:scale-95"
+                                      className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-2xs transition text-center active:scale-95"
                                     >
                                       {t.canResume ? "Resume Test" : "Start Test"}
                                     </Link>
                                   ) : t.canViewResult ? (
                                     <Link
                                       href={`/tests/${t.id}/result`}
-                                      className="px-3.5 py-1.5 rounded-lg border border-purple-500 text-purple-600 hover:bg-purple-50 font-bold text-xs transition text-center"
+                                      className="px-3.5 py-1.5 rounded-lg border border-blue-500 text-blue-600 hover:bg-blue-50 font-bold text-xs transition text-center"
                                     >
                                       Review Analysis
                                     </Link>

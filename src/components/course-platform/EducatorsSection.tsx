@@ -10,7 +10,7 @@ export function EducatorsSection({ course }: { course?: any }) {
     <section id="educators" className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 p-5 sm:p-7 space-y-6">
       <div>
         <h2 className="text-lg sm:text-xl font-extrabold text-[#031635] dark:text-white flex items-center gap-2">
-          <span className="material-symbols-outlined text-purple-600">psychology</span>
+          <span className="material-symbols-outlined text-blue-600">psychology</span>
           <span>Batch Educators</span>
         </h2>
         <p className="text-xs text-slate-500 mt-1">
@@ -44,7 +44,7 @@ export function EducatorsSection({ course }: { course?: any }) {
                   )}
                   <div>
                     <h3 className="font-extrabold text-sm sm:text-base text-[#031635] dark:text-white">{edu.name}</h3>
-                    <p className="text-xs text-[#6b46c1] dark:text-purple-400 font-bold">{edu.role || edu.subject || "Faculty"}</p>
+                    <p className="text-xs text-[#6b46c1] dark:text-blue-400 font-bold">{edu.role || edu.subject || "Faculty"}</p>
                     {edu.experience && <p className="text-[11px] text-slate-500">{edu.experience}</p>}
                   </div>
                 </div>

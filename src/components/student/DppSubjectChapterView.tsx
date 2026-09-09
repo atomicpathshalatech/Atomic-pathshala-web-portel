@@ -247,7 +247,7 @@ export function DppSubjectChapterView({
                                       dpp.difficulty === "EASY" || dpp.difficulty === "Fundamental"
                                         ? "bg-blue-500/10 text-blue-600 dark:text-blue-400"
                                         : dpp.difficulty === "HARD" || dpp.difficulty === "NEET Booster"
-                                        ? "bg-purple-500/10 text-purple-600 dark:text-purple-400 font-extrabold"
+                                        ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 font-extrabold"
                                         : "bg-amber-500/10 text-amber-600 dark:text-amber-400"
                                     }`}
                                   >

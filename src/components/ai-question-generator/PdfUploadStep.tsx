@@ -214,7 +214,7 @@ export function PdfUploadStep({
       {/* 2. Drag & Drop Upload Zone */}
       <div className="bg-white border border-slate-200 rounded-3xl p-6 space-y-4">
         <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
-          <Upload className="w-4 h-4 text-purple-600" />
+          <Upload className="w-4 h-4 text-blue-600" />
           <span>Step 2: Upload Source Document (PDF)</span>
         </h3>
 
@@ -223,7 +223,7 @@ export function PdfUploadStep({
             onDragOver={(e) => e.preventDefault()}
             onDrop={handleDrop}
             onClick={() => fileInputRef.current?.click()}
-            className="border-2 border-dashed border-slate-300 hover:border-purple-500 hover:bg-purple-50/20 rounded-3xl p-8 text-center cursor-pointer transition flex flex-col items-center justify-center gap-3"
+            className="border-2 border-dashed border-slate-300 hover:border-blue-500 hover:bg-blue-50/20 rounded-3xl p-8 text-center cursor-pointer transition flex flex-col items-center justify-center gap-3"
           >
             <input
               type="file"
@@ -232,12 +232,12 @@ export function PdfUploadStep({
               accept=".pdf"
               className="hidden"
             />
-            <div className="w-12 h-12 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center">
+            <div className="w-12 h-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
               <Upload className="w-6 h-6" />
             </div>
             <div>
               <p className="text-sm font-bold text-slate-800">
-                Drag &amp; Drop source PDF here, or <span className="text-purple-600 underline">browse</span>
+                Drag &amp; Drop source PDF here, or <span className="text-blue-600 underline">browse</span>
               </p>
               <p className="text-xs text-slate-400 mt-1">
                 Supports NCERT chapters, coaching modules, teacher notes, or reference documents (up to 30MB)
@@ -264,7 +264,7 @@ export function PdfUploadStep({
                   type="button"
                   onClick={handleProcessPdf}
                   disabled={uploading}
-                  className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:opacity-95 text-white font-bold text-xs rounded-xl shadow-md shadow-purple-500/20 active:scale-95 transition disabled:opacity-50"
+                  className="px-4 py-2 bg-blue-600 hover:opacity-95 text-white font-bold text-xs rounded-xl shadow-md shadow-blue-500/20 active:scale-95 transition disabled:opacity-50"
                 >
                   {uploading ? "Analyzing & Segmenting..." : "Process PDF"}
                 </button>
@@ -292,7 +292,7 @@ export function PdfUploadStep({
             </div>
             <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
               <div
-                className="bg-gradient-to-r from-purple-600 to-indigo-600 h-full transition-all duration-300"
+                className="bg-blue-600 h-full transition-all duration-300"
                 style={{ width: `${uploadProgress}%` }}
               />
             </div>
@@ -314,7 +314,7 @@ export function PdfUploadStep({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
             <div>
               <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-purple-600" />
+                <Sparkles className="w-4 h-4 text-blue-600" />
                 <span>Detected Syllabus Topics in PDF</span>
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
@@ -326,7 +326,7 @@ export function PdfUploadStep({
               <button
                 type="button"
                 onClick={handleSelectAll}
-                className="text-xs font-bold text-purple-600 hover:text-purple-800 px-3 py-1 bg-purple-50 rounded-lg"
+                className="text-xs font-bold text-blue-600 hover:text-blue-800 px-3 py-1 bg-blue-50 rounded-lg"
               >
                 Select All
               </button>
@@ -355,12 +355,12 @@ export function PdfUploadStep({
                     onClick={() => toggleTopic(top)}
                     className={`p-3 rounded-2xl border text-left text-xs transition flex items-center gap-2.5 ${
                       isChecked
-                        ? "bg-purple-50/70 border-purple-400 text-purple-950 font-bold shadow-sm"
+                        ? "bg-blue-50/70 border-blue-400 text-blue-950 font-bold shadow-sm"
                         : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
                     }`}
                   >
                     {isChecked ? (
-                      <CheckSquare className="w-4 h-4 text-purple-600 shrink-0" />
+                      <CheckSquare className="w-4 h-4 text-blue-600 shrink-0" />
                     ) : (
                       <Square className="w-4 h-4 text-slate-300 shrink-0" />
                     )}
@@ -375,7 +375,7 @@ export function PdfUploadStep({
           {processedResult.images && processedResult.images.length > 0 && (
             <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-600">
               <span className="flex items-center gap-1.5 font-bold">
-                <ImageIcon className="w-4 h-4 text-indigo-600" />
+                <ImageIcon className="w-4 h-4 text-blue-600" />
                 <span>{processedResult.images.length} scientific diagram(s) detected in source PDF</span>
               </span>
               <span className="text-[11px] text-emerald-600 font-semibold">

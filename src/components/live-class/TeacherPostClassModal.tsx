@@ -193,7 +193,7 @@ export function TeacherPostClassModal({
         <div className="bg-[#10121d] border border-[#262838] rounded-2xl p-5 mb-6">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-indigo-400 text-lg">folder_zip</span>
+              <span className="material-symbols-outlined text-blue-400 text-lg">folder_zip</span>
               <h3 className="text-sm font-bold text-gray-200">Preserved Class Resources &amp; Recording</h3>
             </div>
 
@@ -284,8 +284,8 @@ export function TeacherPostClassModal({
             >
               <div className="min-w-0 pr-2">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-bold text-indigo-300 truncate">Export Whiteboard (PDF)</span>
-                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 font-mono shrink-0">
+                  <span className="text-xs font-bold text-blue-300 truncate">Export Whiteboard (PDF)</span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-blue-500/20 text-blue-300 font-mono shrink-0">
                     Handwritten Notes
                   </span>
                 </div>
@@ -303,7 +303,7 @@ export function TeacherPostClassModal({
                   type="button"
                   disabled={downloadingPdf}
                   onClick={() => handleDownload("pdf")}
-                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-sm shrink-0"
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-sm shrink-0"
                 >
                   <span className="material-symbols-outlined text-sm">download</span>
                   {downloadingPdf ? "Opening..." : "Download Notes PDF"}
@@ -319,8 +319,8 @@ export function TeacherPostClassModal({
                   Retry Export
                 </button>
               ) : (
-                <div className="flex items-center gap-1.5 text-xs text-indigo-400 font-mono shrink-0">
-                  <span className="w-2 h-2 rounded-full bg-indigo-400 animate-ping" />
+                <div className="flex items-center gap-1.5 text-xs text-blue-400 font-mono shrink-0">
+                  <span className="w-2 h-2 rounded-full bg-blue-400 animate-ping" />
                   Generating...
                 </div>
               )}
@@ -359,7 +359,7 @@ export function TeacherPostClassModal({
                     type="checkbox"
                     checked={networkOk}
                     onChange={(e) => setNetworkOk(e.target.checked)}
-                    className="accent-indigo-500 rounded"
+                    className="accent-blue-500 rounded"
                   />
                   <span>Network / Stream Smooth</span>
                 </label>
@@ -369,7 +369,7 @@ export function TeacherPostClassModal({
                     type="checkbox"
                     checked={audioOk}
                     onChange={(e) => setAudioOk(e.target.checked)}
-                    className="accent-indigo-500 rounded"
+                    className="accent-blue-500 rounded"
                   />
                   <span>Audio &amp; Mic Clear</span>
                 </label>
@@ -379,7 +379,7 @@ export function TeacherPostClassModal({
                     type="checkbox"
                     checked={videoOk}
                     onChange={(e) => setVideoOk(e.target.checked)}
-                    className="accent-indigo-500 rounded"
+                    className="accent-blue-500 rounded"
                   />
                   <span>Camera Feed Crisp</span>
                 </label>
@@ -389,7 +389,7 @@ export function TeacherPostClassModal({
                     type="checkbox"
                     checked={whiteboardOk}
                     onChange={(e) => setWhiteboardOk(e.target.checked)}
-                    className="accent-indigo-500 rounded"
+                    className="accent-blue-500 rounded"
                   />
                   <span>Whiteboard Smooth</span>
                 </label>
@@ -399,7 +399,7 @@ export function TeacherPostClassModal({
                     type="checkbox"
                     checked={engagementOk}
                     onChange={(e) => setEngagementOk(e.target.checked)}
-                    className="accent-indigo-500 rounded"
+                    className="accent-blue-500 rounded"
                   />
                   <span>Student Active</span>
                 </label>
@@ -430,7 +430,7 @@ export function TeacherPostClassModal({
                   value={issueDescription}
                   onChange={(e) => setIssueDescription(e.target.value)}
                   placeholder="Teacher notes / Topics covered / Items to review in next lecture..."
-                  className="w-full h-16 bg-[#171926] border border-[#2d2e3b] rounded-xl p-3 text-xs text-white placeholder-gray-500 outline-none focus:border-indigo-500 transition resize-none"
+                  className="w-full h-16 bg-[#171926] border border-[#2d2e3b] rounded-xl p-3 text-xs text-white placeholder-gray-500 outline-none focus:border-blue-500 transition resize-none"
                 />
               </div>
 
@@ -441,7 +441,7 @@ export function TeacherPostClassModal({
                   value={tagsInput}
                   onChange={(e) => setTagsInput(e.target.value)}
                   placeholder="Optional tags (e.g. Thermodynamics, Class 12, DPP-04)..."
-                  className="w-full bg-[#171926] border border-[#2d2e3b] rounded-xl px-3 py-2 text-xs text-white placeholder-gray-500 outline-none focus:border-indigo-500 transition"
+                  className="w-full bg-[#171926] border border-[#2d2e3b] rounded-xl px-3 py-2 text-xs text-white placeholder-gray-500 outline-none focus:border-blue-500 transition"
                 />
               </div>
 
@@ -458,7 +458,7 @@ export function TeacherPostClassModal({
                 <button
                   type="submit"
                   disabled={submittingClass}
-                  className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-lg shadow-indigo-600/30 flex items-center gap-2 disabled:opacity-60"
+                  className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-lg shadow-blue-600/30 flex items-center gap-2 disabled:opacity-60"
                 >
                   <span className="material-symbols-outlined text-sm">task_alt</span>
                   <span>{submittingClass ? "Finalizing Class..." : "Submit Class"}</span>

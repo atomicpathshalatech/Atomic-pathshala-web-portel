@@ -263,12 +263,12 @@ export function MessagesPanel({
 
             // Avatar color hash for students
             const avatarBgColors = [
-              "bg-indigo-500",
+              "bg-blue-500",
               "bg-emerald-600",
               "bg-amber-600",
               "bg-cyan-600",
               "bg-rose-500",
-              "bg-purple-600",
+              "bg-blue-600",
               "bg-teal-600",
             ];
             let hash = 0;

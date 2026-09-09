@@ -11,7 +11,7 @@ export function ClassesSection({ course }: { course?: any }) {
     <section id="classes" className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 p-5 sm:p-7 space-y-6">
       <div>
         <h2 className="text-lg sm:text-xl font-extrabold text-[#031635] dark:text-white flex items-center gap-2">
-          <span className="material-symbols-outlined text-indigo-600">video_camera_front</span>
+          <span className="material-symbols-outlined text-blue-600">video_camera_front</span>
           <span>Live &amp; Scheduled Classes</span>
         </h2>
         <p className="text-xs text-slate-500 mt-1">

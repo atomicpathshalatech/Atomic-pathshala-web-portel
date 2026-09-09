@@ -270,7 +270,7 @@ export default async function ChapterPage({
       {
         id: "rev-2",
         studentName: "Rahul Sharma",
-        avatarColor: "bg-indigo-500/30 text-indigo-300",
+        avatarColor: "bg-blue-500/30 text-blue-300",
         rating: 5,
         comment: "The roadmap sequence made it very easy to stay on track. Scored 100% in the chapter test!",
         date: "1 week ago",

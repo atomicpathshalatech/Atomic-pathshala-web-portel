@@ -199,7 +199,7 @@ export default async function QuestionBankPage({
           <div className="flex items-center gap-3 flex-wrap">
             <Link
               href="/team/questions/drafts"
-              className="flex items-center gap-2 bg-gradient-to-r from-purple-700 via-indigo-700 to-purple-800 text-white px-5 py-2.5 rounded-full font-bold text-xs hover:opacity-95 transition-all shadow-md shadow-purple-600/20 active:scale-95"
+              className="flex items-center gap-2 bg-gradient-to-r from-blue-700 to-blue-800 text-white px-5 py-2.5 rounded-full font-bold text-xs hover:opacity-95 transition-all shadow-md shadow-blue-600/20 active:scale-95"
               title="Open Dedicated AI Auto-Saved Drafts Folder"
             >
               <span className="material-symbols-outlined text-sm text-amber-300">folder_special</span>
@@ -208,7 +208,7 @@ export default async function QuestionBankPage({
 
             <Link
               href="/team/questions/ai-generated"
-              className="flex items-center gap-2 bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 text-white px-5 py-2.5 rounded-full font-bold text-xs hover:opacity-95 transition-all shadow-md shadow-purple-500/20 active:scale-95"
+              className="flex items-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-full font-bold text-xs hover:opacity-95 transition-all shadow-md shadow-blue-500/20 active:scale-95"
               title="Generate production-grade questions via PDF grounding or AI syllabus engine"
             >
               <span className="material-symbols-outlined text-sm text-amber-300 animate-pulse">auto_awesome</span>
@@ -217,7 +217,7 @@ export default async function QuestionBankPage({
 
             <Link
               href="/team/question-bank-hierarchical"
-              className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-5 py-2.5 rounded-full font-bold text-xs hover:opacity-95 transition-all shadow-md shadow-indigo-500/20"
+              className="flex items-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-full font-bold text-xs hover:opacity-95 transition-all shadow-md shadow-blue-500/20"
               title="Hierarchical Question Bank with Class, Subject, Chapter, Topic taxonomy and Revision Hub"
             >
               <span className="material-symbols-outlined text-base">account_tree</span>

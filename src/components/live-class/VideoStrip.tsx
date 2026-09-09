@@ -76,7 +76,7 @@ export function VideoStrip({
   if (tokenError && role === "STUDENT") {
     return (
       <div className="w-full h-full bg-[#0a0b12] rounded-xl overflow-hidden border border-[#252836] flex flex-col items-center justify-center p-4 text-center">
-        <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 flex items-center justify-center mb-2 shadow-inner">
+        <div className="w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/30 text-blue-400 flex items-center justify-center mb-2 shadow-inner">
           <span className="material-symbols-outlined text-2xl">sensors_off</span>
         </div>
         <p className="text-xs font-bold text-white truncate max-w-full">{teacherName || "Instructor"}</p>
@@ -90,7 +90,7 @@ export function VideoStrip({
   if (!creds || !activeToken) {
     return (
       <div className="w-full h-full bg-[#0a0b12] rounded-xl overflow-hidden border border-[#252836] flex flex-col items-center justify-center p-4 text-center">
-        <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mb-2" />
+        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mb-2" />
         <span className="text-xs font-medium text-slate-400">Initializing Live Stream…</span>
       </div>
     );
@@ -297,11 +297,11 @@ function VideoStripInner({
           <VideoTrack trackRef={cameraTrack} className="w-full h-full object-cover transform scale-x-[-1]" />
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center bg-[#0d0f18] p-4 text-center">
-            <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 flex items-center justify-center mb-2 shadow-inner">
+            <div className="w-14 h-14 rounded-2xl bg-blue-500/10 border border-blue-500/30 text-blue-400 flex items-center justify-center mb-2 shadow-inner">
               <span className="material-symbols-outlined text-3xl">account_circle</span>
             </div>
             <span className="text-xs font-bold text-white">Educator Camera Off</span>
-            <span className="text-[10px] text-indigo-300 mt-1 flex items-center gap-1">
+            <span className="text-[10px] text-blue-300 mt-1 flex items-center gap-1">
               <span className={`w-1.5 h-1.5 rounded-full ${isMicrophoneEnabled ? "bg-emerald-400" : "bg-amber-400"}`} />
               {isMicrophoneEnabled ? "Microphone is LIVE" : "Microphone Muted"}
             </span>
@@ -309,7 +309,7 @@ function VideoStripInner({
               <button
                 type="button"
                 onClick={() => localParticipant.setCameraEnabled(true).catch(() => {})}
-                className="mt-2 text-[11px] font-bold text-indigo-300 hover:text-indigo-200 underline underline-offset-2"
+                className="mt-2 text-[11px] font-bold text-blue-300 hover:text-blue-200 underline underline-offset-2"
               >
                 Retry camera access
               </button>
@@ -323,11 +323,11 @@ function VideoStripInner({
             {remoteStudentVideoTracks.map((stTrack) => (
               <div
                 key={stTrack.participant.identity}
-                className="w-36 sm:w-44 aspect-video rounded-xl overflow-hidden border-2 border-purple-500 shadow-2xl bg-slate-950 relative animate-in zoom-in-95 duration-200 ring-2 ring-purple-400/40"
+                className="w-36 sm:w-44 aspect-video rounded-xl overflow-hidden border-2 border-blue-500 shadow-2xl bg-slate-950 relative animate-in zoom-in-95 duration-200 ring-2 ring-blue-400/40"
               >
                 <VideoTrack trackRef={stTrack} className="w-full h-full object-cover" />
-                <div className="absolute top-1 left-1 bg-black/80 backdrop-blur-sm px-1.5 py-0.5 rounded text-[9px] font-bold text-purple-200 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-ping" />
+                <div className="absolute top-1 left-1 bg-black/80 backdrop-blur-sm px-1.5 py-0.5 rounded text-[9px] font-bold text-blue-200 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-ping" />
                   <span className="truncate max-w-[80px]">{stTrack.participant.name || "Student"}</span>
                 </div>
               </div>
@@ -416,11 +416,11 @@ function VideoStripInner({
         <VideoTrack trackRef={cameraTrack} className="w-full h-full object-cover" />
       ) : (
         <div className="w-full h-full flex flex-col items-center justify-center bg-[#0d0f18] p-4 text-center">
-          <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 flex items-center justify-center mb-2 shadow-inner">
+          <div className="w-14 h-14 rounded-2xl bg-blue-500/10 border border-blue-500/30 text-blue-400 flex items-center justify-center mb-2 shadow-inner">
             <span className="material-symbols-outlined text-3xl">account_circle</span>
           </div>
           <span className="text-xs font-bold text-white">{teacherName || "Instructor"}</span>
-          <span className="text-[10px] text-indigo-300 mt-1 flex items-center gap-1">
+          <span className="text-[10px] text-blue-300 mt-1 flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
             Audio Stream Active · Camera Standby
           </span>
@@ -430,8 +430,8 @@ function VideoStripInner({
       {/* Buffering / Connecting / Reconnecting Overlay */}
       {(isConnecting || isReconnecting) && (
         <div className="absolute inset-0 bg-black/80 backdrop-blur-xs flex flex-col items-center justify-center z-30 text-center p-2">
-          <div className="w-6 h-6 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin mb-1" />
-          <span className="text-xs font-bold text-indigo-300">
+          <div className="w-6 h-6 border-2 border-blue-400 border-t-transparent rounded-full animate-spin mb-1" />
+          <span className="text-xs font-bold text-blue-300">
             {isReconnecting ? "Reconnecting stream…" : "Connecting stream…"}
           </span>
         </div>
@@ -446,7 +446,7 @@ function VideoStripInner({
 
         {/* Network status */}
         <div className="bg-black/80 backdrop-blur-sm px-2 py-1 rounded-lg text-[10px] font-semibold text-slate-300 border border-white/10 flex items-center gap-1">
-          <span className="material-symbols-outlined text-xs text-indigo-400">signal_cellular_alt</span>
+          <span className="material-symbols-outlined text-xs text-blue-400">signal_cellular_alt</span>
           <span>{connectionState === ConnectionState.Connected ? "HD Stream" : connectionState}</span>
         </div>
       </div>
@@ -508,7 +508,7 @@ function VideoStripInner({
               setVolume(val);
               if (val > 0 && isMuted) setIsMuted(false);
             }}
-            className="w-14 xs:w-18 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+            className="w-14 xs:w-18 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
             title={`Volume: ${Math.round((isMuted ? 0 : volume) * 100)}%`}
           />
         </div>
@@ -530,8 +530,8 @@ function VideoStripInner({
                   key={q}
                   type="button"
                   onClick={() => handleQualityChange(q)}
-                  className={`text-[10px] font-semibold px-2 py-1 text-left rounded hover:bg-indigo-600 hover:text-white transition ${
-                    selectedQuality === q ? "text-indigo-400 font-bold bg-indigo-950/60" : "text-slate-300"
+                  className={`text-[10px] font-semibold px-2 py-1 text-left rounded hover:bg-blue-600 hover:text-white transition ${
+                    selectedQuality === q ? "text-blue-400 font-bold bg-blue-950/60" : "text-slate-300"
                   }`}
                 >
                   {q === "auto" ? "Auto" : q.toUpperCase()}
@@ -545,7 +545,7 @@ function VideoStripInner({
             type="button"
             onClick={togglePiP}
             className={`w-7 h-7 rounded-md flex items-center justify-center transition ${
-              isPiPActive ? "bg-indigo-600 text-white" : "bg-white/10 hover:bg-white/20 text-white"
+              isPiPActive ? "bg-blue-600 text-white" : "bg-white/10 hover:bg-white/20 text-white"
             }`}
             title="Picture in Picture"
           >
@@ -600,7 +600,7 @@ function TeacherDeviceSettingsPopover({
           <div className="absolute bottom-full right-0 mb-2 w-64 p-3 rounded-xl border border-[#2d2e3b] bg-[#1a1b23] text-white shadow-2xl z-50 space-y-3">
             <div className="flex items-center justify-between border-b border-[#2d2e3b] pb-2">
               <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-sm text-indigo-400">tune</span>
+                <span className="material-symbols-outlined text-sm text-blue-400">tune</span>
                 AV Hardware Settings
               </span>
               <button
@@ -620,7 +620,7 @@ function TeacherDeviceSettingsPopover({
               <select
                 value={cam.activeDeviceId}
                 onChange={(e) => cam.setActiveMediaDevice(e.target.value)}
-                className="w-full bg-[#10111a] border border-[#2d2e3b] rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-indigo-500"
+                className="w-full bg-[#10111a] border border-[#2d2e3b] rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-blue-500"
               >
                 {cam.devices.length === 0 && <option value="">No camera detected</option>}
                 {cam.devices.map((d) => (
@@ -639,7 +639,7 @@ function TeacherDeviceSettingsPopover({
               <select
                 value={mic.activeDeviceId}
                 onChange={(e) => mic.setActiveMediaDevice(e.target.value)}
-                className="w-full bg-[#10111a] border border-[#2d2e3b] rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-indigo-500"
+                className="w-full bg-[#10111a] border border-[#2d2e3b] rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-blue-500"
               >
                 {mic.devices.length === 0 && <option value="">No microphone detected</option>}
                 {mic.devices.map((d) => (
@@ -659,7 +659,7 @@ function TeacherDeviceSettingsPopover({
                 <select
                   value={speaker.activeDeviceId}
                   onChange={(e) => onSpeakerChange(e.target.value)}
-                  className="w-full bg-[#10111a] border border-[#2d2e3b] rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-indigo-500"
+                  className="w-full bg-[#10111a] border border-[#2d2e3b] rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-blue-500"
                 >
                   {speaker.devices.map((d) => (
                     <option key={d.deviceId} value={d.deviceId}>

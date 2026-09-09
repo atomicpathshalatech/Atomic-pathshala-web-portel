@@ -622,7 +622,7 @@ export function AtomicQuestionEditor({
               AI MULTIMODAL INGESTION
             </span>
             {dppName && (
-              <span className="text-xs px-3 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 font-semibold">
+              <span className="text-xs px-3 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 font-semibold">
                 Target: {dppName}
               </span>
             )}
@@ -666,7 +666,7 @@ export function AtomicQuestionEditor({
             onClick={() => setEditorViewMode("NTA_PREVIEW")}
             className={`px-5 py-2.5 rounded-2xl text-xs font-black transition flex items-center gap-2 ${
               editorViewMode === "NTA_PREVIEW"
-                ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-indigo-500/20"
+                ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
                 : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
             }`}
           >
@@ -831,7 +831,7 @@ export function AtomicQuestionEditor({
                 <button
                   type="button"
                   onClick={() => setNtaShowSolution(!ntaShowSolution)}
-                  className="px-4 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-xs font-bold flex items-center gap-1.5"
+                  className="px-4 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-xs font-bold flex items-center gap-1.5"
                 >
                   <span className="material-symbols-outlined text-base">help</span>
                   <span>{ntaShowSolution ? "Hide Explanation" : "Inspect Solution"}</span>
@@ -993,8 +993,8 @@ export function AtomicQuestionEditor({
             onClick={() => solutionInputRef.current?.click()}
             className={`border-2 border-dashed rounded-2xl p-5 text-center cursor-pointer transition relative group ${
               solutionImagePreview
-                ? "border-indigo-500 bg-indigo-50/20 dark:bg-indigo-950/20"
-                : "border-slate-300 dark:border-slate-700 hover:border-indigo-500 bg-slate-50 dark:bg-slate-800/40"
+                ? "border-blue-500 bg-blue-50/20 dark:bg-blue-950/20"
+                : "border-slate-300 dark:border-slate-700 hover:border-blue-500 bg-slate-50 dark:bg-slate-800/40"
             }`}
           >
             <input
@@ -1016,7 +1016,7 @@ export function AtomicQuestionEditor({
                 </div>
 
                 <div className="flex items-center justify-between text-xs pt-1">
-                  <span className="font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1">
+                  <span className="font-bold text-blue-600 dark:text-blue-400 flex items-center gap-1">
                     <span className="material-symbols-outlined text-sm">verified</span>
                     Solution Reference Attached
                   </span>
@@ -1035,7 +1035,7 @@ export function AtomicQuestionEditor({
               </div>
             ) : (
               <div className="space-y-1.5 py-3">
-                <div className="w-10 h-10 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 mx-auto flex items-center justify-center shadow-sm">
+                <div className="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 mx-auto flex items-center justify-center shadow-sm">
                   <span className="material-symbols-outlined text-xl">description</span>
                 </div>
                 <h4 className="text-xs font-bold text-slate-800 dark:text-white">
@@ -1079,7 +1079,7 @@ export function AtomicQuestionEditor({
 
               {solutionImagePreview && (
                 <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2">
-                  <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5 uppercase font-mono">
+                  <span className="text-xs font-bold text-blue-600 dark:text-blue-400 flex items-center gap-1.5 uppercase font-mono">
                     <span className="material-symbols-outlined text-base">description</span>
                     Solution Reference
                   </span>
@@ -1142,7 +1142,7 @@ export function AtomicQuestionEditor({
                   onClick={() => setActiveLangTab("ENGLISH")}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
                     activeLangTab === "ENGLISH"
-                      ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/20"
+                      ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
                       : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                   }`}
                 >
@@ -1188,19 +1188,19 @@ export function AtomicQuestionEditor({
 
             {/* Live Auto-Detected NEET Question Format Badge */}
             {detectedNeetType && (
-              <div className="flex items-center justify-between p-3 rounded-2xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-xs">
+              <div className="flex items-center justify-between p-3 rounded-2xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-xs">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-bold px-2 py-0.5 rounded-full bg-indigo-600 text-white text-[10px] font-mono">
+                  <span className="font-bold px-2 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-mono">
                     AUTO-DETECTED FORMAT
                   </span>
-                  <span className="font-extrabold text-indigo-950 dark:text-indigo-200">
+                  <span className="font-extrabold text-blue-950 dark:text-blue-200">
                     {detectedNeetType.typeDef.name} ({detectedNeetType.typeDef.hindiName})
                   </span>
-                  <span className="text-[11px] text-indigo-700 dark:text-indigo-300">
+                  <span className="text-[11px] text-blue-700 dark:text-blue-300">
                     — {detectedNeetType.reason}
                   </span>
                 </div>
-                <span className="text-[10px] font-mono font-bold text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-900 px-2 py-0.5 rounded-lg border border-indigo-200 dark:border-indigo-800 shrink-0">
+                <span className="text-[10px] font-mono font-bold text-blue-600 dark:text-blue-400 bg-white dark:bg-slate-900 px-2 py-0.5 rounded-lg border border-blue-200 dark:border-blue-800 shrink-0">
                   {detectedNeetType.confidence}% confidence
                 </span>
               </div>

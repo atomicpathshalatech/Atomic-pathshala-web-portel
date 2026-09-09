@@ -64,7 +64,7 @@ export function GenerationHistoryView({ onSelectBatch }: Props) {
       {/* Filters Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
         <div className="flex items-center gap-2">
-          <History className="w-5 h-5 text-purple-600" />
+          <History className="w-5 h-5 text-blue-600" />
           <h3 className="text-sm font-black text-slate-800">AI Generation Batches History</h3>
         </div>
 
@@ -122,7 +122,7 @@ export function GenerationHistoryView({ onSelectBatch }: Props) {
                     <tr key={b.id} className="hover:bg-slate-50/70 transition">
                       {/* Code & Date */}
                       <td className="px-5 py-3.5">
-                        <span className="font-mono font-bold text-purple-700 block">{b.batchCode}</span>
+                        <span className="font-mono font-bold text-blue-700 block">{b.batchCode}</span>
                         <span className="text-[11px] text-slate-400">
                           {format(new Date(b.createdAt), "MMM d, yyyy · HH:mm")}
                         </span>
@@ -146,7 +146,7 @@ export function GenerationHistoryView({ onSelectBatch }: Props) {
                             )}
                           </div>
                         ) : (
-                          <span className="text-[11px] font-bold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-full">
+                          <span className="text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
                             🤖 BY AI
                           </span>
                         )}

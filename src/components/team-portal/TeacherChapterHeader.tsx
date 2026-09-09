@@ -151,7 +151,7 @@ export function TeacherChapterHeader({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
           {/* Chapter Thumbnail Poster */}
           <div className="lg:col-span-4">
-            <div className="relative aspect-[16/10] sm:aspect-[16/9] w-full rounded-2xl overflow-hidden bg-gradient-to-br from-indigo-100 via-purple-100 to-indigo-200 dark:from-indigo-950 dark:via-purple-950 dark:to-slate-900 border border-indigo-200/80 dark:border-indigo-800/80 shadow-inner flex items-center justify-center p-4">
+            <div className="relative aspect-[16/10] sm:aspect-[16/9] w-full rounded-2xl overflow-hidden bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-950 dark:via-blue-950 dark:to-slate-900 border border-blue-200/80 dark:border-blue-800/80 shadow-inner flex items-center justify-center p-4">
               {/* Subtle Dotted Matrix Graphic */}
               <div
                 className="absolute inset-0 opacity-20 pointer-events-none"
@@ -163,7 +163,7 @@ export function TeacherChapterHeader({
 
               {/* Center Silhouette / Avatar */}
               <div className="relative z-10 flex flex-col items-center justify-center text-center">
-                <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-indigo-500/20 border-2 border-indigo-400/40 flex items-center justify-center text-indigo-700 dark:text-indigo-300 shadow-md">
+                <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-blue-500/20 border-2 border-blue-400/40 flex items-center justify-center text-blue-700 dark:text-blue-300 shadow-md">
                   {teacherPhoto ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -172,15 +172,15 @@ export function TeacherChapterHeader({
                       className="w-full h-full rounded-full object-cover"
                     />
                   ) : (
-                    <div className="w-14 h-14 rounded-full bg-indigo-600 text-white flex items-center justify-center font-black text-xl shadow-inner">
+                    <div className="w-14 h-14 rounded-full bg-blue-600 text-white flex items-center justify-center font-black text-xl shadow-inner">
                       {teacherName.charAt(0).toUpperCase() || "A"}
                     </div>
                   )}
                 </div>
-                <span className="mt-2 text-xs font-bold text-indigo-900 dark:text-indigo-200">
+                <span className="mt-2 text-xs font-bold text-blue-900 dark:text-blue-200">
                   {teacherName}
                 </span>
-                <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-medium">
+                <span className="text-[10px] text-blue-600 dark:text-blue-400 font-medium">
                   {subjectTitle} Expert
                 </span>
               </div>
@@ -222,7 +222,7 @@ export function TeacherChapterHeader({
 
               {/* Lessons Count Chip */}
               <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300">
-                <Play className="w-4 h-4 text-purple-600 fill-purple-600 shrink-0" />
+                <Play className="w-4 h-4 text-blue-600 fill-blue-600 shrink-0" />
                 <span>
                   {totalLectures} lesson{totalLectures === 1 ? "" : "s"}
                 </span>
@@ -262,7 +262,7 @@ export function TeacherChapterHeader({
               <button
                 type="button"
                 onClick={() => setNoticeBoardOpen(true)}
-                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 text-xs font-black shadow-md shadow-amber-500/20 transition-all flex items-center gap-2 cursor-pointer"
+                className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black shadow-md shadow-amber-500/20 transition-all flex items-center gap-2 cursor-pointer"
               >
                 <Bell className="w-4 h-4 text-slate-950 fill-slate-950" />
                 <span>Notice Board</span>
@@ -311,7 +311,7 @@ export function TeacherChapterHeader({
                       onClick={handleShare}
                       className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 transition text-left cursor-pointer"
                     >
-                      <Share2 className="w-4 h-4 text-indigo-500" />
+                      <Share2 className="w-4 h-4 text-blue-500" />
                       <span>Share Chapter Link</span>
                     </button>
 

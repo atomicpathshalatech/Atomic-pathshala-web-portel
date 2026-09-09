@@ -59,12 +59,12 @@ export function StudentPostClassFeedback({
   return (
     <div className="max-w-xl mx-auto my-12 p-6 sm:p-8 bg-[#121420] text-white rounded-3xl border border-slate-800 shadow-2xl space-y-6">
       <div className="text-center space-y-2">
-        <div className="w-16 h-16 rounded-2xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center mx-auto border border-indigo-500/30">
+        <div className="w-16 h-16 rounded-2xl bg-blue-500/20 text-blue-400 flex items-center justify-center mx-auto border border-blue-500/30">
           <span className="material-symbols-outlined text-3xl">school</span>
         </div>
         <h2 className="text-2xl font-black text-white">Class Ended</h2>
         <p className="text-xs text-slate-400 max-w-md mx-auto">
-          The teacher has concluded this live teaching session for <span className="text-indigo-300 font-semibold">{sessionTitle}</span>.
+          The teacher has concluded this live teaching session for <span className="text-blue-300 font-semibold">{sessionTitle}</span>.
         </p>
       </div>
 
@@ -77,7 +77,7 @@ export function StudentPostClassFeedback({
           </p>
           <Link
             href="/schedule"
-            className="inline-block mt-3 px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-lg shadow-indigo-600/30"
+            className="inline-block mt-3 px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-lg shadow-blue-600/30"
           >
             Return to Schedule
           </Link>
@@ -114,7 +114,7 @@ export function StudentPostClassFeedback({
                   onClick={() => setUnderstandingLevel(opt.key as any)}
                   className={`py-2 px-2 rounded-xl text-xs font-bold border transition ${
                     understandingLevel === opt.key
-                      ? "bg-indigo-600 border-indigo-500 text-white shadow-md shadow-indigo-600/30"
+                      ? "bg-blue-600 border-blue-500 text-white shadow-md shadow-blue-600/30"
                       : "bg-[#181a28] border-slate-800 text-slate-400 hover:text-white"
                   }`}
                 >
@@ -139,7 +139,7 @@ export function StudentPostClassFeedback({
                   onClick={() => setDoubtStatus(opt.key as any)}
                   className={`py-2 px-2 rounded-xl text-xs font-bold border transition ${
                     doubtStatus === opt.key
-                      ? "bg-indigo-600 border-indigo-500 text-white shadow-md shadow-indigo-600/30"
+                      ? "bg-blue-600 border-blue-500 text-white shadow-md shadow-blue-600/30"
                       : "bg-[#181a28] border-slate-800 text-slate-400 hover:text-white"
                   }`}
                 >
@@ -176,7 +176,7 @@ export function StudentPostClassFeedback({
               value={comment}
               onChange={(e) => setComment(e.target.value)}
               placeholder="Tell your educator what helped most or what you'd like more practice on..."
-              className="w-full h-20 bg-[#181a28] border border-slate-800 rounded-xl p-3 text-xs text-white placeholder-slate-500 outline-none focus:border-indigo-500 transition resize-none"
+              className="w-full h-20 bg-[#181a28] border border-slate-800 rounded-xl p-3 text-xs text-white placeholder-slate-500 outline-none focus:border-blue-500 transition resize-none"
             />
           </div>
 
@@ -191,7 +191,7 @@ export function StudentPostClassFeedback({
             <button
               type="submit"
               disabled={submitting}
-              className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-lg shadow-indigo-600/30 disabled:opacity-60"
+              className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-lg shadow-blue-600/30 disabled:opacity-60"
             >
               {submitting ? "Submitting..." : "Submit Learning Review"}
             </button>

@@ -954,7 +954,7 @@ export function LectureVideoPlayer({
                           className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-200 hover:bg-white/10 transition cursor-pointer"
                         >
                           <span className="flex items-center gap-2">
-                            <span className="material-symbols-outlined text-base text-indigo-400">high_quality</span>
+                            <span className="material-symbols-outlined text-base text-blue-400">high_quality</span>
                             Quality
                           </span>
                           <span className="text-slate-400 text-[11px]">
@@ -1016,7 +1016,7 @@ export function LectureVideoPlayer({
                               onClick={() => handleQualityChange(q.value)}
                               className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs transition cursor-pointer ${
                                 selectedQuality === q.value
-                                  ? "bg-indigo-500/20 text-indigo-400 font-bold"
+                                  ? "bg-blue-500/20 text-blue-400 font-bold"
                                   : "text-slate-300 hover:bg-white/10"
                               }`}
                             >

@@ -59,7 +59,7 @@ export default async function TestDetailPage({ params }: { params: { id: string 
   return (
     <div className="space-y-6 max-w-5xl">
       <p className="flex items-center gap-2 text-xs text-slate-500 mb-2">
-        <Link href="/team/tests" className="hover:text-indigo-600 transition">
+        <Link href="/team/tests" className="hover:text-blue-600 transition">
           Tests
         </Link>
         <span className="material-symbols-outlined text-sm">chevron_right</span>
@@ -77,7 +77,7 @@ export default async function TestDetailPage({ params }: { params: { id: string 
       {test.status !== "DRAFT" && (
         <section className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
           <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-            <span className="material-symbols-outlined text-indigo-600">leaderboard</span>
+            <span className="material-symbols-outlined text-blue-600">leaderboard</span>
             Student Submissions ({results.length} attempts)
           </h2>
           {results.length === 0 ? (
@@ -92,7 +92,7 @@ export default async function TestDetailPage({ params }: { params: { id: string 
                     className="flex items-center justify-between py-3 hover:bg-slate-50 px-2 rounded-xl transition"
                   >
                     <div className="flex items-center gap-3">
-                      <span className="text-xs font-bold text-indigo-600 w-6">#{i + 1}</span>
+                      <span className="text-xs font-bold text-blue-600 w-6">#{i + 1}</span>
                       <div>
                         <p className="text-xs font-bold text-slate-900">{r.student.user.name}</p>
                         <p className="text-[11px] text-slate-500">

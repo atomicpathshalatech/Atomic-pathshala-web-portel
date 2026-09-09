@@ -35,7 +35,7 @@ export function StickyPurchaseBar({ course }: { course: CourseData }) {
         <div className="space-y-2.5">
           <Link
             href={`/checkout/${course.slug}`}
-            className="w-full bg-[#6b46c1] hover:bg-[#5b3da5] text-white font-extrabold text-sm py-3.5 rounded-2xl shadow-lg shadow-purple-500/25 transition-all text-center flex items-center justify-center gap-2 group"
+            className="w-full bg-[#6b46c1] hover:bg-[#5b3da5] text-white font-extrabold text-sm py-3.5 rounded-2xl shadow-lg shadow-blue-500/25 transition-all text-center flex items-center justify-center gap-2 group"
           >
             <span>BUY NOW</span>
             <span className="material-symbols-outlined text-base group-hover:translate-x-1 transition-transform">
@@ -103,7 +103,7 @@ export function StickyPurchaseBar({ course }: { course: CourseData }) {
           </a>
           <Link
             href={`/checkout/${course.slug}`}
-            className="bg-[#6b46c1] hover:bg-[#5b3da5] text-white font-black text-xs px-5 py-2.5 rounded-xl shadow-md shadow-purple-500/20 whitespace-nowrap"
+            className="bg-[#6b46c1] hover:bg-[#5b3da5] text-white font-black text-xs px-5 py-2.5 rounded-xl shadow-md shadow-blue-500/20 whitespace-nowrap"
           >
             BUY NOW
           </Link>

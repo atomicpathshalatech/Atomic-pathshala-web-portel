@@ -46,9 +46,9 @@ const CATEGORY_CONFIG: Record<
   EXAM: {
     label: "Test / Exam Update",
     icon: FileCheck,
-    badgeBg: "bg-purple-50 dark:bg-purple-950/60",
-    textColor: "text-purple-700 dark:text-purple-300",
-    borderColor: "border-purple-200 dark:border-purple-800",
+    badgeBg: "bg-blue-50 dark:bg-blue-950/60",
+    textColor: "text-blue-700 dark:text-blue-300",
+    borderColor: "border-blue-200 dark:border-blue-800",
   },
   HOMEWORK: {
     label: "Homework & DPP",
@@ -94,7 +94,7 @@ export function StudentChapterNoticeBoard({
   return (
     <div className="space-y-6">
       {/* Notice Board Header Bar */}
-      <div className="bg-gradient-to-br from-indigo-900 via-slate-900 to-slate-950 rounded-3xl p-6 text-white shadow-lg border border-indigo-500/20 relative overflow-hidden">
+      <div className="bg-gradient-to-br from-blue-900 via-slate-900 to-slate-950 rounded-3xl p-6 text-white shadow-lg border border-blue-500/20 relative overflow-hidden">
         <div className="absolute top-0 right-0 -mt-8 -mr-8 w-44 h-44 bg-amber-500/10 rounded-full blur-2xl pointer-events-none" />
         <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
@@ -108,7 +108,7 @@ export function StudentChapterNoticeBoard({
             <h2 className="text-xl sm:text-2xl font-black tracking-tight leading-snug">
               {chapterTitle}
             </h2>
-            <p className="text-xs text-indigo-200/80 mt-1">
+            <p className="text-xs text-blue-200/80 mt-1">
               Important announcements, live lecture reschedules, test alerts, and daily study guidelines from your faculty.
             </p>
           </div>
@@ -145,7 +145,7 @@ export function StudentChapterNoticeBoard({
               onClick={() => setActiveCategory(key)}
               className={`px-3.5 py-2 rounded-xl font-bold transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
                 activeCategory === key
-                  ? "bg-indigo-600 text-white shadow-sm"
+                  ? "bg-blue-600 text-white shadow-sm"
                   : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50"
               }`}
             >
@@ -160,7 +160,7 @@ export function StudentChapterNoticeBoard({
       {/* Notices List */}
       {filteredNotices.length === 0 ? (
         <div className="py-16 text-center rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-800 bg-white/50 dark:bg-slate-900/50 p-8 space-y-3">
-          <div className="w-14 h-14 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 mx-auto flex items-center justify-center">
+          <div className="w-14 h-14 rounded-2xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 mx-auto flex items-center justify-center">
             <Bell className="w-7 h-7" />
           </div>
           <h3 className="text-base font-bold text-slate-800 dark:text-white">
@@ -229,7 +229,7 @@ export function StudentChapterNoticeBoard({
                 {/* Faculty Author Footer */}
                 <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-400">
                   <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-full bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 flex items-center justify-center text-[10px] font-black">
+                    <div className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 flex items-center justify-center text-[10px] font-black">
                       {notice.authorName.charAt(0).toUpperCase() || "A"}
                     </div>
                     <span className="font-bold text-slate-700 dark:text-slate-300">
@@ -240,7 +240,7 @@ export function StudentChapterNoticeBoard({
                     </span>
                   </div>
 
-                  <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2.5 py-0.5 rounded-full">
+                  <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-0.5 rounded-full">
                     Atomic Pathshala Verified
                   </span>
                 </div>

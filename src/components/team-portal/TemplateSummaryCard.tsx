@@ -43,7 +43,7 @@ export function TemplateSummaryCard({
       {/* Header */}
       <div className="flex items-center justify-between pb-4 border-b border-slate-100">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+          <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
             <Layers className="w-5 h-5" />
           </div>
           <div>
@@ -65,7 +65,7 @@ export function TemplateSummaryCard({
           <button
             type="button"
             onClick={onChangeTemplate}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-xl transition"
           >
             <Edit3 className="w-3.5 h-3.5" /> Change Template
           </button>
@@ -78,11 +78,11 @@ export function TemplateSummaryCard({
           <span className="text-[11px] text-slate-500 block">Sections</span>
           <span className="text-lg font-bold text-slate-900">{sections.length}</span>
         </div>
-        <div className="bg-indigo-50/50 border border-indigo-100 p-3 rounded-xl">
-          <span className="text-[11px] text-indigo-600 block">Questions Progress</span>
+        <div className="bg-blue-50/50 border border-blue-100 p-3 rounded-xl">
+          <span className="text-[11px] text-blue-600 block">Questions Progress</span>
           <div className="flex items-baseline gap-1">
-            <span className="text-lg font-bold text-indigo-950">{totalCurrentQuestions}</span>
-            <span className="text-xs text-indigo-600">/ {totalTargetQuestions} Target</span>
+            <span className="text-lg font-bold text-blue-950">{totalCurrentQuestions}</span>
+            <span className="text-xs text-blue-600">/ {totalTargetQuestions} Target</span>
           </div>
         </div>
         <div className="bg-emerald-50/50 border border-emerald-100 p-3 rounded-xl">

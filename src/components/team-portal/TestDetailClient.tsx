@@ -119,7 +119,7 @@ export function TestDetailClient({ test, isDraft, canPublish }: TestDetailClient
             <button
               type="button"
               onClick={() => setShowTemplateModal(true)}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition"
             >
               <Layers className="w-4 h-4" /> Add Template
             </button>
@@ -128,7 +128,7 @@ export function TestDetailClient({ test, isDraft, canPublish }: TestDetailClient
           {isDraft && hasTemplate && (
             <Link
               href={`/team/tests/${test.id}/author`}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition"
             >
               <Plus className="w-4 h-4" /> Add / Author Questions
             </Link>
@@ -140,8 +140,8 @@ export function TestDetailClient({ test, isDraft, canPublish }: TestDetailClient
 
       {/* State 1: No Template Applied */}
       {!hasTemplate && isDraft && (
-        <div className="bg-gradient-to-br from-indigo-50/70 via-white to-slate-50 border-2 border-dashed border-indigo-200 rounded-3xl p-8 text-center space-y-4 shadow-sm">
-          <div className="w-14 h-14 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+        <div className="bg-gradient-to-br from-blue-50/70 via-white to-slate-50 border-2 border-dashed border-blue-200 rounded-3xl p-8 text-center space-y-4 shadow-sm">
+          <div className="w-14 h-14 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
             <Layers className="w-7 h-7" />
           </div>
 
@@ -156,7 +156,7 @@ export function TestDetailClient({ test, isDraft, canPublish }: TestDetailClient
             <button
               type="button"
               onClick={() => setShowTemplateModal(true)}
-              className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-500/20 flex items-center gap-2 transition"
+              className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl shadow-md shadow-blue-500/20 flex items-center gap-2 transition"
             >
               <Sparkles className="w-4 h-4" /> Choose or Build Template
             </button>
@@ -185,7 +185,7 @@ export function TestDetailClient({ test, isDraft, canPublish }: TestDetailClient
             {isDraft && (
               <Link
                 href={`/team/tests/${test.id}/author`}
-                className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
+                className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
               >
                 Open Dual-Column Question Studio <ArrowRight className="w-3.5 h-3.5" />
               </Link>

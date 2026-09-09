@@ -245,15 +245,15 @@ export function TestForm(props: Props) {
               onClick={() => handleSelectBlueprint("CHAPTER_TEST")}
               className={`p-4 rounded-2xl border text-left transition relative flex flex-col justify-between ${
                 selectedBlueprint === "CHAPTER_TEST"
-                  ? "bg-purple-50 dark:bg-purple-950/40 border-purple-500 ring-2 ring-purple-500/20"
+                  ? "bg-blue-50 dark:bg-blue-950/40 border-blue-500 ring-2 ring-blue-500/20"
                   : "bg-surface-container-lowest border-outline-variant/40 hover:border-outline-variant"
               }`}
             >
               {selectedBlueprint === "CHAPTER_TEST" && (
-                <CheckCircle2 className="w-4 h-4 text-purple-600 absolute top-3 right-3" />
+                <CheckCircle2 className="w-4 h-4 text-blue-600 absolute top-3 right-3" />
               )}
               <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/60 px-2 py-0.5 rounded-full">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/60 px-2 py-0.5 rounded-full">
                   Topic Test
                 </span>
                 <h3 className="font-bold text-sm text-slate-900 dark:text-white mt-2">Chapter Assessment</h3>

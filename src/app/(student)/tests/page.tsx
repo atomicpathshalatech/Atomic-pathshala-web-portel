@@ -128,7 +128,7 @@ export default async function StudentTestsPage() {
       name: "Physics",
       icon: "bolt",
       color: "text-blue-500",
-      gradient: "from-blue-600 to-indigo-600",
+      gradient: "from-blue-600 to-blue-600",
       chapters: [],
     },
     Chemistry: {

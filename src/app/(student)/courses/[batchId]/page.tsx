@@ -73,7 +73,7 @@ export default async function BatchCoursePage({
             {/* Breadcrumbs & Header */}
             <div>
               <p className="flex items-center gap-2 text-xs text-slate-500 mb-2">
-                <Link href="/courses" className="hover:text-purple-600 font-bold transition">
+                <Link href="/courses" className="hover:text-blue-600 font-bold transition">
                   Batches
                 </Link>
                 <span className="material-symbols-outlined text-xs">chevron_right</span>
@@ -122,13 +122,13 @@ export default async function BatchCoursePage({
                     <Link
                       key={s.id}
                       href={`/courses/${enrollment.batch.id}/subjects/${s.id}`}
-                      className="bg-white rounded-3xl border border-slate-200/80 p-5 hover:border-purple-300 hover:shadow-md transition-all group flex flex-col justify-between"
+                      className="bg-white rounded-3xl border border-slate-200/80 p-5 hover:border-blue-300 hover:shadow-md transition-all group flex flex-col justify-between"
                     >
                       <div className="space-y-2">
-                        <div className="w-10 h-10 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center font-black text-sm">
+                        <div className="w-10 h-10 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center font-black text-sm">
                           {s.title.charAt(0)}
                         </div>
-                        <h3 className="font-bold text-sm text-[#031635] group-hover:text-purple-600 transition">
+                        <h3 className="font-bold text-sm text-[#031635] group-hover:text-blue-600 transition">
                           {s.title}
                         </h3>
                         <p className="text-xs text-slate-500">
@@ -136,7 +136,7 @@ export default async function BatchCoursePage({
                         </p>
                       </div>
 
-                      <div className="pt-4 border-t border-slate-100 mt-4 flex items-center justify-between text-xs font-bold text-purple-600">
+                      <div className="pt-4 border-t border-slate-100 mt-4 flex items-center justify-between text-xs font-bold text-blue-600">
                         <span>View Chapters</span>
                         <span className="material-symbols-outlined text-base group-hover:translate-x-1 transition-transform">
                           arrow_forward

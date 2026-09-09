@@ -89,7 +89,7 @@ export function RevisionDashboardView({
             Questions Practiced
           </span>
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400">
+            <span className="text-2xl font-black text-blue-600 dark:text-blue-400">
               {stats.questionsRevisedCount.toLocaleString()}
             </span>
             <span className="text-xs text-slate-400 font-medium">total attempts</span>
@@ -246,7 +246,7 @@ export function RevisionDashboardView({
                   </div>
                   <div>
                     <span className="text-[10px] font-bold text-slate-400 block">Average Score</span>
-                    <span className="font-bold text-indigo-600 dark:text-indigo-400">
+                    <span className="font-bold text-blue-600 dark:text-blue-400">
                       {item.averageAccuracy}%
                     </span>
                   </div>

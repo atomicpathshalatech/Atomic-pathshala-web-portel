@@ -36,7 +36,7 @@ export function ChapterThumbnailBanner({
     <div className="relative w-full aspect-[16/9] sm:aspect-[21/9] md:aspect-[16/7] rounded-3xl overflow-hidden shadow-2xl border border-slate-800/80 bg-gradient-to-br from-[#0c0f1d] via-[#131b31] to-[#080a14] p-5 sm:p-7 flex flex-col justify-between select-none">
       {/* Background visual neon/glow elements */}
       <div className="absolute -top-20 -left-20 w-64 h-64 bg-amber-500/15 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-20 -right-20 w-80 h-80 bg-indigo-600/20 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-20 -right-20 w-80 h-80 bg-blue-600/20 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute top-1/2 left-1/3 w-40 h-40 bg-rose-500/10 rounded-full blur-2xl pointer-events-none" />
 
       {/* Top row: Badges & Brand */}
@@ -90,7 +90,7 @@ export function ChapterThumbnailBanner({
                 className="w-full h-full object-cover"
               />
             ) : (
-              <div className="w-full h-full bg-gradient-to-br from-indigo-900 to-slate-900 flex flex-col items-center justify-center text-center p-2">
+              <div className="w-full h-full bg-gradient-to-br from-blue-900 to-slate-900 flex flex-col items-center justify-center text-center p-2">
                 <span className="material-symbols-outlined text-3xl sm:text-4xl text-amber-400">
                   person
                 </span>

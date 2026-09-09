@@ -32,7 +32,7 @@ const REAL_FACULTY = [
     subject: "Physics Faculty",
     experience: "7+ Years Experience",
     qualification: "M.Sc. Physics (IIT Roorkee)",
-    avatarBg: "bg-purple-500/20 text-purple-600",
+    avatarBg: "bg-blue-500/20 text-blue-600",
   },
   {
     name: "Mohsin Ali Sir",

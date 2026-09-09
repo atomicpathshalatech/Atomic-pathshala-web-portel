@@ -86,7 +86,7 @@ export function CheckoutView({ course }: { course: CourseData }) {
                     key={m.id}
                     className={`p-4 rounded-2xl border cursor-pointer flex items-start gap-3.5 transition ${
                       isSelected
-                        ? "bg-purple-50/70 border-purple-600 shadow-sm"
+                        ? "bg-blue-50/70 border-blue-600 shadow-sm"
                         : "bg-white border-slate-200 hover:bg-slate-50"
                     }`}
                   >
@@ -95,7 +95,7 @@ export function CheckoutView({ course }: { course: CourseData }) {
                       name="paymentMethod"
                       checked={isSelected}
                       onChange={() => setSelectedMethod(m.id)}
-                      className="mt-1 text-purple-600 focus:ring-purple-500"
+                      className="mt-1 text-blue-600 focus:ring-blue-500"
                     />
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
@@ -163,7 +163,7 @@ export function CheckoutView({ course }: { course: CourseData }) {
                   placeholder="e.g. ATOMIC10 / TOPPER"
                   value={couponCode}
                   onChange={(e) => setCouponCode(e.target.value)}
-                  className="flex-1 uppercase font-mono px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#031635] outline-none focus:border-purple-600"
+                  className="flex-1 uppercase font-mono px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#031635] outline-none focus:border-blue-600"
                 />
                 <button
                   type="submit"
@@ -191,7 +191,7 @@ export function CheckoutView({ course }: { course: CourseData }) {
                 <span>-₹{standardDiscount.toLocaleString("en-IN")}</span>
               </div>
               {couponApplied && (
-                <div className="flex justify-between text-purple-600 font-bold">
+                <div className="flex justify-between text-blue-600 font-bold">
                   <span>Special Promo Code</span>
                   <span>-₹{couponDiscount.toLocaleString("en-IN")}</span>
                 </div>
@@ -211,7 +211,7 @@ export function CheckoutView({ course }: { course: CourseData }) {
               type="button"
               onClick={handlePay}
               disabled={isProcessing}
-              className="w-full py-3.5 rounded-2xl bg-[#6b46c1] hover:bg-[#5b3da5] text-white font-black text-sm shadow-lg shadow-purple-500/25 transition flex items-center justify-center gap-2"
+              className="w-full py-3.5 rounded-2xl bg-[#6b46c1] hover:bg-[#5b3da5] text-white font-black text-sm shadow-lg shadow-blue-500/25 transition flex items-center justify-center gap-2"
             >
               {isProcessing ? (
                 <>
@@ -238,7 +238,7 @@ export function CheckoutView({ course }: { course: CourseData }) {
             </div>
             <h3 className="text-xl font-black text-[#031635]">Payment Successful!</h3>
             <p className="text-xs text-slate-500">
-              Welcome to <span className="font-bold text-purple-600">{course.title}</span>. Your enrollment is active and ready to start learning.
+              Welcome to <span className="font-bold text-blue-600">{course.title}</span>. Your enrollment is active and ready to start learning.
             </p>
             <div className="p-4 rounded-2xl bg-slate-50 text-left text-xs space-y-1 border border-slate-100">
               <div className="flex justify-between">

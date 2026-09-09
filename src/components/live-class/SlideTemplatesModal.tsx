@@ -36,13 +36,13 @@ export function SlideTemplatesModal({
         {/* Header */}
         <div className="px-5 py-4 bg-[#0a0b12] border-b border-slate-800 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-2xl bg-blue-600/20 border border-blue-500/30 text-blue-400 flex items-center justify-center">
               <span className="material-symbols-outlined text-2xl">style</span>
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-bold text-white">Inbuilt Slide Templates</h3>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-950/80 border border-indigo-500/40 text-indigo-300 font-bold">
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-950/80 border border-blue-500/40 text-blue-300 font-bold">
                   Ctrl + D
                 </span>
               </div>
@@ -70,7 +70,7 @@ export function SlideTemplatesModal({
               onClick={() => setSelectedCategory(c.id)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition shrink-0 ${
                 selectedCategory === c.id
-                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                  ? "bg-blue-600 text-white shadow-md shadow-blue-600/30"
                   : "bg-slate-800/60 hover:bg-slate-800 text-slate-300"
               }`}
             >
@@ -89,7 +89,7 @@ export function SlideTemplatesModal({
                 key={t.id}
                 className={`flex flex-col justify-between p-3.5 rounded-2xl border transition-all duration-150 bg-[#161828]/90 ${
                   isCurrent
-                    ? "border-indigo-500 ring-2 ring-indigo-500/30 shadow-lg shadow-indigo-950"
+                    ? "border-blue-500 ring-2 ring-blue-500/30 shadow-lg shadow-blue-950"
                     : "border-slate-800 hover:border-slate-700"
                 }`}
               >
@@ -100,7 +100,7 @@ export function SlideTemplatesModal({
                   <span className="material-symbols-outlined text-2xl opacity-75">{t.icon}</span>
                   <span className="text-[11px] font-bold mt-1 tracking-wide">{t.name}</span>
                   {isCurrent && (
-                    <span className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-indigo-600 text-white text-[9px] font-bold shadow">
+                    <span className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-blue-600 text-white text-[9px] font-bold shadow">
                       Current Page
                     </span>
                   )}
@@ -131,7 +131,7 @@ export function SlideTemplatesModal({
                         onAddNewPageWithTemplate(t.backgroundValue);
                         onClose();
                       }}
-                      className="w-full py-1.5 px-2 rounded-xl text-[11px] font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-xs transition text-center flex items-center justify-center gap-1"
+                      className="w-full py-1.5 px-2 rounded-xl text-[11px] font-bold bg-blue-600 hover:bg-blue-500 text-white shadow-xs transition text-center flex items-center justify-center gap-1"
                       title="Add a new slide page with this template"
                     >
                       <span className="material-symbols-outlined text-[13px]">add</span>
@@ -147,9 +147,9 @@ export function SlideTemplatesModal({
         {/* Footer info showing custom folder path */}
         <div className="px-5 py-3 bg-[#0a0b12] border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400 shrink-0">
           <div className="flex items-center gap-1.5">
-            <span className="material-symbols-outlined text-indigo-400 text-sm">folder</span>
+            <span className="material-symbols-outlined text-blue-400 text-sm">folder</span>
             <span>
-              Custom slides folder: <code className="text-indigo-300 font-mono">public/templates/slides/</code>
+              Custom slides folder: <code className="text-blue-300 font-mono">public/templates/slides/</code>
             </span>
           </div>
           <span className="text-[10px] text-slate-500">Shortcut: Ctrl+D to open anytime</span>

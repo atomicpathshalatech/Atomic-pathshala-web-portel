@@ -108,10 +108,10 @@ export default async function DppPortalPage() {
 
   // 5. Structure Hierarchical Data: Subject -> Chapter -> DPP
   const SUBJECT_CONFIGS: Record<string, { icon: string; color: string; gradient: string; badgeBg: string }> = {
-    Physics: { icon: "bolt", color: "text-blue-500", gradient: "from-blue-600 to-indigo-600", badgeBg: "bg-blue-500/10 text-blue-600 border-blue-500/20" },
+    Physics: { icon: "bolt", color: "text-blue-500", gradient: "from-blue-600 to-blue-600", badgeBg: "bg-blue-500/10 text-blue-600 border-blue-500/20" },
     Chemistry: { icon: "science", color: "text-amber-500", gradient: "from-amber-500 to-orange-600", badgeBg: "bg-amber-500/10 text-amber-600 border-amber-500/20" },
     Biology: { icon: "biotech", color: "text-emerald-500", gradient: "from-emerald-500 to-teal-600", badgeBg: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" },
-    Mathematics: { icon: "functions", color: "text-purple-500", gradient: "from-purple-600 to-indigo-600", badgeBg: "bg-purple-500/10 text-purple-600 border-purple-500/20" },
+    Mathematics: { icon: "functions", color: "text-blue-500", gradient: "from-blue-600 to-blue-600", badgeBg: "bg-blue-500/10 text-blue-600 border-blue-500/20" },
   };
 
   const subjectMap: Record<string, Record<string, any[]>> = {

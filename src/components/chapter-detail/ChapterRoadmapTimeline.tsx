@@ -122,7 +122,7 @@ export function ChapterRoadmapTimeline({
                   </div>
                   <span>•</span>
                   <div className="flex items-center gap-1">
-                    <span className="material-symbols-outlined text-xs text-indigo-500">description</span>
+                    <span className="material-symbols-outlined text-xs text-blue-500">description</span>
                     <span className="font-medium">Class Notes</span>
                   </div>
                 </div>
@@ -174,7 +174,7 @@ export function ChapterRoadmapTimeline({
                                 target="_blank"
                                 rel="noreferrer"
                                 onClick={(e) => e.stopPropagation()}
-                                className="px-2.5 py-1.5 rounded-lg bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-600 dark:text-indigo-400 font-bold text-xs border border-indigo-500/30 transition flex items-center gap-1"
+                                className="px-2.5 py-1.5 rounded-lg bg-blue-600/10 hover:bg-blue-600/20 text-blue-600 dark:text-blue-400 font-bold text-xs border border-blue-500/30 transition flex items-center gap-1"
                                 title="View & Download Class Notes PDF"
                               >
                                 <span className="material-symbols-outlined text-xs">description</span>
@@ -206,10 +206,10 @@ export function ChapterRoadmapTimeline({
                       step.notes.map((note) => (
                         <div
                           key={note.id}
-                          className="p-3 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 flex items-center justify-between gap-2"
+                          className="p-3 rounded-xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 flex items-center justify-between gap-2"
                         >
                           <div className="flex items-center gap-2.5 min-w-0">
-                            <span className="w-6 h-6 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                            <span className="w-6 h-6 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
                               <span className="material-symbols-outlined text-sm">description</span>
                             </span>
                             <span className="text-slate-800 dark:text-slate-200 font-semibold line-clamp-1">
@@ -223,7 +223,7 @@ export function ChapterRoadmapTimeline({
                               target="_blank"
                               rel="noreferrer"
                               onClick={(e) => e.stopPropagation()}
-                              className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-bold text-xs hover:bg-indigo-500 transition shadow-sm shrink-0 flex items-center gap-1"
+                              className="px-3 py-1.5 rounded-lg bg-blue-600 text-white font-bold text-xs hover:bg-blue-500 transition shadow-sm shrink-0 flex items-center gap-1"
                             >
                               <span className="material-symbols-outlined text-xs">download</span>
                               <span>Notes</span>
@@ -235,7 +235,7 @@ export function ChapterRoadmapTimeline({
                                 e.stopPropagation();
                                 toast.info("Notes will be available once uploaded by faculty.");
                               }}
-                              className="px-3 py-1.5 rounded-lg bg-indigo-600/80 text-white font-bold text-xs hover:bg-indigo-500 transition shadow-sm shrink-0 flex items-center gap-1"
+                              className="px-3 py-1.5 rounded-lg bg-blue-600/80 text-white font-bold text-xs hover:bg-blue-500 transition shadow-sm shrink-0 flex items-center gap-1"
                             >
                               <span className="material-symbols-outlined text-xs">download</span>
                               <span>Notes</span>

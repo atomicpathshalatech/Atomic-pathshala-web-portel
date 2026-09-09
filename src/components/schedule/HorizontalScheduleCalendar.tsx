@@ -92,7 +92,7 @@ function getSubjectBadgeColor(subject?: string | null) {
   for (const [key, val] of Object.entries(SUBJECT_COLORS)) {
     if (lower.includes(key)) return val;
   }
-  return { bg: "bg-indigo-100 dark:bg-indigo-950/60", text: "text-indigo-700 dark:text-indigo-300" };
+  return { bg: "bg-blue-100 dark:bg-blue-950/60", text: "text-blue-700 dark:text-blue-300" };
 }
 
 export function HorizontalScheduleCalendar({

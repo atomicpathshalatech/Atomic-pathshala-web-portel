@@ -36,7 +36,7 @@ export function SideBySideCompareModal({
       case "SIMILAR":
         return "bg-yellow-500/20 text-yellow-300 border-yellow-500/40";
       default:
-        return "bg-indigo-500/20 text-indigo-300 border-indigo-500/40";
+        return "bg-blue-500/20 text-blue-300 border-blue-500/40";
     }
   };
 

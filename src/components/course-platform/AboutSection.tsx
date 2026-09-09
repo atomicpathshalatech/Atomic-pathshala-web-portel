@@ -8,13 +8,13 @@ export function AboutSection({ course }: { course: any }) {
       icon: "video_camera_front",
       title: "Live Interactive Classes",
       desc: "Daily 2-hour interactive sessions with real-time student doubt solving.",
-      color: "bg-indigo-50 text-indigo-600",
+      color: "bg-blue-50 text-blue-600",
     },
     {
       icon: "quiz",
       title: "Standardized Mock Tests",
       desc: "21 Full syllabus & part tests strictly matching the latest NEET examination patterns.",
-      color: "bg-purple-50 text-purple-600",
+      color: "bg-blue-50 text-blue-600",
     },
     {
       icon: "menu_book",
@@ -46,7 +46,7 @@ export function AboutSection({ course }: { course: any }) {
     <section id="about" className="bg-white rounded-3xl border border-slate-200/80 p-5 sm:p-7 space-y-6">
       <div>
         <h2 className="text-base sm:text-lg font-black text-[#031635] flex items-center gap-2">
-          <span className="material-symbols-outlined text-indigo-600">verified</span>
+          <span className="material-symbols-outlined text-blue-600">verified</span>
           <span>What&apos;s Included in this Batch</span>
         </h2>
         <p className="text-xs text-slate-500 mt-0.5">
