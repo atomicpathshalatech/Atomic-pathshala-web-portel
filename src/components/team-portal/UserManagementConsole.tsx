@@ -10,7 +10,17 @@ export interface UserItem {
   email: string;
   phone: string | null;
   photoUrl: string | null;
-  status: "ACTIVE" | "INACTIVE" | "SUSPENDED" | "EXPIRED" | "PENDING_VERIFICATION";
+  status:
+    | "ACTIVE"
+    | "INACTIVE"
+    | "SUSPENDED"
+    | "EXPIRED"
+    | "PENDING_VERIFICATION"
+    | "APPROVAL_PENDING"
+    | "INVITED"
+    | "NO_ROLE"
+    | "EX_EDUCATOR"
+    | "EX_TEAM_MEMBER";
   role: string;
   roleLabel: string;
   department: string;
@@ -202,6 +212,29 @@ export function UserManagementConsole() {
       });
       if (!res.ok) throw new Error("Failed to update status");
       toast.success(`User status updated to ${newStatus}`);
+      loadUsers();
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  // Remove the user's role — identity, profile & history are preserved; the
+  // account is marked as former staff and loses all staff permissions.
+  const handleRemoveRole = async (user: UserItem) => {
+    if (
+      !window.confirm(
+        `Remove ${user.name}'s role?\n\nThey keep their account, profile and all history, but lose access to the team portal until a role is assigned again.`
+      )
+    )
+      return;
+    try {
+      const res = await fetch(`/api/team/users/${user.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ removeRole: true }),
+      });
+      if (!res.ok) throw new Error("Failed to remove role");
+      toast.success(`${user.name}'s role removed — marked as former staff.`);
       loadUsers();
     } catch (err: any) {
       toast.error(err.message);
@@ -468,9 +501,15 @@ export function UserManagementConsole() {
           >
             <option value="ALL">All Status</option>
             <option value="ACTIVE">Active</option>
-            <option value="INACTIVE">Inactive</option>
+            <option value="NO_ROLE">No role</option>
+            <option value="APPROVAL_PENDING">Approval pending</option>
+            <option value="PENDING_VERIFICATION">Verification pending</option>
+            <option value="INVITED">Invited</option>
             <option value="SUSPENDED">Suspended</option>
+            <option value="INACTIVE">Inactive</option>
             <option value="EXPIRED">Expired</option>
+            <option value="EX_EDUCATOR">Former educator</option>
+            <option value="EX_TEAM_MEMBER">Former team member</option>
           </select>
         </div>
       </div>
@@ -583,6 +622,17 @@ export function UserManagementConsole() {
                           <span className="material-symbols-outlined text-sm">tune</span>
                           <span>Matrix</span>
                         </Link>
+                        {u.role !== "NONE" && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveRole(u)}
+                            className="px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 text-[11px] font-bold transition flex items-center gap-1"
+                            title="Remove role — keeps profile & history"
+                          >
+                            <span className="material-symbols-outlined text-sm">person_remove</span>
+                            <span>Remove role</span>
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

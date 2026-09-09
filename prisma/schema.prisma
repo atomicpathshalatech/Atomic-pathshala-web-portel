@@ -55,7 +55,10 @@ model User {
   name                   String
   photoUrl               String?
   status                 UserStatus     @default(ACTIVE)
-  roleId                 String
+  // Nullable so a person can exist with a permanent identity and NO role
+  // (freshly invited, or a former staff member whose role was removed).
+  // A null role => zero effective permissions (see rbac/guard.ts).
+  roleId                 String?
   department             String?
   position               String?
   contractType           String?
@@ -89,7 +92,7 @@ model User {
   resourceAuditLogs        ResourceAuditLog[]
   student                Student?
   teacher                Teacher?
-  role                   Role           @relation(fields: [roleId], references: [id])
+  role                   Role?          @relation(fields: [roleId], references: [id])
   teacherApplicationsReviewed TeacherApplication[] @relation("TeacherApplicationReviewer")
   notificationBroadcasts NotificationBroadcast[]
   homeSectionsCreated    HomePageSection[] @relation("HomeSectionCreatedBy")
@@ -1966,12 +1969,28 @@ enum GlobalRole {
   FOUNDER
 }
 
+// Account lifecycle. The identity/profile is permanent; only this and the
+// role change over a person's time with Atomic Pathshala.
+//   ACTIVE               - full access per assigned role
+//   PENDING_VERIFICATION - can sign in, no staff access ("verification pending")
+//   APPROVAL_PENDING     - can sign in, awaiting an admin to approve/assign a role
+//   INVITED              - created by an admin, first sign-in not yet done
+//   NO_ROLE              - signs in fine but holds no role => no staff permissions
+//   SUSPENDED            - blocked (temporary)
+//   INACTIVE / EXPIRED   - blocked (legacy states, kept for back-compat)
+//   EX_EDUCATOR          - former teacher; profile + history preserved, no access
+//   EX_TEAM_MEMBER       - former non-teaching staff; same
 enum UserStatus {
   ACTIVE
   INACTIVE
   SUSPENDED
   EXPIRED
   PENDING_VERIFICATION
+  APPROVAL_PENDING
+  INVITED
+  NO_ROLE
+  EX_EDUCATOR
+  EX_TEAM_MEMBER
 }
 
 enum Gender {

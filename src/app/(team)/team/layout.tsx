@@ -100,7 +100,7 @@ export default async function TeamPortalLayout({ children }: { children: React.R
   })).filter((section) => section.items.length > 0);
 
   return (
-    <TeamShell userName={user.name} userRoleLabel={user.role.label} hasTeacherProfile={hasTeacherProfile} sections={visibleSections}>
+    <TeamShell userName={user.name} userRoleLabel={user.role?.label ?? ""} hasTeacherProfile={hasTeacherProfile} sections={visibleSections}>
       {children}
     </TeamShell>
   );

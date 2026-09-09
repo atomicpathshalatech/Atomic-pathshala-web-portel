@@ -118,11 +118,29 @@ export const requireTeamSession = cache(async function requireTeamSession() {
     redirect("/login");
   }
 
+  // Authenticated, but not (yet) a working staff account: no role assigned,
+  // or an account state that isn't ACTIVE. These users can sign in — they
+  // just land on /access-denied instead of any protected staff route.
+  const STAFF_WAITING_STATES: string[] = [
+    "PENDING_VERIFICATION",
+    "APPROVAL_PENDING",
+    "INVITED",
+    "NO_ROLE",
+    "SUSPENDED",
+    "INACTIVE",
+    "EXPIRED",
+    "EX_EDUCATOR",
+    "EX_TEAM_MEMBER",
+  ];
+  if (!user.role || STAFF_WAITING_STATES.includes(user.status)) {
+    redirect("/access-denied");
+  }
+
   if (!permissions.has(PERMISSIONS.TEAM_PORTAL_ACCESS)) {
     if (user.role.name === "STUDENT" || user.role.name === "PARENT") {
       redirect("/dashboard");
     }
-    redirect("/");
+    redirect("/access-denied");
   }
 
   return { session, user, permissions };

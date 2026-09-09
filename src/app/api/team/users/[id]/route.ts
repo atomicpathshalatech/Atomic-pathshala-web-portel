@@ -41,13 +41,13 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // Calculate effective permissions
+    // Calculate effective permissions. A user with no role has none.
     const rolePermissionCodes = new Set<string>(
-      user.role.permissions.map((p) => p.permission.code)
+      user.role ? user.role.permissions.map((p) => p.permission.code) : []
     );
 
     // Fallback to static defaults if DB role_permissions is empty
-    const defaults = ROLE_PERMISSION_DEFAULTS[user.role.name];
+    const defaults = user.role ? ROLE_PERMISSION_DEFAULTS[user.role.name] : undefined;
     if (rolePermissionCodes.size === 0 && defaults) {
       defaults.forEach((c) => rolePermissionCodes.add(c));
     }
@@ -57,11 +57,14 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       overridesMap[o.permissionCode] = o.granted;
     });
 
+    const isBlanketAdmin =
+      user.role?.name === "SUPER_ADMIN" || user.role?.name === "FOUNDER";
+
     const effectivePermissions: Record<string, boolean> = {};
     Object.values(PERMISSIONS).forEach((permCode) => {
       if (overridesMap[permCode] !== undefined) {
         effectivePermissions[permCode] = overridesMap[permCode];
-      } else if (user.role.name === "SUPER_ADMIN" || user.role.name === "FOUNDER") {
+      } else if (isBlanketAdmin) {
         effectivePermissions[permCode] = true;
       } else {
         effectivePermissions[permCode] = rolePermissionCodes.has(permCode);
@@ -76,8 +79,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         phone: user.phone,
         photoUrl: user.photoUrl,
         status: user.status,
-        role: user.role.name,
-        roleLabel: user.role.label,
+        role: user.role?.name ?? "NONE",
+        roleLabel: user.role?.label ?? "No role",
         department: user.department,
         position: user.position,
         subjectScope: user.subjectScope,
@@ -117,7 +120,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
     const currentUser = await prisma.user.findUnique({
       where: { id: userId },
-      include: { role: true },
+      include: { role: true, teacher: { select: { id: true } } },
     });
 
     if (!currentUser) {
@@ -180,8 +183,22 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       auditChanges.batchScope = { old: currentUser.batchScope, new: body.batchScope };
     }
 
-    // Role Change
-    if (body.roleName && body.roleName !== currentUser.role.name) {
+    const currentRoleName = currentUser.role?.name ?? null;
+
+    // Role removal — "NONE" or removeRole:true. The identity, profile and all
+    // historical records are kept; only the role link is cleared and the
+    // account is marked as former staff (unless the caller set a status too).
+    if (body.removeRole === true || body.roleName === "NONE" || body.roleName === null) {
+      if (currentUser.roleId) {
+        updateData.roleId = null;
+        auditChanges.role = { old: currentRoleName, new: null };
+        if (body.status === undefined) {
+          updateData.status = currentUser.teacher ? "EX_EDUCATOR" : "EX_TEAM_MEMBER";
+          auditChanges.status = { old: currentUser.status, new: updateData.status };
+        }
+      }
+    } else if (body.roleName && body.roleName !== currentRoleName) {
+      // Role change / (re)assignment
       let newRole = await prisma.role.findUnique({ where: { name: body.roleName } });
       if (!newRole) {
         newRole = await prisma.role.create({
@@ -193,7 +210,17 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         });
       }
       updateData.roleId = newRole.id;
-      auditChanges.role = { old: currentUser.role.name, new: body.roleName };
+      auditChanges.role = { old: currentRoleName, new: body.roleName };
+      // Re-activate a formerly-parked account when a role is assigned back.
+      if (
+        body.status === undefined &&
+        ["NO_ROLE", "APPROVAL_PENDING", "INVITED", "EX_EDUCATOR", "EX_TEAM_MEMBER"].includes(
+          currentUser.status
+        )
+      ) {
+        updateData.status = "ACTIVE";
+        auditChanges.status = { old: currentUser.status, new: "ACTIVE" };
+      }
     }
 
     const updatedUser = await prisma.user.update({
@@ -225,7 +252,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         name: updatedUser.name,
         email: updatedUser.email,
         status: updatedUser.status,
-        role: updatedUser.role.name,
+        role: updatedUser.role?.name ?? "NONE",
         department: updatedUser.department,
         position: updatedUser.position,
       },
