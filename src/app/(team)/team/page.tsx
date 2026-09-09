@@ -76,7 +76,7 @@ export default async function TeamHomePage() {
             Welcome, {user.name.split(" ")[0]}
           </h1>
           <p className="font-body-md text-body-md text-on-surface-variant">
-            {user.role.label} — here&apos;s what you have access to.
+            {user.role?.label ?? ""} — here&apos;s what you have access to.
           </p>
         </div>
         {teacherProfile && (

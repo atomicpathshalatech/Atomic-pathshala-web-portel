@@ -60,7 +60,10 @@ export async function hasPermission(
 
   if (!user) return false;
 
-  // 1. Inactive, Suspended, or Expired users are completely blocked
+  // 0. No role assigned => no effective permissions at all.
+  if (!user.role) return false;
+
+  // 1. Any non-ACTIVE status (suspended / pending / ex-staff / …) is blocked.
   if (user.status !== "ACTIVE") return false;
 
   // 2. Contract expiration check
@@ -127,7 +130,7 @@ export async function getUserPermissionCodes(userId: string): Promise<Set<Permis
     },
   });
 
-  if (!user || user.status !== "ACTIVE") return new Set();
+  if (!user || !user.role || user.status !== "ACTIVE") return new Set();
   if (user.contractEnd && new Date(user.contractEnd) < new Date()) return new Set();
 
   const isSuperAdmin =

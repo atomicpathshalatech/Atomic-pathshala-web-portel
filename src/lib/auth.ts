@@ -44,7 +44,16 @@ export const authOptions: NextAuthOptions = {
         });
 
         if (!user) return null;
-        if (user.status !== "ACTIVE") return null;
+        // Statuses that may still sign in (they'll land on a "no access yet"
+        // screen in the team portal); everything else is a hard block.
+        const CAN_SIGN_IN: string[] = [
+          "ACTIVE",
+          "PENDING_VERIFICATION",
+          "APPROVAL_PENDING",
+          "INVITED",
+          "NO_ROLE",
+        ];
+        if (!CAN_SIGN_IN.includes(user.status)) return null;
 
         const isValid = await bcrypt.compare(credentials.password, user.passwordHash);
         if (!isValid) return null;
@@ -61,7 +70,7 @@ export const authOptions: NextAuthOptions = {
           id: user.id,
           email: user.email,
           name: user.name,
-          role: user.role.name,
+          role: user.role?.name ?? null,
           image: user.photoUrl ?? undefined,
           deviceSessionId,
         };
@@ -82,7 +91,7 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
-        token.role = (user as { role: string }).role;
+        token.role = (user as { role: string | null }).role ?? null;
         token.deviceSessionId = (user as { deviceSessionId?: string | null }).deviceSessionId ?? null;
         token.deviceValid = true;
         token.deviceCheckedAt = Date.now();
@@ -106,7 +115,10 @@ export const authOptions: NextAuthOptions = {
       const valid = token.deviceValid !== false;
       if (session.user && valid && token.id) {
         session.user.id = token.id as string;
-        session.user.role = (token.role as string) || "STUDENT";
+        // No implicit "STUDENT" fallback — a user with no role must read as
+        // roleless so the team portal shows the "no role assigned" screen
+        // instead of silently treating them as a student.
+        session.user.role = (token.role as string | null) ?? null;
       } else if (session.user && !valid) {
         delete (session as any).user;
       }
