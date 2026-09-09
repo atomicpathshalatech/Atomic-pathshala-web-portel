@@ -8,7 +8,14 @@ import { TeacherLiveClassRoomClient } from "@/components/live-class/TeacherLiveC
 import { StudentLiveClassRoomClient } from "@/components/live-class/StudentLiveClassRoomClient";
 
 type View = "teacher" | "student" | "split";
-type LogRow = { t: string; event: string; summary: string };
+type StudentDevice = "desktop" | "mobile";
+type LogRow = {
+  t: string;
+  event: string;
+  summary: string;
+  /** Whether a student was subscribed to the session channel when this fired. */
+  delivered: boolean;
+};
 
 const EVENT_LABEL: Record<string, string> = {
   "board-updated": "Whiteboard stroke / board update",
@@ -47,12 +54,29 @@ export function TestLabHarness({
   endsAtIso: string;
 }) {
   const [view, setView] = useState<View>("teacher");
+  const [studentDevice, setStudentDevice] = useState<StudentDevice>("desktop");
   const [log, setLog] = useState<LogRow[]>([]);
   const [online, setOnline] = useState(true);
   const [realtime, setRealtime] = useState<"connecting" | "connected" | "unavailable">("connecting");
   const [apiOk, setApiOk] = useState<"checking" | "ok" | "fail">("checking");
   const [studentPresent, setStudentPresent] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
+
+  // Read the latest presence inside the event handler without re-binding it.
+  const studentPresentRef = useRef(false);
+  useEffect(() => {
+    studentPresentRef.current = studentPresent;
+  }, [studentPresent]);
+
+  const pushLog = useCallback((event: string, summary: string) => {
+    setLog((prev) =>
+      [
+        { t: new Date().toLocaleTimeString(), event, summary, delivered: studentPresentRef.current },
+        ...prev,
+      ].slice(0, 200)
+    );
+  }, []);
 
   // ---- Event monitor: tap the SAME Pusher channel the rooms use ----------
   useEffect(() => {
@@ -68,12 +92,7 @@ export function TestLabHarness({
         }
         return;
       }
-      setLog((prev) =>
-        [
-          { t: new Date().toLocaleTimeString(), event, summary: summarise(data) },
-          ...prev,
-        ].slice(0, 200)
-      );
+      pushLog(event, summarise(data));
     };
     (channel as unknown as { bind_global: (cb: typeof onAny) => void }).bind_global(onAny);
 
@@ -97,7 +116,7 @@ export function TestLabHarness({
       channel.unbind("pusher:member_removed", onMemberRemoved);
       conn.unbind("state_change", syncConn);
     };
-  }, [whiteboardSessionId]);
+  }, [whiteboardSessionId, pushLog]);
 
   // ---- Real diagnostics -------------------------------------------------
   useEffect(() => {
@@ -141,6 +160,35 @@ export function TestLabHarness({
     }
   }
 
+  /**
+   * §26 — drop and re-open the realtime socket, then confirm the board comes
+   * back. Uses the real Pusher client both rooms share, so this exercises
+   * their actual reconnect/re-fetch paths, not a fake.
+   */
+  function simulateReconnect() {
+    if (reconnecting) return;
+    setReconnecting(true);
+    const client = getPusherClient();
+    pushLog("test-reconnect", "socket disconnect requested");
+    try {
+      client.disconnect();
+    } catch {
+      /* noop */
+    }
+    window.setTimeout(() => {
+      try {
+        client.connect();
+        pushLog("test-reconnect", "socket reconnecting…");
+      } catch {
+        /* noop */
+      }
+      window.setTimeout(() => {
+        setReconnecting(false);
+        pushLog("test-reconnect", `state: ${getPusherClient().connection.state}`);
+      }, 2500);
+    }, 1200);
+  }
+
   const Dot = ({ ok }: { ok: boolean | "warn" }) => (
     <span
       className={`inline-block w-2.5 h-2.5 rounded-full ${
@@ -158,7 +206,7 @@ export function TestLabHarness({
       endsAt={endsAtIso}
     />
   );
-  const studentRoom = (
+  const studentRoomInner = (
     <StudentLiveClassRoomClient
       batchScheduleId={batchScheduleId}
       scheduleTitle="Whiteboard Test Lab"
@@ -167,6 +215,18 @@ export function TestLabHarness({
       currentUserId={currentUserId}
     />
   );
+  // §33 — constrain the student pane to a phone width so the responsive
+  // student classroom layout can be eyeballed without a real device.
+  const studentRoom =
+    studentDevice === "mobile" ? (
+      <div className="h-full w-full overflow-auto bg-slate-800 flex justify-center py-3">
+        <div className="w-[390px] shrink-0 h-full rounded-2xl overflow-hidden border border-white/15 shadow-2xl bg-slate-950">
+          {studentRoomInner}
+        </div>
+      </div>
+    ) : (
+      studentRoomInner
+    );
 
   return (
     <div className="flex flex-col h-[100dvh] bg-slate-950 text-white">
@@ -190,6 +250,21 @@ export function TestLabHarness({
           ))}
         </div>
 
+        {(view === "student" || view === "split") && (
+          <div className="flex rounded-lg bg-white/10 p-0.5" title="Student view device size (§33)">
+            {(["desktop", "mobile"] as StudentDevice[]).map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => setStudentDevice(d)}
+                className={`px-2.5 py-1 rounded-md text-xs font-bold capitalize ${studentDevice === d ? "bg-white text-slate-900" : "text-white/70 hover:text-white"}`}
+              >
+                {d === "mobile" ? "📱 Mobile" : "💻 Desktop"}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="flex items-center gap-3 text-[11px] ml-auto">
           <span className="flex items-center gap-1.5"><Dot ok={online} /> Internet</span>
           <span className="flex items-center gap-1.5"><Dot ok={realtime === "connected" ? true : realtime === "connecting" ? "warn" : false} /> Realtime</span>
@@ -197,9 +272,18 @@ export function TestLabHarness({
           <span className="flex items-center gap-1.5"><Dot ok={studentPresent ? true : "warn"} /> Student sync</span>
           <button
             type="button"
+            onClick={simulateReconnect}
+            disabled={reconnecting}
+            className="ml-1 rounded-md border border-white/20 px-2.5 py-1 text-xs font-bold hover:bg-white/10 disabled:opacity-50"
+            title="Drop & restore the realtime socket, then confirm the board is intact (§26)"
+          >
+            {reconnecting ? "Reconnecting…" : "Simulate reconnect"}
+          </button>
+          <button
+            type="button"
             onClick={reset}
             disabled={resetting}
-            className="ml-1 rounded-md border border-white/20 px-2.5 py-1 text-xs font-bold hover:bg-white/10 disabled:opacity-50"
+            className="rounded-md border border-white/20 px-2.5 py-1 text-xs font-bold hover:bg-white/10 disabled:opacity-50"
           >
             {resetting ? "Resetting…" : "Reset test session"}
           </button>
@@ -216,7 +300,7 @@ export function TestLabHarness({
         </div>
       </div>
 
-      {/* Live activity / event monitor */}
+      {/* Live activity / event monitor — Teacher action → event → student receives (§13–15) */}
       <details className="border-t border-white/10 bg-slate-900" open>
         <summary className="px-3 py-1.5 text-xs font-bold cursor-pointer select-none">
           Live Activity — real classroom events ({log.length})
@@ -225,16 +309,27 @@ export function TestLabHarness({
           {log.length === 0 ? (
             <p className="text-white/40 py-2">
               Draw, change page, upload a PDF, start a poll or send a chat — events from the real
-              classroom engine appear here.
+              classroom engine appear here, with whether a student was connected to receive them.
             </p>
           ) : (
-            log.map((r, i) => (
-              <div key={i} className="flex gap-2 border-b border-white/5 py-1">
-                <span className="text-white/40 shrink-0">{r.t}</span>
-                <span className="text-emerald-400 shrink-0 w-56 truncate">{EVENT_LABEL[r.event] ?? r.event}</span>
-                <span className="text-white/60 truncate">{r.summary}</span>
+            <>
+              <div className="flex gap-2 text-white/30 uppercase tracking-wider text-[9px] py-1 border-b border-white/10 sticky top-0 bg-slate-900">
+                <span className="shrink-0 w-16">Time</span>
+                <span className="shrink-0 w-56">Classroom event</span>
+                <span className="shrink-0 w-24">Student</span>
+                <span>Payload</span>
               </div>
-            ))
+              {log.map((r, i) => (
+                <div key={i} className="flex gap-2 border-b border-white/5 py-1">
+                  <span className="text-white/40 shrink-0 w-16">{r.t}</span>
+                  <span className="text-emerald-400 shrink-0 w-56 truncate">{EVENT_LABEL[r.event] ?? r.event}</span>
+                  <span className={`shrink-0 w-24 ${r.delivered ? "text-emerald-400" : "text-amber-400/80"}`}>
+                    {r.delivered ? "✓ received" : "— none joined"}
+                  </span>
+                  <span className="text-white/60 truncate">{r.summary}</span>
+                </div>
+              ))}
+            </>
           )}
         </div>
       </details>
