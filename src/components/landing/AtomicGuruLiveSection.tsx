@@ -89,7 +89,7 @@ export function AtomicGuruLiveSection() {
       <ScrollReveal className="max-w-container-max mx-auto space-y-8">
         {/* Section Heading */}
         <div className="text-center max-w-2xl mx-auto space-y-3">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-100 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 text-xs font-bold uppercase tracking-wider shadow-sm">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-100 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 text-xs font-bold uppercase tracking-wider shadow-sm">
             <span className="material-symbols-outlined text-sm">psychology</span>
             Atomic Guru &middot; AI Doubt Solver
           </div>
@@ -102,11 +102,11 @@ export function AtomicGuruLiveSection() {
         </div>
 
         {/* Live Chat Box Container */}
-        <div className="max-w-4xl mx-auto glass-card rounded-3xl border-2 border-purple-200/70 dark:border-purple-900/50 shadow-2xl overflow-hidden bg-gradient-to-br from-purple-50/15 via-surface to-surface flex flex-col h-[600px]">
+        <div className="max-w-4xl mx-auto glass-card rounded-3xl border-2 border-blue-200/70 dark:border-blue-900/50 shadow-2xl overflow-hidden bg-gradient-to-br from-blue-50/15 via-surface to-surface flex flex-col h-[600px]">
           {/* Top Bar with Language Selector */}
-          <div className="px-6 py-3.5 bg-purple-500/10 border-b border-purple-200/40 dark:border-purple-900/30 flex flex-wrap items-center justify-between gap-3">
+          <div className="px-6 py-3.5 bg-blue-500/10 border-b border-blue-200/40 dark:border-blue-900/30 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-purple-600 text-white flex items-center justify-center shadow-md">
+              <div className="w-10 h-10 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-md">
                 <span className="material-symbols-outlined text-2xl">psychology</span>
               </div>
               <div>
@@ -125,7 +125,7 @@ export function AtomicGuruLiveSection() {
                 onClick={() => setLanguage("english")}
                 className={`px-3 py-1 rounded-lg font-semibold transition-all ${
                   language === "english"
-                    ? "bg-purple-600 text-white shadow-sm"
+                    ? "bg-blue-600 text-white shadow-sm"
                     : "text-on-surface-variant hover:text-on-surface"
                 }`}
               >
@@ -136,7 +136,7 @@ export function AtomicGuruLiveSection() {
                 onClick={() => setLanguage("hindi")}
                 className={`px-3 py-1 rounded-lg font-semibold transition-all ${
                   language === "hindi"
-                    ? "bg-purple-600 text-white shadow-sm"
+                    ? "bg-blue-600 text-white shadow-sm"
                     : "text-on-surface-variant hover:text-on-surface"
                 }`}
               >
@@ -147,7 +147,7 @@ export function AtomicGuruLiveSection() {
                 onClick={() => setLanguage("hinglish")}
                 className={`px-3 py-1 rounded-lg font-semibold transition-all ${
                   language === "hinglish"
-                    ? "bg-purple-600 text-white shadow-sm"
+                    ? "bg-blue-600 text-white shadow-sm"
                     : "text-on-surface-variant hover:text-on-surface"
                 }`}
               >
@@ -164,7 +164,7 @@ export function AtomicGuruLiveSection() {
                 className={`flex gap-3 ${m.role === "user" ? "justify-end" : "justify-start"}`}
               >
                 {m.role === "guru" && (
-                  <div className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0 mt-1 shadow-sm">
+                  <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 mt-1 shadow-sm">
                     <span className="material-symbols-outlined text-base">smart_toy</span>
                   </div>
                 )}
@@ -182,14 +182,14 @@ export function AtomicGuruLiveSection() {
 
             {loading && (
               <div className="flex items-center gap-3 text-xs text-on-surface-variant">
-                <div className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0">
+                <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0">
                   <span className="material-symbols-outlined text-base">smart_toy</span>
                 </div>
                 <div className="bg-surface-container-lowest p-3 rounded-2xl border border-outline-variant/30 flex items-center gap-2 shadow-sm">
-                  <span className="material-symbols-outlined text-purple-600 animate-spin text-sm">
+                  <span className="material-symbols-outlined text-blue-600 animate-spin text-sm">
                     progress_activity
                   </span>
-                  <span className="font-semibold text-purple-700 dark:text-purple-300">
+                  <span className="font-semibold text-blue-700 dark:text-blue-300">
                     Atomic Guru is analyzing with NCERT knowledge...
                   </span>
                 </div>
@@ -206,7 +206,7 @@ export function AtomicGuruLiveSection() {
                   key={sq.text}
                   type="button"
                   onClick={() => handleSend(sq.text)}
-                  className="px-3.5 py-1.5 rounded-full bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 text-xs font-medium hover:bg-purple-100 dark:hover:bg-purple-900/60 transition-all shrink-0 border border-purple-200/50 flex items-center gap-1.5"
+                  className="px-3.5 py-1.5 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 text-xs font-medium hover:bg-blue-100 dark:hover:bg-blue-900/60 transition-all shrink-0 border border-blue-200/50 flex items-center gap-1.5"
                 >
                   <span className="material-symbols-outlined text-xs">{sq.icon}</span>
                   <span className="truncate max-w-[200px]">{sq.text}</span>
@@ -227,12 +227,12 @@ export function AtomicGuruLiveSection() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Ask any question in English, हिंदी, or Hinglish (e.g. Firoz Sir, Photosynthesis, Newton's law)..."
-                className="flex-1 px-4 py-3 rounded-2xl border border-outline-variant/40 bg-surface text-body-sm text-on-surface outline-none focus:ring-2 focus:ring-purple-500"
+                className="flex-1 px-4 py-3 rounded-2xl border border-outline-variant/40 bg-surface text-body-sm text-on-surface outline-none focus:ring-2 focus:ring-blue-500"
               />
               <button
                 type="submit"
                 disabled={loading || !query.trim()}
-                className="px-6 py-3 bg-purple-600 text-white rounded-2xl font-semibold text-xs hover:bg-purple-700 active:scale-95 disabled:opacity-50 transition-all flex items-center gap-1.5 shrink-0 shadow-md"
+                className="px-6 py-3 bg-blue-600 text-white rounded-2xl font-semibold text-xs hover:bg-blue-700 active:scale-95 disabled:opacity-50 transition-all flex items-center gap-1.5 shrink-0 shadow-md"
               >
                 <span>Ask Guru</span>
                 <span className="material-symbols-outlined text-sm">send</span>
@@ -241,7 +241,7 @@ export function AtomicGuruLiveSection() {
 
             <div className="flex items-center justify-between text-[11px] text-on-surface-variant pt-1">
               <span>Free instant access &middot; Powered by Atomic Pathshala Knowledge Engine</span>
-              <Link href="/register" className="text-purple-600 dark:text-purple-400 font-bold hover:underline">
+              <Link href="/register" className="text-blue-600 dark:text-blue-400 font-bold hover:underline">
                 Explore Full Batch Programs &rarr;
               </Link>
             </div>

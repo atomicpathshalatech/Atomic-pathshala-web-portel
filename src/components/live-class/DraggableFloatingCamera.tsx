@@ -122,7 +122,7 @@ export function DraggableFloatingCamera({
       className="fixed top-0 left-0 z-50 select-none cursor-grab active:cursor-grabbing group animate-in fade-in zoom-in-95 duration-150"
     >
       {/* Outer Halo Glow */}
-      <div className="relative w-full h-full rounded-full p-[3px] bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 shadow-[0_8px_30px_rgb(0,0,0,0.6)] ring-2 ring-white/20">
+      <div className="relative w-full h-full rounded-full p-[3px] bg-gradient-to-tr from-blue-500 via-blue-500 to-pink-500 shadow-[0_8px_30px_rgb(0,0,0,0.6)] ring-2 ring-white/20">
         {/* Inner Video Container */}
         <div className="w-full h-full rounded-full overflow-hidden bg-slate-950 relative flex items-center justify-center">
           {children}
@@ -150,7 +150,7 @@ export function DraggableFloatingCamera({
               e.stopPropagation();
               onExpand();
             }}
-            className="absolute -top-1.5 -right-1.5 w-7 h-7 rounded-full bg-slate-800 hover:bg-indigo-600 text-white flex items-center justify-center border-2 border-slate-900 shadow-md transition transform hover:scale-110 active:scale-95"
+            className="absolute -top-1.5 -right-1.5 w-7 h-7 rounded-full bg-slate-800 hover:bg-blue-600 text-white flex items-center justify-center border-2 border-slate-900 shadow-md transition transform hover:scale-110 active:scale-95"
             title="Expand chat & panel"
           >
             <span className="material-symbols-outlined text-[14px]">open_in_full</span>

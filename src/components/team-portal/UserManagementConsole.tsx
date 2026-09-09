@@ -29,10 +29,10 @@ export interface UserItem {
 
 const PRIMARY_ROLES = [
   { value: "TEACHER", label: "Teacher", badge: "bg-emerald-100 text-emerald-800 border-emerald-300" },
-  { value: "SUPER_ADMIN", label: "Super Admin", badge: "bg-purple-100 text-purple-800 border-purple-300" },
+  { value: "SUPER_ADMIN", label: "Super Admin", badge: "bg-blue-100 text-blue-800 border-blue-300" },
   { value: "ADMIN", label: "Admin", badge: "bg-blue-100 text-blue-800 border-blue-300" },
   { value: "CONTENT_CREATOR", label: "Content Creator", badge: "bg-amber-100 text-amber-800 border-amber-300" },
-  { value: "SME", label: "Subject Matter Expert (SME)", badge: "bg-indigo-100 text-indigo-800 border-indigo-300" },
+  { value: "SME", label: "Subject Matter Expert (SME)", badge: "bg-blue-100 text-blue-800 border-blue-300" },
   { value: "SALES", label: "Sales", badge: "bg-cyan-100 text-cyan-800 border-cyan-300" },
   { value: "DESIGNER", label: "Designer", badge: "bg-pink-100 text-pink-800 border-pink-300" },
   { value: "VIDEO_EDITOR", label: "Video Editor", badge: "bg-rose-100 text-rose-800 border-rose-300" },
@@ -261,14 +261,14 @@ export function UserManagementConsole() {
           </Link>
           <Link
             href="/team/roles"
-            className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-purple-300 bg-white dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 transition flex items-center gap-1.5 shadow-sm"
+            className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-blue-300 bg-white dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 transition flex items-center gap-1.5 shadow-sm"
           >
             <span className="material-symbols-outlined text-base">security</span>
             <span>Role Matrix</span>
           </Link>
           <Link
             href="/team/departments"
-            className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-purple-300 bg-white dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 transition flex items-center gap-1.5 shadow-sm"
+            className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-blue-300 bg-white dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 transition flex items-center gap-1.5 shadow-sm"
           >
             <span className="material-symbols-outlined text-base">corporate_fare</span>
             <span>Departments</span>
@@ -276,7 +276,7 @@ export function UserManagementConsole() {
           <button
             type="button"
             onClick={() => setIsAdvancedModalOpen(true)}
-            className="px-5 py-2.5 rounded-xl bg-[#031635] dark:bg-purple-600 hover:opacity-90 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md"
+            className="px-5 py-2.5 rounded-xl bg-[#031635] dark:bg-blue-600 hover:opacity-90 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md"
           >
             <span className="material-symbols-outlined text-base">person_add</span>
             <span>+ Add Team Member</span>
@@ -291,7 +291,7 @@ export function UserManagementConsole() {
           { label: "Active Users", val: stats.activeUsers || 0, color: "text-emerald-600", icon: "check_circle" },
           { label: "Teachers", val: stats.teachersCount || 0, color: "text-blue-600", icon: "school" },
           { label: "Content Creators", val: stats.contentCount || 0, color: "text-amber-600", icon: "edit_note" },
-          { label: "SME Reviewers", val: stats.smeCount || 0, color: "text-indigo-600", icon: "verified" },
+          { label: "SME Reviewers", val: stats.smeCount || 0, color: "text-blue-600", icon: "verified" },
           { label: "Sales Team", val: stats.salesCount || 0, color: "text-cyan-600", icon: "trending_up" },
           { label: "Designers", val: stats.designerCount || 0, color: "text-pink-600", icon: "palette" },
           { label: "Video Editors", val: stats.videoCount || 0, color: "text-rose-600", icon: "movie" },
@@ -517,7 +517,7 @@ export function UserManagementConsole() {
                           {u.name}
                         </Link>
                         {u.overridesCount > 0 && (
-                          <span className="ml-1.5 px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 text-[9px] font-extrabold uppercase">
+                          <span className="ml-1.5 px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 text-[9px] font-extrabold uppercase">
                             {u.overridesCount} Overrides
                           </span>
                         )}
@@ -577,7 +577,7 @@ export function UserManagementConsole() {
                         </Link>
                         <Link
                           href={`/team/users/${u.id}?tab=access`}
-                          className="px-2.5 py-1 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-700 text-[11px] font-bold transition flex items-center gap-1"
+                          className="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-[11px] font-bold transition flex items-center gap-1"
                           title="Permission Overrides"
                         >
                           <span className="material-symbols-outlined text-sm">tune</span>

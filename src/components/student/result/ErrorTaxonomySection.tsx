@@ -15,9 +15,9 @@ export function ErrorTaxonomySection({
       case "CONCEPTUAL_ERROR":
         return { icon: "psychology", color: "text-blue-500 bg-blue-50 dark:bg-blue-950/60" };
       case "DEEP_CONCEPT_ERROR":
-        return { icon: "hub", color: "text-purple-500 bg-purple-50 dark:bg-purple-950/60" };
+        return { icon: "hub", color: "text-blue-500 bg-blue-50 dark:bg-blue-950/60" };
       case "STATEMENT_MISINTERPRETATION":
-        return { icon: "menu_book", color: "text-indigo-500 bg-indigo-50 dark:bg-indigo-950/60" };
+        return { icon: "menu_book", color: "text-blue-500 bg-blue-50 dark:bg-blue-950/60" };
       case "CALCULATION_ERROR":
         return { icon: "calculate", color: "text-amber-500 bg-amber-50 dark:bg-amber-950/60" };
       case "SILLY_MISTAKE":

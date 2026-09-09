@@ -51,7 +51,7 @@ export function LeaderboardModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-2xl w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Modal Header */}
-        <div className="p-6 bg-gradient-to-r from-blue-900 to-indigo-950 text-white flex items-center justify-between">
+        <div className="p-6 bg-gradient-to-r from-blue-900 to-blue-950 text-white flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <span className="w-9 h-9 rounded-2xl bg-white/10 flex items-center justify-center font-bold">
               <span className="material-symbols-outlined text-amber-300">trophy</span>

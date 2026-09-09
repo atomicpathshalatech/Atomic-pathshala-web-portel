@@ -36,7 +36,7 @@ export function FAQSection() {
     <section id="faq" className="bg-white rounded-3xl border border-slate-200/80 p-5 sm:p-7 space-y-6">
       <div>
         <h2 className="text-lg sm:text-xl font-extrabold text-[#031635] flex items-center gap-2">
-          <span className="material-symbols-outlined text-indigo-600">help_center</span>
+          <span className="material-symbols-outlined text-blue-600">help_center</span>
           <span>Frequently Asked Questions</span>
         </h2>
         <p className="text-xs text-slate-500 mt-1">
@@ -57,7 +57,7 @@ export function FAQSection() {
                 <span className="text-xs sm:text-sm font-bold text-[#031635] pr-4">{faq.q}</span>
                 <span
                   className={`material-symbols-outlined text-slate-400 transition-transform duration-300 shrink-0 ${
-                    isOpen ? "rotate-180 text-purple-600" : ""
+                    isOpen ? "rotate-180 text-blue-600" : ""
                   }`}
                 >
                   expand_more

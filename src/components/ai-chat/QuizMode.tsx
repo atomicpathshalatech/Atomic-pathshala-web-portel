@@ -1226,7 +1226,7 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
               <button
                 type="button"
                 onClick={() => setStage("topicForm")}
-                className="flex w-full items-center gap-4 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 p-4 text-left shadow-md transition hover:brightness-105 active:scale-[0.99]"
+                className="flex w-full items-center gap-4 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-600 p-4 text-left shadow-md transition hover:brightness-105 active:scale-[0.99]"
               >
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/20 text-white">
                   <BookMarked className="h-5 w-5" />
@@ -1244,7 +1244,7 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
               <button
                 type="button"
                 onClick={() => setStage("pyqForm")}
-                className="flex w-full items-center gap-4 rounded-2xl bg-gradient-to-r from-purple-600 to-fuchsia-600 p-4 text-left shadow-md transition hover:brightness-105 active:scale-[0.99]"
+                className="flex w-full items-center gap-4 rounded-2xl bg-gradient-to-r from-blue-600 to-fuchsia-600 p-4 text-left shadow-md transition hover:brightness-105 active:scale-[0.99]"
               >
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/20 text-white">
                   <History className="h-5 w-5" />
@@ -1579,7 +1579,7 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
               <button
                 type="button"
                 onClick={startPyqQuiz}
-                className="w-full rounded-xl bg-purple-600 px-4 py-3 text-sm font-semibold text-white shadow-md hover:bg-purple-700"
+                className="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-md hover:bg-blue-700"
               >
                 Start PYQ Practice
               </button>
@@ -1907,8 +1907,8 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
 
                     {/* Part 2: Concept */}
                     {structured.concept && (
-                      <div className="rounded-xl border border-purple-100 bg-white p-3 dark:border-purple-900/40 dark:bg-slate-800/90">
-                        <p className="mb-1 flex items-center gap-1.5 font-bold text-purple-600 dark:text-purple-400">
+                      <div className="rounded-xl border border-blue-100 bg-white p-3 dark:border-blue-900/40 dark:bg-slate-800/90">
+                        <p className="mb-1 flex items-center gap-1.5 font-bold text-blue-600 dark:text-blue-400">
                           💡 CONCEPT:
                         </p>
                         <div className="text-slate-700 dark:text-slate-200">

@@ -223,7 +223,7 @@ export function RolesPermissionMatrixView() {
           <div className="flex items-center gap-3 mb-1">
             <OpsBackButton href="/team/users" label="Back to Users" />
             <span className="text-slate-300">/</span>
-            <span className="text-xs font-extrabold uppercase text-purple-600">Roles &amp; Permissions</span>
+            <span className="text-xs font-extrabold uppercase text-blue-600">Roles &amp; Permissions</span>
           </div>
           <h1 className="text-2xl font-black text-[#031635] dark:text-white mt-1">
             Role Permission Matrix Configurator
@@ -237,7 +237,7 @@ export function RolesPermissionMatrixView() {
           <button
             type="button"
             onClick={() => setIsAddRoleOpen(true)}
-            className="px-4 py-2.5 rounded-xl border border-slate-200 hover:border-purple-300 text-xs font-bold text-slate-700 dark:text-slate-200 transition flex items-center gap-1.5"
+            className="px-4 py-2.5 rounded-xl border border-slate-200 hover:border-blue-300 text-xs font-bold text-slate-700 dark:text-slate-200 transition flex items-center gap-1.5"
           >
             <span className="material-symbols-outlined text-base">add_moderator</span>
             <span>+ Custom Role</span>
@@ -246,7 +246,7 @@ export function RolesPermissionMatrixView() {
             type="button"
             onClick={handleSavePermissions}
             disabled={saving}
-            className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition shadow-md flex items-center gap-1.5"
+            className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition shadow-md flex items-center gap-1.5"
           >
             <span className="material-symbols-outlined text-base">save</span>
             <span>{saving ? "Saving..." : "Save Role Matrix"}</span>
@@ -277,7 +277,7 @@ export function RolesPermissionMatrixView() {
               className={`px-4 py-2.5 rounded-2xl text-xs font-extrabold transition shrink-0 flex items-center gap-2 border ${
                 isSelected
                   ? "bg-[#031635] text-white border-[#031635] shadow-sm"
-                  : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-purple-300"
+                  : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-blue-300"
               }`}
             >
               <span>{rName.replace(/_/g, " ")}</span>
@@ -313,7 +313,7 @@ export function RolesPermissionMatrixView() {
                     const codes = grp.actions.map((a) => a.code);
                     setActivePermissions(Array.from(new Set([...activePermissions, ...codes])));
                   }}
-                  className="text-[10px] font-bold text-purple-600 hover:underline"
+                  className="text-[10px] font-bold text-blue-600 hover:underline"
                 >
                   Select All
                 </button>
@@ -342,7 +342,7 @@ export function RolesPermissionMatrixView() {
                     onClick={() => handleTogglePermission(act.code)}
                     className={`p-3 rounded-2xl border text-left flex items-center justify-between text-xs transition ${
                       isChecked
-                        ? "bg-purple-50/80 dark:bg-purple-950/30 border-purple-300 dark:border-purple-800 text-purple-900 dark:text-purple-200"
+                        ? "bg-blue-50/80 dark:bg-blue-950/30 border-blue-300 dark:border-blue-800 text-blue-900 dark:text-blue-200"
                         : "bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 text-slate-400"
                     }`}
                   >
@@ -423,7 +423,7 @@ export function RolesPermissionMatrixView() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-purple-600 text-white font-bold shadow-md hover:bg-purple-700"
+                  className="px-5 py-2 rounded-xl bg-blue-600 text-white font-bold shadow-md hover:bg-blue-700"
                 >
                   Create Role
                 </button>

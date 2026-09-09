@@ -13,7 +13,7 @@ export function QuestionTypeAnalysisSection({
       <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
         <div>
           <h3 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
-            <span className="material-symbols-outlined text-indigo-600">category</span>
+            <span className="material-symbols-outlined text-blue-600">category</span>
             <span>Question-Type Format Analysis</span>
           </h3>
           <p className="text-xs text-slate-500">

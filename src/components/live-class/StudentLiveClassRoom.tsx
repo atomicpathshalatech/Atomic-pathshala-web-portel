@@ -162,7 +162,7 @@ function StudentWhiteboardMirror({
             ? "bg-gradient-to-b from-transparent via-[#10131d]/40 to-[#10131d]/80 text-slate-300"
             : "bg-gradient-to-b from-transparent via-slate-100/40 to-slate-200/80 text-slate-700"
         }`}>
-          <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-500 flex items-center justify-center mb-1">
+          <div className="w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-500 flex items-center justify-center mb-1">
             <span className="material-symbols-outlined text-2xl">draw</span>
           </div>
           <p className="text-sm font-bold">Atomic Whiteboard Studio Connected</p>
@@ -658,7 +658,7 @@ export function StudentLiveClassRoom({
           {/* Left Column: Hero & Countdown */}
           <div className="flex-1 bg-[#121422] border border-slate-800 rounded-3xl p-6 sm:p-8 flex flex-col justify-between shadow-2xl space-y-6">
             <div className="space-y-3">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 text-xs font-semibold">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-400 text-xs font-semibold">
                 <span className="material-symbols-outlined text-sm animate-spin">hourglass_top</span>
                 <span>Classroom is being prepared</span>
               </div>
@@ -666,7 +666,7 @@ export function StudentLiveClassRoom({
                 {scheduleTitle}
               </h2>
               <p className="text-sm text-slate-400">
-                Batch: <span className="text-indigo-300 font-semibold">{batchName}</span>
+                Batch: <span className="text-blue-300 font-semibold">{batchName}</span>
               </p>
             </div>
 
@@ -687,14 +687,14 @@ export function StudentLiveClassRoom({
                     </div>
                     <span className="text-2xl font-bold text-slate-600">:</span>
                     <div className="bg-[#0e0f1a] border border-slate-700/60 rounded-xl px-3 py-2 min-w-[60px]">
-                      <span className="text-2xl sm:text-3xl font-black text-indigo-400">{String(seconds).padStart(2, "0")}</span>
+                      <span className="text-2xl sm:text-3xl font-black text-blue-400">{String(seconds).padStart(2, "0")}</span>
                       <span className="block text-[9px] uppercase tracking-wider text-slate-500 font-sans mt-0.5">Secs</span>
                     </div>
                   </div>
                 </>
               ) : (
                 <div className="space-y-2 py-2">
-                  <div className="w-10 h-10 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center mx-auto border border-indigo-500/30">
+                  <div className="w-10 h-10 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center mx-auto border border-blue-500/30">
                     <span className="material-symbols-outlined text-xl animate-pulse">sensors</span>
                   </div>
                   <p className="text-base font-bold text-white">Starting Momentarily</p>
@@ -707,13 +707,13 @@ export function StudentLiveClassRoom({
 
             {/* Educator Card */}
             <div className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-[#181a2c]/60 border border-slate-800">
-              <div className="w-12 h-12 rounded-xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center font-bold text-lg border border-indigo-500/30">
+              <div className="w-12 h-12 rounded-xl bg-blue-600/20 text-blue-400 flex items-center justify-center font-bold text-lg border border-blue-500/30">
                 {teacherName ? teacherName.charAt(0).toUpperCase() : "E"}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
                   <h4 className="text-sm font-bold text-white truncate">{teacherName || "Educator"}</h4>
-                  <span className="material-symbols-outlined text-xs text-indigo-400" title="Verified Educator">verified</span>
+                  <span className="material-symbols-outlined text-xs text-blue-400" title="Verified Educator">verified</span>
                 </div>
                 <p className="text-xs text-slate-400">Atomic Pathshala Faculty</p>
               </div>
@@ -722,7 +722,7 @@ export function StudentLiveClassRoom({
             {/* Preparation Tips */}
             <div className="grid grid-cols-2 gap-2 text-xs text-slate-400">
               <div className="flex items-center gap-2 p-2 rounded-xl bg-slate-900/60 border border-slate-800/60">
-                <span className="material-symbols-outlined text-indigo-400 text-base">edit_note</span>
+                <span className="material-symbols-outlined text-blue-400 text-base">edit_note</span>
                 <span>Keep notebook &amp; pen ready</span>
               </div>
               <div className="flex items-center gap-2 p-2 rounded-xl bg-slate-900/60 border border-slate-800/60">
@@ -737,7 +737,7 @@ export function StudentLiveClassRoom({
             <div className="w-full lg:w-80 h-96 lg:h-auto flex flex-col bg-[#121422] border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
               <div className="px-4 py-3 bg-[#0a0b12] border-b border-slate-800 flex items-center justify-between shrink-0">
                 <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-sm text-indigo-400">chat</span>
+                  <span className="material-symbols-outlined text-sm text-blue-400">chat</span>
                   Pre-Class Discussion
                 </span>
                 <span className="text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2 py-0.5 rounded-full font-semibold">
@@ -825,7 +825,7 @@ export function StudentLiveClassRoom({
             </span>
           ) : secondsUntilStart > 0 ? (
             <span
-              className="hidden sm:inline-flex items-center gap-1 text-xs font-mono font-semibold px-2.5 py-1 rounded-md bg-indigo-950/60 border border-indigo-500/40 text-indigo-300"
+              className="hidden sm:inline-flex items-center gap-1 text-xs font-mono font-semibold px-2.5 py-1 rounded-md bg-blue-950/60 border border-blue-500/40 text-blue-300"
               title="Time until scheduled class start"
             >
               <span className="material-symbols-outlined text-xs">hourglass_top</span>
@@ -857,7 +857,7 @@ export function StudentLiveClassRoom({
             onClick={() => setShowChat((v) => !v)}
             className={`hidden lg:flex items-center gap-1 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition shadow-sm border ${
               showChat
-                ? "bg-slate-800 hover:bg-slate-700 text-indigo-300 border-indigo-500/40"
+                ? "bg-slate-800 hover:bg-slate-700 text-blue-300 border-blue-500/40"
                 : "bg-slate-800/60 hover:bg-slate-700/80 text-slate-400 border-slate-700"
             }`}
             title={showChat ? "Minimize teacher video & chat (distraction-free focus)" : "Show teacher video & chat"}
@@ -891,12 +891,12 @@ export function StudentLiveClassRoom({
           {/* Presentation Title Banner */}
           <div className="flex items-center justify-between px-4 py-2 bg-[#0a0b12] border-b border-slate-800 text-xs text-slate-400 shrink-0">
             <span className="flex items-center gap-2 font-medium text-slate-300">
-              <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+              <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
               <span>{isYouTube ? "Live Stream Broadcast" : "Live Whiteboard & Presentation Stage"}</span>
             </span>
             <div className="flex items-center gap-2">
               {wbSession?.presentationName && (
-                <span className="text-[11px] font-mono text-indigo-300 bg-indigo-950/60 border border-indigo-500/30 px-2 py-0.5 rounded">
+                <span className="text-[11px] font-mono text-blue-300 bg-blue-950/60 border border-blue-500/30 px-2 py-0.5 rounded">
                   {wbSession.presentationName}
                 </span>
               )}
@@ -928,10 +928,10 @@ export function StudentLiveClassRoom({
 
             {/* Desktop Quiz / Poll Floating Drawer (High Contrast + Close Button + Auto-Dismiss) */}
             {quiz && !quizDismissed && (
-              <div className="absolute bottom-4 left-4 right-4 max-w-2xl mx-auto bg-[#13172b]/95 backdrop-blur-md border-2 border-indigo-500 shadow-[0_0_35px_rgba(99,102,241,0.35)] rounded-2xl p-4 space-y-3 z-30 animate-in slide-in-from-bottom duration-200">
-                <div className="flex items-center justify-between pb-1 border-b border-indigo-900/60">
+              <div className="absolute bottom-4 left-4 right-4 max-w-2xl mx-auto bg-[#13172b]/95 backdrop-blur-md border-2 border-blue-500 shadow-[0_0_35px_rgba(99,102,241,0.35)] rounded-2xl p-4 space-y-3 z-30 animate-in slide-in-from-bottom duration-200">
+                <div className="flex items-center justify-between pb-1 border-b border-blue-900/60">
                   <h3 className="text-sm font-black text-white flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-indigo-400 animate-ping" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-ping" />
                     {quiz.questionText || "Live Class Quiz"}
                   </h3>
                   <div className="flex items-center gap-2">
@@ -974,11 +974,11 @@ export function StudentLiveClassRoom({
                             : isWrong
                             ? "border-rose-500 bg-rose-950/80 text-rose-200"
                             : selected
-                            ? "border-white bg-indigo-600 text-white shadow-indigo-500/50 ring-2 ring-indigo-400 scale-[1.02]"
-                            : "bg-[#1a2038] hover:bg-[#252d4e] border-[#333d6b] hover:border-indigo-400 text-white"
+                            ? "border-white bg-blue-600 text-white shadow-blue-500/50 ring-2 ring-blue-400 scale-[1.02]"
+                            : "bg-[#1a2038] hover:bg-[#252d4e] border-[#333d6b] hover:border-blue-400 text-white"
                         } disabled:cursor-default`}
                       >
-                        <span className={`font-mono font-black mr-2 text-sm pointer-events-none ${selected || isCorrect ? "text-white" : "text-indigo-400"}`}>{o.key}.</span>
+                        <span className={`font-mono font-black mr-2 text-sm pointer-events-none ${selected || isCorrect ? "text-white" : "text-blue-400"}`}>{o.key}.</span>
                         <span className="truncate pointer-events-none text-white">{o.label}</span>
                       </button>
                     );
@@ -1018,7 +1018,7 @@ export function StudentLiveClassRoom({
 
           {/* Sidebar Header Tabs */}
           <div className="flex border-b border-slate-800 px-3 pt-2 shrink-0 bg-[#0a0b12]">
-            <span className="px-3 py-2 text-xs font-bold text-indigo-400 border-b-2 border-indigo-500 flex items-center gap-1.5">
+            <span className="px-3 py-2 text-xs font-bold text-blue-400 border-b-2 border-blue-500 flex items-center gap-1.5">
               <span className="material-symbols-outlined text-sm">chat</span>
               Live Classroom Chat
             </span>
@@ -1065,7 +1065,7 @@ export function StudentLiveClassRoom({
               />
               {/* Mobile PiP Teacher Video (Corner Preview) */}
               {!isYouTube && (
-                <div className="absolute top-2 right-2 w-28 xs:w-32 aspect-video rounded-lg overflow-hidden border border-indigo-500/60 shadow-xl bg-[#10121d] z-20">
+                <div className="absolute top-2 right-2 w-28 xs:w-32 aspect-video rounded-lg overflow-hidden border border-blue-500/60 shadow-xl bg-[#10121d] z-20">
                   <VideoStrip
                     whiteboardSessionId={wbSession?.id || batchScheduleId}
                     variant="panel"
@@ -1089,7 +1089,7 @@ export function StudentLiveClassRoom({
               onClick={() => setActiveMobileTab("chat")}
               className={`flex-1 py-2.5 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border-b-2 ${
                 activeMobileTab === "chat"
-                  ? "text-indigo-400 border-indigo-500 bg-indigo-950/20"
+                  ? "text-blue-400 border-blue-500 bg-blue-950/20"
                   : "text-slate-400 border-transparent hover:text-slate-200"
               }`}
             >
@@ -1102,7 +1102,7 @@ export function StudentLiveClassRoom({
               onClick={() => setActiveMobileTab("quiz")}
               className={`flex-1 py-2.5 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border-b-2 relative ${
                 activeMobileTab === "quiz"
-                  ? "text-indigo-400 border-indigo-500 bg-indigo-950/20"
+                  ? "text-blue-400 border-blue-500 bg-blue-950/20"
                   : "text-slate-400 border-transparent hover:text-slate-200"
               }`}
             >
@@ -1118,7 +1118,7 @@ export function StudentLiveClassRoom({
               onClick={() => setActiveMobileTab("info")}
               className={`flex-1 py-2.5 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border-b-2 ${
                 activeMobileTab === "info"
-                  ? "text-indigo-400 border-indigo-500 bg-indigo-950/20"
+                  ? "text-blue-400 border-blue-500 bg-blue-950/20"
                   : "text-slate-400 border-transparent hover:text-slate-200"
               }`}
             >
@@ -1149,10 +1149,10 @@ export function StudentLiveClassRoom({
             {activeMobileTab === "quiz" && (
               <div className="p-4 space-y-4">
                 {quiz ? (
-                  <div className="bg-[#13172b] border-2 border-indigo-500 rounded-2xl p-4 shadow-2xl space-y-3">
-                    <div className="flex items-center justify-between pb-1 border-b border-indigo-900/60">
+                  <div className="bg-[#13172b] border-2 border-blue-500 rounded-2xl p-4 shadow-2xl space-y-3">
+                    <div className="flex items-center justify-between pb-1 border-b border-blue-900/60">
                       <h3 className="text-sm font-black text-white flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-full bg-indigo-400 animate-ping" />
+                        <span className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-ping" />
                         {quiz.questionText || "Live Class Quiz"}
                       </h3>
                       {quiz.status === "ACTIVE" ? (
@@ -1184,11 +1184,11 @@ export function StudentLiveClassRoom({
                                 : isWrong
                                 ? "border-rose-500 bg-rose-950/80 text-rose-200"
                                 : selected
-                                ? "border-white bg-indigo-600 text-white shadow-indigo-500/50 ring-2 ring-indigo-400"
+                                ? "border-white bg-blue-600 text-white shadow-blue-500/50 ring-2 ring-blue-400"
                                 : "bg-[#1a2038] hover:bg-[#252d4e] border-[#333d6b] text-white"
                             } disabled:cursor-default`}
                           >
-                            <span className={`font-mono font-black mr-2 text-sm pointer-events-none ${selected || isCorrect ? "text-white" : "text-indigo-400"}`}>{o.key}.</span>
+                            <span className={`font-mono font-black mr-2 text-sm pointer-events-none ${selected || isCorrect ? "text-white" : "text-blue-400"}`}>{o.key}.</span>
                             <span className="pointer-events-none text-white">{o.label}</span>
                           </button>
                         );
@@ -1212,11 +1212,11 @@ export function StudentLiveClassRoom({
                   <div className="space-y-1.5">
                     <p className="font-bold text-slate-400 text-[11px] uppercase tracking-wider">Teacher Video Stream</p>
                     <div className="w-full aspect-video rounded-xl overflow-hidden bg-[#0a0b12] border border-slate-800 shadow-md flex flex-col items-center justify-center gap-2">
-                      <div className="w-10 h-10 rounded-2xl bg-indigo-500/20 border border-indigo-500/40 text-indigo-400 flex items-center justify-center">
+                      <div className="w-10 h-10 rounded-2xl bg-blue-500/20 border border-blue-500/40 text-blue-400 flex items-center justify-center">
                         <span className="material-symbols-outlined text-xl">videocam</span>
                       </div>
                       <p className="text-xs font-bold text-white">{teacherName || "Instructor"}</p>
-                      <span className="text-[10px] text-indigo-300 flex items-center gap-1.5">
+                      <span className="text-[10px] text-blue-300 flex items-center gap-1.5">
                         <span className={`w-1.5 h-1.5 rounded-full ${isLive ? "bg-rose-500 animate-ping" : "bg-amber-400 animate-pulse"}`} />
                         {isLive ? "Live Teaching" : "Awaiting Class"}
                       </span>
@@ -1236,13 +1236,13 @@ export function StudentLiveClassRoom({
                   {teacherName && (
                     <div className="flex justify-between items-center py-1 border-b border-slate-800">
                       <span className="text-slate-400">Teacher:</span>
-                      <span className="font-bold text-indigo-300">{teacherName}</span>
+                      <span className="font-bold text-blue-300">{teacherName}</span>
                     </div>
                   )}
                   {wbSession?.presentationName && (
                     <div className="flex justify-between items-center py-1">
                       <span className="text-slate-400">Material:</span>
-                      <span className="font-mono text-[11px] text-indigo-400">{wbSession.presentationName}</span>
+                      <span className="font-mono text-[11px] text-blue-400">{wbSession.presentationName}</span>
                     </div>
                   )}
                 </div>
@@ -1280,13 +1280,13 @@ export function StudentLiveClassRoom({
                 type="button"
                 onClick={() => submitHandRaise("AUDIO")}
                 disabled={handRaiseBusy}
-                className="w-full flex items-center gap-3 p-3.5 rounded-xl border border-slate-700 hover:border-indigo-500 bg-slate-800/60 hover:bg-indigo-950/30 text-left transition group"
+                className="w-full flex items-center gap-3 p-3.5 rounded-xl border border-slate-700 hover:border-blue-500 bg-slate-800/60 hover:bg-blue-950/30 text-left transition group"
               >
                 <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
                   <span className="material-symbols-outlined text-xl">mic</span>
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-white group-hover:text-indigo-300 transition">
+                  <h4 className="text-sm font-bold text-white group-hover:text-blue-300 transition">
                     Request to Speak (Audio Only)
                   </h4>
                   <p className="text-[11px] text-slate-400">
@@ -1299,13 +1299,13 @@ export function StudentLiveClassRoom({
                 type="button"
                 onClick={() => submitHandRaise("VIDEO")}
                 disabled={handRaiseBusy}
-                className="w-full flex items-center gap-3 p-3.5 rounded-xl border border-slate-700 hover:border-purple-500 bg-slate-800/60 hover:bg-purple-950/30 text-left transition group"
+                className="w-full flex items-center gap-3 p-3.5 rounded-xl border border-slate-700 hover:border-blue-500 bg-slate-800/60 hover:bg-blue-950/30 text-left transition group"
               >
-                <div className="w-10 h-10 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
+                <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
                   <span className="material-symbols-outlined text-xl">videocam</span>
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-white group-hover:text-purple-300 transition">
+                  <h4 className="text-sm font-bold text-white group-hover:text-blue-300 transition">
                     Request Video + Audio
                   </h4>
                   <p className="text-[11px] text-slate-400">

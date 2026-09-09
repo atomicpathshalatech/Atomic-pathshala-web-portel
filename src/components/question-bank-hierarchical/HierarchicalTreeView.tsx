@@ -88,7 +88,7 @@ function TreeNodeItem({
           bg: "bg-slate-50/70 dark:bg-slate-800/40",
           border: "border-slate-200 dark:border-slate-700/80",
           titleClass: "text-xs font-bold text-slate-800 dark:text-slate-100",
-          tagBg: "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400",
+          tagBg: "bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400",
         };
       case "CHAPTER":
         return {
@@ -96,7 +96,7 @@ function TreeNodeItem({
           bg: "bg-white dark:bg-slate-900/60",
           border: "border-slate-100 dark:border-slate-800",
           titleClass: "text-xs font-bold text-slate-700 dark:text-slate-200",
-          tagBg: "bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400",
+          tagBg: "bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400",
         };
       case "TOPIC":
         return {
@@ -125,7 +125,7 @@ function TreeNodeItem({
       {/* Main Node Card */}
       <div
         className={`group p-3 sm:p-4 rounded-2xl border transition-all ${meta.bg} ${meta.border} ${
-          node.isNew ? "ring-2 ring-purple-500/40 border-purple-300 dark:border-purple-800" : ""
+          node.isNew ? "ring-2 ring-blue-500/40 border-blue-300 dark:border-blue-800" : ""
         } hover:shadow-md`}
       >
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -169,9 +169,9 @@ function TreeNodeItem({
 
                 {/* 🟣 NEW Node Indicator */}
                 {node.isNew && (
-                  <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/80 border border-purple-300 dark:border-purple-800 shadow-sm shrink-0">
-                    <span className="w-2 h-2 rounded-full bg-purple-600 animate-pulse" />
-                    <span className="text-[10px] font-black text-purple-700 dark:text-purple-300 uppercase tracking-wider">
+                  <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950/80 border border-blue-300 dark:border-blue-800 shadow-sm shrink-0">
+                    <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
+                    <span className="text-[10px] font-black text-blue-700 dark:text-blue-300 uppercase tracking-wider">
                       NEW
                     </span>
                     <button
@@ -181,7 +181,7 @@ function TreeNodeItem({
                         onAcknowledgeNewNode(node);
                       }}
                       title="Mark as Seen"
-                      className="text-purple-400 hover:text-purple-700 text-[10px] font-bold ml-1"
+                      className="text-blue-400 hover:text-blue-700 text-[10px] font-bold ml-1"
                     >
                       ✕
                     </button>

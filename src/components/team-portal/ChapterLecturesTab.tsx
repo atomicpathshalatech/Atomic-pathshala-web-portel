@@ -309,7 +309,7 @@ export function ChapterLecturesTab({
               >
                 {/* Left: Sequence Badge + Title & Scheduling Details */}
                 <div className="flex items-start sm:items-center gap-3.5 min-w-0">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500/10 to-indigo-500/20 border border-blue-500/30 text-blue-600 dark:text-blue-400 flex flex-col items-center justify-center font-bold shrink-0 shadow-sm">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500/10 to-blue-500/20 border border-blue-500/30 text-blue-600 dark:text-blue-400 flex flex-col items-center justify-center font-bold shrink-0 shadow-sm">
                     <span className="text-[9px] uppercase tracking-wider text-blue-500 font-bold">LEC</span>
                     <span className="text-sm font-black font-mono leading-none">
                       {String(displayOrder).padStart(2, "0")}

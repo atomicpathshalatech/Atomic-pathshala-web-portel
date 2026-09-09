@@ -1715,7 +1715,7 @@ export function AtomicWhiteboardStudio({
                   setOpenPopup((p) => (p === "shapes" ? null : "shapes"));
                 }}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition ${
-                  tool === "shape" ? "bg-purple-600 text-white shadow" : "bg-[#1c1e2c] text-gray-300 hover:text-white"
+                  tool === "shape" ? "bg-blue-600 text-white shadow" : "bg-[#1c1e2c] text-gray-300 hover:text-white"
                 }`}
               >
                 <span className="material-symbols-outlined text-sm">category</span>

@@ -129,7 +129,7 @@ export function DppQuestionPicker({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
         <div>
           <h3 className="text-base font-bold text-white flex items-center gap-2">
-            <span className="material-symbols-outlined text-indigo-400">help_outline</span>
+            <span className="material-symbols-outlined text-blue-400">help_outline</span>
             <span>Add Questions to DPP</span>
           </h3>
           <p className="text-xs text-slate-400">
@@ -143,7 +143,7 @@ export function DppQuestionPicker({
             onClick={() => setActiveMode("search")}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
               activeMode === "search"
-                ? "bg-indigo-600 text-white shadow"
+                ? "bg-blue-600 text-white shadow"
                 : "text-slate-400 hover:text-white"
             }`}
           >
@@ -179,7 +179,7 @@ export function DppQuestionPicker({
               <button
                 onClick={attachSelected}
                 disabled={attaching}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow disabled:opacity-60 transition"
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold shadow disabled:opacity-60 transition"
               >
                 {attaching ? "Attaching..." : `Attach ${selected.size} Selected`}
               </button>

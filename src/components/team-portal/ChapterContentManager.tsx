@@ -52,7 +52,7 @@ export function ChapterContentManager({
           onClick={() => setActiveTab("dpps")}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition ${
             activeTab === "dpps"
-              ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/20"
+              ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
               : "text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800"
           }`}
         >

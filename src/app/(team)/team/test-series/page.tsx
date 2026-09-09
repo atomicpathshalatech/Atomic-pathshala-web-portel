@@ -62,7 +62,7 @@ export default async function TestSeriesListPage({
         {canCreate && (
           <Link
             href="/team/test-series/new"
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold shadow-md shadow-indigo-500/20 transition-all"
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold shadow-md shadow-blue-500/20 transition-all"
           >
             <span className="material-symbols-outlined text-lg">add_circle</span>
             Create Test Series
@@ -94,7 +94,7 @@ export default async function TestSeriesListPage({
                 <span>{tab.label}</span>
                 <span
                   className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-                    isSelected ? "bg-indigo-100 text-indigo-700 font-bold" : "bg-slate-200 text-slate-600"
+                    isSelected ? "bg-blue-100 text-blue-700 font-bold" : "bg-slate-200 text-slate-600"
                   }`}
                 >
                   {tab.count}
@@ -111,7 +111,7 @@ export default async function TestSeriesListPage({
             name="search"
             defaultValue={searchParams.search}
             placeholder="Search series name or code..."
-            className="w-full bg-slate-50 rounded-xl border border-slate-200 px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full bg-slate-50 rounded-xl border border-slate-200 px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <button
             type="submit"
@@ -154,7 +154,7 @@ export default async function TestSeriesListPage({
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="inline-flex items-center gap-1 font-semibold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg">
+                      <span className="inline-flex items-center gap-1 font-semibold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg">
                         <span className="material-symbols-outlined text-sm">quiz</span>
                         {s._count.tests} Tests
                       </span>
@@ -176,7 +176,7 @@ export default async function TestSeriesListPage({
                       <span
                         className={`px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase ${
                           s.visibility === "PUBLIC"
-                            ? "bg-indigo-50 text-indigo-700"
+                            ? "bg-blue-50 text-blue-700"
                             : "bg-slate-100 text-slate-600"
                         }`}
                       >
@@ -186,7 +186,7 @@ export default async function TestSeriesListPage({
                     <td className="px-6 py-4 text-right">
                       <Link
                         href={`/team/test-series/${s.id}`}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition"
+                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition"
                       >
                         Manage <span className="material-symbols-outlined text-sm">chevron_right</span>
                       </Link>

@@ -80,7 +80,7 @@ function getSourceInfo(category?: string | null, tags?: string | null): {
   if (cat.includes("DIRECT") || t.includes("SOURCE_DIRECT")) {
     return {
       label: "Direct OCR / Paste",
-      badgeClass: "bg-purple-100 text-purple-800 border-purple-200",
+      badgeClass: "bg-blue-100 text-blue-800 border-blue-200",
       icon: "camera",
       sourceKey: "DIRECT",
     };
@@ -104,7 +104,7 @@ function getSourceInfo(category?: string | null, tags?: string | null): {
   if (cat.includes("AI_GENERATED:AI") || cat.includes("AI_DRAFT:AI") || t.includes("METHOD_AI")) {
     return {
       label: "AI Syllabus Engine",
-      badgeClass: "bg-indigo-100 text-indigo-800 border-indigo-200",
+      badgeClass: "bg-blue-100 text-blue-800 border-blue-200",
       icon: "sparkles",
       sourceKey: "AI_STUDIO",
     };
@@ -302,13 +302,13 @@ export function AiDraftsFolderView({
               <span>Back to Question Bank</span>
             </Link>
             <span className="text-slate-300">/</span>
-            <span className="text-xs font-black text-purple-700 bg-purple-50 px-2.5 py-0.5 rounded-full border border-purple-200">
+            <span className="text-xs font-black text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
               AI Drafts Repository
             </span>
           </div>
 
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-2.5">
-            <span className="p-2 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-500/20">
+            <span className="p-2 rounded-2xl bg-gradient-to-tr from-blue-600 to-blue-600 text-white shadow-md shadow-blue-500/20">
               <Sparkles className="w-6 h-6" />
             </span>
             <span>AI Drafts Folder (एआई ड्राफ्ट फोल्डर)</span>
@@ -324,7 +324,7 @@ export function AiDraftsFolderView({
         <div className="flex items-center gap-3 self-start md:self-auto">
           <Link
             href="/team/questions/new"
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs shadow-md shadow-indigo-500/20 transition cursor-pointer"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs shadow-md shadow-blue-500/20 transition cursor-pointer"
           >
             <PlusCircle className="w-4 h-4" />
             <span>New Question (OCR / Paste)</span>
@@ -339,12 +339,12 @@ export function AiDraftsFolderView({
           onClick={() => setSelectedSource("ALL")}
           className={`p-4 rounded-2xl border text-left transition ${
             selectedSource === "ALL"
-              ? "bg-purple-50/80 border-purple-500 shadow-sm"
+              ? "bg-blue-50/80 border-blue-500 shadow-sm"
               : "bg-white border-slate-200 hover:border-slate-300"
           }`}
         >
           <p className="text-xs font-bold text-slate-500">All AI Drafts</p>
-          <h3 className="text-2xl font-black text-purple-900 mt-1">{stats.total}</h3>
+          <h3 className="text-2xl font-black text-blue-900 mt-1">{stats.total}</h3>
         </button>
 
         <button
@@ -352,15 +352,15 @@ export function AiDraftsFolderView({
           onClick={() => setSelectedSource("DIRECT")}
           className={`p-4 rounded-2xl border text-left transition ${
             selectedSource === "DIRECT"
-              ? "bg-purple-50/80 border-purple-500 shadow-sm"
+              ? "bg-blue-50/80 border-blue-500 shadow-sm"
               : "bg-white border-slate-200 hover:border-slate-300"
           }`}
         >
           <div className="flex items-center justify-between">
-            <p className="text-xs font-bold text-purple-700">Direct OCR / Paste</p>
-            <span className="material-symbols-outlined text-sm text-purple-600">crop_free</span>
+            <p className="text-xs font-bold text-blue-700">Direct OCR / Paste</p>
+            <span className="material-symbols-outlined text-sm text-blue-600">crop_free</span>
           </div>
-          <h3 className="text-2xl font-black text-purple-700 mt-1">{stats.directCount}</h3>
+          <h3 className="text-2xl font-black text-blue-700 mt-1">{stats.directCount}</h3>
         </button>
 
         <button
@@ -384,15 +384,15 @@ export function AiDraftsFolderView({
           onClick={() => setSelectedSource("AI_STUDIO")}
           className={`p-4 rounded-2xl border text-left transition ${
             selectedSource === "AI_STUDIO"
-              ? "bg-indigo-50/80 border-indigo-500 shadow-sm"
+              ? "bg-blue-50/80 border-blue-500 shadow-sm"
               : "bg-white border-slate-200 hover:border-slate-300"
           }`}
         >
           <div className="flex items-center justify-between">
-            <p className="text-xs font-bold text-indigo-700">AI Syllabus Engine</p>
-            <span className="material-symbols-outlined text-sm text-indigo-600">auto_stories</span>
+            <p className="text-xs font-bold text-blue-700">AI Syllabus Engine</p>
+            <span className="material-symbols-outlined text-sm text-blue-600">auto_stories</span>
           </div>
-          <h3 className="text-2xl font-black text-indigo-700 mt-1">{stats.aiStudioCount}</h3>
+          <h3 className="text-2xl font-black text-blue-700 mt-1">{stats.aiStudioCount}</h3>
         </button>
 
         <button
@@ -421,7 +421,7 @@ export function AiDraftsFolderView({
             placeholder="Search statement, topic, chapter, question code..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3.5 py-2 bg-slate-50 border border-slate-200 rounded-2xl text-xs text-slate-900 outline-none focus:border-purple-500 transition"
+            className="w-full pl-9 pr-3.5 py-2 bg-slate-50 border border-slate-200 rounded-2xl text-xs text-slate-900 outline-none focus:border-blue-500 transition"
           />
         </div>
 
@@ -429,7 +429,7 @@ export function AiDraftsFolderView({
           <select
             value={selectedSubject}
             onChange={(e) => setSelectedSubject(e.target.value)}
-            className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-2xl text-xs text-slate-900 font-bold outline-none cursor-pointer focus:border-purple-500"
+            className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-2xl text-xs text-slate-900 font-bold outline-none cursor-pointer focus:border-blue-500"
           >
             <option value="ALL">All Subjects</option>
             <option value="Physics">Physics</option>
@@ -446,15 +446,15 @@ export function AiDraftsFolderView({
 
       {/* 4. BULK ACTIONS TOOLBAR */}
       {filteredDrafts.length > 0 && (
-        <div className="bg-purple-50/70 border border-purple-200 rounded-2xl p-3 px-4 flex flex-wrap items-center justify-between gap-3 animate-in fade-in">
+        <div className="bg-blue-50/70 border border-blue-200 rounded-2xl p-3 px-4 flex flex-wrap items-center justify-between gap-3 animate-in fade-in">
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={handleToggleSelectAll}
-              className="inline-flex items-center gap-2 text-xs font-bold text-purple-900 cursor-pointer"
+              className="inline-flex items-center gap-2 text-xs font-bold text-blue-900 cursor-pointer"
             >
               {selectedIds.length === filteredDrafts.length ? (
-                <CheckSquare className="w-4 h-4 text-purple-700" />
+                <CheckSquare className="w-4 h-4 text-blue-700" />
               ) : (
                 <Square className="w-4 h-4 text-slate-400" />
               )}
@@ -466,7 +466,7 @@ export function AiDraftsFolderView({
             </button>
 
             {selectedIds.length > 0 && (
-              <span className="text-xs font-black text-purple-700 bg-white px-2.5 py-0.5 rounded-full border border-purple-200">
+              <span className="text-xs font-black text-blue-700 bg-white px-2.5 py-0.5 rounded-full border border-blue-200">
                 {selectedIds.length} Selected
               </span>
             )}
@@ -478,7 +478,7 @@ export function AiDraftsFolderView({
                 type="button"
                 onClick={() => handleBulkAction("SUBMIT_TO_REVIEW_1")}
                 disabled={isProcessingBulk}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black shadow-xs transition cursor-pointer disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black shadow-xs transition cursor-pointer disabled:opacity-50"
               >
                 <Send className="w-3.5 h-3.5" />
                 <span>Submit Selected to Stage 1 Review</span>
@@ -501,7 +501,7 @@ export function AiDraftsFolderView({
       {/* 5. DRAFTS LIST */}
       {filteredDrafts.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center space-y-3">
-          <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center mx-auto">
+          <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
             <Sparkles className="w-6 h-6" />
           </div>
           <h3 className="text-base font-black text-slate-800">No AI Drafts Found</h3>
@@ -528,7 +528,7 @@ export function AiDraftsFolderView({
               <div
                 key={item.id}
                 className={`bg-white border rounded-3xl p-5 sm:p-6 shadow-sm transition space-y-4 ${
-                  isSelected ? "border-purple-500 ring-2 ring-purple-100" : "border-slate-200 hover:border-slate-300"
+                  isSelected ? "border-blue-500 ring-2 ring-blue-100" : "border-slate-200 hover:border-slate-300"
                 }`}
               >
                 {/* Card Header */}
@@ -537,10 +537,10 @@ export function AiDraftsFolderView({
                     <button
                       type="button"
                       onClick={() => handleToggleSelectOne(item.id)}
-                      className="text-slate-400 hover:text-purple-600 cursor-pointer"
+                      className="text-slate-400 hover:text-blue-600 cursor-pointer"
                     >
                       {isSelected ? (
-                        <CheckSquare className="w-5 h-5 text-purple-600" />
+                        <CheckSquare className="w-5 h-5 text-blue-600" />
                       ) : (
                         <Square className="w-5 h-5" />
                       )}
@@ -635,7 +635,7 @@ export function AiDraftsFolderView({
                       type="button"
                       onClick={() => handleSubmitSingleToReview(item.id)}
                       disabled={isWorking}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition shadow-xs cursor-pointer disabled:opacity-50"
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition shadow-xs cursor-pointer disabled:opacity-50"
                     >
                       {isWorking ? (
                         <RefreshCw className="w-3.5 h-3.5 animate-spin" />

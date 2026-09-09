@@ -279,7 +279,7 @@ export function TaxonomyConfigStep({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
           <div>
             <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
-              <Layers className="w-4 h-4 text-purple-600" />
+              <Layers className="w-4 h-4 text-blue-600" />
               <span>Syllabus Topics (Multi-Select)</span>
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
@@ -291,7 +291,7 @@ export function TaxonomyConfigStep({
             <button
               type="button"
               onClick={handleSelectAllTopics}
-              className="text-xs font-bold text-purple-600 hover:text-purple-800 px-3 py-1 bg-purple-50 rounded-lg"
+              className="text-xs font-bold text-blue-600 hover:text-blue-800 px-3 py-1 bg-blue-50 rounded-lg"
             >
               Select All
             </button>
@@ -314,7 +314,7 @@ export function TaxonomyConfigStep({
               placeholder="Search topics..."
               value={topicSearch}
               onChange={(e) => setTopicSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-purple-500"
+              className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-500"
             />
           </div>
 
@@ -332,13 +332,13 @@ export function TaxonomyConfigStep({
         {showAddCustomTopic && (
           <form
             onSubmit={handleAddCustomTopicSubmit}
-            className="p-4 bg-purple-50/60 border border-purple-200 rounded-2xl space-y-3 animate-in fade-in"
+            className="p-4 bg-blue-50/60 border border-blue-200 rounded-2xl space-y-3 animate-in fade-in"
           >
-            <p className="text-xs font-black text-purple-950 flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+            <p className="text-xs font-black text-blue-950 flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-blue-600" />
               <span>+ Add Persistent Custom Topic</span>
             </p>
-            <p className="text-[11px] text-purple-800">
+            <p className="text-[11px] text-blue-800">
               Normalized into taxonomy memory without duplicate spelling variations. Future teachers selecting this chapter will see it automatically.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -347,14 +347,14 @@ export function TaxonomyConfigStep({
                 placeholder="Topic name e.g. Pedigree Analysis"
                 value={customTopicInput}
                 onChange={(e) => setCustomTopicInput(e.target.value)}
-                className="text-xs p-2.5 bg-white border border-purple-300 rounded-xl outline-none"
+                className="text-xs p-2.5 bg-white border border-blue-300 rounded-xl outline-none"
               />
               <input
                 type="text"
                 placeholder="Optional subtopic e.g. X-linked recessive traits"
                 value={customSubtopicInput}
                 onChange={(e) => setCustomSubtopicInput(e.target.value)}
-                className="text-xs p-2.5 bg-white border border-purple-300 rounded-xl outline-none"
+                className="text-xs p-2.5 bg-white border border-blue-300 rounded-xl outline-none"
               />
             </div>
             <div className="flex justify-end gap-2">
@@ -368,7 +368,7 @@ export function TaxonomyConfigStep({
               <button
                 type="submit"
                 disabled={addingCustom || !customTopicInput.trim()}
-                className="px-4 py-1.5 text-xs bg-purple-600 text-white font-bold rounded-lg hover:bg-purple-500 disabled:opacity-50"
+                className="px-4 py-1.5 text-xs bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-500 disabled:opacity-50"
               >
                 {addingCustom ? "Saving..." : "Save Topic"}
               </button>
@@ -392,12 +392,12 @@ export function TaxonomyConfigStep({
                   onClick={() => toggleTopic(top.title)}
                   className={`p-2.5 rounded-xl border text-left text-xs transition flex items-center gap-2.5 ${
                     isChecked
-                      ? "bg-purple-50/70 border-purple-400 text-purple-950 font-bold shadow-sm"
+                      ? "bg-blue-50/70 border-blue-400 text-blue-950 font-bold shadow-sm"
                       : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
                   }`}
                 >
                   {isChecked ? (
-                    <CheckSquare className="w-4 h-4 text-purple-600 shrink-0" />
+                    <CheckSquare className="w-4 h-4 text-blue-600 shrink-0" />
                   ) : (
                     <Square className="w-4 h-4 text-slate-300 shrink-0" />
                   )}
@@ -470,7 +470,7 @@ export function TaxonomyConfigStep({
               EASY: "border-emerald-500 bg-emerald-50 text-emerald-900 shadow-sm",
               MEDIUM: "border-blue-500 bg-blue-50 text-blue-900 shadow-sm",
               HARD: "border-amber-500 bg-amber-50 text-amber-900 shadow-sm",
-              ULTRA: "border-purple-600 bg-purple-50 text-purple-950 font-black shadow-sm",
+              ULTRA: "border-blue-600 bg-blue-50 text-blue-950 font-black shadow-sm",
             };
 
             return (
@@ -500,7 +500,7 @@ export function TaxonomyConfigStep({
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-indigo-600" />
+              <Sparkles className="w-4 h-4 text-blue-600" />
               <span>NEET Question Types (Multi-Select)</span>
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
@@ -510,7 +510,7 @@ export function TaxonomyConfigStep({
           <button
             type="button"
             onClick={() => onQuestionTypesChange(OFFICIAL_NEET_QUESTION_TYPES.map((t) => t.id))}
-            className="text-xs font-bold text-indigo-600 hover:text-indigo-800 px-3 py-1 bg-indigo-50 rounded-lg"
+            className="text-xs font-bold text-blue-600 hover:text-blue-800 px-3 py-1 bg-blue-50 rounded-lg"
           >
             Select All 20 Types
           </button>
@@ -526,12 +526,12 @@ export function TaxonomyConfigStep({
                 onClick={() => toggleQuestionType(typeDef.id)}
                 className={`p-2.5 rounded-2xl border text-left text-xs transition flex items-center gap-2 ${
                   isSelected
-                    ? "bg-indigo-50/80 border-indigo-400 text-indigo-950 font-bold shadow-sm"
+                    ? "bg-blue-50/80 border-blue-400 text-blue-950 font-bold shadow-sm"
                     : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
                 }`}
               >
                 {isSelected ? (
-                  <CheckSquare className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                  <CheckSquare className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                 ) : (
                   <Square className="w-3.5 h-3.5 text-slate-300 shrink-0" />
                 )}
@@ -570,7 +570,7 @@ export function TaxonomyConfigStep({
               <button
                 type="button"
                 onClick={() => calculateAutoMix(totalQuestions)}
-                className="px-3 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl whitespace-nowrap shadow-sm"
+                className="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl whitespace-nowrap shadow-sm"
                 title="Create a balanced NEET-appropriate distribution across selected types"
               >
                 Auto Mix

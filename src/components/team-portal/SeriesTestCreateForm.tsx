@@ -405,7 +405,7 @@ export function SeriesTestCreateForm({ testSeriesId }: { testSeriesId: string })
             <button
               type="button"
               onClick={handleSaveAsTemplate}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-purple-100 hover:bg-purple-200 dark:bg-purple-950/80 text-purple-800 dark:text-purple-300 font-bold text-xs transition shrink-0"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-100 hover:bg-blue-200 dark:bg-blue-950/80 text-blue-800 dark:text-blue-300 font-bold text-xs transition shrink-0"
             >
               <Save className="w-3.5 h-3.5" />
               <span>Save as Template</span>

@@ -44,7 +44,7 @@ export function Navbar() {
             <Link
               key={link.label}
               href={link.href}
-              className="text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
+              className="text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
             >
               {link.label}
             </Link>
@@ -68,7 +68,7 @@ export function Navbar() {
             <div className="flex items-center gap-2.5">
               <Link
                 href={dashboardHref}
-                className="bg-[#031635] dark:bg-purple-600 text-white font-bold text-xs px-4 sm:px-5 py-2.5 rounded-full hover:opacity-90 active:scale-95 transition-all shadow-sm flex items-center gap-1.5"
+                className="bg-[#031635] dark:bg-blue-600 text-white font-bold text-xs px-4 sm:px-5 py-2.5 rounded-full hover:opacity-90 active:scale-95 transition-all shadow-sm flex items-center gap-1.5"
               >
                 <span className="material-symbols-outlined text-base">dashboard</span>
                 <span>My Study Dashboard</span>
@@ -76,7 +76,7 @@ export function Navbar() {
 
               <Link
                 href={dashboardHref}
-                className="w-9 h-9 rounded-full bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 font-bold flex items-center justify-center text-xs ring-2 ring-purple-400/50"
+                className="w-9 h-9 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-bold flex items-center justify-center text-xs ring-2 ring-blue-400/50"
                 title={user.name || "Student Account"}
               >
                 {initial}
@@ -87,13 +87,13 @@ export function Navbar() {
             <>
               <Link
                 href="/login"
-                className="font-bold text-xs text-[#031635] dark:text-slate-200 px-3 py-2 hover:text-purple-600 transition-all"
+                className="font-bold text-xs text-[#031635] dark:text-slate-200 px-3 py-2 hover:text-blue-600 transition-all"
               >
                 Login / Sign Up
               </Link>
               <Link
                 href="/register"
-                className="bg-[#6b46c1] hover:bg-[#5b3da5] text-white font-bold text-xs px-5 py-2.5 rounded-full hover:opacity-95 active:scale-95 transition-all shadow-md shadow-purple-500/20"
+                className="bg-[#6b46c1] hover:bg-[#5b3da5] text-white font-bold text-xs px-5 py-2.5 rounded-full hover:opacity-95 active:scale-95 transition-all shadow-md shadow-blue-500/20"
               >
                 Start Learning
               </Link>

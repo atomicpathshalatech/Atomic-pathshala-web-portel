@@ -103,7 +103,7 @@ export function CourseListingMasterView({ courses = [] }: { courses?: CourseData
               onClick={() => setSelectedSubject(sub)}
               className={`px-3 py-1 rounded-full text-xs font-semibold transition whitespace-nowrap ${
                 selectedSubject === sub
-                  ? "bg-purple-600 text-white shadow-2xs"
+                  ? "bg-blue-600 text-white shadow-2xs"
                   : "bg-white border border-slate-200 text-slate-600 hover:border-slate-300"
               }`}
             >
@@ -142,7 +142,7 @@ export function CourseListingMasterView({ courses = [] }: { courses?: CourseData
                   setSelectedExam("All");
                   setSelectedSubject("All");
                 }}
-                className="text-xs font-bold text-purple-600 hover:underline cursor-pointer"
+                className="text-xs font-bold text-blue-600 hover:underline cursor-pointer"
               >
                 Clear all filters
               </button>

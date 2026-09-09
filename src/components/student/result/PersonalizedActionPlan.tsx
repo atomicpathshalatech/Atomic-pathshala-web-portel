@@ -15,7 +15,7 @@ export function PersonalizedActionPlan({
       case "PRACTICE":
         return { icon: "edit_document", color: "text-blue-600 bg-blue-50 dark:bg-blue-950/60" };
       case "FORMULA_REVISION":
-        return { icon: "functions", color: "text-purple-600 bg-purple-50 dark:bg-purple-950/60" };
+        return { icon: "functions", color: "text-blue-600 bg-blue-50 dark:bg-blue-950/60" };
       case "RE_TEST":
         return { icon: "schedule", color: "text-amber-600 bg-amber-50 dark:bg-amber-950/60" };
       default:
@@ -28,7 +28,7 @@ export function PersonalizedActionPlan({
       <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
         <div>
           <h3 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
-            <span className="material-symbols-outlined text-purple-600">rocket_launch</span>
+            <span className="material-symbols-outlined text-blue-600">rocket_launch</span>
             <span>Personalized Next-Steps Action Plan</span>
           </h3>
           <p className="text-xs text-slate-500">

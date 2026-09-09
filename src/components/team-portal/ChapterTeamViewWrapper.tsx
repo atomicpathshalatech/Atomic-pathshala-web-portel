@@ -342,7 +342,7 @@ export function ChapterTeamViewWrapper({
           />
 
           {/* BLUE SUBMISSION / STATUS & BATCH IMPORT BOX (BOTTOM) */}
-          <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-3xl p-6 sm:p-8 text-white shadow-xl shadow-blue-500/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
+          <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-3xl p-6 sm:p-8 text-white shadow-xl shadow-blue-500/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
             <div className="space-y-1.5 max-w-xl">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-[10px] uppercase font-black tracking-wider bg-white/20 px-2.5 py-0.5 rounded-full">

@@ -47,7 +47,7 @@ export function ExamInstructionsView({
             triggerButton={
               <button
                 type="button"
-                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-bold text-xs shadow-md transition flex items-center gap-2 shrink-0"
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-blue-600 hover:from-blue-700 hover:to-blue-700 text-white font-bold text-xs shadow-md transition flex items-center gap-2 shrink-0"
               >
                 <span className="material-symbols-outlined text-base">picture_as_pdf</span>
                 <span>Download Test Paper PDF</span>

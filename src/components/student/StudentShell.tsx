@@ -65,7 +65,7 @@ function AccountMenu({
         className="flex items-center gap-1 cursor-pointer group focus:outline-none"
         title={studentName}
       >
-        <div className="w-10 h-10 rounded-full bg-indigo-50 border border-indigo-100 dark:bg-indigo-950/60 dark:border-indigo-800 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-base shadow-xs group-hover:ring-2 group-hover:ring-indigo-300/60 transition-all">
+        <div className="w-10 h-10 rounded-full bg-blue-50 border border-blue-100 dark:bg-blue-950/60 dark:border-blue-800 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-base shadow-xs group-hover:ring-2 group-hover:ring-blue-300/60 transition-all">
           {initial}
         </div>
         <svg
@@ -108,7 +108,7 @@ function AccountMenu({
             onClick={() => setOpen(false)}
             className="flex items-center gap-3 px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 transition"
           >
-            <span className="material-symbols-outlined text-lg text-indigo-500">notifications</span>
+            <span className="material-symbols-outlined text-lg text-blue-500">notifications</span>
             Notifications
           </Link>
           <Link
@@ -132,7 +132,7 @@ function AccountMenu({
             onClick={() => setOpen(false)}
             className="flex items-center gap-3 px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 transition"
           >
-            <span className="material-symbols-outlined text-lg text-purple-500">psychology</span>
+            <span className="material-symbols-outlined text-lg text-blue-500">psychology</span>
             Atomic Guru AI
           </Link>
           <Link
@@ -501,7 +501,7 @@ export function StudentShell({
       {/* Floating Subscription Upgrade Banner (Mobile & Tablet only) */}
       {!hasActiveSubscription && (
         <aside className="lg:hidden fixed bottom-20 left-0 right-0 max-w-lg mx-auto px-4 z-40 pointer-events-auto">
-          <div className="rounded-2xl bg-gradient-to-r from-blue-700 via-indigo-600 to-blue-600 text-white shadow-xl p-3 px-4 flex items-center justify-between border border-blue-400/30 backdrop-blur-md">
+          <div className="rounded-2xl bg-gradient-to-r from-blue-700 via-blue-600 to-blue-600 text-white shadow-xl p-3 px-4 flex items-center justify-between border border-blue-400/30 backdrop-blur-md">
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center text-white flex-shrink-0 shadow-inner">
                 <span className="material-symbols-outlined text-[18px]">lock_open</span>

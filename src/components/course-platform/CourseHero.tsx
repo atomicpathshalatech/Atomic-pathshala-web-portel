@@ -77,7 +77,7 @@ export function CourseHero({ course }: { course: CourseData }) {
             BATCH
           </span>
           {course.exam && (
-            <span className="bg-purple-500 text-white font-extrabold text-[10px] sm:text-xs px-2.5 py-1 rounded-lg uppercase tracking-wider shadow">
+            <span className="bg-blue-500 text-white font-extrabold text-[10px] sm:text-xs px-2.5 py-1 rounded-lg uppercase tracking-wider shadow">
               {course.exam} {course.examYear || ""}
             </span>
           )}

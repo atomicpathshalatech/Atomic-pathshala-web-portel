@@ -257,7 +257,7 @@ export function UserDetailEffectiveAccessView({ userId }: { userId: string }) {
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-purple-600 to-blue-600 text-white font-black text-xl flex items-center justify-center shadow-md">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-blue-600 to-blue-600 text-white font-black text-xl flex items-center justify-center shadow-md">
               {user.name.charAt(0).toUpperCase()}
             </div>
             <div>
@@ -363,7 +363,7 @@ export function UserDetailEffectiveAccessView({ userId }: { userId: string }) {
                           {override && (
                             <span
                               className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${
-                                override.granted ? "bg-purple-200 text-purple-800" : "bg-rose-200 text-rose-800"
+                                override.granted ? "bg-blue-200 text-blue-800" : "bg-rose-200 text-rose-800"
                               }`}
                               title={override.reason || "Override applied"}
                             >
@@ -421,7 +421,7 @@ export function UserDetailEffectiveAccessView({ userId }: { userId: string }) {
                             onClick={() => handleToggleOverride(act.code, override ? override.granted : undefined)}
                             className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition ${
                               override?.granted === true
-                                ? "bg-purple-600 text-white"
+                                ? "bg-blue-600 text-white"
                                 : override?.granted === false
                                 ? "bg-rose-600 text-white"
                                 : isEffective

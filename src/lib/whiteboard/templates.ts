@@ -51,7 +51,7 @@ export const INBUILT_SLIDE_TEMPLATES: SlideTemplate[] = [
     category: "math",
     description: "20px squared grid for geometry, algebra & graphs",
     backgroundValue: "grid",
-    thumbnailBg: "bg-slate-50 text-slate-800 border-indigo-400/40",
+    thumbnailBg: "bg-slate-50 text-slate-800 border-blue-400/40",
     icon: "grid_4x4",
   },
   {

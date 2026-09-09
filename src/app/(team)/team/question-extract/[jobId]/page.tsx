@@ -88,7 +88,7 @@ export default async function ExtractionJobDetailPage({
               {job.fileName}
             </span>
             {job.examName && (
-              <span className="px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-xs font-semibold">
+              <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold">
                 {job.examName}
               </span>
             )}

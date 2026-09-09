@@ -42,7 +42,7 @@ export function TestPdfDownloadModal({
         <button
           type="button"
           onClick={openModal}
-          className="inline-flex items-center gap-2 px-3.5 py-2 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white rounded-xl text-xs font-bold shadow-sm transition hover:shadow"
+          className="inline-flex items-center gap-2 px-3.5 py-2 bg-gradient-to-r from-blue-600 to-blue-600 hover:from-blue-700 hover:to-blue-700 text-white rounded-xl text-xs font-bold shadow-sm transition hover:shadow"
         >
           <FileText className="w-4 h-4" />
           <span>Download Test PDF</span>
@@ -53,7 +53,7 @@ export function TestPdfDownloadModal({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150">
           <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
             {/* Modal Header */}
-            <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 relative">
+            <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white p-6 relative">
               <button
                 type="button"
                 onClick={closeModal}
@@ -62,7 +62,7 @@ export function TestPdfDownloadModal({
                 <X className="w-4 h-4" />
               </button>
 
-              <div className="flex items-center gap-2 text-indigo-300 text-xs font-bold uppercase tracking-wider mb-1">
+              <div className="flex items-center gap-2 text-blue-300 text-xs font-bold uppercase tracking-wider mb-1">
                 <Sparkles className="w-3.5 h-3.5" />
                 <span>Bilingual Test Booklet Export</span>
               </div>
@@ -70,7 +70,7 @@ export function TestPdfDownloadModal({
                 {testName}
               </h2>
               {testCode && (
-                <div className="mt-1 inline-block px-2.5 py-0.5 rounded-full bg-white/15 text-[11px] font-mono text-indigo-200">
+                <div className="mt-1 inline-block px-2.5 py-0.5 rounded-full bg-white/15 text-[11px] font-mono text-blue-200">
                   {testCode}
                 </div>
               )}
@@ -83,11 +83,11 @@ export function TestPdfDownloadModal({
               </p>
 
               {/* Option 1: WITHOUT SOLUTION */}
-              <div className="p-4 rounded-2xl border-2 border-slate-200 dark:border-slate-800 hover:border-indigo-500 dark:hover:border-indigo-500 bg-slate-50/50 dark:bg-slate-800/50 transition group flex flex-col justify-between gap-3">
+              <div className="p-4 rounded-2xl border-2 border-slate-200 dark:border-slate-800 hover:border-blue-500 dark:hover:border-blue-500 bg-slate-50/50 dark:bg-slate-800/50 transition group flex flex-col justify-between gap-3">
                 <div>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-xs">
+                      <div className="w-8 h-8 rounded-xl bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-xs">
                         1
                       </div>
                       <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
@@ -122,7 +122,7 @@ export function TestPdfDownloadModal({
                 <button
                   type="button"
                   onClick={() => handleDownload(false)}
-                  className="w-full py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-black dark:bg-indigo-600 dark:hover:bg-indigo-700 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition"
+                  className="w-full py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-black dark:bg-blue-600 dark:hover:bg-blue-700 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition"
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>Download / Print Question Paper</span>
@@ -179,7 +179,7 @@ export function TestPdfDownloadModal({
                 <button
                   type="button"
                   onClick={() => window.open(`/api/tests/${testId}/export?type=cover`, "_blank")}
-                  className="inline-flex items-center gap-1.5 text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-semibold hover:underline"
+                  className="inline-flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-semibold hover:underline"
                 >
                   <FileText className="w-3.5 h-3.5" />
                   <span>Preview Authentic Front Cover (A4 Sheet AP-26)</span>
@@ -192,7 +192,7 @@ export function TestPdfDownloadModal({
             {/* Modal Footer */}
             <div className="bg-slate-50 dark:bg-slate-800/80 px-6 py-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
               <div className="flex items-center gap-1">
-                <Printer className="w-3.5 h-3.5 text-indigo-500" />
+                <Printer className="w-3.5 h-3.5 text-blue-500" />
                 <span>Print Dialog / PDF Save ready</span>
               </div>
               <button

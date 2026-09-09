@@ -47,7 +47,7 @@ export function StudentDashboardView({ studentName = "Aman Sharma" }: { studentN
 
               <div className="flex-1 flex flex-col justify-between space-y-3">
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-purple-600 tracking-wider">
+                  <span className="text-[10px] uppercase font-bold text-blue-600 tracking-wider">
                     CURRENT IN PROGRESS
                   </span>
                   <h3 className="text-base sm:text-lg font-bold text-[#031635]">
@@ -61,7 +61,7 @@ export function StudentDashboardView({ studentName = "Aman Sharma" }: { studentN
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-xs font-bold text-slate-600">
                     <span>Overall Progress</span>
-                    <span className="text-purple-600">32% Completed</span>
+                    <span className="text-blue-600">32% Completed</span>
                   </div>
                   <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
                     <div className="h-full bg-[#6b46c1] rounded-full" style={{ width: "32%" }} />
@@ -124,7 +124,7 @@ export function StudentDashboardView({ studentName = "Aman Sharma" }: { studentN
                     <span className="material-symbols-outlined text-lg">assignment_turned_in</span>
                     <span>Recent Test Result</span>
                   </div>
-                  <Link href="/tests" className="text-xs font-bold text-purple-600 hover:underline">
+                  <Link href="/tests" className="text-xs font-bold text-blue-600 hover:underline">
                     View All
                   </Link>
                 </div>
@@ -137,7 +137,7 @@ export function StudentDashboardView({ studentName = "Aman Sharma" }: { studentN
                     </div>
                     <div className="text-right">
                       <p className="font-black text-emerald-600 text-sm">320 / 360</p>
-                      <p className="text-[10px] text-purple-600 font-bold">Rank: 45 / 1200</p>
+                      <p className="text-[10px] text-blue-600 font-bold">Rank: 45 / 1200</p>
                     </div>
                   </div>
 
@@ -148,7 +148,7 @@ export function StudentDashboardView({ studentName = "Aman Sharma" }: { studentN
                     </div>
                     <div className="text-right">
                       <p className="font-black text-[#031635] text-sm">305 / 360</p>
-                      <p className="text-[10px] text-purple-600 font-bold">Rank: 89 / 1200</p>
+                      <p className="text-[10px] text-blue-600 font-bold">Rank: 89 / 1200</p>
                     </div>
                   </div>
                 </div>
@@ -191,7 +191,7 @@ export function StudentDashboardView({ studentName = "Aman Sharma" }: { studentN
 
           {/* Doubt Resolution CTA Card */}
           <div className="bg-gradient-to-br from-[#031635] to-[#1a2b4b] text-white rounded-3xl p-5 space-y-3 shadow-md">
-            <span className="material-symbols-outlined text-3xl text-purple-400">forum</span>
+            <span className="material-symbols-outlined text-3xl text-blue-400">forum</span>
             <h3 className="text-base font-bold">Stuck on a Problem?</h3>
             <p className="text-xs text-slate-300 leading-relaxed">
               Our expert faculty and AI Co-Pilot resolve your doubts 24/7 with step-by-step video & text solutions.

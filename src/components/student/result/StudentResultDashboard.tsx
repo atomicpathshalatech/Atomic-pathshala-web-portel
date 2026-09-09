@@ -66,7 +66,7 @@ export function StudentResultDashboard({
             triggerButton={
               <button
                 type="button"
-                className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white text-xs font-bold shadow-sm transition flex items-center gap-1.5"
+                className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-blue-600 hover:from-blue-700 hover:to-blue-700 text-white text-xs font-bold shadow-sm transition flex items-center gap-1.5"
               >
                 <span className="material-symbols-outlined text-sm">download</span>
                 <span>Download Test / Solutions</span>

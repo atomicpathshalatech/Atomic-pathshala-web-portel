@@ -253,7 +253,7 @@ export function AiAssistantTools({
           disabled={Boolean(loadingAction?.startsWith("translate"))}
           className="p-3 rounded-2xl bg-slate-50 hover:bg-slate-100 dark:bg-slate-800/80 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold flex flex-col items-center gap-1.5 border border-slate-200 dark:border-slate-700 transition shadow-sm disabled:opacity-50"
         >
-          <span className="material-symbols-outlined text-lg text-indigo-500">translate</span>
+          <span className="material-symbols-outlined text-lg text-blue-500">translate</span>
           <span>
             {loadingAction?.startsWith("translate") ? "Translating..." : "Auto Translate"}
           </span>
@@ -358,9 +358,9 @@ export function AiAssistantTools({
 
       {/* AI Metadata Suggestion Box with Confidence */}
       {suggestedMeta && (
-        <div className="p-4 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 space-y-2.5 text-xs">
+        <div className="p-4 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 space-y-2.5 text-xs">
           <div className="flex items-center justify-between">
-            <span className="font-bold text-indigo-900 dark:text-indigo-300 flex items-center gap-1.5">
+            <span className="font-bold text-blue-900 dark:text-blue-300 flex items-center gap-1.5">
               <span className="material-symbols-outlined text-sm">auto_fix_high</span>
               AI Suggested Classification
             </span>
@@ -388,7 +388,7 @@ export function AiAssistantTools({
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-indigo-200 dark:border-indigo-800">
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-blue-200 dark:border-blue-800">
             <button
               type="button"
               onClick={() => setSuggestedMeta(null)}
@@ -402,7 +402,7 @@ export function AiAssistantTools({
                 onApplyMetadata(suggestedMeta);
                 setSuggestedMeta(null);
               }}
-              className="px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[11px] shadow-sm"
+              className="px-4 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-[11px] shadow-sm"
             >
               Accept All
             </button>

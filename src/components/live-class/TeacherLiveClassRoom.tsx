@@ -1566,17 +1566,17 @@ export function TeacherLiveClassRoom({
               type="button"
               disabled={pdfLoadState.loading}
               onClick={() => handleLoadPresentationPdf()}
-              className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/40 transition active:scale-95 shadow cursor-pointer"
+              className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 border border-blue-500/40 transition active:scale-95 shadow cursor-pointer"
               title="Click to load or reload PDF presentation onto whiteboard slides"
             >
               <span className="material-symbols-outlined text-xs">picture_as_pdf</span>
               <span className="truncate max-w-[200px]">{wbSession.presentationName || "Presentation PDF"}</span>
-              <span className={`material-symbols-outlined text-xs text-indigo-400 ${pdfLoadState.loading ? "animate-spin" : ""}`}>
+              <span className={`material-symbols-outlined text-xs text-blue-400 ${pdfLoadState.loading ? "animate-spin" : ""}`}>
                 {pdfLoadState.loading ? "progress_activity" : "sync"}
               </span>
             </button>
           ) : wbSession.presentationName ? (
-            <span className="hidden lg:inline-flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded-md bg-indigo-500/10 text-indigo-300 border border-indigo-500/30">
+            <span className="hidden lg:inline-flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded-md bg-blue-500/10 text-blue-300 border border-blue-500/30">
               <span className="material-symbols-outlined text-xs">description</span>
               {wbSession.presentationName}
             </span>
@@ -1590,7 +1590,7 @@ export function TeacherLiveClassRoom({
           <button
             type="button"
             onClick={() => setShowPreFlightWizard(true)}
-            className="flex items-center gap-1.5 text-xs font-medium text-indigo-300 bg-indigo-950/40 hover:bg-indigo-900/50 border border-indigo-500/30 px-3 py-1.5 rounded-lg transition"
+            className="flex items-center gap-1.5 text-xs font-medium text-blue-300 bg-blue-950/40 hover:bg-blue-900/50 border border-blue-500/30 px-3 py-1.5 rounded-lg transition"
             title="Configure Teaching Material, Theme, and Video Devices"
           >
             <span className="material-symbols-outlined text-sm">tune</span>
@@ -1643,7 +1643,7 @@ export function TeacherLiveClassRoom({
                             type="button"
                             disabled={extendingTime}
                             onClick={() => extendClass(mins)}
-                            className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-200 hover:bg-indigo-600 hover:text-white transition disabled:opacity-50"
+                            className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-200 hover:bg-blue-600 hover:text-white transition disabled:opacity-50"
                           >
                             +{mins} Minutes
                           </button>
@@ -1688,7 +1688,7 @@ export function TeacherLiveClassRoom({
                             type="button"
                             disabled={extendingTime}
                             onClick={() => extendClass(mins)}
-                            className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-200 hover:bg-indigo-600 hover:text-white transition disabled:opacity-50"
+                            className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-200 hover:bg-blue-600 hover:text-white transition disabled:opacity-50"
                           >
                             +{mins} Minutes
                           </button>
@@ -1794,7 +1794,7 @@ export function TeacherLiveClassRoom({
         {(pdfLoadState.loading || pdfLoadState.error) && (
           <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 max-w-md w-[92%]">
             {pdfLoadState.loading ? (
-              <div className="flex items-center gap-2 bg-[#1a1b23] border border-indigo-500/40 text-indigo-200 text-xs px-4 py-2 rounded-xl shadow-2xl">
+              <div className="flex items-center gap-2 bg-[#1a1b23] border border-blue-500/40 text-blue-200 text-xs px-4 py-2 rounded-xl shadow-2xl">
                 <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
                 <span className="truncate">{pdfLoadState.progress ?? "Loading presentation…"}</span>
               </div>
@@ -1995,7 +1995,7 @@ export function TeacherLiveClassRoom({
                   }}
                   placeholder="Type text…"
                   rows={1}
-                  className="min-w-[120px] min-h-[1.6em] bg-white/95 border-2 border-indigo-500 rounded px-1.5 py-1 outline-none resize shadow-lg"
+                  className="min-w-[120px] min-h-[1.6em] bg-white/95 border-2 border-blue-500 rounded px-1.5 py-1 outline-none resize shadow-lg"
                   style={{
                     color: textEditor.color,
                     // Approximation only, purely for what the box looks
@@ -2919,7 +2919,7 @@ function HandRaisePanel({
                   <span
                     className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                       h.requestType === "VIDEO"
-                        ? "bg-purple-950/60 border-purple-700/50 text-purple-300"
+                        ? "bg-blue-950/60 border-blue-700/50 text-blue-300"
                         : h.requestType === "AUDIO"
                         ? "bg-blue-950/60 border-blue-700/50 text-blue-300"
                         : "bg-slate-800 border-slate-700 text-slate-300"

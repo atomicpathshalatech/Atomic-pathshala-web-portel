@@ -131,7 +131,7 @@ export function GeneratedQuestionCard({
     EASY: "bg-emerald-50 text-emerald-700 border-emerald-200",
     MEDIUM: "bg-blue-50 text-blue-700 border-blue-200",
     HARD: "bg-amber-50 text-amber-700 border-amber-200",
-    ULTRA: "bg-purple-50 text-purple-700 border-purple-200 font-extrabold",
+    ULTRA: "bg-blue-50 text-blue-700 border-blue-200 font-extrabold",
   };
 
   const quality = question.qualityScore || {
@@ -175,7 +175,7 @@ export function GeneratedQuestionCard({
           </span>
 
           {/* Type Badge */}
-          <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+          <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
             {question.questionType.replace(/_/g, " ")}
           </span>
 
@@ -289,13 +289,13 @@ export function GeneratedQuestionCard({
 
       {/* 5. SOURCE GROUNDING REFERENCE PANEL (If PDF mode) */}
       {(question.sourceExcerpt || question.sourcePageNumbers?.length || question.imageUrl) && (
-        <div className="px-6 py-3 bg-indigo-50/30 border-b border-indigo-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+        <div className="px-6 py-3 bg-blue-50/30 border-b border-blue-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
           <div className="space-y-1">
-            <div className="flex items-center gap-2 text-indigo-900 font-bold">
-              <BookOpen className="w-3.5 h-3.5 text-indigo-600" />
+            <div className="flex items-center gap-2 text-blue-900 font-bold">
+              <BookOpen className="w-3.5 h-3.5 text-blue-600" />
               <span>Source Reference: {pdfFileName || "Uploaded PDF"}</span>
               {question.sourcePageNumbers && question.sourcePageNumbers.length > 0 && (
-                <span className="bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded font-mono text-[10px]">
+                <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-mono text-[10px]">
                   Page {question.sourcePageNumbers.join(", ")}
                 </span>
               )}
@@ -312,7 +312,7 @@ export function GeneratedQuestionCard({
               href={question.imageUrl}
               target="_blank"
               rel="noreferrer"
-              className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-bold bg-indigo-50 border border-indigo-200 px-2.5 py-1.5 rounded-lg shrink-0"
+              className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-bold bg-blue-50 border border-blue-200 px-2.5 py-1.5 rounded-lg shrink-0"
             >
               <ImageIcon className="w-3.5 h-3.5" />
               <span>View Source Diagram</span>
@@ -561,7 +561,7 @@ export function GeneratedQuestionCard({
             type="button"
             onClick={() => handleSingleRegenerate(regMode)}
             disabled={regenerating}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-xl transition disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl transition disabled:opacity-50"
             title="Re-generate this question with fresh AI formulation"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${regenerating ? "animate-spin" : ""}`} />

@@ -126,7 +126,7 @@ export function FreeTrialSection() {
 
             <div className="aspect-video bg-black rounded-2xl flex items-center justify-center relative overflow-hidden border border-slate-800">
               <div className="text-center p-6 space-y-2">
-                <span className="material-symbols-outlined text-5xl text-purple-400 animate-pulse">
+                <span className="material-symbols-outlined text-5xl text-blue-400 animate-pulse">
                   play_circle
                 </span>
                 <p className="text-sm text-slate-300 font-bold">

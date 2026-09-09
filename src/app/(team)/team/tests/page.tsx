@@ -120,7 +120,7 @@ export default async function TestsListPage() {
                         type="button"
                         className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs font-bold flex items-center gap-1.5 shadow-sm transition"
                       >
-                        <span className="material-symbols-outlined text-sm text-indigo-600">picture_as_pdf</span>
+                        <span className="material-symbols-outlined text-sm text-blue-600">picture_as_pdf</span>
                         <span>PDF Export</span>
                       </button>
                     }

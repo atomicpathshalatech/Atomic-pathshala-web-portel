@@ -12,7 +12,7 @@ export function TestsSection({ course }: { course?: any }) {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div>
           <h2 className="text-base sm:text-lg font-black text-[#031635] flex items-center gap-2">
-            <span className="material-symbols-outlined text-purple-600">quiz</span>
+            <span className="material-symbols-outlined text-blue-600">quiz</span>
             <span>Batch Tests &amp; Assessments</span>
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
@@ -40,7 +40,7 @@ export function TestsSection({ course }: { course?: any }) {
             >
               <div className="space-y-0.5 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="px-2 py-0.5 rounded-md bg-purple-100 text-purple-800 text-[10px] font-bold uppercase">
+                  <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 text-[10px] font-bold uppercase">
                     Assessment
                   </span>
                   <h3 className="font-bold text-xs sm:text-sm text-[#031635] truncate">{test.title || test.name}</h3>
@@ -60,7 +60,7 @@ export function TestsSection({ course }: { course?: any }) {
                       title="Download Test PDF"
                       className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition shadow-2xs cursor-pointer"
                     >
-                      <span className="material-symbols-outlined text-[16px] text-indigo-600">picture_as_pdf</span>
+                      <span className="material-symbols-outlined text-[16px] text-blue-600">picture_as_pdf</span>
                       <span>Download PDF</span>
                     </button>
                   }
@@ -68,7 +68,7 @@ export function TestsSection({ course }: { course?: any }) {
 
                 <Link
                   href={`/tests/${test.id}/attempt`}
-                  className="px-3.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-2xs transition text-center self-start sm:self-auto shrink-0"
+                  className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-2xs transition text-center self-start sm:self-auto shrink-0"
                 >
                   Attempt Test
                 </Link>

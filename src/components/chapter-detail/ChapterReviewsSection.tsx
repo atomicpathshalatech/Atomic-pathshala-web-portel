@@ -28,7 +28,7 @@ export function ChapterReviewsSection({
     {
       id: "rev-2",
       studentName: "Aman Sharma",
-      avatarColor: "bg-indigo-500/30 text-indigo-300",
+      avatarColor: "bg-blue-500/30 text-blue-300",
       rating: 5,
       comment: "Line-by-line NCERT breakdown helped me score 100% in my chapter test. Highly recommended!",
       date: "1 week ago",

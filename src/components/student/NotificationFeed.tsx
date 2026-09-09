@@ -46,7 +46,7 @@ function EventCountdown({ targetTime }: { targetTime: string }) {
   const secs = remainingSec % 60;
 
   return (
-    <span className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200 animate-pulse">
+    <span className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200 animate-pulse">
       <span className="material-symbols-outlined text-xs">timer</span>
       {mins}m {secs}s left
     </span>

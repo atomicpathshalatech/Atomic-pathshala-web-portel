@@ -451,7 +451,7 @@ export function LecturePlayer({
               href={slidesUrl}
               target="_blank"
               rel="noreferrer"
-              className="flex items-center gap-1.5 px-3 h-9 rounded-full bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30 text-label-sm font-label-sm font-bold transition shadow-xs"
+              className="flex items-center gap-1.5 px-3 h-9 rounded-full bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/30 text-label-sm font-label-sm font-bold transition shadow-xs"
               title="View & Download Official Class Slides PDF"
             >
               <span className="material-symbols-outlined text-base">description</span>

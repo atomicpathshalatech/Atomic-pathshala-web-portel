@@ -35,7 +35,7 @@ export function GenerationProgressModal({
       <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl border border-slate-100 space-y-6 animate-in zoom-in-95">
         {/* Header */}
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white flex items-center justify-center shadow-md shadow-purple-500/20">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-blue-600 to-blue-600 text-white flex items-center justify-center shadow-md shadow-blue-500/20">
             {progress < 100 ? (
               <Loader2 className="w-6 h-6 animate-spin" />
             ) : (
@@ -60,7 +60,7 @@ export function GenerationProgressModal({
           </div>
           <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden p-0.5">
             <div
-              className="bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 h-full rounded-full transition-all duration-300"
+              className="bg-gradient-to-r from-blue-600 via-blue-600 to-blue-600 h-full rounded-full transition-all duration-300"
               style={{ width: `${Math.max(5, progress)}%` }}
             />
           </div>
@@ -89,9 +89,9 @@ export function GenerationProgressModal({
         </div>
 
         {/* Policy reminder */}
-        <div className="p-3 bg-purple-50/50 rounded-2xl border border-purple-100 text-[11px] text-purple-900 leading-relaxed">
+        <div className="p-3 bg-blue-50/50 rounded-2xl border border-blue-100 text-[11px] text-blue-900 leading-relaxed">
           <p className="font-bold flex items-center gap-1 mb-0.5">
-            <Sparkles className="w-3 h-3 text-purple-600" />
+            <Sparkles className="w-3 h-3 text-blue-600" />
             <span>Adversarial AI Quality Assurance Active:</span>
           </p>
           <span>

@@ -203,7 +203,7 @@ export function ChapterDetailView({
             </div>
             <span className="text-slate-300 dark:text-slate-700">|</span>
             <div className="flex items-center gap-1">
-              <span className="material-symbols-outlined text-sm text-indigo-500">menu_book</span>
+              <span className="material-symbols-outlined text-sm text-blue-500">menu_book</span>
               <span>{totalLessons || 8} Lectures</span>
             </div>
             <span className="text-slate-300 dark:text-slate-700">|</span>
