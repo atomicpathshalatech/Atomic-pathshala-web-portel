@@ -2,15 +2,20 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import type { StudyMaterialType } from "@prisma/client";
-import { STUDY_MATERIAL_TYPES, formatBytes } from "@/lib/study-material";
-
-type SubjectOpt = {
-  id: string;
-  title: string;
-  courseTitle: string | null;
-  chapters: { id: string; title: string }[];
-};
+import type {
+  StudyMaterialType,
+  StudyMaterialClassExam,
+  StudyMaterialLanguage,
+} from "@prisma/client";
+import {
+  CLASS_EXAMS,
+  LANGUAGES,
+  SUBJECTS_FOR_CLASS_EXAM,
+  chaptersForClassExam,
+  moduleTypesForClassExam,
+  validateModuleInput,
+  formatBytes,
+} from "@/lib/study-material";
 
 type Material = {
   id: string;
@@ -20,46 +25,79 @@ type Material = {
   sizeBytes: number;
   allowDownload: boolean;
   isPublished: boolean;
-  order: number;
+  language: StudyMaterialLanguage;
 };
 
-export function StudyMaterialManager({ subjects }: { subjects: SubjectOpt[] }) {
-  const [subjectId, setSubjectId] = useState<string>(subjects[0]?.id ?? "");
-  const subject = useMemo(() => subjects.find((s) => s.id === subjectId), [subjects, subjectId]);
-  const [chapterId, setChapterId] = useState<string>("");
+const CUSTOM = "__custom__";
+
+export function StudyMaterialManager() {
+  const [classExam, setClassExam] = useState<StudyMaterialClassExam | "">("");
+  const [subject, setSubject] = useState("");
+  const [chapterSel, setChapterSel] = useState(""); // ncertChapterId | CUSTOM | ""
+  const [customName, setCustomName] = useState("");
+  const [language, setLanguage] = useState<StudyMaterialLanguage>("ENGLISH");
+
+  const subjects = classExam ? SUBJECTS_FOR_CLASS_EXAM[classExam] : [];
+  const chapters = useMemo(
+    () => (classExam && subject ? chaptersForClassExam(classExam, subject) : []),
+    [classExam, subject]
+  );
+  const types = moduleTypesForClassExam(classExam || null);
+
+  // Reset cascade
+  useEffect(() => {
+    if (classExam && subject && !SUBJECTS_FOR_CLASS_EXAM[classExam].includes(subject)) {
+      setSubject("");
+    }
+    setChapterSel("");
+    setCustomName("");
+  }, [classExam]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    setChapterSel("");
+    setCustomName("");
+  }, [subject]);
+
+  const isCustom = chapterSel === CUSTOM;
+  const chapter = chapters.find((c) => c.ncertChapterId === chapterSel);
+  const chapterTitle = isCustom ? customName.trim() : chapter?.label ?? "";
+  const chapterClass = isCustom ? null : chapter?.chapterClass ?? null;
+
+  const ready =
+    !!classExam && !!subject && (isCustom ? !!customName.trim() : !!chapterSel) && !!language;
 
   const [materials, setMaterials] = useState<Material[]>([]);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    // reset chapter when subject changes
-    setChapterId(subject?.chapters[0]?.id ?? "");
-  }, [subject]);
-
   const load = useCallback(async () => {
-    if (!chapterId) {
+    if (!ready) {
       setMaterials([]);
       return;
     }
     setLoading(true);
     try {
-      const res = await fetch(`/api/team/study-material?chapterId=${chapterId}`, { cache: "no-store" });
+      const q = new URLSearchParams({ classExam: classExam as string, subject, language });
+      if (isCustom) {
+        q.set("custom", "1");
+        q.set("chapterTitle", customName.trim());
+      } else {
+        q.set("ncertChapterId", chapterSel);
+      }
+      const res = await fetch(`/api/team/study-material?${q}`, { cache: "no-store" });
       const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.error ?? "Failed to load.");
       setMaterials(json.data.materials);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to load study material.");
+      toast.error(e instanceof Error ? e.message : "Failed to load.");
     } finally {
       setLoading(false);
     }
-  }, [chapterId]);
+  }, [ready, classExam, subject, language, isCustom, chapterSel, customName]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  async function patch(id: string, data: Partial<Pick<Material, "allowDownload" | "isPublished" | "title">>) {
-    // optimistic
+  async function patch(id: string, data: Partial<Pick<Material, "allowDownload" | "isPublished">>) {
     setMaterials((prev) => prev.map((m) => (m.id === id ? { ...m, ...data } : m)));
     try {
       const res = await fetch(`/api/team/study-material/${id}`, {
@@ -73,7 +111,6 @@ export function StudyMaterialManager({ subjects }: { subjects: SubjectOpt[] }) {
       load();
     }
   }
-
   async function remove(id: string) {
     if (!window.confirm("Remove this PDF? Students will no longer see it.")) return;
     setMaterials((prev) => prev.filter((m) => m.id !== id));
@@ -87,70 +124,119 @@ export function StudyMaterialManager({ subjects }: { subjects: SubjectOpt[] }) {
     }
   }
 
+  const selectCls =
+    "mt-1 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2.5 text-sm font-semibold disabled:opacity-50";
+
   return (
     <div className="space-y-6 max-w-5xl">
       <header>
         <h1 className="text-2xl font-black text-slate-900 dark:text-white">Study Material</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          Pick a subject and chapter, then upload PDFs under each category. Students browse them under
-          Study Material and can view or download each file.
+          Class/Exam → Subject → Chapter → Language → Module Type → PDF. Chapters come from the NCERT
+          syllabus; NEET &amp; JEE combine Class 11 + 12.
         </p>
       </header>
 
-      {/* Subject + chapter pickers */}
-      <div className="grid gap-3 sm:grid-cols-2 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+      {/* Step 1–4 pickers */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
         <label className="block">
-          <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Subject</span>
-          <select
-            value={subjectId}
-            onChange={(e) => setSubjectId(e.target.value)}
-            className="mt-1 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2.5 text-sm font-semibold"
-          >
-            {subjects.length === 0 && <option value="">No subjects yet</option>}
-            {subjects.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.title}
-                {s.courseTitle ? ` — ${s.courseTitle}` : ""}
+          <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Class / Exam *</span>
+          <select value={classExam} onChange={(e) => setClassExam(e.target.value as never)} className={selectCls}>
+            <option value="">Select…</option>
+            {CLASS_EXAMS.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
               </option>
             ))}
           </select>
         </label>
 
         <label className="block">
-          <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Chapter</span>
+          <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Subject *</span>
           <select
-            value={chapterId}
-            onChange={(e) => setChapterId(e.target.value)}
-            disabled={!subject || subject.chapters.length === 0}
-            className="mt-1 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2.5 text-sm font-semibold disabled:opacity-50"
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            disabled={!classExam}
+            className={selectCls}
           >
-            {(!subject || subject.chapters.length === 0) && <option value="">No chapters</option>}
-            {subject?.chapters.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.title}
+            <option value="">{classExam ? "Select…" : "Pick Class/Exam first"}</option>
+            {subjects.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="block">
+          <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Chapter *</span>
+          <select
+            value={chapterSel}
+            onChange={(e) => setChapterSel(e.target.value)}
+            disabled={!subject}
+            className={selectCls}
+          >
+            <option value="">{subject ? "Select…" : "Pick Subject first"}</option>
+            {chapters.map((c) => (
+              <option key={c.ncertChapterId} value={c.ncertChapterId}>
+                {c.label}
+              </option>
+            ))}
+            <option value={CUSTOM}>+ Add Custom Chapter</option>
+          </select>
+          {isCustom && (
+            <input
+              type="text"
+              value={customName}
+              onChange={(e) => setCustomName(e.target.value)}
+              placeholder="Custom chapter name"
+              className="mt-2 w-full rounded-lg border border-amber-400 dark:border-amber-600 bg-amber-50/50 dark:bg-amber-950/20 px-3 py-2 text-sm"
+            />
+          )}
+        </label>
+
+        <label className="block">
+          <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Language *</span>
+          <select
+            value={language}
+            onChange={(e) => setLanguage(e.target.value as never)}
+            className={selectCls}
+          >
+            {LANGUAGES.map((l) => (
+              <option key={l.value} value={l.value}>
+                {l.label}
               </option>
             ))}
           </select>
         </label>
       </div>
 
-      {/* Category sections */}
-      {!chapterId ? (
-        <p className="text-sm text-slate-500">Select a chapter to manage its study material.</p>
+      {!ready ? (
+        <p className="text-sm text-slate-500">
+          Complete Class/Exam, Subject, Chapter and Language to manage modules for that combination.
+        </p>
       ) : (
         <div className="space-y-4">
-          {STUDY_MATERIAL_TYPES.map((t) => (
+          {types.map((t) => (
             <TypeSection
               key={t.value}
               type={t.value}
               label={t.label}
               icon={t.icon}
-              chapterId={chapterId}
               items={materials.filter((m) => m.type === t.value)}
               loading={loading}
               onAdded={load}
               onPatch={patch}
               onRemove={remove}
+              ctx={{
+                classExam: classExam as StudyMaterialClassExam,
+                subject,
+                ncertChapterId: isCustom ? null : chapterSel,
+                chapterTitle,
+                chapterClass,
+                isCustomChapter: isCustom,
+                language,
+              }}
             />
           ))}
         </div>
@@ -159,26 +245,36 @@ export function StudyMaterialManager({ subjects }: { subjects: SubjectOpt[] }) {
   );
 }
 
+type Ctx = {
+  classExam: StudyMaterialClassExam;
+  subject: string;
+  ncertChapterId: string | null;
+  chapterTitle: string;
+  chapterClass: number | null;
+  isCustomChapter: boolean;
+  language: StudyMaterialLanguage;
+};
+
 function TypeSection({
   type,
   label,
   icon,
-  chapterId,
   items,
   loading,
   onAdded,
   onPatch,
   onRemove,
+  ctx,
 }: {
   type: StudyMaterialType;
   label: string;
   icon: string;
-  chapterId: string;
   items: Material[];
   loading: boolean;
   onAdded: () => void;
-  onPatch: (id: string, data: Partial<Pick<Material, "allowDownload" | "isPublished" | "title">>) => void;
+  onPatch: (id: string, d: Partial<Pick<Material, "allowDownload" | "isPublished">>) => void;
   onRemove: (id: string) => void;
+  ctx: Ctx;
 }) {
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
@@ -192,6 +288,16 @@ function TypeSection({
     if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
       return toast.error("Only PDF files are allowed.");
     }
+    const payload = {
+      ...ctx,
+      type,
+      title: title.trim() || file.name.replace(/\.pdf$/i, ""),
+      fileUrl: "pending",
+      fileName: file.name,
+    };
+    const clientErr = validateModuleInput(payload);
+    if (clientErr) return toast.error(clientErr);
+
     setBusy(true);
     setProgress(5);
     try {
@@ -199,7 +305,7 @@ function TypeSection({
       const up = await uploadFileToR2(file, {
         prefix: "documents",
         fileType: "PDF",
-        subPath: `study-material/${chapterId}`,
+        subPath: `study-material/${ctx.classExam}/${ctx.subject}`,
         visibility: "PROTECTED",
         onProgress: setProgress,
       });
@@ -207,9 +313,9 @@ function TypeSection({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          chapterId,
+          ...ctx,
           type,
-          title: title.trim() || file.name.replace(/\.pdf$/i, ""),
+          title: payload.title,
           fileUrl: up.fileAssetId,
           fileName: file.name,
           sizeBytes: up.sizeBytes,
@@ -295,7 +401,7 @@ function TypeSection({
                   {m.fileName} · {formatBytes(m.sizeBytes)}
                 </p>
               </div>
-              <label className="flex items-center gap-1 text-[11px] text-slate-500 shrink-0" title="Students can save the file">
+              <label className="flex items-center gap-1 text-[11px] text-slate-500 shrink-0">
                 <input
                   type="checkbox"
                   checked={m.allowDownload}
@@ -303,7 +409,7 @@ function TypeSection({
                 />
                 Downloadable
               </label>
-              <label className="flex items-center gap-1 text-[11px] text-slate-500 shrink-0" title="Visible to students">
+              <label className="flex items-center gap-1 text-[11px] text-slate-500 shrink-0">
                 <input
                   type="checkbox"
                   checked={m.isPublished}

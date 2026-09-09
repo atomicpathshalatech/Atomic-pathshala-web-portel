@@ -6,14 +6,12 @@ import { prisma } from "@/lib/db";
 import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, handleApiError } from "@/lib/api/response";
-import { isStudyMaterialType } from "@/lib/study-material";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const patchSchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),
-  type: z.string().refine(isStudyMaterialType, "Invalid type").optional(),
   order: z.number().int().nonnegative().optional(),
   allowDownload: z.boolean().optional(),
   isPublished: z.boolean().optional(),
@@ -30,7 +28,6 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       where: { id: params.id },
       data: {
         ...(input.title !== undefined ? { title: input.title } : {}),
-        ...(input.type !== undefined ? { type: input.type as never } : {}),
         ...(input.order !== undefined ? { order: input.order } : {}),
         ...(input.allowDownload !== undefined ? { allowDownload: input.allowDownload } : {}),
         ...(input.isPublished !== undefined ? { isPublished: input.isPublished } : {}),

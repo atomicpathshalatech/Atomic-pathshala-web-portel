@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { StudyMaterialClassExam } from "@prisma/client";
 import { requireStudentSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { StudyMaterialBrowser } from "@/components/student/StudyMaterialBrowser";
@@ -7,56 +8,45 @@ export const metadata: Metadata = {
   title: "Study Material — Atomic Pathshala",
 };
 
+/** Loose map from a batch's free-text target exam to our Class/Exam enum. */
+function deriveClassExams(targetExams: (string | null | undefined)[]): StudyMaterialClassExam[] {
+  const set = new Set<StudyMaterialClassExam>();
+  for (const raw of targetExams) {
+    const t = (raw || "").toLowerCase();
+    if (t.includes("neet")) set.add("NEET");
+    if (t.includes("jee")) set.add("JEE");
+    if (t.includes("12")) set.add("CLASS_12");
+    if (t.includes("11")) set.add("CLASS_11");
+  }
+  return set.size ? [...set] : ["NEET", "JEE", "CLASS_11", "CLASS_12"];
+}
+
 export default async function StudentStudyMaterialPage() {
   const { student } = await requireStudentSession();
 
   const enrolments = await prisma.batchEnrollment.findMany({
     where: { studentId: student.id, status: "ACTIVE" },
-    select: { batch: { select: { courseId: true } } },
+    select: { batch: { select: { targetExam: true } } },
   });
-  const courseIds = Array.from(
-    new Set(enrolments.map((e) => e.batch?.courseId).filter((x): x is string => !!x))
-  );
+  const allowed = deriveClassExams(enrolments.map((e) => e.batch?.targetExam));
 
-  const subjects = courseIds.length
-    ? await prisma.subject.findMany({
-        where: { courseId: { in: courseIds } },
-        orderBy: { title: "asc" },
-        select: {
-          id: true,
-          title: true,
-          chapters: {
-            where: { status: { in: ["PUBLISHED", "APPROVED"] } },
-            orderBy: [{ order: "asc" }, { title: "asc" }],
-            select: {
-              id: true,
-              title: true,
-              studyMaterials: {
-                where: { isPublished: true },
-                orderBy: [{ type: "asc" }, { order: "asc" }],
-                select: {
-                  id: true,
-                  type: true,
-                  title: true,
-                  fileName: true,
-                  sizeBytes: true,
-                  allowDownload: true,
-                },
-              },
-            },
-          },
-        },
-      })
-    : [];
+  const materials = await prisma.studyMaterial.findMany({
+    where: { isPublished: true, classExam: { in: allowed } },
+    orderBy: [{ subject: "asc" }, { chapterClass: "asc" }, { chapterTitle: "asc" }, { type: "asc" }, { order: "asc" }],
+    select: {
+      id: true,
+      classExam: true,
+      subject: true,
+      chapterTitle: true,
+      chapterClass: true,
+      language: true,
+      type: true,
+      title: true,
+      fileName: true,
+      sizeBytes: true,
+      allowDownload: true,
+    },
+  });
 
-  // Keep only chapters that actually have material.
-  const cleaned = subjects
-    .map((s) => ({
-      id: s.id,
-      title: s.title,
-      chapters: s.chapters.filter((c) => c.studyMaterials.length > 0),
-    }))
-    .filter((s) => s.chapters.length > 0);
-
-  return <StudyMaterialBrowser subjects={cleaned} />;
+  return <StudyMaterialBrowser classExams={allowed} materials={materials} />;
 }
