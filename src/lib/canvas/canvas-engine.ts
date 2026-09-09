@@ -961,11 +961,22 @@ export class CanvasEngine {
    * Fills clicked shape or closed figure with `currentColor`, pushing an undo snapshot
    * and committing the change for real-time synchronization with all students.
    */
+  /**
+   * Paint-bucket. Fills the enclosed area of a *closed* shape (rectangle /
+   * circle / triangle) with the current colour. It never recolours pen
+   * strokes, text, or open paths (line / arrow) — clicking those, or empty
+   * canvas, is a no-op. This is object-based fill, not pixel flood-fill:
+   * the target shape gets a `fill` property, everything else is untouched.
+   */
   private fillAtPoint(pt: { x: number; y: number }): void {
-    // 1. Check if clicked inside any shape from top to bottom
+    const FILLABLE: ShapeKind[] = ["rectangle", "circle", "triangle"];
+    const isFillableShape = (o: StrokeObject): o is ShapeObject =>
+      o.type === "shape" && (FILLABLE as string[]).includes((o as ShapeObject).shape);
+
+    // 1. Topmost fillable shape whose interior contains the click.
     for (let i = this.objects.length - 1; i >= 0; i--) {
       const obj = this.objects[i]!;
-      if (obj.type === "shape" && isInsideShape(obj, pt)) {
+      if (isFillableShape(obj) && isInsideShape(obj, pt)) {
         this.pushUndo();
         this.objects[i] = { ...obj, fill: this.currentColor };
         this.renderBase();
@@ -974,50 +985,21 @@ export class CanvasEngine {
       }
     }
 
-    // 2. Direct hit test for strokes, text, or shapes near boundary
+    // 2. Clicked the outline/edge of a fillable shape (but not its inside).
     const hit = this.hitTest(pt);
-    if (hit) {
+    if (hit && isFillableShape(hit)) {
       this.pushUndo();
       const idx = this.objects.findIndex((o) => o.id === hit.id);
       if (idx !== -1) {
-        if (hit.type === "shape") {
-          this.objects[idx] = { ...hit, fill: this.currentColor };
-        } else if (hit.type === "stroke") {
-          this.objects[idx] = { ...hit, color: this.currentColor };
-        } else if (hit.type === "text") {
-          this.objects[idx] = { ...hit, color: this.currentColor };
-        }
+        this.objects[idx] = { ...(this.objects[idx] as ShapeObject), fill: this.currentColor };
         this.renderBase();
         this.onCommit?.(this.objects);
-        return;
       }
+      return;
     }
 
-    // 3. Fallback: Find nearest shape within 80px and fill it
-    let nearestIdx = -1;
-    let minD = 80;
-    for (let i = this.objects.length - 1; i >= 0; i--) {
-      const obj = this.objects[i]!;
-      const pts = representativePoints(obj);
-      for (const p of pts) {
-        const d = distance(p, pt);
-        if (d < minD) {
-          minD = d;
-          nearestIdx = i;
-        }
-      }
-    }
-    if (nearestIdx !== -1) {
-      this.pushUndo();
-      const target = this.objects[nearestIdx]!;
-      if (target.type === "shape") {
-        this.objects[nearestIdx] = { ...target, fill: this.currentColor };
-      } else if (target.type === "stroke") {
-        this.objects[nearestIdx] = { ...target, color: this.currentColor };
-      }
-      this.renderBase();
-      this.onCommit?.(this.objects);
-    }
+    // No fillable shape under the pointer — do nothing. (Never recolour a
+    // stroke, text, line or arrow just because the bucket is active.)
   }
 
   /** Partial/stroke eraser — removes only the points within the eraser
