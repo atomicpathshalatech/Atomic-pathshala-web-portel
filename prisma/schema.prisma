@@ -1919,6 +1919,36 @@ model StaffInvitation {
   @@map("staff_invitations")
 }
 
+// Phone OTP challenges for student sign-up and OTP password reset. The code
+// itself is never stored — only a bcrypt hash. A row is single-use
+// (consumedAt), short-lived (expiresAt), attempt-capped, and rate-limited by
+// querying recent rows per phone / per hashed IP.
+enum OtpPurpose {
+  STUDENT_SIGNUP
+  PASSWORD_RESET
+}
+
+model OtpChallenge {
+  id                   String     @id @default(cuid())
+  phone                String
+  purpose              OtpPurpose
+  codeHash             String
+  ipHash               String?
+  attempts             Int        @default(0)
+  maxAttempts          Int        @default(5)
+  consumedAt           DateTime?
+  // Issued on a successful verify; the final register / reset call presents
+  // this instead of the OTP. Nulled once it's been used to create/reset.
+  verifyToken          String?    @unique
+  verifyTokenExpiresAt DateTime?
+  expiresAt            DateTime
+  createdAt            DateTime   @default(now())
+
+  @@index([phone, purpose, createdAt])
+  @@index([ipHash, createdAt])
+  @@map("otp_challenges")
+}
+
 model AuditLog {
   id         String   @id @default(cuid())
   userId     String?
