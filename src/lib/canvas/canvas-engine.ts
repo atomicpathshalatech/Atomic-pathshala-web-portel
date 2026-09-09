@@ -41,6 +41,11 @@ export interface FreehandObject {
   color: string;
   size: number;
   points: StrokePoint[];
+  /** Which pen style this stroke was drawn with — kept per-stroke so
+   * switching the active pen later never restyles old strokes. One of the
+   * PEN_STYLES ids (hard | fountain | chisel | art | graphite | magic);
+   * absent / unknown renders as "hard". Highlighter ignores this. */
+  penStyle?: string;
 }
 
 export type ShapeKind = "line" | "rectangle" | "circle" | "triangle" | "arrow";
@@ -79,12 +84,24 @@ export type StrokeObject = FreehandObject | ShapeObject | TextObject;
 export type CanvasTool =
   | "pen"
   | "highlighter"
+  | "laser"
   | "stroke-eraser"
   | "object-eraser"
   | "select"
   | "text"
   | "fill"
   | ShapeKind;
+
+/** Eraser brush radii (virtual px) for the S / M / L / XL presets. */
+export const ERASER_SIZES: { id: "S" | "M" | "L" | "XL"; label: string; radius: number }[] = [
+  { id: "S", label: "S", radius: 14 },
+  { id: "M", label: "M", radius: 26 },
+  { id: "L", label: "L", radius: 44 },
+  { id: "XL", label: "XL", radius: 68 },
+];
+
+/** How long a laser stroke stays on screen before it has fully faded (ms). */
+export const LASER_DURATION_MS = 1400;
 
 /** Font-size (virtual px) per unit of the shared pen `currentSize` control,
  * so the same S/M/L size preset used for pen width gives sensible, readable
@@ -107,7 +124,6 @@ const MIN_SHAPE_DRAG = 3;
 export const VIRTUAL_WIDTH = 1920;
 export const VIRTUAL_HEIGHT = 1080;
 
-const ERASER_RADIUS = 24;
 const SELECT_HIT_RADIUS = 18;
 
 function uid() {
@@ -353,6 +369,10 @@ export class CanvasEngine {
   public currentTool: CanvasTool = "pen";
   public currentColor = "#1A1A1A";
   public currentSize = 3;
+  /** Active pen style id (PEN_STYLES); stamped onto each new pen stroke. */
+  public currentPenStyle = "hard";
+  /** Active eraser brush radius in virtual px (default = "M"). */
+  public eraserRadius = 26;
 
   /** Set by the host component. Fired instead of starting a drag when the
    * "text" tool is active on pointerdown — the engine has no DOM to render
@@ -425,6 +445,10 @@ export class CanvasEngine {
     el.removeEventListener("pointerup", this.boundUp);
     el.removeEventListener("pointercancel", this.boundUp);
     el.removeEventListener("pointerleave", this.boundUp);
+    if (this.laserRaf) cancelAnimationFrame(this.laserRaf);
+    this.laserRaf = 0;
+    this.laserActive = null;
+    this.laserStrokes = [];
   }
 
   /** Resize the backing store to match the element's current CSS size at
@@ -500,6 +524,13 @@ export class CanvasEngine {
       return;
     }
 
+    if (this.currentTool === "laser") {
+      // Transient — never enters this.objects, undo, or export.
+      this.laserActive = [{ x: pt.x, y: pt.y }];
+      this.startLaserLoop();
+      return;
+    }
+
     if (this.currentTool === "pen" || this.currentTool === "highlighter") {
       this.activePoints = [pt];
       return;
@@ -559,6 +590,12 @@ export class CanvasEngine {
   private onPointerMove(e: PointerEvent): void {
     if (!this.isPointerDown) return;
     if (this.activePointerId !== null && e.pointerId !== this.activePointerId) return;
+
+    if (this.laserActive) {
+      const p = this.getPoint(e);
+      this.laserActive.push({ x: p.x, y: p.y });
+      return;
+    }
 
     // Read high-frequency coalesced events from pen tablet if available
     const events: PointerEvent[] = typeof (e as any).getCoalescedEvents === "function"
@@ -621,6 +658,18 @@ export class CanvasEngine {
     if (!this.isPointerDown) return;
     if (this.activePointerId !== null && e.pointerId !== this.activePointerId) return;
 
+    if (this.laserActive) {
+      if (this.laserActive.length > 1) {
+        const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+        this.laserStrokes.push({ points: this.laserActive, born: now });
+      }
+      this.laserActive = null;
+      this.isPointerDown = false;
+      this.activePointerId = null;
+      this.activePointerType = null;
+      return;
+    }
+
     this.isPointerDown = false;
     this.activePointerId = null;
     this.activePointerType = null;
@@ -642,6 +691,7 @@ export class CanvasEngine {
           color: this.currentColor,
           size: this.currentSize,
           points: [pt, { ...pt, x: pt.x + 0.1 }],
+          penStyle: this.currentPenStyle,
         };
         this.objects.push(stroke);
         this.renderBase();
@@ -655,6 +705,7 @@ export class CanvasEngine {
           color: this.currentColor,
           size: this.currentSize,
           points: this.activePoints,
+          penStyle: this.currentPenStyle,
         };
         this.objects.push(stroke);
         this.renderBase();
@@ -733,7 +784,7 @@ export class CanvasEngine {
     }
 
     if (this.activePoints.length < 2) return;
-    this.strokePath(this.activeCtx, this.activePoints, this.currentColor, this.currentSize, this.currentTool === "highlighter");
+    this.strokePath(this.activeCtx, this.activePoints, this.currentColor, this.currentSize, this.currentTool === "highlighter", this.currentPenStyle);
   }
 
   private strokePath(
@@ -741,13 +792,14 @@ export class CanvasEngine {
     points: StrokePoint[],
     color: string,
     size: number,
-    isHighlighter: boolean
+    isHighlighter: boolean,
+    penStyle: string = "hard"
   ): void {
     if (points.length === 0) return;
     if (points.length === 1) {
       ctx.save();
       ctx.fillStyle = color;
-      ctx.globalAlpha = isHighlighter ? 0.35 : 1;
+      ctx.globalAlpha = isHighlighter ? 0.35 : penStyle === "graphite" ? 0.8 : 1;
       const r = (size * (isHighlighter ? 3.5 : 0.6 + points[0]!.pressure * 1.4)) / 2;
       ctx.beginPath();
       ctx.arc(points[0]!.x, points[0]!.y, Math.max(1, r), 0, Math.PI * 2);
@@ -757,7 +809,7 @@ export class CanvasEngine {
     }
 
     ctx.save();
-    ctx.lineCap = "round";
+    ctx.lineCap = penStyle === "chisel" ? "butt" : "round";
     ctx.lineJoin = "round";
     ctx.strokeStyle = color;
     ctx.globalAlpha = isHighlighter ? 0.35 : 1;
@@ -780,33 +832,164 @@ export class CanvasEngine {
       }
       ctx.lineWidth = size * (isHighlighter ? 3.5 : 1);
       ctx.stroke();
-    } else {
-      // Smooth pressure-modulated Bézier segments for pen tablet writing
-      for (let i = 0; i < points.length - 1; i++) {
-        const p0 = i > 0 ? points[i - 1]! : points[0]!;
-        const p1 = points[i]!;
-        const p2 = points[i + 1]!;
+      ctx.restore();
+      return;
+    }
 
-        const startPt = i === 0 ? p1 : { x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2 };
-        const endPt = i === points.length - 2 ? p2 : { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+    // ---- Pen styles: each computes a per-segment width / alpha / glow so
+    // the same test stroke renders visibly differently per pen. ----------
+    const CHISEL_NIB = Math.PI / 4; // fixed 45° nib
 
-        ctx.beginPath();
-        ctx.moveTo(startPt.x, startPt.y);
-        ctx.quadraticCurveTo(p1.x, p1.y, endPt.x, endPt.y);
-
-        const pressure = p1.pressure && p1.pressure > 0 ? p1.pressure : 0.5;
-        ctx.lineWidth = Math.max(0.75, size * (0.45 + pressure * 1.35));
-        ctx.stroke();
+    if (penStyle === "magic") {
+      // Glowing (but still permanent) ink: a soft wide halo pass then a
+      // bright core pass.
+      ctx.shadowColor = color;
+      for (const [pass, blur, widthMul, alpha] of [
+        ["halo", size * 2.4, 2.6, 0.35] as const,
+        ["core", size * 0.8, 0.9, 1] as const,
+      ]) {
+        void pass;
+        ctx.shadowBlur = blur;
+        ctx.globalAlpha = alpha;
+        for (let i = 0; i < points.length - 1; i++) {
+          const p1 = points[i]!;
+          const p2 = points[i + 1]!;
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.lineWidth = Math.max(0.6, size * widthMul);
+          ctx.stroke();
+        }
       }
+      ctx.restore();
+      return;
+    }
+
+    for (let i = 0; i < points.length - 1; i++) {
+      const p0 = i > 0 ? points[i - 1]! : points[0]!;
+      const p1 = points[i]!;
+      const p2 = points[i + 1]!;
+      const startPt = i === 0 ? p1 : { x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2 };
+      const endPt = i === points.length - 2 ? p2 : { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+      const pressure = p1.pressure && p1.pressure > 0 ? p1.pressure : 0.5;
+
+      let lineWidth: number;
+      let alpha = 1;
+      if (penStyle === "fountain") {
+        lineWidth = Math.max(0.4, size * (0.15 + pressure * 2.4));
+      } else if (penStyle === "chisel") {
+        const ang = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+        lineWidth = Math.max(1, size * (0.3 + 1.5 * Math.abs(Math.sin(ang - CHISEL_NIB))));
+      } else if (penStyle === "art") {
+        // brush: wider, feathered via a soft self-glow + reduced opacity
+        lineWidth = Math.max(1, size * (1.1 + pressure * 1.5));
+        alpha = 0.7;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = size * 0.9;
+      } else if (penStyle === "graphite") {
+        // pencil: thin + grainy alpha jitter
+        lineWidth = Math.max(0.5, size * (0.35 + pressure * 0.7));
+        alpha = 0.5 + Math.random() * 0.4;
+      } else {
+        // hard-tipped (default)
+        lineWidth = Math.max(0.75, size * (0.45 + pressure * 1.35));
+      }
+
+      ctx.globalAlpha = alpha;
+      ctx.beginPath();
+      ctx.moveTo(startPt.x, startPt.y);
+      ctx.quadraticCurveTo(p1.x, p1.y, endPt.x, endPt.y);
+      ctx.lineWidth = lineWidth;
+      ctx.stroke();
     }
     ctx.restore();
+  }
+
+  // ---- Transient laser overlay ------------------------------------------
+  private laserActive: { x: number; y: number }[] | null = null;
+  private laserStrokes: { points: { x: number; y: number }[]; born: number }[] = [];
+  private laserRaf = 0;
+
+  private startLaserLoop(): void {
+    if (this.laserRaf) return;
+    const tick = () => {
+      const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+      this.laserStrokes = this.laserStrokes.filter((s) => now - s.born < LASER_DURATION_MS);
+
+      // Nothing left to animate and no permanent stroke mid-draw -> stop and
+      // hand the active layer back.
+      if (this.laserStrokes.length === 0 && !this.laserActive) {
+        if (this.activePoints.length === 0) {
+          this.activeCtx.clearRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+        }
+        this.laserRaf = 0;
+        return;
+      }
+
+      if (this.activePoints.length === 0) {
+        this.activeCtx.clearRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+      }
+      for (const s of this.laserStrokes) {
+        const age = now - s.born;
+        const t = Math.min(1, age / LASER_DURATION_MS);
+        this.drawLaser(s.points, 1 - t * t);
+      }
+      if (this.laserActive) this.drawLaser(this.laserActive, 1);
+
+      this.laserRaf = requestAnimationFrame(tick);
+    };
+    this.laserRaf = requestAnimationFrame(tick);
+  }
+
+  private drawLaser(pts: { x: number; y: number }[], opacity: number): void {
+    if (pts.length < 1 || opacity <= 0) return;
+    const ctx = this.activeCtx;
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.globalCompositeOperation = "lighter"; // additive => bright on white
+    ctx.shadowColor = "rgba(255,60,60,0.95)";
+    // outer halo
+    ctx.strokeStyle = `rgba(255,80,80,${0.35 * opacity})`;
+    ctx.shadowBlur = 26;
+    ctx.lineWidth = 16;
+    this.laserPath(ctx, pts);
+    // mid glow
+    ctx.strokeStyle = `rgba(255,120,120,${0.6 * opacity})`;
+    ctx.shadowBlur = 14;
+    ctx.lineWidth = 8;
+    this.laserPath(ctx, pts);
+    // bright core
+    ctx.strokeStyle = `rgba(255,255,255,${0.95 * opacity})`;
+    ctx.shadowBlur = 6;
+    ctx.lineWidth = 3;
+    this.laserPath(ctx, pts);
+    ctx.restore();
+  }
+
+  private laserPath(ctx: CanvasRenderingContext2D, pts: { x: number; y: number }[]): void {
+    if (pts.length === 1) {
+      ctx.beginPath();
+      ctx.arc(pts[0]!.x, pts[0]!.y, ctx.lineWidth / 2, 0, Math.PI * 2);
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.fill();
+      return;
+    }
+    ctx.beginPath();
+    ctx.moveTo(pts[0]!.x, pts[0]!.y);
+    for (let i = 1; i < pts.length - 1; i++) {
+      const mid = { x: (pts[i]!.x + pts[i + 1]!.x) / 2, y: (pts[i]!.y + pts[i + 1]!.y) / 2 };
+      ctx.quadraticCurveTo(pts[i]!.x, pts[i]!.y, mid.x, mid.y);
+    }
+    ctx.lineTo(pts[pts.length - 1]!.x, pts[pts.length - 1]!.y);
+    ctx.stroke();
   }
 
   public renderBase(): void {
     this.baseCtx.clearRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
     for (const obj of this.objects) {
       if (obj.type === "stroke") {
-        this.strokePath(this.baseCtx, obj.points, obj.color, obj.size, obj.tool === "highlighter");
+        this.strokePath(this.baseCtx, obj.points, obj.color, obj.size, obj.tool === "highlighter", obj.penStyle);
       } else if (obj.type === "text") {
         this.drawText(this.baseCtx, obj);
       } else {
@@ -1015,7 +1198,7 @@ export class CanvasEngine {
 
     for (const obj of this.objects) {
       if (obj.type === "shape" || obj.type === "text") {
-        if (representativePoints(obj).some((p) => distance(p, pt) < ERASER_RADIUS)) {
+        if (representativePoints(obj).some((p) => distance(p, pt) < this.eraserRadius)) {
           changed = true;
           continue;
         }
@@ -1025,7 +1208,7 @@ export class CanvasEngine {
 
       const segments: StrokePoint[][] = [[]];
       for (const p of obj.points) {
-        if (distance(p, pt) < ERASER_RADIUS) {
+        if (distance(p, pt) < this.eraserRadius) {
           changed = true;
           // Non-null: segments starts as [[]] and only ever grows via
           // push([]), so the last element always exists.

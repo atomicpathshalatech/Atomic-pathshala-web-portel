@@ -10,6 +10,7 @@ import {
   TEXT_FONT_SCALE,
   VIRTUAL_WIDTH,
   VIRTUAL_HEIGHT,
+  ERASER_SIZES,
 } from "@/lib/canvas/canvas-engine";
 import { getPusherClient } from "@/lib/realtime/pusher-client";
 import { sessionChannel, teacherChannel, WB_EVENTS } from "@/lib/realtime/events";
@@ -356,6 +357,7 @@ export function TeacherLiveClassRoom({
 
   const [tool, setTool] = useState<CanvasTool>("pen");
   const [penStyle, setPenStyle] = useState<PenStyleId>("hard");
+  const [eraserRadius, setEraserRadius] = useState<number>(26); // "M"
   const [color, setColor] = useState<string>(PEN_PALETTE_COLORS[0] ?? "#ef4444");
   const [size, setSize] = useState(5);
   // Read inside the canvas engine's onTextRequested callback (bound once
@@ -604,6 +606,12 @@ export function TeacherLiveClassRoom({
   useEffect(() => {
     if (engineRef.current) engineRef.current.currentSize = size;
   }, [size]);
+  useEffect(() => {
+    if (engineRef.current) engineRef.current.currentPenStyle = penStyle;
+  }, [penStyle]);
+  useEffect(() => {
+    if (engineRef.current) engineRef.current.eraserRadius = eraserRadius;
+  }, [eraserRadius]);
 
   const flushAutosave = useCallback(async () => {
     if (!wbSession || !currentPage || !pendingObjectsRef.current) return;
@@ -1831,6 +1839,8 @@ export function TeacherLiveClassRoom({
                   ? "text_fields"
                   : tool === "fill"
                   ? "format_color_fill"
+                  : tool === "laser"
+                  ? "my_location"
                   : tool === "select"
                   ? "gesture"
                   : "category"}
@@ -1975,7 +1985,7 @@ export function TeacherLiveClassRoom({
                     ? "text"
                     : tool === "fill"
                     ? "cell"
-                    : tool === "stroke-eraser" || tool === "object-eraser"
+                    : tool === "laser"
                     ? "crosshair"
                     : "crosshair",
               }}
@@ -2296,6 +2306,19 @@ export function TeacherLiveClassRoom({
             )}
           </div>
 
+          {/* Laser pointer — transient glow, auto-fades, never saved */}
+          <div className="relative">
+            <ToolbarBtn
+              icon="my_location"
+              label="Laser"
+              active={tool === "laser"}
+              onClick={() => {
+                setTool("laser");
+                setOpenPopup(null);
+              }}
+            />
+          </div>
+
           <div className="relative">
             <ToolbarBtn
               icon="ink_eraser"
@@ -2304,55 +2327,60 @@ export function TeacherLiveClassRoom({
               onClick={() => setOpenPopup((p) => (p === "eraser" ? null : "eraser"))}
             />
             {openPopup === "eraser" && (
-              <div className="absolute bottom-full left-0 mb-2 z-40 bg-[#1a1b23] border border-[#2d2e3b] rounded-2xl p-1.5 shadow-2xl w-52 flex flex-col gap-1 text-white">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTool("stroke-eraser");
-                    setOpenPopup(null);
-                  }}
-                  className={`flex items-center gap-3 p-2 rounded-xl text-xs font-semibold text-left transition ${
-                    tool === "stroke-eraser" ? "bg-blue-600/20 text-blue-400 font-bold border border-blue-500/40" : "text-gray-300 hover:bg-gray-800"
-                  }`}
-                >
-                  <span className="material-symbols-outlined text-base text-blue-400">ink_eraser</span> Stroke Eraser
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTool("object-eraser");
-                    setOpenPopup(null);
-                  }}
-                  className={`flex items-center gap-3 p-2 rounded-xl text-xs font-semibold text-left transition ${
-                    tool === "object-eraser" ? "bg-blue-600/20 text-blue-400 font-bold border border-blue-500/40" : "text-gray-300 hover:bg-gray-800"
-                  }`}
-                >
-                  <span className="material-symbols-outlined text-base text-blue-400">delete_sweep</span> Object Eraser
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTool("object-eraser");
-                    setOpenPopup(null);
-                  }}
-                  className={`flex items-center gap-3 p-2 rounded-xl text-xs font-semibold text-left transition ${
-                    tool === "object-eraser" ? "bg-blue-600/20 text-blue-400 font-bold border border-blue-500/40" : "text-gray-300 hover:bg-gray-800"
-                  }`}
-                >
-                  <span className="material-symbols-outlined text-base text-blue-400">gesture</span> Lasso / Loop Eraser
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTool("stroke-eraser");
-                    setOpenPopup(null);
-                  }}
-                  className={`flex items-center gap-3 p-2 rounded-xl text-xs font-semibold text-left transition ${
-                    tool === "stroke-eraser" ? "bg-blue-600/20 text-blue-400 font-bold border border-blue-500/40" : "text-gray-300 hover:bg-gray-800"
-                  }`}
-                >
-                  <span className="material-symbols-outlined text-base text-blue-400">crop_free</span> Area / Box Eraser
-                </button>
+              <div className="absolute bottom-full left-0 mb-2 z-50 bg-[#1a1b23] border border-[#2d2e3b] rounded-2xl p-2 shadow-2xl w-56 flex flex-col gap-2 text-white">
+                <div className="flex flex-col gap-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTool("stroke-eraser");
+                      setOpenPopup(null);
+                    }}
+                    className={`flex items-center gap-3 p-2 rounded-xl text-xs font-semibold text-left transition ${
+                      tool === "stroke-eraser" ? "bg-blue-600/20 text-blue-400 font-bold border border-blue-500/40" : "text-gray-300 hover:bg-gray-800"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-base text-blue-400">ink_eraser</span> Stroke Eraser
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTool("object-eraser");
+                      setOpenPopup(null);
+                    }}
+                    className={`flex items-center gap-3 p-2 rounded-xl text-xs font-semibold text-left transition ${
+                      tool === "object-eraser" ? "bg-blue-600/20 text-blue-400 font-bold border border-blue-500/40" : "text-gray-300 hover:bg-gray-800"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-base text-blue-400">delete_sweep</span> Object Eraser
+                  </button>
+                </div>
+
+                <div className="border-t border-[#2d2e3b] pt-2">
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-1">Eraser Size</span>
+                  <div className="mt-1.5 flex gap-1.5">
+                    {ERASER_SIZES.map((sz) => (
+                      <button
+                        key={sz.id}
+                        type="button"
+                        onClick={() => {
+                          setEraserRadius(sz.radius);
+                          if (tool !== "stroke-eraser" && tool !== "object-eraser") setTool("stroke-eraser");
+                        }}
+                        className={`flex-1 flex flex-col items-center gap-1 py-1.5 rounded-lg text-[10px] font-bold transition ${
+                          eraserRadius === sz.radius
+                            ? "bg-blue-600 text-white ring-1 ring-blue-400"
+                            : "bg-white/5 text-gray-300 hover:bg-white/10"
+                        }`}
+                      >
+                        <span
+                          className="rounded-full bg-current"
+                          style={{ width: Math.min(18, sz.radius / 3), height: Math.min(18, sz.radius / 3) }}
+                        />
+                        {sz.id}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
           </div>
