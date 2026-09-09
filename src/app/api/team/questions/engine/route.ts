@@ -465,6 +465,45 @@ export async function PUT(request: NextRequest) {
       },
     });
 
+    // Keep a REFERENCE QuestionAsset row in sync on edit too (POST already
+    // does this on create). Question.imageUrl is still the primary field the
+    // edit form reads back, but the asset table should not go stale.
+    const referenceUrlForAsset = (figureUrl?.trim() || referenceImageUrl?.trim() || "") as string;
+    if (figureUrl !== undefined || referenceImageUrl !== undefined) {
+      if (referenceUrlForAsset) {
+        const existingRefAsset = await prisma.questionAsset.findFirst({
+          where: { questionId, type: "REFERENCE" },
+        });
+        if (existingRefAsset) {
+          await prisma.questionAsset
+            .update({
+              where: { id: existingRefAsset.id },
+              data: { publicUrl: referenceUrlForAsset, sizeBytes: referenceUrlForAsset.length },
+            })
+            .catch((e) => console.warn("[Question Asset] Reference update warning:", e));
+        } else {
+          await prisma.questionAsset
+            .create({
+              data: {
+                questionId,
+                type: "REFERENCE",
+                storageKey: `ref-${questionId}`,
+                publicUrl: referenceUrlForAsset,
+                originalName: `question-reference-${updated.questionCode}.png`,
+                mimeType: "image/png",
+                sizeBytes: referenceUrlForAsset.length,
+                createdById: session.user.id,
+              },
+            })
+            .catch((e) => console.warn("[Question Asset] Reference create warning:", e));
+        }
+      } else {
+        await prisma.questionAsset
+          .deleteMany({ where: { questionId, type: "REFERENCE" } })
+          .catch((e) => console.warn("[Question Asset] Reference delete warning:", e));
+      }
+    }
+
     if (solutionImageUrl !== undefined) {
       if (solutionImageUrl?.trim()) {
         const existingSolAsset = await prisma.questionAsset.findFirst({
