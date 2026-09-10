@@ -32,7 +32,7 @@ export function LoginForm() {
       });
 
       if (!result || result.error) {
-        toast.error("Invalid email or password. Please try again.");
+        toast.error("Wrong mobile number / email or password. Please try again.");
         return;
       }
 
@@ -75,14 +75,15 @@ export function LoginForm() {
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
         <div className="space-y-1.5">
           <label htmlFor="email" className="font-label-md text-label-md text-on-surface">
-            Email
+            Mobile number or email
           </label>
           <input
             id="email"
-            type="email"
-            autoComplete="email"
+            type="text"
+            inputMode="text"
+            autoComplete="username"
             className="w-full rounded-xl border border-outline-variant/40 bg-surface px-4 py-3 font-body-md text-body-md text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
-            placeholder="you@example.com"
+            placeholder="98XXXXXXXX or you@example.com"
             {...register("email")}
           />
           {errors.email && (
