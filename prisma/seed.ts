@@ -147,9 +147,18 @@ async function main() {
   }
 
   // ------------------------------------------------------------
-  // TEST PASSWORD
+  // TEST / DEMO ACCOUNTS  (opt-in only)
   // ------------------------------------------------------------
+  // These are throw-away accounts for local development. They must NEVER be
+  // created on a production database — a fresh `db:seed` there would silently
+  // re-introduce the "Atomic Test Admin / Teacher / Student" logins every
+  // deploy. Set SEED_TEST_ACCOUNTS=true in a dev shell to opt in.
+  const seedTestAccounts = process.env.SEED_TEST_ACCOUNTS === "true";
+  if (!seedTestAccounts) {
+    console.log("Skipping test/demo accounts (set SEED_TEST_ACCOUNTS=true to create them).");
+  }
 
+  if (seedTestAccounts) {
   const passwordHash = await bcrypt.hash("Test@12345", 12);
 
   const superAdminRole = roles["SUPER_ADMIN"];
@@ -303,6 +312,19 @@ async function main() {
     },
   });
 
+  console.log("");
+  console.log("==========================================");
+  console.log("TEST ACCOUNTS READY  (SEED_TEST_ACCOUNTS=true)");
+  console.log("==========================================");
+  console.log(`SUPER ADMIN : ${admin.email}`);
+  console.log(`TEACHER     : ${teacherUser.email}`);
+  console.log(`TEACHER ID  : ${teacher.id}`);
+  console.log(`STUDENT     : ${studentUser.email}`);
+  console.log(`STUDENT ID  : ${student.id}`);
+  console.log("PASSWORD FOR ALL TEST ACCOUNTS: Test@12345");
+  console.log("==========================================");
+  } // end if (seedTestAccounts)
+
   // ============================================================
   // ACADEMIC COURSES & SUBJECTS
   // ============================================================
@@ -386,20 +408,6 @@ async function main() {
   // ============================================================
 
   console.log("");
-  console.log("==========================================");
-  console.log("TEST ACCOUNTS READY");
-  console.log("==========================================");
-
-  console.log(`SUPER ADMIN : ${admin.email}`);
-  console.log(`TEACHER     : ${teacherUser.email}`);
-  console.log(`TEACHER ID  : ${teacher.id}`);
-  console.log(`STUDENT     : ${studentUser.email}`);
-  console.log(`STUDENT ID  : ${student.id}`);
-
-  console.log("");
-  console.log("PASSWORD FOR ALL TEST ACCOUNTS:");
-  console.log("Test@12345");
-
   console.log("==========================================");
   console.log("SEED COMPLETE");
   console.log("==========================================");
