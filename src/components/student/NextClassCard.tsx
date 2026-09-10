@@ -136,29 +136,36 @@ export function NextClassCard({
   const buttonDisabled = isLiveClassType && !canJoinNow;
 
   return (
-    <section className="bg-white border border-blue-200/80 rounded-2xl p-4 sm:p-5 shadow-2xs">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full animate-ping ${isLive ? "bg-red-500" : "bg-blue-500"}`} />
-            <span className={`text-[10px] font-bold uppercase tracking-wider ${isLive ? "text-red-600" : "text-blue-600"}`}>
+    <section
+      className={`rounded-2xl border bg-white p-3.5 ${
+        isLive ? "border-red-200 bg-red-50/30" : "border-blue-200/80"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0 space-y-0.5">
+          <div className="flex items-center gap-1.5">
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${isLive ? "animate-ping bg-red-500" : "bg-blue-500"}`}
+            />
+            <span
+              className={`text-[10px] font-bold uppercase tracking-wider ${
+                isLive ? "text-red-600" : "text-blue-600"
+              }`}
+            >
               {headerLabel}
             </span>
           </div>
-          <h2 className="text-base sm:text-lg font-bold text-slate-900">{title}</h2>
-          {teacherName && (
-            <p className="text-xs text-slate-500">
-              Educator: <b>{teacherName}</b>
-            </p>
-          )}
-          {isLiveClassType && (
-            <div className="pt-0.5 space-y-0.5">
-              <div className="font-display-lg text-display-lg-mobile md:text-display-lg text-on-surface tracking-tight tabular-nums">
-                {timeLabel ?? (isLive ? "Live Now" : status === "STARTING_SOON" ? "Starting soon" : `Starts at ${formatAbsoluteTime(startsAtIso)}`)}
-              </div>
-              {hintLabel && <div className="text-[11px] text-slate-400">{hintLabel}</div>}
-            </div>
-          )}
+          <h3 className="truncate text-[15px] font-semibold text-slate-900">{title}</h3>
+          <p className="truncate text-xs text-slate-500">
+            {teacherName ? <>{teacherName} · </> : null}
+            {timeLabel ??
+              (isLive
+                ? "Live now"
+                : status === "STARTING_SOON"
+                ? "Starting soon"
+                : `Starts at ${formatAbsoluteTime(startsAtIso)}`)}
+          </p>
+          {hintLabel && !isLive && <p className="text-[11px] text-slate-400">{hintLabel}</p>}
         </div>
 
         {buttonDisabled ? (
@@ -166,14 +173,16 @@ export function NextClassCard({
             type="button"
             disabled
             aria-disabled="true"
-            className="px-4 py-2 rounded-xl bg-slate-200 text-slate-400 font-bold text-xs shadow-2xs cursor-not-allowed text-center self-start sm:self-auto shrink-0"
+            className="shrink-0 cursor-not-allowed rounded-xl bg-slate-100 px-4 py-2 text-xs font-bold text-slate-400"
           >
             {buttonLabel}
           </button>
         ) : (
           <Link
             href={href}
-            className="px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs shadow-2xs active:scale-95 transition-all text-center self-start sm:self-auto shrink-0"
+            className={`shrink-0 rounded-xl px-4 py-2 text-xs font-bold text-white transition-all active:scale-95 ${
+              isLive ? "bg-red-500 hover:bg-red-600" : "bg-orange-500 hover:bg-orange-600"
+            }`}
           >
             {buttonLabel}
           </Link>

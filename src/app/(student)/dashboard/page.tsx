@@ -4,35 +4,35 @@ import { requireStudentSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import type { BatchSchedule, Teacher, User } from "@prisma/client";
 import { NextClassCard } from "@/components/student/NextClassCard";
-import { FeatureCard } from "@/components/student/FeatureCard";
-import { FloatingGuruWidget } from "@/components/shared/FloatingGuruWidget";
 import { getEffectiveScheduleStatus } from "@/lib/schedule/access-rules";
+import { SectionHeader } from "@/components/student/home/SectionHeader";
+import { ProgressCard } from "@/components/student/home/ProgressCard";
+import { QuickAccessGrid, type QuickAccessItem } from "@/components/student/home/QuickAccessGrid";
+import { ContinueLearningCard } from "@/components/student/home/ContinueLearningCard";
+import { RecommendedCourses } from "@/components/student/home/RecommendedCourses";
+import { PromoCard } from "@/components/student/home/PromoCard";
 
 export const metadata: Metadata = {
-  title: "Student Hub — Home",
+  title: "Home",
 };
 
 type ScheduleWithTeacher = BatchSchedule & { teacher: (Teacher & { user: User }) | null };
 
-function isToday(date: Date) {
-  const now = new Date();
-  return date.toDateString() === now.toDateString();
-}
-
 export default async function StudentDashboardPage() {
   const { student } = await requireStudentSession();
   const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const endOfToday = new Date(startOfToday.getTime() + 24 * 60 * 60 * 1000);
 
-  // 1. Fetch active batch enrollments and schedules
   const enrollments = await prisma.batchEnrollment.findMany({
     where: { studentId: student.id, status: "ACTIVE" },
     include: {
       batch: {
         include: {
           course: { select: { title: true } },
-          teachers: { include: { teacher: { include: { user: true } } } },
+          teachers: { select: { id: true } },
           schedules: {
-            where: { endsAt: { gte: now } },
+            where: { endsAt: { gte: now }, isTest: false },
             orderBy: { startsAt: "asc" },
             include: { teacher: { include: { user: true } } },
           },
@@ -43,21 +43,14 @@ export default async function StudentDashboardPage() {
   });
 
   const enrolledBatchIds = enrollments.map((e) => e.batch.id);
-  const primaryBatchId = enrolledBatchIds[0] || null;
+  const primaryBatch = enrollments[0]?.batch ?? null;
 
   const allUpcoming: ScheduleWithTeacher[] = enrollments
     .flatMap((e) => e.batch.schedules as ScheduleWithTeacher[])
     .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
-
   const nextClass = allUpcoming[0] ?? null;
 
-  // Authoritative T-15 / live / ended state for the "Next Scheduled
-  // Session" card - reuses the same state machine the live-class join
-  // flow and its by-schedule status API are built on
-  // (src/lib/schedule/access-rules.ts) rather than re-deriving the T-15
-  // boundary here, so the two can never disagree about whether a class is
-  // actually joinable or live yet.
-  const nextClassEffectiveStatus =
+  const nextClassStatus =
     nextClass && nextClass.type === "LIVE_CLASS"
       ? getEffectiveScheduleStatus(
           {
@@ -70,298 +63,210 @@ export default async function StudentDashboardPage() {
           now
         )
       : null;
-  const isClassLive = nextClassEffectiveStatus === "LIVE";
-  // A live class that already ended (or was auto-cancelled for not
-  // starting within the grace period) must not keep showing as the next
-  // scheduled live session.
-  const showNextClassCard =
+  const showNextClass =
     !!nextClass &&
     (nextClass.type !== "LIVE_CLASS" ||
-      (nextClassEffectiveStatus !== "COMPLETED" &&
-        nextClassEffectiveStatus !== "CANCELLED" &&
-        nextClassEffectiveStatus !== "NOT_CONDUCTED"));
+      (nextClassStatus !== "COMPLETED" &&
+        nextClassStatus !== "CANCELLED" &&
+        nextClassStatus !== "NOT_CONDUCTED"));
 
-  // 2. Fetch real counts for feature badges (Zero fake data)
   const [
     dppCount,
     testsCount,
     mistakesCount,
-    studentTestAttempts,
+    downloadsCount,
+    doubtsOpenCount,
+    todayScheduleCount,
+    attendedToday,
+    attemptsToday,
+    recentLecture,
+    recommendedRaw,
   ] = await Promise.all([
-    // Today's or active DPP count
     prisma.batchSchedule.count({
-      where: {
-        batchId: { in: enrolledBatchIds },
-        type: "DPP",
-        endsAt: { gte: now },
-      },
+      where: { batchId: { in: enrolledBatchIds }, type: "DPP", endsAt: { gte: now } },
     }),
-    // Available published tests in enrolled batches
-    prisma.test.count({
-      where: {
-        batchSchedule: { batchId: { in: enrolledBatchIds } },
-      },
-    }),
-    // Incorrect answers across all submitted attempts (Mistake Book)
+    prisma.test.count({ where: { batchSchedule: { batchId: { in: enrolledBatchIds } } } }),
     prisma.attemptAnswer.count({
       where: {
-        attempt: {
-          studentId: student.id,
-          status: { in: ["SUBMITTED", "AUTO_SUBMITTED"] },
-        },
+        attempt: { studentId: student.id, status: { in: ["SUBMITTED", "AUTO_SUBMITTED"] } },
         isCorrect: false,
       },
     }),
-    // Student test attempts for accuracy calculation
-    prisma.attempt.findMany({
+    prisma.studyMaterial
+      .count({ where: { isPublished: true, allowDownload: true } })
+      .catch(() => 0),
+    prisma.doubt
+      .count({ where: { studentId: student.id, status: { in: ["OPEN", "ASSIGNED"] } } })
+      .catch(() => 0),
+    prisma.batchSchedule.count({
+      where: {
+        batchId: { in: enrolledBatchIds },
+        isTest: false,
+        startsAt: { gte: startOfToday, lt: endOfToday },
+      },
+    }),
+    prisma.liveClassAttendance.count({
+      where: { studentId: student.id, joinedAt: { gte: startOfToday, lt: endOfToday } },
+    }),
+    prisma.attempt.count({
       where: {
         studentId: student.id,
         status: { in: ["SUBMITTED", "AUTO_SUBMITTED"] },
+        submittedAt: { gte: startOfToday, lt: endOfToday },
       },
-      select: { answers: { select: { isCorrect: true } } },
+    }),
+    prisma.lectureProgress.findFirst({
+      where: { studentId: student.id },
+      orderBy: { completedAt: "desc" },
+      include: {
+        lecture: { include: { chapter: { include: { subject: { select: { title: true } } } } } },
+      },
+    }),
+    prisma.batch.findMany({
+      where: { status: { in: ["UPCOMING", "ACTIVE"] }, id: { notIn: enrolledBatchIds } },
+      orderBy: { createdAt: "desc" },
+      take: 6,
+      select: { id: true, name: true, code: true, targetExam: true, course: { select: { title: true } } },
     }),
   ]);
 
-  // Real overall accuracy
-  const totalCorrect = studentTestAttempts.reduce(
-    (sum, a) => sum + a.answers.filter((x) => x.isCorrect === true).length,
-    0
-  );
-  const totalAttempted = studentTestAttempts.reduce(
-    (sum, a) => sum + a.answers.filter((x) => x.isCorrect !== null).length,
-    0
-  );
-  const overallAccuracy = totalAttempted > 0 ? Math.round((totalCorrect / totalAttempted) * 100) : null;
-
-  const firstName = (student.user.name || "Student").split(" ")[0];
+  const firstName = (student.user.name || "Student").split(" ")[0] || "Student";
   const hour = now.getHours();
-  const greeting = hour < 12 ? "Good Morning" : hour < 17 ? "Good Afternoon" : "Good Evening";
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const targetExam = student.targetExam || "NEET";
+
+  const todayDone = Math.min(attendedToday + attemptsToday, todayScheduleCount);
+
+  // "Continue learning" — real last-completed lecture, else the primary batch.
+  const continueItem = recentLecture?.lecture
+    ? {
+        id: recentLecture.lecture.id,
+        primary: recentLecture.lecture.chapter?.subject?.title || "Lectures",
+        secondary: recentLecture.lecture.chapter?.title || recentLecture.lecture.title,
+        meta: null,
+        href: `/watch/${recentLecture.lecture.id}`,
+        icon: "play_circle",
+      }
+    : primaryBatch
+    ? {
+        id: primaryBatch.id,
+        primary: primaryBatch.name,
+        secondary: primaryBatch.course?.title || "Your batch",
+        meta: `${primaryBatch.teachers.length} faculty`,
+        href: `/courses/${primaryBatch.id}`,
+        icon: "school",
+      }
+    : null;
+
+  const continueHref = continueItem?.href ?? (nextClass ? `/courses/${nextClass.batchId}` : "/courses");
+
+  const quickAccess: QuickAccessItem[] = [
+    { label: "My Batches", icon: "school", href: "/courses", accent: "blue", badge: enrollments.length ? `${enrollments.length}` : null },
+    { label: "My Tests", icon: "quiz", href: "/tests", accent: "violet", badge: testsCount ? `${testsCount}` : null },
+    { label: "Daily DPP", icon: "assignment", href: "/dpp", accent: "rose", badge: dppCount ? `${dppCount}` : null },
+    { label: "My Doubts", icon: "help", href: "/doubts", accent: "orange", badge: doubtsOpenCount ? `${doubtsOpenCount}` : null },
+    { label: "Performance", icon: "insights", href: "/leaderboard", accent: "emerald", badge: null },
+    { label: "Study PDFs", icon: "menu_book", href: "/study-material", accent: "teal", badge: null },
+    { label: "Mistake Book", icon: "auto_fix_high", href: "/mistakes", accent: "indigo", badge: mistakesCount ? `${mistakesCount}` : null },
+    { label: "AI Guru", icon: "smart_toy", href: "/guru", accent: "amber", badge: null },
+  ];
+
+  const recommended = recommendedRaw.map((b) => ({
+    id: b.id,
+    name: b.name,
+    code: b.code,
+    targetExam: b.targetExam,
+    courseTitle: b.course?.title ?? null,
+  }));
 
   return (
-    <>
-    <div className="space-y-6 max-w-7xl">
-      {/* Welcome Strip Banner */}
-      <section className="bg-white border border-slate-200/80 rounded-2xl p-4 sm:p-5 shadow-2xs flex flex-col md:flex-row md:items-center md:justify-between gap-4 relative overflow-hidden">
-        <div className="space-y-1">
-          <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-            Welcome back, {firstName}!
-          </h1>
-          <p className="text-xs text-slate-500 max-w-xl leading-relaxed">
-            Targeting <span className="font-bold text-slate-800">{student.targetExam || "NEET"}</span>. Stay consistent and keep your study streak alive today.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-orange-50 text-orange-700 border border-orange-200">
-            <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
-              <circle cx="12" cy="12" fill="none" r="9" stroke="currentColor" strokeWidth="2" />
-              <circle cx="12" cy="12" r="3" />
-            </svg>
-            <span>Daily Goal: 3/5 Tasks</span>
-          </span>
-          <Link
-            href={nextClass ? `/courses/${nextClass.batchId}` : "/schedule"}
-            className="px-4 py-1.5 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow-2xs transition-colors flex items-center gap-1.5"
-          >
-            <span>Resume Learning</span>
-            <span className="material-symbols-outlined text-sm">arrow_forward</span>
-          </Link>
-        </div>
-      </section>
-
-      {/* Up Next / Live Spotlight */}
-      {showNextClassCard && nextClass && (
-        <NextClassCard
-          scheduleId={nextClass.id}
-          type={nextClass.type}
-          title={nextClass.title}
-          teacherName={nextClass.teacher?.user.name ?? null}
-          startsAtIso={nextClass.startsAt.toISOString()}
-          initialStatus={nextClassEffectiveStatus ?? "SCHEDULED"}
-        />
+    <div className="mx-auto max-w-2xl space-y-5 pb-2 lg:max-w-5xl">
+      {/* Goal / batch context — one compact line */}
+      {primaryBatch && (
+        <Link
+          href={`/courses/${primaryBatch.id}`}
+          className="flex items-center gap-2.5 rounded-xl border border-slate-200/80 bg-white px-3.5 py-2.5"
+        >
+          <span className="material-symbols-outlined text-[20px] text-blue-600">workspace_premium</span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[13px] font-semibold text-slate-900">{primaryBatch.name}</p>
+            <p className="truncate text-[11px] text-slate-500">
+              Current goal · {targetExam}
+              {enrollments.length > 1 ? ` · ${enrollments.length} batches` : ""}
+            </p>
+          </div>
+          <span className="material-symbols-outlined text-slate-300">chevron_right</span>
+        </Link>
       )}
 
-      {/* SECTION 2 — LEARN */}
-      <section className="space-y-3">
-        <div>
-          <h2 className="text-sm sm:text-base font-bold text-slate-900">
-            1. Learn &amp; Understand
-          </h2>
-          <p className="text-xs text-slate-500">
-            Live lectures, comprehensive recordings, and structured study material.
-          </p>
-        </div>
+      <ProgressCard
+        greeting={greeting}
+        firstName={firstName}
+        targetExam={targetExam}
+        streakDays={student.currentStreakDays}
+        todayDone={todayDone}
+        todayTotal={todayScheduleCount}
+        continueHref={continueHref}
+        continueLabel={continueItem ? "Continue learning" : "Explore courses"}
+      />
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-3.5">
-          <FeatureCard
-            title="Live Classes"
-            description="Join live classes and learn in real time"
-            icon="videocam"
-            theme="blue"
-            href="/live-class"
-            isLive={isClassLive}
-            contextText={allUpcoming.length > 0 ? `${allUpcoming.length} upcoming` : "Daily Schedule"}
-          />
-          <FeatureCard
-            title="Recorded Classes"
-            description="Watch lectures anytime, at your own pace"
-            icon="play_circle"
-            theme="teal"
-            href={primaryBatchId ? `/courses/${primaryBatchId}/subjects` : "/courses"}
-            contextText={primaryBatchId ? "Physics, Chem & Bio" : `${enrollments.length} Batches Active`}
-          />
-          <FeatureCard
-            title="Study Material"
-            description="Modules, notes, mind maps, formula sheets & NCERT"
-            icon="menu_book"
-            theme="cyan"
-            href="/study-material"
-            contextText="Chapter-wise PDFs"
-          />
-        </div>
+      <section className="space-y-2.5">
+        <SectionHeader title="Quick access" />
+        <QuickAccessGrid items={quickAccess} />
       </section>
 
-      {/* SECTION 3 — PRACTICE */}
-      <section className="space-y-3">
-        <div>
-          <h2 className="text-sm sm:text-base font-bold text-slate-900">
-            2. Daily Practice &amp; Revision
-          </h2>
-          <p className="text-xs text-slate-500">
-            Targeted question solving, previous year questions, daily practice problems, and error analysis.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-3.5">
-          <FeatureCard
-            title="Question Practice"
-            description="Practice questions topic by topic"
-            icon="edit_note"
-            theme="orange"
-            href="/practice"
-            contextText="NEET &amp; NCERT Quiz"
-          />
-          <FeatureCard
-            title="PYQ Practice"
-            description="Practice previous year questions"
-            icon="history_edu"
-            theme="rose"
-            href="/tests"
-            contextText="NEET Archives"
-          />
-          <FeatureCard
-            title="Daily DPP"
-            description="Complete today's daily practice"
-            icon="assignment"
-            theme="red"
-            href="/dpp"
-            contextText={dppCount > 0 ? `${dppCount} Assigned` : "Daily Problems"}
-          />
-          <FeatureCard
-            title="Mistake Book"
-            description="Review questions you got wrong"
-            icon="auto_fix_high"
-            theme="amber"
-            href="/mistakes"
-            contextText={mistakesCount > 0 ? `${mistakesCount} to review` : "Mistakes Clean"}
-          />
-        </div>
-      </section>
-
-      {/* SECTION 4 — TEST & ANALYZE */}
-      <section className="space-y-3">
-        <div>
-          <h2 className="text-sm sm:text-base font-bold text-slate-900">
-            3. Test &amp; Analyze
-          </h2>
-          <p className="text-xs text-slate-500">
-            Simulated test series, All India Rank diagnostics, and deep performance analysis.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-3.5">
-          <FeatureCard
-            title="Atomic Test Series"
-            description="Take tests and measure your preparation"
-            icon="quiz"
-            theme="green"
-            href="/tests"
-            contextText={testsCount > 0 ? `${testsCount} Mock Tests` : "Test Series"}
-          />
-          <FeatureCard
-            title="My Performance"
-            description="Track scores, accuracy and progress"
-            icon="analytics"
-            theme="indigo"
-            href="/leaderboard"
-            contextText={overallAccuracy !== null ? `${overallAccuracy}% Accuracy` : "AIR Leaderboard"}
-          />
-        </div>
-      </section>
-
-      {/* SECTION 5 — AI ASSISTANT (ATOMIC GURU) */}
-      <section className="space-y-3">
-        <div>
-          <h2 className="text-sm sm:text-base font-bold text-slate-900">
-            4. AI Concept &amp; Doubt Help
-          </h2>
-          <p className="text-xs text-slate-500">
-            Instant step-by-step problem solver, conceptual explanation, and doubt escalation.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 sm:gap-3.5">
-          <FeatureCard
-            title="Atomic Guru"
-            description="Ask doubts and understand concepts with AI"
-            icon="psychology"
-            theme="purple"
-            href="/guru"
-            contextText="Instant 24/7 AI Helper"
-          />
-        </div>
-      </section>
-
-      {/* Enrolled Batches Section */}
-      {enrollments.length > 0 && (
-        <section className="space-y-3 pt-3 border-t border-slate-200/80">
-          <div className="flex justify-between items-center">
-            <h2 className="text-sm sm:text-base font-bold text-slate-900">
-              My Enrolled Batches
-            </h2>
-            <Link href="/courses" className="text-xs font-bold text-orange-600 hover:underline">
-              View All Batches &rarr;
-            </Link>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {enrollments.map((e) => (
-              <Link
-                key={e.id}
-                href={`/courses/${e.batch.id}`}
-                className="bg-white rounded-xl p-3.5 sm:p-4 border border-slate-200/80 hover:border-slate-300 transition-all hover:shadow-2xs block"
-              >
-                <div className="flex items-center gap-2 mb-1.5">
-                  <span className="material-symbols-outlined text-orange-500 text-lg">science</span>
-                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-orange-50 text-orange-700 border border-orange-200">
-                    {e.batch.code}
-                  </span>
-                </div>
-                <h3 className="font-bold text-sm text-slate-900 line-clamp-1">{e.batch.name}</h3>
-                <p className="text-xs text-slate-500 mt-0.5 truncate">
-                  {e.batch.course?.title ?? "Standard Curriculum"}
-                </p>
-                <div className="mt-2.5 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
-                  <span>{e.batch.teachers.length} Faculty</span>
-                  <span className="text-orange-600 font-bold">Open Batch &rarr;</span>
-                </div>
-              </Link>
-            ))}
-          </div>
+      {continueItem && (
+        <section className="space-y-2.5">
+          <SectionHeader title="Continue learning" href={continueItem.href} linkLabel="Open" />
+          <ContinueLearningCard item={continueItem} />
         </section>
       )}
+
+      <section className="space-y-2.5">
+        <SectionHeader
+          title={nextClassStatus === "LIVE" ? "Live now" : "Next class"}
+          href="/schedule"
+          linkLabel="Schedule"
+        />
+        {showNextClass && nextClass ? (
+          <NextClassCard
+            scheduleId={nextClass.id}
+            type={nextClass.type}
+            title={nextClass.title}
+            teacherName={nextClass.teacher?.user.name ?? null}
+            startsAtIso={nextClass.startsAt.toISOString()}
+            initialStatus={nextClassStatus ?? "SCHEDULED"}
+          />
+        ) : (
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-4 text-center">
+            <p className="text-[13px] font-medium text-slate-500">No upcoming classes</p>
+            <Link href="/schedule" className="mt-1 inline-block text-xs font-semibold text-blue-600">
+              View full schedule
+            </Link>
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-2.5">
+        <SectionHeader title="Practice &amp; revise" />
+        <QuickAccessGrid
+          items={[
+            { label: "Question Practice", icon: "edit_note", href: "/practice", accent: "violet", badge: null },
+            { label: "PYQ Practice", icon: "history_edu", href: "/tests", accent: "blue", badge: null },
+            { label: "Daily DPP", icon: "assignment", href: "/dpp", accent: "rose", badge: dppCount ? `${dppCount}` : null },
+            { label: "Downloads", icon: "download", href: "/study-material", accent: "indigo", badge: downloadsCount ? `${downloadsCount}` : null },
+          ]}
+        />
+      </section>
+
+      {recommended.length > 0 && (
+        <section className="space-y-2.5">
+          <SectionHeader title="Recommended for you" href="/courses" />
+          <RecommendedCourses courses={recommended} />
+        </section>
+      )}
+
+      {student.subscription?.status !== "ACTIVE" && <PromoCard />}
     </div>
-    <FloatingGuruWidget />
-    </>
   );
 }

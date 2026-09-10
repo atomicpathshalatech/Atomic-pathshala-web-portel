@@ -25,13 +25,14 @@ const SIDEBAR_ITEMS: StudentNavItem[] = [
   { href: "/predictor", label: "Rank Predictor", icon: "insights" },
 ];
 
-// Bottom floating dock navigation items
+// Bottom dock — 5 tap targets total (4 links + the Menu trigger). Kept
+// deliberately short; DPP / doubts / study material live in Quick Access
+// on the home screen and in the drawer.
 const DOCK_ITEMS: StudentNavItem[] = [
   { href: "/dashboard", label: "Home", icon: "home" },
   { href: "/courses", label: "Batches", icon: "school" },
   { href: "/schedule", label: "Live", icon: "sensors" },
-  { href: "/dpp", label: "My DPP", icon: "fact_check" },
-  { href: "/tests", label: "My Test", icon: "assignment_turned_in" },
+  { href: "/tests", label: "Tests", icon: "assignment_turned_in" },
 ];
 
 function isActive(pathname: string, href: string) {
@@ -280,57 +281,14 @@ export function StudentShell({
             <GlobalSearchBar />
           </div>
 
-          {/* Right Section (Search on mobile, Streak, Wallet, Notification, Profile) */}
-          <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+          {/* Right: Search (mobile) · Notifications · Profile — compact,
+              premium. Streak moved into the home Progress card; wallet
+              lives in the drawer / Subscription page. */}
+          <div className="flex items-center gap-1.5 shrink-0">
             <div className="lg:hidden">
               <GlobalSearchBar compact />
             </div>
-            {/* Streak Pill Badge */}
-            <Link
-              href="/leaderboard"
-              className="flex items-center gap-1.5 bg-orange-50 border border-orange-200/90 rounded-full pl-1.5 pr-3 py-1 shadow-2xs hover:bg-orange-100 transition-colors cursor-pointer select-none"
-              title="Daily study streak"
-            >
-              <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-orange-600 via-orange-500 to-amber-500 flex items-center justify-center text-white shadow-2xs">
-                <svg className="w-3 h-3 fill-current" viewBox="0 0 24 24">
-                  <path d="M12.9 2.1c-.4-.5-1.1-.3-1.3.3-.8 2.6-2.5 4.3-4.2 6.1C5.6 10.5 4 12.8 4 16c0 4.4 3.6 8 8 8s8-3.6 8-8c0-3.1-1.4-5.8-3.6-7.8-1.5-1.4-2.7-3.4-3.5-6.1zM12 21.5c-3 0-5.5-2.5-5.5-5.5 0-1.8.9-3.4 2.2-4.6 1.4-1.3 2.6-2.8 3.3-4.7.7 1.8 1.9 3.3 3.3 4.6 1.3 1.2 2.2 2.8 2.2 4.7 0 3-2.5 5.5-5.5 5.5z" />
-                </svg>
-              </div>
-              <div className="flex items-baseline gap-1">
-                <span className="text-xs font-bold text-orange-950 tracking-tight">
-                  {currentStreakDays}d
-                </span>
-                <span className="hidden sm:inline text-[11px] font-medium text-orange-700">
-                  Streak
-                </span>
-              </div>
-            </Link>
-
-            {/* Wallet / Subscription Button */}
-            <Link
-              href="/subscription"
-              aria-label="Wallet & Balance"
-              className="relative w-9 h-9 flex items-center justify-center rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 shadow-2xs hover:border-slate-300 transition-all focus:outline-none"
-            >
-              <svg
-                className="w-4.5 h-4.5 text-slate-600"
-                fill="none"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="1.8"
-                viewBox="0 0 24 24"
-              >
-                <rect height="14" rx="3" width="20" x="2" y="5" />
-                <line x1="2" x2="22" y1="10" y2="10" />
-                <path d="M16 14h2" />
-              </svg>
-            </Link>
-
-            {/* Notification Bell */}
             <NotificationBell />
-
-            {/* User Profile Avatar with Dropdown Indicator */}
             <AccountMenu studentName={studentName} studentIdCode={studentIdCode} />
           </div>
         </div>
@@ -507,34 +465,8 @@ export function StudentShell({
         </main>
       </div>
 
-      {/* Floating Subscription Upgrade Banner (Mobile & Tablet only) */}
-      {!hasActiveSubscription && (
-        <aside className="lg:hidden fixed bottom-20 left-0 right-0 max-w-lg mx-auto px-4 z-40 pointer-events-auto">
-          <div className="rounded-2xl bg-gradient-to-r from-blue-700 via-blue-600 to-blue-600 text-white shadow-xl p-3 px-4 flex items-center justify-between border border-blue-400/30 backdrop-blur-md">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center text-white flex-shrink-0 shadow-inner">
-                <span className="material-symbols-outlined text-[18px]">lock_open</span>
-              </div>
-              <div className="flex flex-col min-w-0">
-                <span className="text-xs font-bold leading-tight truncate">
-                  Get access to all batches
-                </span>
-                <span className="text-[10px] text-white/85 truncate">
-                  Unlock 100+ live crash courses &amp; test series
-                </span>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-              <Link
-                href="/subscription"
-                className="bg-white text-blue-700 font-bold px-3.5 py-1.5 rounded-xl shadow hover:bg-blue-50 active:scale-95 transition-all text-xs"
-              >
-                Upgrade
-              </Link>
-            </div>
-          </div>
-        </aside>
-      )}
+      {/* The upgrade prompt is no longer a fixed banner stacked on the dock —
+          it renders inline in the page (see <PromoCard/> on the home). */}
 
       {/* Mobile & Tablet Bottom Navigation Dock (Responsive, with 3-Lines Menu Trigger) */}
       <div className="lg:hidden fixed bottom-3 left-0 right-0 max-w-lg mx-auto px-3 z-header pointer-events-auto pb-[env(safe-area-inset-bottom)]">
