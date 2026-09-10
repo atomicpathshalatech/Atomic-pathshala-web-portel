@@ -4,6 +4,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
 import { createDeviceSession, extractRequestMeta, isDeviceSessionValid } from "@/lib/security/device-session";
+import { normaliseLoginIdentifier } from "@/lib/validation/auth";
 
 /**
  * Auth policy (locked):
@@ -39,8 +40,11 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email.toLowerCase().trim() },
+        // The `email` credential carries either the account's email or its
+        // 10-digit mobile number — resolve whichever it is.
+        const id = normaliseLoginIdentifier(credentials.email);
+        const user = await prisma.user.findFirst({
+          where: id.kind === "phone" ? { phone: id.value } : { email: id.value },
           include: { role: true },
         });
 

@@ -78,3 +78,40 @@ export function staffInviteEmailHtml(params: {
     </p>
   </div>`;
 }
+
+/** Password-reset email body (email-link flow). */
+export function passwordResetEmailHtml(params: {
+  resetUrl: string;
+  name?: string | null;
+  expiresInMinutes: number;
+}): string {
+  const hi = params.name ? ` ${params.name}` : "";
+  return `
+  <div style="font-family:system-ui,Segoe UI,Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#0f172a">
+    <h2 style="margin:0 0 4px">Reset your Atomic Pathshala password</h2>
+    <p style="color:#475569;margin:0 0 16px">
+      Hi${hi}, we received a request to reset the password for your account.
+    </p>
+    <p style="margin:0 0 20px">
+      <a href="${params.resetUrl}"
+         style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;font-weight:700;padding:10px 20px;border-radius:10px">
+        Reset password
+      </a>
+    </p>
+    <p style="color:#64748b;font-size:13px;margin:0 0 4px">
+      This link expires in <b>${params.expiresInMinutes} minutes</b> and can be used once.
+    </p>
+    <p style="color:#64748b;font-size:13px;margin:0">
+      Didn't request this? You can safely ignore this email — your password won't change.
+    </p>
+  </div>`;
+}
+
+export function passwordResetEmailText(resetUrl: string, expiresInMinutes: number): string {
+  return `Reset your Atomic Pathshala password.
+
+Open this link to choose a new password (expires in ${expiresInMinutes} minutes, single use):
+${resetUrl}
+
+If you didn't request this, ignore this email — nothing will change.`;
+}
