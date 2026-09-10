@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
 import { studentRegistrationSchema } from "@/lib/validation/student";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
-import { generateEnrollmentNumber, generateStudentIdCode } from "@/lib/utils/id-generator";
+import { generateEnrollmentNumber, generateUniqueStudentIdCode } from "@/lib/utils/id-generator";
 import { verifyLeadInviteToken } from "@/lib/integrations/lead-invite";
 import { notifyOutreachConversion } from "@/lib/integrations/outreach-webhook";
 import { PHONE_RE, normalisePhone, consumeVerifyToken } from "@/lib/otp";
@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
     const invitePayload = input.inviteToken ? verifyLeadInviteToken(input.inviteToken) : null;
 
     const enrollmentNumber = generateEnrollmentNumber();
-    const studentIdCode = generateStudentIdCode();
+    const studentIdCode = await generateUniqueStudentIdCode(prisma);
 
     const created = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
@@ -192,7 +192,7 @@ async function registerViaOtp(input: z.infer<typeof otpRegisterSchema>) {
 
   const passwordHash = await bcrypt.hash(input.password, 12);
   const enrollmentNumber = generateEnrollmentNumber();
-  const studentIdCode = generateStudentIdCode();
+  const studentIdCode = await generateUniqueStudentIdCode(prisma);
 
   const created = await prisma.$transaction(async (tx) => {
     const user = await tx.user.create({
