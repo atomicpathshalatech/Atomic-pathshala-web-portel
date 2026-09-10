@@ -33,7 +33,7 @@ async function loadAccessibleFile(fileId: string, userId: string) {
       folder: { select: { id: true, batchId: true, isPublished: true, parentId: true } },
     },
   });
-  if (!file) return { error: apiError("File not found.", 404) as const };
+  if (!file) return { error: apiError("File not found.", 404) };
 
   const isStaff = await hasPermission(userId, PERMISSIONS.BATCH_READ);
   if (isStaff) return { file };
@@ -42,21 +42,21 @@ async function loadAccessibleFile(fileId: string, userId: string) {
     where: { userId },
     select: { id: true },
   });
-  if (!student) return { error: apiError("Not allowed.", 403) as const };
+  if (!student) return { error: apiError("Not allowed.", 403) };
 
   const enrolled = await prisma.batchEnrollment.count({
     where: { studentId: student.id, batchId: file.folder.batchId, status: "ACTIVE" },
   });
-  if (enrolled === 0) return { error: apiError("Enrol in this batch to open its material.", 403) as const };
+  if (enrolled === 0) return { error: apiError("Enrol in this batch to open its material.", 403) };
 
-  if (!file.isPublished) return { error: apiError("File not found.", 404) as const };
+  if (!file.isPublished) return { error: apiError("File not found.", 404) };
 
   // A published file inside an unpublished folder must stay hidden, so the
   // whole chain up to the root is checked — the same rule the tree endpoint
   // applies when it prunes branches.
   let folder: { id: string; isPublished: boolean; parentId: string | null } | null = file.folder;
   while (folder) {
-    if (!folder.isPublished) return { error: apiError("File not found.", 404) as const };
+    if (!folder.isPublished) return { error: apiError("File not found.", 404) };
     if (!folder.parentId) break;
     folder = await prisma.batchFolder.findUnique({
       where: { id: folder.parentId },
