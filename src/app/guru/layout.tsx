@@ -3,7 +3,6 @@ import type { Metadata } from "next";
 import { buildAiChatUser } from "@/lib/ai-chat/user-context";
 import { AiChatUserProvider } from "@/components/ai-chat/AiChatUserContext";
 import { ThemeProvider } from "@/components/ai-chat/ThemeProvider";
-import { ServiceWorkerRegister } from "@/components/ai-chat/ServiceWorkerRegister";
 
 /**
  * Server layout for the AI Chat ("Atomic Guru") feature, mounted under
@@ -32,7 +31,8 @@ export default async function GuruLayout({ children }: { children: React.ReactNo
 
   return (
     <div className="ai-chat-scope">
-      <ServiceWorkerRegister />
+      {/* Service worker is registered globally by <PwaProvider> in the root
+          layout (with the Capacitor / https guards). */}
       <ThemeProvider>
         <AiChatUserProvider user={user}>{children}</AiChatUserProvider>
       </ThemeProvider>
