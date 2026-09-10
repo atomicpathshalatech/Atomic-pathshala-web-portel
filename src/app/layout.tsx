@@ -4,6 +4,7 @@ import { Toaster } from "sonner";
 import "./globals.css";
 import { AuthSessionProvider } from "@/components/providers/AuthSessionProvider";
 import { CapacitorProvider } from "@/components/providers/CapacitorProvider";
+import { PwaProvider } from "@/components/pwa/PwaProvider";
 
 /**
  * Inter is the app's body/label font (used on effectively every screen).
@@ -39,6 +40,21 @@ export const metadata: Metadata = {
   },
   description:
     "India's premium accelerator for NEET, JEE, and Foundation courses — live classes, AI doubt solving, test series, and 1-on-1 mentorship.",
+  applicationName: "Atomic Guru",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "Atomic Guru",
+    statusBarStyle: "black-translucent",
+  },
+  icons: {
+    icon: [
+      { url: "/favicon.png", type: "image/png" },
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -68,6 +84,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             {children}
           </CapacitorProvider>
         </AuthSessionProvider>
+        <PwaProvider />
         <Toaster richColors position="top-center" />
       </body>
     </html>

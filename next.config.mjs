@@ -57,6 +57,20 @@ const nextConfig = {
           { key: "Permissions-Policy", value: "camera=(self), microphone=(self), geolocation=()" },
         ],
       },
+      {
+        // The service worker must never be held in the HTTP cache, so a
+        // deploy's new sw.js is picked up on the next visit. Allow it to
+        // control the whole origin.
+        source: "/sw.js",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=0, must-revalidate" },
+          { key: "Service-Worker-Allowed", value: "/" },
+        ],
+      },
+      {
+        source: "/manifest.webmanifest",
+        headers: [{ key: "Cache-Control", value: "public, max-age=3600" }],
+      },
     ];
   },
 };

@@ -22,8 +22,8 @@ self.addEventListener("push", (event) => {
   const notificationTitle = payload.notification?.title || payload.data?.title || "Atomic Pathshala";
   const notificationOptions = {
     body: payload.notification?.body || payload.data?.body || "You have a new update.",
-    icon: "/favicon.ico",
-    badge: "/favicon.ico",
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
     data: {
       deepLink: payload.data?.deepLink || payload.fcmOptions?.link || "/",
     },
