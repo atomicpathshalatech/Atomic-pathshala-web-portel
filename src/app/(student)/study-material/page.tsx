@@ -24,13 +24,30 @@ function deriveClassExams(targetExams: (string | null | undefined)[]): StudyMate
 export default async function StudentStudyMaterialPage() {
   const { student } = await requireStudentSession();
 
-  const enrolments = await prisma.batchEnrollment.findMany({
-    where: { studentId: student.id, status: "ACTIVE" },
-    select: { batch: { select: { targetExam: true } } },
-  });
-  const allowed = deriveClassExams(enrolments.map((e) => e.batch?.targetExam));
+  let allowed: StudyMaterialClassExam[] = ["NEET", "JEE", "CLASS_11", "CLASS_12"];
+  let materials: Awaited<ReturnType<typeof loadMaterials>> = [];
 
-  const materials = await prisma.studyMaterial.findMany({
+  try {
+    const enrolments = await prisma.batchEnrollment.findMany({
+      where: { studentId: student.id, status: "ACTIVE" },
+      select: { batch: { select: { targetExam: true } } },
+    });
+    allowed = deriveClassExams(enrolments.map((e) => e.batch?.targetExam));
+    materials = await loadMaterials(allowed);
+  } catch (e) {
+    // The Study Material feature ships behind a migration
+    // (20260910120000_study_material). If it isn't applied on this
+    // environment the table is absent — show an empty library instead of
+    // crashing the whole route.
+    console.error("[study-material] load failed:", e instanceof Error ? e.message : e);
+    materials = [];
+  }
+
+  return <StudyMaterialBrowser classExams={allowed} materials={materials} />;
+}
+
+function loadMaterials(allowed: StudyMaterialClassExam[]) {
+  return prisma.studyMaterial.findMany({
     where: { isPublished: true, classExam: { in: allowed } },
     orderBy: [{ subject: "asc" }, { chapterClass: "asc" }, { chapterTitle: "asc" }, { type: "asc" }, { order: "asc" }],
     select: {
@@ -47,6 +64,4 @@ export default async function StudentStudyMaterialPage() {
       allowDownload: true,
     },
   });
-
-  return <StudyMaterialBrowser classExams={allowed} materials={materials} />;
 }

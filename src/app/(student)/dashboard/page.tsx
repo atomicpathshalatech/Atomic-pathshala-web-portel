@@ -254,7 +254,7 @@ export default async function StudentDashboardPage() {
             { label: "Question Practice", icon: "edit_note", href: "/practice", accent: "violet", badge: null },
             { label: "PYQ Practice", icon: "history_edu", href: "/tests", accent: "blue", badge: null },
             { label: "Daily DPP", icon: "assignment", href: "/dpp", accent: "rose", badge: dppCount ? `${dppCount}` : null },
-            { label: "Downloads", icon: "download", href: "/study-material", accent: "indigo", badge: downloadsCount ? `${downloadsCount}` : null },
+            { label: "Downloads", icon: "download", href: "/downloads", accent: "indigo", badge: downloadsCount ? `${downloadsCount}` : null },
           ]}
         />
       </section>
