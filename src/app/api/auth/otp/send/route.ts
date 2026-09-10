@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
-import { sendSms, otpDebugReturnEnabled } from "@/lib/sms";
+import { sendOtpSms, otpDebugReturnEnabled } from "@/lib/sms";
 import {
   PHONE_RE,
   OTP_TTL_MINUTES,
@@ -65,9 +65,12 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const sms = await sendSms({
+    // Under DLT the wording lives in the approved MSG91 template, not here —
+    // only the code and its expiry travel. See sendOtpSms().
+    const sms = await sendOtpSms({
       to: phone,
-      text: `${code} is your Atomic Pathshala verification code. Valid for ${OTP_TTL_MINUTES} minutes. Do not share it.`,
+      code,
+      ttlMinutes: OTP_TTL_MINUTES,
     });
 
     await prisma.auditLog.create({
@@ -78,6 +81,20 @@ export async function POST(request: NextRequest) {
         metadata: { purpose, delivered: sms.delivered, reason: sms.reason ?? null },
       },
     });
+
+    // A gateway rejection (empty balance, unapproved DLT template, bad
+    // authkey) must not be reported as "code sent" — that leaves the user
+    // waiting on an SMS that was never accepted, with the real cause visible
+    // only in the audit log. The caller still gets a generic message; the
+    // specific reason stays server-side.
+    if (!sms.delivered && !otpDebugReturnEnabled()) {
+      console.error(`[otp] delivery failed for ${purpose}: ${sms.reason ?? "unknown"}`);
+      return apiError(
+        "We could not send the code right now. Please try again in a moment.",
+        502,
+        { code: "OTP_DELIVERY_FAILED" }
+      );
+    }
 
     return apiSuccess({
       sent: true,
