@@ -12,13 +12,6 @@ type SearchResult = {
 };
 type SearchGroup = { type: string; label: string; results: SearchResult[] };
 
-type AiState = {
-  loading: boolean;
-  answer: string | null;
-  sources: SearchResult[];
-  error: string | null;
-};
-
 const PLACEHOLDER = "Search anything in Atomic Pathshala...";
 const DEBOUNCE_MS = 220;
 
@@ -47,7 +40,6 @@ export function GlobalSearchBar({ compact = false }: { compact?: boolean }) {
   const [groups, setGroups] = useState<SearchGroup[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeIdx, setActiveIdx] = useState(0);
-  const [ai, setAi] = useState<AiState>({ loading: false, answer: null, sources: [], error: null });
 
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -77,13 +69,11 @@ export function GlobalSearchBar({ compact = false }: { compact?: boolean }) {
     setQ("");
     setGroups([]);
     setActiveIdx(0);
-    setAi({ loading: false, answer: null, sources: [], error: null });
   }, [open]);
 
   const runSearch = useCallback((value: string) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     const trimmed = value.trim();
-    setAi({ loading: false, answer: null, sources: [], error: null });
     if (trimmed.length < 2) {
       setGroups([]);
       setLoading(false);
@@ -121,32 +111,6 @@ export function GlobalSearchBar({ compact = false }: { compact?: boolean }) {
     router.push(result.href);
   }
 
-  async function askAi() {
-    const query = q.trim();
-    if (query.length < 3) return;
-    setAi({ loading: true, answer: null, sources: [], error: null });
-    try {
-      const res = await fetch("/api/search/ai", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query }),
-      });
-      const json = await res.json();
-      if (!res.ok || !json?.success) {
-        setAi({ loading: false, answer: null, sources: [], error: json?.error ?? "AI search failed." });
-        return;
-      }
-      setAi({
-        loading: false,
-        answer: json.data.answer,
-        sources: json.data.sources ?? [],
-        error: null,
-      });
-    } catch {
-      setAi({ loading: false, answer: null, sources: [], error: "AI search failed." });
-    }
-  }
-
   function onKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Escape") {
       setOpen(false);
@@ -160,11 +124,7 @@ export function GlobalSearchBar({ compact = false }: { compact?: boolean }) {
       setActiveIdx((i) => Math.max(i - 1, 0));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      if (e.shiftKey || flatResults.length === 0) {
-        askAi();
-      } else if (flatResults[activeIdx]) {
-        go(flatResults[activeIdx]);
-      }
+      if (flatResults[activeIdx]) go(flatResults[activeIdx]);
     }
   }
 
@@ -227,37 +187,8 @@ export function GlobalSearchBar({ compact = false }: { compact?: boolean }) {
             </div>
 
             <div className="max-h-[55vh] overflow-y-auto">
-              {/* AI answer block */}
-              {(ai.loading || ai.answer || ai.error) && (
-                <div className="m-3 rounded-xl border border-blue-100 bg-blue-50/60 p-3">
-                  <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-blue-600">
-                    <span className="material-symbols-outlined text-[15px]">auto_awesome</span>
-                    AI Answer
-                  </div>
-                  {ai.loading && <p className="mt-1 text-sm text-slate-500">Searching records…</p>}
-                  {ai.error && <p className="mt-1 text-sm text-red-600">{ai.error}</p>}
-                  {ai.answer && <p className="mt-1 text-sm text-slate-800 leading-relaxed">{ai.answer}</p>}
-                  {ai.sources.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {ai.sources.map((s) => (
-                        <button
-                          key={`${s.type}-${s.id}`}
-                          onClick={() => go(s)}
-                          className="text-[11px] rounded-full bg-white border border-blue-200 px-2 py-0.5 text-blue-700 hover:bg-blue-100"
-                        >
-                          {s.title}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Grouped results */}
-              {groups.length === 0 && q.trim().length >= 2 && !loading && !ai.answer && !ai.loading && (
-                <div className="px-4 py-8 text-center text-sm text-slate-400">
-                  No matches. Press <b>Shift+Enter</b> to ask AI.
-                </div>
+              {groups.length === 0 && q.trim().length >= 2 && !loading && (
+                <div className="px-4 py-8 text-center text-sm text-slate-400">No matches.</div>
               )}
 
               {groups.map((group) => (
@@ -298,17 +229,8 @@ export function GlobalSearchBar({ compact = false }: { compact?: boolean }) {
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-between border-t border-slate-100 px-4 py-2 text-[11px] text-slate-400">
-              <span>↑↓ navigate · Enter open</span>
-              <button
-                type="button"
-                onClick={askAi}
-                disabled={q.trim().length < 3 || ai.loading}
-                className="flex items-center gap-1 font-semibold text-blue-600 hover:text-blue-700 disabled:text-slate-300"
-              >
-                <span className="material-symbols-outlined text-[15px]">auto_awesome</span>
-                Ask AI (Shift+Enter)
-              </button>
+            <div className="border-t border-slate-100 px-4 py-2 text-[11px] text-slate-400">
+              ↑↓ navigate · Enter open · Esc close
             </div>
           </div>
         </div>
