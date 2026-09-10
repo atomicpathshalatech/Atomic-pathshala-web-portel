@@ -2,86 +2,134 @@ import "server-only";
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 
 /**
- * Thin S3-compatible object storage wrapper. Both providers this project's
- * .env already anticipates — Cloudflare R2 and Supabase Storage — expose an
- * S3-compatible API, so one client handles either: which provider is
- * actually active is purely a matter of which STORAGE_* credentials are
- * filled in (see README "Storage setup" for exact steps per provider).
- * No separate SDK per provider, and no code branch on STORAGE_PROVIDER —
- * it's kept in .env only as a human-readable note of which one you picked.
+ * Thin S3-compatible object storage wrapper for the simple
+ * "upload a Buffer, get a public URL" callers (question images, module
+ * assets, profile photos, whiteboard backgrounds, doubt attachments…).
+ *
+ * Credential resolution, in order:
+ *   1. Cloudflare R2 via the dedicated R2_* vars (+ CLOUDFLARE_ACCOUNT_ID) —
+ *      the same set src/lib/storage/r2-client.ts uses. Preferred because
+ *      the generic STORAGE_* vars in .env have historically been duplicated
+ *      / pointed at the wrong bucket, and a stray later block silently wins.
+ *   2. Generic STORAGE_* vars (any S3-compatible provider).
  */
 export class StorageNotConfiguredError extends Error {
   constructor() {
     super(
-      "File storage isn't set up yet. Fill in STORAGE_ENDPOINT, STORAGE_BUCKET_NAME, " +
-        "STORAGE_ACCESS_KEY_ID, STORAGE_SECRET_ACCESS_KEY and STORAGE_PUBLIC_URL in .env " +
-        "— see README's Storage setup section for exact steps."
+      "File storage isn't set up. Provide either R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY / " +
+        "R2_BUCKET_NAME / R2_PUBLIC_BASE_URL (+ CLOUDFLARE_ACCOUNT_ID), or STORAGE_ENDPOINT / " +
+        "STORAGE_BUCKET_NAME / STORAGE_ACCESS_KEY_ID / STORAGE_SECRET_ACCESS_KEY / STORAGE_PUBLIC_URL."
     );
     this.name = "StorageNotConfiguredError";
   }
 }
 
-function requiredEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) throw new StorageNotConfiguredError();
-  return value;
+interface ResolvedStorage {
+  endpoint: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  bucket: string;
+  publicUrlBase: string;
+  provider: "r2" | "s3";
 }
 
-const STORAGE_ENV_KEYS = [
-  "STORAGE_ENDPOINT",
-  "STORAGE_BUCKET_NAME",
-  "STORAGE_ACCESS_KEY_ID",
-  "STORAGE_SECRET_ACCESS_KEY",
-  "STORAGE_PUBLIC_URL",
-] as const;
+function resolveStorage(): ResolvedStorage | null {
+  const env = process.env;
 
-/**
- * True only when every credential the S3 client needs is present. Callers
- * use this to decide whether a cloud-upload failure is a real error to
- * surface (storage IS configured, something went wrong) versus an expected
- * "no bucket on this machine" that may fall back to local disk in dev.
- */
+  // 1. Cloudflare R2 (dedicated vars) — takes precedence.
+  const r2Key = env.R2_ACCESS_KEY_ID;
+  const r2Secret = env.R2_SECRET_ACCESS_KEY;
+  const accountId = env.CLOUDFLARE_ACCOUNT_ID || env.STORAGE_ACCOUNT_ID;
+  if (r2Key && r2Secret && (accountId || env.STORAGE_ENDPOINT)) {
+    const publicUrlBase = env.R2_PUBLIC_BASE_URL || env.STORAGE_PUBLIC_URL;
+    const bucket = env.R2_BUCKET_NAME || env.STORAGE_BUCKET_NAME;
+    if (publicUrlBase && bucket) {
+      return {
+        endpoint: accountId
+          ? `https://${accountId}.r2.cloudflarestorage.com`
+          : (env.STORAGE_ENDPOINT as string),
+        accessKeyId: r2Key,
+        secretAccessKey: r2Secret,
+        bucket,
+        publicUrlBase,
+        provider: "r2",
+      };
+    }
+  }
+
+  // 2. Generic STORAGE_* (any S3-compatible provider).
+  if (
+    env.STORAGE_ENDPOINT &&
+    env.STORAGE_BUCKET_NAME &&
+    env.STORAGE_ACCESS_KEY_ID &&
+    env.STORAGE_SECRET_ACCESS_KEY &&
+    env.STORAGE_PUBLIC_URL
+  ) {
+    return {
+      endpoint: env.STORAGE_ENDPOINT,
+      accessKeyId: env.STORAGE_ACCESS_KEY_ID,
+      secretAccessKey: env.STORAGE_SECRET_ACCESS_KEY,
+      bucket: env.STORAGE_BUCKET_NAME,
+      publicUrlBase: env.STORAGE_PUBLIC_URL,
+      provider: "s3",
+    };
+  }
+
+  return null;
+}
+
+function requireStorage(): ResolvedStorage {
+  const s = resolveStorage();
+  if (!s) throw new StorageNotConfiguredError();
+  return s;
+}
+
+/** True when a usable storage config (R2 or generic S3) is present. */
 export function storageConfigured(): boolean {
-  return STORAGE_ENV_KEYS.every((k) => Boolean(process.env[k]));
+  return resolveStorage() !== null;
 }
 
 /**
  * Non-secret description of the bucket that is actually active — the
- * endpoint host, bucket name and public URL base. Handy in logs and in the
- * /api/upload debug payload when an upload lands somewhere unexpected
- * (e.g. a stray duplicate STORAGE_* block in .env shadowing the real one).
+ * endpoint host, bucket name, public URL base and which provider path
+ * resolved. Handy in logs and the /api/upload debug payload.
  */
 export function activeStorageInfo(): {
   configured: boolean;
+  provider: "r2" | "s3" | null;
   endpointHost: string | null;
   bucket: string | null;
   publicUrlBase: string | null;
 } {
-  const endpoint = process.env.STORAGE_ENDPOINT ?? null;
-  let endpointHost: string | null = null;
-  if (endpoint) {
-    try {
-      endpointHost = new URL(endpoint).host;
-    } catch {
-      endpointHost = endpoint;
-    }
+  const s = resolveStorage();
+  if (!s) {
+    return { configured: false, provider: null, endpointHost: null, bucket: null, publicUrlBase: null };
+  }
+  let endpointHost: string | null = s.endpoint;
+  try {
+    endpointHost = new URL(s.endpoint).host;
+  } catch {
+    /* keep raw */
   }
   return {
-    configured: storageConfigured(),
+    configured: true,
+    provider: s.provider,
     endpointHost,
-    bucket: process.env.STORAGE_BUCKET_NAME ?? null,
-    publicUrlBase: process.env.STORAGE_PUBLIC_URL ?? null,
+    bucket: s.bucket,
+    publicUrlBase: s.publicUrlBase,
   };
 }
 
-function getClient() {
-  return new S3Client({
+let cachedClient: S3Client | null = null;
+let cachedFor = "";
+
+function getClient(s: ResolvedStorage): S3Client {
+  const sig = `${s.endpoint}|${s.accessKeyId}`;
+  if (cachedClient && cachedFor === sig) return cachedClient;
+  cachedClient = new S3Client({
     region: "auto",
-    endpoint: requiredEnv("STORAGE_ENDPOINT"),
-    credentials: {
-      accessKeyId: requiredEnv("STORAGE_ACCESS_KEY_ID"),
-      secretAccessKey: requiredEnv("STORAGE_SECRET_ACCESS_KEY"),
-    },
+    endpoint: s.endpoint,
+    credentials: { accessKeyId: s.accessKeyId, secretAccessKey: s.secretAccessKey },
     // Both R2 and Supabase Storage's S3-compatible endpoints expect
     // path-style requests (bucket in the path, not as a subdomain).
     forcePathStyle: true,
@@ -90,41 +138,44 @@ function getClient() {
     requestChecksumCalculation: "WHEN_REQUIRED",
     responseChecksumValidation: "WHEN_REQUIRED",
   });
+  cachedFor = sig;
+  return cachedClient;
 }
 
-export async function uploadFile(params: { key: string; body: Buffer; contentType: string }): Promise<string> {
-  const bucket = requiredEnv("STORAGE_BUCKET_NAME");
-  const publicUrlBase = requiredEnv("STORAGE_PUBLIC_URL");
-
-  const client = getClient();
+export async function uploadFile(params: {
+  key: string;
+  body: Buffer;
+  contentType: string;
+}): Promise<string> {
+  const s = requireStorage();
+  const client = getClient(s);
   await client.send(
     new PutObjectCommand({
-      Bucket: bucket,
+      Bucket: s.bucket,
       Key: params.key,
       Body: params.body,
       ContentType: params.contentType,
     })
   );
-
-  return `${publicUrlBase.replace(/\/$/, "")}/${params.key}`;
+  return `${s.publicUrlBase.replace(/\/$/, "")}/${params.key}`;
 }
 
 /** Best-effort delete — callers should not fail the request if this throws
  * (e.g. replacing a photo shouldn't fail just because the old file's
  * already gone or storage is briefly unreachable). */
 export async function deleteFile(key: string): Promise<void> {
-  const bucket = process.env.STORAGE_BUCKET_NAME;
-  if (!bucket) return;
-  const client = getClient();
-  await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+  const s = resolveStorage();
+  if (!s) return;
+  const client = getClient(s);
+  await client.send(new DeleteObjectCommand({ Bucket: s.bucket, Key: key }));
 }
 
 /** Recovers the storage key from a public URL previously returned by
  * uploadFile, so a replace/remove can clean up the old object. Returns
- * null for anything that doesn't look like one of ours (e.g. a photoUrl
- * set some other way). */
+ * null for anything that doesn't look like one of ours. */
 export function keyFromPublicUrl(url: string): string | null {
-  const base = process.env.STORAGE_PUBLIC_URL;
+  const s = resolveStorage();
+  const base = s?.publicUrlBase ?? process.env.STORAGE_PUBLIC_URL ?? process.env.R2_PUBLIC_BASE_URL;
   if (!base) return null;
   const prefix = base.replace(/\/$/, "") + "/";
   return url.startsWith(prefix) ? url.slice(prefix.length) : null;
