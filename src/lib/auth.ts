@@ -1,4 +1,5 @@
 import type { NextAuthOptions } from "next-auth";
+import { AUTH_SECRET } from "@/lib/auth-secret";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
@@ -125,5 +126,5 @@ export const authOptions: NextAuthOptions = {
       return session;
     },
   },
-  secret: process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET || "atomic-pathshala-production-enterprise-secret-key-2026-secure-jwt",
+  secret: AUTH_SECRET,
 };

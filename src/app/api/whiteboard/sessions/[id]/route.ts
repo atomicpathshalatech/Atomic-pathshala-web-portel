@@ -125,7 +125,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
             const isAdmin =
               session.user.role === "ADMIN" ||
               session.user.role === "SUPER_ADMIN" ||
-              session.user.role === "ACADEMIC_DIRECTOR";
+              session.user.role === "FOUNDER" ||
+              session.user.role === "ACADEMIC_HEAD";
 
             if (!isAdmin) {
               return apiError(

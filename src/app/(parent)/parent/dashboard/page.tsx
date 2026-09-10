@@ -17,44 +17,27 @@ export default async function ParentDashboardPage({
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) redirect("/login");
 
-  // Find student by phone/email or query param
+  // Whose records this viewer is allowed to see. There is no parent<->child
+  // link table yet, so we authorise on the only signals we have:
+  //  - the viewer's own student record (a student opening the portal), or
+  //  - a student whose `emergencyContact` is the viewer's phone (the number
+  //    the student registered as their guardian contact).
+  // No query param can widen this, and there is no "first student" fallback.
+  const viewer = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { phone: true },
+  });
+  const guardianOr: Record<string, unknown>[] = [{ userId: session.user.id }];
+  if (viewer?.phone) guardianOr.push({ emergencyContact: viewer.phone });
+
   let student = null;
 
-  if (searchParams?.studentCode) {
-    student = await prisma.student.findUnique({
-      where: { studentIdCode: searchParams.studentCode },
-      include: {
-        user: true,
-        batchEnrollments: {
-          include: {
-            batch: {
-              include: {
-                teachers: { include: { teacher: { include: { user: true } } } },
-              },
-            },
-          },
-        },
-        attempts: {
-          where: { status: { in: ["SUBMITTED", "AUTO_SUBMITTED"] } },
-          include: { test: true, answers: { select: { isCorrect: true } } },
-          orderBy: { submittedAt: "desc" },
-          take: 5,
-        },
-        liveClassAttendances: {
-          include: { whiteboardSession: { include: { batchSchedule: true } } },
-          orderBy: { joinedAt: "desc" },
-          take: 5,
-        },
-        subscription: {
-          include: { payments: { where: { status: "SUCCESS" }, orderBy: { createdAt: "desc" }, take: 3 } },
-        },
-      },
-    });
-  }
-
-  // Fallback to first student if not specified
-  if (!student) {
+  {
     student = await prisma.student.findFirst({
+      where: {
+        OR: guardianOr as never,
+        ...(searchParams?.studentCode ? { studentIdCode: searchParams.studentCode } : {}),
+      },
       include: {
         user: true,
         batchEnrollments: {
