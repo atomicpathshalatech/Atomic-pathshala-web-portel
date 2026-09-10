@@ -1,8 +1,8 @@
 "use client";
 
 import React from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useBackNavigation } from "@/lib/navigation/useBackNavigation";
 
 interface OpsBackButtonProps {
   href?: string;
@@ -11,24 +11,33 @@ interface OpsBackButtonProps {
   className?: string;
 }
 
+/**
+ * The team portal's Back control. Appearance is unchanged; the behaviour now
+ * comes from useBackNavigation so this and the student portal's BackButton,
+ * the Android hardware key and the browser gesture all resolve "back" the
+ * same way.
+ *
+ * What that fixes here:
+ *  - it used `window.history.length > 1` to decide whether to call
+ *    router.back(). That counts the whole tab's history, so opening a deep
+ *    team link in a tab that had any other page in it made back leave the
+ *    app entirely. The hook measures only history this app created.
+ *  - the fallback was hardcoded to /team, which is right for a shallow page
+ *    and wrong for a deep one; the hook walks the real hierarchy instead
+ *    (a question editor falls back to its question, not to the dashboard).
+ *  - it ignored guards, so Back could walk out of an editor with unsaved
+ *    changes. Guards now run first.
+ *
+ * `href` still short-circuits everything: an explicit destination is an
+ * explicit destination.
+ */
 export function OpsBackButton({
   href,
   label = "Back",
-  fallbackHref = "/team",
+  fallbackHref,
   className = "",
 }: OpsBackButtonProps) {
-  const router = useRouter();
-
-  const handleBack = (e: React.MouseEvent) => {
-    if (href) return; // Link handles it
-
-    e.preventDefault();
-    if (typeof window !== "undefined" && window.history.length > 1) {
-      router.back();
-    } else {
-      router.push(fallbackHref);
-    }
-  };
+  const { goBack } = useBackNavigation({ fallbackHref });
 
   const buttonContent = (
     <>
@@ -39,7 +48,7 @@ export function OpsBackButton({
     </>
   );
 
-  const baseClasses = `group inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-outline-variant/50 dark:border-slate-700/80 bg-surface dark:bg-slate-900/90 hover:bg-surface-container-high dark:hover:bg-slate-800 text-on-surface dark:text-slate-200 hover:text-primary dark:hover:text-primary font-semibold text-xs md:text-sm shadow-sm transition-all duration-150 active:scale-95 cursor-pointer select-none ${className}`;
+  const baseClasses = `group inline-flex items-center gap-1.5 px-3.5 py-1.5 min-h-11 rounded-xl border border-outline-variant/50 dark:border-slate-700/80 bg-surface dark:bg-slate-900/90 hover:bg-surface-container-high dark:hover:bg-slate-800 text-on-surface dark:text-slate-200 hover:text-primary dark:hover:text-primary font-semibold text-xs md:text-sm shadow-sm transition-all duration-150 active:scale-95 cursor-pointer select-none ${className}`;
 
   if (href) {
     return (
@@ -52,7 +61,7 @@ export function OpsBackButton({
   return (
     <button
       type="button"
-      onClick={handleBack}
+      onClick={() => void goBack()}
       className={baseClasses}
       title="Go back"
       aria-label="Go back"
