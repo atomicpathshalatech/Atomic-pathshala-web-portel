@@ -6,6 +6,13 @@ import { ChapterImportModal } from "./ChapterImportModal";
 import { BatchTeacherManager } from "./BatchTeacherManager";
 import { BatchEnrollmentManager } from "./BatchEnrollmentManager";
 import { BatchScheduleManager } from "./BatchScheduleManager";
+import { BatchFolderManager } from "./BatchFolderManager";
+import {
+  BatchPdfLibrary,
+  type ClassNoteEntry,
+  type DppEntry,
+  type TestEntry,
+} from "./BatchPdfLibrary";
 
 type BatchDetailClientProps = {
   batch: {
@@ -53,7 +60,22 @@ type BatchDetailClientProps = {
     notes: string | null;
     teacherId: string | null;
     teacher: { user: { name: string } } | null;
+    /** Set when this schedule was created by importing a master chapter. */
+    chapter: {
+      id: string;
+      chapterId: string | null;
+      title: string;
+      status: string;
+      subjectTitle: string | null;
+      lectureCount: number;
+      dppCount: number;
+      testCount: number;
+    } | null;
   }>;
+  /** Collected material for the All PDFs tab — see BatchPdfLibrary. */
+  classNotes: ClassNoteEntry[];
+  dpps: DppEntry[];
+  tests: TestEntry[];
   allTeachers: Array<{ id: string; employeeCode: string; department: string; user: { name: string } }>;
   allStudents: Array<{ id: string; enrollmentNumber: string; class: string | null; user: { name: string; email: string } }>;
   canUpdate: boolean;
@@ -73,6 +95,9 @@ export function BatchDetailClient({
   teachers,
   enrollments,
   schedules,
+  classNotes,
+  dpps,
+  tests,
   allTeachers,
   allStudents,
   canUpdate,
@@ -80,10 +105,58 @@ export function BatchDetailClient({
   canManageSchedule,
 }: BatchDetailClientProps) {
   const [showImportModal, setShowImportModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<"flow" | "timetable" | "teachers" | "students">("flow");
+  const [activeTab, setActiveTab] = useState<"flow" | "pdfs" | "materials" | "timetable" | "teachers" | "students">("flow");
 
-  // Derive imported chapters from schedules
-  const uniqueSubjects = Array.from(new Set(schedules.map((s) => s.subject || "General")));
+  /**
+   * The chapters actually imported into this batch, de-duplicated.
+   *
+   * A batch has no direct link to a chapter — importing a master chapter
+   * creates one schedule per session, all pointing at the same chapter. So
+   * the same chapter appears many times in `schedules` and has to be
+   * collapsed here, carrying its session count along.
+   */
+  const importedChapters = (() => {
+    const byId = new Map<
+      string,
+      {
+        id: string;
+        chapterId: string | null;
+        title: string;
+        status: string;
+        subjectTitle: string;
+        lectureCount: number;
+        dppCount: number;
+        testCount: number;
+        sessionCount: number;
+      }
+    >();
+
+    for (const s of schedules) {
+      if (!s.chapter) continue;
+      const existing = byId.get(s.chapter.id);
+      if (existing) {
+        existing.sessionCount += 1;
+        continue;
+      }
+      byId.set(s.chapter.id, {
+        id: s.chapter.id,
+        chapterId: s.chapter.chapterId,
+        title: s.chapter.title,
+        status: s.chapter.status,
+        // Prefer the chapter's own subject; fall back to whatever the
+        // schedule row recorded, which is free text.
+        subjectTitle: s.chapter.subjectTitle || s.subject || "General",
+        lectureCount: s.chapter.lectureCount,
+        dppCount: s.chapter.dppCount,
+        testCount: s.chapter.testCount,
+        sessionCount: 1,
+      });
+    }
+
+    return Array.from(byId.values());
+  })();
+
+  const chapterSubjects = Array.from(new Set(importedChapters.map((c) => c.subjectTitle)));
 
   const activeEnrollmentsCount = enrollments.filter((e) => e.status === "ACTIVE").length;
 
@@ -166,7 +239,31 @@ export function BatchDetailClient({
           }`}
         >
           <span className="material-symbols-outlined text-base">account_tree</span>
-          Course Flow &amp; Chapters
+          Content ({importedChapters.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("pdfs")}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+            activeTab === "pdfs"
+              ? "bg-primary text-on-primary shadow-sm"
+              : "text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high"
+          }`}
+        >
+          <span className="material-symbols-outlined text-base">picture_as_pdf</span>
+          All PDFs ({classNotes.length + dpps.length + tests.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("materials")}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+            activeTab === "materials"
+              ? "bg-primary text-on-primary shadow-sm"
+              : "text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high"
+          }`}
+        >
+          <span className="material-symbols-outlined text-base">folder</span>
+          Syllabus &amp; Schedule
         </button>
         <button
           type="button"
@@ -178,7 +275,7 @@ export function BatchDetailClient({
           }`}
         >
           <span className="material-symbols-outlined text-base">calendar_month</span>
-          Timetable ({schedules.length})
+          Schedule ({schedules.length})
         </button>
         <button
           type="button"
@@ -206,39 +303,42 @@ export function BatchDetailClient({
         </button>
       </div>
 
-      {/* Tab 1: Course Flow & Imported Master Chapters */}
+      {/* Tab 1: Content — master chapters imported into this batch */}
       {activeTab === "flow" && (
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h3 className="font-headline-md text-headline-md font-bold text-on-surface">
-                Academic Course Flow &amp; Master Content
+                Batch Content
               </h3>
               <p className="text-xs text-on-surface-variant mt-0.5">
-                Master chapters imported into this batch with zero duplicate content architecture.
+                Master chapters imported into this batch. Lectures, DPPs and tests stay on the
+                chapter — nothing is duplicated per batch.
               </p>
             </div>
             <button
               type="button"
               onClick={() => setShowImportModal(true)}
-              className="text-primary text-xs font-bold hover:underline flex items-center gap-1"
+              className="text-primary text-xs font-bold hover:underline flex items-center gap-1 min-h-11"
             >
               <span className="material-symbols-outlined text-sm">add_circle</span>
               Import Another Chapter
             </button>
           </div>
 
-          {schedules.length === 0 ? (
-            <div className="glass-card rounded-3xl p-12 text-center text-on-surface-variant space-y-3 border border-dashed border-outline-variant/30">
+          {importedChapters.length === 0 ? (
+            <div className="glass-card rounded-3xl p-8 sm:p-12 text-center text-on-surface-variant space-y-3 border border-dashed border-outline-variant/30">
               <span className="material-symbols-outlined text-4xl text-primary opacity-60">download_for_offline</span>
-              <h4 className="font-bold text-sm text-on-surface">No Master Chapters Imported Yet</h4>
+              <h4 className="font-bold text-sm text-on-surface">No Chapters Imported Yet</h4>
               <p className="text-xs text-on-surface-variant max-w-md mx-auto">
-                Click &quot;Import Master Chapter&quot; above to link centralized chapter lectures, DPPs, and test series into this batch.
+                {schedules.length > 0
+                  ? "This batch has sessions on its Schedule, but none of them are linked to a master chapter yet."
+                  : "Import a master chapter to bring its lectures, DPPs and tests into this batch."}
               </p>
               <button
                 type="button"
                 onClick={() => setShowImportModal(true)}
-                className="px-6 py-2.5 bg-primary text-on-primary font-bold text-xs rounded-xl shadow hover:opacity-90 transition-all inline-flex items-center gap-2"
+                className="px-6 py-2.5 min-h-11 bg-primary text-on-primary font-bold text-xs rounded-xl shadow hover:opacity-90 transition-all inline-flex items-center gap-2"
               >
                 <span className="material-symbols-outlined text-sm">download</span>
                 Import Chapter Now
@@ -246,44 +346,52 @@ export function BatchDetailClient({
             </div>
           ) : (
             <div className="space-y-4">
-              {uniqueSubjects.map((subjectName) => {
-                const subjectSchedules = schedules.filter((s) => (s.subject || "General") === subjectName);
+              {chapterSubjects.map((subjectName) => {
+                const subjectChapters = importedChapters.filter((c) => c.subjectTitle === subjectName);
                 return (
                   <div
                     key={subjectName}
-                    className="glass-card rounded-3xl p-6 border border-outline-variant/30 space-y-4 shadow-sm"
+                    className="glass-card rounded-3xl p-4 sm:p-6 border border-outline-variant/30 space-y-4 shadow-sm"
                   >
-                    <div className="flex items-center justify-between border-b border-outline-variant/20 pb-3">
-                      <div className="flex items-center gap-2">
-                        <span className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">
+                    <div className="flex items-center justify-between gap-3 border-b border-outline-variant/20 pb-3">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold text-xs shrink-0">
                           {subjectName[0]}
                         </span>
-                        <h4 className="font-bold text-sm text-on-surface">{subjectName}</h4>
+                        <h4 className="font-bold text-sm text-on-surface truncate">{subjectName}</h4>
                       </div>
-                      <span className="text-xs text-on-surface-variant font-mono">
-                        {subjectSchedules.length} Scheduled Sessions
+                      <span className="text-xs text-on-surface-variant font-mono shrink-0">
+                        {subjectChapters.length} {subjectChapters.length === 1 ? "Chapter" : "Chapters"}
                       </span>
                     </div>
 
                     <div className="space-y-2">
-                      {subjectSchedules.map((s, idx) => (
-                        <div
-                          key={s.id}
-                          className="p-3.5 rounded-2xl bg-surface-container-lowest border border-outline-variant/20 flex items-center justify-between text-xs"
+                      {subjectChapters.map((c) => (
+                        <Link
+                          key={c.id}
+                          href={`/team/chapters/${c.id}`}
+                          className="p-3.5 rounded-2xl bg-surface-container-lowest border border-outline-variant/20 hover:border-primary/40 transition-colors flex flex-wrap items-center justify-between gap-2 text-xs"
                         >
-                          <div className="space-y-0.5 min-w-0 pr-4">
-                            <p className="font-bold text-on-surface truncate">{s.title}</p>
+                          <div className="space-y-1 min-w-0 pr-2 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="font-bold text-on-surface truncate">{c.title}</p>
+                              {c.chapterId && (
+                                <span className="text-[10px] font-mono text-on-surface-variant bg-surface-container-high px-1.5 py-0.5 rounded">
+                                  {c.chapterId}
+                                </span>
+                              )}
+                            </div>
                             <p className="text-[11px] text-on-surface-variant">
-                              {new Date(s.startsAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })} &middot;{" "}
-                              {new Date(s.startsAt).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true })} →{" "}
-                              {new Date(s.endsAt).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true })}
-                              {s.teacher ? ` · Faculty: ${s.teacher.user.name}` : ""}
+                              {c.lectureCount} {c.lectureCount === 1 ? "lecture" : "lectures"} &middot;{" "}
+                              {c.dppCount} {c.dppCount === 1 ? "DPP" : "DPPs"} &middot;{" "}
+                              {c.testCount} {c.testCount === 1 ? "test" : "tests"} &middot;{" "}
+                              {c.sessionCount} scheduled {c.sessionCount === 1 ? "session" : "sessions"}
                             </p>
                           </div>
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-primary/10 text-primary uppercase shrink-0">
-                            {s.type}
+                            {c.status.replace(/_/g, " ")}
                           </span>
-                        </div>
+                        </Link>
                       ))}
                     </div>
                   </div>
@@ -294,7 +402,16 @@ export function BatchDetailClient({
         </div>
       )}
 
-      {/* Tab 2: Timetable & Schedule */}
+
+      {/* Tab 2: All PDFs */}
+      {activeTab === "pdfs" && (
+        <BatchPdfLibrary classNotes={classNotes} dpps={dpps} tests={tests} />
+      )}
+
+      {/* Tab 3: Syllabus & Schedule folders */}
+      {activeTab === "materials" && <BatchFolderManager batchId={batch.id} />}
+
+      {/* Tab 4: Schedule */}
       {activeTab === "timetable" && (
         <section className="glass-card rounded-3xl p-6 md:p-8 border border-outline-variant/30 space-y-6">
           <div className="flex items-center justify-between">

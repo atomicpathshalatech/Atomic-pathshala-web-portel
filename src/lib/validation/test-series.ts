@@ -10,6 +10,10 @@ export const testSeriesSchema = z.object({
   course: z.string().trim().max(60).optional().or(z.literal("")),
   examType: z.string().trim().max(60).optional().or(z.literal("")),
   tags: z.array(z.string().trim().min(1)).default([]),
+  // Cover image for listing cards. Stored as the public R2 URL produced by
+  // the direct-upload flow (see ThumbnailUploader); the column already
+  // existed on TestSeries, only the form never wrote to it.
+  thumbnailUrl: z.string().url().optional().nullable().or(z.literal("")),
   visibility: z.enum(["PRIVATE", "PUBLIC"]).default("PRIVATE"),
   status: testSeriesStatusEnum.default("DRAFT"),
   startDate: z.string().datetime().optional().or(z.literal("")),

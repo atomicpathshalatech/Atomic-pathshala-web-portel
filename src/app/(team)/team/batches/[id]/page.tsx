@@ -34,14 +34,47 @@ export default async function BatchDetailPage({ params }: { params: { id: string
         orderBy: { enrolledAt: "desc" },
       },
       schedules: {
-        include: { teacher: { include: { user: true } } },
+        // The chapter rides along because the Content tab lists the chapters
+        // imported into this batch, and a batch only knows its chapters
+        // through the schedules that reference them — there is no direct
+        // Batch → Chapter relation.
+        include: {
+          teacher: { include: { user: true } },
+          chapter: {
+            select: {
+              id: true,
+              chapterId: true,
+              title: true,
+              status: true,
+              subject: { select: { title: true } },
+              _count: { select: { lectures: true, dpps: true, tests: true } },
+            },
+          },
+        },
         orderBy: { startsAt: "asc" },
       },
     },
   });
   if (!batch) notFound();
 
-  const [allTeachers, allStudents] = await Promise.all([
+  /**
+   * Material for the "All PDFs" tab.
+   *
+   * Nothing here is uploaded by hand — every entry already exists elsewhere
+   * and is simply gathered per batch:
+   *   class notes  → the PDF the whiteboard pipeline produces when a live
+   *                  class ends (WhiteboardSession.pdfStatus = READY)
+   *   DPPs / tests → whatever hangs off the chapters imported into this batch
+   *
+   * A batch reaches its chapters only through its schedules, so the chapter
+   * ids are derived first and then reused for both lookups.
+   */
+  const scheduleIds = batch.schedules.map((s) => s.id);
+  const importedChapterIds = Array.from(
+    new Set(batch.schedules.map((s) => s.chapterId).filter((id): id is string => Boolean(id)))
+  );
+
+  const [allTeachers, allStudents, classNoteSessions, chapterDpps, chapterTests] = await Promise.all([
     canUpdate
       ? prisma.teacher.findMany({
           select: { id: true, employeeCode: true, department: true, user: { select: { name: true } } },
@@ -58,6 +91,51 @@ export default async function BatchDetailPage({ params }: { params: { id: string
           },
           orderBy: { createdAt: "desc" },
           take: 500,
+        })
+      : Promise.resolve([]),
+
+    scheduleIds.length
+      ? prisma.whiteboardSession.findMany({
+          where: { batchScheduleId: { in: scheduleIds }, pdfStatus: "READY" },
+          select: {
+            id: true,
+            title: true,
+            endedAt: true,
+            batchSchedule: { select: { subject: true, title: true, startsAt: true } },
+          },
+          orderBy: { endedAt: "desc" },
+        })
+      : Promise.resolve([]),
+
+    importedChapterIds.length
+      ? prisma.dpp.findMany({
+          where: { chapterId: { in: importedChapterIds } },
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            subject: true,
+            chapter: true,
+            status: true,
+            questionTargetCount: true,
+          },
+          orderBy: [{ subject: "asc" }, { createdAt: "desc" }],
+        })
+      : Promise.resolve([]),
+
+    importedChapterIds.length
+      ? prisma.test.findMany({
+          where: { chapterId: { in: importedChapterIds }, archived: false },
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            status: true,
+            durationMin: true,
+            testSeries: { select: { id: true, name: true } },
+            chapter: { select: { title: true, subject: { select: { title: true } } } },
+          },
+          orderBy: { createdAt: "desc" },
         })
       : Promise.resolve([]),
   ]);
@@ -109,6 +187,43 @@ export default async function BatchDetailPage({ params }: { params: { id: string
         notes: s.notes,
         teacherId: s.teacherId,
         teacher: s.teacher ? { user: { name: s.teacher.user.name } } : null,
+        chapter: s.chapter
+          ? {
+              id: s.chapter.id,
+              chapterId: s.chapter.chapterId,
+              title: s.chapter.title,
+              status: s.chapter.status,
+              subjectTitle: s.chapter.subject?.title ?? null,
+              lectureCount: s.chapter._count.lectures,
+              dppCount: s.chapter._count.dpps,
+              testCount: s.chapter._count.tests,
+            }
+          : null,
+      }))}
+      classNotes={classNoteSessions.map((s) => ({
+        sessionId: s.id,
+        title: s.batchSchedule?.title || s.title,
+        subject: s.batchSchedule?.subject || "General",
+        heldOn: (s.endedAt ?? s.batchSchedule?.startsAt ?? null)?.toISOString() ?? null,
+      }))}
+      dpps={chapterDpps.map((d) => ({
+        id: d.id,
+        code: d.code,
+        name: d.name,
+        subject: d.subject || "General",
+        chapter: d.chapter,
+        status: d.status,
+        questionCount: d.questionTargetCount,
+      }))}
+      tests={chapterTests.map((t) => ({
+        id: t.id,
+        name: t.name,
+        code: t.code,
+        status: t.status,
+        durationMin: t.durationMin,
+        subject: t.chapter?.subject?.title || "General",
+        chapterTitle: t.chapter?.title ?? null,
+        series: t.testSeries ? { id: t.testSeries.id, name: t.testSeries.name } : null,
       }))}
       allTeachers={allTeachers}
       allStudents={allStudents}

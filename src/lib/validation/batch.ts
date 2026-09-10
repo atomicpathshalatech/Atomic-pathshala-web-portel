@@ -30,6 +30,10 @@ export const batchCreateSchema = z.object({
   startDate: z.coerce.date().optional(),
   endDate: z.coerce.date().optional(),
   capacity: z.coerce.number().int().positive("Capacity must be a positive number").optional(),
+  // Public R2 URL of the 16:9 cover image, produced by the direct-upload
+  // flow (see ThumbnailUploader). Empty string is accepted because clearing
+  // the picker submits "" rather than undefined.
+  thumbnailUrl: z.string().url().optional().nullable().or(z.literal("")),
 });
 
 export type BatchCreateInput = z.infer<typeof batchCreateSchema>;

@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { testSeriesSchema, type TestSeriesInput } from "@/lib/validation/test-series";
+import { ThumbnailUploader } from "./ThumbnailUploader";
 
 export function TestSeriesForm() {
   const router = useRouter();
@@ -27,6 +28,7 @@ export function TestSeriesForm() {
   });
 
   const tags = watch("tags") ?? [];
+  const thumbnailUrl = watch("thumbnailUrl") ?? "";
 
   function addTag() {
     const value = tagInput.trim();
@@ -91,6 +93,16 @@ export function TestSeriesForm() {
             {...register("description")}
           />
         </div>
+
+        {/* TestSeries.thumbnailUrl already existed in the schema — this form
+            simply never wrote to it, so every series card fell back to a
+            placeholder. */}
+        <ThumbnailUploader
+          value={thumbnailUrl}
+          onChange={(url) => setValue("thumbnailUrl", url ?? "")}
+          label="Series Thumbnail (16:9)"
+        />
+        {errors.thumbnailUrl && <p className={errorClass}>{errors.thumbnailUrl.message}</p>}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
