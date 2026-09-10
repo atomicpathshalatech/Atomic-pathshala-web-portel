@@ -18,6 +18,7 @@
  *   SUPER_ADMIN_EMAIL=you@company.com SUPER_ADMIN_PASSWORD='...' \
  *     npx tsx scripts/cleanup-seeded-accounts.ts --confirm
  */
+import { randomBytes } from "crypto";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
@@ -109,6 +110,7 @@ async function ensureSuperAdmin() {
 
 async function deleteSeeded(protectedEmail: string) {
   let removed = 0;
+  let neutralised = 0;
   for (const email of SEEDED_EMAILS) {
     if (email.toLowerCase() === protectedEmail) {
       console.log(`[skip] ${email} — this is your permanent Super Admin, keeping it.`);
@@ -131,20 +133,58 @@ async function deleteSeeded(protectedEmail: string) {
       console.log(`[deleted] ${email}  (${user.role?.name}, "${user.name}")`);
       removed++;
     } catch (err) {
-      console.error(
-        `[FAILED] ${email} — ${(err as Error).message.split("\n")[0]}. ` +
-          `Left in place; remove its dependent rows first or delete from the Team portal.`
-      );
+      // A handful of authored-artifact tables reference User with a required
+      // FK (no cascade / no SetNull), so a seeded account that was ever used
+      // to edit a question or kick off an AI generation batch can't be
+      // deleted outright. These rows are byproducts of the seeded account
+      // itself — safe to drop. Nullable authorship (Question.createdById,
+      // AuditLog.userId, ...) is SetNull'd automatically by the DB.
+      const code = (err as { code?: string }).code;
+      if (code !== "P2003") {
+        console.error(`[FAILED] ${email} — ${(err as Error).message.split("\n")[0]}.`);
+        continue;
+      }
+      const [qv, gb] = await Promise.all([
+        prisma.questionVersion.deleteMany({ where: { editedById: user.id } }),
+        prisma.aiGenerationBatch.deleteMany({ where: { createdById: user.id } }),
+      ]);
+      try {
+        await prisma.user.delete({ where: { id: user.id } });
+        console.log(
+          `[deleted] ${email}  (${user.role?.name}, "${user.name}") ` +
+            `[+${qv.count} question_versions, +${gb.count} ai_generation_batches]`
+        );
+        removed++;
+      } catch (err2) {
+        // Still blocked: this seeded account authored other artifacts
+        // (home sections, extraction jobs, staff invitations, ...) behind
+        // required FKs. Rather than cascade-delete real-looking content,
+        // NEUTRALISE it: unusable email, no password, no role, INACTIVE.
+        // It can no longer log in, holds no privileges, and its address no
+        // longer matches the seed upsert so `db:seed` won't revive it.
+        const blocker = (err2 as { meta?: { field_name?: string } }).meta?.field_name ?? "unknown FK";
+        const deadEmail = `disabled+${Date.now()}.${email.replace(/[@.]/g, "_")}@seed.invalid`;
+        const deadHash = await bcrypt.hash(randomBytes(24).toString("hex"), 12);
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { email: deadEmail, passwordHash: deadHash, roleId: null, status: "INACTIVE" },
+        });
+        neutralised++;
+        console.log(
+          `[neutralised] ${email} — hard delete blocked by ${blocker}; ` +
+            `account disabled (no login, no role), email parked as ${deadEmail}.`
+        );
+      }
     }
   }
-  return removed;
+  return { removed, neutralised };
 }
 
 async function main() {
   console.log(CONFIRM ? "=== CLEANUP (LIVE) ===" : "=== CLEANUP (DRY RUN — pass --confirm to apply) ===");
 
   const protectedEmail = await ensureSuperAdmin();
-  const removed = await deleteSeeded(protectedEmail);
+  const { removed, neutralised } = await deleteSeeded(protectedEmail);
 
   console.log("");
   console.log("Left for manual review (NOT touched):");
@@ -152,7 +192,7 @@ async function main() {
 
   console.log("");
   if (CONFIRM) {
-    console.log(`Done. Seeded accounts removed: ${removed}.`);
+    console.log(`Done. Removed: ${removed}. Neutralised (disabled, un-deletable): ${neutralised}.`);
   } else {
     console.log("Dry run only. Re-run with --confirm to apply.");
   }
