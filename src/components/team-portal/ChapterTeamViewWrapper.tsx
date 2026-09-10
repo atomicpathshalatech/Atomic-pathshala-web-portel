@@ -335,6 +335,15 @@ export function ChapterTeamViewWrapper({
             resourceId={chapterId}
             resourceTitle={chapterTitle}
             resourceType="CHAPTER"
+            /* Chapters are not in the PlatformResource registry (that covers
+               tests, DPPs, questions and lectures), so they need their own
+               endpoint. `force=1` skips the DRAFT-only / no-content workflow
+               rails - this modal already demands the full id be typed, and
+               the route still requires CHAPTER_DELETE, which only ADMIN,
+               SUPER_ADMIN and FOUNDER hold. Lectures, DPPs and tests are
+               detached (chapterId set to null), not deleted. */
+            deleteEndpoint={`/api/team/chapters/${chapterId}?force=1`}
+            method="DELETE"
             onDeleted={() => {
               setShowDeleteModal(false);
               router.push("/team/chapters");

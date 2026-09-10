@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { generateEnrollmentNumber, generateUniqueStudentIdCode } from "@/lib/utils/id-generator";
 
 export async function GET(req: NextRequest) {
   try {
@@ -231,10 +232,8 @@ export async function POST(req: NextRequest) {
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const year = new Date().getFullYear();
-    const randomDigits = Math.floor(100000 + Math.random() * 900000);
-    const enrollmentNumber = `AP-${year}-${randomDigits}`;
-    const studentIdCode = `STU-${randomDigits}`;
+    const enrollmentNumber = generateEnrollmentNumber();
+    const studentIdCode = await generateUniqueStudentIdCode(prisma);
 
     const result = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({

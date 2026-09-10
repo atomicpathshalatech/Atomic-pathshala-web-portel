@@ -6,6 +6,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getUserPermissionCodes } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
+import { generateEnrollmentNumber, generateUniqueStudentIdCode } from "@/lib/utils/id-generator";
 
 /**
  * Defense-in-depth alongside middleware.ts: middleware runs on the edge and
@@ -42,12 +43,11 @@ export const requireStudentSession = cache(async function requireStudentSession(
 
   if (!student) {
     try {
-      const code = Date.now().toString().slice(-6);
       student = await prisma.student.create({
         data: {
           userId: session.user.id,
-          enrollmentNumber: `ENR-${code}`,
-          studentIdCode: `AP-${code}`,
+          enrollmentNumber: generateEnrollmentNumber(),
+          studentIdCode: await generateUniqueStudentIdCode(prisma),
           fatherName: "Parent",
           motherName: "Parent",
           dob: new Date(2007, 0, 1),

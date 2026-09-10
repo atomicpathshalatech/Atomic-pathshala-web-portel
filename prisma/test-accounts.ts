@@ -4,6 +4,15 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 async function main() {
+  // Throw-away demo logins for local development only. Never run this against
+  // a production database — set SEED_TEST_ACCOUNTS=true in a dev shell to opt in.
+  if (process.env.SEED_TEST_ACCOUNTS !== "true") {
+    console.log(
+      "Refusing to create demo accounts: set SEED_TEST_ACCOUNTS=true to run this script."
+    );
+    return;
+  }
+
   const accounts = [
     {
       email: "admin@atomicpathshala.com",

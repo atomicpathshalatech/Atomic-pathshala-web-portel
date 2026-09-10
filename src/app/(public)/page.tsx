@@ -13,12 +13,16 @@ import { TestimonialsSection } from "@/components/landing/TestimonialsSection";
 import { FAQSection } from "@/components/landing/FAQSection";
 import { Footer } from "@/components/landing/Footer";
 import { FloatingGuruWidget } from "@/components/shared/FloatingGuruWidget";
+import { AppEntryGate } from "@/components/platform/AppEntryGate";
 
 export const revalidate = 60;
 
 export default function HomePage() {
   return (
     <>
+      {/* Installed PWA / native app users skip the marketing home and go
+          straight to login → dashboard. No-op in a normal browser tab. */}
+      <AppEntryGate />
       <Navbar />
       <main className="pt-20 md:pt-24 space-y-12 md:space-y-20 overflow-x-hidden">
         <Hero />

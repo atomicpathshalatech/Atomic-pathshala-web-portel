@@ -7,6 +7,8 @@ import { LogoutButton } from "@/components/student/LogoutButton";
 import { GoalSelectionModal } from "@/components/student/GoalSelectionModal";
 import { NotificationBell } from "@/components/student/NotificationBell";
 import { GlobalSearchBar } from "@/components/search/GlobalSearchBar";
+import { BackButton } from "@/components/layout/BackButton";
+import { isRootRoute } from "@/lib/navigation/hierarchy";
 
 export type StudentNavItem = {
   href: string;
@@ -460,6 +462,18 @@ export function StudentShell({
         {/* Content Area (Pure White Background) */}
         <main className="flex-1 pb-28 lg:pb-12 w-full bg-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
+            {/* One Back control for every nested student page, rendered by
+                the shell rather than repeated in ~30 page files. Hidden on
+                the roots the student can always reach from the bottom dock
+                (dashboard, courses, schedule, ...), where there is nothing
+                above to go back to. Fullscreen routes (exam attempt, live
+                class) never reach here - they return early above and own
+                their exit affordance. */}
+            {!isRootRoute(pathname) && (
+              <div className="mb-3">
+                <BackButton />
+              </div>
+            )}
             {children}
           </div>
         </main>
