@@ -11,6 +11,23 @@ interface Props {
   resourceTitle: string;
   resourceType: string;
   onDeleted?: () => void;
+  /**
+   * Where to send the deletion.
+   *
+   * Defaults to the PlatformResource registry endpoint, which addresses
+   * things by their human-readable resource code (TEST-…, DPP-…) and only
+   * knows how to remove TEST, DPP, QUESTION and LECTURE.
+   *
+   * Anything outside that registry - a Chapter, for instance, which is
+   * addressed by its cuid and has its own delete rules - must pass its own
+   * endpoint here. Without this, such a resource is looked up in a registry
+   * it was never in and the API answers "Resource not found", which reads
+   * like the record is missing when in fact the request went to the wrong
+   * place entirely.
+   */
+  deleteEndpoint?: string;
+  /** HTTP method for `deleteEndpoint`. Registry deletions stay POST. */
+  method?: "POST" | "DELETE";
 }
 
 export function SecureDeleteResourceModal({
@@ -20,6 +37,8 @@ export function SecureDeleteResourceModal({
   resourceTitle,
   resourceType,
   onDeleted,
+  deleteEndpoint,
+  method = "POST",
 }: Props) {
   const [confirmInput, setConfirmInput] = useState("");
   const [reason, setReason] = useState("");
@@ -41,12 +60,17 @@ export function SecureDeleteResourceModal({
     setError("");
 
     try {
-      const res = await fetch("/api/team/resources/delete", {
-        method: "POST",
+      // The id is sent EXACTLY as given. It used to be upper-cased on the way
+      // out, which is fine for registry codes but destroys a cuid: a chapter
+      // id like `cmtopwtqe000fxzmc7s0caiaw` became `CMTOPWTQE000FXZMC7S0CAIAW`
+      // and matched no row, surfacing as "Resource not found". The registry
+      // API normalises case on its own side anyway.
+      const res = await fetch(deleteEndpoint ?? "/api/team/resources/delete", {
+        method: deleteEndpoint ? method : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          resourceId: resourceId.trim().toUpperCase(),
-          confirmResourceId: confirmInput.trim().toUpperCase(),
+          resourceId: resourceId.trim(),
+          confirmResourceId: confirmInput.trim(),
           reason: reason.trim() || "User confirmed deletion",
         }),
       });
@@ -109,7 +133,10 @@ export function SecureDeleteResourceModal({
                 setConfirmInput(e.target.value);
                 setError("");
               }}
-              className="w-full bg-slate-50 border border-slate-300 focus:border-rose-500 px-3.5 py-2.5 rounded-xl font-mono text-xs text-slate-900 uppercase tracking-wider outline-none"
+              // No `uppercase` class here: the id shown above is lower-case,
+              // so visually upper-casing what the user types made a correct
+              // entry look wrong (and a wrong one look right).
+              className="w-full bg-slate-50 border border-slate-300 focus:border-rose-500 px-3.5 py-2.5 rounded-xl font-mono text-xs text-slate-900 tracking-wider outline-none"
             />
           </div>
 
