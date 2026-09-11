@@ -108,6 +108,16 @@ export function TeacherPostClassModal({
 
     try {
       const res = await fetch(`/api/whiteboard/sessions/${sessionId}/slides?format=${format}`);
+      const contentType = res.headers.get("content-type") || "";
+
+      if (contentType.includes("application/pdf")) {
+        const blob = await res.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        window.open(objectUrl, "_blank");
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+        return;
+      }
+
       const json = await res.json();
       if (json.success && json.data?.downloadUrl) {
         window.open(json.data.downloadUrl, "_blank");

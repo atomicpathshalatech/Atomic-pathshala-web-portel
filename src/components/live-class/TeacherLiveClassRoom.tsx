@@ -988,30 +988,46 @@ export function TeacherLiveClassRoom({
     }
   }
 
-  const exportBoardAsImage = useCallback(() => {
-    if (!baseCanvasRef.current) return;
-    const canvas = document.createElement("canvas");
-    canvas.width = VIRTUAL_WIDTH;
-    canvas.height = VIRTUAL_HEIGHT;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+  const [exportingPdf, setExportingPdf] = useState(false);
 
-    if (currentPage?.background === "dark") {
-      ctx.fillStyle = "#1a1b23";
-      ctx.fillRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
-    } else {
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+  const exportBoardAsPdf = useCallback(async () => {
+    if (!wbSession || !currentPage || exportingPdf) return;
+    setExportingPdf(true);
+    try {
+      const res = await fetch(`/api/whiteboard/sessions/${wbSession.id}/export-pdf`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: scheduleTitle || "Whiteboard",
+          pages: [
+            {
+              pageNumber: currentPage.pageNumber,
+              background: currentPage.background,
+              objects: currentPage.objects,
+            },
+          ],
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        throw new Error(err?.error || "Could not export this slide as a PDF.");
+      }
+
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const safeTitle = (scheduleTitle || "Whiteboard").replace(/[^a-z0-9]/gi, "_");
+      const link = document.createElement("a");
+      link.download = `${safeTitle}_Slide_${currentPage.pageNumber}.pdf`;
+      link.href = objectUrl;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Could not export this slide as a PDF.");
+    } finally {
+      setExportingPdf(false);
     }
-
-    ctx.drawImage(baseCanvasRef.current, 0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
-
-    const link = document.createElement("a");
-    const safeTitle = (scheduleTitle || "Whiteboard").replace(/[^a-z0-9]/gi, "_");
-    link.download = `${safeTitle}_Slide_${currentPage?.pageNumber ?? 1}.png`;
-    link.href = canvas.toDataURL("image/png");
-    link.click();
-  }, [currentPage, scheduleTitle]);
+  }, [wbSession, currentPage, scheduleTitle, exportingPdf]);
 
   // ---- Slide background (More menu / Theme modal) --------------------------
   async function handleBackgroundFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -2668,7 +2684,12 @@ export function TeacherLiveClassRoom({
           </button>
           <div className="w-px h-6 bg-[#2d2e3b] mx-2" />
           <ToolbarBtn icon="add" label="Add" onClick={addPage} />
-          <ToolbarBtn icon="download" label="Export" onClick={exportBoardAsImage} title="Export current slide as PNG" />
+          <ToolbarBtn
+            icon="download"
+            label={exportingPdf ? "Exporting…" : "Export"}
+            onClick={exportBoardAsPdf}
+            title="Export current slide as PDF"
+          />
           <ToolbarBtn
             icon="delete"
             label="Delete"

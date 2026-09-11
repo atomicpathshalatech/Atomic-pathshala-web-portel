@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import { WhiteboardPdfDownloadButton } from "@/components/whiteboard/WhiteboardPdfDownloadButton";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -703,17 +704,14 @@ function TimelineLectureRow({
 
                 {/* Download PDF Notes Button */}
                 {item.liveWhiteboardSession?.id ? (
-                  <a
-                    href={`/api/whiteboard/sessions/${item.liveWhiteboardSession.id}/slides?format=pdf`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    download
-                    className="inline-flex items-center gap-1 py-1 px-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 rounded-lg text-[11px] font-bold shadow-xs transition active:scale-95 shrink-0"
+                  <WhiteboardPdfDownloadButton
+                    sessionId={item.liveWhiteboardSession.id}
+                    className="inline-flex items-center gap-1 py-1 px-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 rounded-lg text-[11px] font-bold shadow-xs transition active:scale-95 shrink-0 disabled:opacity-60"
                     title="Download Class Board Notes PDF"
                   >
                     <span className="material-symbols-outlined text-[13px] text-rose-500">picture_as_pdf</span>
                     <span>PDF Notes</span>
-                  </a>
+                  </WhiteboardPdfDownloadButton>
                 ) : null}
               </div>
             ) : isCancelled ? (
