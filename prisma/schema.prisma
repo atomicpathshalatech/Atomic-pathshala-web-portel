@@ -122,6 +122,11 @@ model User {
   aiGenerationBatches    AiGenerationBatch[] @relation("AiGenerationBatchCreatedBy")
   taxonomyTopicMemories  TaxonomyTopicMemory[] @relation("TaxonomyTopicMemoryCreatedBy")
 
+  // --- Centralized Email & Communication System ---------------------------
+  emailLogsReceived      EmailLog[]        @relation("EmailLogRecipient")
+  emailTemplatesCreated  EmailTemplate[]   @relation("EmailTemplateCreatedBy")
+  emailCampaignsCreated  EmailCampaign[]   @relation("EmailCampaignCreatedBy")
+
   // --- AI Chat / Atomic Guru integration (imported from _import_atomic-ai-chat) ---
   // Reuses this existing User for login — the imported app's own User/Account/
   // Session/role/gamification fields are deliberately NOT duplicated here:
@@ -205,6 +210,10 @@ model Student {
   gender           Gender
   class            String
   targetExam       String
+  // Optional free-text board (CBSE / ICSE / UP Board / ...) — not collected
+  // at signup today. Nullable; birthday personalization and any other
+  // board-aware feature falls back gracefully when it's empty.
+  board            String?
   school           String
   city             String
   state            String
@@ -307,6 +316,10 @@ model Teacher {
   department       String
   subjects         String[]
   bio              String?
+  // Optional — filled in by the teacher/admin after onboarding. Nullable so
+  // existing staff rows are unaffected; birthday automation simply skips
+  // anyone without it (see docs on BirthdaySendLog).
+  dob              DateTime?
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   onboardingStatus OnboardingStatus  @default(PENDING_DOCUMENTS)
@@ -4533,4 +4546,263 @@ model CoachMessage {
 
   @@index([conversationId, createdAt])
   @@map("coach_messages")
+}
+
+// ============================================================================
+// CENTRALIZED EMAIL & COMMUNICATION SYSTEM
+// ----------------------------------------------------------------------------
+// One reusable pipeline — Template -> Event -> Log — for every outgoing
+// email in the app: registration credentials, password reset, enrollment,
+// staff invitations, and admin-composed bulk campaigns. EmailLog is both the
+// audit trail (section 11 of the spec) and the idempotency ledger: every
+// caller builds a stable key ("registration:<userId>",
+// "enrollment:<enrollmentId>", "campaign:<campaignId>:<recipientId>", ...)
+// and dispatch() below refuses a second send for the same key. See
+// src/lib/email/dispatch.ts — nothing should call sendMail() directly for a
+// user-facing email going forward; it should go through dispatchEmail() so
+// it is logged and deduplicated the same way everywhere.
+// ============================================================================
+
+enum EmailCategory {
+  CREDENTIALS
+  PASSWORD_RESET
+  ENROLLMENT
+  INVITATION
+  BIRTHDAY
+  PROMOTIONAL
+  ANNOUNCEMENT
+  OTHER
+}
+
+enum EmailStatus {
+  QUEUED
+  SENDING
+  SENT
+  DELIVERED
+  FAILED
+  BOUNCED
+  SKIPPED
+}
+
+enum RecipientType {
+  STUDENT
+  STAFF
+  OTHER
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  PROCESSING
+  COMPLETED
+  PARTIALLY_FAILED
+  CANCELLED
+}
+
+enum RecipientGroupType {
+  ALL_STUDENTS
+  ALL_STAFF
+  SELECTED_STUDENTS
+  SELECTED_STAFF
+  BATCH
+  TEACHER
+  CUSTOM_FILTER_STUDENTS
+  CUSTOM_FILTER_STAFF
+}
+
+model EmailTemplate {
+  id          String         @id @default(cuid())
+  /// Stable machine key, e.g. "registration_credentials" — looked up by
+  /// system triggers. Admin-created custom templates get a generated slug.
+  key         String         @unique
+  name        String
+  category    EmailCategory
+  subject     String
+  bodyHtml    String         @db.Text
+  /// Documents which {{placeholders}} this template supports, shown in the
+  /// template editor — see EMAIL_VARIABLES_BY_CATEGORY in lib/email/templates.ts.
+  variables   String[]       @default([])
+  isActive    Boolean        @default(true)
+  /// Seeded defaults (the 10 templates the spec lists). Editable like any
+  /// other template, just not deletable — see the API route.
+  isSystem    Boolean        @default(false)
+  createdById String?
+  createdBy   User?          @relation("EmailTemplateCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  logs        EmailLog[]
+  campaigns   EmailCampaign[]
+
+  @@index([category])
+  @@map("email_templates")
+}
+
+model EmailCampaign {
+  id              String              @id @default(cuid())
+  name            String
+  recipientGroup  RecipientGroupType
+  /// Snapshot of the filter used to build the recipient list (batchId,
+  /// teacherId, or the custom-filter criteria) — kept for the record even
+  /// if the underlying batch/filter changes later.
+  recipientFilter Json?
+  recipientCount  Int                 @default(0)
+  subject         String
+  bodyHtml        String              @db.Text
+  templateId      String?
+  template        EmailTemplate?      @relation(fields: [templateId], references: [id])
+  status          CampaignStatus      @default(DRAFT)
+  scheduledAt     DateTime?
+  sentCount       Int                 @default(0)
+  failedCount     Int                 @default(0)
+  createdById     String
+  createdBy       User                @relation("EmailCampaignCreatedBy", fields: [createdById], references: [id])
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  logs            EmailLog[]
+
+  @@index([status])
+  @@map("email_campaigns")
+}
+
+model EmailLog {
+  id                String         @id @default(cuid())
+  /// The duplicate-prevention key (spec section 18). Unique constraint IS
+  /// the dedupe mechanism — dispatchEmail() tries to create this row first
+  /// and treats a unique-violation as "already sent, skip".
+  idempotencyKey    String         @unique
+  recipientUserId   String?
+  recipientUser     User?          @relation("EmailLogRecipient", fields: [recipientUserId], references: [id])
+  recipientName     String
+  recipientEmail    String
+  recipientType     RecipientType
+  emailType         EmailCategory
+  templateId        String?
+  template          EmailTemplate? @relation(fields: [templateId], references: [id])
+  campaignId        String?
+  campaign          EmailCampaign? @relation(fields: [campaignId], references: [id])
+  subject           String
+  status            EmailStatus    @default(QUEUED)
+  providerMessageId String?
+  failureReason     String?
+  retryCount        Int            @default(0)
+  createdAt         DateTime       @default(now())
+  sentAt            DateTime?
+
+  @@index([recipientEmail])
+  @@index([status])
+  @@index([emailType])
+  @@index([campaignId])
+  @@map("email_logs")
+}
+
+// ============================================================================
+// BIRTHDAY AUTOMATION (WhatsApp + Email fallback)
+// ----------------------------------------------------------------------------
+// Real sending goes through lib/notifications/whatsapp.ts, which already
+// degrades to a logged "simulation" when WHATSAPP_API_URL/TOKEN are unset —
+// this system builds on that same fallback rather than requiring a WhatsApp
+// Business API account to exist before any of it can be exercised. See
+// lib/birthday/category.ts (priority resolution) and
+// app/api/cron/birthday/route.ts (the daily job).
+// ============================================================================
+
+enum BirthdayCategory {
+  FOUNDATION9
+  CLASS10
+  CLASS11
+  CLASS12
+  NEET
+  JEE
+  BOARD
+  GENERAL
+}
+
+enum BirthdaySendStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+model BirthdayTemplate {
+  id          String           @id @default(cuid())
+  name        String
+  category    BirthdayCategory
+  /// Optional board override (e.g. a CBSE-flavoured CLASS10 template).
+  /// Matched before the plain-category template — see category.ts.
+  board       String?
+  messageText String           @db.Text
+  isActive    Boolean          @default(true)
+  priority    Int              @default(0)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([category])
+  @@map("birthday_templates")
+}
+
+model BirthdayCreative {
+  id         String           @id @default(cuid())
+  name       String
+  category   BirthdayCategory
+  imageUrl   String
+  isActive   Boolean          @default(true)
+  usageCount Int              @default(0)
+  lastUsedAt DateTime?
+  createdAt  DateTime         @default(now())
+
+  @@index([category])
+  @@map("birthday_creatives")
+}
+
+model TodaySpecial {
+  id            String   @id @default(cuid())
+  /// "MM-DD" — recurs every year without needing a row per year.
+  specialDate   String   @unique
+  title         String
+  content       String   @db.Text
+  imageUrl      String?
+  ctaLabel      String?
+  ctaUrl        String?
+  targetClass   String?
+  targetExam    String?
+  targetBoard   String?
+  targetBatchId String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("today_specials")
+}
+
+model BirthdaySendLog {
+  id                String              @id @default(cuid())
+  subjectType       String              // "STUDENT" | "TEACHER"
+  subjectId         String              // Student.id or Teacher.id
+  subjectName       String
+  year              Int
+  category          BirthdayCategory
+  board             String?
+  templateId        String?
+  creativeId        String?
+  whatsappNumber    String?
+  channel           String              @default("WHATSAPP")
+  status            BirthdaySendStatus  @default(PENDING)
+  providerMessageId String?
+  failureReason     String?
+  retryCount        Int                 @default(0)
+  /// "AUTOMATIC" (daily cron) | "MANUAL" (admin, blocked if already sent) |
+  /// "FORCE" (admin override, always logged as such).
+  triggerType       String              @default("AUTOMATIC")
+  todaySpecialId    String?
+  sentAt            DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  /// The actual duplicate-prevention constraint (spec section 24): one send
+  /// per subject per year, full stop.
+  @@unique([subjectType, subjectId, year])
+  @@index([status])
+  @@map("birthday_send_logs")
 }

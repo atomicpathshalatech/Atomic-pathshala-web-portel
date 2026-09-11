@@ -6,6 +6,7 @@ import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { batchEnrollSchema } from "@/lib/validation/batch";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { notifyEnrollment } from "@/lib/email/enrollment";
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -35,7 +36,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     const input = batchEnrollSchema.parse(await request.json());
 
-    const student = await prisma.student.findUnique({ where: { id: input.studentId } });
+    const student = await prisma.student.findUnique({
+      where: { id: input.studentId },
+      include: { user: { select: { name: true, email: true } } },
+    });
     if (!student) return apiError("Student not found", 404);
 
     const existing = await prisma.batchEnrollment.findUnique({
@@ -68,6 +72,15 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         },
       });
 
+      await notifyEnrollment({
+        idempotencyKey: `enrollment:${reactivated.id}:reactivated:${reactivated.enrolledAt.getTime()}`,
+        kind: "BATCH",
+        studentUserId: student.userId,
+        studentName: student.user.name,
+        studentEmail: student.user.email,
+        productName: batch.name,
+      });
+
       return apiSuccess({ enrollment: reactivated });
     }
 
@@ -96,6 +109,15 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         entityId: params.id,
         metadata: { studentId: input.studentId },
       },
+    });
+
+    await notifyEnrollment({
+      idempotencyKey: `enrollment:${enrollment.id}`,
+      kind: "BATCH",
+      studentUserId: student.userId,
+      studentName: student.user.name,
+      studentEmail: student.user.email,
+      productName: batch.name,
     });
 
     return apiSuccess({ enrollment }, 201);

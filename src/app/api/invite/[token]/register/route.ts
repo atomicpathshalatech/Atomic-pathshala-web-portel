@@ -74,6 +74,10 @@ export async function POST(request: NextRequest, { params }: { params: { token: 
           department: "Unassigned",
           subjects: [],
           bio: `Qualification: ${input.qualification} · Experience: ${input.experience} · DOB: ${dob.toISOString().slice(0, 10)}`,
+          // Also stored as a real date (birthday automation reads this
+          // column) — bio keeps it too so nothing existing that parses bio
+          // text changes.
+          dob,
           onboardingStatus: "PENDING_REVIEW",
         },
       });

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { notifyEnrollment } from "@/lib/email/enrollment";
 
 export async function POST(
   req: NextRequest,
@@ -27,6 +28,7 @@ export async function POST(
 
     const student = await prisma.student.findUnique({
       where: { id: params.id },
+      include: { user: { select: { name: true, email: true } } },
     });
     if (!student) return apiError("Student not found", 404);
 
@@ -34,6 +36,16 @@ export async function POST(
       where: { id: batchId },
     });
     if (!batch) return apiError("Batch not found", 404);
+
+    // Read before the upsert so we know whether this call actually *changes*
+    // anything (new enrollment, or reactivating a dropped one) vs. is a
+    // no-op re-submission of an already-ACTIVE enrollment — only the former
+    // should trigger a welcome email.
+    const existing = await prisma.batchEnrollment.findUnique({
+      where: { batchId_studentId: { batchId, studentId: student.id } },
+      select: { status: true },
+    });
+    const wasAlreadyActive = existing?.status === "ACTIVE";
 
     const enrollment = await prisma.batchEnrollment.upsert({
       where: {
@@ -63,6 +75,21 @@ export async function POST(
         },
       },
     });
+
+    if (!wasAlreadyActive) {
+      // Keyed by the BatchEnrollment row's own id, so a retried/duplicate
+      // POST for the same activation is deduped; a later drop + re-enroll
+      // reuses this same row (and so this same key) and is intentionally
+      // treated as "already notified for this enrollment", not a fresh event.
+      await notifyEnrollment({
+        idempotencyKey: `enrollment:${enrollment.id}`,
+        kind: "BATCH",
+        studentUserId: student.userId,
+        studentName: student.user.name,
+        studentEmail: student.user.email,
+        productName: enrollment.batch.name,
+      });
+    }
 
     return apiSuccess(enrollment);
   } catch (error) {

@@ -7,7 +7,8 @@ import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS, ROLE_PERMISSION_DEFAULTS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { newInviteToken, inviteExpiry, buildInviteUrl } from "@/lib/invitations";
-import { sendMail, staffInviteEmailHtml } from "@/lib/mail";
+import { staffInviteEmailHtml } from "@/lib/mail";
+import { dispatchEmail } from "@/lib/email/dispatch";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -58,8 +59,15 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         include: { invitedBy: { select: { name: true } } },
       });
       const inviteUrl = buildInviteUrl(raw);
-      const mail = await sendMail({
+      const dispatched = await dispatchEmail({
+        // A fresh key per explicit resend click (a new tokenHash/expiry was
+        // just issued above) — this is a deliberate new send, not a retry
+        // of the original invite, so it must not be deduped against it.
+        idempotencyKey: `invitation:${invitation.id}:resend:${updated.expiresAt.getTime()}`,
         to: updated.email,
+        recipientName: updated.email,
+        recipientType: "STAFF",
+        emailType: "INVITATION",
         subject: "Your Atomic Pathshala invitation (resent)",
         html: staffInviteEmailHtml({
           inviteUrl,
@@ -67,6 +75,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           expiresAt: updated.expiresAt,
         }),
       });
+      const mail = { delivered: dispatched.outcome === "sent" };
       await audit(actorId, "STAFF_INVITE_RESENT", invitation.id, {
         emailDelivered: mail.delivered,
       });
