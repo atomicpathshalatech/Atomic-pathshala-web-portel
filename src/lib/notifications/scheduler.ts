@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/db";
 import {
   NotificationType,
+  NotificationCategory,
+  NotificationPriority,
   NotificationTargetType,
   ScheduledNotificationStatus,
 } from "./types";
@@ -15,6 +17,12 @@ export interface EnqueueOptions {
     title: string;
     body: string;
     deepLink?: string;
+    icon?: string;
+    image?: string;
+    actionType?: string;
+    actionUrl?: string;
+    category?: NotificationCategory;
+    priority?: NotificationPriority | "normal" | "high";
     metadata?: Record<string, any>;
     batchId?: string;
     courseId?: string;
@@ -36,7 +44,7 @@ export async function enqueueScheduledNotification(opts: EnqueueOptions) {
     where: { idempotencyKey },
     update: {
       executeAt: opts.executeAt,
-      payload: opts.payload,
+      payload: opts.payload as any,
       status: ScheduledNotificationStatus.PENDING,
       updatedAt: new Date(),
     },
@@ -45,7 +53,7 @@ export async function enqueueScheduledNotification(opts: EnqueueOptions) {
       entityId: opts.entityId,
       targetType: opts.targetType,
       targetId: opts.targetId,
-      payload: opts.payload,
+      payload: opts.payload as any,
       executeAt: opts.executeAt,
       idempotencyKey,
       status: ScheduledNotificationStatus.PENDING,
@@ -74,6 +82,65 @@ export async function cancelScheduledNotifications(
   });
 
   return result.count;
+}
+
+/**
+ * Process Daily Motivational notification rotation from database template.
+ */
+export async function processDailyMotivationRotation(): Promise<{ sent: boolean; message?: string }> {
+  const template = await prisma.notificationTemplate.findFirst({
+    where: { category: "MOTIVATION", isActive: true },
+  });
+
+  if (!template) {
+    return { sent: false, message: "No active motivation template found" };
+  }
+
+  const rawMessages = template.rotationMessages;
+  const messages: string[] = Array.isArray(rawMessages) ? (rawMessages as string[]) : [];
+
+  if (messages.length === 0) {
+    return { sent: false, message: "No rotation messages in template" };
+  }
+
+  const currentIndex = template.currentRotationIndex % messages.length;
+  const todayMessage = messages[currentIndex] || template.message || "Keep pushing towards your dreams!";
+  const nextIndex = template.restartOnComplete
+    ? (currentIndex + 1) % messages.length
+    : Math.min(currentIndex + 1, messages.length - 1);
+
+  // Update rotation state in DB
+  await prisma.notificationTemplate.update({
+    where: { id: template.id },
+    data: { currentRotationIndex: nextIndex, updatedAt: new Date() },
+  });
+
+  // Resolve all active students
+  const students = await prisma.student.findMany({
+    where: { user: { status: "ACTIVE" } },
+    select: { userId: true },
+  });
+  const userIds = students.map((s) => s.userId).filter(Boolean);
+
+  if (userIds.length === 0) {
+    return { sent: false, message: "No active students found" };
+  }
+
+  const dateStr = new Date().toISOString().slice(0, 10);
+  await triggerNotificationEvent({
+    eventType: NotificationType.DAILY_MOTIVATION,
+    category: NotificationCategory.MOTIVATION,
+    priority: NotificationPriority.LOW,
+    recipientUserIds: userIds,
+    title: template.title || "Daily Motivation 💡",
+    body: todayMessage,
+    deepLink: template.actionUrl || "/",
+    actionType: template.actionType || "VIEW_MOTIVATION",
+    actionUrl: template.actionUrl || "/",
+    idempotencyKey: `daily-motivation:${template.id}:${dateStr}:${currentIndex}`,
+  });
+
+  return { sent: true, message: todayMessage };
 }
 
 /**
@@ -120,8 +187,8 @@ export async function processDueNotifications(): Promise<{
     }
 
     try {
-      // Authoritative race condition check before sending:
-      // If it's a CLASS_REMINDER_15_MIN, verify that the class is not CANCELLED or already LIVE!
+      // 1. Authoritative check for CLASS_REMINDER_15_MIN:
+      // If class is CANCELLED, COMPLETED, or already LIVE, skip sending!
       if (job.eventType === NotificationType.CLASS_REMINDER_15_MIN && job.entityId) {
         const schedule = await prisma.batchSchedule.findUnique({
           where: { id: job.entityId },
@@ -129,7 +196,6 @@ export async function processDueNotifications(): Promise<{
         });
 
         if (!schedule || schedule.status === "CANCELLED" || schedule.status === "LIVE" || schedule.status === "COMPLETED") {
-          console.info(`[Scheduler] Skipping 15m reminder for schedule ${job.entityId} because status is ${schedule?.status || "NOT_FOUND"}`);
           await prisma.scheduledNotification.update({
             where: { id: job.id },
             data: { status: ScheduledNotificationStatus.CANCELLED, updatedAt: new Date() },
@@ -139,7 +205,25 @@ export async function processDueNotifications(): Promise<{
         }
       }
 
-      // If it's a TEST_REMINDER_15_MIN, verify that the test is still PUBLISHED
+      // 2. Authoritative check for CLASS_STARTED:
+      // If class is CANCELLED, skip!
+      if (job.eventType === NotificationType.CLASS_STARTED && job.entityId) {
+        const schedule = await prisma.batchSchedule.findUnique({
+          where: { id: job.entityId },
+          select: { status: true },
+        });
+
+        if (!schedule || schedule.status === "CANCELLED") {
+          await prisma.scheduledNotification.update({
+            where: { id: job.id },
+            data: { status: ScheduledNotificationStatus.CANCELLED, updatedAt: new Date() },
+          });
+          skipped++;
+          continue;
+        }
+      }
+
+      // 3. Authoritative check for TEST_REMINDER_15_MIN:
       if (job.eventType === NotificationType.TEST_REMINDER_15_MIN && job.entityId) {
         const test = await prisma.test.findUnique({
           where: { id: job.entityId },
@@ -147,7 +231,6 @@ export async function processDueNotifications(): Promise<{
         });
 
         if (!test || test.status !== "PUBLISHED") {
-          console.info(`[Scheduler] Skipping 15m reminder for test ${job.entityId} because status is ${test?.status || "NOT_FOUND"}`);
           await prisma.scheduledNotification.update({
             where: { id: job.id },
             data: { status: ScheduledNotificationStatus.CANCELLED, updatedAt: new Date() },
@@ -157,17 +240,34 @@ export async function processDueNotifications(): Promise<{
         }
       }
 
+      // 4. Special handler for DAILY_MOTIVATION:
+      if (job.eventType === NotificationType.DAILY_MOTIVATION) {
+        await processDailyMotivationRotation();
+        await prisma.scheduledNotification.update({
+          where: { id: job.id },
+          data: { status: ScheduledNotificationStatus.PROCESSED, updatedAt: new Date() },
+        });
+        processed++;
+        continue;
+      }
+
       const payload = (job.payload as any) || {};
 
       // Execute dispatch through Central Notification Engine
       await triggerNotificationEvent({
         eventType: job.eventType,
+        category: payload.category,
+        priority: payload.priority,
         entityId: job.entityId || undefined,
         batchId: payload.batchId || (job.targetType === NotificationTargetType.BATCH ? job.targetId || undefined : undefined),
         courseId: payload.courseId,
         title: payload.title,
         body: payload.body,
         deepLink: payload.deepLink,
+        icon: payload.icon,
+        image: payload.image,
+        actionType: payload.actionType,
+        actionUrl: payload.actionUrl,
         metadata: payload.metadata,
         idempotencyKey: job.idempotencyKey || undefined,
         channel: payload.channel || "ALL",

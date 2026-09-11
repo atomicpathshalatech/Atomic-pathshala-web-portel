@@ -185,28 +185,39 @@ export async function POST(
       console.warn("Realtime broadcast warning:", pushErr);
     }
 
-    // 7. Dispatch CLASS_LIVE notification event to enrolled students
-    const { triggerNotificationEvent } = await import("@/lib/notifications/engine");
-    const { NotificationType } = await import("@/lib/notifications/types");
+    // 7. Dispatch LIVE_CLASS_STARTED notification event to enrolled students
+    try {
+      const { triggerNotificationEvent } = await import("@/lib/notifications/engine");
+      const { cancelScheduledNotifications } = await import("@/lib/notifications/scheduler");
+      const { NotificationType, NotificationCategory, NotificationPriority } = await import("@/lib/notifications/types");
 
-    await triggerNotificationEvent({
-      eventType: NotificationType.CLASS_LIVE,
-      entityId: schedule.id,
-      classId: schedule.id,
-      batchId: schedule.batchId,
-      title: `🔴 Class is LIVE: ${schedule.title}`,
-      body: `Your live class has started. Join your classroom now!`,
-      deepLink: `/live-class/${schedule.id}`,
-      metadata: {
+      // Cancel any future scheduled start alert or 15m reminder to prevent duplicates
+      await cancelScheduledNotifications(NotificationType.CLASS_STARTED, schedule.id).catch(() => {});
+      await cancelScheduledNotifications(NotificationType.CLASS_REMINDER_15_MIN, schedule.id).catch(() => {});
+
+      await triggerNotificationEvent({
+        eventType: NotificationType.LIVE_CLASS_STARTED,
+        category: NotificationCategory.CLASSES,
+        priority: NotificationPriority.HIGH,
+        entityId: schedule.id,
         classId: schedule.id,
-        liveStartedAt: (wbSession.actualStartedAt || now).toISOString(),
         batchId: schedule.batchId,
-      },
-      priority: "high",
-      idempotencyKey: `class-live:${schedule.id}`,
-    }).catch((err) => {
-      console.error("[CLASS_LIVE notification error]", err);
-    });
+        title: `🔴 Live Now: ${schedule.title}`,
+        body: `Your live class has started. Tap to join now!`,
+        deepLink: `/live-class/${schedule.id}`,
+        actionType: "JOIN_CLASS",
+        actionUrl: `/live-class/${schedule.id}`,
+        metadata: {
+          classId: schedule.id,
+          className: schedule.title,
+          liveStartedAt: (wbSession.actualStartedAt || now).toISOString(),
+          batchId: schedule.batchId,
+        },
+        idempotencyKey: `class-live:${schedule.id}`,
+      });
+    } catch (err) {
+      console.error("[LIVE_CLASS_STARTED notification error]", err);
+    }
 
     return apiSuccess({
       message: "Class started successfully.",

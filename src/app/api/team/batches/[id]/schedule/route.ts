@@ -105,31 +105,57 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       },
     });
 
-    // Trigger CLASS_SCHEDULED notification & automatically queue 15m reminder
+    // Trigger CLASS_SCHEDULED or TEST_SCHEDULED notification & automatically queue 15m reminder + start alerts
     try {
       const { triggerNotificationEvent } = await import("@/lib/notifications/engine");
-      const { NotificationType } = await import("@/lib/notifications/types");
+      const { NotificationType, NotificationCategory, NotificationPriority } = await import("@/lib/notifications/types");
 
       const timeStr = schedule.startsAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
       const dateStr = schedule.startsAt.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
 
-      await triggerNotificationEvent({
-        eventType: NotificationType.CLASS_SCHEDULED,
-        entityId: schedule.id,
-        classId: schedule.id,
-        batchId: params.id,
-        title: `Class Scheduled: ${schedule.title}`,
-        body: `Your ${schedule.subject || "live"} class is scheduled for ${dateStr} at ${timeStr}.`,
-        deepLink: `/batches/${params.id}`,
-        metadata: {
+      if (schedule.type === "TEST") {
+        await triggerNotificationEvent({
+          eventType: NotificationType.TEST_SCHEDULED,
+          category: NotificationCategory.TESTS,
+          priority: NotificationPriority.NORMAL,
+          entityId: schedule.id,
+          testId: schedule.id,
+          batchId: params.id,
+          title: `New Test Scheduled: ${schedule.title}`,
+          body: `Test is scheduled for ${dateStr} at ${timeStr}.`,
+          deepLink: `/batches/${params.id}`,
+          actionType: "VIEW_TEST",
+          actionUrl: `/batches/${params.id}`,
+          metadata: {
+            testId: schedule.id,
+            testName: schedule.title,
+            openTime: schedule.startsAt.toISOString(),
+          },
+          idempotencyKey: `test-scheduled:${schedule.id}`,
+        });
+      } else {
+        await triggerNotificationEvent({
+          eventType: NotificationType.CLASS_SCHEDULED,
+          category: NotificationCategory.CLASSES,
+          priority: NotificationPriority.NORMAL,
+          entityId: schedule.id,
           classId: schedule.id,
-          className: schedule.title,
-          startsAt: schedule.startsAt.toISOString(),
-        },
-        idempotencyKey: `class-scheduled:${schedule.id}`,
-      });
+          batchId: params.id,
+          title: `New Class Scheduled: ${schedule.title}`,
+          body: `Your ${schedule.subject || "live"} class is scheduled for ${dateStr} at ${timeStr}.`,
+          deepLink: `/live-class/${schedule.id}`,
+          actionType: "VIEW_CLASS",
+          actionUrl: `/live-class/${schedule.id}`,
+          metadata: {
+            classId: schedule.id,
+            className: schedule.title,
+            startsAt: schedule.startsAt.toISOString(),
+          },
+          idempotencyKey: `class-scheduled:${schedule.id}`,
+        });
+      }
     } catch (notifErr) {
-      console.warn("[CLASS_SCHEDULED Notification Warning]", notifErr);
+      console.warn("[SCHEDULE_NOTIFICATION_WARNING]", notifErr);
     }
 
     return apiSuccess({ schedule }, 201);

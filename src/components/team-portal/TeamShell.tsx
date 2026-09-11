@@ -7,6 +7,8 @@ import { LogoutButton } from "@/components/student/LogoutButton";
 import { TeamProfileMenu } from "@/components/team-portal/TeamProfileMenu";
 import { OpsBackButton } from "@/components/common/OpsBackButton";
 import { GlobalSearchBar } from "@/components/search/GlobalSearchBar";
+import { NotificationBell } from "@/components/student/NotificationBell";
+import { NotificationPopupLayer } from "@/components/common/NotificationPopupLayer";
 
 export type TeamNavItem = { href: string; label: string; icon: string };
 export type TeamNavSection = { title?: string; items: TeamNavItem[] };
@@ -88,6 +90,7 @@ export function TeamShell({
             <div className="md:hidden">
               <GlobalSearchBar compact />
             </div>
+            <NotificationBell />
             <TeamProfileMenu userName={userName} userRoleLabel={userRoleLabel} hasTeacherProfile={hasTeacherProfile} />
           </div>
         </div>
@@ -131,6 +134,8 @@ export function TeamShell({
           </div>
         </main>
       </div>
+
+      <NotificationPopupLayer />
     </div>
   );
 }

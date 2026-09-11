@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { LogoutButton } from "@/components/student/LogoutButton";
 import { GoalSelectionModal } from "@/components/student/GoalSelectionModal";
 import { NotificationBell } from "@/components/student/NotificationBell";
+import { NotificationPopupLayer } from "@/components/common/NotificationPopupLayer";
 import { GlobalSearchBar } from "@/components/search/GlobalSearchBar";
 import { BackButton } from "@/components/layout/BackButton";
 import { isRootRoute } from "@/lib/navigation/hierarchy";
@@ -529,6 +530,9 @@ export function StudentShell({
         onClose={() => setGoalModalOpen(false)}
         onGoalChanged={(newGoal) => setActiveGoal(newGoal)}
       />
+
+      {/* Global In-App Notification Pop-up Queue */}
+      <NotificationPopupLayer />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { processDueNotifications } from "@/lib/notifications/scheduler";
+import { processDueNotifications, processDailyMotivationRotation } from "@/lib/notifications/scheduler";
 import { generateDailyTargetsForAllActiveStudents } from "@/lib/notifications/dailyTargetEngine";
 
 export const runtime = "nodejs";
@@ -25,10 +25,16 @@ export async function GET(req: NextRequest) {
       dailyTargetsSent = await generateDailyTargetsForAllActiveStudents();
     }
 
+    let dailyMotivation = null;
+    if (req.nextUrl.searchParams.get("dailyMotivation") === "true") {
+      dailyMotivation = await processDailyMotivationRotation();
+    }
+
     return NextResponse.json({
       success: true,
       queue: queueResult,
       dailyTargetsSent,
+      dailyMotivation,
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {

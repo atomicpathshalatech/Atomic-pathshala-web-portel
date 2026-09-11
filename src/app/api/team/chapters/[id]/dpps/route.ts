@@ -115,21 +115,26 @@ export async function POST(
     // Central Notification Engine: Notify students of new DPP
     try {
       const { triggerNotificationEvent } = await import("@/lib/notifications/engine");
-      const { NotificationType } = await import("@/lib/notifications/types");
+      const { NotificationType, NotificationCategory, NotificationPriority } = await import("@/lib/notifications/types");
 
       await triggerNotificationEvent({
-        eventType: NotificationType.DPP_UPLOADED,
+        eventType: NotificationType.NEW_DPP,
+        category: NotificationCategory.STUDY_MATERIAL,
+        priority: NotificationPriority.NORMAL,
         entityId: dpp.id,
         dppId: dpp.id,
         chapterId: chapter.id,
         title: `New DPP Added: ${dpp.name}`,
         body: `A new daily practice problem sheet has been uploaded for ${chapter.title}. Attempt it now!`,
         deepLink: `/student/practice`,
+        actionType: "OPEN_DPP",
+        actionUrl: `/student/practice`,
         metadata: {
           dppId: dpp.id,
           chapterId: chapter.id,
           chapterTitle: chapter.title,
         },
+        idempotencyKey: `dpp-added:${dpp.id}`,
       });
     } catch (notifErr) {
       console.warn("[DPP Notification Warning]", notifErr);
