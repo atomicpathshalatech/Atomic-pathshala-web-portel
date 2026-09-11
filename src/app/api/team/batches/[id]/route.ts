@@ -69,6 +69,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         startDate: data.startDate ?? null,
         endDate: data.endDate ?? null,
         capacity: data.capacity ?? null,
+        thumbnailUrl: data.thumbnailUrl || null,
       },
     });
 

@@ -56,6 +56,7 @@ export async function POST(request: NextRequest) {
             course: data.course || null,
             examType: data.examType || null,
             tags: data.tags.length > 0 ? data.tags.join(",") : null,
+            thumbnailUrl: data.thumbnailUrl || null,
             visibility: data.visibility,
             status: data.status || "DRAFT",
             startDate: data.startDate ? new Date(data.startDate) : null,

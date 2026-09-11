@@ -80,6 +80,7 @@ export async function POST(request: NextRequest) {
           startDate: input.startDate ?? null,
           endDate: input.endDate ?? null,
           capacity: input.capacity ?? null,
+          thumbnailUrl: input.thumbnailUrl || null,
           createdById: session.user.id,
         },
       });

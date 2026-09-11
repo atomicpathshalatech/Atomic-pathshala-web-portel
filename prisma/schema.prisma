@@ -366,6 +366,10 @@ model Batch {
   startDate   DateTime?
   endDate     DateTime?
   capacity    Int?
+  // Public R2 URL of the 16:9 cover image shown on batch cards. Public
+  // rather than presigned because a listing renders many of these at once,
+  // often for viewers who do not own the batch.
+  thumbnailUrl String?
   createdById String
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
@@ -374,10 +378,68 @@ model Batch {
   teachers    BatchTeacher[]
   enrollments BatchEnrollment[]
   schedules   BatchSchedule[]
+  folders     BatchFolder[]
 
   @@index([status])
   @@index([targetExam])
   @@map("batches")
+}
+
+/// A folder in a batch's material tree — "Syllabus & Schedule" and anything
+/// staff nest under it.
+///
+/// Self-referencing so folders can nest arbitrarily; depth is capped in the
+/// API rather than the schema, since Postgres has no opinion about it and the
+/// limit is a usability choice.
+///
+/// `isPublished` is the student gate: staff always see the whole tree, a
+/// student sees only published folders. An unpublished parent hides its
+/// children too — the API walks down from published roots rather than
+/// filtering rows individually.
+model BatchFolder {
+  id          String   @id @default(cuid())
+  batchId     String
+  parentId    String?
+  name        String
+  order       Int      @default(0)
+  isPublished Boolean  @default(true)
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  batch    Batch             @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  parent   BatchFolder?      @relation("BatchFolderTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children BatchFolder[]     @relation("BatchFolderTree")
+  files    BatchFolderFile[]
+
+  @@index([batchId])
+  @@index([parentId])
+  @@map("batch_folders")
+}
+
+/// One uploaded file inside a batch folder.
+///
+/// `fileAssetId` holds a FileAsset id with no foreign key, matching how
+/// StudyMaterial already stores its upload: FileAsset carries no back
+/// relations, and adding one here would mean editing that model for every
+/// feature that stores a file.
+model BatchFolderFile {
+  id           String   @id @default(cuid())
+  folderId     String
+  fileAssetId  String
+  title        String
+  fileName     String
+  sizeBytes    Int      @default(0)
+  mimeType     String   @default("application/pdf")
+  order        Int      @default(0)
+  isPublished  Boolean  @default(true)
+  uploadedById String?
+  createdAt    DateTime @default(now())
+
+  folder BatchFolder @relation(fields: [folderId], references: [id], onDelete: Cascade)
+
+  @@index([folderId])
+  @@map("batch_folder_files")
 }
 
 model BatchTeacher {

@@ -9,6 +9,7 @@ import {
   BATCH_STATUS_OPTIONS,
   type BatchCreateInput,
 } from "@/lib/validation/batch";
+import { ThumbnailUploader } from "./ThumbnailUploader";
 
 type CourseOption = { id: string; title: string };
 
@@ -36,6 +37,22 @@ export function BatchForm(props: Props) {
   const isCreate = props.mode === "create";
   const initial = isCreate ? undefined : props.initialData;
 
+  /**
+   * New batches default to the NEET UG course, since that is what almost
+   * every batch here is. Matched by title rather than a hardcoded id — course
+   * rows are seeded data and their ids differ per environment, so an id
+   * baked in here would silently select nothing in production.
+   *
+   * Editing an existing batch always keeps whatever it already had, and the
+   * full course list (plus "No course linked yet") stays selectable.
+   */
+  const neetUgCourseId =
+    props.courses.find((c) => /neet\s*ug/i.test(c.title))?.id ??
+    props.courses.find((c) => /neet/i.test(c.title))?.id ??
+    "";
+
+  const defaultCourseId = isCreate ? neetUgCourseId : initial?.courseId ?? "";
+
   // Only string/select fields go through RHF's defaultValues — date and number
   // inputs are uncontrolled natively (via the DOM `defaultValue` prop below) so
   // a Date/number from the server never collides with the string value a
@@ -43,6 +60,8 @@ export function BatchForm(props: Props) {
   const {
     register,
     handleSubmit,
+    watch,
+    setValue,
     formState: { errors },
   } = useForm<BatchCreateInput>({
     resolver: zodResolver(batchCreateSchema),
@@ -51,10 +70,13 @@ export function BatchForm(props: Props) {
       code: initial?.code ?? "",
       description: initial?.description ?? "",
       targetExam: initial?.targetExam ?? "",
-      courseId: initial?.courseId ?? "",
+      courseId: defaultCourseId,
       status: initial?.status ?? "UPCOMING",
+      thumbnailUrl: initial?.thumbnailUrl ?? "",
     },
   });
+
+  const thumbnailUrl = watch("thumbnailUrl") ?? "";
 
   async function onSubmit(values: BatchCreateInput) {
     setSubmitting(true);
@@ -103,7 +125,7 @@ export function BatchForm(props: Props) {
             <input className={inputClass} placeholder="e.g. NEET" {...register("targetExam")} />
           </Field>
           <Field label="Course (optional)" error={errors.courseId?.message}>
-            <select className={inputClass} defaultValue={initial?.courseId ?? ""} {...register("courseId")}>
+            <select className={inputClass} defaultValue={defaultCourseId} {...register("courseId")}>
               <option value="">No course linked yet</option>
               {props.courses.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -158,6 +180,15 @@ export function BatchForm(props: Props) {
             {...register("description")}
           />
         </div>
+
+        <ThumbnailUploader
+          value={thumbnailUrl}
+          onChange={(url) => setValue("thumbnailUrl", url ?? "")}
+          label="Batch Thumbnail (16:9)"
+        />
+        {errors.thumbnailUrl && (
+          <p className="text-label-sm font-label-sm text-error">{errors.thumbnailUrl.message}</p>
+        )}
       </fieldset>
 
       <button
