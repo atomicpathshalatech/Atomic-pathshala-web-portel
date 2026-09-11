@@ -10,11 +10,11 @@
     },
     {
       "path": "/api/cron/email-campaigns/process",
-      "schedule": "*/15 * * * *"
+      "schedule": "0 4 * * *"
     },
     {
       "path": "/api/cron/notifications/process",
-      "schedule": "* * * * *"
+      "schedule": "0 5 * * *"
     }
   ]
 }
