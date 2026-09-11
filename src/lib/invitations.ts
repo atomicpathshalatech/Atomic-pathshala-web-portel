@@ -23,8 +23,9 @@ export function inviteExpiry(from: Date = new Date()): Date {
 export function buildInviteUrl(rawToken: string): string {
   const base =
     process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.APP_URL ||
     process.env.NEXTAUTH_URL ||
-    "https://atomicpathshala.com";
+    "https://ap.atomicpathshala.in";
   return `${base.replace(/\/$/, "")}/invite/${rawToken}`;
 }
 

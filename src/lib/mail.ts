@@ -13,10 +13,13 @@ export async function sendMail(opts: {
   text?: string;
 }): Promise<{ delivered: boolean; reason?: string }> {
   const key = process.env.RESEND_API_KEY;
-  const from = process.env.MAIL_FROM || "Atomic Pathshala <noreply@atomicpathshala.com>";
+  const from = process.env.MAIL_FROM || "Atomic Pathshala <noreply@atomicpathshala.in>";
 
   if (!key) {
-    console.info(`[mail] not configured — would send "${opts.subject}" to ${opts.to}`);
+    console.warn(
+      `[mail] RESEND_API_KEY is not set — "${opts.subject}" to ${opts.to} was NOT sent. ` +
+        `Set RESEND_API_KEY (and MAIL_FROM with a Resend-verified sender) to enable email.`
+    );
     return { delivered: false, reason: "MAIL_NOT_CONFIGURED" };
   }
 
@@ -37,7 +40,11 @@ export async function sendMail(opts: {
     });
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      console.error(`[mail] send failed ${res.status}: ${body}`);
+      console.error(
+        `[mail] Resend rejected "${opts.subject}" to ${opts.to} (from ${from}) — ` +
+          `HTTP ${res.status}: ${body}. A 403 here usually means the MAIL_FROM domain ` +
+          `is not verified in Resend.`
+      );
       return { delivered: false, reason: `HTTP_${res.status}` };
     }
     return { delivered: true };
