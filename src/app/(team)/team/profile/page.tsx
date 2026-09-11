@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { SelfProfileForm } from "@/components/team-portal/SelfProfileForm";
+import { ProfileImagesSection } from "@/components/team-portal/ProfileImagesSection";
 
 export const metadata: Metadata = {
   title: "My Profile",
@@ -15,6 +16,7 @@ export default async function MyProfilePage() {
 
   const teacher = await prisma.teacher.findUnique({
     where: { userId: session.user.id },
+    include: { user: { select: { photoUrl: true } } },
   });
 
   return (
@@ -43,6 +45,11 @@ export default async function MyProfilePage() {
           <p className="text-label-sm text-on-surface-variant">
             Employee code and department are set by HR/Academic Head — contact them for changes.
           </p>
+          <ProfileImagesSection
+            initialPhotoUrl={teacher.user.photoUrl}
+            initialCreativePngUrl={teacher.creativePngUrl}
+            initialHasAlpha={teacher.creativePngHasAlpha}
+          />
           <SelfProfileForm initialData={{ subjects: teacher.subjects, bio: teacher.bio ?? undefined }} />
         </>
       )}

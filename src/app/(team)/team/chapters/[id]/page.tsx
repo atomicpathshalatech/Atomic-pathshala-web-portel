@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { ChapterTeamViewWrapper } from "@/components/team-portal/ChapterTeamViewWrapper";
+import { CreativeThumbnail } from "@/components/team-portal/CreativeThumbnail";
 import { ChapterDetailData } from "@/components/chapter-detail/ChapterDetailView";
 import { RoadmapTopicGroup } from "@/components/chapter-detail/ChapterRoadmapTimeline";
 
@@ -179,6 +180,12 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
 
   return (
     <div className="space-y-6 max-w-6xl">
+      {/* Auto-generated chapter creative — educator PNG + chapter name + lecture
+          count, built from the same data as everything below, no manual upload. */}
+      <div className="max-w-sm">
+        <CreativeThumbnail type="CHAPTER" entityId={chapter.id} showRegenerate={canUpdate} />
+      </div>
+
       {/* Main View Wrapper with Teacher Overview and Unified Schedule */}
       <ChapterTeamViewWrapper
         chapterId={chapter.id}

@@ -49,6 +49,7 @@ const NAV_SECTIONS: { title?: string; items: { href: string; label: string; icon
       { href: "/team/roles", label: "Roles & Permissions", icon: "security", permission: PERMISSIONS.ROLE_MANAGE },
       { href: "/team/departments", label: "Departments & Positions", icon: "corporate_fare", permission: PERMISSIONS.DEPARTMENT_MANAGE },
       { href: "/team/communication", label: "Communication Center", icon: "forum", permission: PERMISSIONS.COMMUNICATION_CENTER_ACCESS },
+      { href: "/team/creatives", label: "Creative Management", icon: "palette", permission: PERMISSIONS.COMMUNICATION_CENTER_ACCESS },
     ],
   },
   {
