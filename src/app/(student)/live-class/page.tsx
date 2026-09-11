@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { WhiteboardPdfDownloadButton } from "@/components/whiteboard/WhiteboardPdfDownloadButton";
 import { requireStudentSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import type { BatchSchedule, Teacher, User, Batch } from "@prisma/client";
@@ -124,17 +125,14 @@ export default async function LiveClassesListPage() {
 
             {/* Download PDF Notes Button */}
             {wb?.id ? (
-              <a
-                href={`/api/whiteboard/sessions/${wb.id}/slides?format=pdf`}
-                target="_blank"
-                rel="noopener noreferrer"
-                download
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full font-label-md text-label-md border border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-slate-200 transition shadow-sm"
+              <WhiteboardPdfDownloadButton
+                sessionId={wb.id}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full font-label-md text-label-md border border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-slate-200 transition shadow-sm disabled:opacity-60"
                 title="Download Board Notes PDF"
               >
                 <span className="material-symbols-outlined text-base text-rose-400">picture_as_pdf</span>
                 <span>Download PDF (डाउनलोड पीडीएफ)</span>
-              </a>
+              </WhiteboardPdfDownloadButton>
             ) : (
               <Link
                 href={`/live-class/${s.id}`}

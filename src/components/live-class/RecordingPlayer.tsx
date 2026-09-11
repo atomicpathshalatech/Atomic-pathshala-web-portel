@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { WhiteboardPdfDownloadButton } from "@/components/whiteboard/WhiteboardPdfDownloadButton";
 
 const SPEEDS = [0.25, 0.5, 1, 1.25, 1.5, 2, 3] as const;
 
@@ -155,17 +156,14 @@ export function RecordingPlayer({ whiteboardSessionId }: { whiteboardSessionId: 
           ))}
         </div>
 
-        <a
-          href={`/api/whiteboard/sessions/${whiteboardSessionId}/slides?format=pdf`}
-          target="_blank"
-          rel="noopener noreferrer"
-          download
-          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white transition shadow-sm shrink-0"
+        <WhiteboardPdfDownloadButton
+          sessionId={whiteboardSessionId}
+          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white transition shadow-sm shrink-0 disabled:opacity-60"
           title="Download Board Notes PDF"
         >
           <span className="material-symbols-outlined text-sm">picture_as_pdf</span>
           <span>Download PDF (नोट्स)</span>
-        </a>
+        </WhiteboardPdfDownloadButton>
       </div>
     </div>
   );

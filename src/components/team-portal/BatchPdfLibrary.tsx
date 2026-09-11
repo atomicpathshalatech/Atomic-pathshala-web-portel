@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { WhiteboardPdfDownloadButton } from "@/components/whiteboard/WhiteboardPdfDownloadButton";
 
 /**
  * "All PDFs" for one batch — every piece of material the batch has produced
@@ -178,15 +179,13 @@ export function BatchPdfLibrary({
                         </p>
                       )}
                     </div>
-                    <a
-                      href={`/api/whiteboard/sessions/${n.sessionId}/slides?format=pdf`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="px-3 min-h-11 rounded-xl bg-primary/10 text-primary font-bold text-[11px] inline-flex items-center gap-1.5 hover:bg-primary/20 transition shrink-0"
+                    <WhiteboardPdfDownloadButton
+                      sessionId={n.sessionId}
+                      className="px-3 min-h-11 rounded-xl bg-primary/10 text-primary font-bold text-[11px] inline-flex items-center gap-1.5 hover:bg-primary/20 transition shrink-0 disabled:opacity-60"
                     >
                       <span className="material-symbols-outlined text-sm">download</span>
                       PDF
-                    </a>
+                    </WhiteboardPdfDownloadButton>
                   </div>
                 ))}
               </SubjectCard>
