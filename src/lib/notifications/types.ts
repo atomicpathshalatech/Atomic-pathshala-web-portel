@@ -1,18 +1,43 @@
-import { NotificationType, NotificationChannel, DevicePlatform, ScheduledNotificationStatus, NotificationTargetType } from "@prisma/client";
+import {
+  NotificationType,
+  NotificationCategory,
+  NotificationPriority,
+  NotificationStatus,
+  NotificationChannel,
+  DevicePlatform,
+  ScheduledNotificationStatus,
+  NotificationTargetType,
+} from "@prisma/client";
 
-export { NotificationType, NotificationChannel, DevicePlatform, ScheduledNotificationStatus, NotificationTargetType };
+export {
+  NotificationType,
+  NotificationCategory,
+  NotificationPriority,
+  NotificationStatus,
+  NotificationChannel,
+  DevicePlatform,
+  ScheduledNotificationStatus,
+  NotificationTargetType,
+};
 
 export interface NotificationPayload {
   title: string;
   body: string;
   deepLink?: string;
+  category?: NotificationCategory;
+  priority?: NotificationPriority | "normal" | "high" | "low" | "urgent";
+  icon?: string;
+  image?: string;
+  actionType?: string;
+  actionUrl?: string;
   metadata?: Record<string, any>;
   data?: Record<string, string>;
-  priority?: "normal" | "high";
 }
 
 export interface EventTriggerInput {
   eventType: NotificationType;
+  category?: NotificationCategory;
+  priority?: NotificationPriority | "normal" | "high" | "low" | "urgent";
   entityId?: string;
   batchId?: string;
   courseId?: string;
@@ -23,13 +48,17 @@ export interface EventTriggerInput {
   title: string;
   body: string;
   deepLink?: string;
+  icon?: string;
+  image?: string;
+  actionType?: string;
+  actionUrl?: string;
   metadata?: Record<string, any>;
   recipientUserIds?: string[];
   scheduledFor?: Date;
   expiresAt?: Date;
-  priority?: "normal" | "high";
   channel?: NotificationChannel | "ALL";
   idempotencyKey?: string;
+  createdById?: string;
 }
 
 export interface PushResult {

@@ -79,6 +79,42 @@ export async function POST(
       },
     });
 
+    // Trigger batch-scoped material notification
+    try {
+      const { triggerNotificationEvent } = await import("@/lib/notifications/engine");
+      const { NotificationType, NotificationCategory, NotificationPriority } = await import("@/lib/notifications/types");
+
+      const isPdf = asset.mimeType === "application/pdf" || asset.originalFilename.toLowerCase().endsWith(".pdf");
+      const isPpt =
+        asset.mimeType?.includes("presentation") ||
+        asset.originalFilename.toLowerCase().endsWith(".ppt") ||
+        asset.originalFilename.toLowerCase().endsWith(".pptx");
+
+      const eventType = isPdf
+        ? NotificationType.NEW_PDF
+        : isPpt
+        ? NotificationType.NEW_PPT
+        : NotificationType.NEW_STUDY_MATERIAL;
+
+      const typeLabel = isPdf ? "New PDF Added" : isPpt ? "New Presentation Added" : "New Study Material Added";
+
+      await triggerNotificationEvent({
+        eventType,
+        category: NotificationCategory.STUDY_MATERIAL,
+        priority: NotificationPriority.NORMAL,
+        entityId: file.id,
+        batchId: params.id,
+        title: `${typeLabel}: ${title}`,
+        body: `A new document "${title}" has been uploaded to your batch.`,
+        deepLink: `/batches/${params.id}`,
+        actionType: isPdf ? "OPEN_PDF" : "VIEW_RESOURCE",
+        actionUrl: `/batches/${params.id}`,
+        idempotencyKey: `material-added:${file.id}`,
+      });
+    } catch (notifErr) {
+      console.warn("[Batch Material Notification Warning]", notifErr);
+    }
+
     return apiSuccess({ file });
   } catch (error) {
     return handleApiError(error);

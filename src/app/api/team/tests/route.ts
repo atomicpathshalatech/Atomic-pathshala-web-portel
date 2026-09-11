@@ -143,6 +143,44 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    if (finalScheduleId) {
+      try {
+        const schedule = await prisma.batchSchedule.findUnique({
+          where: { id: finalScheduleId },
+          select: { batchId: true, startsAt: true, title: true },
+        });
+        if (schedule) {
+          const { triggerNotificationEvent } = await import("@/lib/notifications/engine");
+          const { NotificationType, NotificationCategory, NotificationPriority } = await import("@/lib/notifications/types");
+
+          const timeStr = schedule.startsAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+          const dateStr = schedule.startsAt.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
+
+          await triggerNotificationEvent({
+            eventType: NotificationType.TEST_SCHEDULED,
+            category: NotificationCategory.TESTS,
+            priority: NotificationPriority.NORMAL,
+            entityId: test.id,
+            testId: test.id,
+            batchId: schedule.batchId,
+            title: `New Test Scheduled: ${test.name}`,
+            body: `Test "${test.name}" is scheduled for ${dateStr} at ${timeStr}.`,
+            deepLink: `/test/${test.id}`,
+            actionType: "VIEW_TEST",
+            actionUrl: `/test/${test.id}`,
+            metadata: {
+              testId: test.id,
+              testName: test.name,
+              openTime: schedule.startsAt.toISOString(),
+            },
+            idempotencyKey: `test-scheduled:${test.id}`,
+          });
+        }
+      } catch (notifErr) {
+        console.warn("[Test Notification Warning]", notifErr);
+      }
+    }
+
     return apiSuccess({ test }, 201);
   } catch (error) {
     return handleApiError(error);

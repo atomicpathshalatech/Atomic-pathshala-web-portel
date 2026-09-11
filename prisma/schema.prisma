@@ -82,6 +82,8 @@ model User {
   notifications          Notification[]
   devices                UserDevice[]
   notificationPreference NotificationPreference?
+  notificationDeliveries NotificationDelivery[]
+  webPushSubscriptions  WebPushSubscription[]
   questionsCreated       Question[]     @relation("QuestionCreatedBy")
   questionsPublished     Question[]     @relation("QuestionPublishedBy")
   questionsReviewed1     Question[]     @relation("QuestionReview1By")
@@ -1876,24 +1878,142 @@ model Doubt {
 }
 
 model Notification {
-  id             String              @id @default(cuid())
+  id             String                @id @default(cuid())
   userId         String
   title          String
   body           String
-  type           NotificationType    @default(GENERAL)
-  channel        NotificationChannel @default(IN_APP)
+  type           NotificationType      @default(GENERAL)
+  category       NotificationCategory  @default(SYSTEM)
+  priority       NotificationPriority  @default(NORMAL)
+  channel        NotificationChannel   @default(IN_APP)
   deepLink       String?
+  icon           String?
+  image          String?
+  actionType     String?
+  actionUrl      String?
+  entityType     String?
+  entityId       String?
+  batchId        String?
+  courseId       String?
+  createdById    String?
+  scheduledAt    DateTime?
+  sentAt         DateTime?
+  status         NotificationStatus    @default(SENT)
   metadata       Json?
-  idempotencyKey String?             @unique
-  isRead         Boolean             @default(false)
+  idempotencyKey String?               @unique
+  isRead         Boolean               @default(false)
   readAt         DateTime?
-  createdAt      DateTime            @default(now())
-  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clickedAt      DateTime?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  user       User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveries NotificationDelivery[]
 
   @@index([userId, isRead])
   @@index([userId, createdAt])
   @@index([type])
+  @@index([category])
+  @@index([batchId])
   @@map("notifications")
+}
+
+model NotificationDelivery {
+  id             String    @id @default(cuid())
+  notificationId String
+  userId         String
+  channel        String    // "IN_APP", "BROWSER_PUSH", "FCM"
+  status         String    @default("PENDING") // "PENDING", "DELIVERED", "FAILED", "READ", "CLICKED"
+  errorMessage   String?
+  deliveredAt    DateTime?
+  readAt         DateTime?
+  clickedAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([notificationId])
+  @@index([userId, status])
+  @@map("notification_deliveries")
+}
+
+model NotificationTemplate {
+  id                   String               @id @default(cuid())
+  templateName         String               @unique
+  category             NotificationCategory @default(SYSTEM)
+  title                String
+  message              String
+  icon                 String?
+  image                String?
+  actionType           String?
+  actionUrl            String?
+  priority             NotificationPriority @default(NORMAL)
+  targetAudience       String               @default("ALL_STUDENTS")
+  schedule             String?              // e.g. "08:00"
+  isActive             Boolean              @default(true)
+  rotationMessages     Json?                // Array of strings for daily rotation
+  currentRotationIndex Int                  @default(0)
+  restartOnComplete    Boolean              @default(true)
+  createdById          String?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  rules NotificationRule[]
+
+  @@map("notification_templates")
+}
+
+model NotificationRule {
+  id         String               @id @default(cuid())
+  eventType  String               @unique
+  isEnabled  Boolean              @default(true)
+  priority   NotificationPriority @default(NORMAL)
+  channels   Json?                // ["IN_APP", "PUSH"]
+  templateId String?
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+
+  template NotificationTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  @@map("notification_rules")
+}
+
+model NotificationActionLog {
+  id             String   @id @default(cuid())
+  notificationId String?
+  studentId      String?
+  userId         String
+  classId        String?
+  testId         String?
+  batchId        String?
+  actionType     String   // e.g. "LIVE_CLASS_JOIN_CLICKED"
+  source         String?  // "POPUP", "NOTIFICATION_CENTER", "BROWSER_PUSH"
+  metadata       Json?
+  timestamp      DateTime @default(now())
+
+  @@index([userId, actionType])
+  @@index([classId])
+  @@index([batchId])
+  @@index([timestamp])
+  @@map("notification_action_logs")
+}
+
+model WebPushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isActive])
+  @@map("web_push_subscriptions")
 }
 
 model UserDevice {
@@ -1934,20 +2054,24 @@ model ScheduledNotification {
 }
 
 model NotificationPreference {
-  id                String   @id @default(cuid())
-  userId            String   @unique
-  classes           Boolean  @default(true)
-  tests             Boolean  @default(true)
-  dpps              Boolean  @default(true)
-  announcements     Boolean  @default(true)
-  dailyTargets      Boolean  @default(true)
-  pushEnabled       Boolean  @default(true)
-  inAppEnabled      Boolean  @default(true)
-  quietHoursEnabled Boolean  @default(false)
-  quietHoursStart   String?
-  quietHoursEnd     String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  classes             Boolean  @default(true)
+  tests               Boolean  @default(true)
+  dpps                Boolean  @default(true)
+  studyMaterial       Boolean  @default(true)
+  offers              Boolean  @default(true)
+  motivation          Boolean  @default(true)
+  announcements       Boolean  @default(true)
+  dailyTargets        Boolean  @default(true)
+  pushEnabled         Boolean  @default(true)
+  inAppEnabled        Boolean  @default(true)
+  soundEnabled        Boolean  @default(true)
+  quietHoursEnabled   Boolean  @default(false)
+  quietHoursStart     String?
+  quietHoursEnd       String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -2233,6 +2357,8 @@ enum NotificationType {
   CLASS_SCHEDULED
   CLASS_REMINDER_15_MIN
   CLASS_LIVE
+  CLASS_STARTED
+  LIVE_CLASS_STARTED
   CLASS_RESCHEDULED
   CLASS_CANCELLED
   CLASS_DELETED
@@ -2240,18 +2366,55 @@ enum NotificationType {
   TEST_SCHEDULED
   TEST_REMINDER_15_MIN
   TEST_LIVE
+  TEST_STARTED
   TEST_ENDED
   TEST_RESULT_AVAILABLE
   DPP_UPLOADED
   DPP_QUESTION_ADDED
   DPP_SUBMITTED
   PDF_UPLOADED
+  NEW_DPP
+  NEW_PDF
+  NEW_PPT
+  NEW_STUDY_MATERIAL
   MODULE_UPLOADED
   ANNOUNCEMENT_CREATED
   NOTICE_CREATED
   BATCH_UPDATE
   DAILY_TARGET
+  OFFER_CREATED
+  PROMOTIONAL_SCHEDULED
+  DAILY_MOTIVATION
+  CUSTOM_SCHEDULED
+  BATCH_NOTIFICATION
+  SYSTEM_ANNOUNCEMENT
   GENERAL
+}
+
+enum NotificationCategory {
+  CLASSES
+  TESTS
+  STUDY_MATERIAL
+  OFFERS
+  MOTIVATION
+  SYSTEM
+}
+
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum NotificationStatus {
+  DRAFT
+  SCHEDULED
+  PROCESSING
+  SENT
+  PARTIALLY_SENT
+  FAILED
+  CANCELLED
 }
 
 enum DevicePlatform {

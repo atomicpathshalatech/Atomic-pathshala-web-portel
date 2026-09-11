@@ -78,8 +78,18 @@ export async function dispatchEmail(input: DispatchEmailInput): Promise<Dispatch
     return { outcome: "failed", logId: null, reason: "LOG_CREATE_ERROR" };
   }
 
+  return sendAndFinalize(logId, input.to, input.subject, input.html, input.text);
+}
+
+async function sendAndFinalize(
+  logId: string,
+  to: string,
+  subject: string,
+  html: string,
+  text?: string
+): Promise<DispatchEmailResult> {
   try {
-    const result = await sendMail({ to: input.to, subject: input.subject, html: input.html, text: input.text });
+    const result = await sendMail({ to, subject, html, text });
     if (result.delivered) {
       await prisma.emailLog
         .update({ where: { id: logId }, data: { status: "SENT", sentAt: new Date() } })
@@ -99,6 +109,18 @@ export async function dispatchEmail(input: DispatchEmailInput): Promise<Dispatch
     console.error("[email] sendMail threw:", err);
     return { outcome: "failed", logId, reason };
   }
+}
+
+/**
+ * Sends a row that's already QUEUED in EmailLog — the campaign queue
+ * processor's per-recipient send (see lib/email/campaign-queue.ts). The row
+ * itself (created when the campaign was queued) already carries the
+ * idempotency guarantee, so this only flips SENDING -> SENT/FAILED; it does
+ * not create a new log or check for duplicates.
+ */
+export async function sendQueuedLog(logId: string, to: string, subject: string, html: string): Promise<DispatchEmailResult> {
+  await prisma.emailLog.update({ where: { id: logId }, data: { status: "SENDING" } }).catch(() => {});
+  return sendAndFinalize(logId, to, subject, html);
 }
 
 function isUniqueConstraintError(err: unknown): boolean {

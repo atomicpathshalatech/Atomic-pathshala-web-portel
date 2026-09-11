@@ -7,6 +7,14 @@
     {
       "path": "/api/cron/birthday",
       "schedule": "30 3 * * *"
+    },
+    {
+      "path": "/api/cron/email-campaigns/process",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/notifications/process",
+      "schedule": "* * * * *"
     }
   ]
 }

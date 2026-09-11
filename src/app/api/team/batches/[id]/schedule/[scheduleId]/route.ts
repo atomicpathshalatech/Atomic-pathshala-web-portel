@@ -109,8 +109,9 @@ export async function PATCH(
       const { NotificationType } = await import("@/lib/notifications/types");
 
       if (input.status === "CANCELLED") {
-        // Cancel all pending reminders for this class
+        // Cancel all pending reminders and start alerts for this class
         await cancelScheduledNotifications(NotificationType.CLASS_REMINDER_15_MIN, schedule.id);
+        await cancelScheduledNotifications(NotificationType.CLASS_STARTED, schedule.id);
 
         await triggerNotificationEvent({
           eventType: NotificationType.CLASS_CANCELLED,
@@ -120,10 +121,13 @@ export async function PATCH(
           title: `Class Cancelled: ${schedule.title}`,
           body: `Your class "${schedule.title}" has been cancelled. Please check your schedule for updates.`,
           deepLink: `/batches/${params.id}`,
+          actionType: "VIEW_SCHEDULE",
+          actionUrl: `/batches/${params.id}`,
         });
       } else if (isLiveClassReschedule) {
-        // Invalidate old reminder jobs
+        // Invalidate old reminder and start jobs
         await cancelScheduledNotifications(NotificationType.CLASS_REMINDER_15_MIN, schedule.id);
+        await cancelScheduledNotifications(NotificationType.CLASS_STARTED, schedule.id);
 
         const timeStr = schedule.startsAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
         const dateStr = schedule.startsAt.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
@@ -135,13 +139,73 @@ export async function PATCH(
           batchId: params.id,
           title: `Class Rescheduled: ${schedule.title}`,
           body: `Your class has been rescheduled to ${dateStr} at ${timeStr}.`,
-          deepLink: `/batches/${params.id}`,
+          deepLink: `/live-class/${schedule.id}`,
+          actionType: "VIEW_CLASS",
+          actionUrl: `/live-class/${schedule.id}`,
           metadata: {
             classId: schedule.id,
             className: schedule.title,
             startsAt: schedule.startsAt.toISOString(),
           },
         });
+
+        // Re-enqueue new 15m reminder and start job based on new schedule
+        const now = new Date();
+        const reminderTime = new Date(schedule.startsAt.getTime() - 15 * 60 * 1000);
+        const { enqueueScheduledNotification } = await import("@/lib/notifications/scheduler");
+        const { NotificationCategory, NotificationPriority, NotificationTargetType } = await import("@/lib/notifications/types");
+
+        if (reminderTime.getTime() > now.getTime()) {
+          await enqueueScheduledNotification({
+            eventType: NotificationType.CLASS_REMINDER_15_MIN,
+            entityId: schedule.id,
+            targetType: NotificationTargetType.BATCH,
+            targetId: params.id,
+            payload: {
+              title: `Class starting in 15 minutes!`,
+              body: `${schedule.title} starts in 15 minutes. Keep your notes ready.`,
+              deepLink: `/live-class/${schedule.id}`,
+              actionType: "JOIN_CLASS",
+              actionUrl: `/live-class/${schedule.id}`,
+              category: NotificationCategory.CLASSES,
+              priority: NotificationPriority.HIGH,
+              batchId: params.id,
+              metadata: {
+                classId: schedule.id,
+                className: schedule.title,
+                startsAt: schedule.startsAt.toISOString(),
+              },
+            },
+            executeAt: reminderTime,
+            idempotencyKey: `class-reminder-15m:${schedule.id}`,
+          });
+        }
+
+        if (schedule.startsAt.getTime() > now.getTime()) {
+          await enqueueScheduledNotification({
+            eventType: NotificationType.CLASS_STARTED,
+            entityId: schedule.id,
+            targetType: NotificationTargetType.BATCH,
+            targetId: params.id,
+            payload: {
+              title: `Class started!`,
+              body: `Your live class "${schedule.title}" has started. Join now!`,
+              deepLink: `/live-class/${schedule.id}`,
+              actionType: "JOIN_CLASS",
+              actionUrl: `/live-class/${schedule.id}`,
+              category: NotificationCategory.CLASSES,
+              priority: NotificationPriority.HIGH,
+              batchId: params.id,
+              metadata: {
+                classId: schedule.id,
+                className: schedule.title,
+                startsAt: schedule.startsAt.toISOString(),
+              },
+            },
+            executeAt: schedule.startsAt,
+            idempotencyKey: `class-started:${schedule.id}`,
+          });
+        }
       }
     } catch (notifErr) {
       console.warn("[Schedule Update Notification Warning]", notifErr);

@@ -13,6 +13,7 @@ import {
   type DppEntry,
   type TestEntry,
 } from "./BatchPdfLibrary";
+import { BatchNotificationManager } from "./BatchNotificationManager";
 
 type BatchDetailClientProps = {
   batch: {
@@ -105,7 +106,7 @@ export function BatchDetailClient({
   canManageSchedule,
 }: BatchDetailClientProps) {
   const [showImportModal, setShowImportModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<"flow" | "pdfs" | "materials" | "timetable" | "teachers" | "students">("flow");
+  const [activeTab, setActiveTab] = useState<"flow" | "pdfs" | "materials" | "timetable" | "teachers" | "students" | "notifications">("flow");
 
   /**
    * The chapters actually imported into this batch, de-duplicated.
@@ -300,6 +301,18 @@ export function BatchDetailClient({
         >
           <span className="material-symbols-outlined text-base">groups</span>
           Students ({activeEnrollmentsCount})
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("notifications")}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+            activeTab === "notifications"
+              ? "bg-primary text-on-primary shadow-sm"
+              : "text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high"
+          }`}
+        >
+          <span className="material-symbols-outlined text-base">campaign</span>
+          Notifications
         </button>
       </div>
 
@@ -508,6 +521,15 @@ export function BatchDetailClient({
             </ul>
           )}
         </section>
+      )}
+
+      {/* Tab 7: Notifications */}
+      {activeTab === "notifications" && (
+        <BatchNotificationManager
+          batchId={batch.id}
+          batchName={batch.name}
+          canSend={canUpdate}
+        />
       )}
 
       {/* Chapter Import Modal Dialog */}

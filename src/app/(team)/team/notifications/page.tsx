@@ -5,10 +5,10 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
-import { BroadcastManager } from "@/components/team-portal/BroadcastManager";
+import { AdminNotificationHub } from "@/components/team-portal/AdminNotificationHub";
 
 export const metadata: Metadata = {
-  title: "Bulk Notifications",
+  title: "Notifications Control Center | Atomic Pathshala",
 };
 
 export default async function TeamNotificationsPage() {
@@ -34,15 +34,8 @@ export default async function TeamNotificationsPage() {
   ]);
 
   return (
-    <div className="space-y-stack-lg max-w-4xl">
-      <div>
-        <h1 className="font-headline-lg text-headline-lg text-primary">Bulk Notifications</h1>
-        <p className="text-on-surface-variant font-body-md mt-1">
-          Broadcast an in-app notification to a whole batch, class, or target-exam segment.
-        </p>
-      </div>
-
-      <BroadcastManager
+    <div className="space-y-6 max-w-6xl">
+      <AdminNotificationHub
         canSend={canSend}
         batches={batches}
         initialBroadcasts={broadcasts.map((b) => ({
@@ -52,10 +45,11 @@ export default async function TeamNotificationsPage() {
           segmentType: b.segmentType,
           segmentValue: b.segmentValue,
           recipientCount: b.recipientCount,
-          sentByName: b.sentBy.name,
+          sentByName: b.sentBy?.name ?? "Admin",
           createdAt: b.createdAt.toISOString(),
         }))}
       />
     </div>
   );
 }
+
