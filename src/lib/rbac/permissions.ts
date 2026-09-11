@@ -234,7 +234,17 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PermissionCode[]> = {
   TEACHER: [
     PERMISSIONS.TEAM_PORTAL_ACCESS,
     PERMISSIONS.TEACHER_READ,
-    PERMISSIONS.STUDENT_READ_ANY,
+    // Deliberately NOT PERMISSIONS.STUDENT_READ_ANY — Student Management
+    // (the student directory: profiles, contact info, academic status,
+    // batch/course access grants) is ADMIN/SUPER_ADMIN/FOUNDER only. A
+    // teacher's own view of "which students are in my batch" is served by
+    // batch/attendance/doubt endpoints scoped to their own batches, none of
+    // which require this permission. See /team/students/page.tsx,
+    // /api/team/students/*, and lib/search/scope.ts — all gate on exactly
+    // this permission, so removing it here removes teacher access
+    // everywhere at once. (Also removed from the TEACHER row in the DB
+    // RolePermission table — the code default alone does not retract an
+    // already-seeded DB grant.)
     PERMISSIONS.COURSE_READ,
     PERMISSIONS.COURSE_UPDATE,
     PERMISSIONS.DOUBT_READ,
