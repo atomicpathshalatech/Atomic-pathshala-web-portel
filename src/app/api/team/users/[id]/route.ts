@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
+import bcrypt from "bcryptjs";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS, ROLE_PERMISSION_DEFAULTS, PermissionCode } from "@/lib/rbac/permissions";
+import { generateTempPassword, sendCredentialsEmail } from "@/lib/email/credentials";
+import { getLoginUrl } from "@/lib/email/app-url";
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -223,11 +226,38 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       }
     }
 
+    // Registration -> credential email (spec: "whenever a Staff member
+    // successfully completes registration"). Scoped strictly to
+    // APPROVAL_PENDING -> ACTIVE — the one transition that unambiguously
+    // means "brand-new account, never had a working login yet" (set by
+    // POST /api/invite/[token]/register). Every OTHER reactivated status
+    // (EX_TEAM_MEMBER, INACTIVE, ...) belongs to someone who already knows
+    // a real password; we must not silently invalidate it, so those paths
+    // are untouched — this is additive only for the true first-approval case.
+    let tempPasswordForEmail: string | null = null;
+    const isFirstApproval = currentUser.status === "APPROVAL_PENDING" && updateData.status === "ACTIVE";
+    if (isFirstApproval) {
+      tempPasswordForEmail = generateTempPassword();
+      updateData.passwordHash = await bcrypt.hash(tempPasswordForEmail, 10);
+    }
+
     const updatedUser = await prisma.user.update({
       where: { id: userId },
       data: updateData,
       include: { role: true },
     });
+
+    if (isFirstApproval && tempPasswordForEmail) {
+      await sendCredentialsEmail({
+        idempotencyKey: `registration:${updatedUser.id}`,
+        recipientUserId: updatedUser.id,
+        recipientType: "STAFF",
+        fullName: updatedUser.name,
+        email: updatedUser.email,
+        password: tempPasswordForEmail,
+        loginUrl: getLoginUrl(),
+      }).catch((err) => console.error("[team/users PATCH] credentials email failed:", err));
+    }
 
     // Write Audit Log if any changes occurred
     if (Object.keys(auditChanges).length > 0) {

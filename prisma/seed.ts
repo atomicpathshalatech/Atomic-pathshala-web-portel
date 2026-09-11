@@ -2,6 +2,8 @@ import { PrismaClient, GlobalRole } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { PERMISSIONS, ROLE_PERMISSION_DEFAULTS } from "../src/lib/rbac/permissions";
 import { DEFAULT_PLAN_PRICING } from "../src/lib/subscription/plan-pricing-defaults";
+import { DEFAULT_EMAIL_TEMPLATES } from "../src/lib/email/defaults";
+import { DEFAULT_BIRTHDAY_TEMPLATES } from "../src/lib/birthday/defaults";
 
 const prisma = new PrismaClient();
 
@@ -142,6 +144,43 @@ async function main() {
           billingCycle: billingCycle as keyof typeof cycles,
           amount,
         },
+      });
+    }
+  }
+
+  // ------------------------------------------------------------
+  // EMAIL TEMPLATES (centralized communication system)
+  // ------------------------------------------------------------
+  // Reference data, always seeded (not gated behind SEED_TEST_ACCOUNTS) —
+  // dispatch.ts's callers look these up by `key` and fall back to the
+  // built-in default in lib/email/defaults.ts if a row is missing, so this
+  // is a convenience for admins to edit wording, not a hard dependency.
+  console.log("Seeding default email templates...");
+  for (const t of DEFAULT_EMAIL_TEMPLATES) {
+    await prisma.emailTemplate.upsert({
+      where: { key: t.key },
+      update: {}, // never clobber an admin's edits on re-seed
+      create: {
+        key: t.key,
+        name: t.name,
+        category: t.category,
+        subject: t.subject,
+        bodyHtml: t.bodyHtml,
+        variables: t.variables,
+        isSystem: true,
+      },
+    });
+  }
+
+  // ------------------------------------------------------------
+  // BIRTHDAY TEMPLATES (default message library)
+  // ------------------------------------------------------------
+  console.log("Seeding default birthday templates...");
+  for (const t of DEFAULT_BIRTHDAY_TEMPLATES) {
+    const existing = await prisma.birthdayTemplate.findFirst({ where: { name: t.name, category: t.category } });
+    if (!existing) {
+      await prisma.birthdayTemplate.create({
+        data: { name: t.name, category: t.category, messageText: t.messageText, priority: 0 },
       });
     }
   }

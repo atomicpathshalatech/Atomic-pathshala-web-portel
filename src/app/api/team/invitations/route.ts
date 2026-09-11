@@ -8,7 +8,8 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { ROLE_PERMISSION_DEFAULTS } from "@/lib/rbac/permissions";
 import { newInviteToken, inviteExpiry, buildInviteUrl } from "@/lib/invitations";
-import { sendMail, staffInviteEmailHtml } from "@/lib/mail";
+import { staffInviteEmailHtml } from "@/lib/mail";
+import { dispatchEmail } from "@/lib/email/dispatch";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -86,8 +87,17 @@ export async function POST(request: NextRequest) {
     });
 
     const inviteUrl = buildInviteUrl(raw);
-    const mail = await sendMail({
+    // Same send as before (staffInviteEmailHtml, unchanged) — now routed
+    // through dispatchEmail so it lands in the centralized Email Logs too,
+    // per spec section 15 ("integrate into the centralized logging
+    // architecture ... while preserving its existing behavior"). `mail`
+    // still exposes `.delivered` below so nothing downstream had to change.
+    const dispatched = await dispatchEmail({
+      idempotencyKey: `invitation:${invitation.id}`,
       to: input.email,
+      recipientName: input.email,
+      recipientType: "STAFF",
+      emailType: "INVITATION",
       subject: "You're invited to join Atomic Pathshala",
       html: staffInviteEmailHtml({
         inviteUrl,
@@ -95,6 +105,7 @@ export async function POST(request: NextRequest) {
         expiresAt: invitation.expiresAt,
       }),
     });
+    const mail = { delivered: dispatched.outcome === "sent" };
 
     await prisma.auditLog.create({
       data: {

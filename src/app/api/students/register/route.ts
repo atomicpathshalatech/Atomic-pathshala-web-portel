@@ -8,6 +8,8 @@ import { generateEnrollmentNumber, generateUniqueStudentIdCode } from "@/lib/uti
 import { verifyLeadInviteToken } from "@/lib/integrations/lead-invite";
 import { notifyOutreachConversion } from "@/lib/integrations/outreach-webhook";
 import { PHONE_RE, normalisePhone, consumeVerifyToken } from "@/lib/otp";
+import { sendCredentialsEmail } from "@/lib/email/credentials";
+import { getLoginUrl } from "@/lib/email/app-url";
 
 export const runtime = "nodejs";
 
@@ -147,6 +149,18 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Best-effort, same reasoning as the outreach webhook above — never lets
+    // an email-provider hiccup affect the registration response.
+    sendCredentialsEmail({
+      idempotencyKey: `registration:${created.user.id}`,
+      recipientUserId: created.user.id,
+      recipientType: "STUDENT",
+      fullName: created.user.name,
+      email: created.user.email,
+      password: input.password,
+      loginUrl: getLoginUrl(),
+    }).catch((error) => console.error("[credentials_email_error]", error));
+
     return apiSuccess(
       {
         userId: created.user.id,
@@ -235,6 +249,16 @@ async function registerViaOtp(input: z.infer<typeof otpRegisterSchema>) {
     });
     return { user, student };
   });
+
+  sendCredentialsEmail({
+    idempotencyKey: `registration:${created.user.id}`,
+    recipientUserId: created.user.id,
+    recipientType: "STUDENT",
+    fullName: created.user.name,
+    email: created.user.email,
+    password: input.password,
+    loginUrl: getLoginUrl(),
+  }).catch((error) => console.error("[credentials_email_error]", error));
 
   return apiSuccess(
     {

@@ -6,6 +6,7 @@ import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { PHONE_RE, normalisePhone, consumeVerifyToken } from "@/lib/otp";
 import { emailResetPasswordSchema } from "@/lib/validation/auth";
 import { hashResetToken } from "@/lib/auth/reset-tokens";
+import { notifyPasswordChanged } from "@/lib/email/password-notify";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,7 +46,14 @@ export async function POST(request: NextRequest) {
 
       const user = await prisma.user.findFirst({
         where: { passwordResetToken: hash },
-        select: { id: true, status: true, passwordResetExpiresAt: true },
+        select: {
+          id: true,
+          status: true,
+          passwordResetExpiresAt: true,
+          name: true,
+          email: true,
+          role: { select: { name: true } },
+        },
       });
       if (!user) return apiError("This reset link is invalid or has already been used.", 400, { code: "RESET_TOKEN_INVALID" });
       if (!user.passwordResetExpiresAt || user.passwordResetExpiresAt.getTime() < Date.now()) {
@@ -73,6 +81,14 @@ export async function POST(request: NextRequest) {
         },
       }).catch(() => undefined);
 
+      await notifyPasswordChanged({
+        idempotencyKey: `password_reset:${hash}`,
+        userId: user.id,
+        recipientType: user.role?.name === "STUDENT" ? "STUDENT" : user.role?.name ? "STAFF" : "OTHER",
+        fullName: user.name,
+        email: user.email,
+      }).catch((err) => console.error("[reset-password] confirmation email failed:", err));
+
       return apiSuccess({ reset: true });
     }
 
@@ -84,7 +100,10 @@ export async function POST(request: NextRequest) {
     const check = await consumeVerifyToken(phone, "PASSWORD_RESET", verifyToken);
     if (!check.ok) return apiError(check.reason, 400, { code: "OTP_NOT_VERIFIED" });
 
-    const user = await prisma.user.findUnique({ where: { phone }, select: { id: true, status: true } });
+    const user = await prisma.user.findUnique({
+      where: { phone },
+      select: { id: true, status: true, name: true, email: true, role: { select: { name: true } } },
+    });
     if (!user) return apiError("No account found for that number.", 404);
     if (BLOCKED_STATUSES.includes(user.status)) {
       return apiError("This account can't be reset. Contact support.", 403);
@@ -107,6 +126,16 @@ export async function POST(request: NextRequest) {
         metadata: { method: "phone-otp" },
       },
     }).catch(() => undefined);
+
+    if (user.email) {
+      await notifyPasswordChanged({
+        idempotencyKey: `password_reset:${verifyToken}`,
+        userId: user.id,
+        recipientType: user.role?.name === "STUDENT" ? "STUDENT" : user.role?.name ? "STAFF" : "OTHER",
+        fullName: user.name,
+        email: user.email,
+      }).catch((err) => console.error("[reset-password] confirmation email failed:", err));
+    }
 
     return apiSuccess({ reset: true });
   } catch (error) {

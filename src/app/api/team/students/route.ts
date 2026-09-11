@@ -7,6 +7,9 @@ import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { generateEnrollmentNumber, generateUniqueStudentIdCode } from "@/lib/utils/id-generator";
+import { generateTempPassword, sendCredentialsEmail } from "@/lib/email/credentials";
+import { getLoginUrl } from "@/lib/email/app-url";
+import { notifyEnrollment } from "@/lib/email/enrollment";
 
 export async function GET(req: NextRequest) {
   try {
@@ -207,9 +210,13 @@ export async function POST(req: NextRequest) {
       batchId,
     } = body;
 
-    if (!name || !email || !password) {
-      return apiError("Name, email, and password are required", 400);
+    if (!name || !email) {
+      return apiError("Name and email are required", 400);
     }
+    // Admin can still set a specific password (unchanged, existing
+    // behaviour); if they leave it blank, we generate one and email it —
+    // see the "Registration -> Credential Email" requirement.
+    const effectivePassword: string = password || generateTempPassword();
 
     const existingUser = await prisma.user.findUnique({
       where: { email: email.toLowerCase() },
@@ -231,7 +238,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(effectivePassword, 10);
     const enrollmentNumber = generateEnrollmentNumber();
     const studentIdCode = await generateUniqueStudentIdCode(prisma);
 
@@ -265,19 +272,46 @@ export async function POST(req: NextRequest) {
         },
       });
 
+      let enrollment: { id: string; batch: { name: string } } | null = null;
       if (batchId) {
-        await tx.batchEnrollment.create({
+        enrollment = await tx.batchEnrollment.create({
           data: {
             batchId,
             studentId: student.id,
             status: "ACTIVE",
             enrolledById: session.user.id,
           },
+          select: { id: true, batch: { select: { name: true } } },
         });
       }
 
-      return { user, student };
+      return { user, student, enrollment };
     });
+
+    // Fire only after the account is durably created — never lets an email
+    // provider hiccup roll back or fail the registration itself (dispatchEmail
+    // already never throws; idempotencyKey means a client retry of this
+    // same request can't double-send).
+    const mail = await sendCredentialsEmail({
+      idempotencyKey: `registration:${result.user.id}`,
+      recipientUserId: result.user.id,
+      recipientType: "STUDENT",
+      fullName: result.user.name,
+      email: result.user.email,
+      password: effectivePassword,
+      loginUrl: getLoginUrl(),
+    });
+
+    if (result.enrollment) {
+      await notifyEnrollment({
+        idempotencyKey: `enrollment:${result.enrollment.id}`,
+        kind: "BATCH",
+        studentUserId: result.user.id,
+        studentName: result.user.name,
+        studentEmail: result.user.email,
+        productName: result.enrollment.batch.name,
+      });
+    }
 
     return apiSuccess({
       studentId: result.student.id,
@@ -285,6 +319,7 @@ export async function POST(req: NextRequest) {
       enrollmentNumber: result.student.enrollmentNumber,
       name: result.user.name,
       email: result.user.email,
+      credentialsEmailed: mail.outcome === "sent",
     });
   } catch (error) {
     return handleApiError(error);

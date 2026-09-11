@@ -221,6 +221,16 @@ export const PERMISSIONS = {
   MODULE_PUBLISH: "module.publish",
   MODULE_DELETE: "module.delete",
   MODULE_BRAND_PROFILE_MANAGE: "module.brand.manage",
+
+  // Communication Center — Admin-only (see ROLE_PERMISSION_DEFAULTS: not
+  // granted to TEACHER or any non-admin role by default). Gates the whole
+  // /team/communication surface and its APIs, the same way STUDENT_READ_ANY
+  // gates Student Management.
+  COMMUNICATION_CENTER_ACCESS: "communication.center.access",
+  EMAIL_LOG_READ: "communication.email_log.read",
+  EMAIL_TEMPLATE_MANAGE: "communication.email_template.manage",
+  EMAIL_CAMPAIGN_MANAGE: "communication.email_campaign.manage",
+  BIRTHDAY_AUTOMATION_MANAGE: "communication.birthday.manage",
 } as const;
 
 export type PermissionCode = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -421,6 +431,11 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PermissionCode[]> = {
     PERMISSIONS.SALES_REPORT_VIEW,
     PERMISSIONS.FINANCE_READ,
     PERMISSIONS.AUDIT_LOG_VIEW,
+    PERMISSIONS.COMMUNICATION_CENTER_ACCESS,
+    PERMISSIONS.EMAIL_LOG_READ,
+    PERMISSIONS.EMAIL_TEMPLATE_MANAGE,
+    PERMISSIONS.EMAIL_CAMPAIGN_MANAGE,
+    PERMISSIONS.BIRTHDAY_AUTOMATION_MANAGE,
   ],
   SUB_ADMIN: [
     PERMISSIONS.TEAM_PORTAL_ACCESS,
