@@ -6,6 +6,7 @@ import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { batchTeacherAssignSchema } from "@/lib/validation/batch";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { regenerateCreativeAwaited } from "@/lib/creative/engine";
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -45,6 +46,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         metadata: { teacherId: input.teacherId, subject: input.subject ?? null },
       },
     });
+
+    // Batch creative auto-updates the moment an educator's assignment
+    // changes (spec section 6) — no manual "re-upload the thumbnail" step.
+    await regenerateCreativeAwaited("BATCH", params.id);
 
     return apiSuccess({ assignment }, 201);
   } catch (error) {

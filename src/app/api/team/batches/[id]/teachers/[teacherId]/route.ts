@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { regenerateCreativeAwaited } from "@/lib/creative/engine";
 
 export async function DELETE(
   _request: NextRequest,
@@ -31,6 +32,9 @@ export async function DELETE(
         metadata: { teacherId: params.teacherId },
       },
     });
+
+    // Removed educator drops out of the batch creative automatically (spec section 6).
+    await regenerateCreativeAwaited("BATCH", params.id);
 
     return apiSuccess({ removed: true });
   } catch (error) {

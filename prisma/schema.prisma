@@ -322,6 +322,25 @@ model Teacher {
   // existing staff rows are unaffected; birthday automation simply skips
   // anyone without it (see docs on BirthdaySendLog).
   dob              DateTime?
+
+  // --- Creative PNG / cutout photo (Dynamic Educator Creative system) -----
+  // Deliberately separate from User.photoUrl (the normal avatar, used
+  // everywhere a plain profile picture appears) — this is a second,
+  // independent asset: a transparent-background cutout used ONLY as an
+  // input to auto-generated batch/chapter/lecture/test-series creatives.
+  // Uploading/replacing this never touches photoUrl and vice versa.
+  creativePngUrl       String?
+  creativePngWidth     Int?
+  creativePngHeight    Int?
+  creativePngHasAlpha  Boolean?
+  creativePngSizeBytes Int?
+  creativePngUpdatedAt DateTime?
+  // Bumped on every creativePngUrl change. Part of every GeneratedCreative's
+  // sourceVersionHash — the cache-invalidation mechanism (spec section 24):
+  // a stale creative is detected by comparing hashes, not by a
+  // "regenerate everything" sweep.
+  creativeAssetVersion Int       @default(0)
+
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   onboardingStatus OnboardingStatus  @default(PENDING_DOCUMENTS)
@@ -331,6 +350,7 @@ model Teacher {
   documents        TeacherDocument[]
   whiteboardBoards WhiteboardBoard[]
   batchAssignments BatchTeacher[]
+  testSeriesAssignments TestSeriesTeacher[]
   scheduleSessions BatchSchedule[]
   liveWhiteboardSessions WhiteboardSession[]
   lectures         Lecture[]
@@ -385,6 +405,12 @@ model Batch {
   // rather than presigned because a listing renders many of these at once,
   // often for viewers who do not own the batch.
   thumbnailUrl String?
+  // true while thumbnailUrl was last set by the creative engine (spec
+  // section 6/14: auto-updates as assigned educators change). Flips to
+  // false the moment an admin uploads their own thumbnail through the
+  // existing ThumbnailUploader — after that, auto-regeneration stops
+  // overwriting thumbnailUrl until they explicitly re-enable it.
+  thumbnailIsAuto Boolean  @default(true)
   createdById String
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
@@ -574,16 +600,38 @@ model TestSeries {
   examType     String?
   tags         String?
   thumbnailUrl String?
+  // Same convention as Batch.thumbnailIsAuto — see that field's comment.
+  thumbnailIsAuto Boolean @default(true)
   visibility   String    @default("PRIVATE")
   status       String    @default("DRAFT")
   startDate    DateTime?
   endDate      DateTime?
   createdAt    DateTime  @default(now())
 
-  tests Test[]
+  tests    Test[]
+  teachers TestSeriesTeacher[]
 
   @@index([status])
   @@map("test_series")
+}
+
+/// Assigned-educator join, mirroring BatchTeacher — TestSeries had no
+/// educator relation at all before (spec section 7 needs one: the
+/// test-series creative shows every assigned educator's cutout + name,
+/// derived from real assignment rows, never re-typed by an admin).
+model TestSeriesTeacher {
+  id           String   @id @default(cuid())
+  testSeriesId String
+  teacherId    String
+  subject      String?
+  createdAt    DateTime @default(now())
+
+  testSeries TestSeries @relation(fields: [testSeriesId], references: [id], onDelete: Cascade)
+  teacher    Teacher    @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@unique([testSeriesId, teacherId, subject])
+  @@index([teacherId])
+  @@map("test_series_teachers")
 }
 
 model Test {
@@ -4968,4 +5016,108 @@ model BirthdaySendLog {
   @@unique([subjectType, subjectId, year])
   @@index([status])
   @@map("birthday_send_logs")
+}
+
+// ============================================================================
+// DYNAMIC EDUCATOR CREATIVE & AUTO-THUMBNAIL SYSTEM
+// ----------------------------------------------------------------------------
+// One reusable rendering pipeline (see lib/creative/engine.ts) instead of
+// separate image-generation code per module. CONTENT (educator, chapter,
+// lecture, batch — all resolved live from existing relations) is always kept
+// separate from DESIGN (CreativeTemplate + CreativeBackground); the engine
+// combines them. A GeneratedCreative row is the single source of truth for
+// "what's the current creative for this entity" — regeneration is driven by
+// comparing sourceVersionHash, never a blind re-render on every page load.
+// ============================================================================
+
+enum CreativeType {
+  BATCH
+  TEST_SERIES
+  CHAPTER
+  LECTURE
+  LECTURE_START_SLIDE
+}
+
+enum CreativeStatus {
+  PENDING
+  READY
+  FAILED
+}
+
+enum CreativeBackgroundKind {
+  SOLID
+  GRADIENT
+  IMAGE
+}
+
+/// A DESIGN preset for one CreativeType. `layoutConfig` is a structured JSON
+/// document (typed in lib/creative/layout-types.ts) describing educator
+/// image shape/position/size, text block positions/typography, and layer
+/// order — never freeform pixel-drag state; per spec section 27 this is
+/// deliberately NOT a visual page-builder, so a template is authored/edited
+/// as a small set of named fields (see the admin Templates UI), not dragged.
+model CreativeTemplate {
+  id           String       @id @default(cuid())
+  key          String       @unique
+  name         String
+  type         CreativeType
+  layoutConfig Json
+  isActive     Boolean      @default(true)
+  isDefault    Boolean      @default(false)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  creatives GeneratedCreative[]
+
+  @@index([type])
+  @@map("creative_templates")
+}
+
+/// A selectable background — solid color, gradient (colors as a JSON array),
+/// or an image (existing-library or admin-uploaded via the existing
+/// POST /api/upload, same as birthday creatives).
+model CreativeBackground {
+  id        String                  @id @default(cuid())
+  name      String
+  kind      CreativeBackgroundKind
+  value     Json
+  isActive  Boolean                 @default(true)
+  isDefault Boolean                 @default(false)
+  createdAt DateTime                @default(now())
+
+  creatives GeneratedCreative[]
+
+  @@map("creative_backgrounds")
+}
+
+/// The current generated creative for one entity. One row per
+/// (type, sourceEntityId) — regeneration UPDATES this row in place rather
+/// than accumulating history, matching spec section 24's cache/invalidate
+/// model rather than full version history.
+model GeneratedCreative {
+  id                String             @id @default(cuid())
+  type              CreativeType
+  sourceEntityType  String
+  sourceEntityId    String
+  templateId        String?
+  template          CreativeTemplate?  @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  backgroundId      String?
+  background        CreativeBackground? @relation(fields: [backgroundId], references: [id], onDelete: SetNull)
+  assetUrl          String?
+  width             Int?
+  height            Int?
+  /// Hash of every input that determines the pixels (educator asset
+  /// versions, entity title/name/count, template id, background id). The
+  /// engine regenerates only when the freshly-computed hash differs from
+  /// this — the literal "educatorCreativePngVersion = 4 -> regenerate"
+  /// mechanism from spec section 24.
+  sourceVersionHash String?
+  status            CreativeStatus     @default(PENDING)
+  errorMessage      String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@unique([type, sourceEntityId])
+  @@index([sourceEntityType, sourceEntityId])
+  @@map("generated_creatives")
 }

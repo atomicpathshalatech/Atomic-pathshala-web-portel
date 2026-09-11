@@ -219,11 +219,27 @@ export async function POST(
       console.error("[LIVE_CLASS_STARTED notification error]", err);
     }
 
+    // 8. Auto-generated first slide (spec section 10) — the educator never
+    // manually creates/uploads this. Resolved straight from this same
+    // BatchSchedule (educator, chapter, lecture, batch — all already known
+    // here), rendered by the one shared creative engine, and cached: a
+    // second "Start Class" call (a refresh, a retry) reuses the same
+    // asset instead of re-rendering.
+    let startSlideUrl: string | null = null;
+    try {
+      const { generateCreative } = await import("@/lib/creative/engine");
+      const result = await generateCreative("LECTURE_START_SLIDE", params.scheduleId);
+      if (result.ok) startSlideUrl = result.assetUrl;
+    } catch (slideErr) {
+      console.error("[live_class_start_slide_error]", slideErr);
+    }
+
     return apiSuccess({
       message: "Class started successfully.",
       whiteboardSession: wbSession,
       schedule: updatedSchedule,
       serverTime: now.toISOString(),
+      startSlideUrl,
     });
   } catch (error) {
     return handleApiError(error);

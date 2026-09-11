@@ -8,6 +8,7 @@ import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { LectureStatus } from "@prisma/client";
 import { getChapterSequenceState } from "@/lib/chapters/sequence";
 import { computeISTScheduleDates } from "@/lib/date-utils";
+import { regenerateCreativeAwaited } from "@/lib/creative/engine";
 
 export async function GET(
   request: NextRequest,
@@ -189,6 +190,12 @@ export async function POST(
         },
       },
     });
+
+    // New lecture -> both its own creative and the parent chapter's
+    // (lecture count, and possibly the derived primary educator) update
+    // automatically (spec section 8-9) — never a manual re-upload.
+    await regenerateCreativeAwaited("LECTURE", lecture.id);
+    await regenerateCreativeAwaited("CHAPTER", chapter.id);
 
     return apiSuccess({ lecture }, 201);
   } catch (error) {
