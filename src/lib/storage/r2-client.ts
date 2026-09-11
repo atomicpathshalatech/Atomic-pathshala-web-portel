@@ -35,23 +35,27 @@ export class R2StorageNotConfiguredError extends Error {
 }
 
 function getR2Credentials() {
-  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID || process.env.STORAGE_ACCOUNT_ID;
-  const accessKeyId =
-    process.env.R2_ACCESS_KEY_ID || process.env.STORAGE_ACCESS_KEY_ID;
-  const secretAccessKey =
-    process.env.R2_SECRET_ACCESS_KEY || process.env.STORAGE_SECRET_ACCESS_KEY;
-  const bucketName =
-    process.env.R2_BUCKET_NAME || process.env.STORAGE_BUCKET_NAME || "atomic-pathshala";
+  // Deliberately R2_* / CLOUDFLARE_ACCOUNT_ID ONLY — no STORAGE_* fallback and
+  // no STORAGE_ENDPOINT override. This file exists specifically to talk to
+  // Cloudflare R2 (the presigned-URL direct-upload flow); the generic
+  // STORAGE_* / STORAGE_ENDPOINT vars belong to lib/storage/index.ts's
+  // multi-provider resolveStorage(), and a legacy Supabase-storage
+  // STORAGE_ENDPOINT left set on Vercel was silently overriding the R2
+  // endpoint here, sending browser direct-uploads to Supabase Storage (wrong
+  // host entirely) while everything routed through lib/storage/index.ts kept
+  // working — same production/local drift as the earlier duplicate STORAGE_*
+  // block issue, recurring in this second, independent storage client. This
+  // one is now immune to whatever STORAGE_ENDPOINT happens to be set to.
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
+  const bucketName = process.env.R2_BUCKET_NAME || "atomic-pathshala";
 
-  // R2 endpoint format: https://<accountid>.r2.cloudflarestorage.com or custom STORAGE_ENDPOINT
-  let endpoint = process.env.STORAGE_ENDPOINT;
-  if (!endpoint && accountId) {
-    endpoint = `https://${accountId}.r2.cloudflarestorage.com`;
-  }
-
+  if (!accountId) throw new R2StorageNotConfiguredError("CLOUDFLARE_ACCOUNT_ID");
   if (!accessKeyId) throw new R2StorageNotConfiguredError("R2_ACCESS_KEY_ID");
   if (!secretAccessKey) throw new R2StorageNotConfiguredError("R2_SECRET_ACCESS_KEY");
-  if (!endpoint) throw new R2StorageNotConfiguredError("CLOUDFLARE_ACCOUNT_ID / STORAGE_ENDPOINT");
+
+  const endpoint = `https://${accountId}.r2.cloudflarestorage.com`;
 
   return { accountId, accessKeyId, secretAccessKey, bucketName, endpoint };
 }
