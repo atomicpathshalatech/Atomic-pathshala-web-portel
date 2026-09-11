@@ -19,6 +19,36 @@ async function getStats() {
 
 const CARDS = [
   {
+    href: "/team/communication/students",
+    icon: "school",
+    label: "Students",
+    description: "Search, filter, and select students as a recipient group.",
+  },
+  {
+    href: "/team/communication/staff",
+    icon: "badge",
+    label: "Staff",
+    description: "Kept separate from students — search, filter, select.",
+  },
+  {
+    href: "/team/communication/compose",
+    icon: "edit_note",
+    label: "Compose Email",
+    description: "Recipients → compose → confirm → send. Queued, never a frontend loop.",
+  },
+  {
+    href: "/team/communication/templates",
+    icon: "description",
+    label: "Templates",
+    description: "Edit the 10 default templates or create your own — admin-editable, no deploy needed.",
+  },
+  {
+    href: "/team/communication/campaigns",
+    icon: "campaign",
+    label: "Campaigns",
+    description: "Every bulk send, draft to completed, with delivery stats.",
+  },
+  {
     href: "/team/communication/logs",
     icon: "receipt_long",
     label: "Email Logs",
@@ -28,7 +58,13 @@ const CARDS = [
     href: "/team/communication/birthday",
     icon: "cake",
     label: "Birthday Automation",
-    description: "Today's birthdays, send status, manual/force send, and the message template library.",
+    description: "Today's birthdays, send status, manual/force send.",
+  },
+  {
+    href: "/team/communication/today-special",
+    icon: "celebration",
+    label: "Today Special",
+    description: "Recurring date-based content, combined into birthday messages when it targets the subject.",
   },
 ];
 
@@ -51,7 +87,7 @@ export default async function CommunicationCenterPage() {
         <StatTile label="Active templates" value={stats.templates} tone="indigo" />
       </div>
 
-      <div className="grid sm:grid-cols-2 gap-4">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {CARDS.map((c) => (
           <Link
             key={c.href}
