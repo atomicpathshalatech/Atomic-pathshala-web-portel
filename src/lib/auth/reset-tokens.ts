@@ -27,7 +27,7 @@ export function buildResetUrl(rawToken: string): string {
     process.env.NEXT_PUBLIC_APP_URL ||
     process.env.APP_URL ||
     process.env.NEXTAUTH_URL ||
-    "https://app.atomicpathshala.com"
+    "https://ap.atomicpathshala.in"
   ).replace(/\/$/, "");
   return `${base}/reset-password?token=${encodeURIComponent(rawToken)}`;
 }
