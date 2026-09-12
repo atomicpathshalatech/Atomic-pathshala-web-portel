@@ -39,15 +39,73 @@ export type CredentialsEmailInput = {
   email: string;
   password: string;
   loginUrl: string;
+  /** Student-only extras — rendered as extra table rows when present, and
+   * simply omitted (see renderTemplate()'s "unknown token -> empty string"
+   * behaviour) when not. Staff approval never sets these. */
+  enrollmentNumber?: string;
+  batchName?: string;
 };
 
+function tableRow(label: string, value: string): string {
+  return `<tr><td style="padding:6px 0;color:#64748b;font-size:13px">${label}</td><td style="padding:6px 0;font-weight:600">${value}</td></tr>`;
+}
+
 /**
- * Section 1 of the spec: registration -> credential email. Never throws —
- * a failure here must not roll back the account that was just created.
+ * Section 1 of the spec: student registration -> credential email. Never
+ * throws — a failure here must not roll back the account that was just
+ * created. Staff approval uses the separate sendStaffApprovalEmail() below
+ * instead, since it needs role/department content this template has no use
+ * for.
  */
 export async function sendCredentialsEmail(input: CredentialsEmailInput) {
   const { subject, html, templateId } = await renderEmailTemplate("registration_credentials", {
     recipient_name: input.fullName,
+    email: input.email,
+    login_id: input.email,
+    password: input.password,
+    login_url: input.loginUrl,
+    enrollment_number_row: input.enrollmentNumber ? tableRow("Enrollment Number", input.enrollmentNumber) : "",
+    batch_row: input.batchName ? tableRow("Batch", input.batchName) : "",
+  });
+
+  return dispatchEmail({
+    idempotencyKey: input.idempotencyKey,
+    to: input.email,
+    recipientName: input.fullName,
+    recipientUserId: input.recipientUserId,
+    recipientType: input.recipientType,
+    emailType: "CREDENTIALS",
+    subject,
+    html,
+    templateId,
+  });
+}
+
+export type StaffApprovalEmailInput = {
+  idempotencyKey: string;
+  recipientUserId: string;
+  fullName: string;
+  email: string;
+  password: string;
+  loginUrl: string;
+  /** The actual role/department the admin assigned — never hard-coded, see
+   * the "staff_approval_credentials" template in lib/email/defaults.ts. */
+  roleLabel: string;
+  department: string;
+};
+
+/**
+ * Section 2/4 of the spec: the ONE credentials email a staff/teacher
+ * account gets, sent exactly once at the genuine APPROVAL_PENDING -> ACTIVE
+ * transition (see both call sites: the invitations-approve route and the
+ * team/users PATCH route, which share this function and the same
+ * idempotency-key convention so only one of them ever actually sends it).
+ */
+export async function sendStaffApprovalEmail(input: StaffApprovalEmailInput) {
+  const { subject, html, templateId } = await renderEmailTemplate("staff_approval_credentials", {
+    recipient_name: input.fullName,
+    role_label: input.roleLabel,
+    department: input.department,
     email: input.email,
     login_id: input.email,
     password: input.password,
@@ -59,7 +117,7 @@ export async function sendCredentialsEmail(input: CredentialsEmailInput) {
     to: input.email,
     recipientName: input.fullName,
     recipientUserId: input.recipientUserId,
-    recipientType: input.recipientType,
+    recipientType: "STAFF",
     emailType: "CREDENTIALS",
     subject,
     html,

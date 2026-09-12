@@ -106,6 +106,7 @@ export async function POST(req: NextRequest) {
       });
 
       let enrolledBatchId: string | null = null;
+      let enrolledBatchName: string | null = null;
       if (invitePayload) {
         const batch = await tx.batch.findUnique({ where: { id: invitePayload.batchId } });
         if (batch) {
@@ -113,6 +114,7 @@ export async function POST(req: NextRequest) {
             data: { batchId: batch.id, studentId: student.id, status: "ACTIVE" },
           });
           enrolledBatchId = batch.id;
+          enrolledBatchName = batch.name;
         }
       }
 
@@ -137,7 +139,7 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      return { user, student };
+      return { user, student, enrolledBatchName };
     });
 
     // Best-effort: tell the outreach CRM this lead actually finished
@@ -149,17 +151,29 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Best-effort, same reasoning as the outreach webhook above — never lets
-    // an email-provider hiccup affect the registration response.
-    sendCredentialsEmail({
-      idempotencyKey: `registration:${created.user.id}`,
-      recipientUserId: created.user.id,
-      recipientType: "STUDENT",
-      fullName: created.user.name,
-      email: created.user.email,
-      password: input.password,
-      loginUrl: getLoginUrl(),
-    }).catch((error) => console.error("[credentials_email_error]", error));
+    // Awaited (not fire-and-forget): a Vercel serverless function is not
+    // guaranteed to keep running background work once its response has
+    // been sent, which is exactly why this email was going missing.
+    // sendCredentialsEmail() itself never throws (dispatchEmail() always
+    // resolves to a normal result, logging SENT/FAILED to EmailLog either
+    // way) — the try/catch here is just belt-and-braces so a genuinely
+    // unexpected error still can't turn a successful registration into an
+    // error response; the account transaction above has already committed.
+    try {
+      await sendCredentialsEmail({
+        idempotencyKey: `registration:${created.user.id}`,
+        recipientUserId: created.user.id,
+        recipientType: "STUDENT",
+        fullName: created.user.name,
+        email: created.user.email,
+        password: input.password,
+        loginUrl: getLoginUrl(),
+        enrollmentNumber: created.student.enrollmentNumber,
+        batchName: created.enrolledBatchName ?? undefined,
+      });
+    } catch (error) {
+      console.error("[credentials_email_error]", error);
+    }
 
     return apiSuccess(
       {
@@ -250,15 +264,21 @@ async function registerViaOtp(input: z.infer<typeof otpRegisterSchema>) {
     return { user, student };
   });
 
-  sendCredentialsEmail({
-    idempotencyKey: `registration:${created.user.id}`,
-    recipientUserId: created.user.id,
-    recipientType: "STUDENT",
-    fullName: created.user.name,
-    email: created.user.email,
-    password: input.password,
-    loginUrl: getLoginUrl(),
-  }).catch((error) => console.error("[credentials_email_error]", error));
+  // Awaited — see the identical comment in the legacy flow above for why.
+  try {
+    await sendCredentialsEmail({
+      idempotencyKey: `registration:${created.user.id}`,
+      recipientUserId: created.user.id,
+      recipientType: "STUDENT",
+      fullName: created.user.name,
+      email: created.user.email,
+      password: input.password,
+      loginUrl: getLoginUrl(),
+      enrollmentNumber: created.student.enrollmentNumber,
+    });
+  } catch (error) {
+    console.error("[credentials_email_error]", error);
+  }
 
   return apiSuccess(
     {

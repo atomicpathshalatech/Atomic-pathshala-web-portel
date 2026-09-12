@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
+import bcrypt from "bcryptjs";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -9,6 +10,8 @@ import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { newInviteToken, inviteExpiry, buildInviteUrl } from "@/lib/invitations";
 import { staffInviteEmailHtml } from "@/lib/mail";
 import { dispatchEmail } from "@/lib/email/dispatch";
+import { generateTempPassword, sendStaffApprovalEmail } from "@/lib/email/credentials";
+import { getLoginUrl } from "@/lib/email/app-url";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -112,12 +115,31 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     }
 
     // ---- APPROVE ------------------------------------------------------
+    // This is the ONLY place a newly-approved staff account gets a working
+    // login — the account was created earlier at invite-registration time
+    // with no usable password, so a genuine first approval must mint one
+    // here. Fetched before the transaction so "genuine first approval" is
+    // judged from the real current status, not assumed from the invitation
+    // record (which an admin could revisit after other changes happened).
+    const currentTargetUser = await prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: { status: true, email: true, name: true, department: true, teacher: { select: { department: true } } },
+    });
+    if (!currentTargetUser) return apiError("Linked user record is missing.", 409);
+    const isFirstApproval = currentTargetUser.status === "APPROVAL_PENDING";
+    // The invite-registration flow (POST /api/invite/[token]/register) only
+    // ever sets Teacher.department, never User.department — so for an
+    // educator, Teacher.department is the real assigned value and
+    // User.department is always empty. Prefer it when present.
+    const departmentForEmail = currentTargetUser.teacher?.department || currentTargetUser.department || "—";
+
     const roleToAssign = (roleName || invitation.intendedRoleName || "").trim() || null;
     if (roleToAssign && !ROLE_PERMISSION_DEFAULTS[roleToAssign]) {
       return apiError(`Unknown role "${roleToAssign}".`, 422);
     }
 
     let assignedRoleId: string | null = null;
+    let assignedRoleLabel: string | null = null;
     if (roleToAssign) {
       const role =
         (await prisma.role.findUnique({ where: { name: roleToAssign as never } })) ??
@@ -125,7 +147,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           data: { name: roleToAssign as never, label: roleToAssign.replace(/_/g, " "), isSystem: true },
         }));
       assignedRoleId = role.id;
+      assignedRoleLabel = role.label;
     }
+
+    // Generate + hash a temp password ONLY for a genuine first approval —
+    // an already-active user having their role changed later through this
+    // same endpoint must never have their real password silently replaced.
+    const tempPassword = isFirstApproval ? generateTempPassword() : null;
+    const newPasswordHash = tempPassword ? await bcrypt.hash(tempPassword, 12) : undefined;
 
     await prisma.$transaction([
       prisma.staffInvitation.update({
@@ -145,6 +174,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           // and lands on /access-denied until an admin assigns a role.
           status: "ACTIVE",
           ...(assignedRoleId ? { roleId: assignedRoleId } : {}),
+          ...(newPasswordHash ? { passwordHash: newPasswordHash } : {}),
         },
       }),
     ]);
@@ -162,7 +192,33 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       });
     }
 
-    return apiSuccess({ status: "APPROVED", roleAssigned: roleToAssign });
+    // Credentials email — sent after the transaction has committed (never
+    // before), awaited so it actually completes before this serverless
+    // response is returned, but its failure must not turn a successful
+    // approval into an error response. idempotencyKey deliberately matches
+    // the one src/app/api/team/users/[id]/route.ts uses for the identical
+    // APPROVAL_PENDING -> ACTIVE event, so whichever admin path fires first
+    // is the only one that ever sends it.
+    let emailDelivered = false;
+    if (isFirstApproval && tempPassword) {
+      try {
+        const result = await sendStaffApprovalEmail({
+          idempotencyKey: `registration:${targetUserId}`,
+          recipientUserId: targetUserId,
+          fullName: currentTargetUser.name,
+          email: currentTargetUser.email,
+          password: tempPassword,
+          loginUrl: getLoginUrl(),
+          roleLabel: assignedRoleLabel ?? roleToAssign?.replace(/_/g, " ") ?? "Team Member",
+          department: departmentForEmail,
+        });
+        emailDelivered = result.outcome === "sent";
+      } catch (err) {
+        console.error("[staff_approval_email_error]", err);
+      }
+    }
+
+    return apiSuccess({ status: "APPROVED", roleAssigned: roleToAssign, emailDelivered });
   } catch (error) {
     return handleApiError(error);
   }

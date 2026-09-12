@@ -68,6 +68,18 @@ export async function dispatchEmail(input: DispatchEmailInput): Promise<Dispatch
     logId = created.id;
   } catch (err: unknown) {
     if (isUniqueConstraintError(err)) {
+      // A row for this event already exists. A SENT (or in-flight SENDING)
+      // row is a genuine duplicate — never re-send. A FAILED row is not:
+      // the event still needs its one real delivery, so let exactly one
+      // caller reclaim it and retry. reclaimFailedLog()'s updateMany is the
+      // race-safe part — if two retries land at the same instant, only the
+      // one whose UPDATE actually flips FAILED -> SENDING wins; the other
+      // sees 0 rows affected and correctly falls back to "duplicate".
+      const reclaimedId = await reclaimFailedLog(input.idempotencyKey);
+      if (reclaimedId) {
+        console.info(`[email] retrying previously-failed send for idempotency key: ${input.idempotencyKey}`);
+        return sendAndFinalize(reclaimedId, input.to, input.subject, input.html, input.text);
+      }
       console.info(`[email] duplicate suppressed for idempotency key: ${input.idempotencyKey}`);
       const existing = await prisma.emailLog
         .findUnique({ where: { idempotencyKey: input.idempotencyKey }, select: { id: true } })
@@ -125,4 +137,28 @@ export async function sendQueuedLog(logId: string, to: string, subject: string, 
 
 function isUniqueConstraintError(err: unknown): boolean {
   return typeof err === "object" && err !== null && (err as { code?: string }).code === "P2002";
+}
+
+/**
+ * Atomically claims a FAILED EmailLog row for retry by flipping it to
+ * SENDING — race-safe because the WHERE clause requires status still be
+ * FAILED at UPDATE time. Postgres serializes concurrent UPDATEs to the
+ * same row, so if two retries fire at once, the second one's WHERE no
+ * longer matches once the first has committed its SENDING write, and its
+ * `count` comes back 0. Returns the log id on a successful claim, null if
+ * there's nothing to reclaim (row is missing, or already SENT/SENDING, or
+ * another concurrent caller just won the race).
+ */
+async function reclaimFailedLog(idempotencyKey: string): Promise<string | null> {
+  const existing = await prisma.emailLog.findUnique({
+    where: { idempotencyKey },
+    select: { id: true, status: true },
+  });
+  if (!existing || existing.status !== "FAILED") return null;
+
+  const claimed = await prisma.emailLog.updateMany({
+    where: { idempotencyKey, status: "FAILED" },
+    data: { status: "SENDING", failureReason: null },
+  });
+  return claimed.count === 1 ? existing.id : null;
 }

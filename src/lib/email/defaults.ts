@@ -39,19 +39,51 @@ export const DEFAULT_EMAIL_TEMPLATES: DefaultEmailTemplate[] = [
     key: "registration_credentials",
     name: "Registration Credentials",
     category: "CREDENTIALS",
-    subject: "Your {{institute_name}} login details",
-    variables: ["recipient_name", "email", "login_id", "password", "login_url", "institute_name"],
+    subject: "Welcome to {{institute_name}} — Your Registration is Successful",
+    variables: [
+      "recipient_name",
+      "email",
+      "login_id",
+      "password",
+      "login_url",
+      "enrollment_number_row",
+      "batch_row",
+      "institute_name",
+    ],
     bodyHtml: WRAP(`
-    <h2 style="margin:0 0 4px">Welcome to {{institute_name}}, {{recipient_name}}!</h2>
-    <p style="color:#475569;margin:0 0 16px">Your account has been created. Here are your login details:</p>
+    <h2 style="margin:0 0 4px">Welcome to {{institute_name}}, {{recipient_name}}! 🎉</h2>
+    <p style="color:#475569;margin:0 0 16px">Your registration has been successfully completed. Your account is now ready to use.</p>
     <table style="width:100%;border-collapse:collapse;margin:0 0 16px">
-      <tr><td style="padding:6px 0;color:#64748b;font-size:13px">Name</td><td style="padding:6px 0;font-weight:600">{{recipient_name}}</td></tr>
-      <tr><td style="padding:6px 0;color:#64748b;font-size:13px">Email</td><td style="padding:6px 0;font-weight:600">{{email}}</td></tr>
       <tr><td style="padding:6px 0;color:#64748b;font-size:13px">Login ID</td><td style="padding:6px 0;font-weight:600">{{login_id}}</td></tr>
       <tr><td style="padding:6px 0;color:#64748b;font-size:13px">Password</td><td style="padding:6px 0;font-weight:600;font-family:monospace">{{password}}</td></tr>
+      {{enrollment_number_row}}
+      {{batch_row}}
     </table>
     <p style="margin:0 0 20px">
-      <a href="{{login_url}}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;font-weight:700;padding:10px 20px;border-radius:10px">Log In</a>
+      <a href="{{login_url}}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;font-weight:700;padding:10px 20px;border-radius:10px">Log In to {{institute_name}}</a>
+    </p>
+    <p style="color:#64748b;font-size:13px;margin:0">
+      Keep these credentials safe and change your password after your first login.
+    </p>
+    ${FOOTER}`),
+  },
+  {
+    key: "staff_approval_credentials",
+    name: "Staff Approval — Credentials",
+    category: "CREDENTIALS",
+    subject: "You're approved — Welcome to {{institute_name}}",
+    variables: ["recipient_name", "role_label", "department", "email", "login_id", "password", "login_url", "institute_name"],
+    bodyHtml: WRAP(`
+    <h2 style="margin:0 0 4px">Congratulations, {{recipient_name}}!</h2>
+    <p style="color:#475569;margin:0 0 16px">Your application to join {{institute_name}} has been approved.</p>
+    <table style="width:100%;border-collapse:collapse;margin:0 0 16px">
+      <tr><td style="padding:6px 0;color:#64748b;font-size:13px">Role / Position</td><td style="padding:6px 0;font-weight:600">{{role_label}}</td></tr>
+      <tr><td style="padding:6px 0;color:#64748b;font-size:13px">Department</td><td style="padding:6px 0;font-weight:600">{{department}}</td></tr>
+      <tr><td style="padding:6px 0;color:#64748b;font-size:13px">Login ID</td><td style="padding:6px 0;font-weight:600">{{login_id}}</td></tr>
+      <tr><td style="padding:6px 0;color:#64748b;font-size:13px">Temporary Password</td><td style="padding:6px 0;font-weight:600;font-family:monospace">{{password}}</td></tr>
+    </table>
+    <p style="margin:0 0 20px">
+      <a href="{{login_url}}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;font-weight:700;padding:10px 20px;border-radius:10px">Log In to {{institute_name}}</a>
     </p>
     <p style="color:#64748b;font-size:13px;margin:0">
       For your security, please change this password after your first login. Never share it with anyone.
