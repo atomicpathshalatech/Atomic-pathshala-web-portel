@@ -68,13 +68,25 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
       include: { _count: { select: { tests: true } } },
     });
     if (!existing) return apiError("Test series not found", 404);
-    if (existing._count.tests > 0) {
-      return apiError("Remove or reassign this series' tests before deleting it.", 409);
-    }
 
+    // Test.testSeries has no onDelete override (default SetNull) — deleting
+    // the series only detaches its tests (testSeriesId -> null), it never
+    // deletes them. Previously blocked entirely whenever any test was
+    // attached, which is why a series with real content in it could never
+    // actually be deleted.
     await prisma.testSeries.delete({ where: { id: params.id } });
 
-    return apiSuccess({ deleted: true });
+    await prisma.auditLog.create({
+      data: {
+        userId: session.user.id,
+        action: "TEST_SERIES_DELETED",
+        entityType: "TestSeries",
+        entityId: params.id,
+        metadata: { name: existing.name, testsDetached: existing._count.tests },
+      },
+    });
+
+    return apiSuccess({ deleted: true, testsDetached: existing._count.tests });
   } catch (error) {
     return handleApiError(error);
   }

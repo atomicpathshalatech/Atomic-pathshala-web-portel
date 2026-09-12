@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { DppStatusActions } from "@/components/team-portal/DppStatusActions";
+import { DppDeleteButton } from "@/components/team-portal/DppDeleteButton";
 import { DPP_LEVELS } from "@/lib/dpp/levels";
 
 export const metadata: Metadata = {
@@ -26,6 +27,7 @@ export default async function DppListPage({
 
   const canCreate = await hasPermission(session.user.id, PERMISSIONS.DPP_CREATE);
   const canPublish = await hasPermission(session.user.id, PERMISSIONS.DPP_PUBLISH);
+  const canDelete = await hasPermission(session.user.id, PERMISSIONS.DPP_DELETE);
 
   const page = Math.max(1, Number(searchParams.page ?? 1));
   const pageSize = 20;
@@ -169,6 +171,7 @@ export default async function DppListPage({
                         <span className="material-symbols-outlined">edit</span>
                       </Link>
                       {canPublish && <DppStatusActions dppId={dpp.id} status={dpp.status} />}
+                      {canDelete && <DppDeleteButton dppId={dpp.id} dppCode={dpp.code} dppName={dpp.name} />}
                     </div>
                   </td>
                 </tr>

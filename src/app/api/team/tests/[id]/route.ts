@@ -7,6 +7,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { canManageTest, getTestOr404 } from "@/lib/test-engine/access";
 import { testUpdateSchema } from "@/lib/validation/test";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { deleteTestCascading } from "@/lib/team/resource-delete";
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -79,22 +80,16 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
     const test = await getTestOr404(params.id);
     if (!test) return apiError("Test not found", 404);
     if (!(await canManageTest(session.user.id, test.batchScheduleId))) throw new ForbiddenError();
-    if (test.status !== "DRAFT") {
-      return apiError("Only draft tests can be deleted — a published test may already have attempts.", 409);
-    }
 
-    await prisma.test.delete({ where: { id: params.id } });
+    // deleteTestCascading explicitly deletes this test's Attempt rows (and
+    // everything that cascades from them — answers, violations, analysis)
+    // inside a transaction before deleting the Test, and writes its own
+    // audit log. A published, already-attempted test is deletable like
+    // any other — it no longer needs to stay DRAFT first.
+    const result = await deleteTestCascading(params.id, session.user.id);
+    if (!result) return apiError("Test not found", 404);
 
-    await prisma.auditLog.create({
-      data: {
-        userId: session.user.id,
-        action: "TEST_DELETED",
-        entityType: "Test",
-        entityId: params.id,
-      },
-    });
-
-    return apiSuccess({ removed: true });
+    return apiSuccess({ removed: true, attemptsDeleted: result.attemptsDeleted });
   } catch (error) {
     return handleApiError(error);
   }

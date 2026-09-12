@@ -773,6 +773,12 @@ model Attempt {
   rank           Int?
   integrityScore Int           @default(100)
 
+  // Kept as Restrict deliberately — this is the DB-level safety net so no
+  // code path can ever silently wipe a student's attempt by deleting a
+  // Test out from under it. The actual "delete this test" admin routes
+  // (resources/delete, chapters/[id]/tests/[testId]) explicitly delete
+  // Attempt rows first, inside a transaction, before deleting the Test —
+  // an intentional, auditable cascade rather than an implicit schema one.
   test       Test?              @relation(fields: [testId], references: [id], onDelete: Restrict)
   dpp        Dpp?               @relation(fields: [dppId], references: [id])
   student    Student            @relation(fields: [studentId], references: [id], onDelete: Cascade)

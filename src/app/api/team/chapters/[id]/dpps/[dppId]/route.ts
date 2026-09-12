@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { deleteDppCascading } from "@/lib/team/resource-delete";
 
 export async function PATCH(
   request: NextRequest,
@@ -67,21 +68,10 @@ export async function DELETE(
     });
     if (!dpp) return apiError("DPP not found", 404);
 
-    await prisma.dpp.delete({
-      where: { id: params.dppId },
-    });
+    const result = await deleteDppCascading(params.dppId, session.user.id);
+    if (!result) return apiError("DPP not found", 404);
 
-    await prisma.auditLog.create({
-      data: {
-        userId: session.user.id,
-        action: "DPP_DELETED",
-        entityType: "Dpp",
-        entityId: params.dppId,
-        metadata: { chapterId: params.id, name: dpp.name },
-      },
-    });
-
-    return apiSuccess({ deleted: true });
+    return apiSuccess({ deleted: true, attemptsOrphaned: result.attemptsOrphaned });
   } catch (error) {
     return handleApiError(error);
   }

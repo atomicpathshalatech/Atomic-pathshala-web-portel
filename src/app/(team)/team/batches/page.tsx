@@ -6,6 +6,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
+import { BatchDeleteButton } from "@/components/team-portal/BatchDeleteButton";
 
 export const metadata: Metadata = {
   title: "Batches",
@@ -26,6 +27,7 @@ export default async function BatchListPage() {
   if (!canRead) redirect("/team");
 
   const canCreate = await hasPermission(session.user.id, PERMISSIONS.BATCH_CREATE);
+  const canDelete = await hasPermission(session.user.id, PERMISSIONS.BATCH_DELETE);
 
   const batches = await prisma.batch.findMany({
     include: {
@@ -73,13 +75,16 @@ export default async function BatchListPage() {
                   <h3 className="font-headline-md text-headline-md text-on-surface">{b.name}</h3>
                   <p className="text-label-sm font-label-sm text-primary">{b.code}</p>
                 </div>
-                <span
-                  className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded shrink-0 ${
-                    STATUS_STYLES[b.status] ?? "bg-surface-container-high text-on-surface-variant"
-                  }`}
-                >
-                  {b.status}
-                </span>
+                <div className="flex items-center gap-1 shrink-0">
+                  <span
+                    className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded ${
+                      STATUS_STYLES[b.status] ?? "bg-surface-container-high text-on-surface-variant"
+                    }`}
+                  >
+                    {b.status}
+                  </span>
+                  {canDelete && <BatchDeleteButton batchId={b.id} batchCode={b.code} batchName={b.name} />}
+                </div>
               </div>
               {(b.targetExam || b.course) && (
                 <p className="text-label-sm text-on-surface-variant">
