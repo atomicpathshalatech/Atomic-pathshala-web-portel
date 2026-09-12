@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { ForbiddenError, UnauthorizedError } from "@/lib/rbac/guard";
 import { SubscriptionError } from "@/server/services/subscription-service";
+import { BatchOrderError } from "@/server/services/batch-order-service";
 
 type ApiSuccess<T> = { success: true; data: T };
 type ApiFailure = {
@@ -57,6 +58,10 @@ export function handleApiError(error: unknown) {
   }
 
   if (error instanceof SubscriptionError) {
+    return apiError(error.message, 409);
+  }
+
+  if (error instanceof BatchOrderError) {
     return apiError(error.message, 409);
   }
 

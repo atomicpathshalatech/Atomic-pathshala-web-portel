@@ -249,6 +249,7 @@ model Student {
   subscription Subscription?
   whiteboardBoards StudentWhiteboardBoard[]
   batchEnrollments BatchEnrollment[]
+  batchOrders      BatchOrder[]
   handRaises       HandRaiseEvent[]
   teacherStudentConnections TeacherStudentConnection[]
   quizResponses    QuizResponse[]
@@ -413,6 +414,13 @@ model Batch {
   // existing ThumbnailUploader — after that, auto-regeneration stops
   // overwriting thumbnailUrl until they explicitly re-enable it.
   thumbnailIsAuto Boolean  @default(true)
+  // Individual-purchase pricing (rupees). Null means "not sellable as a
+  // standalone batch" — the checkout route refuses to create an order for
+  // a null price rather than falling back to a client-supplied amount, per
+  // the "price must come from the trusted server source" rule. originalPrice
+  // is display-only (strikethrough/discount badge), never used for billing.
+  price         Float?
+  originalPrice Float?
   createdById String
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
@@ -423,6 +431,7 @@ model Batch {
   schedules   BatchSchedule[]
   folders     BatchFolder[]
   activityEvents StudentActivityEvent[]
+  orders      BatchOrder[]
 
   @@index([status])
   @@index([targetExam])
@@ -517,6 +526,42 @@ model BatchEnrollment {
   @@index([studentId])
   @@index([status])
   @@map("batch_enrollments")
+}
+
+// A one-time individual-batch purchase — separate from Subscription (the
+// platform-wide BASIC/PRO plan), which has no batch scoping at all. Mirrors
+// Subscription/SubscriptionPayment's Order-based one-time-checkout shape
+// (see subscription-service.ts's createCheckout/verifyAndActivateOrderPayment)
+// but combines "order" and "payment record" into one row since a batch
+// purchase never recurs the way a billing cycle does. On verified SUCCESS,
+// exactly one BatchEnrollment is created/reactivated for (studentId, batchId)
+// — see batch-order-service.ts's verifyAndActivateBatchOrder.
+enum BatchOrderStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+model BatchOrder {
+  id                String           @id @default(cuid())
+  studentId         String
+  batchId           String
+  amount            Float
+  status            BatchOrderStatus @default(PENDING)
+  razorpayOrderId   String?          @unique
+  razorpayPaymentId String?
+  razorpaySignature String?
+  failureReason     String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  batch   Batch   @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@index([batchId])
+  @@index([status])
+  @@map("batch_orders")
 }
 
 model BatchSchedule {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyWebhookSignature } from "@/lib/payments/razorpay";
 import { handleWebhookEvent } from "@/server/services/subscription-service";
+import { reconcileBatchOrderFromWebhook } from "@/server/services/batch-order-service";
 import { prisma } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -26,6 +27,14 @@ export async function POST(request: NextRequest) {
 
   try {
     await handleWebhookEvent(event, payload.payload);
+    // Independent backup path for individual batch purchases — covers a
+    // student closing the tab right after paying, before the client-side
+    // /api/batches/[id]/verify call fires. A no-op for any payment.captured
+    // event whose order id isn't a BatchOrder's, so this never interferes
+    // with Subscription's own handling above.
+    if (event === "payment.captured") {
+      await reconcileBatchOrderFromWebhook(payload.payload);
+    }
   } catch (error) {
     // Log and still 200 — Razorpay retries on non-2xx, and we don't want a
     // transient DB hiccup to trigger a retry storm. The event is recorded
