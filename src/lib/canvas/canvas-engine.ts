@@ -79,7 +79,23 @@ export interface TextObject {
   height: number;
 }
 
-export type StrokeObject = FreehandObject | ShapeObject | TextObject;
+/** A cropped, pre-rendered bitmap patch — currently produced only by the
+ * bucket tool's flood fill (see fillAtPoint/floodFillImageData below). It's
+ * a plain image overlay (PNG data URL + placement rect in virtual px), not
+ * a vector shape, but it goes through the exact same objects/undo/onCommit
+ * pipeline as every other object so fill/undo/redo/autosave/export all keep
+ * working without special-casing it at the call sites. */
+export interface RasterObject {
+  id: string;
+  type: "raster";
+  dataUrl: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export type StrokeObject = FreehandObject | ShapeObject | TextObject | RasterObject;
 
 export type CanvasTool =
   | "pen"
@@ -100,8 +116,34 @@ export const ERASER_SIZES: { id: "S" | "M" | "L" | "XL"; label: string; radius: 
   { id: "XL", label: "XL", radius: 68 },
 ];
 
-/** How long a laser stroke stays on screen before it has fully faded (ms). */
-export const LASER_DURATION_MS = 1400;
+/** How long a laser stroke stays on screen before it has fully faded (ms) —
+ * long enough for the blink-then-fade lifecycle in laserOpacityAt() below
+ * to actually read as distinct phases rather than a single quick flash. */
+export const LASER_DURATION_MS = 2800;
+
+/**
+ * Laser-pointer opacity over its lifetime, `t` in [0, 1] (age / DURATION):
+ * visible → 1-2 sharp blinks → slower/lighter blinking → smooth fade → gone.
+ * Piecewise so each phase is easy to retune independently:
+ *   [0.00, 0.35) — 2 sharp on/off blinks (square wave, not a smooth fade —
+ *                  these should read as distinct flashes).
+ *   [0.35, 0.70) — continues blinking, but slower (one full cycle instead
+ *                  of two) and lighter (bounded further from full opacity).
+ *   [0.70, 1.00] — no more blinking, smooth quadratic fade to fully gone.
+ */
+function laserOpacityAt(t: number): number {
+  if (t < 0.35) {
+    const cyclePos = (t / 0.35) * 2; // 2 blinks across this phase
+    return cyclePos % 1 < 0.5 ? 1 : 0.2;
+  }
+  if (t < 0.7) {
+    const localT = (t - 0.35) / 0.35;
+    const wave = (Math.sin(localT * Math.PI * 2 - Math.PI / 2) + 1) / 2; // 0..1, starts low
+    return 0.35 + wave * 0.45; // stays within [0.35, 0.8] — lighter than phase 1
+  }
+  const fadeT = (t - 0.7) / 0.3;
+  return Math.max(0, 1 - fadeT * fadeT) * 0.6; // tail off from phase 2's ceiling to 0
+}
 
 /** Font-size (virtual px) per unit of the shared pen `currentSize` control,
  * so the same S/M/L size preset used for pen width gives sensible, readable
@@ -157,8 +199,8 @@ function pointInPolygon(pt: { x: number; y: number }, poly: { x: number; y: numb
  * though (like the freehand eraser) it's an outline test, not a fill test. */
 function representativePoints(obj: StrokeObject): { x: number; y: number }[] {
   if (obj.type === "stroke") return obj.points;
-  if (obj.type === "text") {
-    const { x, y } = obj.position;
+  if (obj.type === "text" || obj.type === "raster") {
+    const { x, y } = obj.type === "text" ? obj.position : obj;
     const { width, height } = obj;
     return [
       { x, y },
@@ -207,6 +249,7 @@ function representativePoints(obj: StrokeObject): { x: number; y: number }[] {
 function firstPoint(obj: StrokeObject): { x: number; y: number } | undefined {
   if (obj.type === "stroke") return obj.points[0];
   if (obj.type === "text") return obj.position;
+  if (obj.type === "raster") return { x: obj.x, y: obj.y };
   return obj.start;
 }
 
@@ -217,6 +260,9 @@ function translateObject(obj: StrokeObject, dx: number, dy: number): StrokeObjec
   if (obj.type === "text") {
     return { ...obj, position: { x: obj.position.x + dx, y: obj.position.y + dy } };
   }
+  if (obj.type === "raster") {
+    return { ...obj, x: obj.x + dx, y: obj.y + dy };
+  }
   return {
     ...obj,
     start: { x: obj.start.x + dx, y: obj.start.y + dy },
@@ -224,20 +270,34 @@ function translateObject(obj: StrokeObject, dx: number, dy: number): StrokeObjec
   };
 }
 
-function getBoundingBox(obj: StrokeObject): { minX: number; minY: number; maxX: number; maxY: number } {
+/** Exact (unpadded) bounds of an object's own geometry — the correct
+ * reference for resize math (anchor point + original size ratio). Kept
+ * separate from getBoundingBox()'s padded version (used for drawing/
+ * hit-testing the selection box) because using the padded box as the resize
+ * anchor made every resize drag end with the object's true edge a few
+ * pixels away from the pointer — small and easy to miss on a large
+ * freehand stroke, but very visible on a small text object (see
+ * getResizeAnchor() below, used for the actual scale-ratio math). */
+function getUnpaddedBounds(obj: StrokeObject): { minX: number; minY: number; maxX: number; maxY: number } {
   const pts = representativePoints(obj);
   if (pts.length === 0) return { minX: 0, minY: 0, maxX: 0, maxY: 0 };
   const xs = pts.map((p) => p.x);
   const ys = pts.map((p) => p.y);
-  return {
-    minX: Math.min(...xs) - 8,
-    minY: Math.min(...ys) - 8,
-    maxX: Math.max(...xs) + 8,
-    maxY: Math.max(...ys) + 8,
-  };
+  return { minX: Math.min(...xs), minY: Math.min(...ys), maxX: Math.max(...xs), maxY: Math.max(...ys) };
 }
 
-function scaleObject(obj: StrokeObject, scaleX: number, scaleY: number, origin: { x: number; y: number }): StrokeObject {
+function getBoundingBox(obj: StrokeObject): { minX: number; minY: number; maxX: number; maxY: number } {
+  const b = getUnpaddedBounds(obj);
+  return { minX: b.minX - 8, minY: b.minY - 8, maxX: b.maxX + 8, maxY: b.maxY + 8 };
+}
+
+function scaleObject(
+  obj: StrokeObject,
+  scaleX: number,
+  scaleY: number,
+  origin: { x: number; y: number },
+  measureText?: (text: string, sizePx: number) => { width: number; height: number }
+): StrokeObject {
   if (obj.type === "stroke") {
     return {
       ...obj,
@@ -250,15 +310,35 @@ function scaleObject(obj: StrokeObject, scaleX: number, scaleY: number, origin: 
   }
   if (obj.type === "text") {
     const scale = Math.max(0.2, (scaleX + scaleY) / 2);
+    const size = Math.max(8, Math.round(obj.size * scale));
+    // Re-measure at the new font size instead of independently scaling the
+    // stored width/height by scaleX/scaleY — drawText() only ever uses
+    // `size` to render, so scaling width/height on their own let the
+    // selection box drift away from what was actually drawn on a
+    // non-uniform drag (the "distorts" symptom). Re-measuring keeps the box
+    // exactly matched to the real rendered text, same as addTextObject/
+    // updateTextObject already do.
+    const { width, height } = measureText
+      ? measureText(obj.text, size)
+      : { width: Math.max(10, Math.round(obj.width * scaleX)), height: Math.max(10, Math.round(obj.height * scaleY)) };
     return {
       ...obj,
       position: {
         x: origin.x + (obj.position.x - origin.x) * scaleX,
         y: origin.y + (obj.position.y - origin.y) * scaleY,
       },
-      size: Math.max(8, Math.round(obj.size * scale)),
-      width: Math.max(10, Math.round(obj.width * scaleX)),
-      height: Math.max(10, Math.round(obj.height * scaleY)),
+      size,
+      width,
+      height,
+    };
+  }
+  if (obj.type === "raster") {
+    return {
+      ...obj,
+      x: origin.x + (obj.x - origin.x) * scaleX,
+      y: origin.y + (obj.y - origin.y) * scaleY,
+      width: Math.max(4, Math.round(obj.width * scaleX)),
+      height: Math.max(4, Math.round(obj.height * scaleY)),
     };
   }
   return {
@@ -375,6 +455,118 @@ function isInsideShape(obj: ShapeObject, pt: { x: number; y: number }): boolean 
   return false;
 }
 
+export function hexToRgba(hex: string): { r: number; g: number; b: number; a: number } {
+  const m = hex.replace("#", "");
+  const full = m.length === 3 ? m.split("").map((c) => c + c).join("") : m;
+  const num = parseInt(full, 16);
+  return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255, a: 255 };
+}
+
+/**
+ * Scanline flood fill over already-rendered canvas pixels — this is what
+ * makes the bucket tool work on ANY closed region (freehand pen loops,
+ * mixed strokes+shapes+text), not just the three shape primitives handled
+ * separately in fillAtPoint(). Any non-matching pixel (a stroke, a shape
+ * outline, a text glyph) acts as a boundary automatically; no separate
+ * "is this a closed path" geometry check is needed.
+ *
+ * Mutates `imageData.data` in place for the pixels it fills. Returns the
+ * bounding box of the filled region, or `null` if:
+ *   - the clicked pixel is already the fill color (nothing to do), or
+ *   - the fill "leaked" — it reached the canvas edge, or grew past
+ *     `maxFillPixels` — meaning the region wasn't actually closed. Either
+ *     way the caller should discard the (already-mutated) ImageData rather
+ *     than use it, so an open boundary never silently colors the whole
+ *     board and never runs long enough to freeze the tab.
+ */
+export function floodFillImageData(
+  imageData: ImageData,
+  startX: number,
+  startY: number,
+  fillColor: { r: number; g: number; b: number; a: number },
+  tolerance = 32,
+  // Not a "stay small" cap — the scanline fill below is O(pixels visited)
+  // with cheap per-pixel work, so even filling the entire 1920x1080 canvas
+  // in one pass is fast (tens of ms), not a freeze risk. This only exists
+  // as a hard backstop against a truly pathological input; the real
+  // open-boundary signal is `leaked` (the fill reaching any canvas edge),
+  // checked independently below. Defaulting this to the full canvas size
+  // means it should essentially never be the reason a fill is rejected.
+  maxFillPixels = imageData.width * imageData.height
+): { minX: number; minY: number; maxX: number; maxY: number } | null {
+  const { width, height, data } = imageData;
+  const sx = Math.floor(startX);
+  const sy = Math.floor(startY);
+  if (sx < 0 || sx >= width || sy < 0 || sy >= height) return null;
+
+  const startIdx = (sy * width + sx) * 4;
+  const tR = data[startIdx]!, tG = data[startIdx + 1]!, tB = data[startIdx + 2]!, tA = data[startIdx + 3]!;
+  const dr0 = tR - fillColor.r, dg0 = tG - fillColor.g, db0 = tB - fillColor.b, da0 = tA - fillColor.a;
+  if (Math.sqrt(dr0 * dr0 + dg0 * dg0 + db0 * db0 + da0 * da0) < 2) return null; // already this color
+
+  const matches = (x: number, y: number): boolean => {
+    const i = (y * width + x) * 4;
+    const dr = data[i]! - tR, dg = data[i + 1]! - tG, db = data[i + 2]! - tB, da = data[i + 3]! - tA;
+    return Math.sqrt(dr * dr + dg * dg + db * db + da * da) <= tolerance;
+  };
+
+  const visited = new Uint8Array(width * height);
+  const fillPixel = (x: number, y: number) => {
+    visited[y * width + x] = 1;
+    const i = (y * width + x) * 4;
+    data[i] = fillColor.r;
+    data[i + 1] = fillColor.g;
+    data[i + 2] = fillColor.b;
+    data[i + 3] = fillColor.a;
+  };
+
+  let minX = sx, maxX = sx, minY = sy, maxY = sy;
+  let filledCount = 0;
+  let leaked = false;
+  const stack: [number, number][] = [[sx, sy]];
+
+  while (stack.length > 0) {
+    const [x, y0] = stack.pop()!;
+    if (y0 < 0 || y0 >= height || visited[y0 * width + x] || !matches(x, y0)) continue;
+
+    // Extend left/right from (x, y0) to find this row's contiguous span.
+    let xl = x;
+    while (xl - 1 >= 0 && !visited[y0 * width + (xl - 1)] && matches(xl - 1, y0)) xl--;
+    let xr = x;
+    while (xr + 1 < width && !visited[y0 * width + (xr + 1)] && matches(xr + 1, y0)) xr++;
+
+    for (let xi = xl; xi <= xr; xi++) fillPixel(xi, y0);
+    filledCount += xr - xl + 1;
+    if (xl < minX) minX = xl;
+    if (xr > maxX) maxX = xr;
+    if (y0 < minY) minY = y0;
+    if (y0 > maxY) maxY = y0;
+    if (xl === 0 || xr === width - 1 || y0 === 0 || y0 === height - 1) leaked = true;
+    if (filledCount > maxFillPixels) {
+      leaked = true;
+      break;
+    }
+
+    // Queue one seed point per contiguous matching run on the row above and
+    // below — the inner while-loop above will pick up the rest of each run.
+    for (const ny of [y0 - 1, y0 + 1]) {
+      if (ny < 0 || ny >= height) continue;
+      let xi = xl;
+      while (xi <= xr) {
+        if (!visited[ny * width + xi] && matches(xi, ny)) {
+          stack.push([xi, ny]);
+          while (xi <= xr && matches(xi, ny)) xi++;
+        } else {
+          xi++;
+        }
+      }
+    }
+  }
+
+  if (leaked || filledCount === 0) return null;
+  return { minX, minY, maxX: maxX + 1, maxY: maxY + 1 };
+}
+
 export class CanvasEngine {
   private baseCanvas: HTMLCanvasElement;
   private activeCanvas: HTMLCanvasElement;
@@ -420,6 +612,15 @@ export class CanvasEngine {
 
   private onCommit?: (objects: StrokeObject[]) => void;
   private onSelectionChange?: (ids: string[]) => void;
+  /** Set by the host component. Fired for a transient, non-blocking notice
+   * the engine can't show itself (e.g. the bucket tool hitting an open
+   * boundary) — never thrown, so a slow/failed listener can't break
+   * drawing. */
+  public onNotice?: (message: string) => void;
+  /** Decoded <img> per RasterObject.id, populated lazily in drawRaster()
+   * since canvas drawImage() needs an already-loaded Image, not a raw data
+   * URL, and renderBase() itself must stay synchronous. */
+  private rasterImageCache = new Map<string, HTMLImageElement>();
 
   private get selectedId(): string | null {
     return this.selectedIds.size ? [...this.selectedIds][0]! : null;
@@ -600,19 +801,26 @@ export class CanvasEngine {
       if (this.selectedIds.size === 1) {
         const selectedObj = this.objects.find((o) => o.id === this.selectedId);
         if (selectedObj) {
+          // Handles are drawn/grabbed at the padded box (a few px outside
+          // the object, same as the visible selection outline), but the
+          // opposite-corner anchor and original size used for the actual
+          // scale math must be the object's exact, unpadded geometry — see
+          // getUnpaddedBounds()'s doc comment for why using the padded box
+          // there caused drift.
           const bbox = getBoundingBox(selectedObj);
+          const unpadded = getUnpaddedBounds(selectedObj);
           const handleTolerance = 14;
           const handles: { handle: "tl" | "tr" | "br" | "bl"; corner: { x: number; y: number }; opposite: { x: number; y: number } }[] = [
-            { handle: "tl", corner: { x: bbox.minX, y: bbox.minY }, opposite: { x: bbox.maxX, y: bbox.maxY } },
-            { handle: "tr", corner: { x: bbox.maxX, y: bbox.minY }, opposite: { x: bbox.minX, y: bbox.maxY } },
-            { handle: "br", corner: { x: bbox.maxX, y: bbox.maxY }, opposite: { x: bbox.minX, y: bbox.minY } },
-            { handle: "bl", corner: { x: bbox.minX, y: bbox.maxY }, opposite: { x: bbox.maxX, y: bbox.minY } },
+            { handle: "tl", corner: { x: bbox.minX, y: bbox.minY }, opposite: { x: unpadded.maxX, y: unpadded.maxY } },
+            { handle: "tr", corner: { x: bbox.maxX, y: bbox.minY }, opposite: { x: unpadded.minX, y: unpadded.maxY } },
+            { handle: "br", corner: { x: bbox.maxX, y: bbox.maxY }, opposite: { x: unpadded.minX, y: unpadded.minY } },
+            { handle: "bl", corner: { x: bbox.minX, y: bbox.maxY }, opposite: { x: unpadded.maxX, y: unpadded.minY } },
           ];
           const hitHandle = handles.find((h) => distance(h.corner, pt) < handleTolerance);
           if (hitHandle) {
             this.resizeHandle = hitHandle.handle;
             this.resizeOpposite = hitHandle.opposite;
-            this.resizeInitialBBox = bbox;
+            this.resizeInitialBBox = unpadded;
             this.dragSnapshot = this.cloneObjects();
             return;
           }
@@ -703,7 +911,7 @@ export class CanvasEngine {
           if (original) {
             const idx = this.objects.findIndex((o) => o.id === this.selectedId);
             if (idx !== -1) {
-              this.objects[idx] = scaleObject(original, scaleX, scaleY, this.resizeOpposite);
+              this.objects[idx] = scaleObject(original, scaleX, scaleY, this.resizeOpposite, this.measureText.bind(this));
               this.renderBase();
             }
           }
@@ -1023,7 +1231,7 @@ export class CanvasEngine {
       for (const s of this.laserStrokes) {
         const age = now - s.born;
         const t = Math.min(1, age / LASER_DURATION_MS);
-        this.drawLaser(s.points, 1 - t * t);
+        this.drawLaser(s.points, laserOpacityAt(t));
       }
       if (this.laserActive) this.drawLaser(this.laserActive, 1);
 
@@ -1083,6 +1291,8 @@ export class CanvasEngine {
         this.strokePath(this.baseCtx, obj.points, obj.color, obj.size, obj.tool === "highlighter", obj.penStyle);
       } else if (obj.type === "text") {
         this.drawText(this.baseCtx, obj);
+      } else if (obj.type === "raster") {
+        this.drawRaster(obj);
       } else {
         drawShape(this.baseCtx, obj);
       }
@@ -1119,6 +1329,23 @@ export class CanvasEngine {
       ctx.fillText(line, obj.position.x, obj.position.y + i * lineHeight);
     });
     ctx.restore();
+  }
+
+  /** Draws a bucket-fill patch. `<img>` decode is async, so a not-yet-loaded
+   * image is skipped this frame (drawing a blank/transparent rect there is
+   * fine — a fill is additive over whatever's already correctly on screen)
+   * and triggers one renderBase() re-run the moment it finishes loading. */
+  private drawRaster(obj: RasterObject): void {
+    let img = this.rasterImageCache.get(obj.id);
+    if (!img) {
+      img = new Image();
+      img.onload = () => this.renderBase();
+      img.src = obj.dataUrl;
+      this.rasterImageCache.set(obj.id, img);
+    }
+    if (img.complete && img.naturalWidth > 0) {
+      this.baseCtx.drawImage(img, obj.x, obj.y, obj.width, obj.height);
+    }
   }
 
   /** Measures text with the same font renderBase()/drawText() will actually
@@ -1222,6 +1449,13 @@ export class CanvasEngine {
         if (pt.x >= x - 6 && pt.x <= x + obj.width + 6 && pt.y >= y - 6 && pt.y <= y + obj.height + 6) return obj;
         continue;
       }
+      // A filled patch is a solid block, not an outline — click-anywhere-
+      // inside should select it, same reasoning as text above.
+      if (obj.type === "raster") {
+        const { x, y, width, height } = obj;
+        if (pt.x >= x - 6 && pt.x <= x + width + 6 && pt.y >= y - 6 && pt.y <= y + height + 6) return obj;
+        continue;
+      }
       if (representativePoints(obj).some((p) => distance(p, pt) < SELECT_HIT_RADIUS)) return obj;
     }
     return null;
@@ -1285,8 +1519,66 @@ export class CanvasEngine {
       return;
     }
 
-    // No fillable shape under the pointer — do nothing. (Never recolour a
-    // stroke, text, line or arrow just because the bucket is active.)
+    // 3. Not a shape primitive — fall back to a real closed-region flood
+    // fill against the rendered pixels (handles freehand pen loops, and
+    // shapes/text used purely as boundaries rather than fillable objects).
+    //
+    // getImageData() always reads the canvas's actual physical pixel
+    // buffer, which setTransform() in syncSize() has deliberately made
+    // SMALLER than VIRTUAL_WIDTH/HEIGHT (backing-store size = CSS size *
+    // devicePixelRatio; every draw call is then scaled up to fill virtual
+    // space). `pt` here is in virtual coordinates, same as every other
+    // object's geometry — so both the click point and the resulting
+    // bounds must be converted through that same scale factor, or the
+    // flood fill silently samples/writes the wrong physical pixels
+    // relative to what's actually on screen at the virtual click point.
+    this.renderBase();
+    const transform = this.baseCtx.getTransform();
+    const scaleX = transform.a || 1;
+    const scaleY = transform.d || 1;
+    const bufferW = this.baseCanvas.width;
+    const bufferH = this.baseCanvas.height;
+    const imageData = this.baseCtx.getImageData(0, 0, bufferW, bufferH);
+    const physPt = { x: pt.x * scaleX, y: pt.y * scaleY };
+    const bounds = floodFillImageData(imageData, physPt.x, physPt.y, hexToRgba(this.currentColor));
+    if (!bounds) {
+      this.onNotice?.("This area isn't fully closed — bucket fill needs a closed boundary.");
+      return;
+    }
+
+    const w = bounds.maxX - bounds.minX;
+    const h = bounds.maxY - bounds.minY;
+    const patchCanvas = document.createElement("canvas");
+    patchCanvas.width = w;
+    patchCanvas.height = h;
+    const patchCtx = patchCanvas.getContext("2d");
+    if (!patchCtx) return;
+    // ImageData's constructor needs its own buffer slice, not a live view
+    // into the full-canvas array — copy just the patch's rows out.
+    const patchData = patchCtx.createImageData(w, h);
+    for (let row = 0; row < h; row++) {
+      const srcStart = ((bounds.minY + row) * bufferW + bounds.minX) * 4;
+      patchData.data.set(imageData.data.subarray(srcStart, srcStart + w * 4), row * w * 4);
+    }
+    patchCtx.putImageData(patchData, 0, 0);
+
+    this.pushUndo();
+    // The patch bitmap itself is physical-pixel resolution; its placement
+    // (x/y/width/height) goes back through objects/renderBase() and must
+    // be in virtual coordinates like everything else, so divide back down
+    // by the same scale factors used above.
+    const raster: RasterObject = {
+      id: uid(),
+      type: "raster",
+      dataUrl: patchCanvas.toDataURL("image/png"),
+      x: bounds.minX / scaleX,
+      y: bounds.minY / scaleY,
+      width: w / scaleX,
+      height: h / scaleY,
+    };
+    this.objects.push(raster);
+    this.renderBase();
+    this.onCommit?.(this.objects);
   }
 
   /** Partial/stroke eraser — removes only the points within the eraser
@@ -1301,7 +1593,7 @@ export class CanvasEngine {
     const next: StrokeObject[] = [];
 
     for (const obj of this.objects) {
-      if (obj.type === "shape" || obj.type === "text") {
+      if (obj.type === "shape" || obj.type === "text" || obj.type === "raster") {
         if (representativePoints(obj).some((p) => distance(p, pt) < this.eraserRadius)) {
           changed = true;
           continue;
@@ -1445,6 +1737,7 @@ export class CanvasEngine {
     return this.objects.map((o) => {
       if (o.type === "stroke") return { ...o, points: o.points.map((p) => ({ ...p })) };
       if (o.type === "text") return { ...o, position: { ...o.position } };
+      if (o.type === "raster") return { ...o };
       return { ...o, start: { ...o.start }, end: { ...o.end } };
     });
   }
@@ -1512,6 +1805,16 @@ export class CanvasEngine {
             ...obj,
             position: { x: obj.position.x * scaleX, y: obj.position.y * scaleY },
             size: obj.size * scaleX,
+            width: obj.width * scaleX,
+            height: obj.height * scaleY,
+          };
+        } else if (obj.type === "raster") {
+          // Raster (bucket-fill patch) objects are newer than this legacy
+          // format too — unreachable in practice, handled for exhaustiveness.
+          return {
+            ...obj,
+            x: obj.x * scaleX,
+            y: obj.y * scaleY,
             width: obj.width * scaleX,
             height: obj.height * scaleY,
           };

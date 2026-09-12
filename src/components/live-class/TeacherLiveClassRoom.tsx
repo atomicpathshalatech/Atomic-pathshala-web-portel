@@ -562,6 +562,10 @@ export function TeacherLiveClassRoom({
       }
     );
     engineRef.current = engine;
+    // Transient, non-blocking notices the engine can't show itself (e.g. the
+    // bucket tool hitting an open boundary) — reuses the existing error
+    // banner rather than introducing a separate toast system.
+    engine.onNotice = (message) => setLoadError(message);
     // The engine has no DOM of its own to render a text-entry UI, so on a
     // "text" tool click it hands the click point back here and this opens
     // a positioned <textarea> overlay instead.
