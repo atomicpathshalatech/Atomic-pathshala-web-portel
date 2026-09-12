@@ -45,6 +45,31 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: "10mb",
     },
+    // Trims non-runtime files (docs, source maps, dev-only tooling) out of
+    // every serverless function's traced bundle. With ~370 API routes in
+    // this app, even a small per-function saving multiplies across every
+    // route and every retained deployment (Vercel's "Functions Storage"
+    // usage is the sum of every function bundle across every deployment
+    // it still has, not just the current one) — this keeps that sum from
+    // growing faster than it needs to as the app adds routes over time.
+    // Never lists real runtime deps (googleapis/jspdf/livekit-server-sdk/
+    // the Prisma query engine) — those are genuinely needed by the routes
+    // that import them.
+    outputFileTracingExcludes: {
+      "*": [
+        "**/*.map",
+        "**/*.md",
+        "**/LICENSE",
+        "**/LICENSE.txt",
+        "**/CHANGELOG.md",
+        "**/*.d.ts.map",
+        "node_modules/typescript/**",
+        "node_modules/@typescript-eslint/**",
+        "node_modules/eslint*/**",
+        "node_modules/prettier/**",
+        "node_modules/@types/**",
+      ],
+    },
   },
   async headers() {
     return [
