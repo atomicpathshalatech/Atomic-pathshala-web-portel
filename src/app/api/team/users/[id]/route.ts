@@ -5,7 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS, ROLE_PERMISSION_DEFAULTS, PermissionCode } from "@/lib/rbac/permissions";
-import { generateTempPassword, sendCredentialsEmail } from "@/lib/email/credentials";
+import { generateTempPassword, sendStaffApprovalEmail } from "@/lib/email/credentials";
 import { getLoginUrl } from "@/lib/email/app-url";
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
@@ -123,7 +123,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
     const currentUser = await prisma.user.findUnique({
       where: { id: userId },
-      include: { role: true, teacher: { select: { id: true } } },
+      include: { role: true, teacher: { select: { id: true, department: true } } },
     });
 
     if (!currentUser) {
@@ -248,14 +248,23 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     });
 
     if (isFirstApproval && tempPasswordForEmail) {
-      await sendCredentialsEmail({
+      // Same idempotencyKey convention as the invitations-approve route
+      // (src/app/api/team/invitations/[id]/route.ts) — whichever admin
+      // path reaches this exact APPROVAL_PENDING -> ACTIVE transition
+      // first is the only one that ever actually sends this email.
+      await sendStaffApprovalEmail({
         idempotencyKey: `registration:${updatedUser.id}`,
         recipientUserId: updatedUser.id,
-        recipientType: "STAFF",
         fullName: updatedUser.name,
         email: updatedUser.email,
         password: tempPasswordForEmail,
         loginUrl: getLoginUrl(),
+        roleLabel: updatedUser.role?.label ?? body.roleName?.replace(/_/g, " ") ?? "Team Member",
+        // Teacher.department is what invite-registration actually sets
+        // (see the identical comment in team/invitations/[id]/route.ts) —
+        // currentUser was fetched before this update, but department never
+        // changes as part of this PATCH, so it's still accurate here.
+        department: currentUser.teacher?.department || updatedUser.department || "—",
       }).catch((err) => console.error("[team/users PATCH] credentials email failed:", err));
     }
 
