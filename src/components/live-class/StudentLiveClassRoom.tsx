@@ -212,6 +212,12 @@ export function StudentLiveClassRoom({
   const [isApprovedSpeaker, setIsApprovedSpeaker] = useState(false);
   const [speakerToken, setSpeakerToken] = useState<string | null>(null);
 
+  // Teacher-initiated connect — independent of the hand-raise flow above
+  // (teacher grants directly, no request from the student involved).
+  const [teacherAudioConnected, setTeacherAudioConnected] = useState(false);
+  const [teacherVideoConnected, setTeacherVideoConnected] = useState(false);
+  const [teacherConnectionToken, setTeacherConnectionToken] = useState<string | null>(null);
+
   const [quiz, setQuiz] = useState<LiveQuiz | null>(null);
   const [mySelection, setMySelection] = useState<string | null>(null);
   const [submittingAnswer, setSubmittingAnswer] = useState(false);
@@ -484,6 +490,37 @@ export function StudentLiveClassRoom({
         setHandRaised(false);
       }
     });
+
+    // Teacher-initiated connect/disconnect — independent of hand-raise above.
+    channel.bind(
+      WB_EVENTS.TEACHER_CONNECT_UPDATED,
+      (data: {
+        studentUserId: string;
+        audioConnected: boolean;
+        videoConnected: boolean;
+        connectionToken: string | null;
+      }) => {
+        if (data.studentUserId !== currentUserId) return;
+        setTeacherAudioConnected(data.audioConnected);
+        setTeacherVideoConnected(data.videoConnected);
+        setTeacherConnectionToken(data.connectionToken);
+      }
+    );
+
+    // Restore teacher-connect state after a refresh — server state is
+    // authoritative, so this fills in what the last Pusher event (missed
+    // while the page was reloading) would have set, including a freshly
+    // minted token so the client can actually resume publishing.
+    fetch(`/api/whiteboard/sessions/${wbSession.id}/teacher-connect`)
+      .then((r) => r.json())
+      .then((j) => {
+        if (j.success && j.data) {
+          setTeacherAudioConnected(!!j.data.audioConnected);
+          setTeacherVideoConnected(!!j.data.videoConnected);
+          setTeacherConnectionToken(j.data.connectionToken ?? null);
+        }
+      })
+      .catch(() => {});
 
     // Check existing quiz
 
@@ -1001,6 +1038,9 @@ export function StudentLiveClassRoom({
                 teacherName={teacherName}
                 isApprovedSpeaker={isApprovedSpeaker}
                 speakerToken={speakerToken}
+                teacherAudioConnected={teacherAudioConnected}
+                teacherVideoConnected={teacherVideoConnected}
+                teacherConnectionToken={teacherConnectionToken}
               />
             )}
           </div>
@@ -1013,6 +1053,21 @@ export function StudentLiveClassRoom({
                 Speaking Active
               </span>
               <span className="text-[10px] text-emerald-400 font-normal">Mic Connected</span>
+            </div>
+          )}
+
+          {/* Teacher-Connected Banner — informational only, no accept/reject
+              (same as hand-raise approval above, the teacher's action is
+              already authoritative by the time this fires). */}
+          {(teacherAudioConnected || teacherVideoConnected) && (
+            <div className="mx-3 my-2 bg-blue-950/80 border border-blue-500/60 rounded-xl px-3 py-1.5 flex items-center justify-between text-xs text-blue-200 font-bold shrink-0">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-blue-400 animate-ping" />
+                {teacherVideoConnected ? "Teacher connected your camera & mic" : "Teacher connected your mic"}
+              </span>
+              <span className="text-[10px] text-blue-400 font-normal">
+                {teacherVideoConnected ? "Camera + Mic" : "Mic Only"}
+              </span>
             </div>
           )}
 
@@ -1073,6 +1128,9 @@ export function StudentLiveClassRoom({
                     teacherName={teacherName}
                     isApprovedSpeaker={isApprovedSpeaker}
                     speakerToken={speakerToken}
+                    teacherAudioConnected={teacherAudioConnected}
+                    teacherVideoConnected={teacherVideoConnected}
+                    teacherConnectionToken={teacherConnectionToken}
                   />
                 </div>
               )}

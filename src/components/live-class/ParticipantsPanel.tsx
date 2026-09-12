@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { getPusherClient } from "@/lib/realtime/pusher-client";
-import { sessionChannel } from "@/lib/realtime/events";
+import { sessionChannel, WB_EVENTS } from "@/lib/realtime/events";
 
 export type Participant = {
   id: string;
@@ -26,8 +26,21 @@ export type TeacherInfo = {
   photoUrl: string | null;
 };
 
+type MediaConnectionState = { audioConnected: boolean; videoConnected: boolean };
+
 async function getJson(url: string) {
   const res = await fetch(url);
+  const json = await res.json();
+  if (!res.ok || !json.success) throw new Error(json.error ?? "Request failed");
+  return json.data;
+}
+
+async function postJson(url: string, body?: unknown) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
   const json = await res.json();
   if (!res.ok || !json.success) throw new Error(json.error ?? "Request failed");
   return json.data;
@@ -56,6 +69,8 @@ export function ParticipantsPanel({
   const [error, setError] = useState<string | null>(null);
   const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
+  const [connections, setConnections] = useState<Record<string, MediaConnectionState>>({});
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
 
   const loadData = async () => {
     try {
@@ -69,11 +84,59 @@ export function ParticipantsPanel({
     }
   };
 
+  const loadConnections = async () => {
+    try {
+      const data = await getJson(`/api/whiteboard/sessions/${whiteboardSessionId}/teacher-connect`);
+      const next: Record<string, MediaConnectionState> = {};
+      for (const c of data.connections || []) {
+        next[c.studentId] = { audioConnected: c.audioConnected, videoConnected: c.videoConnected };
+      }
+      setConnections(next);
+    } catch {
+      // Non-fatal — the roster still renders, buttons just start from "not connected"
+      // until the next Pusher event.
+    }
+  };
+
   useEffect(() => {
     loadData();
+    loadConnections();
     const interval = setInterval(loadData, 30_000);
     return () => clearInterval(interval);
   }, [whiteboardSessionId]);
+
+  const connectStudent = async (studentId: string, mediaType: "AUDIO" | "VIDEO") => {
+    setPendingAction(`${studentId}:${mediaType}`);
+    try {
+      const data = await postJson(`/api/whiteboard/sessions/${whiteboardSessionId}/teacher-connect`, {
+        studentId,
+        mediaType,
+      });
+      setConnections((prev) => ({
+        ...prev,
+        [studentId]: {
+          audioConnected: data.connection.audioConnected,
+          videoConnected: data.connection.videoConnected,
+        },
+      }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to connect student");
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  const disconnectStudent = async (studentId: string) => {
+    setPendingAction(`${studentId}:DISCONNECT`);
+    try {
+      await postJson(`/api/whiteboard/sessions/${whiteboardSessionId}/teacher-connect/${studentId}/disconnect`);
+      setConnections((prev) => ({ ...prev, [studentId]: { audioConnected: false, videoConnected: false } }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to disconnect student");
+    } finally {
+      setPendingAction(null);
+    }
+  };
 
   useEffect(() => {
     const client = getPusherClient();
@@ -92,6 +155,18 @@ export function ParticipantsPanel({
       }
       setOnlineUserIds(ids);
     };
+
+    const onTeacherConnectUpdated = (payload: any) => {
+      if (!payload?.studentId) return;
+      setConnections((prev) => ({
+        ...prev,
+        [payload.studentId]: {
+          audioConnected: !!payload.audioConnected,
+          videoConnected: !!payload.videoConnected,
+        },
+      }));
+    };
+    channel.bind(WB_EVENTS.TEACHER_CONNECT_UPDATED, onTeacherConnectUpdated);
 
     channel.bind("pusher:subscription_succeeded", syncMembers);
     channel.bind("pusher:member_added", (member: any) => {
@@ -115,6 +190,7 @@ export function ParticipantsPanel({
 
     return () => {
       channel.unbind("pusher:subscription_succeeded", syncMembers);
+      channel.unbind(WB_EVENTS.TEACHER_CONNECT_UPDATED, onTeacherConnectUpdated);
     };
   }, [whiteboardSessionId]);
 
@@ -272,12 +348,105 @@ export function ParticipantsPanel({
                       <span className="text-amber-400/80">({p.reconnectCount} reconnects)</span>
                     )}
                   </div>
+
+                  {p.hasJoined && (
+                    <MediaConnectRow
+                      studentId={p.id}
+                      state={connections[p.id] ?? { audioConnected: false, videoConnected: false }}
+                      pendingAction={pendingAction}
+                      onConnect={(mediaType) => connectStudent(p.id, mediaType)}
+                      onDisconnect={() => disconnectStudent(p.id)}
+                      isDark={isDark}
+                    />
+                  )}
                 </div>
               </div>
             );
           })
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Teacher-initiated connect/disconnect buttons for one roster row. Kept as
+ * its own component so each row's pending-request state doesn't re-render
+ * (or block) the rest of the roster while a request is in flight — the
+ * spec's double-click concern (§22) is handled by disabling per-action, not
+ * the whole panel.
+ */
+function MediaConnectRow({
+  studentId,
+  state,
+  pendingAction,
+  onConnect,
+  onDisconnect,
+  isDark,
+}: {
+  studentId: string;
+  state: MediaConnectionState;
+  pendingAction: string | null;
+  onConnect: (mediaType: "AUDIO" | "VIDEO") => void;
+  onDisconnect: () => void;
+  isDark: boolean;
+}) {
+  const audioPending = pendingAction === `${studentId}:AUDIO`;
+  const videoPending = pendingAction === `${studentId}:VIDEO`;
+  const disconnectPending = pendingAction === `${studentId}:DISCONNECT`;
+  const anyPending = audioPending || videoPending || disconnectPending;
+  const isConnected = state.audioConnected || state.videoConnected;
+
+  const baseBtn = `flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md border transition-colors disabled:opacity-50 disabled:cursor-not-allowed`;
+
+  return (
+    <div className="flex items-center gap-1.5 mt-1.5">
+      <button
+        type="button"
+        disabled={anyPending}
+        onClick={() => onConnect("AUDIO")}
+        className={`${baseBtn} ${
+          state.audioConnected
+            ? "bg-emerald-950/70 text-emerald-300 border-emerald-800/60"
+            : isDark
+            ? "bg-[#1a1d29] text-slate-300 border-[#2d2e3b] hover:border-blue-600"
+            : "bg-white text-slate-600 border-slate-200 hover:border-blue-400"
+        }`}
+        title={state.audioConnected ? "Audio connected" : "Connect audio"}
+      >
+        <span className="material-symbols-outlined text-[12px]">mic</span>
+        {audioPending ? "…" : state.audioConnected ? "Audio On" : "Connect Audio"}
+      </button>
+
+      <button
+        type="button"
+        disabled={anyPending}
+        onClick={() => onConnect("VIDEO")}
+        className={`${baseBtn} ${
+          state.videoConnected
+            ? "bg-emerald-950/70 text-emerald-300 border-emerald-800/60"
+            : isDark
+            ? "bg-[#1a1d29] text-slate-300 border-[#2d2e3b] hover:border-blue-600"
+            : "bg-white text-slate-600 border-slate-200 hover:border-blue-400"
+        }`}
+        title={state.videoConnected ? "Video connected" : "Connect video"}
+      >
+        <span className="material-symbols-outlined text-[12px]">videocam</span>
+        {videoPending ? "…" : state.videoConnected ? "Video On" : "Connect Video"}
+      </button>
+
+      {isConnected && (
+        <button
+          type="button"
+          disabled={anyPending}
+          onClick={onDisconnect}
+          className={`${baseBtn} bg-red-950/70 text-red-300 border-red-800/60 hover:bg-red-900/60`}
+          title="Disconnect audio/video"
+        >
+          <span className="material-symbols-outlined text-[12px]">call_end</span>
+          {disconnectPending ? "…" : "Disconnect"}
+        </button>
+      )}
     </div>
   );
 }

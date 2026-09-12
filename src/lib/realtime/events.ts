@@ -53,5 +53,12 @@ export const WB_EVENTS = {
   HAND_RAISE_UPDATED: "hand-raise-updated",
   SPEAKER_APPROVED: "speaker-approved",
   SPEAKER_REVOKED: "speaker-revoked",
+  // Teacher-initiated audio/video connection to a specific student — the
+  // reverse direction of the hand-raise flow above (teacher grants, rather
+  // than approves a student's request). One state-snapshot event per
+  // change, filtered client-side by studentUserId, same pattern as
+  // SPEAKER_APPROVED/SPEAKER_REVOKED — no per-student private channel exists
+  // or is needed.
+  TEACHER_CONNECT_UPDATED: "teacher-connect-updated",
 } as const;
 

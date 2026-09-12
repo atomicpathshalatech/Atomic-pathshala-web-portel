@@ -21,6 +21,11 @@ export interface VideoStripProps {
   teacherName?: string | null;
   isApprovedSpeaker?: boolean;
   speakerToken?: string | null;
+  // Teacher-initiated connect (independent of hand-raise's isApprovedSpeaker
+  // above — a separate grant, not a different name for the same thing).
+  teacherAudioConnected?: boolean;
+  teacherVideoConnected?: boolean;
+  teacherConnectionToken?: string | null;
   settingsPortalRef?: RefObject<HTMLDivElement>;
 }
 
@@ -31,14 +36,20 @@ export function VideoStrip({
   teacherName,
   isApprovedSpeaker = false,
   speakerToken = null,
+  teacherAudioConnected = false,
+  teacherVideoConnected = false,
+  teacherConnectionToken = null,
   settingsPortalRef,
 }: VideoStripProps) {
   const [creds, setCreds] = useState<{ token: string; url: string } | null>(null);
   const [tokenError, setTokenError] = useState<string | null>(null);
   const [useFallbackCamera, setUseFallbackCamera] = useState(false);
 
-  // Determine active token: if student is approved speaker with a speaker token, use it
-  const activeToken = (role === "STUDENT" && isApprovedSpeaker && speakerToken) ? speakerToken : creds?.token;
+  // Determine active token: a student who is either an approved hand-raise
+  // speaker or teacher-connected needs the publish-capable token instead of
+  // the default subscribe-only one.
+  const isStudentGrantedPublish = role === "STUDENT" && (isApprovedSpeaker || teacherAudioConnected || teacherVideoConnected);
+  const activeToken = isStudentGrantedPublish ? (speakerToken || teacherConnectionToken || creds?.token) : creds?.token;
 
   useEffect(() => {
     let cancelled = false;
@@ -115,6 +126,8 @@ export function VideoStrip({
         role={role}
         teacherName={teacherName}
         isApprovedSpeaker={isApprovedSpeaker}
+        teacherAudioConnected={teacherAudioConnected}
+        teacherVideoConnected={teacherVideoConnected}
         settingsPortalRef={settingsPortalRef}
       />
     </LiveKitRoom>
@@ -129,12 +142,16 @@ function VideoStripInner({
   role = "TEACHER",
   teacherName,
   isApprovedSpeaker = false,
+  teacherAudioConnected = false,
+  teacherVideoConnected = false,
   settingsPortalRef,
 }: {
   variant: "header" | "panel";
   role?: "TEACHER" | "STUDENT";
   teacherName?: string | null;
   isApprovedSpeaker?: boolean;
+  teacherAudioConnected?: boolean;
+  teacherVideoConnected?: boolean;
   settingsPortalRef?: RefObject<HTMLDivElement>;
 }) {
   const connectionState = useConnectionState();
@@ -190,8 +207,27 @@ function VideoStripInner({
           if (!cancelled) setMicError(describeMediaError(err));
         }
       })();
-    } else if (role === "STUDENT" && !isApprovedSpeaker) {
-      // Regular student -> strictly mute local mic & camera
+    } else if (role === "STUDENT" && (teacherAudioConnected || teacherVideoConnected)) {
+      // Teacher connected this student directly (independent grant from the
+      // hand-raise flow above) -> audio always, camera only when the teacher
+      // also connected video.
+      (async () => {
+        try {
+          await localParticipant.setMicrophoneEnabled(true);
+          if (!cancelled) setMicError(null);
+        } catch (err) {
+          if (!cancelled) setMicError(describeMediaError(err));
+        }
+        try {
+          await localParticipant.setCameraEnabled(teacherVideoConnected);
+          if (!cancelled) setCamError(null);
+        } catch (err) {
+          if (!cancelled) setCamError(describeMediaError(err));
+        }
+      })();
+    } else if (role === "STUDENT") {
+      // No active grant (neither hand-raise approval nor teacher-connect) ->
+      // strictly mute local mic & camera.
       localParticipant.setMicrophoneEnabled(false).catch(() => {});
       localParticipant.setCameraEnabled(false).catch(() => {});
     }
@@ -199,7 +235,7 @@ function VideoStripInner({
     return () => {
       cancelled = true;
     };
-  }, [localParticipant, role, isApprovedSpeaker]);
+  }, [localParticipant, role, isApprovedSpeaker, teacherAudioConnected, teacherVideoConnected]);
 
   // Handle speaker sink selection if supported
   const handleSpeakerSelect = async (deviceId: string) => {
