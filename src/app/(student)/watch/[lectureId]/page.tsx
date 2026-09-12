@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
+import { requireStudentSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { AtomicVideoPlayer } from "@/components/student/AtomicVideoPlayer";
 import { createPresignedDownloadUrl } from "@/lib/storage/r2-client";
@@ -8,7 +10,19 @@ export const metadata: Metadata = {
   title: "Lecture Video Player — Atomic Pathshala",
 };
 
+/**
+ * This route used to have ZERO entitlement checks — any logged-in student
+ * could watch any batch's lecture (or mint a signed recording URL for any
+ * class) just by navigating here with a guessed/shared id, bypassing the
+ * enrollment, PUBLISHED-status, and DPP-progression gates the "real" lecture
+ * route enforces. Fixed by requiring a session up front, redirecting a
+ * resolved Lecture to the real, fully-gated route instead of re-serving it
+ * here, and inline-gating the recording-playback branch with
+ * resolveBatchAccess (the same centralized check every other batch-gated
+ * route now uses).
+ */
 export default async function WatchLecturePage({ params }: { params?: { lectureId?: string } }) {
+  const { student } = await requireStudentSession();
   const targetId = params?.lectureId || "demo-lecture";
 
   // 1. Try to find lecture from database
@@ -80,6 +94,16 @@ export default async function WatchLecturePage({ params }: { params?: { lectureI
     if (schedule?.lecture) {
       lecture = schedule.lecture;
     } else if (schedule) {
+      const { resolveBatchAccess } = await import("@/lib/batch/entitlement");
+      const access = await resolveBatchAccess(student.userId, schedule.batchId);
+      if (
+        access.status !== "ACTIVE_ENROLLMENT" &&
+        access.status !== "ACTIVE_SUBSCRIPTION" &&
+        access.status !== "ADMIN_GRANTED"
+      ) {
+        redirect("/schedule");
+      }
+
       let resolvedRecUrl = "";
       if (schedule.liveWhiteboardSession) {
         const updated = await reconcileRecordingStatus(schedule.liveWhiteboardSession);
@@ -116,49 +140,23 @@ export default async function WatchLecturePage({ params }: { params?: { lectureI
   }
 
   if (lecture) {
-    let resolvedVideoUrl = lecture.videoUrl;
-
-    // If lecture.videoUrl is not set, check if any attached batchSchedule has a ready recording
-    if (!resolvedVideoUrl) {
-      await Promise.all(
-        (lecture.batchSchedules || []).map(async (s) => {
-          if (!s.liveWhiteboardSession) return;
-          const updated = await reconcileRecordingStatus(s.liveWhiteboardSession);
-          if (updated) {
-            s.liveWhiteboardSession.recordingStatus = updated.recordingStatus;
-            s.liveWhiteboardSession.recordingStorageKey = updated.recordingStorageKey;
-          }
-        })
+    // Redirect to the real, fully access-checked lecture route instead of
+    // re-serving the same content here — that route enforces enrollment,
+    // PUBLISHED status, and the DPP-progression gate; duplicating those
+    // checks here a second time would just create a fifth copy of the same
+    // access rule to keep in sync. Any Batch under this lecture's course
+    // works for the URL — the real route's own access check
+    // (isEnrolledInCourse) is course-scoped, not tied to a specific batch.
+    const batch = await prisma.batch.findFirst({
+      where: { courseId: lecture.chapter.subject.courseId },
+      select: { id: true },
+    });
+    if (batch) {
+      redirect(
+        `/courses/${batch.id}/subjects/${lecture.chapter.subjectId}/chapters/${lecture.chapterId}/lectures/${lecture.id}`
       );
-      const scheduleWithRec = lecture.batchSchedules?.find(
-        (s) =>
-          s.liveWhiteboardSession?.recordingStatus === "READY" &&
-          s.liveWhiteboardSession.recordingStorageKey
-      );
-      if (scheduleWithRec?.liveWhiteboardSession?.recordingStorageKey) {
-        try {
-          resolvedVideoUrl = await createPresignedDownloadUrl({
-            key: scheduleWithRec.liveWhiteboardSession.recordingStorageKey,
-            expiresInSeconds: 7200,
-          });
-        } catch (e) {
-          console.error("Failed to create presigned download URL for lecture recording", e);
-        }
-      }
     }
-
-    return (
-      <AtomicVideoPlayer
-        lectureId={lecture.id}
-        title={lecture.title}
-        subjectTitle={lecture.chapter.subject.title}
-        chapterTitle={lecture.chapter.title}
-        educatorName={lecture.teacher.user.name || "Sonu Bhaiya"}
-        videoUrl={resolvedVideoUrl || "https://www.youtube.com/embed/dQw4w9WgXcQ"}
-        educatorVideoUrl={lecture.educatorVideoUrl}
-        slidesUrl={lecture.slidesUrl}
-      />
-    );
+    redirect("/courses");
   }
 
   // Fallback / Demo video lecture player

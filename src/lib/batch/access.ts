@@ -58,6 +58,17 @@ export async function resolveTeacherForSchedule(userId: string, batchScheduleId:
   return { schedule, teacher: null };
 }
 
+/**
+ * Read-only. Never creates or reactivates a BatchEnrollment — a student is
+ * only "resolved" here if they already have real access to the schedule's
+ * batch (a paid ACTIVE enrollment, an active subscription, or an admin
+ * grant), checked via the centralized resolveBatchAccess(). Returning
+ * `student: null` is this function's deny signal; every existing caller
+ * already treats it that way (see e.g. tests/[id]/result/my/route.ts and
+ * whiteboard/sessions/by-schedule/[batchScheduleId]/route.ts, both of which
+ * throw ForbiddenError on a null student), so tightening this check requires
+ * no caller-side changes.
+ */
 export async function resolveStudentForSchedule(userId: string, batchScheduleId: string) {
   const schedule = await prisma.batchSchedule.findUnique({ where: { id: batchScheduleId } });
   if (!schedule) return { schedule: null, student: null };
@@ -65,33 +76,14 @@ export async function resolveStudentForSchedule(userId: string, batchScheduleId:
   const student = await prisma.student.findUnique({ where: { userId } });
   if (!student) return { schedule, student: null };
 
-  let enrolled = await prisma.batchEnrollment.findFirst({
-    where: { studentId: student.id, batchId: schedule.batchId },
-  });
+  const { resolveBatchAccess } = await import("./entitlement");
+  const access = await resolveBatchAccess(userId, schedule.batchId);
+  const allowed =
+    access.status === "ACTIVE_ENROLLMENT" ||
+    access.status === "ACTIVE_SUBSCRIPTION" ||
+    access.status === "ADMIN_GRANTED";
+  if (!allowed) return { schedule, student: null };
 
-  if (enrolled) {
-    if (enrolled.status !== "ACTIVE") {
-      enrolled = await prisma.batchEnrollment.update({
-        where: { id: enrolled.id },
-        data: { status: "ACTIVE" },
-      });
-    }
-    return { schedule, student };
-  }
-
-  // Auto-enroll if batch is open or student has access
-  try {
-    enrolled = await prisma.batchEnrollment.create({
-      data: {
-        studentId: student.id,
-        batchId: schedule.batchId,
-        status: "ACTIVE",
-      },
-    });
-    return { schedule, student };
-  } catch {
-    // Return student if enrollment check succeeded
-    return { schedule, student };
-  }
+  return { schedule, student };
 }
 

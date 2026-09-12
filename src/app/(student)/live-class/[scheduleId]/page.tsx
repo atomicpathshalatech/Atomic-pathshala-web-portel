@@ -9,12 +9,15 @@ export const metadata: Metadata = {
 };
 
 /**
- * Student entry point for a scheduled live class. Ownership (must be
- * ACTIVELY enrolled in the batch this schedule belongs to) is re-checked
- * independently — and authoritatively — by every API call the room makes
- * (see resolveWhiteboardAccess/resolveStudentForSchedule in
- * src/lib/whiteboard/access.ts). This page-level check just avoids showing
- * the room shell to a student who isn't enrolled.
+ * Student entry point for a scheduled live class. Access (real, existing
+ * entitlement to the batch this schedule belongs to — active enrollment,
+ * active subscription, or an admin grant) is re-checked independently — and
+ * authoritatively — by every API call the room makes (see
+ * resolveWhiteboardAccess/resolveStudentForSchedule in
+ * src/lib/whiteboard/access.ts, both backed by resolveBatchAccess). This
+ * page-level check is read-only and just avoids showing the room shell to a
+ * student who has no access — it must never itself grant access by creating
+ * an enrollment row.
  */
 export default async function StudentLiveClassPage({
   params,
@@ -38,29 +41,16 @@ export default async function StudentLiveClassPage({
   if (!schedule) notFound();
   if (schedule.type !== "LIVE_CLASS") redirect("/schedule");
 
-  let enrollment = await prisma.batchEnrollment.findFirst({
-    where: { studentId: student.id, batchId: schedule.batchId },
-  });
-
-  if (enrollment) {
-    if (enrollment.status !== "ACTIVE") {
-      enrollment = await prisma.batchEnrollment.update({
-        where: { id: enrollment.id },
-        data: { status: "ACTIVE" },
-      });
-    }
-  } else {
-    try {
-      enrollment = await prisma.batchEnrollment.create({
-        data: {
-          studentId: student.id,
-          batchId: schedule.batchId,
-          status: "ACTIVE",
-        },
-      });
-    } catch {
-      // If batch enrollment fails, continue safely
-    }
+  const { resolveBatchAccess } = await import("@/lib/batch/entitlement");
+  const access = await resolveBatchAccess(student.userId, schedule.batchId);
+  if (
+    access.status !== "ACTIVE_ENROLLMENT" &&
+    access.status !== "ACTIVE_SUBSCRIPTION" &&
+    access.status !== "ADMIN_GRANTED"
+  ) {
+    redirect(
+      `/schedule?blocked=1&reason=${encodeURIComponent("You are not enrolled in this batch.")}`
+    );
   }
 
   // Server-authoritative 15-minute access boundary check
