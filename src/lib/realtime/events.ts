@@ -21,6 +21,18 @@ export function teacherChannel(sessionId: string) {
   return `private-wb-teacher-${sessionId}`;
 }
 
+/** One private channel per Doubt Book Session booking — only the booked
+ * student and the assigned teacher (or an admin override) ever have
+ * authorization to subscribe; see /api/pusher/auth's doubt-booking branch. */
+export function doubtBookingChannel(bookingId: string) {
+  return `private-doubt-booking-${bookingId}`;
+}
+
+export const DOUBT_BOOKING_EVENTS = {
+  SESSION_STARTED: "doubt-session-started",
+  SESSION_ENDED: "doubt-session-ended",
+} as const;
+
 export const WB_EVENTS = {
   HAND_RAISE_LIST: "hand-raise-list",
   QUIZ_LAUNCHED: "quiz-launched",

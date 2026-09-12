@@ -27,6 +27,7 @@ export async function POST(request: NextRequest) {
 
   const presenceMatch = channelName.match(/^presence-wb-session-(.+)$/);
   const teacherMatch = channelName.match(/^private-wb-teacher-(.+)$/);
+  const doubtBookingMatch = channelName.match(/^private-doubt-booking-(.+)$/);
 
   try {
     if (presenceMatch) {
@@ -45,6 +46,28 @@ export async function POST(request: NextRequest) {
     if (teacherMatch) {
       const access = await resolveWhiteboardAccess(session.user.id, teacherMatch[1]!);
       if (!access || access.role !== "TEACHER") return apiError("Forbidden", 403);
+
+      const authResponse = pusherServer.authorizeChannel(socketId, channelName);
+      return Response.json(authResponse);
+    }
+
+    if (doubtBookingMatch) {
+      const bookingId = doubtBookingMatch[1]!;
+      const booking = await prisma.doubtBooking.findUnique({
+        where: { id: bookingId },
+        include: { student: { select: { userId: true } }, teacher: { select: { userId: true } } },
+      });
+      if (!booking) return apiError("Forbidden", 403);
+
+      const isStudent = booking.student.userId === session.user.id;
+      const isTeacher = booking.teacher.userId === session.user.id;
+      let isAdmin = false;
+      if (!isStudent && !isTeacher) {
+        const { hasPermission } = await import("@/lib/rbac/guard");
+        const { PERMISSIONS } = await import("@/lib/rbac/permissions");
+        isAdmin = await hasPermission(session.user.id, PERMISSIONS.BATCH_UPDATE);
+      }
+      if (!isStudent && !isTeacher && !isAdmin) return apiError("Forbidden", 403);
 
       const authResponse = pusherServer.authorizeChannel(socketId, channelName);
       return Response.json(authResponse);

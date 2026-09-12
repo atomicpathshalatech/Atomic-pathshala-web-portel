@@ -1,6 +1,6 @@
 import Pusher from "pusher";
 
-export { sessionChannel, teacherChannel, WB_EVENTS } from "./events";
+export { sessionChannel, teacherChannel, WB_EVENTS, doubtBookingChannel, DOUBT_BOOKING_EVENTS } from "./events";
 
 /**
  * Server-side Pusher client — the only thing allowed to publish realtime

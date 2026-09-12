@@ -72,3 +72,24 @@ export async function resolveBatchAccess(
 
   return { status: "NO_ACCESS" };
 }
+
+/**
+ * "Does this student have ANY paid access at all" — not scoped to one
+ * batch. Used to gate features that are a perk of being a paying student
+ * generally rather than tied to a specific batch's content (e.g. Doubt
+ * Book Session). Admin/staff callers are not entitled through this path —
+ * it answers a student-specific question.
+ */
+export async function hasAnyBatchAccess(userId: string | undefined | null): Promise<boolean> {
+  if (!userId) return false;
+
+  const student = await prisma.student.findUnique({ where: { userId } });
+  if (!student) return false;
+
+  const activeEnrollment = await prisma.batchEnrollment.count({
+    where: { studentId: student.id, status: "ACTIVE" },
+  });
+  if (activeEnrollment > 0) return true;
+
+  return hasActiveSubscription(student.id);
+}
