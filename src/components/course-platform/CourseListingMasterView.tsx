@@ -1,12 +1,28 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { CourseCard, CourseData } from "./CourseCard";
 
 export function CourseListingMasterView({ courses = [] }: { courses?: CourseData[] }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedExam, setSelectedExam] = useState("All");
   const [selectedSubject, setSelectedSubject] = useState("All");
+
+  // CRM signal (see src/lib/crm/lead-category.ts) — debounced so we track
+  // what a student actually searched for, not every keystroke. A logged-out
+  // visitor's search 401s silently; that's fine, this is best-effort.
+  useEffect(() => {
+    const trimmed = searchQuery.trim();
+    if (trimmed.length < 2) return;
+    const timer = setTimeout(() => {
+      fetch("/api/students/activity", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ searchQuery: trimmed }),
+      }).catch(() => {});
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   const exams = ["All", "NEET", "JEE Mains", "JEE Advanced", "Boards"];
   const subjects = ["All", "Physics", "Chemistry", "Biology", "Mathematics"];

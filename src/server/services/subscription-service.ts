@@ -386,6 +386,16 @@ export async function verifyAndActivateOrderPayment(
       : []),
   ]);
 
+  // CRM signal: real conversion (see src/lib/crm/lead-category.ts). Never
+  // allowed to fail the payment flow it's reporting on.
+  try {
+    const { recordActivity, syncCategoryToOutreach } = await import("@/lib/crm/lead-category");
+    const category = await recordActivity({ studentId, type: "PAYMENT_SUCCESS" });
+    await syncCategoryToOutreach(studentId, category);
+  } catch (err) {
+    console.error("Activity tracking error (order payment success):", err);
+  }
+
   return updatedSub;
 }
 
@@ -476,6 +486,16 @@ async function onSubscriptionCharged(payload: any) {
     },
   });
 
+  // CRM signal: recurring charge succeeded — still a conversion event for a
+  // student who was, say, a HOT_LEAD before their first cycle billed.
+  try {
+    const { recordActivity, syncCategoryToOutreach } = await import("@/lib/crm/lead-category");
+    const category = await recordActivity({ studentId: subscription.studentId, type: "PAYMENT_SUCCESS" });
+    await syncCategoryToOutreach(subscription.studentId, category);
+  } catch (err) {
+    console.error("Activity tracking error (recurring charge success):", err);
+  }
+
   return updated;
 }
 
@@ -552,6 +572,15 @@ export async function grantSubscriptionManually(params: {
       invoiceNumber,
     },
   });
+
+  // CRM signal: an offline/manual grant is still a real conversion.
+  try {
+    const { recordActivity, syncCategoryToOutreach } = await import("@/lib/crm/lead-category");
+    const category = await recordActivity({ studentId: params.studentId, type: "PAYMENT_SUCCESS" });
+    await syncCategoryToOutreach(params.studentId, category);
+  } catch (err) {
+    console.error("Activity tracking error (manual grant success):", err);
+  }
 
   return subscription;
 }

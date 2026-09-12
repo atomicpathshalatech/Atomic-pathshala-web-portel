@@ -3,6 +3,7 @@ import { requireTeamSession } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { getOutreachLeads, getOutreachUsers, OutreachIntegrationError } from "@/lib/integrations/outreach-leads";
+import { getLocalCrmDataForContacts } from "@/lib/crm/lead-category";
 import { LeadsManager } from "@/components/team-portal/LeadsManager";
 
 export const metadata: Metadata = { title: "CRM / Leads — Team Portal" };
@@ -32,6 +33,23 @@ export default async function LeadsPage() {
     loadError = error instanceof OutreachIntegrationError ? error.message : "Could not load leads from the CRM.";
   }
 
+  // Local activity/category data (see src/lib/crm/lead-category.ts) — this
+  // app tracks its own students' activity, the external CRM doesn't, so
+  // this is joined in here by contact rather than coming from the CRM
+  // response itself. A failure here should never hide the leads list.
+  let localCrmData: Awaited<ReturnType<typeof getLocalCrmDataForContacts>> = new Map();
+  try {
+    localCrmData = await getLocalCrmDataForContacts(leads.map((l) => ({ email: l.contact.email, phone: l.contact.phone })));
+  } catch (error) {
+    console.error("getLocalCrmDataForContacts failed:", error);
+  }
+  const localCrmDataByLead = Object.fromEntries(
+    leads.map((l) => {
+      const data = (l.contact.email && localCrmData.get(l.contact.email)) || localCrmData.get(l.contact.phone);
+      return [l.id, data ?? null];
+    })
+  );
+
   return (
     <div className="space-y-stack-lg max-w-6xl">
       <div>
@@ -45,7 +63,13 @@ export default async function LeadsPage() {
       {loadError ? (
         <div className="glass-card rounded-2xl p-8 text-center text-error font-body-md">{loadError}</div>
       ) : (
-        <LeadsManager initialLeads={leads} counselors={counselors} canUpdate={canUpdate} canAssign={canAssign} />
+        <LeadsManager
+          initialLeads={leads}
+          counselors={counselors}
+          canUpdate={canUpdate}
+          canAssign={canAssign}
+          localCrmDataByLead={localCrmDataByLead}
+        />
       )}
     </div>
   );

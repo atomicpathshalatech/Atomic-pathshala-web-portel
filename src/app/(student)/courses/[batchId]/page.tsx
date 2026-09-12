@@ -208,6 +208,21 @@ export default async function BatchCoursePage({
     console.error("Batch query error:", err);
   }
 
+  // CRM signal: a logged-in student viewing a real (non-sample) batch is a
+  // "batch explored" lead-scoring event (see src/lib/crm/lead-category.ts).
+  // Awaited (not fire-and-forget) since a serverless function's background
+  // work isn't guaranteed to keep running once the response is sent; kept
+  // to a single insert so it doesn't meaningfully add to page load time,
+  // and never allowed to break the page if it fails.
+  if (studentId && dbBatch) {
+    try {
+      const { recordActivity } = await import("@/lib/crm/lead-category");
+      await recordActivity({ studentId, type: "BATCH_VIEW", batchId: dbBatch.id });
+    } catch (err) {
+      console.error("Activity tracking error (batch view):", err);
+    }
+  }
+
   // Fallback to predefined store course if no DB batch exists yet
   if (!dbBatch && foundSample) {
     return <CourseDetailMasterView course={foundSample} />;

@@ -268,6 +268,7 @@ model Student {
   lectureProgress LectureProgress[]
   teacherFollows  TeacherFollow[]
   classFeedbacks  StudentClassFeedback[]
+  activityEvents  StudentActivityEvent[]
 
   @@index([city, state])
   @@index([targetExam])
@@ -420,6 +421,7 @@ model Batch {
   enrollments BatchEnrollment[]
   schedules   BatchSchedule[]
   folders     BatchFolder[]
+  activityEvents StudentActivityEvent[]
 
   @@index([status])
   @@index([targetExam])
@@ -2816,6 +2818,37 @@ model LectureIssueReport {
 
   @@index([lectureId])
   @@map("lecture_issue_reports")
+}
+
+enum StudentActivityType {
+  SEARCH
+  BATCH_VIEW
+  // Reached checkout, or clicked Enroll/Buy/Subscribe — real buying intent
+  // without a completed payment yet.
+  PAYMENT_INTENT
+  PAYMENT_SUCCESS
+}
+
+/// Append-only activity log driving automatic CRM lead categorization (see
+/// src/lib/crm/lead-category.ts) — a student's category is computed on read
+/// from this table, never stored, so it's always consistent with the latest
+/// activity without a separate write path to keep in sync. Deliberately
+/// narrow (type + which batch + the literal search text, nothing else) per
+/// the "don't unnecessarily store private data" requirement — no IP, no
+/// device fingerprint, no full page-view log.
+model StudentActivityEvent {
+  id          String              @id @default(cuid())
+  studentId   String
+  type        StudentActivityType
+  batchId     String?
+  searchQuery String?
+  createdAt   DateTime            @default(now())
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  batch   Batch?  @relation(fields: [batchId], references: [id], onDelete: SetNull)
+
+  @@index([studentId, createdAt])
+  @@map("student_activity_events")
 }
 
 // Personal notes a student writes while watching a lecture — one doc per
