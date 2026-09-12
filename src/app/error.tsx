@@ -41,7 +41,7 @@ export default function ErrorBoundary({
       }}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/icons/icon-192.png" alt="Atomic Guru" width={72} height={72} style={{ borderRadius: 16 }} />
+      <img src="/icons/icon-192.png" alt="Atomic Pathshala" width={72} height={72} style={{ borderRadius: 16 }} />
       <h1 style={{ fontSize: "1.15rem", fontWeight: 700, margin: 0 }}>Something went wrong</h1>
       <p style={{ fontSize: "0.9rem", color: "#9AA5B8", maxWidth: 360, margin: 0 }}>
         This is usually a brief connection hiccup. Try again — if it keeps happening, let us know.

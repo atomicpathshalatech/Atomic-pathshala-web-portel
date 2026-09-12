@@ -2,17 +2,17 @@ import type { MetadataRoute } from "next";
 
 /**
  * Web App Manifest — served at /manifest.webmanifest by Next's metadata
- * route. Makes the Atomic Guru student web app installable from Chrome
- * (Android + desktop) with no APK. The Capacitor native build is
+ * route. Makes the Atomic Pathshala student web app installable from
+ * Chrome (Android + desktop) with no APK. The Capacitor native build is
  * unaffected — it loads the same origin in a WebView and simply ignores
  * this file.
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Atomic Guru",
-    short_name: "Atomic Guru",
+    name: "Atomic Pathshala",
+    short_name: "Atomic Pathshala",
     description:
-      "Atomic Guru — live classes, tests, DPPs and doubt solving for NEET, JEE and Boards.",
+      "Atomic Pathshala — live classes, tests, DPPs and doubt solving for NEET, JEE and Boards.",
     id: "/",
     start_url: "/dashboard?utm_source=pwa",
     scope: "/",

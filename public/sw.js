@@ -1,5 +1,5 @@
 /*
- * Atomic Guru — PWA service worker.
+ * Atomic Pathshala — PWA service worker.
  *
  * Scope: "/" (the whole site). Deliberately conservative:
  *   - /api/*  is NEVER cached (auth, tests, results, payments, personal

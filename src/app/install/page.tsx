@@ -11,7 +11,7 @@ interface BeforeInstallPromptEvent extends Event {
 type Mode = "loading" | "installed" | "prompt" | "manual" | "native";
 
 /**
- * A shareable "install Atomic Guru" page. Uses the browser's real install
+ * A shareable "install Atomic Pathshala" page. Uses the browser's real install
  * prompt where available; otherwise shows the exact manual steps (spec
  * §18) — never a fake success.
  */
@@ -67,11 +67,11 @@ export default function InstallPage() {
   return (
     <main className="mx-auto flex min-h-[100dvh] max-w-md flex-col items-center justify-center gap-5 p-6 text-center">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/icons/icon-192.png" alt="Atomic Guru" width={80} height={80} className="rounded-2xl shadow" />
+      <img src="/icons/icon-192.png" alt="Atomic Pathshala" width={80} height={80} className="rounded-2xl shadow" />
       <div>
-        <h1 className="text-xl font-black text-slate-900">Install Atomic Guru</h1>
+        <h1 className="text-xl font-black text-slate-900">Install Atomic Pathshala</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Add Atomic Guru to your home screen — faster access to classes, tests and doubts. No Play Store, no APK.
+          Add Atomic Pathshala to your home screen — faster access to classes, tests and doubts. No Play Store, no APK.
         </p>
       </div>
 
@@ -79,13 +79,13 @@ export default function InstallPage() {
 
       {mode === "native" && (
         <p className="rounded-xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
-          You&apos;re already in the Atomic Guru app.
+          You&apos;re already in the Atomic Pathshala app.
         </p>
       )}
 
       {mode === "installed" && (
         <p className="rounded-xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
-          Atomic Guru is installed. Open it from your home screen.
+          Atomic Pathshala is installed. Open it from your home screen.
         </p>
       )}
 
@@ -101,7 +101,7 @@ export default function InstallPage() {
 
       {mode === "manual" && (
         <div className="w-full rounded-xl border border-slate-200 bg-white p-4 text-left text-sm text-slate-600">
-          <p className="font-bold text-slate-900">To install Atomic Guru:</p>
+          <p className="font-bold text-slate-900">To install Atomic Pathshala:</p>
           {isIOS ? (
             <ol className="mt-2 list-decimal space-y-1 pl-5">
               <li>Open this page in Safari.</li>
@@ -118,7 +118,7 @@ export default function InstallPage() {
               <li>
                 Tap <b>Add to Home screen</b> / <b>Install app</b>.
               </li>
-              <li>Confirm. Atomic Guru appears on your home screen.</li>
+              <li>Confirm. Atomic Pathshala appears on your home screen.</li>
             </ol>
           )}
         </div>

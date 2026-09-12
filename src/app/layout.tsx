@@ -40,11 +40,11 @@ export const metadata: Metadata = {
   },
   description:
     "India's premium accelerator for NEET, JEE, and Foundation courses — live classes, AI doubt solving, test series, and 1-on-1 mentorship.",
-  applicationName: "Atomic Guru",
+  applicationName: "Atomic Pathshala",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
-    title: "Atomic Guru",
+    title: "Atomic Pathshala",
     statusBarStyle: "black-translucent",
   },
   icons: {
