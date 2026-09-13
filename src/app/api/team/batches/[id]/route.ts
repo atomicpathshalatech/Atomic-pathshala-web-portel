@@ -8,6 +8,7 @@ import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { batchUpdateSchema } from "@/lib/validation/batch";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { clearAttemptsForSchedules } from "@/lib/team/resource-delete";
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -95,8 +96,19 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.BATCH_DELETE);
 
-    const existing = await prisma.batch.findUnique({ where: { id: params.id } });
+    const existing = await prisma.batch.findUnique({
+      where: { id: params.id },
+      include: { schedules: { select: { id: true } } },
+    });
     if (!existing) return apiError("Batch not found", 404);
+
+    // Deleting the batch cascades through its schedules into any Test rows
+    // hanging off them, which is blocked by Attempt.testId's Restrict the
+    // moment a real student attempt exists — clear those first so the
+    // batch delete itself can actually complete rather than throwing a raw
+    // FK violation (this was silently making batch deletion impossible for
+    // any batch that ever ran a class test).
+    const attemptsCleared = await clearAttemptsForSchedules(existing.schedules.map((s) => s.id));
 
     await prisma.batch.delete({ where: { id: params.id } });
 
@@ -106,7 +118,7 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
         action: "BATCH_DELETED",
         entityType: "Batch",
         entityId: params.id,
-        metadata: { code: existing.code },
+        metadata: { code: existing.code, attemptsCleared },
       },
     });
 

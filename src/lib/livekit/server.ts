@@ -104,3 +104,37 @@ export async function createApprovedSpeakerToken(opts: {
 export async function createVideoAccessToken(opts: { identity: string; name: string; roomName: string }) {
   return createTeacherPublisherToken(opts);
 }
+
+/** One LiveKit room per Doubt Book Session booking — private to exactly the
+ * booked student and assigned teacher, unlike wb-session rooms which serve
+ * a whole batch's worth of students. */
+export function doubtBookingRoomName(bookingId: string) {
+  return `doubt-booking-${bookingId}`;
+}
+
+/**
+ * Symmetric participant token for a 1:1 doubt-booking call. Every other
+ * token function above grants a fixed publisher-or-viewer role for a
+ * shared classroom (one teacher broadcasting to many students); a private
+ * doubt session is peer-to-peer, so both the student and the teacher get
+ * identical publish+subscribe grants here — what's actually private is
+ * room membership itself, enforced server-side by the booking join route
+ * (only the booked student/teacher/admin ever gets a token minted for this
+ * room) and by Pusher's matching doubt-booking channel auth.
+ */
+export async function createDoubtSessionToken(opts: { identity: string; name: string; roomName: string }) {
+  const { apiKey, apiSecret } = getCredentials();
+  const at = new AccessToken(apiKey, apiSecret, {
+    identity: opts.identity,
+    name: opts.name,
+    ttl: "1h", // a doubt slot is a short, fixed-duration booking, not an open-ended class
+  });
+  at.addGrant({
+    room: opts.roomName,
+    roomJoin: true,
+    canPublish: true,
+    canSubscribe: true,
+    canPublishData: true,
+  });
+  return at.toJwt();
+}

@@ -32,7 +32,7 @@ export default function OfflinePage() {
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src="/icons/icon-192.png"
-        alt="Atomic Guru"
+        alt="Atomic Pathshala"
         width={72}
         height={72}
         style={{ borderRadius: 16 }}
@@ -41,7 +41,7 @@ export default function OfflinePage() {
         You are offline. Please check your internet connection.
       </h1>
       <p style={{ fontSize: "0.9rem", opacity: 0.7, margin: 0, maxWidth: "22rem" }}>
-        Atomic Guru needs a connection to load your classes, tests and doubts.
+        Atomic Pathshala needs a connection to load your classes, tests and doubts.
         This page will reconnect automatically once you&apos;re back online.
       </p>
       <OfflineRetryButton />

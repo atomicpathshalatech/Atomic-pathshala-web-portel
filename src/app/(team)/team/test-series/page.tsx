@@ -6,6 +6,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
+import { TestSeriesDeleteButton } from "@/components/team-portal/TestSeriesDeleteButton";
 
 export const metadata: Metadata = {
   title: "Test Series",
@@ -184,12 +185,17 @@ export default async function TestSeriesListPage({
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <Link
-                        href={`/team/test-series/${s.id}`}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition"
-                      >
-                        Manage <span className="material-symbols-outlined text-sm">chevron_right</span>
-                      </Link>
+                      <div className="flex items-center justify-end gap-1">
+                        <Link
+                          href={`/team/test-series/${s.id}`}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition"
+                        >
+                          Manage <span className="material-symbols-outlined text-sm">chevron_right</span>
+                        </Link>
+                        {canCreate && (
+                          <TestSeriesDeleteButton seriesId={s.id} seriesCode={s.code} seriesName={s.name} />
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );

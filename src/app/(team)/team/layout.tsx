@@ -18,6 +18,7 @@ const NAV_SECTIONS: { title?: string; items: { href: string; label: string; icon
     title: "Teaching",
     items: [
       { href: "/team/my-schedule", label: "My Schedule", icon: "calendar_month", permission: PERMISSIONS.WHITEBOARD_ACCESS },
+      { href: "/team/doubt-booking", label: "Doubt Book Session", icon: "event_available", permission: PERMISSIONS.WHITEBOARD_ACCESS },
       { href: "/team/batches", label: "Batches", icon: "groups", permission: PERMISSIONS.BATCH_READ },
       { href: "/team/chapters", label: "Chapters", icon: "auto_stories", permission: PERMISSIONS.CHAPTER_READ },
       { href: "/team/study-material", label: "Study Material", icon: "folder_open", permission: PERMISSIONS.STUDY_MATERIAL_MANAGE },

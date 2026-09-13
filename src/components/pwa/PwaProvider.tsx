@@ -150,7 +150,7 @@ export function PwaProvider() {
   return (
     <div
       role="dialog"
-      aria-label="Install Atomic Guru"
+      aria-label="Install Atomic Pathshala"
       className="fixed inset-x-0 bottom-0 z-[1000] mx-auto max-w-md p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
     >
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl">
@@ -164,7 +164,7 @@ export function PwaProvider() {
             className="shrink-0 rounded-xl"
           />
           <div className="min-w-0">
-            <p className="text-sm font-bold text-slate-900">Install Atomic Guru</p>
+            <p className="text-sm font-bold text-slate-900">Install Atomic Pathshala</p>
             <p className="mt-0.5 text-xs text-slate-500">
               Get faster access to your classes, tests and doubts.
             </p>

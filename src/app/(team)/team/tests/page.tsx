@@ -12,6 +12,7 @@ export const metadata: Metadata = {
 };
 
 import { TestPdfDownloadModal } from "@/components/test-portal/TestPdfDownloadModal";
+import { TestDeleteButton } from "@/components/team-portal/TestDeleteButton";
 
 const STATUS_STYLES: Record<string, string> = {
   DRAFT: "bg-surface-container-high text-on-surface-variant",
@@ -28,6 +29,7 @@ export default async function TestsListPage() {
 
   const canCreate = await hasPermission(session.user.id, PERMISSIONS.TEST_CREATE);
   const isAdmin = await hasPermission(session.user.id, PERMISSIONS.TEST_PUBLISH);
+  const canDelete = await hasPermission(session.user.id, PERMISSIONS.TEST_DELETE);
 
   let tests;
   if (isAdmin) {
@@ -125,6 +127,8 @@ export default async function TestsListPage() {
                       </button>
                     }
                   />
+
+                  {canDelete && <TestDeleteButton testId={t.id} testCode={t.code} testName={t.name} />}
 
                   <Link
                     href={`/team/tests/${t.id}`}

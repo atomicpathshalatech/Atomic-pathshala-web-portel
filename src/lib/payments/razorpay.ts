@@ -39,6 +39,21 @@ export const razorpay = new Proxy({} as Razorpay, {
 });
 
 /**
+ * Constant-time comparison for signature checks — a plain `===` on two hex
+ * digests leaks timing information proportional to how many leading bytes
+ * match, which is a (low-severity but real) side channel for an attacker
+ * trying to forge a signature byte-by-byte. `crypto.timingSafeEqual` throws
+ * on mismatched buffer lengths instead of returning false, so that case is
+ * handled explicitly first.
+ */
+function safeCompare(expected: string, actual: string): boolean {
+  const a = Buffer.from(expected);
+  const b = Buffer.from(actual);
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
+
+/**
  * Verifies the checkout-success signature for a one-time Order payment.
  */
 export function verifyOrderPaymentSignature(params: {
@@ -57,7 +72,7 @@ export function verifyOrderPaymentSignature(params: {
     .update(`${params.orderId}|${params.paymentId}`)
     .digest("hex");
 
-  return expected === params.signature;
+  return safeCompare(expected, params.signature);
 }
 
 /**
@@ -79,7 +94,7 @@ export function verifySubscriptionPaymentSignature(params: {
     .update(`${params.paymentId}|${params.subscriptionId}`)
     .digest("hex");
 
-  return expected === params.signature;
+  return safeCompare(expected, params.signature);
 }
 
 /**
@@ -100,5 +115,5 @@ export function verifyWebhookSignature(
     .update(rawBody)
     .digest("hex");
 
-  return expected === signature;
+  return safeCompare(expected, signature);
 }

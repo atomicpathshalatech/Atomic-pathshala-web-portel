@@ -7,6 +7,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { dppSchema } from "@/lib/validation/dpp";
 import { resolveSubjectChapterNames } from "@/lib/questions/legacy";
+import { deleteDppCascading } from "@/lib/team/resource-delete";
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -94,29 +95,13 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.DPP_DELETE);
 
-    const existing = await prisma.dpp.findUnique({ where: { id: params.id } });
-    if (!existing) return apiError("DPP not found", 404);
+    // deleteDppCascading deletes the DPP (Attempt.dppId already SetNulls
+    // safely — no student attempt row is destroyed, just detached) and
+    // writes its own audit log recording how many attempts were affected.
+    const result = await deleteDppCascading(params.id, session.user.id);
+    if (!result) return apiError("DPP not found", 404);
 
-    const attemptCount = await prisma.attempt.count({ where: { dppId: params.id } });
-    if (attemptCount > 0) {
-      return apiError(
-        "This DPP already has student attempts and can't be deleted. Unpublish it instead.",
-        409
-      );
-    }
-
-    await prisma.dpp.delete({ where: { id: params.id } });
-
-    await prisma.auditLog.create({
-      data: {
-        userId: session.user.id,
-        action: "DPP_DELETE",
-        entityType: "Dpp",
-        entityId: params.id,
-      },
-    });
-
-    return apiSuccess({ deleted: true });
+    return apiSuccess({ deleted: true, attemptsOrphaned: result.attemptsOrphaned });
   } catch (error) {
     return handleApiError(error);
   }

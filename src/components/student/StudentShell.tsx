@@ -25,6 +25,7 @@ const SIDEBAR_ITEMS: StudentNavItem[] = [
   { href: "/dpp", label: "My DPP", icon: "fact_check" },
   { href: "/schedule", label: "Live Classes", icon: "sensors" },
   { href: "/guru", label: "AI Doubt Solver", icon: "psychology_alt" },
+  { href: "/book-session", label: "Book a Session", icon: "event_available" },
   { href: "/predictor", label: "Rank Predictor", icon: "insights" },
 ];
 

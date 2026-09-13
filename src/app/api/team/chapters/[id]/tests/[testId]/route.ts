@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { deleteTestCascading } from "@/lib/team/resource-delete";
 
 export async function PATCH(
   request: NextRequest,
@@ -61,26 +62,15 @@ export async function DELETE(
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.TEST_DELETE || PERMISSIONS.CHAPTER_UPDATE);
 
-    const test = await prisma.test.findUnique({
-      where: { id: params.testId },
-    });
-    if (!test) return apiError("Test not found", 404);
+    // deleteTestCascading explicitly removes this test's Attempt rows (and
+    // everything that cascades from them) inside a transaction before
+    // deleting the Test itself, and writes its own TEST_DELETED audit log
+    // — it never silently no-ops on a foreign-key conflict the way the raw
+    // prisma.test.delete() used to here.
+    const result = await deleteTestCascading(params.testId, session.user.id);
+    if (!result) return apiError("Test not found", 404);
 
-    await prisma.test.delete({
-      where: { id: params.testId },
-    });
-
-    await prisma.auditLog.create({
-      data: {
-        userId: session.user.id,
-        action: "TEST_DELETED",
-        entityType: "Test",
-        entityId: params.testId,
-        metadata: { chapterId: params.id, name: test.name },
-      },
-    });
-
-    return apiSuccess({ deleted: true });
+    return apiSuccess({ deleted: true, attemptsDeleted: result.attemptsDeleted });
   } catch (error) {
     return handleApiError(error);
   }

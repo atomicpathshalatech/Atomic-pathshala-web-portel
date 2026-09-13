@@ -18,8 +18,9 @@ export type WhiteboardAccess =
  * Teacher: must be the session's own teacher (the one who started it) —
  * NOT just any teacher assigned to the batch, since ownership of an
  * in-progress session is single-teacher once created.
- * Student: must be ACTIVELY enrolled in the batch the session's schedule
- * belongs to.
+ * Student: must have real, existing access to the batch the session's
+ * schedule belongs to (active paid enrollment, active subscription, or an
+ * admin grant) — resolved via resolveBatchAccess, never fabricated here.
  * Both branches re-check the DB on every call. Nothing here trusts a
  * client-supplied userId/role — the only identity input is the server
  * session's own user id.
@@ -90,34 +91,19 @@ export async function resolveWhiteboardAccess(
 
   if (!student) return null;
 
-  let enrolled = await prisma.batchEnrollment.findFirst({
-    where: {
-      studentId: student.id,
-      batchId: wbSession.batchSchedule.batchId,
-    },
-  });
-
-  if (enrolled) {
-    if (enrolled.status !== "ACTIVE") {
-      await prisma.batchEnrollment.update({
-        where: { id: enrolled.id },
-        data: { status: "ACTIVE" },
-      });
-    }
-    return { role: "STUDENT", entityId: student.id, name: student.user.name };
-  }
-
-  // Auto enroll student if batch is open
-  try {
-    await prisma.batchEnrollment.create({
-      data: {
-        studentId: student.id,
-        batchId: wbSession.batchSchedule.batchId,
-        status: "ACTIVE",
-      },
-    });
-  } catch {
-    // continue
+  // Read-only entitlement check — never auto-creates a BatchEnrollment.
+  // resolveBatchAccess is the one centralized "does this user have real,
+  // paid/granted access to this batch" function; a plain enrollment lookup
+  // that silently fabricated ACTIVE rows used to live here, which is
+  // exactly the auto-enrollment vulnerability this delegates away from.
+  const { resolveBatchAccess } = await import("@/lib/batch/entitlement");
+  const access = await resolveBatchAccess(userId, wbSession.batchSchedule.batchId);
+  if (
+    access.status !== "ACTIVE_ENROLLMENT" &&
+    access.status !== "ACTIVE_SUBSCRIPTION" &&
+    access.status !== "ADMIN_GRANTED"
+  ) {
+    return null;
   }
 
   return { role: "STUDENT", entityId: student.id, name: student.user.name };

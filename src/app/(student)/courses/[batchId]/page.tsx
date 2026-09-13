@@ -290,9 +290,16 @@ export default async function BatchCoursePage({
     classesCount: dbBatch?._count?.schedules || 0,
     testsCount: dbTests.length,
     studentsCount: dbBatch?._count?.enrollments || 0,
-    price: 4999,
-    originalPrice: 5999,
-    discountPercentage: 15,
+    // Real price from the DB — never hardcoded, since this is exactly what
+    // /api/batches/[id]/checkout charges. A batch with no price set yet
+    // shows as 0 here; the checkout page itself refuses to create an order
+    // for a null price rather than silently charging nothing.
+    price: dbBatch?.price ?? 0,
+    originalPrice: dbBatch?.originalPrice ?? dbBatch?.price ?? 0,
+    discountPercentage:
+      dbBatch?.originalPrice && dbBatch?.price && dbBatch.originalPrice > dbBatch.price
+        ? Math.round(((dbBatch.originalPrice - dbBatch.price) / dbBatch.originalPrice) * 100)
+        : undefined,
     isNewBatch: true,
     thumbnailUrl: null,
     teachers: educatorsList,

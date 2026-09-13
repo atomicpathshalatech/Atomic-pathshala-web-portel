@@ -8,6 +8,7 @@ import { batchScheduleUpdateSchema } from "@/lib/validation/batch";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { checkScheduleConflict } from "@/lib/batch/schedule-conflict";
 import { applyLateReschedulePenaltyIfDue } from "@/lib/batch/reschedule-penalty";
+import { clearAttemptsForSchedules } from "@/lib/team/resource-delete";
 
 export async function PATCH(
   request: NextRequest,
@@ -241,6 +242,12 @@ export async function DELETE(
       return apiError("This class is currently live — end it before deleting the schedule entry.", 409);
     }
 
+    // A schedule entry of type TEST cascades (onDelete: Cascade) into its
+    // Test row, which is blocked by Attempt.testId's Restrict the moment
+    // any student has a real attempt — clear those first so the cascade
+    // below can actually complete instead of throwing a raw FK violation.
+    const attemptsCleared = await clearAttemptsForSchedules([params.scheduleId]);
+
     const deleted = await prisma.batchSchedule.deleteMany({
       where: { id: params.scheduleId, batchId: params.id },
     });
@@ -252,7 +259,7 @@ export async function DELETE(
         action: "BATCH_SCHEDULE_DELETED",
         entityType: "Batch",
         entityId: params.id,
-        metadata: { scheduleId: params.scheduleId },
+        metadata: { scheduleId: params.scheduleId, attemptsCleared },
       },
     });
 
