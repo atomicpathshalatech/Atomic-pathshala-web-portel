@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { WebhookReceiver, EgressStatus } from "livekit-server-sdk";
+import { waitUntil } from "@vercel/functions";
 import { prisma } from "@/lib/db";
 import { pusherServer, sessionChannel } from "@/lib/realtime/pusher-server";
 
@@ -119,9 +120,11 @@ export async function POST(request: NextRequest) {
           // invocation is killed before the import resolves, the once-daily
           // cron safety net (/api/cron/youtube-archive/process) picks it up.
           if (!session.isTest) {
-            import("@/lib/youtube/archive-service")
-              .then(({ startArchiveJob }) => startArchiveJob(session.id))
-              .catch((err) => console.error("[youtube_archive_trigger_error]", err));
+            waitUntil(
+              import("@/lib/youtube/archive-service")
+                .then(({ startArchiveJob }) => startArchiveJob(session.id))
+                .catch((err) => console.error("[youtube_archive_trigger_error]", err))
+            );
           }
         } else {
           await prisma.whiteboardSession.update({

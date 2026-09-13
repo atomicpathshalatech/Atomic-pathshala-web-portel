@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
+import { Prisma } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { requirePermission, UnauthorizedError, ForbiddenError } from "@/lib/rbac/guard";
@@ -102,14 +103,44 @@ export async function POST(
     }
 
     // 4. Atomic Transition to LIVE using Database Transaction
+    //
+    // WhiteboardSession is @unique on batchScheduleId (schema.prisma) - a
+    // rescheduled or re-run class NEVER gets a new row, it's the same row
+    // reused across every occurrence. The `update` branch below used to
+    // just flip livePhase/status back to LIVE and leave `pages` (and every
+    // recording/PDF/PPTX/YouTube-archive field) exactly as the PREVIOUS
+    // occurrence left them - so starting a class that had already run once
+    // silently opened with the old class's entire board still on it. Any
+    // livePhase other than LIVE reaching this point means the previous
+    // occurrence is over (isAlreadyLive above already returned early for a
+    // genuinely still-live class), so it's safe - and correct per "every
+    // class must start from a blank first slide" - to reset here.
+    const existingSession = schedule.liveWhiteboardSession;
+    const isNewOccurrence = Boolean(existingSession) && existingSession!.livePhase !== "LIVE";
+
+    if (isNewOccurrence && (existingSession!.pdfStatus === "GENERATING" || existingSession!.pptxStatus === "GENERATING")) {
+      return apiError(
+        "The previous class's recording/notes are still being finalized. Please try Start Class again in a minute.",
+        409,
+        { code: "PREVIOUS_OCCURRENCE_FINALIZING" }
+      );
+    }
+
     const scheduledStart = schedule.startsAt ? new Date(schedule.startsAt) : now;
     const scheduledEnd = schedule.endsAt ? new Date(schedule.endsAt) : new Date(now.getTime() + 60 * 60 * 1000);
 
-    const [updatedSchedule, wbSession] = await prisma.$transaction([
+    const transactionOps: any[] = [
       prisma.batchSchedule.update({
         where: { id: params.scheduleId },
         data: { status: "LIVE" },
       }),
+    ];
+    if (isNewOccurrence) {
+      transactionOps.push(
+        prisma.whiteboardPage.deleteMany({ where: { sessionId: existingSession!.id } })
+      );
+    }
+    transactionOps.push(
       prisma.whiteboardSession.upsert({
         where: { batchScheduleId: params.scheduleId },
         update: {
@@ -117,6 +148,38 @@ export async function POST(
           status: "ACTIVE",
           actualStartedAt: schedule.liveWhiteboardSession?.actualStartedAt || now,
           startedAt: schedule.liveWhiteboardSession?.startedAt || now,
+          activePageNumber: 1,
+          ...(isNewOccurrence && {
+            endedAt: null,
+            actualEndedAt: null,
+            recordingStatus: "NONE",
+            recordingStorageKey: null,
+            recordingEgressId: null,
+            recordingDurationSeconds: null,
+            pdfStatus: "NONE",
+            pptxStatus: "NONE",
+            pdfStorageKey: null,
+            pptxStorageKey: null,
+            pdfFileAssetId: null,
+            pptxFileAssetId: null,
+            pdfError: null,
+            pptxError: null,
+            finalizedAt: null,
+            youtubeArchiveStatus: "NOT_ENABLED",
+            youtubeArchiveVideoId: null,
+            youtubeArchiveVideoUrl: null,
+            youtubeArchiveUploadAttempts: 0,
+            youtubeArchiveLastError: null,
+            youtubeArchiveUploadStartedAt: null,
+            youtubeArchiveUploadedAt: null,
+            youtubeArchiveProcessedAt: null,
+            youtubeArchiveUploadSessionUrl: null,
+            youtubeArchiveUploadOffset: null,
+            youtubeArchiveThumbnailStatus: "NOT_STARTED",
+            youtubeArchiveThumbnailError: null,
+            youtubeArchiveMetadataSnapshot: Prisma.JsonNull,
+            pages: { create: { pageNumber: 1, objects: [] } },
+          }),
         },
         create: {
           batchScheduleId: schedule.id,
@@ -138,8 +201,15 @@ export async function POST(
         include: {
           pages: { orderBy: { pageNumber: "asc" } },
         },
-      }),
-    ]);
+      })
+    );
+
+    // transactionOps is [batchSchedule.update, (whiteboardPage.deleteMany)?, whiteboardSession.upsert]
+    // - length varies with isNewOccurrence, so pull by position (first/last)
+    // rather than a fixed-arity destructure.
+    const txResults = await prisma.$transaction(transactionOps);
+    const updatedSchedule = txResults[0];
+    const wbSession = txResults[txResults.length - 1];
 
     // 5. Start Room Recording (Room Composite Egress -> R2) - Idempotent, single identity
     const isAlreadyRecording =
@@ -147,6 +217,11 @@ export async function POST(
       wbSession.recordingStatus === "RECORDING_STARTING" ||
       wbSession.recordingStatus === "STARTING" ||
       Boolean(wbSession.recordingEgressId);
+
+    // Surfaced in the response below (never just console-logged) so the
+    // teacher UI can show a visible "recording could not start" banner
+    // instead of a class silently running with no recording at all.
+    let recordingWarning: string | null = null;
 
     if (!isAlreadyRecording) {
       try {
@@ -163,12 +238,15 @@ export async function POST(
               data: { recordingEgressId: egress.egressId, recordingStatus: "RECORDING" },
             })
             .catch(() => null);
+        } else {
+          recordingWarning = "Recording could not be confirmed as started. This class may not be recorded.";
         }
       } catch (recordingError) {
         console.error("[live_class_recording_start_error]", recordingError);
         await prisma.whiteboardSession
           .update({ where: { id: wbSession.id }, data: { recordingStatus: "RECORDING_FAILED" } })
           .catch(() => null);
+        recordingWarning = "Recording failed to start for this class. Students will not get a recorded video for it.";
       }
     }
 
@@ -240,6 +318,7 @@ export async function POST(
       schedule: updatedSchedule,
       serverTime: now.toISOString(),
       startSlideUrl,
+      recordingWarning,
     });
   } catch (error) {
     return handleApiError(error);

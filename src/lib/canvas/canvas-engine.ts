@@ -649,6 +649,16 @@ export class CanvasEngine {
     return box;
   }
   private rafPending = false;
+  // Batches the drag/resize base-layer redraw the same way scheduleActiveRender
+  // already batches pen drawing - without this, every coalesced pointermove
+  // event during a multi-object drag triggered its own full renderBase() (a
+  // full-board redraw), which is what froze the tab on a large selection.
+  private baseRenderRafPending = false;
+  // id -> array-index / id -> pre-drag-snapshot lookups, rebuilt once per
+  // drag/resize gesture (on pointerdown) instead of re-scanning `objects`
+  // with findIndex/find for every selected id on every pointermove event.
+  private dragIndexById: Map<string, number> | null = null;
+  private dragSnapshotById: Map<string, StrokeObject> | null = null;
 
   private boundDown = this.onPointerDown.bind(this);
   private boundMove = this.onPointerMove.bind(this);
@@ -843,6 +853,7 @@ export class CanvasEngine {
       ) {
         this.dragOrigin = pt;
         this.dragSnapshot = this.cloneObjects();
+        this.buildDragIndex();
         return;
       }
 
@@ -851,6 +862,7 @@ export class CanvasEngine {
         this.selectedIds = new Set([hit.id]);
         this.dragOrigin = pt;
         this.dragSnapshot = this.cloneObjects();
+        this.buildDragIndex();
         this.emitSelection();
         this.renderBase();
         return;
@@ -911,24 +923,25 @@ export class CanvasEngine {
           const newH = Math.max(10, Math.abs(pt.y - this.resizeOpposite.y));
           const scaleX = newW / origW;
           const scaleY = newH / origH;
-          const original = this.dragSnapshot?.find((o) => o.id === this.selectedId);
-          if (original) {
-            const idx = this.objects.findIndex((o) => o.id === this.selectedId);
-            if (idx !== -1) {
-              this.objects[idx] = scaleObject(original, scaleX, scaleY, this.resizeOpposite, this.measureText.bind(this));
-              this.renderBase();
-            }
+          const original = this.selectedId ? this.dragSnapshotById?.get(this.selectedId) : undefined;
+          const idx = this.selectedId ? this.dragIndexById?.get(this.selectedId) : undefined;
+          if (original && idx !== undefined) {
+            this.objects[idx] = scaleObject(original, scaleX, scaleY, this.resizeOpposite, this.measureText.bind(this));
           }
         } else if (this.dragOrigin) {
           const dx = pt.x - this.dragOrigin.x;
           const dy = pt.y - this.dragOrigin.y;
           for (const id of this.selectedIds) {
-            const idx = this.objects.findIndex((o) => o.id === id);
-            const original = this.dragSnapshot?.find((o) => o.id === id);
-            if (idx !== -1 && original) this.objects[idx] = translateObject(original, dx, dy);
+            const idx = this.dragIndexById?.get(id);
+            const original = this.dragSnapshotById?.get(id);
+            if (idx !== undefined && original) this.objects[idx] = translateObject(original, dx, dy);
           }
-          this.renderBase();
         }
+        // Deferred to the next animation frame (batches every coalesced
+        // event above into a single full-board redraw per frame) instead
+        // of a synchronous renderBase() per event - this was the main
+        // cause of a multi-object drag freezing the whole tab.
+        this.scheduleBaseRender();
       }
     }
 
@@ -1053,6 +1066,8 @@ export class CanvasEngine {
     this.activePoints = [];
     this.dragOrigin = null;
     this.dragSnapshot = null;
+    this.dragIndexById = null;
+    this.dragSnapshotById = null;
     this.resizeHandle = null;
     this.resizeOpposite = null;
     this.resizeInitialBBox = null;
@@ -1068,6 +1083,28 @@ export class CanvasEngine {
       this.rafPending = false;
       this.renderActiveStroke();
     });
+  }
+
+  /** Same batching idea as scheduleActiveRender, for the full-board
+   * renderBase() redraw used by drag/resize - coalesces many pointermove
+   * events per frame into a single redraw instead of one redraw per event. */
+  private scheduleBaseRender(): void {
+    if (this.baseRenderRafPending) return;
+    this.baseRenderRafPending = true;
+    requestAnimationFrame(() => {
+      this.baseRenderRafPending = false;
+      this.renderBase();
+    });
+  }
+
+  /** Builds the id -> objects[] index once at drag/resize start. Object
+   * order in `objects` doesn't change mid-drag (only in-place replacement
+   * via objects[idx] = ...), so this stays valid for the whole gesture -
+   * avoiding an O(selectedCount * totalObjects) findIndex/find scan on
+   * every single pointermove event. */
+  private buildDragIndex(): void {
+    this.dragIndexById = new Map(this.objects.map((o, idx) => [o.id, idx]));
+    this.dragSnapshotById = this.dragSnapshot ? new Map(this.dragSnapshot.map((o) => [o.id, o])) : null;
   }
 
   private renderActiveStroke(): void {

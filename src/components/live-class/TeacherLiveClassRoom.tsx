@@ -442,6 +442,7 @@ export function TeacherLiveClassRoom({
   const [showPostClassModal, setShowPostClassModal] = useState(false);
   const [startingClass, setStartingClass] = useState(false);
   const [startClassError, setStartClassError] = useState<string | null>(null);
+  const [recordingWarning, setRecordingWarning] = useState<string | null>(null);
   const [slideTemplatesOpen, setSlideTemplatesOpen] = useState(false);
 
   // Pre-flight & Authoritative System State
@@ -703,12 +704,26 @@ export function TeacherLiveClassRoom({
     [tool]
   );
 
+  // Throttled to once per animation frame: this fires on every native
+  // pointermove (including every event coalesced during a fast drag), and
+  // an unthrottled setCursorPos was forcing a full React re-render of this
+  // whole component on each one - in parallel with the canvas engine's own
+  // per-frame drag/resize work, this doubled up the cost that was freezing
+  // the tab during a multi-object drag.
+  const cursorRafPending = useRef(false);
+  const latestCursorPos = useRef<{ x: number; y: number } | null>(null);
   const handleCanvasPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return;
     const relX = (e.clientX - rect.left) / rect.width;
     const relY = (e.clientY - rect.top) / rect.height;
-    setCursorPos({ x: relX * VIRTUAL_WIDTH, y: relY * VIRTUAL_HEIGHT });
+    latestCursorPos.current = { x: relX * VIRTUAL_WIDTH, y: relY * VIRTUAL_HEIGHT };
+    if (cursorRafPending.current) return;
+    cursorRafPending.current = true;
+    requestAnimationFrame(() => {
+      cursorRafPending.current = false;
+      setCursorPos(latestCursorPos.current);
+    });
   }, []);
 
   const handleCanvasPointerLeave = useCallback(() => setCursorPos(null), []);
@@ -1369,6 +1384,7 @@ export function TeacherLiveClassRoom({
     if (!wbSession || startingClass) return;
     setStartingClass(true);
     setStartClassError(null);
+    setRecordingWarning(null);
     try {
       const data = await postJson(`/api/team/live-class/${batchScheduleId}/start`, {});
       if (data.whiteboardSession) {
@@ -1376,6 +1392,10 @@ export function TeacherLiveClassRoom({
           prev ? { ...prev, ...data.whiteboardSession, livePhase: "LIVE" } : data.whiteboardSession
         );
       }
+      // Recording-start failures used to be silently logged server-side
+      // only, so a class could run with no recording and nobody noticed
+      // until playback. Now surfaced as a visible banner instead.
+      if (data.recordingWarning) setRecordingWarning(data.recordingWarning);
     } catch (err) {
       setStartClassError(err instanceof Error ? err.message : "Could not start the class.");
     } finally {
@@ -1807,6 +1827,12 @@ export function TeacherLiveClassRoom({
               )}
             </div>
           )}
+          {recordingWarning && (
+            <div className="flex items-center gap-1.5 rounded-lg bg-amber-500/15 border border-amber-500/40 px-3 py-1.5 text-xs font-semibold text-amber-300">
+              <span className="material-symbols-outlined text-sm">warning</span>
+              {recordingWarning}
+            </div>
+          )}
 
           <button
             type="button"
@@ -2077,6 +2103,12 @@ export function TeacherLiveClassRoom({
                     ? "cell"
                     : tool === "laser"
                     ? "crosshair"
+                    // pen/highlighter/stroke-eraser/object-eraser already
+                    // render their own dot/circle overlay just below - the
+                    // native browser cursor must be hidden for those or it
+                    // draws a "+" crosshair on top of/alongside the dot.
+                    : tool === "pen" || tool === "highlighter" || tool === "stroke-eraser" || tool === "object-eraser"
+                    ? "none"
                     : "crosshair",
               }}
               onDoubleClick={handleCanvasDoubleClick}
