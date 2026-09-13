@@ -36,6 +36,21 @@ export default async function CheckoutPage({ params }: { params: { courseSlug: s
       );
     }
 
+    // Captured as its own object right after the null check, in the same
+    // synchronous block — TypeScript's narrowing of realBatch.price to
+    // `number` doesn't survive the `await`s below if we keep passing
+    // realBatch itself (property narrowing on an object is not guaranteed
+    // to persist across an await boundary), but a fresh object literal
+    // built here bakes in the already-narrowed `number` type permanently.
+    const sellableBatch = {
+      id: realBatch.id,
+      name: realBatch.name,
+      price: realBatch.price,
+      originalPrice: realBatch.originalPrice,
+      thumbnailUrl: realBatch.thumbnailUrl,
+      description: realBatch.description,
+    };
+
     const { student } = await requireStudentSession();
 
     // CRM signal: arriving at real-batch checkout is a real payment intent.
@@ -53,7 +68,7 @@ export default async function CheckoutPage({ params }: { params: { courseSlug: s
 
     return (
       <RealBatchCheckoutView
-        batch={realBatch}
+        batch={sellableBatch}
         studentName={student.user.name ?? "Student"}
         studentEmail={student.user.email ?? ""}
       />
