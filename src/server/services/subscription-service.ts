@@ -4,6 +4,7 @@ import {
   razorpay,
   verifyOrderPaymentSignature,
   verifySubscriptionPaymentSignature,
+  assertPaymentGatewayConfigured,
 } from "@/lib/payments/razorpay";
 import {
   FREE_TRIAL_DAYS,
@@ -43,6 +44,8 @@ export async function startTrialCheckout(studentId: string, plan: SubscriptionPl
   if (existing) {
     throw new SubscriptionError("A subscription already exists for this student.");
   }
+
+  assertPaymentGatewayConfigured("Online payment is currently unavailable for subscriptions right now.");
 
   const now = new Date();
   const trialEndsAt = addDays(now, FREE_TRIAL_DAYS);
@@ -234,6 +237,8 @@ export async function createCheckout(
   billingCycle: BillingCycle,
   couponCode?: string
 ) {
+  assertPaymentGatewayConfigured("Online payment is currently unavailable for subscriptions right now.");
+
   const baseAmount = await getPlanPrice(plan, billingCycle);
   const now = new Date();
 

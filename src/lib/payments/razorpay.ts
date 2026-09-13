@@ -39,6 +39,28 @@ export const razorpay = new Proxy({} as Razorpay, {
 });
 
 /**
+ * True only when both Razorpay credentials are actually set. Every paid
+ * checkout path must check this BEFORE calling into `razorpay` and fail
+ * with a clean, typed `PaymentGatewayError` — calling `razorpay.orders.create`
+ * (or any other method) with no credentials throws a raw, un-typed Error from
+ * `getRazorpay()` that falls through to a generic 500, which still blocks the
+ * purchase (safe) but gives no honest "payment isn't available yet" signal to
+ * the client or to anyone reading the server logs.
+ */
+export function isPaymentGatewayConfigured(): boolean {
+  return Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET);
+}
+
+/** Thrown by a checkout path when `isPaymentGatewayConfigured()` is false. */
+export class PaymentGatewayError extends Error {}
+
+export function assertPaymentGatewayConfigured(message: string): void {
+  if (!isPaymentGatewayConfigured()) {
+    throw new PaymentGatewayError(message);
+  }
+}
+
+/**
  * Constant-time comparison for signature checks — a plain `===` on two hex
  * digests leaks timing information proportional to how many leading bytes
  * match, which is a (low-severity but real) side channel for an attacker

@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db";
-import { razorpay, verifyOrderPaymentSignature } from "@/lib/payments/razorpay";
+import { razorpay, verifyOrderPaymentSignature, assertPaymentGatewayConfigured } from "@/lib/payments/razorpay";
 import type { BatchOrder } from "@prisma/client";
 
 export class BatchOrderError extends Error {}
@@ -26,6 +26,8 @@ export async function createBatchCheckout(studentId: string, batchId: string) {
   if (existingEnrollment) {
     throw new BatchOrderError("You already have access to this batch.");
   }
+
+  assertPaymentGatewayConfigured("Online payment is currently unavailable for this batch.");
 
   const amount = batch.price;
   const order = await razorpay.orders.create({

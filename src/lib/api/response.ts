@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { ForbiddenError, UnauthorizedError } from "@/lib/rbac/guard";
 import { SubscriptionError } from "@/server/services/subscription-service";
 import { BatchOrderError } from "@/server/services/batch-order-service";
+import { PaymentGatewayError } from "@/lib/payments/razorpay";
 
 type ApiSuccess<T> = { success: true; data: T };
 type ApiFailure = {
@@ -64,6 +65,10 @@ export function handleApiError(error: unknown) {
 
   if (error instanceof BatchOrderError) {
     return apiError(error.message, 409);
+  }
+
+  if (error instanceof PaymentGatewayError) {
+    return apiError(error.message, 503, { code: "PAYMENT_GATEWAY_NOT_CONFIGURED" });
   }
 
   // A raw foreign-key-constraint violation (P2003) used to fall through to
