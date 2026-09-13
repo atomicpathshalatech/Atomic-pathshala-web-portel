@@ -45,6 +45,10 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
 
     const booking = await prisma.doubtBooking.create({
       data: { slotId: slot.id, studentId: student.id, teacherId: slot.teacherId, status: "CONFIRMED" },
+      include: {
+        student: { include: { user: { select: { name: true } } } },
+        teacher: { select: { userId: true } },
+      },
     });
 
     try {
@@ -53,6 +57,40 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
       });
     } catch (err) {
       console.error("[doubt-booking] confirm notify error:", err);
+    }
+
+    // The teacher previously had no way to learn a student had booked their
+    // slot at all — this route created the DoubtBooking and only fired a
+    // Pusher event on a private channel the teacher's client has to already
+    // be subscribed to (i.e. only useful if they happen to have the booking
+    // screen open at that exact moment). Push/in-app notification via the
+    // same engine every other booking-style event (CLASS_SCHEDULED,
+    // TEST_SCHEDULED) already uses. Reuses NotificationType.GENERAL rather
+    // than adding a dedicated DOUBT_SESSION_BOOKED value — that enum is
+    // Prisma-generated and a new variant needs its own migration; GENERAL
+    // still delivers correctly and can be split out later without touching
+    // this call site.
+    try {
+      const { triggerNotificationEvent } = await import("@/lib/notifications/engine");
+      const { NotificationType, NotificationCategory, NotificationPriority } = await import("@/lib/notifications/types");
+      const timeStr = slot.startTime.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+      const dateStr = slot.startTime.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
+
+      await triggerNotificationEvent({
+        eventType: NotificationType.GENERAL,
+        category: NotificationCategory.SYSTEM,
+        priority: NotificationPriority.HIGH,
+        entityId: booking.id,
+        recipientUserIds: [booking.teacher.userId],
+        title: `New Doubt Session Booked`,
+        body: `${booking.student.user.name || "A student"} booked your doubt session slot on ${dateStr} at ${timeStr}.`,
+        deepLink: `/team/doubt-booking/${booking.id}`,
+        actionType: "VIEW_BOOKING",
+        actionUrl: `/team/doubt-booking/${booking.id}`,
+        idempotencyKey: `doubt-booking-created:${booking.id}`,
+      });
+    } catch (err) {
+      console.error("[doubt-booking] teacher notification error:", err);
     }
 
     return apiSuccess({ booking }, 201);
