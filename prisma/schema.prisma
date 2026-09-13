@@ -1263,6 +1263,40 @@ model WhiteboardSession {
   pptxError           String?
   finalizedAt         DateTime?
 
+  // YouTube recording-archive pipeline (uploads the FINISHED recordingStorageKey
+  // file to YouTube as an unlisted video once it's READY). Deliberately
+  // `youtubeArchive*`-prefixed, NOT reusing youtubeVideoId/youtubeStatus above -
+  // those are for the separate, existing "teacher pastes a YouTube Live link"
+  // videoTransport:YOUTUBE feature (a class actually broadcasting FROM YouTube);
+  // this is the opposite direction (a LiveKit-recorded class being archived TO
+  // YouTube afterward) and must never collide with that field's meaning.
+  // status: NOT_ENABLED | PENDING | QUEUED | UPLOADING | UPLOADED | PROCESSING |
+  //         COMPLETED | FAILED | RETRYING
+  youtubeArchiveStatus            String    @default("NOT_ENABLED")
+  youtubeArchiveVideoId           String?
+  youtubeArchiveVideoUrl          String?
+  youtubeArchiveUploadAttempts    Int       @default(0)
+  youtubeArchiveLastError         String?
+  youtubeArchiveUploadStartedAt   DateTime?
+  youtubeArchiveUploadedAt        DateTime?
+  youtubeArchiveProcessedAt       DateTime?
+  // Resumable-upload checkpoint (Vercel serverless has no long-lived worker,
+  // so a large recording's upload may need to resume across invocations) -
+  // the YouTube-issued session URI and how many bytes have been confirmed
+  // received so far.
+  youtubeArchiveUploadSessionUrl  String?   @db.Text
+  youtubeArchiveUploadOffset      BigInt?
+  // thumbnailStatus is independent of youtubeArchiveStatus on purpose: a
+  // successful video upload must never be re-uploaded just because setting
+  // the custom thumbnail failed - see PART 10 of the spec this implements.
+  // status: NOT_STARTED | PENDING | UPLOADED | FAILED
+  youtubeArchiveThumbnailStatus   String    @default("NOT_STARTED")
+  youtubeArchiveThumbnailError    String?
+  // Snapshot of the class metadata AT THE TIME the archive job was created -
+  // see PART 13 of the spec: a later edit to the class/chapter must never
+  // silently change what an in-flight or already-completed archive used.
+  youtubeArchiveMetadataSnapshot  Json?
+
   batchSchedule BatchSchedule        @relation(fields: [batchScheduleId], references: [id], onDelete: Cascade)
   teacher       Teacher              @relation(fields: [teacherId], references: [id], onDelete: Cascade)
   pages         WhiteboardPage[]
@@ -1279,6 +1313,7 @@ model WhiteboardSession {
   @@index([teacherId])
   @@index([status])
   @@index([livePhase])
+  @@index([youtubeArchiveStatus])
   @@map("whiteboard_sessions")
 }
 

@@ -39,6 +39,8 @@ export async function GET(
         actualEndedAt: true,
         endedAt: true,
         createdAt: true,
+        youtubeArchiveStatus: true,
+        youtubeArchiveVideoUrl: true,
       },
     });
 
@@ -64,8 +66,16 @@ export async function GET(
 
     const isReady = effective.recordingStatus === "READY" && Boolean(effective.recordingStorageKey);
 
+    // Prefer the archived YouTube (unlisted) video once it's fully
+    // uploaded — playable inline via AtomicVideoPlayer's YouTube-embed
+    // auto-detection, never requiring a redirect to youtube.com. Falls
+    // back to the direct R2 presigned URL otherwise.
+    const youtubeReady = wbSession.youtubeArchiveStatus === "COMPLETED" && Boolean(wbSession.youtubeArchiveVideoUrl);
+
     let presignedUrl: string | null = null;
-    if (isReady && effective.recordingStorageKey) {
+    if (youtubeReady) {
+      presignedUrl = wbSession.youtubeArchiveVideoUrl;
+    } else if (isReady && effective.recordingStorageKey) {
       presignedUrl = await createPresignedDownloadUrl({
         key: effective.recordingStorageKey,
         expiresInSeconds: 3600, // 1 hour private playback token
@@ -78,7 +88,7 @@ export async function GET(
       liveSessionId: effective.id,
       providerRecordingId: effective.recordingEgressId || null,
       status: effective.recordingStatus,
-      available: isReady,
+      available: isReady || youtubeReady,
       url: presignedUrl,
       startedAt: effective.actualStartedAt || effective.startedAt,
       stoppedAt: effective.actualEndedAt || effective.endedAt,
