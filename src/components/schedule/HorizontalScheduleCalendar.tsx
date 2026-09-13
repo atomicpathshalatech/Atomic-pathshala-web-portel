@@ -707,15 +707,35 @@ function TimelineLectureRow({
                   <span>Watch Video</span>
                 </Link>
 
-                {/* Download PDF Notes Button */}
+                {/* Annotated Notes — the whiteboard export with everything
+                    the teacher actually wrote/drew during the live class. */}
                 {item.liveWhiteboardSession?.id ? (
                   <WhiteboardPdfDownloadButton
                     sessionId={item.liveWhiteboardSession.id}
+                    format="pdf"
                     className="inline-flex items-center gap-1 py-1 px-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 rounded-lg text-[11px] font-bold shadow-xs transition active:scale-95 shrink-0 disabled:opacity-60"
-                    title="Download Class Board Notes PDF"
+                    title="Download Class Board Notes PDF (with annotations)"
                   >
                     <span className="material-symbols-outlined text-[13px] text-rose-500">picture_as_pdf</span>
-                    <span>PDF Notes</span>
+                    <span>Annotated Notes</span>
+                  </WhiteboardPdfDownloadButton>
+                ) : null}
+
+                {/* Original Slides — the exact PDF the teacher uploaded
+                    before class, no annotations. Backend already supported
+                    this (format=original_pdf) but no frontend ever called
+                    it; shows a friendly toast instead of a dead link when
+                    the teacher never uploaded one. */}
+                {item.liveWhiteboardSession?.id ? (
+                  <WhiteboardPdfDownloadButton
+                    sessionId={item.liveWhiteboardSession.id}
+                    format="original_pdf"
+                    onUnavailable={(msg) => toast.info(msg)}
+                    className="inline-flex items-center gap-1 py-1 px-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 rounded-lg text-[11px] font-bold shadow-xs transition active:scale-95 shrink-0 disabled:opacity-60"
+                    title="View the original slide deck (no annotations)"
+                  >
+                    <span className="material-symbols-outlined text-[13px] text-blue-500">description</span>
+                    <span>Original Slides</span>
                   </WhiteboardPdfDownloadButton>
                 ) : null}
               </div>

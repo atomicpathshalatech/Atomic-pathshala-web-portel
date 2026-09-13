@@ -366,6 +366,16 @@ export function TeacherLiveClassRoom({
   } | null>(null);
   const [undoRedoTick, setUndoRedoTick] = useState(0);
   const [zoom, setZoom] = useState(1);
+  // Panning was never implemented — zoom was a pure CSS scale() on a fixed,
+  // overflow-hidden, centered card with no translate state and no drag
+  // handler, so zooming in always revealed the same center region with no
+  // way to move around it. panOffset is in the stage's own pre-scale px
+  // (applied as `translate(x,y) scale(zoom)`, translate-before-scale, so a
+  // screen-space drag delta is divided by zoom to get a 1:1 visual pan
+  // regardless of zoom level — see panBy() below).
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+  const [panModeActive, setPanModeActive] = useState(false);
+  const panDragRef = useRef<{ x: number; y: number } | null>(null);
   // Below lg the right panel slides in over the canvas rather than holding
   // a fixed 320px column open on a phone. It is never unmounted - see the
   // .live-panel rules in globals.css and the VideoStrip note below.
@@ -808,6 +818,40 @@ export function TeacherLiveClassRoom({
   }, [wbSession?.id]);
 
   // ---- Page navigation -----------------------------------------------------
+  /** Clamps panOffset (pre-scale px) so the scaled stage can never be
+   * dragged fully off-screen — bounded by how much bigger the scaled stage
+   * is than the visible container in each axis. Returns {0,0} once zoom is
+   * back to a level where the stage fits entirely (nothing to pan to). */
+  function clampPan(x: number, y: number, currentZoom: number): { x: number; y: number } {
+    const containerRect = mainCanvasContainerRef.current?.getBoundingClientRect();
+    const containerW = containerRect?.width ?? stageDimensions.width * currentZoom;
+    const containerH = containerRect?.height ?? stageDimensions.height * currentZoom;
+    const scaledW = stageDimensions.width * currentZoom;
+    const scaledH = stageDimensions.height * currentZoom;
+    const maxPanX = Math.max(0, (scaledW - containerW) / 2) / currentZoom;
+    const maxPanY = Math.max(0, (scaledH - containerH) / 2) / currentZoom;
+    return {
+      x: Math.min(maxPanX, Math.max(-maxPanX, x)),
+      y: Math.min(maxPanY, Math.max(-maxPanY, y)),
+    };
+  }
+
+  function panBy(dxScreenPx: number, dyScreenPx: number) {
+    setPanOffset((prev) => clampPan(prev.x + dxScreenPx / zoom, prev.y + dyScreenPx / zoom, zoom));
+  }
+
+  // Re-clamp (or fully reset) pan whenever zoom changes, so zooming back
+  // out never leaves the stage stuck off-center with nothing to actually
+  // pan to anymore.
+  useEffect(() => {
+    if (zoom <= 1) {
+      setPanOffset({ x: 0, y: 0 });
+      return;
+    }
+    setPanOffset((prev) => clampPan(prev.x, prev.y, zoom));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zoom, stageDimensions.width, stageDimensions.height]);
+
   async function switchToPage(pageNumber: number) {
     if (!wbSession || !engineRef.current) return;
     if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
@@ -1895,6 +1939,35 @@ export function TeacherLiveClassRoom({
         ref={mainCanvasContainerRef}
         className="live-canvas relative overflow-hidden bg-[#10131b] flex items-center justify-center min-w-0 min-h-0"
       >
+        {/* Pan-capture overlay — only rendered while Pan mode is on, sits
+            above the stage (which has no z-index / auto stacking) but
+            below the toolbars (z-30+) so the Pan toggle itself, and every
+            other button, stays clickable while panning is active. Reads
+            plain screen-space movementX/Y so a drag always feels 1:1 on
+            screen regardless of zoom - panBy() converts that into the
+            stage's own pre-scale units. */}
+        {panModeActive && zoom > 1 && (
+          <div
+            className="absolute inset-0 z-20 cursor-grab active:cursor-grabbing"
+            onPointerDown={(e) => {
+              (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+              panDragRef.current = { x: e.clientX, y: e.clientY };
+            }}
+            onPointerMove={(e) => {
+              if (!panDragRef.current) return;
+              panBy(e.movementX, e.movementY);
+            }}
+            onPointerUp={(e) => {
+              panDragRef.current = null;
+              try {
+                (e.currentTarget as HTMLDivElement).releasePointerCapture(e.pointerId);
+              } catch {
+                // already released — safe to ignore
+              }
+            }}
+          />
+        )}
+
         {(pdfLoadState.loading || pdfLoadState.error) && (
           <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 max-w-md w-[92%]">
             {pdfLoadState.loading ? (
@@ -2055,11 +2128,13 @@ export function TeacherLiveClassRoom({
         </aside>
 
         <div
-          className="relative rounded-2xl shadow-2xl overflow-hidden border border-slate-800/80 shrink-0 transition-transform duration-75 select-none"
+          className={`relative rounded-2xl shadow-2xl overflow-hidden border border-slate-800/80 shrink-0 select-none ${
+            panDragRef.current ? "" : "transition-transform duration-75"
+          }`}
           style={{
             width: `${stageDimensions.width}px`,
             height: `${stageDimensions.height}px`,
-            transform: zoom === 1 ? undefined : `scale(${zoom})`,
+            transform: zoom === 1 ? undefined : `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoom})`,
             transformOrigin: "center center",
             ...(isBackgroundImageUrl(currentPage?.background) ? undefined : slideBackgroundStyle(currentPage?.background)),
           }}
@@ -2902,6 +2977,40 @@ export function TeacherLiveClassRoom({
                 >
                   <span className="material-symbols-outlined text-lg">add</span>
                 </button>
+                {/* Pan didn't exist before - zoom was a pure CSS scale() with
+                    no way to move around what it revealed. Only meaningful
+                    (and only shown) once actually zoomed in. */}
+                {zoom > 1 && (
+                  <>
+                    <div className="w-[1px] h-5 bg-gray-700/60" />
+                    <button
+                      type="button"
+                      onClick={() => setPanModeActive((p) => !p)}
+                      title="Drag to pan around the zoomed slide"
+                      className={`w-7 h-7 flex items-center justify-center rounded-full transition-colors ${
+                        panModeActive ? "bg-blue-600 text-white" : "hover:bg-gray-800 text-gray-300"
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-lg">pan_tool</span>
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+            {/* Viewport indicator - shows which part of the slide is
+                currently visible once zoomed/panned. Nothing like this
+                existed before; only relevant above 100% zoom. */}
+            {zoom > 1 && (
+              <div className="absolute bottom-full right-0 mb-2 z-30 w-16 h-9 rounded-md border border-gray-600 bg-black/60 overflow-hidden pointer-events-none">
+                <div
+                  className="absolute bg-blue-500/40 border border-blue-400"
+                  style={{
+                    width: `${Math.min(100, (100 / zoom))}%`,
+                    height: `${Math.min(100, (100 / zoom))}%`,
+                    left: `${50 - (100 / zoom) / 2 - (panOffset.x / stageDimensions.width) * 100}%`,
+                    top: `${50 - (100 / zoom) / 2 - (panOffset.y / stageDimensions.height) * 100}%`,
+                  }}
+                />
               </div>
             )}
           </div>
