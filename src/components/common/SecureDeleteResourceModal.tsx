@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { AlertTriangle, Trash2, Lock, ShieldAlert } from "lucide-react";
 
@@ -44,8 +45,17 @@ export function SecureDeleteResourceModal({
   const [reason, setReason] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
+  // Rendered via a portal (below) rather than inline: this modal is invoked
+  // from inside list rows that carry hover/entrance CSS transforms (e.g. the
+  // test/DPP/batch cards' `.glass-card` hover lift), and a `transform` on any
+  // ancestor makes that ancestor the containing block for a `position:fixed`
+  // descendant per spec — the modal was rendering clipped to one card's box
+  // instead of covering the viewport. `document` doesn't exist during SSR,
+  // so the portal target is only resolved after mount.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   const isMatch = confirmInput.trim().toUpperCase() === resourceId.trim().toUpperCase();
 
@@ -91,7 +101,7 @@ export function SecureDeleteResourceModal({
     }
   };
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
       <div className="bg-white rounded-3xl max-w-md w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 border border-rose-100">
         {/* Warning Header */}
@@ -172,6 +182,7 @@ export function SecureDeleteResourceModal({
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
