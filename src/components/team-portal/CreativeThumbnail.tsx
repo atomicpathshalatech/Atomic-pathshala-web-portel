@@ -35,6 +35,9 @@ export async function CreativeThumbnail({
           <div className="text-center px-4">
             <span className="material-symbols-outlined text-2xl text-rose-500">error</span>
             <p className="text-xs text-rose-500 mt-1">Creative generation failed</p>
+            {creative.errorMessage && (
+              <p className="text-[10px] text-slate-400 mt-1 max-w-xs mx-auto break-words">{creative.errorMessage}</p>
+            )}
           </div>
         ) : (
           <div className="text-center px-4">

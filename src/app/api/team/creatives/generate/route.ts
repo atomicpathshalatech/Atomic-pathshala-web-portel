@@ -29,10 +29,24 @@ export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
-    // Communication/creative management is an admin capability, same gate as the Communication Center.
-    await requirePermission(session.user.id, PERMISSIONS.COMMUNICATION_CENTER_ACCESS);
 
     const input = schema.parse(await req.json());
+
+    // The only UI entry point that calls this today is the Chapter detail
+    // page's "Regenerate Creative" button, which is shown to a teacher
+    // based on PERMISSIONS.CHAPTER_UPDATE (see (team)/team/chapters/[id]/
+    // page.tsx's `canUpdate`). This route was gated on
+    // COMMUNICATION_CENTER_ACCESS instead - a permission with nothing to
+    // do with chapter/creative management - so a teacher who could see
+    // and click the button always got a 403 back. Chapter regeneration
+    // now requires the same permission the button's own visibility is
+    // based on; every other creative type keeps the original gate since
+    // nothing in the UI calls this route for them yet.
+    if (input.type === "CHAPTER") {
+      await requirePermission(session.user.id, PERMISSIONS.CHAPTER_UPDATE);
+    } else {
+      await requirePermission(session.user.id, PERMISSIONS.COMMUNICATION_CENTER_ACCESS);
+    }
     const result = await generateCreative(input.type, input.entityId, {
       templateId: input.templateId,
       backgroundId: input.backgroundId,
