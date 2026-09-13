@@ -233,12 +233,34 @@ export async function DELETE(
     // one out from under a class that's currently live would yank the
     // room out from under everyone mid-session with no warning. Ended/
     // never-started sessions are still deletable, matching existing
-    // behavior; only an ACTIVE one blocks the delete.
+    // behavior; only a session that's genuinely live right now blocks the
+    // delete.
+    //
+    // `status: "ACTIVE"` alone isn't a reliable signal of that — the
+    // end-of-class finalization (stopRoomRecording/finalizeWhiteboardSlides
+    // in endWhiteboardSession) can fail to run to completion (a crashed
+    // teacher tab, a dropped connection, a serverless function that got cut
+    // off), leaving the row ACTIVE forever with nothing left to actually
+    // end. Confirmed against real data: sessions for classes that ended
+    // days ago were still sitting at status ACTIVE, permanently 409-ing
+    // every delete attempt — exactly the "live class won't delete" symptom
+    // reported. lastHeartbeatAt (sent by the teacher's client every 30s
+    // while truly live, per its own schema comment: stale past 3 minutes
+    // means the teacher is disconnected) is the actual signal of whether
+    // anyone is still in the room.
+    const STALE_SESSION_MS = 5 * 60 * 1000;
     const liveSession = await prisma.whiteboardSession.findFirst({
       where: { batchScheduleId: params.scheduleId, status: "ACTIVE" },
-      select: { id: true },
+      select: { id: true, lastHeartbeatAt: true, actualStartedAt: true },
     });
-    if (liveSession) {
+    const genuinelyLive =
+      liveSession &&
+      (liveSession.lastHeartbeatAt
+        ? Date.now() - liveSession.lastHeartbeatAt.getTime() < STALE_SESSION_MS
+        : liveSession.actualStartedAt
+          ? Date.now() - liveSession.actualStartedAt.getTime() < STALE_SESSION_MS
+          : false);
+    if (genuinelyLive) {
       return apiError("This class is currently live — end it before deleting the schedule entry.", 409);
     }
 

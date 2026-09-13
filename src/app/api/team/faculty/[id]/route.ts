@@ -6,6 +6,7 @@ import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { teacherAdminUpdateSchema } from "@/lib/validation/teacher";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { deleteTeacherCascading } from "@/lib/team/resource-delete";
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -63,6 +64,36 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     });
 
     return apiSuccess({ teacher });
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
+/**
+ * Permanently removes a teacher's platform account (see
+ * deleteTeacherCascading in src/lib/team/resource-delete.ts for exactly
+ * what that cascades through and the one case it refuses — a teacher who
+ * is still the instructor of record on a Lecture). Admin-tier only:
+ * TEACHER_DELETE isn't granted to any role's defaults, so only
+ * SUPER_ADMIN/FOUNDER/ADMIN (which bypass the defaults check entirely,
+ * see hasPermission in src/lib/rbac/guard.ts) can reach this.
+ */
+export async function DELETE(_request: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) throw new UnauthorizedError();
+    await requirePermission(session.user.id, PERMISSIONS.TEACHER_DELETE);
+
+    let deleted;
+    try {
+      deleted = await deleteTeacherCascading(params.id, session.user.id);
+    } catch (deleteErr) {
+      const message = deleteErr instanceof Error ? deleteErr.message : "Could not delete this teacher.";
+      return apiError(message, 409);
+    }
+    if (!deleted) return apiError("Teacher not found", 404);
+
+    return apiSuccess({ deleted: true, name: deleted.name });
   } catch (error) {
     return handleApiError(error);
   }

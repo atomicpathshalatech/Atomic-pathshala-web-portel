@@ -19,6 +19,7 @@ export const PERMISSIONS = {
   TEACHER_READ: "teacher.read",
   TEACHER_CREATE: "teacher.create",
   TEACHER_UPDATE: "teacher.update",
+  TEACHER_DELETE: "teacher.delete",
 
   // Course / Content
   COURSE_READ: "course.read",

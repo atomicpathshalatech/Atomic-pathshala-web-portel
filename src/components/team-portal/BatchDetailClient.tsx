@@ -472,6 +472,7 @@ export function BatchDetailClient({
               id: t.teacherId,
               user: { name: t.teacher.user.name },
             }))}
+            canManageSchedule={canManageSchedule}
           />
         </section>
       )}

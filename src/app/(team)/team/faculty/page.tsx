@@ -6,6 +6,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
+import { FacultyCard } from "@/components/team-portal/FacultyCard";
 
 export const metadata: Metadata = {
   title: "Faculty",
@@ -19,6 +20,7 @@ export default async function FacultyListPage() {
   if (!canRead) redirect("/team");
 
   const canCreate = await hasPermission(session.user.id, PERMISSIONS.TEACHER_CREATE);
+  const canDelete = await hasPermission(session.user.id, PERMISSIONS.TEACHER_DELETE);
 
   const teachers = await prisma.teacher.findMany({
     include: { user: true },
@@ -61,33 +63,17 @@ export default async function FacultyListPage() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-gutter">
           {teachers.map((t) => (
-            <Link
+            <FacultyCard
               key={t.id}
-              href={`/team/faculty/${t.id}/edit`}
-              className="glass-card rounded-2xl p-6 space-y-3 hover:shadow-lg hover:-translate-y-0.5 transition-all"
-            >
-              <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-lg">
-                {t.user.name
-                  .split(" ")
-                  .map((p) => p[0])
-                  .slice(0, 2)
-                  .join("")}
-              </div>
-              <div>
-                <h3 className="font-headline-md text-headline-md text-on-surface">{t.user.name}</h3>
-                <p className="text-label-sm font-label-sm text-primary">{t.department}</p>
-              </div>
-              <p className="text-label-sm text-on-surface-variant">Code: {t.employeeCode}</p>
-              {t.subjects.length > 0 && (
-                <div className="flex flex-wrap gap-1">
-                  {t.subjects.map((s) => (
-                    <span key={s} className="bg-surface-container-high px-2 py-0.5 rounded text-[11px]">
-                      {s}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </Link>
+              teacher={{
+                id: t.id,
+                employeeCode: t.employeeCode,
+                department: t.department,
+                subjects: t.subjects,
+                user: { name: t.user.name },
+              }}
+              canDelete={canDelete}
+            />
           ))}
         </div>
       )}
