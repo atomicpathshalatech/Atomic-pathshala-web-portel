@@ -95,7 +95,88 @@ export async function lookupPlatformResource(resourceId: string) {
     return resource;
   }
 
-  // 2. Dynamic resolution for existing legacy/pre-existing resources
+  // 2. Direct code match, tried before any prefix-based guess. Test/Dpp/
+  // Question codes are assigned by several different generators over this
+  // platform's history (generateQuestionId()'s plain 8-digit strings,
+  // "TEST_0001", "AP0001", plus one-off imported/seeded codes like "10001"
+  // or "PHY-001") and not all of them start with the prefix the branches
+  // below assume — a real code that doesn't match any of those prefixes
+  // used to fall straight through to `return null`, so deleting that
+  // resource always 404'd as "not found" no matter how correctly the user
+  // typed its ID. Each `code`/`questionCode` column is unique, so this is
+  // an unambiguous direct hit whenever one exists.
+  const [testByCode, dppByCode, questionByCode] = await Promise.all([
+    prisma.test.findUnique({
+      where: { code: cleanId },
+      include: { createdBy: { select: { id: true, name: true, email: true } }, chapter: true },
+    }),
+    prisma.dpp.findUnique({
+      where: { code: cleanId },
+      include: { createdBy: { select: { id: true, name: true, email: true } } },
+    }),
+    prisma.question.findUnique({
+      where: { questionCode: cleanId },
+      include: { createdBy: { select: { id: true, name: true, email: true } }, translations: true },
+    }),
+  ]);
+
+  if (testByCode) {
+    return prisma.platformResource.create({
+      data: {
+        resourceId: `TST-${testByCode.id.slice(0, 6).toUpperCase()}`,
+        type: "TEST",
+        title: testByCode.name,
+        subject: testByCode.chapter?.title || "Assessment",
+        targetId: testByCode.id,
+        downloadUrl: `/api/pdf/test/${testByCode.id}`,
+        format: "PDF",
+        createdById: testByCode.createdById,
+      },
+      include: {
+        createdBy: { select: { id: true, name: true, email: true } },
+        deletedBy: { select: { id: true, name: true, email: true } },
+      },
+    });
+  }
+
+  if (dppByCode) {
+    return prisma.platformResource.create({
+      data: {
+        resourceId: `DPP-${dppByCode.id.slice(0, 6).toUpperCase()}`,
+        type: "DPP",
+        title: dppByCode.name,
+        subject: dppByCode.chapter || dppByCode.subject || "Daily Practice Problem",
+        targetId: dppByCode.id,
+        downloadUrl: `/api/pdf/dpp/${dppByCode.id}`,
+        format: "PDF",
+        createdById: dppByCode.createdById,
+      },
+      include: {
+        createdBy: { select: { id: true, name: true, email: true } },
+        deletedBy: { select: { id: true, name: true, email: true } },
+      },
+    });
+  }
+
+  if (questionByCode) {
+    return prisma.platformResource.create({
+      data: {
+        resourceId: `QST-${questionByCode.id.slice(0, 6).toUpperCase()}`,
+        type: "QUESTION",
+        title: questionByCode.translations[0]?.statement.slice(0, 60) || "Question Entry",
+        subject: questionByCode.subject,
+        targetId: questionByCode.id,
+        format: "JSON",
+        createdById: questionByCode.createdById,
+      },
+      include: {
+        createdBy: { select: { id: true, name: true, email: true } },
+        deletedBy: { select: { id: true, name: true, email: true } },
+      },
+    });
+  }
+
+  // 3. Dynamic resolution for existing legacy/pre-existing resources
   if (cleanId.startsWith("TST-") || cleanId.startsWith("TEST_") || cleanId.length === 25) {
     const test = await prisma.test.findFirst({
       where: {
@@ -165,7 +246,13 @@ export async function lookupPlatformResource(resourceId: string) {
     }
   }
 
-  if (cleanId.startsWith("QST-") || cleanId.startsWith("Q-")) {
+  // Real questions never get a "QST-"/"Q-" prefixed code — generateQuestionId()
+  // (src/lib/questions/id-generator.ts) always produces a plain 8-digit string
+  // like "82000001", which is exactly what QuestionManagementTable passes as
+  // resourceId whenever a questionCode exists. Without this branch, every
+  // question with a real code skipped this block entirely and fell through to
+  // `return null`, so deleting any real question always 404'd as "not found".
+  if (cleanId.startsWith("QST-") || cleanId.startsWith("Q-") || /^\d+$/.test(cleanId)) {
     const question = await prisma.question.findFirst({
       where: {
         OR: [
