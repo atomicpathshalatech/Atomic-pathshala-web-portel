@@ -10,9 +10,14 @@ export const metadata: Metadata = {
   title: "My Teaching Schedule",
 };
 
-export default async function TeacherMySchedulePage() {
+export default async function TeacherMySchedulePage({
+  searchParams,
+}: {
+  searchParams?: { blocked?: string; reason?: string };
+}) {
   const { user } = await requireTeamSession();
   const teacher = await prisma.teacher.findUnique({ where: { userId: user.id } });
+  const blockedReason = searchParams?.blocked === "1" ? searchParams?.reason || "That class isn't accessible right now." : null;
 
   if (!teacher) {
     return (
@@ -22,6 +27,12 @@ export default async function TeacherMySchedulePage() {
             My Schedule
           </h1>
         </header>
+        {blockedReason && (
+          <div className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/40 dark:border-amber-800 px-4 py-3 text-xs md:text-sm text-amber-800 dark:text-amber-200">
+            <span className="material-symbols-outlined text-base mt-0.5">info</span>
+            <p>{blockedReason}</p>
+          </div>
+        )}
         <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-12 text-center text-slate-500">
           This account does not have a teacher profile, so there is no teaching timetable to show here.
         </div>
@@ -60,6 +71,12 @@ export default async function TeacherMySchedulePage() {
             Every class across the batches you teach, in one place.
           </p>
         </header>
+        {blockedReason && (
+          <div className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/40 dark:border-amber-800 px-4 py-3 text-xs md:text-sm text-amber-800 dark:text-amber-200">
+            <span className="material-symbols-outlined text-base mt-0.5">info</span>
+            <p>{blockedReason}</p>
+          </div>
+        )}
         <div className="rounded-3xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 p-12 text-center text-slate-500 text-xs md:text-sm">
           Nothing scheduled for you yet — once a batch adds you to its timetable, your classes will show up here.
         </div>
@@ -119,6 +136,7 @@ export default async function TeacherMySchedulePage() {
       role="TEACHER"
       title="My Teaching Schedule"
       subtitle={`${batches.length} Batch${batches.length === 1 ? "" : "es"} • Manage & Start Live Classrooms`}
+      blockedReason={blockedReason}
     />
   );
 }

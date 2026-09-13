@@ -121,7 +121,16 @@ export default async function TeacherLiveClassPage({
   const { canTeacherEnterClass } = await import("@/lib/schedule/access-rules");
   const teacherEval = canTeacherEnterClass(schedule, new Date());
   if (!teacherEval.allowed) {
-    redirect(`/team/my-schedule?blocked=1&reason=${encodeURIComponent(teacherEval.reason || "Pre-class room entry is not open yet.")}`);
+    // Redirect back to the batch's own timetable tab, not /team/my-schedule
+    // — my-schedule only lists classes where teacherId matches the viewer's
+    // own Teacher row (or they're in BatchTeacher for that batch), so an
+    // admin/coordinator using their BATCH_UPDATE override to click "Start
+    // Class" from inside the batch — or a teacher who was never actually
+    // assigned as this schedule's teacherId — landed on a page showing
+    // nothing at all, which read as "the class disappeared."  Everyone who
+    // reaches this point already passed the assignment/admin check above,
+    // so they're guaranteed to have BATCH_READ access to this same batch.
+    redirect(`/team/batches/${schedule.batchId}?tab=timetable&blocked=1&reason=${encodeURIComponent(teacherEval.reason || "Pre-class room entry is not open yet.")}`);
   }
 
   return (

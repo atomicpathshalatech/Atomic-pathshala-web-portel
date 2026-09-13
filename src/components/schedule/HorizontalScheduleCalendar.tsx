@@ -103,18 +103,26 @@ export function HorizontalScheduleCalendar({
   role = "STUDENT",
   title = "My Schedule",
   subtitle = "live lectures and test",
+  blockedReason,
 }: {
   schedules: ScheduleItem[];
   batches: BatchOption[];
   role?: "STUDENT" | "TEACHER";
   title?: string;
   subtitle?: string;
+  // Set when the page was reached via a redirect from a blocked live-class
+  // entry attempt (?blocked=1&reason=...) — without this, that reason was
+  // silently dropped and the class the user just tried to join simply
+  // appeared to vanish, with no indication of why (too early, not
+  // enrolled, cancelled, etc).
+  blockedReason?: string | null;
 }) {
   const [selectedBatchId, setSelectedBatchId] = useState<string>("ALL");
   const [currentWeekStart, setCurrentWeekStart] = useState<Date>(() => getMonday(new Date()));
   const [selectedDateKey, setSelectedDateKey] = useState<string>(() => getISTDayKey(new Date()));
   const [clientTimeMs, setClientTimeMs] = useState<number>(Date.now());
   const [batchDropdownOpen, setBatchDropdownOpen] = useState(false);
+  const [blockedBannerDismissed, setBlockedBannerDismissed] = useState(false);
 
   // Local ticker every second for authoritative boundary updates
   useEffect(() => {
@@ -243,6 +251,20 @@ export function HorizontalScheduleCalendar({
 
   return (
     <div className="max-w-4xl mx-auto space-y-4 px-2 sm:px-4 pb-16">
+      {blockedReason && !blockedBannerDismissed && (
+        <div className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/40 dark:border-amber-800 px-4 py-3 text-xs sm:text-sm text-amber-800 dark:text-amber-200">
+          <span className="material-symbols-outlined text-base mt-0.5">info</span>
+          <p className="flex-1">{blockedReason}</p>
+          <button
+            type="button"
+            aria-label="Dismiss"
+            onClick={() => setBlockedBannerDismissed(true)}
+            className="text-amber-500 hover:text-amber-700 dark:hover:text-amber-100"
+          >
+            <span className="material-symbols-outlined text-base">close</span>
+          </button>
+        </div>
+      )}
       {/* Top Header */}
       <section className="pt-2 flex flex-col gap-2">
         <div className="flex items-center justify-between">

@@ -14,9 +14,10 @@ export const metadata: Metadata = {
 export default async function SchedulePage({
   searchParams,
 }: {
-  searchParams?: { batch?: string };
+  searchParams?: { batch?: string; blocked?: string; reason?: string };
 }) {
   const { student } = await requireStudentSession();
+  const blockedReason = searchParams?.blocked === "1" ? searchParams?.reason || "That class isn't accessible right now." : null;
 
   const enrollments = await prisma.batchEnrollment.findMany({
     where: { studentId: student.id, status: "ACTIVE" },
@@ -60,6 +61,12 @@ export default async function SchedulePage({
             Track your learning journey and classroom timetable.
           </p>
         </header>
+        {blockedReason && (
+          <div className="mt-4 flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/40 dark:border-amber-800 px-4 py-3 text-xs md:text-sm text-amber-800 dark:text-amber-200">
+            <span className="material-symbols-outlined text-base mt-0.5">info</span>
+            <p>{blockedReason}</p>
+          </div>
+        )}
         <div className="mt-6 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 p-12 text-center text-slate-500 text-xs md:text-sm">
           You are not enrolled in a batch yet — once enrolled, your live timetable, DPPs, and tests will appear here.
         </div>
@@ -135,6 +142,7 @@ export default async function SchedulePage({
       role="STUDENT"
       title="My Schedule"
       subtitle={`${enrollments.length} Active Batch${enrollments.length === 1 ? "" : "es"} • Live Classrooms & Tests`}
+      blockedReason={blockedReason}
     />
   );
 }
