@@ -265,11 +265,14 @@ export async function generateCreative(
         : " — no remote image URLs in play; if this is local Windows `next dev`, this is likely the known @vercel/og bundled-font bug (see comment above the render step in engine.ts), not a data problem.";
     }
     console.error(`[creative] generation failed for ${type}:${entityId}:`, err);
+    // Capped defensively — this is meant to be a short diagnostic string
+    // surfaced in the admin UI (CreativeThumbnail), not an arbitrary blob.
+    const storedReason = reason.length > 500 ? `${reason.slice(0, 500)}…` : reason;
     await prisma.generatedCreative
       .upsert({
         where: { type_sourceEntityId: { type, sourceEntityId: entityId } },
-        create: { type, sourceEntityType: SOURCE_ENTITY_TYPE[type], sourceEntityId: entityId, status: "FAILED", errorMessage: reason },
-        update: { status: "FAILED", errorMessage: reason },
+        create: { type, sourceEntityType: SOURCE_ENTITY_TYPE[type], sourceEntityId: entityId, status: "FAILED", errorMessage: storedReason },
+        update: { status: "FAILED", errorMessage: storedReason },
       })
       .catch(() => {});
     return { ok: false, reason };
