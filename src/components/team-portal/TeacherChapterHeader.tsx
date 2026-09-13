@@ -336,16 +336,26 @@ export function TeacherChapterHeader({
         </div>
       </div>
 
-      {/* Statistics Cards Row (Matching Reference) */}
+      {/* Statistics Cards Row.
+          Previously: "Hours taught" divided by a fabricated "out of 15h"
+          target; "Watch minutes" was totalDurationMin * 12 (an arbitrary
+          multiplier with no real watch-time data behind it — no such
+          tracking exists in the schema); "Rating" was a hardcoded "5.0 (24
+          ratings)" shown identically for every chapter. All replaced with
+          real values or an honest empty state — see the totalDurationMin
+          comment where it's computed (now a real sum of each Lecture's
+          durationMin, a *scheduled* duration, hence "Scheduled hours" not
+          "Hours taught" — there is no real conducted/actual-duration
+          tracking to label it otherwise). */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* Hours Taught Card */}
+        {/* Scheduled Hours Card */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 shadow-sm flex items-center justify-between">
           <div>
             <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
-              Hours taught
+              Scheduled hours
             </span>
             <span className="text-2xl font-black text-slate-900 dark:text-white font-mono mt-1 block">
-              {totalHours} / {Math.max(Number(totalHours), 15)}h
+              {totalHours}h
             </span>
           </div>
           <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/80 dark:border-emerald-800 text-emerald-600 flex items-center justify-center">
@@ -353,14 +363,14 @@ export function TeacherChapterHeader({
           </div>
         </div>
 
-        {/* Watch Minutes Card */}
+        {/* Lectures Card */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 shadow-sm flex items-center justify-between">
           <div>
             <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
-              Watch minutes
+              Lectures
             </span>
             <span className="text-2xl font-black text-slate-900 dark:text-white font-mono mt-1 block">
-              {totalDurationMin * 12}
+              {totalLectures}
             </span>
           </div>
           <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200/80 dark:border-rose-800 text-rose-600 flex items-center justify-center">
@@ -368,22 +378,19 @@ export function TeacherChapterHeader({
           </div>
         </div>
 
-        {/* Rating Card */}
+        {/* Rating Card — no student-rating data model exists for chapters;
+            honest empty state instead of a fabricated number. */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 shadow-sm flex items-center justify-between">
           <div>
             <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
               Rating
             </span>
-            <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-2xl font-black text-slate-900 dark:text-white font-mono">5.0</span>
-              <span className="text-xs text-slate-400 font-medium">(24 ratings)</span>
-            </div>
-            <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider mt-1 block hover:underline cursor-pointer">
-              VIEW DETAILS
+            <span className="text-sm font-bold text-slate-400 dark:text-slate-500 mt-1 block">
+              No ratings yet
             </span>
           </div>
           <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200/80 dark:border-amber-800 text-amber-500 flex items-center justify-center">
-            <Star className="w-6 h-6 fill-amber-500" />
+            <Star className="w-6 h-6" />
           </div>
         </div>
       </div>

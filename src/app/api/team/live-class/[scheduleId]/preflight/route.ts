@@ -23,11 +23,17 @@ export async function POST(
 
     if (!schedule) return apiError("Scheduled class not found", 404);
 
-    const { canTeacherEnterClass } = await import("@/lib/schedule/access-rules");
-    const evaluation = canTeacherEnterClass(schedule, new Date());
+    // Slide/presentation prep is metadata prep, not entering the live room
+    // with students -- gated by canTeacherPrepareClass (any time before the
+    // class is cancelled/concluded), NOT the stricter T-15
+    // canTeacherEnterClass room-entry window. That T-15 gate used to block
+    // a teacher from preparing slides more than 15 minutes ahead, which
+    // defeated the entire point of "prepare in advance."
+    const { canTeacherPrepareClass } = await import("@/lib/schedule/access-rules");
+    const evaluation = canTeacherPrepareClass(schedule, new Date());
     if (!evaluation.allowed) {
       return apiError(
-        evaluation.reason || "Live class setup is only allowed within 15 minutes of scheduled time.",
+        evaluation.reason || "This class can no longer be prepared.",
         403,
         {
           code: evaluation.code || "ENTRY_TOO_EARLY",

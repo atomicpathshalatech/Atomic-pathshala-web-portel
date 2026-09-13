@@ -275,6 +275,90 @@ export function canTeacherEnterClass(
 }
 
 /**
+ * Authoritative Teacher Pre-Class SLIDE PREPARATION Check (distinct from
+ * canTeacherEnterClass, which gates actually entering the live room).
+ * Uploading/linking presentation slides in advance is just metadata prep —
+ * it doesn't put the teacher in the room with students — so it should not
+ * be locked to the same T-15 window as classroom entry. A teacher can
+ * prepare slides any time the class is still schedulable (not yet
+ * cancelled or already concluded).
+ */
+export function canTeacherPrepareClass(
+  schedule: ScheduleAccessTarget,
+  serverNow: Date = new Date()
+): AccessEvaluation {
+  const { startsAt, endsAt, opensAt, startOpensAt } = getScheduleWindowDates(schedule);
+  const nowMs = serverNow.getTime();
+
+  const isCancelled = schedule.status === "CANCELLED";
+  const isCompleted =
+    schedule.status === "COMPLETED" ||
+    (schedule.liveWhiteboardSession?.status === "ENDED" &&
+      schedule.liveWhiteboardSession?.livePhase === "ENDED");
+
+  const secondsUntilWindowOpens = Math.max(0, Math.ceil((opensAt.getTime() - nowMs) / 1000));
+  const secondsUntilStartOpens = Math.max(0, Math.ceil((startOpensAt.getTime() - nowMs) / 1000));
+  const secondsUntilStartsAt = Math.max(0, Math.ceil((startsAt.getTime() - nowMs) / 1000));
+
+  if (isCancelled) {
+    return {
+      allowed: false,
+      status: "CANCELLED",
+      code: "CANCELLED",
+      reason: "This class has been cancelled.",
+      opensAt,
+      startOpensAt,
+      startsAt,
+      endsAt,
+      isLive: false,
+      isCompleted: false,
+      isCancelled: true,
+      isWindowOpen: false,
+      secondsUntilWindowOpens,
+      secondsUntilStartOpens,
+      secondsUntilStartsAt,
+    };
+  }
+
+  if (isCompleted) {
+    return {
+      allowed: false,
+      status: "COMPLETED",
+      code: "COMPLETED",
+      reason: "This live class has already concluded.",
+      opensAt,
+      startOpensAt,
+      startsAt,
+      endsAt,
+      isLive: false,
+      isCompleted: true,
+      isCancelled: false,
+      isWindowOpen: false,
+      secondsUntilWindowOpens,
+      secondsUntilStartOpens,
+      secondsUntilStartsAt,
+    };
+  }
+
+  return {
+    allowed: true,
+    status: "SCHEDULED",
+    code: "OK",
+    opensAt,
+    startOpensAt,
+    startsAt,
+    endsAt,
+    isLive: false,
+    isCompleted: false,
+    isCancelled: false,
+    isWindowOpen: true,
+    secondsUntilWindowOpens,
+    secondsUntilStartOpens,
+    secondsUntilStartsAt,
+  };
+}
+
+/**
  * Authoritative Teacher Start Class Check
  * Rule: Start Class is strictly FORBIDDEN before (scheduled_start_at - 5 minutes).
  * T-15 to T-5: Teacher entry = ENABLED, Start Class = DISABLED

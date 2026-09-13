@@ -20,8 +20,11 @@ export interface ChapterDetailData {
   totalLectures: number;
   totalDpps: number;
   totalTests: number;
-  averageRating: number;
-  learnerCount: number;
+  // No student-rating/enrollment-count data model exists for chapters in
+  // the schema — optional, and simply omitted from the UI when absent
+  // rather than backfilled with a fake number (see the render below).
+  averageRating?: number | null;
+  learnerCount?: number | null;
   learningOutcomes: string[];
   teacher: {
     id?: string;
@@ -195,22 +198,31 @@ export function ChapterDetailView({
             {data.title}: Complete Chapter
           </h1>
 
-          {/* Meta Line: Duration | Lessons */}
+          {/* Meta Line: Duration | Lessons — real values only. Previously
+              `|| 180` / `|| 8` / `|| 4.9` silently swapped in fake numbers
+              whenever the real value was 0 (e.g. a brand-new chapter with
+              no lectures yet showed "8 Lectures" instead of 0). Rating is
+              omitted entirely rather than shown as a fake number — there is
+              no student-rating data model for chapters in this schema. */}
           <div className="flex items-center gap-3 text-xs sm:text-sm text-slate-600 dark:text-slate-300 font-medium">
             <div className="flex items-center gap-1">
               <span className="material-symbols-outlined text-sm text-amber-500">schedule</span>
-              <span>{data.totalDurationMin || 180} Min</span>
+              <span>{data.totalDurationMin} Min</span>
             </div>
             <span className="text-slate-300 dark:text-slate-700">|</span>
             <div className="flex items-center gap-1">
               <span className="material-symbols-outlined text-sm text-blue-500">menu_book</span>
-              <span>{totalLessons || 8} Lectures</span>
+              <span>{totalLessons} Lecture{totalLessons === 1 ? "" : "s"}</span>
             </div>
-            <span className="text-slate-300 dark:text-slate-700">|</span>
-            <div className="flex items-center gap-1 text-amber-500">
-              <span>★</span>
-              <span>{data.averageRating || 4.9}</span>
-            </div>
+            {typeof data.averageRating === "number" && (
+              <>
+                <span className="text-slate-300 dark:text-slate-700">|</span>
+                <div className="flex items-center gap-1 text-amber-500">
+                  <span>★</span>
+                  <span>{data.averageRating.toFixed(1)}</span>
+                </div>
+              </>
+            )}
           </div>
         </div>
 

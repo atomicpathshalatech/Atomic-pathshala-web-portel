@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { chapterSchema } from "@/lib/validation/chapter";
+import { isCanonicalCourseSlug } from "@/lib/academic/canonical-courses";
 import { generateChapterId } from "@/lib/chapters/code";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { Prisma } from "@prisma/client";
@@ -58,6 +59,15 @@ export async function POST(request: NextRequest) {
 
     if (data.courseId && subject.courseId !== data.courseId) {
       return apiError("The selected Subject does not belong to the selected Course/Exam", 400);
+    }
+
+    // Server-side enforcement of the canonical course list — the frontend
+    // dropdown already only offers these four, but a client can submit any
+    // subjectId directly, so this can't be frontend-only. Rejects a
+    // subject belonging to a non-canonical course (e.g. old/legacy/test
+    // course rows) rather than silently accepting it.
+    if (!isCanonicalCourseSlug(subject.course.slug)) {
+      return apiError("This subject's course is not one of the currently approved courses (Class 11th, Class 12th, NEET, JEE).", 400);
     }
 
     let chapter: Awaited<ReturnType<typeof prisma.chapter.create>> | null = null;

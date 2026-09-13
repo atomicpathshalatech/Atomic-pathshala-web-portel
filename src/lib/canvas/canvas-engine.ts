@@ -50,6 +50,15 @@ export interface FreehandObject {
    * PEN_STYLES ids (hard | fountain | chisel | art | graphite | magic);
    * absent / unknown renders as "hard". Highlighter ignores this. */
   penStyle?: string;
+  /** Set only on a "fading highlighter" stroke (drawn with the
+   * highlighter-fade tool, stored as a normal tool:"highlighter" object so
+   * every existing render/hit-test/export path already handles it) —
+   * epoch ms after which this stroke is fully gone. Unlike the laser
+   * pointer, a fading highlighter is a real, persisted, synced object (so
+   * every viewer — teacher and student — sees the same fade and eventual
+   * removal, computed independently from this shared timestamp rather than
+   * broadcast frame-by-frame). Absent on every ordinary stroke. */
+  fadeExpiresAt?: number;
 }
 
 /**
@@ -111,6 +120,7 @@ export type StrokeObject = FreehandObject | ShapeObject | TextObject | RasterObj
 export type CanvasTool =
   | "pen"
   | "highlighter"
+  | "highlighter-fade"
   | "laser"
   | "stroke-eraser"
   | "object-eraser"
@@ -167,6 +177,30 @@ function laserOpacityAt(t: number): number {
   }
   const fadeT = (t - pulsePhaseFrac) / (1 - pulsePhaseFrac);
   return Math.max(0, 1 - fadeT * fadeT) * LASER_PULSE_CEILING_OPACITY;
+}
+
+/**
+ * Fading-highlighter lifetime (ms) — a second highlighter variant (spec:
+ * "one type stays, the other should disappear after a short while, like
+ * the laser"). Held fully visible for a highlight-and-explain window, then
+ * eases out over FADE_MS. Deliberately a much slower, gentler curve than
+ * the laser's ~2.8s pulse-then-fade — a highlighter is meant to linger
+ * while a point is being made, not flash attention like a pointer.
+ */
+export const FADING_HIGHLIGHTER_HOLD_MS = 6000;
+export const FADING_HIGHLIGHTER_FADE_MS = 2000;
+export const FADING_HIGHLIGHTER_LIFETIME_MS = FADING_HIGHLIGHTER_HOLD_MS + FADING_HIGHLIGHTER_FADE_MS;
+
+/** Opacity multiplier (0-1) for a fading-highlighter stroke, computed
+ * purely from its shared `fadeExpiresAt` timestamp and the current time —
+ * every viewer (teacher, each student) computes the same value
+ * independently from the same persisted/synced timestamp, so the fade
+ * looks identical everywhere without any extra network traffic. */
+function fadeHighlighterOpacityAt(fadeExpiresAt: number, now: number): number {
+  const remaining = fadeExpiresAt - now;
+  if (remaining <= 0) return 0;
+  if (remaining >= FADING_HIGHLIGHTER_FADE_MS) return 1;
+  return remaining / FADING_HIGHLIGHTER_FADE_MS;
 }
 
 /** Font-size (virtual px) per unit of the shared pen `currentSize` control,
@@ -649,6 +683,16 @@ export class CanvasEngine {
     return box;
   }
   private rafPending = false;
+  // Batches the drag/resize base-layer redraw the same way scheduleActiveRender
+  // already batches pen drawing - without this, every coalesced pointermove
+  // event during a multi-object drag triggered its own full renderBase() (a
+  // full-board redraw), which is what froze the tab on a large selection.
+  private baseRenderRafPending = false;
+  // id -> array-index / id -> pre-drag-snapshot lookups, rebuilt once per
+  // drag/resize gesture (on pointerdown) instead of re-scanning `objects`
+  // with findIndex/find for every selected id on every pointermove event.
+  private dragIndexById: Map<string, number> | null = null;
+  private dragSnapshotById: Map<string, StrokeObject> | null = null;
 
   private boundDown = this.onPointerDown.bind(this);
   private boundMove = this.onPointerMove.bind(this);
@@ -697,6 +741,8 @@ export class CanvasEngine {
     this.laserRaf = 0;
     this.laserActive = null;
     this.laserStrokes = [];
+    if (this.fadeTimer) clearTimeout(this.fadeTimer as ReturnType<typeof setTimeout>);
+    this.fadeTimer = 0;
   }
 
   /** Resize the backing store to match the element's current CSS size at
@@ -779,7 +825,7 @@ export class CanvasEngine {
       return;
     }
 
-    if (this.currentTool === "pen" || this.currentTool === "highlighter") {
+    if (this.currentTool === "pen" || this.currentTool === "highlighter" || this.currentTool === "highlighter-fade") {
       this.activePoints = [pt];
       return;
     }
@@ -843,6 +889,7 @@ export class CanvasEngine {
       ) {
         this.dragOrigin = pt;
         this.dragSnapshot = this.cloneObjects();
+        this.buildDragIndex();
         return;
       }
 
@@ -851,6 +898,7 @@ export class CanvasEngine {
         this.selectedIds = new Set([hit.id]);
         this.dragOrigin = pt;
         this.dragSnapshot = this.cloneObjects();
+        this.buildDragIndex();
         this.emitSelection();
         this.renderBase();
         return;
@@ -882,7 +930,7 @@ export class CanvasEngine {
     for (const evt of events) {
       const pt = this.getPoint(evt);
 
-      if (this.currentTool === "pen" || this.currentTool === "highlighter") {
+      if (this.currentTool === "pen" || this.currentTool === "highlighter" || this.currentTool === "highlighter-fade") {
         this.activePoints.push(pt);
         continue;
       }
@@ -911,28 +959,34 @@ export class CanvasEngine {
           const newH = Math.max(10, Math.abs(pt.y - this.resizeOpposite.y));
           const scaleX = newW / origW;
           const scaleY = newH / origH;
-          const original = this.dragSnapshot?.find((o) => o.id === this.selectedId);
-          if (original) {
-            const idx = this.objects.findIndex((o) => o.id === this.selectedId);
-            if (idx !== -1) {
-              this.objects[idx] = scaleObject(original, scaleX, scaleY, this.resizeOpposite, this.measureText.bind(this));
-              this.renderBase();
-            }
+          const original = this.selectedId ? this.dragSnapshotById?.get(this.selectedId) : undefined;
+          const idx = this.selectedId ? this.dragIndexById?.get(this.selectedId) : undefined;
+          if (original && idx !== undefined) {
+            this.objects[idx] = scaleObject(original, scaleX, scaleY, this.resizeOpposite, this.measureText.bind(this));
           }
         } else if (this.dragOrigin) {
           const dx = pt.x - this.dragOrigin.x;
           const dy = pt.y - this.dragOrigin.y;
           for (const id of this.selectedIds) {
-            const idx = this.objects.findIndex((o) => o.id === id);
-            const original = this.dragSnapshot?.find((o) => o.id === id);
-            if (idx !== -1 && original) this.objects[idx] = translateObject(original, dx, dy);
+            const idx = this.dragIndexById?.get(id);
+            const original = this.dragSnapshotById?.get(id);
+            if (idx !== undefined && original) this.objects[idx] = translateObject(original, dx, dy);
           }
-          this.renderBase();
         }
+        // Deferred to the next animation frame (batches every coalesced
+        // event above into a single full-board redraw per frame) instead
+        // of a synchronous renderBase() per event - this was the main
+        // cause of a multi-object drag freezing the whole tab.
+        this.scheduleBaseRender();
       }
     }
 
-    if (this.currentTool === "pen" || this.currentTool === "highlighter" || (isShapeTool(this.currentTool) && this.shapeStart)) {
+    if (
+      this.currentTool === "pen" ||
+      this.currentTool === "highlighter" ||
+      this.currentTool === "highlighter-fade" ||
+      (isShapeTool(this.currentTool) && this.shapeStart)
+    ) {
       this.scheduleActiveRender();
     }
   }
@@ -962,7 +1016,15 @@ export class CanvasEngine {
       // pointer already released — safe to ignore
     }
 
-    if (this.currentTool === "pen" || this.currentTool === "highlighter") {
+    if (this.currentTool === "pen" || this.currentTool === "highlighter" || this.currentTool === "highlighter-fade") {
+      // Stored as a plain "highlighter" object (not a fourth tool value on
+      // FreehandObject itself) so every existing render/hit-test/export
+      // path already handles it - fadeExpiresAt is the only marker that
+      // distinguishes it, and it's what the fade loop below acts on.
+      const isFading = this.currentTool === "highlighter-fade";
+      const storedTool: "pen" | "highlighter" = this.currentTool === "pen" ? "pen" : "highlighter";
+      const fadeExpiresAt = isFading ? Date.now() + FADING_HIGHLIGHTER_LIFETIME_MS : undefined;
+
       if (this.activePoints.length === 1) {
         // Single tap dot
         this.pushUndo();
@@ -970,29 +1032,33 @@ export class CanvasEngine {
         const stroke: StrokeObject = {
           id: uid(),
           type: "stroke",
-          tool: this.currentTool,
+          tool: storedTool,
           color: this.currentColor,
           size: this.currentSize,
           points: [pt, { ...pt, x: pt.x + 0.1 }],
           penStyle: this.currentPenStyle,
+          fadeExpiresAt,
         };
         this.objects.push(stroke);
         this.renderBase();
         this.onCommit?.(this.objects);
+        if (isFading) this.startFadeLoopIfNeeded();
       } else if (this.activePoints.length > 1) {
         this.pushUndo();
         const stroke: StrokeObject = {
           id: uid(),
           type: "stroke",
-          tool: this.currentTool,
+          tool: storedTool,
           color: this.currentColor,
           size: this.currentSize,
           points: this.activePoints,
           penStyle: this.currentPenStyle,
+          fadeExpiresAt,
         };
         this.objects.push(stroke);
         this.renderBase();
         this.onCommit?.(this.objects);
+        if (isFading) this.startFadeLoopIfNeeded();
       }
     }
 
@@ -1053,6 +1119,8 @@ export class CanvasEngine {
     this.activePoints = [];
     this.dragOrigin = null;
     this.dragSnapshot = null;
+    this.dragIndexById = null;
+    this.dragSnapshotById = null;
     this.resizeHandle = null;
     this.resizeOpposite = null;
     this.resizeInitialBBox = null;
@@ -1068,6 +1136,28 @@ export class CanvasEngine {
       this.rafPending = false;
       this.renderActiveStroke();
     });
+  }
+
+  /** Same batching idea as scheduleActiveRender, for the full-board
+   * renderBase() redraw used by drag/resize - coalesces many pointermove
+   * events per frame into a single redraw instead of one redraw per event. */
+  private scheduleBaseRender(): void {
+    if (this.baseRenderRafPending) return;
+    this.baseRenderRafPending = true;
+    requestAnimationFrame(() => {
+      this.baseRenderRafPending = false;
+      this.renderBase();
+    });
+  }
+
+  /** Builds the id -> objects[] index once at drag/resize start. Object
+   * order in `objects` doesn't change mid-drag (only in-place replacement
+   * via objects[idx] = ...), so this stays valid for the whole gesture -
+   * avoiding an O(selectedCount * totalObjects) findIndex/find scan on
+   * every single pointermove event. */
+  private buildDragIndex(): void {
+    this.dragIndexById = new Map(this.objects.map((o, idx) => [o.id, idx]));
+    this.dragSnapshotById = this.dragSnapshot ? new Map(this.dragSnapshot.map((o) => [o.id, o])) : null;
   }
 
   private renderActiveStroke(): void {
@@ -1087,7 +1177,8 @@ export class CanvasEngine {
     }
 
     if (this.activePoints.length < 2) return;
-    this.strokePath(this.activeCtx, this.activePoints, this.currentColor, this.currentSize, this.currentTool === "highlighter", this.currentPenStyle);
+    const isHighlighter = this.currentTool === "highlighter" || this.currentTool === "highlighter-fade";
+    this.strokePath(this.activeCtx, this.activePoints, this.currentColor, this.currentSize, isHighlighter, this.currentPenStyle);
   }
 
   private strokePath(
@@ -1096,13 +1187,14 @@ export class CanvasEngine {
     color: string,
     size: number,
     isHighlighter: boolean,
-    penStyle: string = "hard"
+    penStyle: string = "hard",
+    extraAlpha: number = 1
   ): void {
-    if (points.length === 0) return;
+    if (points.length === 0 || extraAlpha <= 0) return;
     if (points.length === 1) {
       ctx.save();
       ctx.fillStyle = color;
-      ctx.globalAlpha = isHighlighter ? 0.35 : penStyle === "graphite" ? 0.8 : 1;
+      ctx.globalAlpha = (isHighlighter ? 0.35 : penStyle === "graphite" ? 0.8 : 1) * extraAlpha;
       const r = (size * (isHighlighter ? 3.5 : 0.6 + points[0]!.pressure * 1.4)) / 2;
       ctx.beginPath();
       ctx.arc(points[0]!.x, points[0]!.y, Math.max(1, r), 0, Math.PI * 2);
@@ -1115,7 +1207,7 @@ export class CanvasEngine {
     ctx.lineCap = penStyle === "chisel" ? "butt" : "round";
     ctx.lineJoin = "round";
     ctx.strokeStyle = color;
-    ctx.globalAlpha = isHighlighter ? 0.35 : 1;
+    ctx.globalAlpha = (isHighlighter ? 0.35 : 1) * extraAlpha;
     ctx.globalCompositeOperation = "source-over";
 
     if (isHighlighter || points.length === 2) {
@@ -1244,6 +1336,45 @@ export class CanvasEngine {
     this.laserRaf = requestAnimationFrame(tick);
   }
 
+  // Fading-highlighter lifecycle - unlike the laser above, these ARE real
+  // persisted `objects` entries (so every viewer sees/syncs the same
+  // stroke), so this loop only needs to (a) periodically re-render the
+  // base layer so the fade is visible, and (b) once a stroke's fade
+  // completes, actually remove it from `objects` and commit that removal
+  // through the normal autosave/broadcast pipeline - a slow ~200ms tick
+  // is smooth enough for a multi-second fade and far cheaper than an rAF
+  // loop running the whole time a fading highlighter merely EXISTS
+  // on-screen (which, unlike the laser, can be many seconds).
+  private fadeTimer: ReturnType<typeof setTimeout> | number = 0;
+
+  private startFadeLoopIfNeeded(): void {
+    if (this.fadeTimer) return;
+    const hasFading = this.objects.some((o) => o.type === "stroke" && o.fadeExpiresAt);
+    if (!hasFading) return;
+
+    const tick = () => {
+      this.fadeTimer = 0;
+      const now = Date.now();
+      const before = this.objects.length;
+      this.objects = this.objects.filter((o) => !(o.type === "stroke" && o.fadeExpiresAt && o.fadeExpiresAt <= now));
+      const removed = this.objects.length !== before;
+
+      const stillFading = this.objects.some((o) => o.type === "stroke" && o.fadeExpiresAt);
+      this.renderBase();
+      if (removed) {
+        // Persists the removal (and the intermediate opacity is purely a
+        // client-side render effect derived from fadeExpiresAt, never
+        // itself written to the DB) so every viewer's board matches once
+        // it's actually gone, not just visually faded on one screen.
+        this.onCommit?.(this.objects);
+      }
+      if (stillFading) {
+        this.fadeTimer = setTimeout(tick, 200);
+      }
+    };
+    this.fadeTimer = setTimeout(tick, 200);
+  }
+
   private drawLaser(pts: { x: number; y: number }[], opacity: number): void {
     if (pts.length < 1 || opacity <= 0) return;
     const ctx = this.activeCtx;
@@ -1290,9 +1421,11 @@ export class CanvasEngine {
 
   public renderBase(): void {
     this.baseCtx.clearRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+    const now = Date.now();
     for (const obj of this.objects) {
       if (obj.type === "stroke") {
-        this.strokePath(this.baseCtx, obj.points, obj.color, obj.size, obj.tool === "highlighter", obj.penStyle);
+        const extraAlpha = obj.fadeExpiresAt ? fadeHighlighterOpacityAt(obj.fadeExpiresAt, now) : 1;
+        this.strokePath(this.baseCtx, obj.points, obj.color, obj.size, obj.tool === "highlighter", obj.penStyle, extraAlpha);
       } else if (obj.type === "text") {
         this.drawText(this.baseCtx, obj);
       } else if (obj.type === "raster") {
@@ -1839,6 +1972,11 @@ export class CanvasEngine {
     this.redoStack = [];
     this.selectedIds.clear();
     this.renderBase();
+    // A page can load with an already-fading highlighter still on it (e.g.
+    // a student's board syncing mid-fade, or switching back to a page that
+    // has one) - this is what makes the fade/eventual-removal visible on
+    // every viewer, not just the one who drew it.
+    this.startFadeLoopIfNeeded();
   }
 
   public getObjects(): StrokeObject[] {

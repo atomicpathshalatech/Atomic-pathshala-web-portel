@@ -14,11 +14,22 @@ export function WhiteboardPdfDownloadButton({
   className,
   title,
   children,
+  // "pdf" = annotated whiteboard export (handwritten notes/annotations on
+  // top of the slide). "original_pdf" = the exact PDF the teacher
+  // originally uploaded, with nothing drawn on it — see the slides route's
+  // format handling. Both return the same {downloadUrl} shape.
+  format = "pdf",
+  onUnavailable,
 }: {
   sessionId: string;
   className?: string;
   title?: string;
   children: React.ReactNode;
+  format?: "pdf" | "original_pdf";
+  /** Called instead of the default alert() when the server reports nothing
+   * is available for this format (e.g. no original was ever uploaded) —
+   * lets callers show a friendlier inline message. */
+  onUnavailable?: (message: string) => void;
 }) {
   const [loading, setLoading] = useState(false);
 
@@ -26,7 +37,7 @@ export function WhiteboardPdfDownloadButton({
     if (loading) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/whiteboard/sessions/${sessionId}/slides?format=pdf`);
+      const res = await fetch(`/api/whiteboard/sessions/${sessionId}/slides?format=${format}`);
       const contentType = res.headers.get("content-type") || "";
 
       if (contentType.includes("application/pdf")) {
@@ -40,11 +51,14 @@ export function WhiteboardPdfDownloadButton({
       const json = await res.json();
       if (json.success && json.data?.downloadUrl) {
         window.open(json.data.downloadUrl, "_blank");
+      } else if (onUnavailable) {
+        onUnavailable(json.error || "This isn't available for this class.");
       } else {
         alert(json.error || "Could not download whiteboard PDF notes.");
       }
     } catch {
-      alert("Download request failed. Please try again.");
+      if (onUnavailable) onUnavailable("Request failed. Please try again.");
+      else alert("Download request failed. Please try again.");
     } finally {
       setLoading(false);
     }

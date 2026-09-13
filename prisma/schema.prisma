@@ -435,10 +435,39 @@ model Batch {
   folders     BatchFolder[]
   activityEvents StudentActivityEvent[]
   orders      BatchOrder[]
+  chapterAssignments BatchChapter[]
 
   @@index([status])
   @@index([targetExam])
   @@map("batches")
+}
+
+/// Explicit chapter->batch assignment (the "My Lectures" content-isolation
+/// fix). Before this model, a Chapter had no batch scoping at all — it was
+/// only reachable via Subject->Course, so ANY batch sharing that Course
+/// could see every chapter under it, regardless of which specific batch a
+/// teacher meant to assign it to (see BatchSchedule.chapterId, which only
+/// ever created a per-class calendar entry, never a durable assignment).
+/// This table is the durable, explicit "chapter X is available to batch Y"
+/// record that src/app/api/student/batches/[batchId]/my-lectures/route.ts
+/// filters on. Deliberately does NOT touch/replace the existing, separately
+/// course-wide `/courses/[batchId]/subjects/...` content-library browsing
+/// routes — those pre-date this fix and serve a different purpose (a
+/// shared reference library gated by "any active enrollment").
+model BatchChapter {
+  id           String   @id @default(cuid())
+  batchId      String
+  chapterId    String
+  assignedById String?
+  assignedAt   DateTime @default(now())
+
+  batch   Batch   @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  chapter Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  @@unique([batchId, chapterId])
+  @@index([batchId])
+  @@index([chapterId])
+  @@map("batch_chapters")
 }
 
 /// A folder in a batch's material tree — "Syllabus & Schedule" and anything
@@ -1755,6 +1784,7 @@ model Chapter {
   batchSchedules BatchSchedule[]
   reviews        ChapterReview[]
   notices        ChapterNotice[]
+  batchAssignments BatchChapter[]
 
   @@index([subjectId])
   @@index([subjectId, title])

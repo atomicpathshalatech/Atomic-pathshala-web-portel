@@ -16,40 +16,21 @@ export function ChapterReviewsSection({
 }: {
   reviews: ChapterReviewItem[];
 }) {
-  const defaultReviews: ChapterReviewItem[] = [
-    {
-      id: "rev-1",
-      studentName: "Priya Nair",
-      avatarColor: "bg-rose-500/30 text-rose-300",
-      rating: 5,
-      comment: "Outstanding explanation of concepts! The DPPs and notes cleared all my doubts for NEET.",
-      date: "2 days ago",
-    },
-    {
-      id: "rev-2",
-      studentName: "Aman Sharma",
-      avatarColor: "bg-blue-500/30 text-blue-300",
-      rating: 5,
-      comment: "Line-by-line NCERT breakdown helped me score 100% in my chapter test. Highly recommended!",
-      date: "1 week ago",
-    },
-    {
-      id: "rev-3",
-      studentName: "Rohan Patel",
-      avatarColor: "bg-emerald-500/30 text-emerald-300",
-      rating: 5,
-      comment: "Best chapter sequence. Covered all NCERT topics and previous year questions easily.",
-      date: "2 weeks ago",
-    },
-  ];
-
-  const displayReviews = reviews && reviews.length > 0 ? reviews : defaultReviews;
+  // Previously fell back to 3 hardcoded fake reviews (fake names, fake
+  // 5-star ratings, fake relative dates like "2 days ago") whenever the
+  // real `reviews` array was empty — every chapter with zero real reviews
+  // showed identical fabricated testimonials. No student-review data model
+  // exists in the schema at all, so an empty state is honest; a fake one
+  // was not.
+  if (!reviews || reviews.length === 0) {
+    return <p className="text-xs text-slate-400 py-4">No student reviews yet.</p>;
+  }
 
   return (
     <div className="space-y-3">
       {/* Horizontal Snap Scroll Carousel */}
       <div className="flex gap-4 overflow-x-auto pb-4 pt-1 snap-x scrollbar-thin scrollbar-thumb-slate-800">
-        {displayReviews.map((rev) => {
+        {reviews.map((rev) => {
           const initials = rev.studentName
             .split(" ")
             .map((n) => n[0])

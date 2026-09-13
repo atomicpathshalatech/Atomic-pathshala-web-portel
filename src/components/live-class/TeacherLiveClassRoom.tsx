@@ -366,6 +366,16 @@ export function TeacherLiveClassRoom({
   } | null>(null);
   const [undoRedoTick, setUndoRedoTick] = useState(0);
   const [zoom, setZoom] = useState(1);
+  // Panning was never implemented — zoom was a pure CSS scale() on a fixed,
+  // overflow-hidden, centered card with no translate state and no drag
+  // handler, so zooming in always revealed the same center region with no
+  // way to move around it. panOffset is in the stage's own pre-scale px
+  // (applied as `translate(x,y) scale(zoom)`, translate-before-scale, so a
+  // screen-space drag delta is divided by zoom to get a 1:1 visual pan
+  // regardless of zoom level — see panBy() below).
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+  const [panModeActive, setPanModeActive] = useState(false);
+  const panDragRef = useRef<{ x: number; y: number } | null>(null);
   // Below lg the right panel slides in over the canvas rather than holding
   // a fixed 320px column open on a phone. It is never unmounted - see the
   // .live-panel rules in globals.css and the VideoStrip note below.
@@ -442,6 +452,7 @@ export function TeacherLiveClassRoom({
   const [showPostClassModal, setShowPostClassModal] = useState(false);
   const [startingClass, setStartingClass] = useState(false);
   const [startClassError, setStartClassError] = useState<string | null>(null);
+  const [recordingWarning, setRecordingWarning] = useState<string | null>(null);
   const [slideTemplatesOpen, setSlideTemplatesOpen] = useState(false);
 
   // Pre-flight & Authoritative System State
@@ -703,12 +714,26 @@ export function TeacherLiveClassRoom({
     [tool]
   );
 
+  // Throttled to once per animation frame: this fires on every native
+  // pointermove (including every event coalesced during a fast drag), and
+  // an unthrottled setCursorPos was forcing a full React re-render of this
+  // whole component on each one - in parallel with the canvas engine's own
+  // per-frame drag/resize work, this doubled up the cost that was freezing
+  // the tab during a multi-object drag.
+  const cursorRafPending = useRef(false);
+  const latestCursorPos = useRef<{ x: number; y: number } | null>(null);
   const handleCanvasPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return;
     const relX = (e.clientX - rect.left) / rect.width;
     const relY = (e.clientY - rect.top) / rect.height;
-    setCursorPos({ x: relX * VIRTUAL_WIDTH, y: relY * VIRTUAL_HEIGHT });
+    latestCursorPos.current = { x: relX * VIRTUAL_WIDTH, y: relY * VIRTUAL_HEIGHT };
+    if (cursorRafPending.current) return;
+    cursorRafPending.current = true;
+    requestAnimationFrame(() => {
+      cursorRafPending.current = false;
+      setCursorPos(latestCursorPos.current);
+    });
   }, []);
 
   const handleCanvasPointerLeave = useCallback(() => setCursorPos(null), []);
@@ -793,6 +818,40 @@ export function TeacherLiveClassRoom({
   }, [wbSession?.id]);
 
   // ---- Page navigation -----------------------------------------------------
+  /** Clamps panOffset (pre-scale px) so the scaled stage can never be
+   * dragged fully off-screen — bounded by how much bigger the scaled stage
+   * is than the visible container in each axis. Returns {0,0} once zoom is
+   * back to a level where the stage fits entirely (nothing to pan to). */
+  function clampPan(x: number, y: number, currentZoom: number): { x: number; y: number } {
+    const containerRect = mainCanvasContainerRef.current?.getBoundingClientRect();
+    const containerW = containerRect?.width ?? stageDimensions.width * currentZoom;
+    const containerH = containerRect?.height ?? stageDimensions.height * currentZoom;
+    const scaledW = stageDimensions.width * currentZoom;
+    const scaledH = stageDimensions.height * currentZoom;
+    const maxPanX = Math.max(0, (scaledW - containerW) / 2) / currentZoom;
+    const maxPanY = Math.max(0, (scaledH - containerH) / 2) / currentZoom;
+    return {
+      x: Math.min(maxPanX, Math.max(-maxPanX, x)),
+      y: Math.min(maxPanY, Math.max(-maxPanY, y)),
+    };
+  }
+
+  function panBy(dxScreenPx: number, dyScreenPx: number) {
+    setPanOffset((prev) => clampPan(prev.x + dxScreenPx / zoom, prev.y + dyScreenPx / zoom, zoom));
+  }
+
+  // Re-clamp (or fully reset) pan whenever zoom changes, so zooming back
+  // out never leaves the stage stuck off-center with nothing to actually
+  // pan to anymore.
+  useEffect(() => {
+    if (zoom <= 1) {
+      setPanOffset({ x: 0, y: 0 });
+      return;
+    }
+    setPanOffset((prev) => clampPan(prev.x, prev.y, zoom));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zoom, stageDimensions.width, stageDimensions.height]);
+
   async function switchToPage(pageNumber: number) {
     if (!wbSession || !engineRef.current) return;
     if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
@@ -803,7 +862,12 @@ export function TeacherLiveClassRoom({
       await patchJson(`/api/whiteboard/sessions/${wbSession.id}`, { activePageNumber: pageNumber });
       setWbSession((prev) => (prev ? { ...prev, activePageNumber: pageNumber } : prev));
       engineRef.current.loadObjects(target.objects ?? []);
-    } catch {
+    } catch (err) {
+      // Was previously silent apart from the generic "offline" indicator -
+      // logged now so a stale/ended-session 409 (or any other switchToPage
+      // failure) is actually diagnosable instead of just looking like
+      // "Next/Prev doesn't work".
+      console.error("[switchToPage_error]", pageNumber, err);
       setSaveState("offline");
     }
   }
@@ -918,8 +982,16 @@ export function TeacherLiveClassRoom({
         return;
       }
 
-      // Page navigation: PageDown / Alt+Right -> Next Page, PageUp / Alt+Left -> Prev Page
-      if (!e.ctrlKey && !e.metaKey && (e.key === "PageDown" || (e.altKey && e.key === "ArrowRight"))) {
+      // Page navigation: PageDown / Alt+Right / plain ArrowDown -> Next Page,
+      // PageUp / Alt+Left / plain ArrowUp -> Prev Page. Plain arrow keys were
+      // never bound before this - added since teachers expect the literal
+      // "up/down" keys to move slides, same as the on-screen Next/Prev
+      // buttons right next to them.
+      if (
+        !e.ctrlKey &&
+        !e.metaKey &&
+        (e.key === "PageDown" || (!e.altKey && e.key === "ArrowDown") || (e.altKey && e.key === "ArrowRight"))
+      ) {
         if (wbSession && wbSession.activePageNumber < wbSession.pages.length) {
           e.preventDefault();
           switchToPage(wbSession.activePageNumber + 1);
@@ -927,7 +999,11 @@ export function TeacherLiveClassRoom({
         return;
       }
 
-      if (!e.ctrlKey && !e.metaKey && (e.key === "PageUp" || (e.altKey && e.key === "ArrowLeft"))) {
+      if (
+        !e.ctrlKey &&
+        !e.metaKey &&
+        (e.key === "PageUp" || (!e.altKey && e.key === "ArrowUp") || (e.altKey && e.key === "ArrowLeft"))
+      ) {
         if (wbSession && wbSession.activePageNumber > 1) {
           e.preventDefault();
           switchToPage(wbSession.activePageNumber - 1);
@@ -1369,6 +1445,7 @@ export function TeacherLiveClassRoom({
     if (!wbSession || startingClass) return;
     setStartingClass(true);
     setStartClassError(null);
+    setRecordingWarning(null);
     try {
       const data = await postJson(`/api/team/live-class/${batchScheduleId}/start`, {});
       if (data.whiteboardSession) {
@@ -1376,6 +1453,10 @@ export function TeacherLiveClassRoom({
           prev ? { ...prev, ...data.whiteboardSession, livePhase: "LIVE" } : data.whiteboardSession
         );
       }
+      // Recording-start failures used to be silently logged server-side
+      // only, so a class could run with no recording and nobody noticed
+      // until playback. Now surfaced as a visible banner instead.
+      if (data.recordingWarning) setRecordingWarning(data.recordingWarning);
     } catch (err) {
       setStartClassError(err instanceof Error ? err.message : "Could not start the class.");
     } finally {
@@ -1807,6 +1888,12 @@ export function TeacherLiveClassRoom({
               )}
             </div>
           )}
+          {recordingWarning && (
+            <div className="flex items-center gap-1.5 rounded-lg bg-amber-500/15 border border-amber-500/40 px-3 py-1.5 text-xs font-semibold text-amber-300">
+              <span className="material-symbols-outlined text-sm">warning</span>
+              {recordingWarning}
+            </div>
+          )}
 
           <button
             type="button"
@@ -1852,6 +1939,35 @@ export function TeacherLiveClassRoom({
         ref={mainCanvasContainerRef}
         className="live-canvas relative overflow-hidden bg-[#10131b] flex items-center justify-center min-w-0 min-h-0"
       >
+        {/* Pan-capture overlay — only rendered while Pan mode is on, sits
+            above the stage (which has no z-index / auto stacking) but
+            below the toolbars (z-30+) so the Pan toggle itself, and every
+            other button, stays clickable while panning is active. Reads
+            plain screen-space movementX/Y so a drag always feels 1:1 on
+            screen regardless of zoom - panBy() converts that into the
+            stage's own pre-scale units. */}
+        {panModeActive && zoom > 1 && (
+          <div
+            className="absolute inset-0 z-20 cursor-grab active:cursor-grabbing"
+            onPointerDown={(e) => {
+              (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+              panDragRef.current = { x: e.clientX, y: e.clientY };
+            }}
+            onPointerMove={(e) => {
+              if (!panDragRef.current) return;
+              panBy(e.movementX, e.movementY);
+            }}
+            onPointerUp={(e) => {
+              panDragRef.current = null;
+              try {
+                (e.currentTarget as HTMLDivElement).releasePointerCapture(e.pointerId);
+              } catch {
+                // already released — safe to ignore
+              }
+            }}
+          />
+        )}
+
         {(pdfLoadState.loading || pdfLoadState.error) && (
           <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 max-w-md w-[92%]">
             {pdfLoadState.loading ? (
@@ -1884,7 +2000,7 @@ export function TeacherLiveClassRoom({
               <span className="material-symbols-outlined text-sm">
                 {tool === "pen"
                   ? (PEN_STYLES.find((s) => s.id === penStyle)?.icon || "edit")
-                  : tool === "highlighter"
+                  : tool === "highlighter" || tool === "highlighter-fade"
                   ? "border_color"
                   : tool === "stroke-eraser" || tool === "object-eraser"
                   ? "ink_eraser"
@@ -2012,11 +2128,13 @@ export function TeacherLiveClassRoom({
         </aside>
 
         <div
-          className="relative rounded-2xl shadow-2xl overflow-hidden border border-slate-800/80 shrink-0 transition-transform duration-75 select-none"
+          className={`relative rounded-2xl shadow-2xl overflow-hidden border border-slate-800/80 shrink-0 select-none ${
+            panDragRef.current ? "" : "transition-transform duration-75"
+          }`}
           style={{
             width: `${stageDimensions.width}px`,
             height: `${stageDimensions.height}px`,
-            transform: zoom === 1 ? undefined : `scale(${zoom})`,
+            transform: zoom === 1 ? undefined : `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoom})`,
             transformOrigin: "center center",
             ...(isBackgroundImageUrl(currentPage?.background) ? undefined : slideBackgroundStyle(currentPage?.background)),
           }}
@@ -2077,6 +2195,12 @@ export function TeacherLiveClassRoom({
                     ? "cell"
                     : tool === "laser"
                     ? "crosshair"
+                    // pen/highlighter/stroke-eraser/object-eraser already
+                    // render their own dot/circle overlay just below - the
+                    // native browser cursor must be hidden for those or it
+                    // draws a "+" crosshair on top of/alongside the dot.
+                    : tool === "pen" || tool === "highlighter" || tool === "highlighter-fade" || tool === "stroke-eraser" || tool === "object-eraser"
+                    ? "none"
                     : "crosshair",
               }}
               onDoubleClick={handleCanvasDoubleClick}
@@ -2090,7 +2214,7 @@ export function TeacherLiveClassRoom({
                 laser — laser has its own on-canvas transient render inside
                 the engine, not this overlay). */}
             {cursorPos &&
-              (tool === "pen" || tool === "highlighter" || tool === "stroke-eraser" || tool === "object-eraser") &&
+              (tool === "pen" || tool === "highlighter" || tool === "highlighter-fade" || tool === "stroke-eraser" || tool === "object-eraser") &&
               (() => {
                 const isEraser = tool === "stroke-eraser" || tool === "object-eraser";
                 // Highlighter renders at a fixed 3.5x `size` (see canvas-
@@ -2099,7 +2223,7 @@ export function TeacherLiveClassRoom({
                 // slightly by pen style/pressure at draw time, so `size`
                 // alone is the deliberately-approximate stand-in the spec
                 // asks for.
-                const diameterVirtualPx = isEraser ? eraserRadius * 2 : tool === "highlighter" ? size * 3.5 : size;
+                const diameterVirtualPx = isEraser ? eraserRadius * 2 : tool === "highlighter" || tool === "highlighter-fade" ? size * 3.5 : size;
                 return (
                   <div
                     className="absolute rounded-full pointer-events-none"
@@ -2403,30 +2527,55 @@ export function TeacherLiveClassRoom({
             <ToolbarBtn
               icon="border_color"
               label="Highlight"
-              active={tool === "highlighter"}
+              active={tool === "highlighter" || tool === "highlighter-fade"}
               onClick={() => {
-                setTool("highlighter");
+                setTool((prev) => (prev === "highlighter-fade" ? "highlighter-fade" : "highlighter"));
                 setOpenPopup((p) => (p === "highlight" ? null : "highlight"));
               }}
             />
             {openPopup === "highlight" && (
-              <div className="absolute bottom-full left-0 mb-3 z-40 bg-[#161722] border border-[#2d2e3b] rounded-2xl p-2.5 shadow-2xl flex flex-row items-center gap-2.5 min-w-max">
-                {HIGHLIGHT_COLORS.map((c) => (
+              <div className="absolute bottom-full left-0 mb-3 z-40 bg-[#161722] border border-[#2d2e3b] rounded-2xl p-2.5 shadow-2xl flex flex-col gap-2.5 min-w-max">
+                {/* Two highlighter variants: stays until erased, or fades on
+                    its own after a few seconds (like the laser pointer, but
+                    a real synced stroke, not a teacher-local-only effect). */}
+                <div className="flex rounded-lg bg-[#0d0e16] border border-[#2d2e3b] p-0.5 gap-0.5">
                   <button
-                    key={c}
                     type="button"
-                    onClick={() => {
-                      setColor(c);
-                    }}
-                    className={`w-7 h-7 rounded-full border shadow-md transition transform hover:scale-110 ${
-                      color.toLowerCase() === c.toLowerCase()
-                        ? "ring-2 ring-white ring-offset-2 ring-offset-[#161722] border-transparent"
-                        : "border-gray-600/60 opacity-85 hover:opacity-100"
+                    onClick={() => setTool("highlighter")}
+                    className={`flex-1 px-2.5 py-1 rounded-md text-[10px] font-bold transition ${
+                      tool === "highlighter" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-gray-200"
                     }`}
-                    style={{ backgroundColor: c }}
-                    title={c}
-                  />
-                ))}
+                  >
+                    Permanent
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTool("highlighter-fade")}
+                    className={`flex-1 px-2.5 py-1 rounded-md text-[10px] font-bold transition ${
+                      tool === "highlighter-fade" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-gray-200"
+                    }`}
+                  >
+                    Fades Away
+                  </button>
+                </div>
+                <div className="flex flex-row items-center gap-2.5">
+                  {HIGHLIGHT_COLORS.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => {
+                        setColor(c);
+                      }}
+                      className={`w-7 h-7 rounded-full border shadow-md transition transform hover:scale-110 ${
+                        color.toLowerCase() === c.toLowerCase()
+                          ? "ring-2 ring-white ring-offset-2 ring-offset-[#161722] border-transparent"
+                          : "border-gray-600/60 opacity-85 hover:opacity-100"
+                      }`}
+                      style={{ backgroundColor: c }}
+                      title={c}
+                    />
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -2828,6 +2977,40 @@ export function TeacherLiveClassRoom({
                 >
                   <span className="material-symbols-outlined text-lg">add</span>
                 </button>
+                {/* Pan didn't exist before - zoom was a pure CSS scale() with
+                    no way to move around what it revealed. Only meaningful
+                    (and only shown) once actually zoomed in. */}
+                {zoom > 1 && (
+                  <>
+                    <div className="w-[1px] h-5 bg-gray-700/60" />
+                    <button
+                      type="button"
+                      onClick={() => setPanModeActive((p) => !p)}
+                      title="Drag to pan around the zoomed slide"
+                      className={`w-7 h-7 flex items-center justify-center rounded-full transition-colors ${
+                        panModeActive ? "bg-blue-600 text-white" : "hover:bg-gray-800 text-gray-300"
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-lg">pan_tool</span>
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+            {/* Viewport indicator - shows which part of the slide is
+                currently visible once zoomed/panned. Nothing like this
+                existed before; only relevant above 100% zoom. */}
+            {zoom > 1 && (
+              <div className="absolute bottom-full right-0 mb-2 z-30 w-16 h-9 rounded-md border border-gray-600 bg-black/60 overflow-hidden pointer-events-none">
+                <div
+                  className="absolute bg-blue-500/40 border border-blue-400"
+                  style={{
+                    width: `${Math.min(100, (100 / zoom))}%`,
+                    height: `${Math.min(100, (100 / zoom))}%`,
+                    left: `${50 - (100 / zoom) / 2 - (panOffset.x / stageDimensions.width) * 100}%`,
+                    top: `${50 - (100 / zoom) / 2 - (panOffset.y / stageDimensions.height) * 100}%`,
+                  }}
+                />
               </div>
             )}
           </div>
@@ -3941,24 +4124,44 @@ function QuizPanel({
         />
       )}
 
-      {/* Options List (Screenshot 1) */}
+      {/* Options List — click one to mark it the correct answer. This used
+          to be a static, non-interactive list that always silently kept
+          `correctOption` at its default "A" (from initial/reset state)
+          with no way for the teacher to actually change it — Reveal Answer
+          then always revealed "A" no matter what the teacher intended. */}
       <div className="space-y-2">
         <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block">
-          OPTIONS (ANSWER WILL BE MARKED BY YOU AT REVEAL TIME):
+          OPTIONS — TAP THE CORRECT ANSWER:
         </span>
         <div className="space-y-1.5">
           {form.options.map((val, i) => {
             const key = String.fromCharCode(65 + i);
+            const isCorrect = form.correctOption === key;
             return (
-              <div
+              <button
                 key={key}
-                className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-[#10111a] border border-[#242634]"
+                type="button"
+                onClick={() => setForm((f) => ({ ...f, correctOption: key }))}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl border text-left transition ${
+                  isCorrect
+                    ? "bg-emerald-600/20 border-emerald-500 ring-1 ring-emerald-500/50"
+                    : "bg-[#10111a] border-[#242634] hover:border-[#3a3d52]"
+                }`}
               >
-                <span className="w-6 h-6 rounded-lg bg-blue-600/30 text-blue-400 border border-blue-500/40 text-xs font-bold flex items-center justify-center font-mono">
+                <span
+                  className={`w-6 h-6 rounded-lg text-xs font-bold flex items-center justify-center font-mono border ${
+                    isCorrect
+                      ? "bg-emerald-600 text-white border-emerald-400"
+                      : "bg-blue-600/30 text-blue-400 border-blue-500/40"
+                  }`}
+                >
                   {key}
                 </span>
                 <span className="text-xs font-semibold text-gray-200 flex-1">{val || `Option ${key}`}</span>
-              </div>
+                {isCorrect && (
+                  <span className="material-symbols-outlined text-emerald-400 text-base">check_circle</span>
+                )}
+              </button>
             );
           })}
         </div>

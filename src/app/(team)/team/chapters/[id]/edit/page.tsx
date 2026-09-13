@@ -7,6 +7,7 @@ import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { ChapterForm } from "@/components/team-portal/ChapterForm";
 import type { MediumValue } from "@/lib/validation/chapter";
+import { CANONICAL_COURSE_SLUGS } from "@/lib/academic/canonical-courses";
 
 export const metadata: Metadata = {
   title: "Edit Chapter",
@@ -19,18 +20,21 @@ export default async function EditChapterPage({ params }: { params: { id: string
   const canUpdate = await hasPermission(session.user.id, PERMISSIONS.CHAPTER_UPDATE);
   if (!canUpdate) redirect(`/team/chapters/${params.id}`);
 
-  const [chapter, courses] = await Promise.all([
-    prisma.chapter.findUnique({
-      where: { id: params.id },
-      include: { subject: { include: { course: true } } },
-    }),
-    prisma.course.findMany({
-      include: { subjects: { orderBy: { title: "asc" } } },
-      orderBy: { title: "asc" },
-    }),
-  ]);
-
+  const chapter = await prisma.chapter.findUnique({
+    where: { id: params.id },
+    include: { subject: { include: { course: true } } },
+  });
   if (!chapter) notFound();
+
+  // Canonical list, plus this chapter's own current course even if it's
+  // not one of the four (e.g. a pre-existing chapter under the excluded
+  // "Foundation" course) — otherwise the edit form would load with a
+  // selected course value missing from its own dropdown options.
+  const courses = await prisma.course.findMany({
+    where: { OR: [{ slug: { in: [...CANONICAL_COURSE_SLUGS] } }, { id: chapter.subject.courseId }] },
+    include: { subjects: { orderBy: { title: "asc" } } },
+    orderBy: { title: "asc" },
+  });
 
   return (
     <div className="max-w-2xl space-y-6">

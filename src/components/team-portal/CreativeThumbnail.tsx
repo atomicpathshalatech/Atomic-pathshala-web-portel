@@ -35,6 +35,15 @@ export async function CreativeThumbnail({
           <div className="text-center px-4">
             <span className="material-symbols-outlined text-2xl text-rose-500">error</span>
             <p className="text-xs text-rose-500 mt-1">Creative generation failed</p>
+            {creative.errorMessage && (
+              // Defensive truncation — errorMessage is meant to be a short
+              // diagnostic string, but nothing enforces that server-side, so
+              // this guards the UI against ever rendering something
+              // pathologically long (e.g. an accidentally-embedded data URI).
+              <p className="text-[10px] text-slate-400 mt-1 max-w-xs mx-auto break-words">
+                {creative.errorMessage.length > 300 ? `${creative.errorMessage.slice(0, 300)}…` : creative.errorMessage}
+              </p>
+            )}
           </div>
         ) : (
           <div className="text-center px-4">

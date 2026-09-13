@@ -1,4 +1,5 @@
 import "server-only";
+import { waitUntil } from "@vercel/functions";
 import { prisma } from "@/lib/db";
 import { pusherServer, sessionChannel, teacherChannel, WB_EVENTS } from "@/lib/realtime/pusher-server";
 import { GRACE_PERIOD_MINUTES } from "@/lib/whiteboard/constants";
@@ -33,16 +34,22 @@ export async function endWhiteboardSession(
 
   const now = new Date();
 
-  // Stop LiveKit Room Recording if active
+  // Stop LiveKit Room Recording if active. waitUntil() keeps this function
+  // alive past the HTTP response — a bare fire-and-forget import().then()
+  // has no guarantee of completing on Vercel serverless once the response
+  // is sent (this was silently losing the recording on every "End Class"
+  // click before this fix).
   if (
     existing.recordingEgressId &&
     (existing.recordingStatus === "RECORDING" ||
       existing.recordingStatus === "RECORDING_STARTING" ||
       existing.recordingStatus === "STARTING")
   ) {
-    import("@/lib/livekit/egress")
-      .then(({ stopRoomRecording }) => stopRoomRecording(existing.recordingEgressId!))
-      .catch((err) => console.warn("[stopRoomRecording_on_end_error]", err));
+    waitUntil(
+      import("@/lib/livekit/egress")
+        .then(({ stopRoomRecording }) => stopRoomRecording(existing.recordingEgressId!))
+        .catch((err) => console.warn("[stopRoomRecording_on_end_error]", err))
+    );
   }
 
   const isRecordingActive =
@@ -104,10 +111,13 @@ export async function endWhiteboardSession(
     })
     .catch((err) => console.error("[audit_log_error]", err));
 
-  // Trigger background slide generation & R2 upload (PDF & PPTX with watermark)
-  import("@/lib/whiteboard/finalization")
-    .then(({ finalizeWhiteboardSlides }) => finalizeWhiteboardSlides(sessionId))
-    .catch((err) => console.error("[finalizeWhiteboardSlides_trigger_error]", err));
+  // Trigger background slide generation & R2 upload (PDF & PPTX with
+  // watermark) — same waitUntil reasoning as stopRoomRecording above.
+  waitUntil(
+    import("@/lib/whiteboard/finalization")
+      .then(({ finalizeWhiteboardSlides }) => finalizeWhiteboardSlides(sessionId))
+      .catch((err) => console.error("[finalizeWhiteboardSlides_trigger_error]", err))
+  );
 
   return ended;
 }

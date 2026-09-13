@@ -1,4 +1,5 @@
 import "server-only";
+import { waitUntil } from "@vercel/functions";
 import { prisma } from "@/lib/db";
 import { createPresignedDownloadUrl, getR2ObjectMetadata } from "@/lib/storage/r2-client";
 import { generateCreative } from "@/lib/creative/engine";
@@ -143,15 +144,22 @@ function triggerContinuation(whiteboardSessionId: string): void {
   try {
     const secret = process.env.CRON_SECRET;
     const baseUrl = (process.env.YOUTUBE_OAUTH_PRODUCTION_URL || process.env.NEXT_PUBLIC_APP_URL || "https://ap.atomicpathshala.in").replace(/\/$/, "");
-    fetch(`${baseUrl}/api/internal/youtube-archive/run`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(secret ? { Authorization: `Bearer ${secret}` } : {}),
-      },
-      body: JSON.stringify({ whiteboardSessionId }),
-    }).catch((err) =>
-      console.error("[youtube-archive] continuation trigger did not fire (daily cron will still resume it)", whiteboardSessionId, err)
+    // waitUntil keeps the CURRENT invocation alive long enough for this
+    // fetch to actually be sent — without it, the invocation can be torn
+    // down before the request leaves the process, and the continuation
+    // never fires (same root cause as the recording/finalization loss this
+    // fixed elsewhere).
+    waitUntil(
+      fetch(`${baseUrl}/api/internal/youtube-archive/run`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(secret ? { Authorization: `Bearer ${secret}` } : {}),
+        },
+        body: JSON.stringify({ whiteboardSessionId }),
+      }).catch((err) =>
+        console.error("[youtube-archive] continuation trigger did not fire (daily cron will still resume it)", whiteboardSessionId, err)
+      )
     );
   } catch (err) {
     console.error("[youtube-archive] failed to schedule continuation", whiteboardSessionId, err);

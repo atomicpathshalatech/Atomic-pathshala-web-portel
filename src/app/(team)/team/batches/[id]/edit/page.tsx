@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { BatchForm } from "@/components/team-portal/BatchForm";
+import { CANONICAL_COURSE_SLUGS } from "@/lib/academic/canonical-courses";
 
 export const metadata: Metadata = {
   title: "Edit Batch",
@@ -18,11 +19,14 @@ export default async function EditBatchPage({ params }: { params: { id: string }
   const canUpdate = await hasPermission(session.user.id, PERMISSIONS.BATCH_UPDATE);
   if (!canUpdate) redirect(`/team/batches/${params.id}`);
 
-  const [batch, courses] = await Promise.all([
-    prisma.batch.findUnique({ where: { id: params.id } }),
-    prisma.course.findMany({ select: { id: true, title: true }, orderBy: { title: "asc" } }),
-  ]);
+  const batch = await prisma.batch.findUnique({ where: { id: params.id } });
   if (!batch) notFound();
+
+  const courses = await prisma.course.findMany({
+    where: { OR: [{ slug: { in: [...CANONICAL_COURSE_SLUGS] } }, ...(batch.courseId ? [{ id: batch.courseId }] : [])] },
+    select: { id: true, title: true },
+    orderBy: { title: "asc" },
+  });
 
   return (
     <div className="space-y-stack-lg max-w-3xl">

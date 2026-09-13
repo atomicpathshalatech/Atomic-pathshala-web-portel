@@ -1,5 +1,6 @@
 import "server-only";
 import { EgressClient, EgressStatus, EncodedFileOutput, EncodedFileType, S3Upload } from "livekit-server-sdk";
+import { waitUntil } from "@vercel/functions";
 import { prisma } from "@/lib/db";
 
 /**
@@ -211,9 +212,11 @@ export async function reconcileRecordingStatus(
       // arrives, so it needs to fire the same fire-and-forget archive kick
       // itself rather than relying on the webhook to have done it.
       if (wbSession && !wbSession.isTest) {
-        import("@/lib/youtube/archive-service")
-          .then(({ startArchiveJob }) => startArchiveJob(session.id))
-          .catch((err) => console.error("[youtube_archive_trigger_error]", err));
+        waitUntil(
+          import("@/lib/youtube/archive-service")
+            .then(({ startArchiveJob }) => startArchiveJob(session.id))
+            .catch((err) => console.error("[youtube_archive_trigger_error]", err))
+        );
       }
 
       return {

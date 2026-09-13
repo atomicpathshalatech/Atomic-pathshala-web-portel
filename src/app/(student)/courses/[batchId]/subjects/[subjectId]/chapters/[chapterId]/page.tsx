@@ -238,12 +238,12 @@ export default async function ChapterPage({
     subjectName: chapter.subject.title,
     className: chapter.subject.course?.title?.includes("12") ? "Class 12" : "Class 11",
     courseTitle: chapter.subject.course?.title || "NEET / JEE / CBSE",
-    totalDurationMin: lectures.length * 45 || 180,
+    totalDurationMin: lectures.reduce((sum, l) => sum + (l.durationMin || 0), 0),
     totalLectures: lectures.length,
     totalDpps: dpps.length,
     totalTests: tests.length,
-    averageRating: 4.9,
-    learnerCount: 51200,
+    averageRating: null,
+    learnerCount: null,
     learningOutcomes: [
       `Understand fundamental principles and concepts of ${chapter.title}`,
       `Master core formulas, reactions, and analytical problem-solving techniques`,
@@ -258,32 +258,10 @@ export default async function ChapterPage({
       bio: `Dedicated academic mentor specializing in ${chapter.subject.title}, helping students achieve conceptual mastery and top scores in NEET and JEE.`,
     },
     roadmap: roadmapGroups,
-    reviews: [
-      {
-        id: "rev-1",
-        studentName: "Priya Nair",
-        avatarColor: "bg-rose-500/30 text-rose-300",
-        rating: 5,
-        comment: `Outstanding explanation of ${chapter.title}! The video lectures and DPPs helped clear all my doubts.`,
-        date: "2 days ago",
-      },
-      {
-        id: "rev-2",
-        studentName: "Rahul Sharma",
-        avatarColor: "bg-blue-500/30 text-blue-300",
-        rating: 5,
-        comment: "The roadmap sequence made it very easy to stay on track. Scored 100% in the chapter test!",
-        date: "1 week ago",
-      },
-      {
-        id: "rev-3",
-        studentName: "Ananya Mishra",
-        avatarColor: "bg-emerald-500/30 text-emerald-300",
-        rating: 5,
-        comment: "Best NCERT line-by-line coverage for NEET 2026. Notes PDF are super crisp and high quality.",
-        date: "2 weeks ago",
-      },
-    ],
+    // No student-review data model exists for chapters — was 3 hardcoded
+    // fake named reviews with fake dates, shown identically on every
+    // chapter regardless of real content.
+    reviews: [],
     notices: notices.map((n) => ({
       id: n.id,
       chapterId: n.chapterId,

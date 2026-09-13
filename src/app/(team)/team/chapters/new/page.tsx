@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { ChapterForm } from "@/components/team-portal/ChapterForm";
+import { CANONICAL_COURSE_SLUGS } from "@/lib/academic/canonical-courses";
 
 export const metadata: Metadata = {
   title: "Create Chapter",
@@ -19,6 +20,7 @@ export default async function NewChapterPage() {
   if (!canCreate) redirect("/team/chapters");
 
   const courses = await prisma.course.findMany({
+    where: { slug: { in: [...CANONICAL_COURSE_SLUGS] } },
     include: {
       subjects: { orderBy: { title: "asc" } },
     },

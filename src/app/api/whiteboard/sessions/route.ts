@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
+import { Prisma } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { requirePermission, hasPermission, ForbiddenError, UnauthorizedError } from "@/lib/rbac/guard";
@@ -62,9 +63,57 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      // existing.status !== "ACTIVE" here means this is a genuinely NEW
+      // occurrence of a rescheduled/reused BatchSchedule, not a reconnect
+      // to a still-live class (that already returned early above) - so the
+      // previous occurrence's board must not leak into this one. Same fix
+      // as src/app/api/team/live-class/[scheduleId]/start/route.ts.
+      if (existing.pdfStatus === "GENERATING" || existing.pptxStatus === "GENERATING") {
+        return apiError(
+          "The previous class's recording/notes are still being finalized. Please try again in a minute.",
+          409,
+          { code: "PREVIOUS_OCCURRENCE_FINALIZING" }
+        );
+      }
+
+      await prisma.whiteboardPage.deleteMany({ where: { sessionId: existing.id } });
+
       const resumed = await prisma.whiteboardSession.update({
         where: { id: existing.id },
-        data: { status: "ACTIVE", endedAt: null, livePhase: "PREPARING" },
+        data: {
+          status: "ACTIVE",
+          endedAt: null,
+          actualEndedAt: null,
+          livePhase: "PREPARING",
+          activePageNumber: 1,
+          recordingStatus: "NONE",
+          recordingStorageKey: null,
+          recordingEgressId: null,
+          recordingDurationSeconds: null,
+          pdfStatus: "NONE",
+          pptxStatus: "NONE",
+          pdfStorageKey: null,
+          pptxStorageKey: null,
+          pdfFileAssetId: null,
+          pptxFileAssetId: null,
+          pdfError: null,
+          pptxError: null,
+          finalizedAt: null,
+          youtubeArchiveStatus: "NOT_ENABLED",
+          youtubeArchiveVideoId: null,
+          youtubeArchiveVideoUrl: null,
+          youtubeArchiveUploadAttempts: 0,
+          youtubeArchiveLastError: null,
+          youtubeArchiveUploadStartedAt: null,
+          youtubeArchiveUploadedAt: null,
+          youtubeArchiveProcessedAt: null,
+          youtubeArchiveUploadSessionUrl: null,
+          youtubeArchiveUploadOffset: null,
+          youtubeArchiveThumbnailStatus: "NOT_STARTED",
+          youtubeArchiveThumbnailError: null,
+          youtubeArchiveMetadataSnapshot: Prisma.JsonNull,
+          pages: { create: { pageNumber: 1, objects: [] } },
+        },
         include: { pages: { orderBy: { pageNumber: "asc" } } },
       });
 

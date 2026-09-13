@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { WhiteboardPdfDownloadButton } from "@/components/whiteboard/WhiteboardPdfDownloadButton";
+import { PrepareSlidesModal } from "@/components/live-class/PrepareSlidesModal";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -508,6 +509,7 @@ function TimelineLectureRow({
   const studentEval = canStudentJoin(scheduleTarget, clientNow);
   const teacherEval = canTeacherStart(scheduleTarget, clientNow);
   const effectiveStatus = getEffectiveScheduleStatus(scheduleTarget, clientNow);
+  const [prepareSlidesOpen, setPrepareSlidesOpen] = useState(false);
 
   const isLive = effectiveStatus === "LIVE";
   const isCompleted = effectiveStatus === "COMPLETED";
@@ -692,9 +694,12 @@ function TimelineLectureRow({
               )
             ) : isCompleted ? (
               <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
-                {/* Watch Recorded Video Button */}
+                {/* Watch Recorded Video Button - teachers get their own
+                    playback route; /live-class/[id] is student-only
+                    (requireStudentSession) and used to silently bounce any
+                    teacher who clicked this back to /team. */}
                 <Link
-                  href={`/live-class/${item.id}`}
+                  href={role === "TEACHER" ? `/team/live-class/${item.id}/recording` : `/live-class/${item.id}`}
                   className="inline-flex items-center gap-1 py-1 px-2.5 bg-[#a33900] hover:bg-orange-800 text-white rounded-lg text-[11px] font-bold shadow-sm transition active:scale-95 shrink-0"
                   title="Play Recorded Class"
                 >
@@ -702,15 +707,35 @@ function TimelineLectureRow({
                   <span>Watch Video</span>
                 </Link>
 
-                {/* Download PDF Notes Button */}
+                {/* Annotated Notes — the whiteboard export with everything
+                    the teacher actually wrote/drew during the live class. */}
                 {item.liveWhiteboardSession?.id ? (
                   <WhiteboardPdfDownloadButton
                     sessionId={item.liveWhiteboardSession.id}
+                    format="pdf"
                     className="inline-flex items-center gap-1 py-1 px-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 rounded-lg text-[11px] font-bold shadow-xs transition active:scale-95 shrink-0 disabled:opacity-60"
-                    title="Download Class Board Notes PDF"
+                    title="Download Class Board Notes PDF (with annotations)"
                   >
                     <span className="material-symbols-outlined text-[13px] text-rose-500">picture_as_pdf</span>
-                    <span>PDF Notes</span>
+                    <span>Annotated Notes</span>
+                  </WhiteboardPdfDownloadButton>
+                ) : null}
+
+                {/* Original Slides — the exact PDF the teacher uploaded
+                    before class, no annotations. Backend already supported
+                    this (format=original_pdf) but no frontend ever called
+                    it; shows a friendly toast instead of a dead link when
+                    the teacher never uploaded one. */}
+                {item.liveWhiteboardSession?.id ? (
+                  <WhiteboardPdfDownloadButton
+                    sessionId={item.liveWhiteboardSession.id}
+                    format="original_pdf"
+                    onUnavailable={(msg) => toast.info(msg)}
+                    className="inline-flex items-center gap-1 py-1 px-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 rounded-lg text-[11px] font-bold shadow-xs transition active:scale-95 shrink-0 disabled:opacity-60"
+                    title="View the original slide deck (no annotations)"
+                  >
+                    <span className="material-symbols-outlined text-[13px] text-blue-500">description</span>
+                    <span>Original Slides</span>
                   </WhiteboardPdfDownloadButton>
                 ) : null}
               </div>
@@ -755,18 +780,39 @@ function TimelineLectureRow({
                 <span>{isLive ? "Resume Live Class" : "Start Live Class"}</span>
               </Link>
             ) : (
-              <button
-                type="button"
-                disabled
-                className="inline-flex items-center justify-center gap-1 py-1 px-2.5 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 rounded-lg text-[10px] font-semibold cursor-not-allowed"
-              >
-                <span className="material-symbols-outlined text-[12px]">lock</span>
-                <span>Start from {formatISTTime(teacherEval.opensAt)}</span>
-              </button>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  disabled
+                  className="inline-flex items-center justify-center gap-1 py-1 px-2.5 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 rounded-lg text-[10px] font-semibold cursor-not-allowed"
+                >
+                  <span className="material-symbols-outlined text-[12px]">lock</span>
+                  <span>Start from {formatISTTime(teacherEval.opensAt)}</span>
+                </button>
+                {/* Slide prep is metadata prep, not room entry - allowed any
+                    time before the class starts (see canTeacherPrepareClass),
+                    unlike the T-15-gated "Start" button next to it. */}
+                <button
+                  type="button"
+                  onClick={() => setPrepareSlidesOpen(true)}
+                  className="inline-flex items-center gap-1 py-1 px-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg text-[10px] font-semibold shadow-xs transition active:scale-95"
+                  title="Upload slides now so they auto-load when this class starts"
+                >
+                  <span className="material-symbols-outlined text-[12px]">upload_file</span>
+                  <span>Prepare Slides</span>
+                </button>
+              </div>
             )}
           </div>
         </div>
       </div>
+      {prepareSlidesOpen && (
+        <PrepareSlidesModal
+          scheduleId={item.id}
+          classTitle={item.title}
+          onClose={() => setPrepareSlidesOpen(false)}
+        />
+      )}
     </div>
   );
 }
