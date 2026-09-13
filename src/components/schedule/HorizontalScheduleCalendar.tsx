@@ -694,9 +694,12 @@ function TimelineLectureRow({
               )
             ) : isCompleted ? (
               <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
-                {/* Watch Recorded Video Button */}
+                {/* Watch Recorded Video Button - teachers get their own
+                    playback route; /live-class/[id] is student-only
+                    (requireStudentSession) and used to silently bounce any
+                    teacher who clicked this back to /team. */}
                 <Link
-                  href={`/live-class/${item.id}`}
+                  href={role === "TEACHER" ? `/team/live-class/${item.id}/recording` : `/live-class/${item.id}`}
                   className="inline-flex items-center gap-1 py-1 px-2.5 bg-[#a33900] hover:bg-orange-800 text-white rounded-lg text-[11px] font-bold shadow-sm transition active:scale-95 shrink-0"
                   title="Play Recorded Class"
                 >
