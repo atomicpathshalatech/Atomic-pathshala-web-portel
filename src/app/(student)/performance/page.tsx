@@ -62,6 +62,33 @@ export default async function StudentPerformancePage() {
         />
       </section>
 
+      <section className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <StatCard
+          label="Overall Percentile"
+          value={profile.rank.overallPercentile !== null ? `${profile.rank.overallPercentile.toFixed(1)}%ile` : "Insufficient Data"}
+        />
+        <StatCard
+          label="Batch Rank"
+          value={profile.rank.insufficient ? "Insufficient Data" : `#${profile.rank.batchRank} of ${profile.rank.batchSize}`}
+        />
+        <StatCard
+          label="Atomic Guru"
+          value={`${profile.atomicGuru.questionsAsked} questions asked`}
+          sub={profile.atomicGuru.lastActiveAt ? `Last used ${new Date(profile.atomicGuru.lastActiveAt).toLocaleDateString("en-IN")}` : "Never used"}
+        />
+      </section>
+
+      {profile.improvementPlan.length > 0 && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-4">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-blue-600 mb-2">Improvement Plan</h3>
+          <ul className="space-y-1.5 text-xs text-slate-600 list-disc list-inside">
+            {profile.improvementPlan.map((line, i) => (
+              <li key={i}>{line}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <section className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="rounded-2xl border border-slate-200 bg-white p-4">
           <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-600 mb-2">Strong Zones</h3>

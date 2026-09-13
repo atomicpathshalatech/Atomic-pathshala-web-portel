@@ -134,13 +134,46 @@ export default async function StudentProfilePage({ params }: { params: { id: str
         </div>
       </section>
 
-      {/* Doubts */}
-      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4">
-        <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100 mb-3">Doubt Activity</h2>
-        <div className="flex gap-6 text-xs text-slate-600 dark:text-slate-300">
-          <p>Asked: <span className="font-bold">{profile.doubts.totalAsked}</span></p>
-          <p>Resolved: <span className="font-bold text-emerald-600">{profile.doubts.resolved}</span></p>
-          <p>Open: <span className="font-bold text-amber-600">{profile.doubts.open}</span></p>
+      {/* Rank */}
+      <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <StatCard
+          label="Overall Percentile"
+          value={profile.rank.overallPercentile !== null ? `${profile.rank.overallPercentile.toFixed(1)}%ile` : "Insufficient Data"}
+          sub="Average across all attempted tests"
+        />
+        <StatCard
+          label="Batch Rank"
+          value={profile.rank.insufficient ? "Insufficient Data" : `#${profile.rank.batchRank} of ${profile.rank.batchSize}`}
+          sub="Ranked by average test %"
+        />
+        <StatCard
+          label="Atomic Guru (AI Chat)"
+          value={`${profile.atomicGuru.questionsAsked} questions`}
+          sub={profile.atomicGuru.lastActiveAt ? `Last used ${new Date(profile.atomicGuru.lastActiveAt).toLocaleDateString("en-IN")}` : "Never used"}
+        />
+      </section>
+
+      {/* Doubt Queue + Improvement Plan */}
+      <section className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4">
+          <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100 mb-3">Doubt Queue Activity</h2>
+          <div className="flex gap-6 text-xs text-slate-600 dark:text-slate-300">
+            <p>Asked: <span className="font-bold">{profile.doubts.totalAsked}</span></p>
+            <p>Resolved: <span className="font-bold text-emerald-600">{profile.doubts.resolved}</span></p>
+            <p>Open: <span className="font-bold text-amber-600">{profile.doubts.open}</span></p>
+          </div>
+        </div>
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4">
+          <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100 mb-3">Improvement Plan</h2>
+          {profile.improvementPlan.length === 0 ? (
+            <p className="text-xs text-slate-400">No specific weak areas identified yet.</p>
+          ) : (
+            <ul className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300 list-disc list-inside">
+              {profile.improvementPlan.map((line, i) => (
+                <li key={i}>{line}</li>
+              ))}
+            </ul>
+          )}
         </div>
       </section>
 

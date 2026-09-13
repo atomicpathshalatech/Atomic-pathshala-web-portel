@@ -67,6 +67,29 @@ export interface StudentCompleteProfile {
     resolved: number;
     open: number;
   };
+  /** The separate Gemini-powered "Atomic Guru" AI chat widget — a
+   * different product surface from the Doubt queue above (User-scoped
+   * Conversation/ChatMessage rows, not Student-scoped, and with no
+   * resolved/open concept since it's a chat log, not a ticket system).
+   * Shown alongside `doubts` rather than merged with it, since they track
+   * genuinely different real activity. */
+  atomicGuru: {
+    conversationCount: number;
+    questionsAsked: number;
+    lastActiveAt: Date | null;
+  };
+  rank: {
+    /** Average of this student's own real per-test percentile
+     * (TestAttemptAnalysis.percentile) across all their attempts. */
+    overallPercentile: number | null;
+    /** This student's rank (1 = best) among their batch-mates' average
+     * test percentage, computed only among batch-mates who have at least
+     * one submitted+analyzed test — never estimated. */
+    batchRank: number | null;
+    batchSize: number | null;
+    insufficient: boolean;
+  };
+  improvementPlan: string[];
   strongZones: StudentZone[];
   weakZones: StudentZone[];
 }
@@ -173,6 +196,63 @@ export async function getStudentCompleteProfile(studentId: string): Promise<Stud
         })
       : 0;
 
+  // ---- Atomic Guru (AI chat) — User-scoped, not Student-scoped, so this
+  // queries via student.userId rather than studentId. ---------------------
+  const [conversationCount, questionsAsked, lastMessage] = await Promise.all([
+    prisma.conversation.count({ where: { userId: student.userId, deletedAt: null } }),
+    prisma.chatMessage.count({
+      where: { role: "USER", conversation: { userId: student.userId, deletedAt: null } },
+    }),
+    prisma.chatMessage.findFirst({
+      where: { conversation: { userId: student.userId, deletedAt: null } },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true },
+    }),
+  ]);
+
+  // ---- Rank — overallPercentile is a real average of this student's own
+  // per-test percentile (already computed by the test-analysis engine).
+  // batchRank is computed fresh here: rank this student among their
+  // batch-mates by average TestAttemptAnalysis.percentage, using a single
+  // groupBy aggregate rather than one query per batch-mate. -----------------
+  const percentiles = withAnalysis.map((a) => a.analysis!.percentile).filter((p): p is number => typeof p === "number");
+  const overallPercentile = percentiles.length ? percentiles.reduce((s, p) => s + p, 0) / percentiles.length : null;
+
+  let batchRank: number | null = null;
+  let batchSize: number | null = null;
+  const primaryBatchId = batchIds[0];
+  if (primaryBatchId) {
+    const batchmateIds = await prisma.batchEnrollment
+      .findMany({ where: { batchId: primaryBatchId, status: "ACTIVE" }, select: { studentId: true } })
+      .then((rows) => rows.map((r) => r.studentId));
+
+    if (batchmateIds.length > 1) {
+      const grouped = await prisma.testAttemptAnalysis.groupBy({
+        by: ["studentId"],
+        where: { studentId: { in: batchmateIds } },
+        _avg: { percentage: true },
+      });
+      const ranked = grouped
+        .filter((g) => typeof g._avg.percentage === "number")
+        .sort((a, b) => (b._avg.percentage ?? 0) - (a._avg.percentage ?? 0));
+      const myIndex = ranked.findIndex((g) => g.studentId === studentId);
+      if (myIndex !== -1) {
+        batchRank = myIndex + 1;
+        batchSize = ranked.length;
+      }
+    }
+  }
+
+  // ---- Improvement plan — template sentences built ONLY from the real
+  // weakZones computed above (real subject/chapter names, real accuracy
+  // numbers) - never a generic or invented recommendation. -----------------
+  const improvementPlan = weakZones
+    .slice(0, 3)
+    .map((z) => `Improve ${z.subject} — ${z.chapter} (currently ${z.accuracy.toFixed(0)}% accuracy over ${z.attempted} questions attempted).`);
+  if (withAnalysis.length < MIN_ATTEMPTS_FOR_ZONE) {
+    improvementPlan.push("Attempt a few more tests so we can identify your weak chapters with confidence.");
+  }
+
   return {
     student: {
       id: student.id,
@@ -230,6 +310,18 @@ export async function getStudentCompleteProfile(studentId: string): Promise<Stud
       resolved: doubts.filter((d) => d.status === "RESOLVED").length,
       open: doubts.filter((d) => d.status !== "RESOLVED").length,
     },
+    atomicGuru: {
+      conversationCount,
+      questionsAsked,
+      lastActiveAt: lastMessage?.createdAt ?? null,
+    },
+    rank: {
+      overallPercentile,
+      batchRank,
+      batchSize,
+      insufficient: batchRank === null,
+    },
+    improvementPlan,
     strongZones,
     weakZones,
   };
