@@ -20,13 +20,17 @@
  *   transform or devicePixelRatio without this class needing to know about
  *   either.
  * - `StrokeObject` is a discriminated union: freehand ink (`type: "stroke"`,
- *   the original shape) plus `type: "shape"` for the line/rectangle/circle/
- *   triangle/arrow tools. Anything that used to assume every object had
+ *   the original shape) plus `type: "shape"` for every shape-tool id in the
+ *   authoritative registry (see ./shapes/registry.ts — line/rectangle/
+ *   circle/triangle/arrow plus the full general/chemistry/physics/biology
+ *   library). Anything that used to assume every object had
  *   `.points` (hit-testing, drag-select, the partial eraser, cloning) is
  *   routed through the representativePoints()/translateObject()/
  *   firstPoint() helpers below so both variants work through one code path
  *   instead of two parallel systems.
  */
+
+import { SHAPE_DEFS, SHAPE_RENDERERS, FILLABLE_SHAPE_IDS } from "./shapes/registry";
 
 export interface StrokePoint {
   x: number;
@@ -48,7 +52,14 @@ export interface FreehandObject {
   penStyle?: string;
 }
 
-export type ShapeKind = "line" | "rectangle" | "circle" | "triangle" | "arrow";
+/**
+ * A shape id is any `id` from the authoritative registry (shapes/registry.ts)
+ * — deliberately a plain string, not a fixed literal union, since the
+ * registry (not this type) is the single source of truth for which ids
+ * exist. Widening this used to be impossible without breaking the old
+ * 5-value union call sites below; those now all go through the registry too.
+ */
+export type ShapeKind = string;
 
 export interface ShapeObject {
   id: string;
@@ -150,7 +161,7 @@ function laserOpacityAt(t: number): number {
  * text sizes on the 1920x1080 virtual canvas. */
 export const TEXT_FONT_SCALE = 8;
 
-const SHAPE_TOOLS: ShapeKind[] = ["line", "rectangle", "circle", "triangle", "arrow"];
+const SHAPE_TOOLS: ShapeKind[] = SHAPE_DEFS.map((d) => d.id);
 function isShapeTool(tool: CanvasTool): tool is ShapeKind {
   return (SHAPE_TOOLS as string[]).includes(tool);
 }
@@ -243,6 +254,21 @@ function representativePoints(obj: StrokeObject): { x: number; y: number }[] {
     }
     case "triangle":
       return [{ x: (start.x + end.x) / 2, y: start.y }, { x: start.x, y: end.y }, { x: end.x, y: end.y }];
+    default: {
+      // Every other registry shape: the 4 corners + center of its bounding
+      // box is a safe, generic stand-in for drag-select/eraser hit-testing
+      // and doesn't need per-shape geometry (see isInsideShape's fallback
+      // above for the same reasoning).
+      const { x: x1, y: y1 } = start;
+      const { x: x2, y: y2 } = end;
+      return [
+        { x: x1, y: y1 },
+        { x: x2, y: y1 },
+        { x: x1, y: y2 },
+        { x: x2, y: y2 },
+        { x: (x1 + x2) / 2, y: (y1 + y2) / 2 },
+      ];
+    }
   }
 }
 
@@ -363,63 +389,18 @@ function drawShape(
   obj: { shape: ShapeKind; color: string; size: number; start: { x: number; y: number }; end: { x: number; y: number }; fill?: string }
 ): void {
   const { start, end, shape, color, size, fill } = obj;
-  ctx.save();
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  ctx.strokeStyle = color;
-  ctx.lineWidth = size;
-
-  if (shape === "line") {
-    ctx.beginPath();
-    ctx.moveTo(start.x, start.y);
-    ctx.lineTo(end.x, end.y);
-    ctx.stroke();
-  } else if (shape === "rectangle") {
-    if (fill) {
-      ctx.fillStyle = fill;
-      ctx.fillRect(start.x, start.y, end.x - start.x, end.y - start.y);
-    }
-    ctx.strokeRect(start.x, start.y, end.x - start.x, end.y - start.y);
-  } else if (shape === "circle") {
-    const rx = Math.abs(end.x - start.x) / 2;
-    const ry = Math.abs(end.y - start.y) / 2;
-    const cx = (start.x + end.x) / 2;
-    const cy = (start.y + end.y) / 2;
-    ctx.beginPath();
-    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
-    if (fill) {
-      ctx.fillStyle = fill;
-      ctx.fill();
-    }
-    ctx.stroke();
-  } else if (shape === "triangle") {
-    ctx.beginPath();
-    ctx.moveTo((start.x + end.x) / 2, start.y);
-    ctx.lineTo(start.x, end.y);
-    ctx.lineTo(end.x, end.y);
-    ctx.closePath();
-    if (fill) {
-      ctx.fillStyle = fill;
-      ctx.fill();
-    }
-    ctx.stroke();
-  } else if (shape === "arrow") {
-    ctx.beginPath();
-    ctx.moveTo(start.x, start.y);
-    ctx.lineTo(end.x, end.y);
-    ctx.stroke();
-
-    const angle = Math.atan2(end.y - start.y, end.x - start.x);
-    const headLen = 8 + size * 2;
-    ctx.beginPath();
-    ctx.moveTo(end.x, end.y);
-    ctx.lineTo(end.x - headLen * Math.cos(angle - Math.PI / 7), end.y - headLen * Math.sin(angle - Math.PI / 7));
-    ctx.lineTo(end.x - headLen * Math.cos(angle + Math.PI / 7), end.y - headLen * Math.sin(angle + Math.PI / 7));
-    ctx.closePath();
-    ctx.fillStyle = fill || color;
-    ctx.fill();
+  // Single dispatch point into the authoritative shape registry
+  // (shapes/registry.ts) — this used to be an if/else chain hardcoded to
+  // exactly 5 shape kinds, which is what silently drew a generic ellipse/
+  // rectangle/triangle for every one of the ~40 other shape ids the toolbar
+  // could set. Every registry id (asserted unique + fully rendered at
+  // module load, see registry.ts) now renders as its own real shape.
+  const renderer = SHAPE_RENDERERS[shape];
+  if (!renderer) {
+    console.error(`[canvas-engine] no renderer registered for shape id "${shape}" — drawing nothing.`);
+    return;
   }
-  ctx.restore();
+  renderer({ ctx, start, end, color, size, fill });
 }
 
 function isInsideShape(obj: ShapeObject, pt: { x: number; y: number }): boolean {
@@ -452,7 +433,17 @@ function isInsideShape(obj: ShapeObject, pt: { x: number; y: number }): boolean 
     const hasPos = d1 > 0 || d2 > 0 || d3 > 0;
     return !(hasNeg && hasPos);
   }
-  return false;
+  // Generic fallback for every other registry shape (chemistry structures,
+  // stars, callouts, ...): a plain bounding-box test. Good enough for
+  // select/fill-target hit-testing without needing exact per-shape geometry
+  // for every one of the ~40 registry entries — precise geometry above stays
+  // for the 3 shapes where a bounding box would be a poor fit (fill/select
+  // clicking clearly outside a circle's rounded corner, for instance).
+  const minX = Math.min(start.x, end.x);
+  const maxX = Math.max(start.x, end.x);
+  const minY = Math.min(start.y, end.y);
+  const maxY = Math.max(start.y, end.y);
+  return pt.x >= minX && pt.x <= maxX && pt.y >= minY && pt.y <= maxY;
 }
 
 export function hexToRgba(hex: string): { r: number; g: number; b: number; a: number } {
@@ -1483,16 +1474,17 @@ export class CanvasEngine {
    * and committing the change for real-time synchronization with all students.
    */
   /**
-   * Paint-bucket. Fills the enclosed area of a *closed* shape (rectangle /
-   * circle / triangle) with the current colour. It never recolours pen
-   * strokes, text, or open paths (line / arrow) — clicking those, or empty
-   * canvas, is a no-op. This is object-based fill, not pixel flood-fill:
-   * the target shape gets a `fill` property, everything else is untouched.
+   * Paint-bucket. Fills the enclosed area of a *closed* shape (see
+   * FILLABLE_SHAPE_IDS in shapes/registry.ts — rectangle/circle/triangle and
+   * every other shape whose outline is a simple closed region) with the
+   * current colour. It never recolours pen strokes, text, or open paths
+   * (line / arrow) — clicking those, or empty canvas, is a no-op. This is
+   * object-based fill, not pixel flood-fill: the target shape gets a `fill`
+   * property, everything else is untouched.
    */
   private fillAtPoint(pt: { x: number; y: number }): void {
-    const FILLABLE: ShapeKind[] = ["rectangle", "circle", "triangle"];
     const isFillableShape = (o: StrokeObject): o is ShapeObject =>
-      o.type === "shape" && (FILLABLE as string[]).includes((o as ShapeObject).shape);
+      o.type === "shape" && FILLABLE_SHAPE_IDS.includes((o as ShapeObject).shape);
 
     // 1. Topmost fillable shape whose interior contains the click.
     for (let i = this.objects.length - 1; i >= 0; i--) {
