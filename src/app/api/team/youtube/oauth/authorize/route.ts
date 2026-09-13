@@ -55,7 +55,17 @@ export async function GET() {
     // (e.g. after accidentally losing the first refresh token) can silently
     // return no refresh_token at all.
     url.searchParams.set("prompt", "consent");
-    url.searchParams.set("scope", "https://www.googleapis.com/auth/youtube.upload");
+    // youtube.upload alone is sufficient for the actual archive-upload
+    // feature (videos.insert doesn't need a channel lookup first), but it is
+    // NOT enough to call channels.list() for the admin-facing "which channel
+    // is this?" verification step (confirmed live: Google returns 403
+    // ACCESS_TOKEN_SCOPE_INSUFFICIENT for that call with upload-only scope).
+    // youtube.readonly is added solely so that verification can resolve and
+    // display the authorized channel's name/id.
+    url.searchParams.set(
+      "scope",
+      ["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube.readonly"].join(" ")
+    );
     url.searchParams.set("state", state);
 
     return NextResponse.redirect(url.toString());
