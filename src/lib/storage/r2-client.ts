@@ -23,6 +23,27 @@ export type R2FolderPrefix =
   | "documents"
   | "exports";
 
+/**
+ * S3/R2 object metadata is sent as raw `x-amz-meta-*` HTTP headers — Node's
+ * http client throws ERR_INVALID_CHAR for any header value containing a
+ * character outside Latin-1 (anything above U+00FF), which includes every
+ * Devanagari/Hindi character and most emoji. A whiteboard session or lecture
+ * titled in Hindi (extremely normal content for this platform) would hit
+ * this on every metadata-bearing upload and abort the whole PutObjectCommand
+ * before any bytes were sent — not a partial/cosmetic failure, the entire
+ * PDF/PPTX upload throws. `encodeURIComponent` is a cheap, always-ASCII,
+ * fully reversible encoding, so this never loses information (unlike
+ * stripping) and never crashes regardless of input.
+ */
+function sanitizeMetadata(metadata?: Record<string, string>): Record<string, string> | undefined {
+  if (!metadata) return metadata;
+  const safe: Record<string, string> = {};
+  for (const [key, value] of Object.entries(metadata)) {
+    safe[key] = encodeURIComponent(value);
+  }
+  return safe;
+}
+
 export class R2StorageNotConfiguredError extends Error {
   constructor(missingVar?: string) {
     super(
@@ -137,7 +158,7 @@ export async function createPresignedUploadUrl(params: {
     Bucket: bucketName,
     Key: params.key,
     ContentType: params.contentType,
-    Metadata: params.metadata,
+    Metadata: sanitizeMetadata(params.metadata),
   });
 
   const uploadUrl = await getSignedUrl(client, command, { expiresIn });
@@ -233,7 +254,7 @@ export async function uploadBufferToR2(params: {
     Key: params.key,
     Body: params.buffer,
     ContentType: params.contentType,
-    Metadata: params.metadata,
+    Metadata: sanitizeMetadata(params.metadata),
   });
 
   await client.send(command);
