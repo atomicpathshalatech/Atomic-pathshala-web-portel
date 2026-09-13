@@ -12,7 +12,7 @@ import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
  * batch-isolation fix; a chapter assigned only to a different batch will
  * never appear, even if that batch shares the same course.
  */
-export async function GET(request: NextRequest, { params }: { params: { batchId: string } }) {
+export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) return apiError("Unauthorized", 401);
@@ -21,16 +21,16 @@ export async function GET(request: NextRequest, { params }: { params: { batchId:
     if (!student) return apiError("Student profile not found", 404);
 
     const { resolveBatchAccess } = await import("@/lib/batch/entitlement");
-    const access = await resolveBatchAccess(session.user.id, params.batchId);
+    const access = await resolveBatchAccess(session.user.id, params.id);
     if (access.status !== "ACTIVE_ENROLLMENT" && access.status !== "ACTIVE_SUBSCRIPTION" && access.status !== "ADMIN_GRANTED") {
       return apiError("You are not enrolled in this batch.", 403);
     }
 
-    const batch = await prisma.batch.findUnique({ where: { id: params.batchId }, select: { id: true, name: true } });
+    const batch = await prisma.batch.findUnique({ where: { id: params.id }, select: { id: true, name: true } });
     if (!batch) return apiError("Batch not found", 404);
 
     const assignments = await prisma.batchChapter.findMany({
-      where: { batchId: params.batchId, chapter: { status: { in: ["PUBLISHED", "APPROVED"] } } },
+      where: { batchId: params.id, chapter: { status: { in: ["PUBLISHED", "APPROVED"] } } },
       select: {
         chapter: {
           select: {
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest, { params }: { params: { batchId:
                 durationMin: true,
                 teacher: { select: { user: { select: { name: true } } } },
                 batchSchedules: {
-                  where: { batchId: params.batchId },
+                  where: { batchId: params.id },
                   select: {
                     id: true,
                     startsAt: true,
