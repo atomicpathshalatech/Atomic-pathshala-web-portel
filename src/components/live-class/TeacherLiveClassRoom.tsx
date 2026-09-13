@@ -818,7 +818,12 @@ export function TeacherLiveClassRoom({
       await patchJson(`/api/whiteboard/sessions/${wbSession.id}`, { activePageNumber: pageNumber });
       setWbSession((prev) => (prev ? { ...prev, activePageNumber: pageNumber } : prev));
       engineRef.current.loadObjects(target.objects ?? []);
-    } catch {
+    } catch (err) {
+      // Was previously silent apart from the generic "offline" indicator -
+      // logged now so a stale/ended-session 409 (or any other switchToPage
+      // failure) is actually diagnosable instead of just looking like
+      // "Next/Prev doesn't work".
+      console.error("[switchToPage_error]", pageNumber, err);
       setSaveState("offline");
     }
   }
@@ -933,8 +938,16 @@ export function TeacherLiveClassRoom({
         return;
       }
 
-      // Page navigation: PageDown / Alt+Right -> Next Page, PageUp / Alt+Left -> Prev Page
-      if (!e.ctrlKey && !e.metaKey && (e.key === "PageDown" || (e.altKey && e.key === "ArrowRight"))) {
+      // Page navigation: PageDown / Alt+Right / plain ArrowDown -> Next Page,
+      // PageUp / Alt+Left / plain ArrowUp -> Prev Page. Plain arrow keys were
+      // never bound before this - added since teachers expect the literal
+      // "up/down" keys to move slides, same as the on-screen Next/Prev
+      // buttons right next to them.
+      if (
+        !e.ctrlKey &&
+        !e.metaKey &&
+        (e.key === "PageDown" || (!e.altKey && e.key === "ArrowDown") || (e.altKey && e.key === "ArrowRight"))
+      ) {
         if (wbSession && wbSession.activePageNumber < wbSession.pages.length) {
           e.preventDefault();
           switchToPage(wbSession.activePageNumber + 1);
@@ -942,7 +955,11 @@ export function TeacherLiveClassRoom({
         return;
       }
 
-      if (!e.ctrlKey && !e.metaKey && (e.key === "PageUp" || (e.altKey && e.key === "ArrowLeft"))) {
+      if (
+        !e.ctrlKey &&
+        !e.metaKey &&
+        (e.key === "PageUp" || (!e.altKey && e.key === "ArrowUp") || (e.altKey && e.key === "ArrowLeft"))
+      ) {
         if (wbSession && wbSession.activePageNumber > 1) {
           e.preventDefault();
           switchToPage(wbSession.activePageNumber - 1);

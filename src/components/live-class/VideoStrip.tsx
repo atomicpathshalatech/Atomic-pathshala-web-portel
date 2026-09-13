@@ -12,7 +12,27 @@ import {
   useConnectionState,
   ConnectionQualityIndicator,
 } from "@livekit/components-react";
-import { Track, ConnectionState, VideoQuality, Participant } from "livekit-client";
+import { Track, ConnectionState, VideoQuality, Participant, VideoPresets } from "livekit-client";
+import type { RoomOptions } from "livekit-client";
+
+// Previously `<LiveKitRoom>` connected with zero custom options - raw SDK
+// defaults, meaning adaptiveStream/dynacast were both off and there were no
+// simulcast layers or a degradation preference for the teacher's own
+// publish. That's the "sometimes buffers" complaint: with no simulcast, a
+// participant on a weaker connection just stalls waiting for the single
+// full-quality stream instead of falling back to a lower layer.
+const ROOM_OPTIONS: RoomOptions = {
+  adaptiveStream: true,
+  dynacast: true,
+  videoCaptureDefaults: {
+    resolution: VideoPresets.h720.resolution,
+  },
+  publishDefaults: {
+    simulcast: true,
+    videoSimulcastLayers: [VideoPresets.h180, VideoPresets.h360, VideoPresets.h720],
+    degradationPreference: "balanced",
+  },
+};
 
 export interface VideoStripProps {
   whiteboardSessionId: string;
@@ -115,6 +135,7 @@ export function VideoStrip({
       // Connect without auto-publishing tracks to avoid getUserMedia race conditions or unwanted student publishing
       audio={false}
       video={false}
+      options={ROOM_OPTIONS}
       className="contents"
       onError={(err) => {
         console.warn("[LiveKitRoom] Connection error:", err);
