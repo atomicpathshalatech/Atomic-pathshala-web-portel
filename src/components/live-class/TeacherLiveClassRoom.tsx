@@ -968,36 +968,39 @@ export function TeacherLiveClassRoom({
     if (!wbSession || !currentPage || exportingPdf) return;
     setExportingPdf(true);
     try {
+      // The whole lecture, not just whatever slide happens to be on screen
+      // right now — a teacher who's drawn 20 pages expects a 20-page PDF out
+      // of "Export PDF." This used to send only `currentPage`, silently
+      // discarding every other page even though the generator this hits
+      // (generateWhiteboardPdf) already supports multi-page output.
+      const allPages = [...wbSession.pages]
+        .sort((a, b) => a.pageNumber - b.pageNumber)
+        .map((p) => ({ pageNumber: p.pageNumber, background: p.background, objects: p.objects }));
+
       const res = await fetch(`/api/whiteboard/sessions/${wbSession.id}/export-pdf`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: scheduleTitle || "Whiteboard",
-          pages: [
-            {
-              pageNumber: currentPage.pageNumber,
-              background: currentPage.background,
-              objects: currentPage.objects,
-            },
-          ],
+          pages: allPages,
         }),
       });
 
       if (!res.ok) {
         const err = await res.json().catch(() => null);
-        throw new Error(err?.error || "Could not export this slide as a PDF.");
+        throw new Error(err?.error || "Could not export this lecture as a PDF.");
       }
 
       const blob = await res.blob();
       const objectUrl = URL.createObjectURL(blob);
       const safeTitle = (scheduleTitle || "Whiteboard").replace(/[^a-z0-9]/gi, "_");
       const link = document.createElement("a");
-      link.download = `${safeTitle}_Slide_${currentPage.pageNumber}.pdf`;
+      link.download = `${safeTitle}.pdf`;
       link.href = objectUrl;
       link.click();
       setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "Could not export this slide as a PDF.");
+      setLoadError(err instanceof Error ? err.message : "Could not export this lecture as a PDF.");
     } finally {
       setExportingPdf(false);
     }
@@ -2664,7 +2667,7 @@ export function TeacherLiveClassRoom({
             icon="download"
             label={exportingPdf ? "Exporting…" : "Export"}
             onClick={exportBoardAsPdf}
-            title="Export current slide as PDF"
+            title="Export the whole lecture as a PDF"
           />
           <ToolbarBtn
             icon="delete"
