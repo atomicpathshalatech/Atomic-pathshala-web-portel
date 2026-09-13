@@ -28,6 +28,7 @@ import { ScienceLabsModal } from "@/components/live-class/ScienceLabsModal";
 import { PreFlightSetupWizard, type PreFlightConfig } from "@/components/live-class/PreFlightSetupWizard";
 import { TeacherPostClassModal } from "@/components/live-class/TeacherPostClassModal";
 import { SlideTemplatesModal } from "@/components/live-class/SlideTemplatesModal";
+import { PageThumbnail } from "@/components/live-class/PageThumbnail";
 import { GRACE_PERIOD_MINUTES, END_WARNING_MINUTES } from "@/lib/whiteboard/constants";
 
 type WhiteboardPage = { id: string; pageNumber: number; objects: StrokeObject[]; background: string };
@@ -2686,24 +2687,41 @@ export function TeacherLiveClassRoom({
               </span>
             </button>
             {openPopup === "pages" && (
-              <div className="absolute bottom-full left-0 mb-2 z-40 bg-[#1a1b23] border border-[#2d2e3b] rounded-lg p-1.5 shadow-2xl max-h-56 overflow-y-auto flex flex-col gap-1 min-w-[9rem]">
-                {wbSession.pages.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => {
-                      switchToPage(p.pageNumber);
-                      setOpenPopup(null);
-                    }}
-                    className={`px-3 py-1.5 rounded text-sm text-left transition-colors ${
-                      p.pageNumber === wbSession.activePageNumber
-                        ? "bg-blue-900/20 text-blue-400"
-                        : "text-gray-300 hover:bg-gray-800"
-                    }`}
-                  >
-                    Page {p.pageNumber}
-                  </button>
-                ))}
+              <div className="absolute bottom-full left-0 mb-2 z-40 bg-[#1a1b23] border border-[#2d2e3b] rounded-lg shadow-2xl w-[21rem] flex flex-col">
+                <div className="px-3 py-2 border-b border-[#2d2e3b]">
+                  <div className="text-xs font-bold text-white truncate">{scheduleTitle || "Whiteboard"}</div>
+                  <div className="text-[10px] text-gray-500">{wbSession.pages.length} page{wbSession.pages.length === 1 ? "" : "s"}</div>
+                </div>
+                {/* Grid of real thumbnails, not a bare page-number list — a
+                    teacher with several pages of drawn content couldn't tell
+                    them apart before this, since "Page 3" carries no
+                    information about what's actually on it. */}
+                <div className="grid grid-cols-2 gap-2 p-2 max-h-80 overflow-y-auto">
+                  {wbSession.pages.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => {
+                        switchToPage(p.pageNumber);
+                        setOpenPopup(null);
+                      }}
+                      className={`rounded-lg p-1 flex flex-col items-center gap-1 border transition-colors ${
+                        p.pageNumber === wbSession.activePageNumber
+                          ? "border-blue-500 bg-blue-900/20"
+                          : "border-transparent hover:bg-gray-800"
+                      }`}
+                    >
+                      <PageThumbnail background={p.background} objects={p.objects} />
+                      <span
+                        className={`text-[11px] font-medium ${
+                          p.pageNumber === wbSession.activePageNumber ? "text-blue-400" : "text-gray-400"
+                        }`}
+                      >
+                        Page {p.pageNumber}
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>
