@@ -18,7 +18,7 @@
     },
     {
       "path": "/api/cron/whiteboard/finalize-stale-sessions",
-      "schedule": "*/15 * * * *"
+      "schedule": "45 3 * * *"
     }
   ]
 }

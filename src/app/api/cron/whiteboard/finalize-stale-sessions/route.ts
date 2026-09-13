@@ -27,6 +27,15 @@ function isAuthorized(req: NextRequest): boolean {
  * existing cron pattern (see vercel.json + the other routes under
  * src/app/api/cron/) rather than introducing a new job system.
  *
+ * Scheduled once daily (matching every other cron in this project) —
+ * Vercel's Hobby plan rejects the entire deployment if any cron schedule
+ * would run more often than once a day (confirmed: an earlier version of
+ * this route scheduled every 15 minutes and failed the production deploy
+ * outright). On the Pro plan or above this could safely run every few
+ * minutes for much faster recovery; worth revisiting if the account is
+ * upgraded and a tighter window matters.
+ *
+
  * Two independent passes:
  * 1. Sessions still ACTIVE past their scheduled end + grace period — ends
  *    them via the exact same endWhiteboardSession() every other caller
