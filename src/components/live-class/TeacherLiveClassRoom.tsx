@@ -330,6 +330,15 @@ export function TeacherLiveClassRoom({
   const [selectionCount, setSelectionCount] = useState(0);
   const [color, setColor] = useState<string>(PEN_PALETTE_COLORS[0] ?? "#ef4444");
   const [size, setSize] = useState(5);
+  // Cursor-following pen-dot / eraser-size-circle overlay (Live Board spec
+  // Parts 6-7). Pure UI state — virtual (1920x1080) coordinates, same space
+  // as everything else on this canvas — rendered as a plain absolutely
+  // positioned div alongside the canvas, never drawn through the canvas
+  // engine's ctx. That's what keeps it out of undo history, out of the
+  // exported PDF, and out of the persisted board state: none of those read
+  // from anything but the canvas engine's own `objects` array, which this
+  // never touches.
+  const [cursorPos, setCursorPos] = useState<{ x: number; y: number } | null>(null);
   // Read inside the canvas engine's onTextRequested callback (bound once
   // per session in the canvas-lifecycle effect below), which needs the
   // CURRENT color/size, not a stale one captured when the engine was
@@ -692,6 +701,16 @@ export function TeacherLiveClassRoom({
     },
     [tool]
   );
+
+  const handleCanvasPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+    const relX = (e.clientX - rect.left) / rect.width;
+    const relY = (e.clientY - rect.top) / rect.height;
+    setCursorPos({ x: relX * VIRTUAL_WIDTH, y: relY * VIRTUAL_HEIGHT });
+  }, []);
+
+  const handleCanvasPointerLeave = useCallback(() => setCursorPos(null), []);
 
   // ---- Pusher: roster presence + teacher-only hand-raise/quiz channels ----
   useEffect(() => {
@@ -2060,7 +2079,42 @@ export function TeacherLiveClassRoom({
                     : "crosshair",
               }}
               onDoubleClick={handleCanvasDoubleClick}
+              onPointerMove={handleCanvasPointerMove}
+              onPointerLeave={handleCanvasPointerLeave}
             />
+            {/* Cursor-following pen dot / eraser-size circle — UI overlay
+                only, see the cursorPos state comment above for why this
+                never touches undo/export/persistence. Hidden for every tool
+                that isn't pen/highlighter/eraser (select, text, fill, shapes,
+                laser — laser has its own on-canvas transient render inside
+                the engine, not this overlay). */}
+            {cursorPos &&
+              (tool === "pen" || tool === "highlighter" || tool === "stroke-eraser" || tool === "object-eraser") &&
+              (() => {
+                const isEraser = tool === "stroke-eraser" || tool === "object-eraser";
+                // Highlighter renders at a fixed 3.5x `size` (see canvas-
+                // engine.ts's strokePath) — reflected here so the dot isn't
+                // misleadingly thin for that tool. Plain pen width varies
+                // slightly by pen style/pressure at draw time, so `size`
+                // alone is the deliberately-approximate stand-in the spec
+                // asks for.
+                const diameterVirtualPx = isEraser ? eraserRadius * 2 : tool === "highlighter" ? size * 3.5 : size;
+                return (
+                  <div
+                    className="absolute rounded-full pointer-events-none"
+                    style={{
+                      left: `${(cursorPos.x / VIRTUAL_WIDTH) * 100}%`,
+                      top: `${(cursorPos.y / VIRTUAL_HEIGHT) * 100}%`,
+                      width: `${(diameterVirtualPx / VIRTUAL_WIDTH) * 100}%`,
+                      height: `${(diameterVirtualPx / VIRTUAL_HEIGHT) * 100}%`,
+                      transform: "translate(-50%, -50%)",
+                      border: isEraser ? "1.5px solid rgba(30,30,30,0.65)" : "1px solid rgba(255,255,255,0.7)",
+                      backgroundColor: isEraser ? "rgba(255,255,255,0.35)" : color,
+                      boxShadow: isEraser ? "0 0 0 1px rgba(255,255,255,0.5)" : "none",
+                    }}
+                  />
+                );
+              })()}
             {textEditor && (
               <div
                 className="absolute z-30"
