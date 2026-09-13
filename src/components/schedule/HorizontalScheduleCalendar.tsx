@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { WhiteboardPdfDownloadButton } from "@/components/whiteboard/WhiteboardPdfDownloadButton";
+import { PrepareSlidesModal } from "@/components/live-class/PrepareSlidesModal";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -508,6 +509,7 @@ function TimelineLectureRow({
   const studentEval = canStudentJoin(scheduleTarget, clientNow);
   const teacherEval = canTeacherStart(scheduleTarget, clientNow);
   const effectiveStatus = getEffectiveScheduleStatus(scheduleTarget, clientNow);
+  const [prepareSlidesOpen, setPrepareSlidesOpen] = useState(false);
 
   const isLive = effectiveStatus === "LIVE";
   const isCompleted = effectiveStatus === "COMPLETED";
@@ -755,18 +757,39 @@ function TimelineLectureRow({
                 <span>{isLive ? "Resume Live Class" : "Start Live Class"}</span>
               </Link>
             ) : (
-              <button
-                type="button"
-                disabled
-                className="inline-flex items-center justify-center gap-1 py-1 px-2.5 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 rounded-lg text-[10px] font-semibold cursor-not-allowed"
-              >
-                <span className="material-symbols-outlined text-[12px]">lock</span>
-                <span>Start from {formatISTTime(teacherEval.opensAt)}</span>
-              </button>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  disabled
+                  className="inline-flex items-center justify-center gap-1 py-1 px-2.5 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 rounded-lg text-[10px] font-semibold cursor-not-allowed"
+                >
+                  <span className="material-symbols-outlined text-[12px]">lock</span>
+                  <span>Start from {formatISTTime(teacherEval.opensAt)}</span>
+                </button>
+                {/* Slide prep is metadata prep, not room entry - allowed any
+                    time before the class starts (see canTeacherPrepareClass),
+                    unlike the T-15-gated "Start" button next to it. */}
+                <button
+                  type="button"
+                  onClick={() => setPrepareSlidesOpen(true)}
+                  className="inline-flex items-center gap-1 py-1 px-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg text-[10px] font-semibold shadow-xs transition active:scale-95"
+                  title="Upload slides now so they auto-load when this class starts"
+                >
+                  <span className="material-symbols-outlined text-[12px]">upload_file</span>
+                  <span>Prepare Slides</span>
+                </button>
+              </div>
             )}
           </div>
         </div>
       </div>
+      {prepareSlidesOpen && (
+        <PrepareSlidesModal
+          scheduleId={item.id}
+          classTitle={item.title}
+          onClose={() => setPrepareSlidesOpen(false)}
+        />
+      )}
     </div>
   );
 }

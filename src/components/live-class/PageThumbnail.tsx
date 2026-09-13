@@ -19,7 +19,20 @@ export function PageThumbnail({ background, objects }: { background: string; obj
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (!ctx) return;
-    renderPageThumbnail(ctx, { background, objects }, THUMB_WIDTH, THUMB_HEIGHT);
+    let cancelled = false;
+    const draw = () => {
+      if (cancelled || !ctx) return;
+      // An image background/raster object can't draw synchronously the
+      // first time (the browser has to fetch it) — renderPageThumbnail
+      // draws whatever's ready immediately and calls this back once more
+      // per image that finishes loading, so the thumbnail fills in
+      // instead of staying permanently blank.
+      renderPageThumbnail(ctx, { background, objects }, THUMB_WIDTH, THUMB_HEIGHT, draw);
+    };
+    draw();
+    return () => {
+      cancelled = true;
+    };
     // objects is a fresh array reference on every autosave/page-switch (see
     // TeacherLiveClassRoom's wbSession state), so a plain dependency on the
     // array itself (not a stringified diff) is exactly the right amount of

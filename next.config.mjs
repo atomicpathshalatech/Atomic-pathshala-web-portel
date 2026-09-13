@@ -70,6 +70,20 @@ const nextConfig = {
         "node_modules/@types/**",
       ],
     },
+    // src/lib/whiteboard/branding.ts reads public/brand/logo.png (and a
+    // fallback) via fs.readFileSync at request time for the PDF/PPTX export
+    // watermark. Next's serverless file tracer does NOT automatically
+    // bundle public/ assets into a function's Lambda package (only
+    // node_modules/source files it can statically see through imports) -
+    // this silently made the watermark logo missing in every production
+    // export while working fine in `next dev` (which serves public/
+    // straight off disk). Explicitly force-including these two files into
+    // every traced function is simpler and more robust than enumerating
+    // every route that transitively imports branding.ts (finalization,
+    // export-pdf, the cron safety net, pptx export, …).
+    outputFileTracingIncludes: {
+      "*": ["public/brand/logo.png", "public/atomic-logo.png"],
+    },
   },
   async headers() {
     return [

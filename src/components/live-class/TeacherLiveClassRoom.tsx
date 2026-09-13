@@ -3973,24 +3973,44 @@ function QuizPanel({
         />
       )}
 
-      {/* Options List (Screenshot 1) */}
+      {/* Options List — click one to mark it the correct answer. This used
+          to be a static, non-interactive list that always silently kept
+          `correctOption` at its default "A" (from initial/reset state)
+          with no way for the teacher to actually change it — Reveal Answer
+          then always revealed "A" no matter what the teacher intended. */}
       <div className="space-y-2">
         <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block">
-          OPTIONS (ANSWER WILL BE MARKED BY YOU AT REVEAL TIME):
+          OPTIONS — TAP THE CORRECT ANSWER:
         </span>
         <div className="space-y-1.5">
           {form.options.map((val, i) => {
             const key = String.fromCharCode(65 + i);
+            const isCorrect = form.correctOption === key;
             return (
-              <div
+              <button
                 key={key}
-                className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-[#10111a] border border-[#242634]"
+                type="button"
+                onClick={() => setForm((f) => ({ ...f, correctOption: key }))}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl border text-left transition ${
+                  isCorrect
+                    ? "bg-emerald-600/20 border-emerald-500 ring-1 ring-emerald-500/50"
+                    : "bg-[#10111a] border-[#242634] hover:border-[#3a3d52]"
+                }`}
               >
-                <span className="w-6 h-6 rounded-lg bg-blue-600/30 text-blue-400 border border-blue-500/40 text-xs font-bold flex items-center justify-center font-mono">
+                <span
+                  className={`w-6 h-6 rounded-lg text-xs font-bold flex items-center justify-center font-mono border ${
+                    isCorrect
+                      ? "bg-emerald-600 text-white border-emerald-400"
+                      : "bg-blue-600/30 text-blue-400 border-blue-500/40"
+                  }`}
+                >
                   {key}
                 </span>
                 <span className="text-xs font-semibold text-gray-200 flex-1">{val || `Option ${key}`}</span>
-              </div>
+                {isCorrect && (
+                  <span className="material-symbols-outlined text-emerald-400 text-base">check_circle</span>
+                )}
+              </button>
             );
           })}
         </div>

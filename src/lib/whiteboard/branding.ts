@@ -35,5 +35,12 @@ export function getLogoBase64(): string {
     }
   }
 
+  // This used to fail silently in production (public/ isn't auto-traced
+  // into a serverless function's bundle — see next.config.mjs's
+  // outputFileTracingIncludes for the actual fix) with no log at all, so
+  // exported PDFs/PPTXs were missing the watermark with no way to notice
+  // except visually. Kept as a warning, not a thrown error — a missing
+  // logo should never fail the whole export.
+  console.warn("[branding] logo file not found at any candidate path — watermark will be omitted", candidatePaths);
   return "";
 }
