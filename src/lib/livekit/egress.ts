@@ -206,6 +206,16 @@ export async function reconcileRecordingStatus(
         },
       });
 
+      // Same YouTube-archive trigger as the webhook path (route.ts) — this
+      // reconcile function is the fallback for when that webhook never
+      // arrives, so it needs to fire the same fire-and-forget archive kick
+      // itself rather than relying on the webhook to have done it.
+      if (wbSession && !wbSession.isTest) {
+        import("@/lib/youtube/archive-service")
+          .then(({ startArchiveJob }) => startArchiveJob(session.id))
+          .catch((err) => console.error("[youtube_archive_trigger_error]", err));
+      }
+
       return {
         ...updated,
         resourceId,

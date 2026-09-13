@@ -112,6 +112,17 @@ export async function POST(request: NextRequest) {
           } catch {
             // non-blocking
           }
+
+          // 4. Kick off the YouTube recording-archive pipeline (fire-and-
+          // forget, same pattern as finalizeWhiteboardSlides elsewhere in
+          // this app). Skipped for Whiteboard Test Lab rooms. If this
+          // invocation is killed before the import resolves, the once-daily
+          // cron safety net (/api/cron/youtube-archive/process) picks it up.
+          if (!session.isTest) {
+            import("@/lib/youtube/archive-service")
+              .then(({ startArchiveJob }) => startArchiveJob(session.id))
+              .catch((err) => console.error("[youtube_archive_trigger_error]", err));
+          }
         } else {
           await prisma.whiteboardSession.update({
             where: { id: session.id },

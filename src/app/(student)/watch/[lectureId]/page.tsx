@@ -112,7 +112,18 @@ export default async function WatchLecturePage({ params }: { params?: { lectureI
           schedule.liveWhiteboardSession.recordingStorageKey = updated.recordingStorageKey;
         }
       }
+
+      // Prefer the archived YouTube (unlisted) video once it's fully
+      // uploaded — the student plays it right here via AtomicVideoPlayer's
+      // existing YouTube-embed auto-detection (native speed control etc.,
+      // no redirect to youtube.com). Falls back to the direct R2 recording
+      // whenever the archive isn't done yet (or archiving is disabled).
       if (
+        schedule.liveWhiteboardSession?.youtubeArchiveStatus === "COMPLETED" &&
+        schedule.liveWhiteboardSession.youtubeArchiveVideoUrl
+      ) {
+        resolvedRecUrl = schedule.liveWhiteboardSession.youtubeArchiveVideoUrl;
+      } else if (
         schedule.liveWhiteboardSession?.recordingStorageKey &&
         schedule.liveWhiteboardSession.recordingStatus === "READY"
       ) {
