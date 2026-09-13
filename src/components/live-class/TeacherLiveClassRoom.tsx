@@ -6,12 +6,18 @@ import {
   CanvasEngine,
   type StrokeObject,
   type CanvasTool,
-  type ShapeKind,
   TEXT_FONT_SCALE,
   VIRTUAL_WIDTH,
   VIRTUAL_HEIGHT,
   ERASER_SIZES,
 } from "@/lib/canvas/canvas-engine";
+import {
+  SHAPE_DEFS,
+  CHEM_SUBCATEGORY_LABELS,
+  CHEM_SUBCATEGORY_ORDER,
+  type ShapeCategory,
+  type ChemSubcategory,
+} from "@/lib/canvas/shapes/registry";
 import { getPusherClient } from "@/lib/realtime/pusher-client";
 import { sessionChannel, teacherChannel, WB_EVENTS } from "@/lib/realtime/events";
 import { VideoStrip } from "@/components/live-class/VideoStrip";
@@ -90,51 +96,14 @@ type SlideTheme =
   | "dotted"
   | (string & {});
 
-type SubjectShapeCategory = "math" | "phys" | "chem" | "bio";
-
-const SUBJECT_SHAPES: Record<
-  SubjectShapeCategory,
-  { id: ShapeKind; label: string; icon: string }[]
-> = {
-  math: [
-    { id: "line", label: "Line", icon: "horizontal_rule" },
-    { id: "arrow", label: "Arrow", icon: "north_east" },
-    { id: "rectangle", label: "Rectangle / Box", icon: "crop_square" },
-    { id: "circle", label: "Circle / Ellipse", icon: "circle" },
-    { id: "triangle", label: "Triangle", icon: "change_history" },
-    { id: "arrow", label: "Double Arrow", icon: "sync_alt" },
-    { id: "triangle", label: "Right-Angled T...", icon: "play_arrow" },
-    { id: "line", label: "XY Coordinate ...", icon: "show_chart" },
-    { id: "rectangle", label: "Cylinder (3D)", icon: "view_in_ar" },
-    { id: "circle", label: "Polygon / Hexa...", icon: "hexagon" },
-    { id: "circle", label: "Star", icon: "star" },
-  ],
-  phys: [
-    { id: "rectangle", label: "Resistor", icon: "reorder" },
-    { id: "rectangle", label: "Capacitor", icon: "pause" },
-    { id: "line", label: "Inductor", icon: "waves" },
-    { id: "rectangle", label: "Battery Cell", icon: "battery_charging_full" },
-    { id: "circle", label: "Pulley", icon: "radio_button_checked" },
-    { id: "triangle", label: "Optics Prism", icon: "change_history" },
-    { id: "rectangle", label: "Bar Magnet", icon: "crop_5_4" },
-  ],
-  chem: [
-    { id: "circle", label: "Benzene Ring", icon: "hexagon" },
-    { id: "triangle", label: "Flask / Beaker", icon: "science" },
-    { id: "circle", label: "Atom Model", icon: "bubble_chart" },
-    { id: "rectangle", label: "Test Tube", icon: "biotech" },
-    { id: "line", label: "Double Bond", icon: "drag_handle" },
-  ],
-  bio: [
-    { id: "circle", label: "DNA Helix", icon: "grain" },
-    { id: "circle", label: "Animal Cell", icon: "lens" },
-    { id: "line", label: "Neuron Cell", icon: "hub" },
-    { id: "circle", label: "Human Heart", icon: "favorite" },
-    { id: "circle", label: "Plant Leaf", icon: "eco" },
-  ],
-};
-
-const SHAPE_TOOLS = SUBJECT_SHAPES.math;
+// Shape definitions themselves live in one authoritative registry
+// (src/lib/canvas/shapes/registry.ts), imported below — this file only
+// renders whatever categories/subcategories/ids that registry defines.
+// This used to be a locally-defined SUBJECT_SHAPES map where ~28
+// distinct, uniquely-labeled buttons all pointed at only 5 real `id`
+// values (e.g. "Benzene Ring", "Star", and "DNA Helix" all had
+// `id: "circle"`) — clicking one drew whichever of the 5 generic
+// primitives that id happened to alias, not the shape the label promised.
 
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 2;
@@ -447,7 +416,8 @@ export function TeacherLiveClassRoom({
   const [themeModalOpen, setThemeModalOpen] = useState(false);
   const [sim3dOpen, setSim3dOpen] = useState(false);
   const [scienceLabsOpen, setScienceLabsOpen] = useState(false);
-  const [shapeSubjectTab, setShapeSubjectTab] = useState<SubjectShapeCategory>("math");
+  const [shapeSubjectTab, setShapeSubjectTab] = useState<ShapeCategory>("general");
+  const [chemSubcategory, setChemSubcategory] = useState<ChemSubcategory>("bonds");
   const [pollOpen, setPollOpen] = useState(false);
   const [pollModalTab, setPollModalTab] = useState<"quiz" | "ranks">("quiz");
   const [pollType, setPollType] = useState<"mcq4" | "yesno">("mcq4");
@@ -2491,64 +2461,66 @@ export function TeacherLiveClassRoom({
               onClick={() => setOpenPopup((p) => (p === "shapes" ? null : "shapes"))}
             />
             {openPopup === "shapes" && (
-              <div className="absolute bottom-full left-0 mb-3 z-50 bg-[#161722] border border-[#2d2e3b] rounded-2xl p-3 shadow-2xl w-72 flex flex-col gap-3 text-white">
-                {/* Category Switcher Tabs: Math, Phys, Chem, Bio (Screenshot 5) */}
+              <div className="absolute bottom-full left-0 mb-3 z-50 bg-[#161722] border border-[#2d2e3b] rounded-2xl p-3 shadow-2xl w-72 flex flex-col gap-2 text-white">
+                {/* Category Switcher Tabs: General, Phys, Chem, Bio */}
                 <div className="grid grid-cols-4 gap-1 bg-[#10111a] p-1 rounded-xl border border-[#242634]">
-                  <button
-                    type="button"
-                    onClick={() => setShapeSubjectTab("math")}
-                    className={`flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] font-bold transition ${
-                      shapeSubjectTab === "math"
-                        ? "bg-blue-600 text-white shadow-md"
-                        : "text-gray-400 hover:text-white"
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-xs">square_foot</span>
-                    Math
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShapeSubjectTab("phys")}
-                    className={`flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] font-bold transition ${
-                      shapeSubjectTab === "phys"
-                        ? "bg-blue-600 text-white shadow-md"
-                        : "text-gray-400 hover:text-white"
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-xs">bolt</span>
-                    Phys
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShapeSubjectTab("chem")}
-                    className={`flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] font-bold transition ${
-                      shapeSubjectTab === "chem"
-                        ? "bg-blue-600 text-white shadow-md"
-                        : "text-gray-400 hover:text-white"
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-xs">science</span>
-                    Chem
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShapeSubjectTab("bio")}
-                    className={`flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] font-bold transition ${
-                      shapeSubjectTab === "bio"
-                        ? "bg-blue-600 text-white shadow-md"
-                        : "text-gray-400 hover:text-white"
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-xs">grain</span>
-                    Bio
-                  </button>
+                  {(
+                    [
+                      { id: "general", label: "General", icon: "square_foot" },
+                      { id: "phys", label: "Phys", icon: "bolt" },
+                      { id: "chem", label: "Chem", icon: "science" },
+                      { id: "bio", label: "Bio", icon: "grain" },
+                    ] as const
+                  ).map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setShapeSubjectTab(tab.id)}
+                      className={`flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] font-bold transition ${
+                        shapeSubjectTab === tab.id
+                          ? "bg-blue-600 text-white shadow-md"
+                          : "text-gray-400 hover:text-white"
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-xs">{tab.icon}</span>
+                      {tab.label}
+                    </button>
+                  ))}
                 </div>
 
-                {/* 2-Column Grid of Shapes (Screenshot 5) */}
+                {/* Chemistry gets a second row of subcategory pills — the
+                    library is too large (~48 structures) for one flat grid,
+                    per the categorized-submenu requirement. */}
+                {shapeSubjectTab === "chem" && (
+                  <div className="flex flex-wrap gap-1">
+                    {CHEM_SUBCATEGORY_ORDER.map((sub) => (
+                      <button
+                        key={sub}
+                        type="button"
+                        onClick={() => setChemSubcategory(sub)}
+                        className={`px-2 py-1 rounded-lg text-[10px] font-bold transition ${
+                          chemSubcategory === sub
+                            ? "bg-emerald-600 text-white"
+                            : "bg-[#10111a] text-gray-400 hover:text-white border border-[#242634]"
+                        }`}
+                      >
+                        {CHEM_SUBCATEGORY_LABELS[sub]}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* 2-Column Grid of Shapes, sourced from the one authoritative
+                    registry (src/lib/canvas/shapes/registry.ts) — every id
+                    here is unique and maps 1:1 to a real renderer. */}
                 <div className="grid grid-cols-2 gap-1.5 max-h-64 overflow-y-auto pr-1">
-                  {(SUBJECT_SHAPES[shapeSubjectTab] || SUBJECT_SHAPES.math).map((s, idx) => (
+                  {SHAPE_DEFS.filter(
+                    (s) =>
+                      s.category === shapeSubjectTab &&
+                      (shapeSubjectTab !== "chem" || s.subcategory === chemSubcategory)
+                  ).map((s) => (
                     <button
-                      key={`${s.label}-${idx}`}
+                      key={s.id}
                       type="button"
                       onClick={() => {
                         setTool(s.id);
