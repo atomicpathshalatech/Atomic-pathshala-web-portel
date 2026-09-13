@@ -561,6 +561,16 @@ export function StudentManagementConsole() {
 
                     <td className="px-5 py-4 text-right">
                       <div className="inline-flex items-center gap-1.5">
+                        {/* Previously a dead import — no per-student page
+                            existed to link to at all. */}
+                        <Link
+                          href={`/team/students/${student.id}`}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition"
+                          title="View full academic profile"
+                        >
+                          <span className="material-symbols-outlined text-sm">person</span>
+                          Profile
+                        </Link>
                         <button
                           type="button"
                           onClick={() => setSelectedStudentForAccess(student)}
