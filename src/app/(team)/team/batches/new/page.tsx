@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { BatchCreatorWizard } from "@/components/team-portal/BatchCreatorWizard";
+import { CANONICAL_COURSE_SLUGS } from "@/lib/academic/canonical-courses";
 
 export const metadata: Metadata = {
   title: "Create High-End Batch",
@@ -24,6 +25,7 @@ export default async function NewBatchPage() {
 
   const [courses, teachers] = await Promise.all([
     prisma.course.findMany({
+      where: { slug: { in: [...CANONICAL_COURSE_SLUGS] } },
       select: { id: true, title: true, slug: true },
       orderBy: { title: "asc" },
     }),
