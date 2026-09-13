@@ -1927,7 +1927,7 @@ export function TeacherLiveClassRoom({
               <span className="material-symbols-outlined text-sm">
                 {tool === "pen"
                   ? (PEN_STYLES.find((s) => s.id === penStyle)?.icon || "edit")
-                  : tool === "highlighter"
+                  : tool === "highlighter" || tool === "highlighter-fade"
                   ? "border_color"
                   : tool === "stroke-eraser" || tool === "object-eraser"
                   ? "ink_eraser"
@@ -2124,7 +2124,7 @@ export function TeacherLiveClassRoom({
                     // render their own dot/circle overlay just below - the
                     // native browser cursor must be hidden for those or it
                     // draws a "+" crosshair on top of/alongside the dot.
-                    : tool === "pen" || tool === "highlighter" || tool === "stroke-eraser" || tool === "object-eraser"
+                    : tool === "pen" || tool === "highlighter" || tool === "highlighter-fade" || tool === "stroke-eraser" || tool === "object-eraser"
                     ? "none"
                     : "crosshair",
               }}
@@ -2139,7 +2139,7 @@ export function TeacherLiveClassRoom({
                 laser — laser has its own on-canvas transient render inside
                 the engine, not this overlay). */}
             {cursorPos &&
-              (tool === "pen" || tool === "highlighter" || tool === "stroke-eraser" || tool === "object-eraser") &&
+              (tool === "pen" || tool === "highlighter" || tool === "highlighter-fade" || tool === "stroke-eraser" || tool === "object-eraser") &&
               (() => {
                 const isEraser = tool === "stroke-eraser" || tool === "object-eraser";
                 // Highlighter renders at a fixed 3.5x `size` (see canvas-
@@ -2148,7 +2148,7 @@ export function TeacherLiveClassRoom({
                 // slightly by pen style/pressure at draw time, so `size`
                 // alone is the deliberately-approximate stand-in the spec
                 // asks for.
-                const diameterVirtualPx = isEraser ? eraserRadius * 2 : tool === "highlighter" ? size * 3.5 : size;
+                const diameterVirtualPx = isEraser ? eraserRadius * 2 : tool === "highlighter" || tool === "highlighter-fade" ? size * 3.5 : size;
                 return (
                   <div
                     className="absolute rounded-full pointer-events-none"
@@ -2452,30 +2452,55 @@ export function TeacherLiveClassRoom({
             <ToolbarBtn
               icon="border_color"
               label="Highlight"
-              active={tool === "highlighter"}
+              active={tool === "highlighter" || tool === "highlighter-fade"}
               onClick={() => {
-                setTool("highlighter");
+                setTool((prev) => (prev === "highlighter-fade" ? "highlighter-fade" : "highlighter"));
                 setOpenPopup((p) => (p === "highlight" ? null : "highlight"));
               }}
             />
             {openPopup === "highlight" && (
-              <div className="absolute bottom-full left-0 mb-3 z-40 bg-[#161722] border border-[#2d2e3b] rounded-2xl p-2.5 shadow-2xl flex flex-row items-center gap-2.5 min-w-max">
-                {HIGHLIGHT_COLORS.map((c) => (
+              <div className="absolute bottom-full left-0 mb-3 z-40 bg-[#161722] border border-[#2d2e3b] rounded-2xl p-2.5 shadow-2xl flex flex-col gap-2.5 min-w-max">
+                {/* Two highlighter variants: stays until erased, or fades on
+                    its own after a few seconds (like the laser pointer, but
+                    a real synced stroke, not a teacher-local-only effect). */}
+                <div className="flex rounded-lg bg-[#0d0e16] border border-[#2d2e3b] p-0.5 gap-0.5">
                   <button
-                    key={c}
                     type="button"
-                    onClick={() => {
-                      setColor(c);
-                    }}
-                    className={`w-7 h-7 rounded-full border shadow-md transition transform hover:scale-110 ${
-                      color.toLowerCase() === c.toLowerCase()
-                        ? "ring-2 ring-white ring-offset-2 ring-offset-[#161722] border-transparent"
-                        : "border-gray-600/60 opacity-85 hover:opacity-100"
+                    onClick={() => setTool("highlighter")}
+                    className={`flex-1 px-2.5 py-1 rounded-md text-[10px] font-bold transition ${
+                      tool === "highlighter" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-gray-200"
                     }`}
-                    style={{ backgroundColor: c }}
-                    title={c}
-                  />
-                ))}
+                  >
+                    Permanent
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTool("highlighter-fade")}
+                    className={`flex-1 px-2.5 py-1 rounded-md text-[10px] font-bold transition ${
+                      tool === "highlighter-fade" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-gray-200"
+                    }`}
+                  >
+                    Fades Away
+                  </button>
+                </div>
+                <div className="flex flex-row items-center gap-2.5">
+                  {HIGHLIGHT_COLORS.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => {
+                        setColor(c);
+                      }}
+                      className={`w-7 h-7 rounded-full border shadow-md transition transform hover:scale-110 ${
+                        color.toLowerCase() === c.toLowerCase()
+                          ? "ring-2 ring-white ring-offset-2 ring-offset-[#161722] border-transparent"
+                          : "border-gray-600/60 opacity-85 hover:opacity-100"
+                      }`}
+                      style={{ backgroundColor: c }}
+                      title={c}
+                    />
+                  ))}
+                </div>
               </div>
             )}
           </div>
