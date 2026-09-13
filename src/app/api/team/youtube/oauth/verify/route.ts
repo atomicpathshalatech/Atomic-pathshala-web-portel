@@ -53,16 +53,30 @@ export async function GET() {
       );
     }
 
+    // Diagnostics for the "token is valid but no channel comes back" case —
+    // this can legitimately happen (channels.list(mine=true) resolves to
+    // whatever channel the authorizing Google account's default identity is,
+    // which is NOT necessarily a Brand Account channel that account merely
+    // manages) so the raw HTTP status + Google's own error object (never a
+    // secret — channel metadata isn't sensitive) are surfaced instead of
+    // silently returning an empty object.
     let channel: { id?: string; title?: string } = {};
+    let channelApiStatus: number | null = null;
+    let channelApiError: unknown = null;
+    let channelApiRawItemCount: number | null = null;
     try {
       const channelRes = await fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true", {
         headers: { Authorization: `Bearer ${tokenJson.access_token}` },
       });
+      channelApiStatus = channelRes.status;
       const channelJson = await channelRes.json();
+      channelApiError = channelJson?.error ?? null;
+      channelApiRawItemCount = Array.isArray(channelJson?.items) ? channelJson.items.length : null;
       const item = channelJson?.items?.[0];
       if (item) channel = { id: item.id, title: item.snippet?.title };
     } catch (err) {
       console.error("[youtube_oauth_verify_channel_lookup_error]", err instanceof Error ? err.message : err);
+      channelApiError = err instanceof Error ? err.message : String(err);
     }
 
     return NextResponse.json({
@@ -71,6 +85,9 @@ export async function GET() {
       refreshTokenValid: true,
       grantedScope: tokenJson.scope,
       channel,
+      channelApiStatus,
+      channelApiError,
+      channelApiRawItemCount,
     });
   } catch (error) {
     return handleApiError(error);
