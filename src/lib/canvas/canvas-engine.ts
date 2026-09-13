@@ -127,33 +127,46 @@ export const ERASER_SIZES: { id: "S" | "M" | "L" | "XL"; label: string; radius: 
   { id: "XL", label: "XL", radius: 68 },
 ];
 
-/** How long a laser stroke stays on screen before it has fully faded (ms) —
- * long enough for the blink-then-fade lifecycle in laserOpacityAt() below
- * to actually read as distinct phases rather than a single quick flash. */
-export const LASER_DURATION_MS = 2800;
+/**
+ * Laser lifecycle timing (ms) — named constants per the classroom-visibility
+ * requirement, instead of magic numbers scattered through laserOpacityAt().
+ * A previous version used a hard on/off square wave for its first phase
+ * (two blinks per ~1s, i.e. roughly a 2Hz flicker with instant full-to-0.2
+ * cuts) — reported as "flashing very fast." Replaced below with a smooth
+ * sine breathing pulse that never fully disappears between pulses, which
+ * reads as a deliberate, slow pulse instead of a strobe even at a similar
+ * pulse count, because human motion perception is far more sensitive to
+ * hard instantaneous cuts than to the same frequency eased smoothly.
+ */
+export const LASER_PULSE_COUNT = 3;
+export const LASER_PULSE_DURATION_MS = 1500;
+export const LASER_FADE_DURATION_MS = 1300;
+export const LASER_DISPLAY_DURATION_MS = LASER_PULSE_DURATION_MS + LASER_FADE_DURATION_MS;
+/** @deprecated Use LASER_DISPLAY_DURATION_MS — kept as an alias so any other
+ * caller of the total on-screen lifetime doesn't need to change. */
+export const LASER_DURATION_MS = LASER_DISPLAY_DURATION_MS;
+
+const LASER_PULSE_FLOOR_OPACITY = 0.45;
+const LASER_PULSE_CEILING_OPACITY = 1;
 
 /**
  * Laser-pointer opacity over its lifetime, `t` in [0, 1] (age / DURATION):
- * visible → 1-2 sharp blinks → slower/lighter blinking → smooth fade → gone.
- * Piecewise so each phase is easy to retune independently:
- *   [0.00, 0.35) — 2 sharp on/off blinks (square wave, not a smooth fade —
- *                  these should read as distinct flashes).
- *   [0.35, 0.70) — continues blinking, but slower (one full cycle instead
- *                  of two) and lighter (bounded further from full opacity).
- *   [0.70, 1.00] — no more blinking, smooth quadratic fade to fully gone.
+ *   [0, pulsePhaseFrac) — LASER_PULSE_COUNT smooth pulses, breathing between
+ *     a floor and ceiling opacity (never fully invisible mid-pulse, and
+ *     starts/ends each cycle AT the ceiling — "appears smoothly," pulses,
+ *     and is already at full brightness right as the fade phase begins).
+ *   [pulsePhaseFrac, 1] — smooth quadratic fade from the ceiling to fully
+ *     gone ("short hold, then fade out").
  */
 function laserOpacityAt(t: number): number {
-  if (t < 0.35) {
-    const cyclePos = (t / 0.35) * 2; // 2 blinks across this phase
-    return cyclePos % 1 < 0.5 ? 1 : 0.2;
+  const pulsePhaseFrac = LASER_PULSE_DURATION_MS / LASER_DISPLAY_DURATION_MS;
+  if (t < pulsePhaseFrac) {
+    const cyclePos = ((t / pulsePhaseFrac) * LASER_PULSE_COUNT) % 1;
+    const dip = (1 - Math.cos(cyclePos * Math.PI * 2)) / 2; // 0 at cycle start/end, 1 at midpoint
+    return LASER_PULSE_CEILING_OPACITY - (LASER_PULSE_CEILING_OPACITY - LASER_PULSE_FLOOR_OPACITY) * dip;
   }
-  if (t < 0.7) {
-    const localT = (t - 0.35) / 0.35;
-    const wave = (Math.sin(localT * Math.PI * 2 - Math.PI / 2) + 1) / 2; // 0..1, starts low
-    return 0.35 + wave * 0.45; // stays within [0.35, 0.8] — lighter than phase 1
-  }
-  const fadeT = (t - 0.7) / 0.3;
-  return Math.max(0, 1 - fadeT * fadeT) * 0.6; // tail off from phase 2's ceiling to 0
+  const fadeT = (t - pulsePhaseFrac) / (1 - pulsePhaseFrac);
+  return Math.max(0, 1 - fadeT * fadeT) * LASER_PULSE_CEILING_OPACITY;
 }
 
 /** Font-size (virtual px) per unit of the shared pen `currentSize` control,
