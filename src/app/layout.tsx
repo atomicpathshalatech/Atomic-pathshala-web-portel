@@ -5,6 +5,7 @@ import "./globals.css";
 import { AuthSessionProvider } from "@/components/providers/AuthSessionProvider";
 import { CapacitorProvider } from "@/components/providers/CapacitorProvider";
 import { PwaProvider } from "@/components/pwa/PwaProvider";
+import { Analytics } from "@vercel/analytics/next";
 
 /**
  * Inter is the app's body/label font (used on effectively every screen).
@@ -85,6 +86,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </CapacitorProvider>
         </AuthSessionProvider>
         <PwaProvider />
+        <Analytics />
         <Toaster richColors position="top-center" />
       </body>
     </html>
