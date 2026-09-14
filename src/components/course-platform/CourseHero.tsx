@@ -73,9 +73,16 @@ export function CourseHero({ course }: { course: CourseData }) {
         <div className="absolute inset-0 bg-gradient-to-t from-[#031635]/90 via-[#031635]/30 to-transparent" />
 
         <div className="absolute bottom-4 left-4 sm:bottom-6 sm:left-6 flex items-center gap-2 flex-wrap">
-          <span className="bg-emerald-400 text-emerald-950 font-extrabold text-[10px] sm:text-xs px-2.5 py-1 rounded-lg uppercase tracking-wider shadow">
-            BATCH
-          </span>
+          {course.isEnrolled ? (
+            <span className="bg-emerald-400 text-emerald-950 font-extrabold text-[10px] sm:text-xs px-2.5 py-1 rounded-lg uppercase tracking-wider shadow flex items-center gap-1">
+              <span className="material-symbols-outlined text-[14px]">verified</span>
+              ACTIVE ENROLLMENT
+            </span>
+          ) : (
+            <span className="bg-emerald-400 text-emerald-950 font-extrabold text-[10px] sm:text-xs px-2.5 py-1 rounded-lg uppercase tracking-wider shadow">
+              BATCH
+            </span>
+          )}
           {course.exam && (
             <span className="bg-blue-500 text-white font-extrabold text-[10px] sm:text-xs px-2.5 py-1 rounded-lg uppercase tracking-wider shadow">
               {course.exam} {course.examYear || ""}

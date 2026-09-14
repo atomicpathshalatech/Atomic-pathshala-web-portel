@@ -74,11 +74,13 @@ export function DoubtBookingJoinScreen({ bookingId, backHref }: { bookingId: str
   }
 
   if (inCall && liveKit) {
+    const isTeacher = booking?.role === "TEACHER" || booking?.role === "ADMIN";
     return (
-      <div className="h-[70vh] max-w-4xl mx-auto">
+      <div className="h-[75vh] max-w-5xl mx-auto">
         <DoubtSessionRoom
           token={liveKit.token}
           serverUrl={liveKit.serverUrl}
+          isTeacher={isTeacher}
           onLeave={() => {
             setInCall(false);
             setLiveKit(null);

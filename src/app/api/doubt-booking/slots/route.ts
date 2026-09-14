@@ -58,21 +58,44 @@ export async function POST(request: NextRequest) {
   }
 }
 
-/** Teacher's own slots (own-only — never a client-supplied teacherId). */
-export async function GET(_request: NextRequest) {
+/** Teacher's own slots (or admin viewing a specific teacher's slots). */
+export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
 
+    let targetTeacherId: string | null = null;
     const teacher = await resolveTeacher(session.user.id);
-    if (!teacher) throw new ForbiddenError("Only teachers can view their own slots.");
+    if (teacher) {
+      targetTeacherId = teacher.id;
+    }
+
+    const queryTeacherId = request.nextUrl.searchParams.get("teacherId");
+    if (queryTeacherId) {
+      const { hasPermission } = await import("@/lib/rbac/guard");
+      const { PERMISSIONS } = await import("@/lib/rbac/permissions");
+      const isAdmin = await hasPermission(session.user.id, PERMISSIONS.BATCH_UPDATE);
+      if (isAdmin) {
+        targetTeacherId = queryTeacherId;
+      }
+    }
+
+    if (!targetTeacherId) {
+      throw new ForbiddenError("Only teachers or authorized staff can view slots.");
+    }
 
     const slots = await prisma.doubtSlot.findMany({
-      where: { teacherId: teacher.id },
+      where: { teacherId: targetTeacherId },
       orderBy: { startTime: "asc" },
       include: {
         booking: {
-          include: { student: { include: { user: { select: { name: true, photoUrl: true } } } } },
+          include: {
+            student: {
+              include: {
+                user: { select: { name: true, email: true, photoUrl: true } },
+              },
+            },
+          },
         },
       },
     });

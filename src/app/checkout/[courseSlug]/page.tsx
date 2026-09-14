@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { requireStudentSession } from "@/lib/auth/session";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -36,12 +37,52 @@ export default async function CheckoutPage({ params }: { params: { courseSlug: s
       );
     }
 
-    // Captured as its own object right after the null check, in the same
-    // synchronous block — TypeScript's narrowing of realBatch.price to
-    // `number` doesn't survive the `await`s below if we keep passing
-    // realBatch itself (property narrowing on an object is not guaranteed
-    // to persist across an await boundary), but a fresh object literal
-    // built here bakes in the already-narrowed `number` type permanently.
+    const { student } = await requireStudentSession();
+
+    // Check if student already has active access (Admin grant, paid enrollment, or subscription)
+    const { resolveBatchAccess } = await import("@/lib/batch/entitlement");
+    const access = await resolveBatchAccess(student.userId, realBatch.id);
+    const hasActiveAccess =
+      access.status === "ACTIVE_ENROLLMENT" ||
+      access.status === "ACTIVE_SUBSCRIPTION" ||
+      access.status === "ADMIN_GRANTED";
+
+    if (hasActiveAccess) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-[#f9f9ff] px-4 text-center py-12">
+          <div className="max-w-md w-full bg-white border border-emerald-200/90 rounded-3xl p-6 sm:p-8 shadow-xl shadow-emerald-500/5 space-y-5">
+            <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto shadow-2xs">
+              <span className="material-symbols-outlined text-3xl">verified</span>
+            </div>
+            <div className="space-y-2">
+              <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full">
+                Active Enrollment
+              </span>
+              <h1 className="text-xl font-black text-[#031635]">{realBatch.name}</h1>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                You already have active access to this batch. You do not need to purchase it again.
+              </p>
+            </div>
+            <div className="pt-2 flex flex-col gap-2.5">
+              <Link
+                href={`/courses/${realBatch.id}`}
+                className="w-full py-3 px-4 rounded-xl bg-[#6b46c1] hover:bg-[#5b3da5] text-white font-bold text-xs shadow-md transition flex items-center justify-center gap-2"
+              >
+                <span>Continue Learning</span>
+                <span className="material-symbols-outlined text-base">arrow_forward</span>
+              </Link>
+              <Link
+                href="/courses"
+                className="w-full py-2.5 px-4 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 transition text-center"
+              >
+                Explore Other Batches
+              </Link>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     const sellableBatch = {
       id: realBatch.id,
       name: realBatch.name,
@@ -50,8 +91,6 @@ export default async function CheckoutPage({ params }: { params: { courseSlug: s
       thumbnailUrl: realBatch.thumbnailUrl,
       description: realBatch.description,
     };
-
-    const { student } = await requireStudentSession();
 
     // CRM signal: arriving at real-batch checkout is a real payment intent.
     try {

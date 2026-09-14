@@ -20,7 +20,8 @@ export async function POST(
       where: { userId: session.user.id },
     });
 
-    if (!teacher && session.user.role !== "ADMIN") {
+    const isAdmin = ["SUPER_ADMIN", "ADMIN", "FOUNDER"].includes(session.user.role || "");
+    if (!teacher && !isAdmin) {
       return apiError("Only teachers can start a live class.", 403);
     }
 

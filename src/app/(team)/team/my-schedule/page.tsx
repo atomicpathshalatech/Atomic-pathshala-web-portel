@@ -16,7 +16,10 @@ export default async function TeacherMySchedulePage({
   searchParams?: { blocked?: string; reason?: string };
 }) {
   const { user } = await requireTeamSession();
-  const teacher = await prisma.teacher.findUnique({ where: { userId: user.id } });
+  const teacher = await prisma.teacher.findUnique({
+    where: { userId: user.id },
+    include: { user: true },
+  });
   const blockedReason = searchParams?.blocked === "1" ? searchParams?.reason || "That class isn't accessible right now." : null;
 
   if (!teacher) {
@@ -42,25 +45,42 @@ export default async function TeacherMySchedulePage({
 
   // Fetch all schedules for this teacher without filtering out past dates.
   // `isTest` rows (Whiteboard Test Lab) are never real classes — hidden here.
-  const rawSchedules = await prisma.batchSchedule.findMany({
-    where: {
-      isTest: false,
-      OR: [
-        { teacherId: teacher.id },
-        { batch: { teachers: { some: { teacherId: teacher.id } } } },
-      ],
-    },
-    orderBy: { startsAt: "asc" },
-    include: {
-      batch: true,
-      teacher: { include: { user: true } },
-      liveWhiteboardSession: {
-        select: { id: true, status: true, livePhase: true },
+  const [rawSchedules, doubtBookings] = await Promise.all([
+    prisma.batchSchedule.findMany({
+      where: {
+        isTest: false,
+        OR: [
+          { teacherId: teacher.id },
+          { batch: { teachers: { some: { teacherId: teacher.id } } } },
+        ],
       },
-    },
-  });
+      orderBy: { startsAt: "asc" },
+      include: {
+        batch: true,
+        teacher: { include: { user: true } },
+        liveWhiteboardSession: {
+          select: { id: true, status: true, livePhase: true },
+        },
+      },
+    }),
+    prisma.doubtBooking.findMany({
+      where: {
+        teacherId: teacher.id,
+        status: { in: ["CONFIRMED", "COMPLETED"] },
+      },
+      include: {
+        slot: true,
+        student: {
+          include: {
+            user: { select: { name: true, email: true, photoUrl: true } },
+          },
+        },
+      },
+      orderBy: { slot: { startTime: "asc" } },
+    }),
+  ]);
 
-  if (rawSchedules.length === 0) {
+  if (rawSchedules.length === 0 && doubtBookings.length === 0) {
     return (
       <div className="space-y-6 max-w-6xl mx-auto">
         <header>
@@ -68,7 +88,7 @@ export default async function TeacherMySchedulePage({
             My Teaching Schedule
           </h1>
           <p className="text-xs md:text-sm text-slate-500 mt-1">
-            Every class across the batches you teach, in one place.
+            Every class across the batches you teach and 1:1 doubt sessions, in one place.
           </p>
         </header>
         {blockedReason && (
@@ -78,7 +98,7 @@ export default async function TeacherMySchedulePage({
           </div>
         )}
         <div className="rounded-3xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 p-12 text-center text-slate-500 text-xs md:text-sm">
-          Nothing scheduled for you yet — once a batch adds you to its timetable, your classes will show up here.
+          Nothing scheduled for you yet — once a batch adds you to its timetable or a student books a doubt session, your classes will show up here.
         </div>
       </div>
     );
@@ -95,9 +115,18 @@ export default async function TeacherMySchedulePage({
       });
     }
   }
+
+  if (doubtBookings.length > 0) {
+    batchMap.set("doubt-sessions", {
+      id: "doubt-sessions",
+      name: "1:1 Doubt Sessions",
+      code: "1:1",
+    });
+  }
+
   const batches = Array.from(batchMap.values());
 
-  const allSchedules: ScheduleItem[] = rawSchedules.map((s) => ({
+  const batchScheduleItems: ScheduleItem[] = rawSchedules.map((s) => ({
     id: s.id,
     title: s.title,
     subject: s.subject,
@@ -129,13 +158,42 @@ export default async function TeacherMySchedulePage({
       : null,
   }));
 
+  const doubtScheduleItems: ScheduleItem[] = doubtBookings.map((b) => ({
+    id: `doubt-booking-${b.id}`,
+    title: `1:1 Doubt Session: ${b.student.user.name || "Student"}`,
+    subject: "1:1 Doubt",
+    type: "DOUBT_SESSION",
+    status: b.status === "COMPLETED" ? "COMPLETED" : "SCHEDULED",
+    startsAt: b.slot.startTime.toISOString(),
+    endsAt: b.slot.endTime.toISOString(),
+    batchId: "doubt-sessions",
+    batch: {
+      id: "doubt-sessions",
+      name: "1:1 Doubt Sessions",
+      code: "1:1",
+    },
+    teacher: {
+      id: teacher.id,
+      user: {
+        name: teacher.user.name,
+        email: teacher.user.email,
+      },
+    },
+    bookingId: b.id,
+    studentName: b.student.user.name,
+  }));
+
+  const allSchedules: ScheduleItem[] = [...batchScheduleItems, ...doubtScheduleItems].sort(
+    (a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()
+  );
+
   return (
     <HorizontalScheduleCalendar
       schedules={allSchedules}
       batches={batches}
       role="TEACHER"
       title="My Teaching Schedule"
-      subtitle={`${batches.length} Batch${batches.length === 1 ? "" : "es"} • Manage & Start Live Classrooms`}
+      subtitle={`${batches.length} Category${batches.length === 1 ? "" : "s"} • Manage & Start Classrooms`}
       blockedReason={blockedReason}
     />
   );

@@ -51,6 +51,8 @@ export interface ScheduleItem {
     recordingStatus?: string | null;
     recordingStorageKey?: string | null;
   } | null;
+  bookingId?: string | null;
+  studentName?: string | null;
 }
 
 export interface BatchOption {
@@ -86,6 +88,8 @@ const SUBJECT_COLORS: Record<string, { bg: string; text: string }> = {
   biology: { bg: "bg-rose-100 dark:bg-rose-950/60", text: "text-rose-700 dark:text-rose-300" },
   botany: { bg: "bg-lime-100 dark:bg-lime-950/60", text: "text-lime-700 dark:text-lime-300" },
   zoology: { bg: "bg-teal-100 dark:bg-teal-950/60", text: "text-teal-700 dark:text-teal-300" },
+  doubt: { bg: "bg-purple-100 dark:bg-purple-950/60", text: "text-purple-700 dark:text-purple-300" },
+  "1:1": { bg: "bg-indigo-100 dark:bg-indigo-950/60", text: "text-indigo-700 dark:text-indigo-300" },
 };
 
 function getSubjectBadgeColor(subject?: string | null) {
@@ -684,19 +688,44 @@ function TimelineLectureRow({
 
         {/* Footer Row: Teacher Info & Role-Aware Action Button */}
         <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-slate-100 dark:border-slate-800/80">
-          {/* Teacher Avatar & Name */}
+          {/* Teacher/Student Avatar & Name */}
           <div className="flex items-center gap-1.5 min-w-0">
-            <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center shrink-0 text-slate-700 dark:text-slate-200 text-[10px] font-bold overflow-hidden">
-              {item.teacher?.user?.name ? item.teacher.user.name.charAt(0).toUpperCase() : "T"}
-            </div>
-            <span className="text-[11px] font-semibold text-slate-800 dark:text-slate-200 truncate">
-              {item.teacher?.user?.name ?? "Atomic Faculty"}
-            </span>
+            {item.type === "DOUBT_SESSION" && role === "TEACHER" ? (
+              <>
+                <div className="w-6 h-6 rounded-full bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 flex items-center justify-center shrink-0 text-[10px] font-bold">
+                  {item.studentName ? item.studentName.charAt(0).toUpperCase() : "S"}
+                </div>
+                <span className="text-[11px] font-semibold text-slate-800 dark:text-slate-200 truncate">
+                  Student: {item.studentName ?? "Student"}
+                </span>
+              </>
+            ) : (
+              <>
+                <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center shrink-0 text-slate-700 dark:text-slate-200 text-[10px] font-bold overflow-hidden">
+                  {item.teacher?.user?.name ? item.teacher.user.name.charAt(0).toUpperCase() : "T"}
+                </div>
+                <span className="text-[11px] font-semibold text-slate-800 dark:text-slate-200 truncate">
+                  {item.teacher?.user?.name ?? "Atomic Faculty"}
+                </span>
+              </>
+            )}
           </div>
 
           {/* Action Button */}
           <div className="shrink-0">
-            {item.type !== "LIVE_CLASS" ? (
+            {item.type === "DOUBT_SESSION" ? (
+              <Link
+                href={
+                  role === "TEACHER"
+                    ? `/team/doubt-booking/${item.bookingId || item.id.replace("doubt-booking-", "")}`
+                    : `/book-session/bookings/${item.bookingId || item.id.replace("doubt-booking-", "")}`
+                }
+                className="inline-flex items-center gap-1.5 py-1 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[11px] font-bold shadow-sm transition active:scale-95"
+              >
+                <span className="material-symbols-outlined text-[14px]">videocam</span>
+                <span>Join 1:1 Session</span>
+              </Link>
+            ) : item.type !== "LIVE_CLASS" ? (
               item.type === "TEST" ? (
                 <Link
                   href="/tests"
