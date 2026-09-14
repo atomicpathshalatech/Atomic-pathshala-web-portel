@@ -92,10 +92,16 @@ const STROKE_WIDTHS = [
 export function DoubtWhiteboard({
   room,
   isTeacher,
+  topic,
+  description,
+  questionImageUrls = [],
   onClose,
 }: {
   room: Room;
   isTeacher: boolean;
+  topic?: string;
+  description?: string;
+  questionImageUrls?: string[];
   onClose?: () => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -107,6 +113,15 @@ export function DoubtWhiteboard({
   const [currentTool, setCurrentTool] = useState<ToolMode>("pen");
   const [currentColor, setCurrentColor] = useState<string>("#ffffff");
   const [strokeWidth, setStrokeWidth] = useState<number>(4);
+
+  // Projected Image State
+  const [activeImageUrl, setActiveImageUrl] = useState<string | null>(null);
+  const activeImageRef = useRef<string | null>(null);
+  activeImageRef.current = activeImageUrl;
+  const [loadedImage, setLoadedImage] = useState<HTMLImageElement | null>(null);
+  const [showImagePicker, setShowImagePicker] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // In-progress drawing
   const isDrawingRef = useRef(false);
@@ -131,6 +146,23 @@ export function DoubtWhiteboard({
     [room]
   );
 
+  // Load projected image into memory
+  useEffect(() => {
+    if (!activeImageUrl) {
+      setLoadedImage(null);
+      return;
+    }
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      setLoadedImage(img);
+    };
+    img.onerror = () => {
+      console.error("[DoubtWhiteboard] Failed to load projected image:", activeImageUrl);
+    };
+    img.src = activeImageUrl;
+  }, [activeImageUrl]);
+
   // Listen for remote real-time events from LiveKit room
   useEffect(() => {
     if (!room) return;
@@ -150,11 +182,22 @@ export function DoubtWhiteboard({
           setUndoStack([]);
         } else if (data.type === "WB_UNDO" && Array.isArray(data.elements)) {
           setElements(data.elements);
-        } else if (data.type === "WB_SNAPSHOT" && Array.isArray(data.elements)) {
-          setElements(data.elements);
+        } else if (data.type === "WB_SNAPSHOT") {
+          if (Array.isArray(data.elements)) {
+            setElements(data.elements);
+          }
+          if (data.activeImageUrl !== undefined) {
+            setActiveImageUrl(data.activeImageUrl ?? null);
+          }
+        } else if (data.type === "WB_SET_IMAGE") {
+          setActiveImageUrl(data.url ?? null);
         } else if (data.type === "WB_REQUEST_SYNC" && isTeacher) {
-          // Teacher sends full snapshot to student
-          broadcast({ type: "WB_SNAPSHOT", elements: elementsRef.current });
+          // Teacher sends full snapshot (elements + active image) to student
+          broadcast({
+            type: "WB_SNAPSHOT",
+            elements: elementsRef.current,
+            activeImageUrl: activeImageRef.current,
+          });
         }
       } catch (err) {
         console.error("[DoubtWhiteboard] DataReceived parse error:", err);
@@ -172,6 +215,36 @@ export function DoubtWhiteboard({
       room.off(RoomEvent.DataReceived, handleDataReceived);
     };
   }, [room, isTeacher, broadcast]);
+
+  const handleSetProjectedImage = (url: string | null) => {
+    setActiveImageUrl(url);
+    broadcast({ type: "WB_SET_IMAGE", url });
+    setShowImagePicker(false);
+  };
+
+  const handleImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setIsUploading(true);
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("folder", "doubt-whiteboard");
+      const res = await fetch("/api/upload", { method: "POST", body: fd });
+      const json = await res.json();
+      if (json.success && json.data?.url) {
+        handleSetProjectedImage(json.data.url);
+      } else {
+        alert(json.error?.message || "Failed to upload image");
+      }
+    } catch (err) {
+      console.error("Upload error:", err);
+      alert("Failed to upload image");
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   // Re-draw canvas on elements change or resize
   const renderCanvas = useCallback(() => {
@@ -199,6 +272,33 @@ export function DoubtWhiteboard({
         ctx.arc(x, y, 1, 0, Math.PI * 2);
         ctx.fill();
       }
+    }
+
+    // Draw projected question image if active
+    if (loadedImage) {
+      const imgW = loadedImage.naturalWidth || 800;
+      const imgH = loadedImage.naturalHeight || 600;
+      const imgAspect = imgW / imgH;
+      const canvasAspect = w / h;
+      let drawW = w;
+      let drawH = h;
+      if (imgAspect > canvasAspect) {
+        drawW = w * 0.85;
+        drawH = drawW / imgAspect;
+      } else {
+        drawH = h * 0.85;
+        drawW = drawH * imgAspect;
+      }
+      const drawX = (w - drawW) / 2;
+      const drawY = (h - drawH) / 2;
+
+      ctx.save();
+      ctx.shadowColor = "rgba(0, 0, 0, 0.65)";
+      ctx.shadowBlur = 24;
+      ctx.fillStyle = "#1e293b";
+      ctx.fillRect(drawX - 2, drawY - 2, drawW + 4, drawH + 4);
+      ctx.drawImage(loadedImage, drawX, drawY, drawW, drawH);
+      ctx.restore();
     }
 
     // Helper to render an individual element
@@ -306,7 +406,7 @@ export function DoubtWhiteboard({
     if (currentElementRef.current) {
       drawItem(currentElementRef.current);
     }
-  }, [elements]);
+  }, [elements, loadedImage]);
 
   // Handle resize & sync resolution
   useEffect(() => {
@@ -332,7 +432,7 @@ export function DoubtWhiteboard({
 
   useEffect(() => {
     renderCanvas();
-  }, [elements, renderCanvas]);
+  }, [elements, loadedImage, renderCanvas]);
 
   // Pointer event helpers (teacher only)
   const getNormCoords = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -547,18 +647,32 @@ export function DoubtWhiteboard({
     <div className="relative h-full w-full flex flex-col bg-slate-950 rounded-2xl overflow-hidden border border-slate-800 select-none shadow-2xl">
       {/* Top Header / Status Strip */}
       <div className="h-10 px-3.5 bg-slate-900/95 border-b border-slate-800 flex items-center justify-between text-xs text-white z-20 shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="font-bold tracking-wide flex items-center gap-1">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+          <span className="font-bold tracking-wide flex items-center gap-1 shrink-0">
             <span className="material-symbols-outlined text-[15px] text-amber-400">draw</span>
-            {isTeacher ? "Teacher Whiteboard" : "Live Class Whiteboard"}
+            {isTeacher ? "Teacher Whiteboard" : "Live Doubt Whiteboard"}
           </span>
-          <span className="text-[10px] text-slate-400 bg-slate-800 px-2 py-0.5 rounded font-mono">
+          <span className="text-[10px] text-slate-400 bg-slate-800 px-2 py-0.5 rounded font-mono shrink-0">
             {isTeacher ? "Instructor Mode" : "Student View"}
           </span>
+          {topic && (
+            <div className="hidden sm:flex items-center gap-1.5 ml-2 pl-2 border-l border-slate-700 min-w-0">
+              <span className="text-[10px] uppercase font-bold text-amber-400 shrink-0">Topic:</span>
+              <span className="text-slate-300 font-medium truncate max-w-[200px] lg:max-w-[340px]" title={description || topic}>
+                {topic}
+              </span>
+            </div>
+          )}
+          {activeImageUrl && (
+            <span className="shrink-0 px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold flex items-center gap-1">
+              <span className="material-symbols-outlined text-[12px]">image</span>
+              Image Projected
+            </span>
+          )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {isTeacher && onClose && (
             <button
               type="button"
@@ -629,6 +743,89 @@ export function DoubtWhiteboard({
           </div>
         )}
       </div>
+
+      {/* Hidden file input for image upload */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleImageFileUpload}
+      />
+
+      {/* Image Projection Picker Popover for Teacher */}
+      {isTeacher && showImagePicker && (
+        <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-40 w-96 max-w-[92vw] bg-slate-900/95 backdrop-blur-md border border-slate-700 p-3.5 rounded-2xl shadow-2xl space-y-3">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-white">
+              <span className="material-symbols-outlined text-amber-400 text-sm">photo_library</span>
+              <span>Project Question Image</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowImagePicker(false)}
+              className="text-slate-400 hover:text-white text-xs p-1"
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Student Uploaded Images List */}
+          <div className="space-y-1.5">
+            <p className="text-[11px] font-semibold text-slate-400">Student&apos;s Doubt Attachments:</p>
+            {questionImageUrls.length > 0 ? (
+              <div className="grid grid-cols-3 gap-2">
+                {questionImageUrls.map((url, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => handleSetProjectedImage(url)}
+                    className={`relative aspect-video rounded-lg overflow-hidden border transition group ${
+                      activeImageUrl === url
+                        ? "border-amber-400 ring-2 ring-amber-400/40"
+                        : "border-slate-700 hover:border-slate-500"
+                    }`}
+                  >
+                    <img src={url} alt={`Attachment ${idx + 1}`} className="w-full h-full object-cover" />
+                    {activeImageUrl === url && (
+                      <div className="absolute inset-0 bg-amber-500/30 flex items-center justify-center">
+                        <span className="material-symbols-outlined text-amber-300 text-base font-bold">check_circle</span>
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[11px] text-slate-500 italic">No attachments were uploaded by the student.</p>
+            )}
+          </div>
+
+          {/* Actions: Upload Custom or Remove */}
+          <div className="flex items-center gap-2 pt-1 border-t border-slate-800">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploading}
+              className="flex-1 py-1.5 px-3 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-[11px] font-bold flex items-center justify-center gap-1.5 transition"
+            >
+              <span className="material-symbols-outlined text-[14px]">cloud_upload</span>
+              <span>{isUploading ? "Uploading…" : "Upload Device Photo"}</span>
+            </button>
+
+            {activeImageUrl && (
+              <button
+                type="button"
+                onClick={() => handleSetProjectedImage(null)}
+                className="py-1.5 px-2.5 rounded-xl bg-rose-950/60 hover:bg-rose-900 border border-rose-800 text-rose-300 text-[11px] font-bold flex items-center gap-1 transition"
+                title="Remove projected image"
+              >
+                <span className="material-symbols-outlined text-[14px]">close</span>
+                <span>Clear Image</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Teacher Floating Toolbar (Bottom) */}
       {isTeacher && (
@@ -737,6 +934,20 @@ export function DoubtWhiteboard({
               title="Eraser"
             >
               <span className="material-symbols-outlined text-[18px]">ink_eraser</span>
+            </button>
+
+            {/* Project Doubt Image Button */}
+            <button
+              type="button"
+              onClick={() => setShowImagePicker((prev) => !prev)}
+              className={`p-1.5 rounded-xl transition relative ${
+                activeImageUrl || showImagePicker
+                  ? "bg-amber-500 text-slate-950 font-bold shadow-xs"
+                  : "text-slate-400 hover:text-white hover:bg-slate-800"
+              }`}
+              title="Project Doubt Image / Photo"
+            >
+              <span className="material-symbols-outlined text-[18px]">photo_library</span>
             </button>
           </div>
 

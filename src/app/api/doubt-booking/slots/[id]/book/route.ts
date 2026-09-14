@@ -31,6 +31,25 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
       throw new ForbiddenError("An active batch enrollment or subscription is required to book a doubt session.");
     }
 
+    let topic: string | undefined;
+    let description: string | undefined;
+    let attachmentUrls: string[] = [];
+
+    try {
+      const body = await _request.json();
+      if (body) {
+        if (typeof body.topic === "string") topic = body.topic.trim().slice(0, 300);
+        if (typeof body.description === "string") description = body.description.trim().slice(0, 5000);
+        if (Array.isArray(body.attachmentUrls)) {
+          attachmentUrls = body.attachmentUrls
+            .filter((u: any) => typeof u === "string" && u.trim().length > 0)
+            .slice(0, 10);
+        }
+      }
+    } catch {
+      // Body is optional
+    }
+
     const slot = await prisma.doubtSlot.findUnique({ where: { id: params.id } });
     if (!slot) return apiError("Slot not found.", 404);
     if (slot.startTime <= new Date()) return apiError("This slot has already passed.", 409);
@@ -44,10 +63,19 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
     }
 
     const booking = await prisma.doubtBooking.create({
-      data: { slotId: slot.id, studentId: student.id, teacherId: slot.teacherId, status: "CONFIRMED" },
+      data: {
+        slotId: slot.id,
+        studentId: student.id,
+        teacherId: slot.teacherId,
+        topic: topic || null,
+        description: description || null,
+        attachmentUrls,
+        status: "CONFIRMED",
+      },
       include: {
         student: { include: { user: { select: { name: true } } } },
         teacher: { select: { userId: true } },
+        slot: true,
       },
     });
 

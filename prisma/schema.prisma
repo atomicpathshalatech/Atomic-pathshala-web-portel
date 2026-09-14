@@ -2060,6 +2060,8 @@ model Doubt {
   status            DoubtStatus   @default(OPEN)
   expertExplanation String?
   videoUrl          String?
+  voiceUrl          String?
+  voiceDurationSec  Int?
   resolvedById      String?
   resolvedAt        DateTime?
   createdAt         DateTime      @default(now())
@@ -2124,13 +2126,21 @@ enum DoubtBookingStatus {
 
 model DoubtBooking {
   id           String             @id @default(cuid())
-  slotId       String             @unique
-  studentId    String
-  teacherId    String
-  status       DoubtBookingStatus @default(CONFIRMED)
-  cancelReason String?
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
+  slotId             String             @unique
+  studentId          String
+  teacherId          String
+  topic              String?
+  description        String?            @db.Text
+  attachmentUrls     String[]           @default([])
+  claimedByTeacherId String?
+  claimedAt          DateTime?
+  voiceAnswerUrl     String?
+  voiceDurationSec   Int?
+  teacherNotes       String?            @db.Text
+  status             DoubtBookingStatus @default(CONFIRMED)
+  cancelReason       String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
 
   slot    DoubtSlot @relation(fields: [slotId], references: [id], onDelete: Cascade)
   student Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
@@ -4906,12 +4916,20 @@ model QuizAttemptAnswer {
   attemptId      String
   quizId         String?
   questionId     String
-  selectedIndex  Int?
-  selectedAnswer String?
-  correctAnswer  String?
-  isCorrect      Boolean
-  timeTakenSec   Int         @default(0)
-  answeredAt     DateTime    @default(now())
+  selectedIndex   Int?
+  selectedAnswer  String?
+  correctAnswer   String?
+  isCorrect       Boolean
+  timeTakenSec    Int         @default(0)
+  questionText    String?     @db.Text
+  options         Json?
+  subject         String?
+  chapter         String?
+  topic           String?
+  solution        String?     @db.Text
+  attemptCount    Int         @default(1)
+  lastAttemptedAt DateTime    @default(now())
+  answeredAt      DateTime    @default(now())
 
   attempt        QuizAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
 

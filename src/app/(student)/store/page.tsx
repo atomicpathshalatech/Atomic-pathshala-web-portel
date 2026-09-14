@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -9,19 +8,18 @@ import { CourseData } from "@/components/course-platform/CourseCard";
 import { BatchTabSwitcher } from "@/components/course-platform/BatchTabSwitcher";
 
 export const metadata: Metadata = {
-  title: "My Batches — Atomic Pathshala",
-  description: "Access your active enrolled batches, live lectures, and study resources.",
+  title: "Store — Atomic Pathshala",
+  description: "Browse and enroll in NEET, JEE, and Board courses engineered for exam success.",
 };
 
-export default async function CoursesPage() {
+export default async function StorePage() {
   let dbBatches: any[] = [];
   try {
     dbBatches = await getActiveBatchCatalog();
   } catch (err) {
-    console.error("Error fetching batches:", err);
+    console.error("Error fetching store batches:", err);
   }
 
-  // Check logged-in user's active batch enrollments & subscription
   let activeBatchIds = new Set<string>();
   let hasUniversalAccess = false;
 
@@ -56,7 +54,7 @@ export default async function CoursesPage() {
       }
     }
   } catch (err) {
-    console.error("Error checking student enrollment status:", err);
+    console.error("Error checking student enrollment status in store:", err);
   }
 
   const allCourses: CourseData[] = dbBatches.map((batch) => {
@@ -98,8 +96,9 @@ export default async function CoursesPage() {
     };
   });
 
-  const enrolledCourses = allCourses.filter((c) => c.isEnrolled);
-  const storeCount = allCourses.filter((c) => !c.isEnrolled).length;
+  const enrolledCount = allCourses.filter((c) => c.isEnrolled).length;
+  // Enrolled batches must NEVER show as purchase items in Store
+  const storeCourses = allCourses.filter((c) => !c.isEnrolled);
 
   return (
     <div className="max-w-7xl mx-auto py-4 sm:py-6 space-y-6">
@@ -107,41 +106,18 @@ export default async function CoursesPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-3">
           <div>
             <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-              My Batches
+              Course Store
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-1">
-              Your enrolled batches and ongoing coursework.
+              Explore and enroll in new batches engineered for your target exam.
             </p>
           </div>
         </div>
 
-        <BatchTabSwitcher myBatchesCount={enrolledCourses.length} storeCount={storeCount} />
+        <BatchTabSwitcher myBatchesCount={enrolledCount} storeCount={storeCourses.length} />
       </div>
 
-      {enrolledCourses.length === 0 ? (
-        <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm max-w-lg mx-auto">
-          <div className="w-16 h-16 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-600 flex items-center justify-center mx-auto">
-            <span className="material-symbols-outlined text-3xl">school</span>
-          </div>
-          <div>
-            <h2 className="text-base font-bold text-slate-900 dark:text-white">
-              You are not enrolled in any batches yet
-            </h2>
-            <p className="text-xs text-slate-500 mt-1">
-              Explore our Store to find the right batch for NEET, JEE, or Board preparation.
-            </p>
-          </div>
-          <Link
-            href="/store"
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-md transition"
-          >
-            <span className="material-symbols-outlined text-base">storefront</span>
-            <span>Browse Store Catalog</span>
-          </Link>
-        </div>
-      ) : (
-        <CourseListingMasterView courses={enrolledCourses} />
-      )}
+      <CourseListingMasterView courses={storeCourses} />
     </div>
   );
 }

@@ -27,6 +27,11 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
         startTime: caller.booking.slot.startTime,
         endTime: caller.booking.slot.endTime,
       },
+      topic: caller.booking.topic,
+      description: caller.booking.description,
+      attachmentUrls: caller.booking.attachmentUrls,
+      voiceAnswerUrl: caller.booking.voiceAnswerUrl,
+      voiceDurationSec: caller.booking.voiceDurationSec,
       role: caller.role,
       counterpart:
         caller.role === "STUDENT"
@@ -85,6 +90,39 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     }
 
     return apiSuccess({ cancelled: true });
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
+/**
+ * Update a booking with teacher voice answer / notes.
+ */
+export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) throw new UnauthorizedError();
+
+    const caller = await resolveDoubtBookingCaller(session.user.id, params.id);
+    if (!caller.role || (caller.role !== "TEACHER" && caller.role !== "ADMIN")) {
+      return apiError("Only the assigned teacher or admin can update voice answers or notes.", 403);
+    }
+
+    const body = await request.json();
+    const voiceAnswerUrl = typeof body?.voiceAnswerUrl === "string" ? body.voiceAnswerUrl : undefined;
+    const voiceDurationSec = typeof body?.voiceDurationSec === "number" ? Math.round(body.voiceDurationSec) : undefined;
+    const teacherNotes = typeof body?.teacherNotes === "string" ? body.teacherNotes.slice(0, 2000) : undefined;
+
+    const updated = await prisma.doubtBooking.update({
+      where: { id: caller.booking.id },
+      data: {
+        ...(voiceAnswerUrl !== undefined ? { voiceAnswerUrl } : {}),
+        ...(voiceDurationSec !== undefined ? { voiceDurationSec } : {}),
+        ...(teacherNotes !== undefined ? { teacherNotes } : {}),
+      },
+    });
+
+    return apiSuccess({ booking: updated });
   } catch (error) {
     return handleApiError(error);
   }

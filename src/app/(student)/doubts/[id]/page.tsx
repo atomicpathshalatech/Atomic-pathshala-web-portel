@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireStudentSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
+import { VoicePlayer } from "@/components/doubt/VoicePlayer";
 
 export const metadata: Metadata = {
   title: "Doubt Detail",
@@ -67,13 +68,25 @@ export default async function DoubtDetailPage({ params }: { params: { id: string
         )}
       </div>
 
-      {doubt.status === "RESOLVED" && doubt.expertExplanation ? (
-        <div className="glass-card rounded-2xl p-5 space-y-3 border-l-4 border-l-primary">
+      {doubt.status === "RESOLVED" && (doubt.expertExplanation || doubt.voiceUrl || doubt.videoUrl) ? (
+        <div className="glass-card rounded-2xl p-5 space-y-4 border-l-4 border-l-primary">
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-primary">verified</span>
-            <h2 className="font-headline-md text-headline-md text-on-surface">Expert Explanation</h2>
+            <h2 className="font-headline-md text-headline-md text-on-surface">Expert Solution</h2>
           </div>
-          <p className="font-body-md text-body-md text-on-surface whitespace-pre-wrap">{doubt.expertExplanation}</p>
+
+          {doubt.voiceUrl && (
+            <VoicePlayer
+              url={doubt.voiceUrl}
+              durationSec={doubt.voiceDurationSec}
+              title="Teacher's Voice Answer"
+            />
+          )}
+
+          {doubt.expertExplanation && (
+            <p className="font-body-md text-body-md text-on-surface whitespace-pre-wrap">{doubt.expertExplanation}</p>
+          )}
+
           {doubt.videoUrl && (
             <a
               href={doubt.videoUrl}

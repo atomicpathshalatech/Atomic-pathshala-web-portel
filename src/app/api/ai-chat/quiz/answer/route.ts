@@ -14,9 +14,27 @@ export async function POST(request: NextRequest) {
       questionId?: string;
       selectedIndex?: number;
       timeTakenSec?: number;
+      questionText?: string;
+      options?: any;
+      subject?: string;
+      chapter?: string;
+      topic?: string;
+      solution?: string;
     };
 
-    const { attemptId, quizId, questionId, selectedIndex, timeTakenSec = 0 } = body;
+    const {
+      attemptId,
+      quizId,
+      questionId,
+      selectedIndex,
+      timeTakenSec = 0,
+      questionText,
+      options,
+      subject,
+      chapter,
+      topic,
+      solution,
+    } = body;
 
     if (!questionId || selectedIndex === undefined) {
       return NextResponse.json({ error: "Missing required answer fields." }, { status: 400 });
@@ -30,6 +48,12 @@ export async function POST(request: NextRequest) {
       questionId,
       selectedIndex,
       timeTakenSec,
+      questionText,
+      options,
+      subject,
+      chapter,
+      topic,
+      solution,
     });
 
     return NextResponse.json({

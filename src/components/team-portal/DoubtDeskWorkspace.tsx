@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { toast } from "sonner";
+import { VoiceRecorder } from "@/components/doubt/VoiceRecorder";
+import { VoicePlayer } from "@/components/doubt/VoicePlayer";
 
 type Doubt = {
   id: string;
@@ -12,6 +14,8 @@ type Doubt = {
   expertExplanation: string | null;
   videoUrl: string | null;
   attachmentUrl: string | null;
+  voiceUrl: string | null;
+  voiceDurationSec: number | null;
   createdAt: string;
   resolvedAt: string | null;
   student: {
@@ -34,6 +38,8 @@ export function DoubtDeskWorkspace({ canResolve }: { canResolve: boolean }) {
   const [loading, setLoading] = useState(true);
   const [explanation, setExplanation] = useState("");
   const [videoUrl, setVideoUrl] = useState("");
+  const [voiceUrl, setVoiceUrl] = useState<string | null>(null);
+  const [voiceDuration, setVoiceDuration] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const load = useCallback(async (status: string) => {
@@ -57,6 +63,8 @@ export function DoubtDeskWorkspace({ canResolve }: { canResolve: boolean }) {
   useEffect(() => {
     setExplanation("");
     setVideoUrl("");
+    setVoiceUrl(null);
+    setVoiceDuration(null);
   }, [selectedId]);
 
   const selected = doubts.find((d) => d.id === selectedId) ?? null;
@@ -68,7 +76,13 @@ export function DoubtDeskWorkspace({ canResolve }: { canResolve: boolean }) {
       const res = await fetch(`/api/team/doubts/${selected.id}/resolve`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status, expertExplanation: explanation, videoUrl }),
+        body: JSON.stringify({
+          status,
+          expertExplanation: explanation,
+          videoUrl,
+          voiceUrl,
+          voiceDurationSec: voiceDuration,
+        }),
       });
       const body = await res.json();
       if (!res.ok || !body.success) {
@@ -209,6 +223,37 @@ export function DoubtDeskWorkspace({ canResolve }: { canResolve: boolean }) {
                       className="w-full mt-1.5 p-4 bg-surface-container-lowest border border-outline-variant rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition-all font-body-md text-body-md"
                     />
                   </div>
+
+                  {/* Voice Answer Recorder */}
+                  <div>
+                    <label className="font-label-md text-label-md text-on-surface block mb-1.5">
+                      Voice Answer / Audio Explanation
+                    </label>
+                    {voiceUrl ? (
+                      <div className="space-y-2">
+                        <VoicePlayer url={voiceUrl} durationSec={voiceDuration} title="Recorded Voice Answer" />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setVoiceUrl(null);
+                            setVoiceDuration(null);
+                          }}
+                          className="text-xs font-semibold text-rose-500 hover:underline flex items-center gap-1"
+                        >
+                          <span className="material-symbols-outlined text-sm">delete</span>
+                          <span>Remove Audio Recording</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <VoiceRecorder
+                        onRecorded={(res) => {
+                          setVoiceUrl(res.url);
+                          setVoiceDuration(res.durationSec);
+                        }}
+                      />
+                    )}
+                  </div>
+
                   <div>
                     <label className="font-label-md text-label-md text-on-surface">
                       Video walkthrough URL (optional)
@@ -250,6 +295,15 @@ export function DoubtDeskWorkspace({ canResolve }: { canResolve: boolean }) {
                     <p className="text-body-md text-on-surface whitespace-pre-wrap">
                       {selected.expertExplanation}
                     </p>
+                  )}
+                  {selected.voiceUrl && (
+                    <div className="pt-1">
+                      <VoicePlayer
+                        url={selected.voiceUrl}
+                        durationSec={selected.voiceDurationSec}
+                        title="Teacher's Voice Answer"
+                      />
+                    </div>
                   )}
                   {selected.videoUrl && (
                     <a

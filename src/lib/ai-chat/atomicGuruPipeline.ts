@@ -289,12 +289,24 @@ export async function recordQuizAnswer({
   questionId,
   selectedIndex,
   timeTakenSec = 0,
+  questionText,
+  options,
+  subject,
+  chapter,
+  topic,
+  solution,
 }: {
   attemptId: string;
   quizId?: string;
   questionId: string;
   selectedIndex: number;
   timeTakenSec?: number;
+  questionText?: string;
+  options?: any;
+  subject?: string;
+  chapter?: string;
+  topic?: string;
+  solution?: string;
 }) {
   // Locate question in database for authoritative validation
   let correctIndex = 0;
@@ -324,6 +336,36 @@ export async function recordQuizAnswer({
   const correctLetter = String.fromCharCode(65 + correctIndex);
   const selectedLetter = String.fromCharCode(65 + selectedIndex);
 
+  const finalQuestionText = questionRecord?.text || questionText || null;
+  const finalOptions = questionRecord?.options || options || null;
+  const finalSubject = questionRecord?.subject || subject || null;
+  const finalChapter = questionRecord?.chapter || chapter || null;
+  const finalTopic = questionRecord?.topic || topic || null;
+  const structured = questionRecord ? formatStructuredSolution(questionRecord as any) : null;
+  const finalSolution = structured || questionRecord?.explanation || solution || null;
+
+  // De-duplication: check how many times this student previously attempted this question
+  let previousAttemptsCount = 0;
+  try {
+    const currentAttempt = await prisma.quizAttempt.findUnique({
+      where: { id: attemptId },
+      select: { userId: true },
+    });
+    if (currentAttempt?.userId) {
+      const prevAnswer = await prisma.quizAttemptAnswer.findFirst({
+        where: {
+          questionId,
+          attempt: { userId: currentAttempt.userId },
+        },
+        select: { attemptCount: true },
+        orderBy: { lastAttemptedAt: "desc" },
+      });
+      if (prevAnswer?.attemptCount) {
+        previousAttemptsCount = prevAnswer.attemptCount;
+      }
+    }
+  } catch {}
+
   // Idempotent upsert on [attemptId, questionId]
   const answerRecord = await prisma.quizAttemptAnswer.upsert({
     where: {
@@ -338,6 +380,14 @@ export async function recordQuizAnswer({
       correctAnswer: correctLetter,
       isCorrect,
       timeTakenSec,
+      questionText: finalQuestionText,
+      options: finalOptions,
+      subject: finalSubject,
+      chapter: finalChapter,
+      topic: finalTopic,
+      solution: finalSolution,
+      attemptCount: { increment: 1 },
+      lastAttemptedAt: new Date(),
       answeredAt: new Date(),
     },
     create: {
@@ -349,11 +399,17 @@ export async function recordQuizAnswer({
       correctAnswer: correctLetter,
       isCorrect,
       timeTakenSec,
+      questionText: finalQuestionText,
+      options: finalOptions,
+      subject: finalSubject,
+      chapter: finalChapter,
+      topic: finalTopic,
+      solution: finalSolution,
+      attemptCount: previousAttemptsCount + 1,
+      lastAttemptedAt: new Date(),
       answeredAt: new Date(),
     },
   });
-
-  const structured = questionRecord ? formatStructuredSolution(questionRecord as any) : null;
 
   return {
     answerRecord,

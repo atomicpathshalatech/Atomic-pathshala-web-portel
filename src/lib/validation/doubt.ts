@@ -35,6 +35,8 @@ export const doubtResolveSchema = z.object({
   status: z.enum(["RESOLVED", "FLAGGED"]),
   expertExplanation: z.string().optional(),
   videoUrl: z.string().url("Enter a valid URL").optional().or(z.literal("")),
+  voiceUrl: z.string().url("Enter a valid voice URL").optional().or(z.literal("")).nullable(),
+  voiceDurationSec: z.number().int().nonnegative().optional().nullable(),
 });
 
 export type DoubtResolveInput = z.infer<typeof doubtResolveSchema>;

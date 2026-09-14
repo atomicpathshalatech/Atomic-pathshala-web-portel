@@ -30,11 +30,19 @@ export function DoubtSessionRoom({
   serverUrl,
   isTeacher = false,
   onLeave,
+  bookingId,
+  topic,
+  description,
+  attachmentUrls = [],
 }: {
   token: string;
   serverUrl: string;
   isTeacher?: boolean;
   onLeave: () => void;
+  bookingId?: string;
+  topic?: string;
+  description?: string;
+  attachmentUrls?: string[];
 }) {
   return (
     <LiveKitRoom
@@ -46,7 +54,14 @@ export function DoubtSessionRoom({
       onDisconnected={onLeave}
       className="h-full w-full"
     >
-      <DoubtSessionRoomInner isTeacher={isTeacher} onLeave={onLeave} />
+      <DoubtSessionRoomInner
+        isTeacher={isTeacher}
+        bookingId={bookingId}
+        topic={topic}
+        description={description}
+        attachmentUrls={attachmentUrls}
+        onLeave={onLeave}
+      />
       <RoomAudioRenderer />
     </LiveKitRoom>
   );
@@ -54,9 +69,17 @@ export function DoubtSessionRoom({
 
 function DoubtSessionRoomInner({
   isTeacher = false,
+  bookingId,
+  topic,
+  description,
+  attachmentUrls = [],
   onLeave,
 }: {
   isTeacher?: boolean;
+  bookingId?: string;
+  topic?: string;
+  description?: string;
+  attachmentUrls?: string[];
   onLeave: () => void;
 }) {
   const room = useRoomContext();
@@ -80,17 +103,41 @@ function DoubtSessionRoomInner({
         const msg = JSON.parse(new TextDecoder().decode(payload));
         if (msg.type === "WB_TOGGLE") {
           setWhiteboardActive(!!msg.active);
+        } else if (msg.type === "WB_ROOM_QUERY" && isTeacher) {
+          // Send current state to newly joined student
+          const res = new TextEncoder().encode(JSON.stringify({ type: "WB_TOGGLE", active: whiteboardActive }));
+          room.localParticipant.publishData(res, { reliable: true });
         }
       } catch (err) {
         console.error("[DoubtSessionRoom] DataReceived error:", err);
       }
     };
 
+    const handleParticipantConnected = () => {
+      if (isTeacher && whiteboardActive) {
+        try {
+          const res = new TextEncoder().encode(JSON.stringify({ type: "WB_TOGGLE", active: true }));
+          room.localParticipant.publishData(res, { reliable: true });
+        } catch {}
+      }
+    };
+
     room.on(RoomEvent.DataReceived, handleDataReceived);
+    room.on(RoomEvent.ParticipantConnected, handleParticipantConnected);
+
+    // If student just joined and connected, query room state
+    if (!isTeacher && connectionState === ConnectionState.Connected) {
+      try {
+        const query = new TextEncoder().encode(JSON.stringify({ type: "WB_ROOM_QUERY" }));
+        room.localParticipant.publishData(query, { reliable: true });
+      } catch {}
+    }
+
     return () => {
       room.off(RoomEvent.DataReceived, handleDataReceived);
+      room.off(RoomEvent.ParticipantConnected, handleParticipantConnected);
     };
-  }, [room]);
+  }, [room, isTeacher, whiteboardActive, connectionState]);
 
   const toggleWhiteboard = () => {
     const nextState = !whiteboardActive;
@@ -125,6 +172,9 @@ function DoubtSessionRoomInner({
             <DoubtWhiteboard
               room={room}
               isTeacher={isTeacher}
+              topic={topic}
+              description={description}
+              questionImageUrls={attachmentUrls}
               onClose={() => toggleWhiteboard()}
             />
           </div>

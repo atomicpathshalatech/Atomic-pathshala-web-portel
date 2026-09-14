@@ -21,6 +21,7 @@ export type StudentNavItem = {
 const SIDEBAR_ITEMS: StudentNavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: "space_dashboard" },
   { href: "/courses", label: "My Batches", icon: "school" },
+  { href: "/store", label: "Store", icon: "storefront" },
   { href: "/tests", label: "My Test", icon: "assignment_turned_in" },
   { href: "/dpp", label: "My DPP", icon: "fact_check" },
   { href: "/schedule", label: "Live Classes", icon: "sensors" },

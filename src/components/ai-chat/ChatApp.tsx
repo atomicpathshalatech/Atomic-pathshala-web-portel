@@ -1,9 +1,10 @@
 "use client";
 
-import { AlertCircle, LogOut, Menu, RefreshCw, Settings, UserCircle } from "lucide-react";
+import { AlertCircle, ArrowLeft, LogOut, Menu, RefreshCw, Settings, UserCircle } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useAiChatUser } from "@/components/ai-chat/AiChatUserContext";
 import {
   useCallback,
   useEffect,
@@ -689,6 +690,28 @@ export function ChatApp({
     [activeChat, effectiveStudentProfile, isLoading, requestAssistant]
   );
 
+  const { user } = useAiChatUser();
+
+  const handleBack = useCallback(() => {
+    if (typeof window !== "undefined") {
+      const ref = document.referrer;
+      if (
+        ref &&
+        ref.includes(window.location.host) &&
+        !ref.includes("/guru") &&
+        !ref.includes("/login")
+      ) {
+        window.history.back();
+        return;
+      }
+    }
+    if (user?.isAdmin || user?.isScheduleManager || user?.isQuestionBankViewer) {
+      router.push("/team");
+    } else {
+      router.push("/dashboard");
+    }
+  }, [router, user]);
+
   if (!hydrated) {
     return (
       <div className="flex h-dvh items-center justify-center bg-white dark:bg-atomic-navy">
@@ -743,6 +766,15 @@ export function ChatApp({
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between gap-2 border-b border-slate-200 px-3 py-3 dark:border-slate-700 sm:px-4">
           <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={handleBack}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition shadow-xs shrink-0"
+              title="Return to Portal"
+            >
+              <ArrowLeft className="h-4 w-4 text-atomic-orange" />
+              <span className="hidden sm:inline">Back</span>
+            </button>
             <button
               onClick={() => setSidebarOpen(true)}
               className="shrink-0 rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 lg:hidden"

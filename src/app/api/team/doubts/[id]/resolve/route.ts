@@ -24,6 +24,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         status: data.status,
         expertExplanation: data.expertExplanation || null,
         videoUrl: data.videoUrl || null,
+        voiceUrl: data.voiceUrl || null,
+        voiceDurationSec: data.voiceDurationSec ?? null,
         resolvedById: session.user.id,
         resolvedAt: new Date(),
       },

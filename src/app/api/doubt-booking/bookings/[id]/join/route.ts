@@ -35,12 +35,20 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
 
     const roomName = doubtBookingRoomName(caller.booking.id);
     const token = await createDoubtSessionToken({ identity, name, roomName });
+    const serverUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL || process.env.LIVEKIT_URL || "";
 
     return apiSuccess({
       token,
+      serverUrl,
       roomName,
       channel: doubtBookingChannel(caller.booking.id),
       role: caller.role,
+      booking: {
+        id: caller.booking.id,
+        topic: caller.booking.topic,
+        description: caller.booking.description,
+        attachmentUrls: caller.booking.attachmentUrls,
+      },
     });
   } catch (error) {
     return handleApiError(error);

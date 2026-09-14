@@ -675,6 +675,12 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
             questionId: currentQuestion.id,
             selectedIndex: optionIndex,
             timeTakenSec: timeSpent,
+            questionText: currentQuestion.text,
+            options: currentQuestion.options,
+            subject: currentQuestion.subject,
+            chapter: currentQuestion.chapter,
+            topic: currentQuestion.topic,
+            solution: currentQuestion.explanation,
           }),
         }).catch((err) => {
           console.warn("[Answer persistence warning]", err);

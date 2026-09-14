@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { DoubtSessionRoom } from "./DoubtSessionRoom";
+import { VoicePlayer } from "@/components/doubt/VoicePlayer";
 
 type BookingDetail = {
   id: string;
@@ -9,6 +10,11 @@ type BookingDetail = {
   slot: { startTime: string; endTime: string };
   role: "STUDENT" | "TEACHER" | "ADMIN";
   counterpart: { name: string; photoUrl: string | null };
+  topic?: string | null;
+  description?: string | null;
+  attachmentUrls?: string[];
+  voiceAnswerUrl?: string | null;
+  voiceDurationSec?: number | null;
 };
 
 async function getJson(url: string) {
@@ -63,7 +69,7 @@ export function DoubtBookingJoinScreen({ bookingId, backHref }: { bookingId: str
       if (!res.ok || !json.success) throw new Error(json.error ?? "Could not join this session");
       setLiveKit({
         token: json.data.token,
-        serverUrl: process.env.NEXT_PUBLIC_LIVEKIT_URL || "",
+        serverUrl: json.data.serverUrl || process.env.NEXT_PUBLIC_LIVEKIT_URL || "",
       });
       setInCall(true);
     } catch (err) {
@@ -76,11 +82,15 @@ export function DoubtBookingJoinScreen({ bookingId, backHref }: { bookingId: str
   if (inCall && liveKit) {
     const isTeacher = booking?.role === "TEACHER" || booking?.role === "ADMIN";
     return (
-      <div className="h-[75vh] max-w-5xl mx-auto">
+      <div className="h-[78vh] max-w-5xl mx-auto">
         <DoubtSessionRoom
+          bookingId={bookingId}
           token={liveKit.token}
           serverUrl={liveKit.serverUrl}
           isTeacher={isTeacher}
+          topic={booking?.topic ?? undefined}
+          description={booking?.description ?? undefined}
+          attachmentUrls={booking?.attachmentUrls ?? []}
           onLeave={() => {
             setInCall(false);
             setLiveKit(null);
@@ -122,6 +132,16 @@ export function DoubtBookingJoinScreen({ bookingId, backHref }: { bookingId: str
             </p>
             <p className="text-xs text-slate-500 mt-1">{fmtRange(booking.slot.startTime, booking.slot.endTime)}</p>
           </div>
+
+          {booking.voiceAnswerUrl && (
+            <div className="pt-2 text-left">
+              <VoicePlayer
+                url={booking.voiceAnswerUrl}
+                durationSec={booking.voiceDurationSec}
+                title="Teacher's Session Voice Recap"
+              />
+            </div>
+          )}
 
           {booking.status !== "CONFIRMED" ? (
             <p className="text-xs font-bold text-amber-600">

@@ -12,6 +12,13 @@ type Slot = {
   booking: {
     id: string;
     status: string;
+    topic?: string | null;
+    description?: string | null;
+    attachmentUrls?: string[];
+    claimedByTeacherId?: string | null;
+    claimedAt?: string | null;
+    voiceAnswerUrl?: string | null;
+    voiceDurationSec?: number | null;
     student: {
       user: {
         name: string;
@@ -71,6 +78,9 @@ export function DoubtBookingTeacherConsole({
   const [startTime, setStartTime] = useState("16:00");
   const [endTime, setEndTime] = useState("18:00");
   const [duration, setDuration] = useState(30);
+  const [zoomImage, setZoomImage] = useState<string | null>(null);
+  const [zoomScale, setZoomScale] = useState(1);
+  const [claimingBookingId, setClaimingBookingId] = useState<string | null>(null);
 
   const loadSlots = async () => {
     setLoading(true);
@@ -159,6 +169,21 @@ export function DoubtBookingTeacherConsole({
       await loadSlots();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to cancel slot");
+    }
+  }
+
+  async function handleClaimDoubt(bookingId: string) {
+    setClaimingBookingId(bookingId);
+    setError(null);
+    try {
+      const res = await fetch(`/api/doubt-booking/bookings/${bookingId}/claim`, { method: "POST" });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error ?? "Failed to accept doubt");
+      await loadSlots();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to accept doubt");
+    } finally {
+      setClaimingBookingId(null);
     }
   }
 
@@ -420,33 +445,108 @@ export function DoubtBookingTeacherConsole({
                       </div>
 
                       {/* Time Window */}
-                      <div className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/60 px-3 py-2 rounded-xl mb-4">
+                      <div className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/60 px-3 py-2 rounded-xl mb-3">
                         <span className="material-symbols-outlined text-sm text-slate-400">schedule</span>
                         <span>
                           {fmtTime(s.startTime)} – {fmtTime(s.endTime)}
                         </span>
                       </div>
+
+                      {/* Student Submitted Doubt Information */}
+                      {s.booking && (s.booking.topic || s.booking.description || (s.booking.attachmentUrls && s.booking.attachmentUrls.length > 0)) && (
+                        <div className="p-3 rounded-2xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/50 mb-4 space-y-2">
+                          {s.booking.topic && (
+                            <div className="flex items-start gap-1.5">
+                              <span className="material-symbols-outlined text-sm text-blue-600 dark:text-blue-400 mt-0.5 shrink-0">topic</span>
+                              <p className="text-xs font-bold text-slate-900 dark:text-white leading-tight">
+                                {s.booking.topic}
+                              </p>
+                            </div>
+                          )}
+
+                          {s.booking.description && (
+                            <p className="text-xs text-slate-600 dark:text-slate-300 whitespace-pre-wrap line-clamp-3 pl-5">
+                              {s.booking.description}
+                            </p>
+                          )}
+
+                          {/* Uploaded Question Images / Screenshots */}
+                          {s.booking.attachmentUrls && s.booking.attachmentUrls.length > 0 && (
+                            <div className="pt-1 pl-5">
+                              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                                <span className="material-symbols-outlined text-xs">image</span>
+                                Question Images ({s.booking.attachmentUrls.length}):
+                              </p>
+                              <div className="flex flex-wrap gap-2">
+                                {s.booking.attachmentUrls.map((imgUrl, imgIdx) => (
+                                  <button
+                                    key={imgIdx}
+                                    type="button"
+                                    onClick={() => {
+                                      setZoomImage(imgUrl);
+                                      setZoomScale(1);
+                                    }}
+                                    className="relative group w-14 h-14 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:ring-2 hover:ring-blue-500 transition cursor-zoom-in"
+                                    title="Click to view and zoom image"
+                                  >
+                                    <img src={imgUrl} alt={`Doubt Image ${imgIdx + 1}`} className="w-full h-full object-cover" />
+                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition">
+                                      <span className="material-symbols-outlined text-base">zoom_in</span>
+                                    </div>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
 
-                    {/* Actions */}
-                    <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                      {s.booking && (
-                        <Link
-                          href={`/team/doubt-booking/${s.booking.id}`}
-                          className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm transition active:scale-95"
-                        >
-                          <span className="material-symbols-outlined text-base">videocam</span>
-                          <span>{isLiveNow ? "Join Session Now" : "Open Live Room"}</span>
-                        </Link>
+                    {/* Actions & Claiming */}
+                    <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                      {s.booking && !s.booking.claimedByTeacherId && (
+                        <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60">
+                          <span className="text-[11px] font-bold text-amber-800 dark:text-amber-200 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                            Unclaimed Doubt
+                          </span>
+                          <button
+                            type="button"
+                            disabled={claimingBookingId === s.booking.id}
+                            onClick={() => handleClaimDoubt(s.booking!.id)}
+                            className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold shadow-xs transition active:scale-95 disabled:opacity-50"
+                          >
+                            {claimingBookingId === s.booking.id ? "Accepting…" : "Take / Accept Doubt"}
+                          </button>
+                        </div>
                       )}
-                      <button
-                        type="button"
-                        onClick={() => handleCancel(s.id)}
-                        className="p-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition"
-                        title="Cancel this session"
-                      >
-                        <span className="material-symbols-outlined text-base">cancel</span>
-                      </button>
+
+                      {s.booking?.claimedByTeacherId && (
+                        <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 px-1">
+                          <span className="material-symbols-outlined text-sm">check_circle</span>
+                          <span>Accepted by Faculty</span>
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-2">
+                        {s.booking && (
+                          <Link
+                            href={`/team/doubt-booking/${s.booking.id}`}
+                            className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm transition active:scale-95"
+                          >
+                            <span className="material-symbols-outlined text-base">videocam</span>
+                            <span>{isLiveNow ? "Join Session Now" : "Start Doubt Session"}</span>
+                          </Link>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleCancel(s.id)}
+                          className="p-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition"
+                          title="Cancel this session"
+                        >
+                          <span className="material-symbols-outlined text-base">cancel</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -624,6 +724,70 @@ export function DoubtBookingTeacherConsole({
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Image Lightbox with Zoom Controls */}
+      {zoomImage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in duration-150">
+          <div className="relative max-w-5xl max-h-[90vh] flex flex-col items-center">
+            {/* Top Toolbar */}
+            <div className="w-full flex items-center justify-between gap-3 mb-3 text-white">
+              <div className="flex items-center gap-2 bg-slate-900/80 px-3 py-1.5 rounded-2xl border border-slate-700/60 backdrop-blur-xs">
+                <button
+                  type="button"
+                  onClick={() => setZoomScale((s) => Math.max(0.5, s - 0.25))}
+                  className="p-1 hover:bg-slate-800 rounded-lg transition"
+                  title="Zoom Out"
+                >
+                  <span className="material-symbols-outlined text-lg">zoom_out</span>
+                </button>
+                <span className="text-xs font-mono font-bold w-12 text-center">{Math.round(zoomScale * 100)}%</span>
+                <button
+                  type="button"
+                  onClick={() => setZoomScale((s) => Math.min(3, s + 0.25))}
+                  className="p-1 hover:bg-slate-800 rounded-lg transition"
+                  title="Zoom In"
+                >
+                  <span className="material-symbols-outlined text-lg">zoom_in</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setZoomScale(1)}
+                  className="text-[11px] font-bold px-2 py-0.5 hover:bg-slate-800 rounded-lg transition"
+                >
+                  Reset
+                </button>
+                <a
+                  href={zoomImage}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-1 hover:bg-slate-800 rounded-lg transition flex items-center"
+                  title="Open in new tab"
+                >
+                  <span className="material-symbols-outlined text-lg">open_in_new</span>
+                </a>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setZoomImage(null)}
+                className="w-9 h-9 rounded-full bg-slate-900/80 hover:bg-rose-600 text-white flex items-center justify-center transition border border-slate-700/60"
+              >
+                <span className="material-symbols-outlined text-lg">close</span>
+              </button>
+            </div>
+
+            {/* Image Container */}
+            <div className="overflow-auto max-h-[80vh] rounded-2xl border border-slate-800 bg-slate-950/60 p-2 flex items-center justify-center">
+              <img
+                src={zoomImage}
+                alt="Zoomed Doubt Question"
+                style={{ transform: `scale(${zoomScale})`, transformOrigin: "center center" }}
+                className="max-h-[75vh] w-auto object-contain transition-transform duration-100 select-none"
+              />
+            </div>
+          </div>
         </div>
       )}
     </div>
