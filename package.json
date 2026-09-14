@@ -43,6 +43,7 @@
     "@prisma/client": "5.17.0",
     "@types/katex": "^0.16.8",
     "@vercel/functions": "^3.9.7",
+    "@vercel/speed-insights": "^2.0.0",
     "bcryptjs": "2.4.3",
     "class-variance-authority": "0.7.0",
     "clsx": "2.1.1",
