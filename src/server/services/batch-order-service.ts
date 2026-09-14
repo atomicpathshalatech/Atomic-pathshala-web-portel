@@ -14,17 +14,35 @@ export class BatchOrderError extends Error {}
  * from the client.
  */
 export async function createBatchCheckout(studentId: string, batchId: string) {
-  const batch = await prisma.batch.findUnique({ where: { id: batchId } });
+  const batch = await prisma.batch.findFirst({
+    where: { OR: [{ id: batchId }, { code: batchId }] },
+  });
   if (!batch) throw new BatchOrderError("Batch not found.");
   if (batch.price == null) {
     throw new BatchOrderError("This batch is not available for individual purchase.");
   }
 
+  const student = await prisma.student.findUnique({
+    where: { id: studentId },
+    select: { id: true, userId: true },
+  });
+  if (!student) throw new BatchOrderError("Student not found.");
+
+  const { resolveBatchAccess } = await import("@/lib/batch/entitlement");
+  const access = await resolveBatchAccess(student.userId, batch.id);
+  if (
+    access.status === "ACTIVE_ENROLLMENT" ||
+    access.status === "ACTIVE_SUBSCRIPTION" ||
+    access.status === "ADMIN_GRANTED"
+  ) {
+    throw new BatchOrderError("You already have active access to this batch.");
+  }
+
   const existingEnrollment = await prisma.batchEnrollment.findFirst({
-    where: { studentId, batchId, status: "ACTIVE" },
+    where: { studentId: student.id, batchId: batch.id, status: "ACTIVE" },
   });
   if (existingEnrollment) {
-    throw new BatchOrderError("You already have access to this batch.");
+    throw new BatchOrderError("You already have active access to this batch.");
   }
 
   assertPaymentGatewayConfigured("Online payment is currently unavailable for this batch.");
@@ -33,13 +51,13 @@ export async function createBatchCheckout(studentId: string, batchId: string) {
   const order = await razorpay.orders.create({
     amount: Math.round(amount * 100),
     currency: "INR",
-    notes: { studentId, batchId },
+    notes: { studentId, batchId: batch.id },
   });
 
   const batchOrder = await prisma.batchOrder.create({
     data: {
       studentId,
-      batchId,
+      batchId: batch.id,
       amount,
       status: "PENDING",
       razorpayOrderId: order.id,

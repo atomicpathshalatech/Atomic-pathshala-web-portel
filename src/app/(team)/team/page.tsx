@@ -55,17 +55,54 @@ export default async function TeamHomePage() {
 
   const now = new Date();
   const horizon = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
-  const upcoming = teacherProfile
-    ? await prisma.batchSchedule.findMany({
-        where: {
-          startsAt: { gte: now, lte: horizon },
-          OR: [{ teacherId: teacherProfile.id }, { batch: { teachers: { some: { teacherId: teacherProfile.id } } } }],
-        },
-        include: { batch: { select: { name: true } } },
-        orderBy: { startsAt: "asc" },
-        take: 30,
-      })
-    : [];
+  const [upcomingSchedules, upcomingDoubtBookings] = teacherProfile
+    ? await Promise.all([
+        prisma.batchSchedule.findMany({
+          where: {
+            startsAt: { gte: now, lte: horizon },
+            OR: [{ teacherId: teacherProfile.id }, { batch: { teachers: { some: { teacherId: teacherProfile.id } } } }],
+          },
+          include: { batch: { select: { name: true } } },
+          orderBy: { startsAt: "asc" },
+          take: 30,
+        }),
+        prisma.doubtBooking.findMany({
+          where: {
+            teacherId: teacherProfile.id,
+            status: "CONFIRMED",
+            slot: { endTime: { gte: now } },
+          },
+          include: {
+            slot: true,
+            student: { include: { user: { select: { name: true } } } },
+          },
+          orderBy: { slot: { startTime: "asc" } },
+          take: 15,
+        }),
+      ])
+    : [[], []];
+
+  const mappedDoubts = upcomingDoubtBookings.map((b) => ({
+    id: `doubt-${b.id}`,
+    title: `1:1 Doubt: ${b.student.user.name || "Student"}`,
+    type: "DOUBT_SESSION",
+    batch: { name: "1:1 Doubt" },
+    startsAt: b.slot.startTime,
+    href: `/team/doubt-booking/${b.id}`,
+  }));
+
+  const mappedSchedules = upcomingSchedules.map((s) => ({
+    id: s.id,
+    title: s.title,
+    type: s.type,
+    batch: s.batch,
+    startsAt: s.startsAt,
+    href: "/team/my-schedule",
+  }));
+
+  const upcoming = [...mappedDoubts, ...mappedSchedules].sort(
+    (a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()
+  );
 
   const calendarEvents = upcoming.map((s) => ({ date: toIsoDate(s.startsAt) }));
 
@@ -148,22 +185,27 @@ export default async function TeamHomePage() {
               ) : (
                 <ul className="space-y-2">
                   {upcoming.slice(0, 5).map((s) => (
-                    <li key={s.id} className="bg-surface-container-lowest rounded-lg px-3 py-2">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <span className="text-[10px] font-bold uppercase tracking-wide bg-secondary/10 text-secondary px-1.5 py-0.5 rounded">
-                          {SCHEDULE_TYPE_LABEL[s.type] ?? s.type}
-                        </span>
-                        <span className="text-label-sm text-on-surface-variant truncate">{s.batch.name}</span>
-                      </div>
-                      <p className="font-label-md text-label-md text-on-surface truncate">{s.title}</p>
-                      <p className="text-label-sm text-on-surface-variant">
-                        {s.startsAt.toLocaleString(undefined, {
-                          month: "short",
-                          day: "numeric",
-                          hour: "numeric",
-                          minute: "2-digit",
-                        })}
-                      </p>
+                    <li key={s.id}>
+                      <Link
+                        href={s.href}
+                        className="block bg-surface-container-lowest hover:bg-surface-container-low rounded-lg px-3 py-2 transition"
+                      >
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="text-[10px] font-bold uppercase tracking-wide bg-secondary/10 text-secondary px-1.5 py-0.5 rounded">
+                            {SCHEDULE_TYPE_LABEL[s.type] ?? s.type}
+                          </span>
+                          <span className="text-label-sm text-on-surface-variant truncate">{s.batch.name}</span>
+                        </div>
+                        <p className="font-label-md text-label-md text-on-surface truncate">{s.title}</p>
+                        <p className="text-label-sm text-on-surface-variant">
+                          {s.startsAt.toLocaleString(undefined, {
+                            month: "short",
+                            day: "numeric",
+                            hour: "numeric",
+                            minute: "2-digit",
+                          })}
+                        </p>
+                      </Link>
                     </li>
                   ))}
                 </ul>

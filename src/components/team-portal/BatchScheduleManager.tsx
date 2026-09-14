@@ -56,10 +56,20 @@ export function BatchScheduleManager({
   batchId,
   schedules,
   teachers,
+  canManageSchedule = true,
 }: {
   batchId: string;
   schedules: ScheduleEntry[];
   teachers: TeacherOption[];
+  // Edit/Delete/Schedule actions all hit routes gated on
+  // PERMISSIONS.BATCH_SCHEDULE_MANAGE (ACADEMIC_HEAD/SUPER_ADMIN/FOUNDER
+  // only) — this component used to render those controls for every viewer
+  // regardless of whether they actually held that permission, so anyone
+  // without it (e.g. a Teacher, who only has BATCH_READ) saw working-looking
+  // Edit/Delete buttons that always 403'd. Defaults to true only so any
+  // other unaudited caller keeps its previous behavior; the real caller
+  // (BatchDetailClient) always passes the server-computed value explicitly.
+  canManageSchedule?: boolean;
 }) {
   const router = useRouter();
   const [showForm, setShowForm] = useState(false);
@@ -257,17 +267,21 @@ export function BatchScheduleManager({
                       Start Class
                     </Link>
                   )}
-                  <button type="button" onClick={() => startEdit(s)} className="text-primary font-bold hover:underline">
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    disabled={submitting}
-                    onClick={() => remove(s.id)}
-                    className="text-error font-bold hover:underline disabled:opacity-50"
-                  >
-                    Delete
-                  </button>
+                  {canManageSchedule && (
+                    <>
+                      <button type="button" onClick={() => startEdit(s)} className="text-primary font-bold hover:underline">
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        disabled={submitting}
+                        onClick={() => remove(s.id)}
+                        className="text-error font-bold hover:underline disabled:opacity-50"
+                      >
+                        Delete
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
               <p className="font-bold text-sm text-on-surface">{s.title}</p>
@@ -286,7 +300,7 @@ export function BatchScheduleManager({
       )}
 
       {/* Timetable Form & Duration Selector */}
-      {!showForm ? (
+      {!canManageSchedule ? null : !showForm ? (
         <button
           type="button"
           onClick={() => setShowForm(true)}

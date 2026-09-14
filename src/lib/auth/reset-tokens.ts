@@ -22,13 +22,10 @@ export function resetTokenExpiry(from: Date = new Date()): Date {
   return new Date(from.getTime() + RESET_TTL_MINUTES * 60 * 1000);
 }
 
+import { getAppBaseUrl } from "@/lib/email/app-url";
+
 export function buildResetUrl(rawToken: string): string {
-  const base = (
-    process.env.NEXT_PUBLIC_APP_URL ||
-    process.env.APP_URL ||
-    process.env.NEXTAUTH_URL ||
-    "https://ap.atomicpathshala.in"
-  ).replace(/\/$/, "");
+  const base = getAppBaseUrl();
   return `${base}/reset-password?token=${encodeURIComponent(rawToken)}`;
 }
 

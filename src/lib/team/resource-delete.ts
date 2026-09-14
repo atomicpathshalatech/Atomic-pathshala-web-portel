@@ -69,6 +69,51 @@ export async function clearAttemptsForSchedules(scheduleIds: string[]): Promise<
  * orphaned-attempt count so a deletion that detaches real attempt history
  * from its DPP is visible in the audit trail, not silent.
  */
+/**
+ * Deletes a teacher's platform account entirely. Deleting the underlying
+ * User row (rather than just the Teacher row) is deliberate — Teacher.user
+ * is onDelete: Cascade toward Teacher (schema.prisma), so removing the User
+ * takes the Teacher profile and every Cascade-linked relation
+ * (BatchTeacher, TestSeriesTeacher, DoubtSlot, DoubtBooking,
+ * WhiteboardBoard, WhiteboardSession, Contract, PenaltyRecord,
+ * TeacherDocument, TeacherFollow, TeacherClassFeedback) with it in one
+ * transaction-safe operation, and BatchSchedule.teacherId is already
+ * onDelete: SetNull so past/future schedule entries survive.
+ *
+ * Lecture.teacherId is the one required, non-cascading relation on Teacher
+ * (no onDelete clause — schema.prisma) — deleting a teacher who is still
+ * the instructor of record on any Lecture would hit a raw FK violation, so
+ * that case is refused up front with an actionable message instead.
+ */
+export async function deleteTeacherCascading(teacherId: string, actorUserId: string) {
+  const teacher = await prisma.teacher.findUnique({
+    where: { id: teacherId },
+    select: { id: true, userId: true, employeeCode: true, user: { select: { name: true, email: true } } },
+  });
+  if (!teacher) return null;
+
+  const lectureCount = await prisma.lecture.count({ where: { teacherId } });
+  if (lectureCount > 0) {
+    throw new Error(
+      `This teacher is still the instructor on ${lectureCount} lecture(s). Reassign or delete those lectures first, then delete the teacher.`
+    );
+  }
+
+  await prisma.user.delete({ where: { id: teacher.userId } });
+
+  await prisma.auditLog.create({
+    data: {
+      userId: actorUserId,
+      action: "TEACHER_DELETED",
+      entityType: "Teacher",
+      entityId: teacherId,
+      metadata: { employeeCode: teacher.employeeCode, name: teacher.user.name, email: teacher.user.email },
+    },
+  });
+
+  return { name: teacher.user.name, employeeCode: teacher.employeeCode };
+}
+
 export async function deleteDppCascading(dppId: string, actorUserId: string) {
   const dpp = await prisma.dpp.findUnique({ where: { id: dppId }, select: { id: true, name: true } });
   if (!dpp) return null;

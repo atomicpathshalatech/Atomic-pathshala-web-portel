@@ -20,13 +20,11 @@ export function inviteExpiry(from: Date = new Date()): Date {
   return new Date(from.getTime() + STAFF_INVITE_TTL_DAYS * 24 * 60 * 60 * 1000);
 }
 
+import { getAppBaseUrl } from "@/lib/email/app-url";
+
 export function buildInviteUrl(rawToken: string): string {
-  const base =
-    process.env.NEXT_PUBLIC_APP_URL ||
-    process.env.APP_URL ||
-    process.env.NEXTAUTH_URL ||
-    "https://ap.atomicpathshala.in";
-  return `${base.replace(/\/$/, "")}/invite/${rawToken}`;
+  const base = getAppBaseUrl();
+  return `${base}/invite/${rawToken}`;
 }
 
 export type InviteLookup =

@@ -23,6 +23,7 @@ export interface CourseData {
   discountPercentage?: number;
   thumbnailUrl?: string | null;
   isNewBatch?: boolean;
+  isEnrolled?: boolean;
 }
 
 export function CourseCard({ course }: { course: CourseData }) {
@@ -53,11 +54,16 @@ export function CourseCard({ course }: { course: CourseData }) {
           <span className="bg-[#031635] text-white px-2 py-0.5 rounded-md font-bold text-[10px] uppercase tracking-wider shadow-2xs">
             {course.exam} {course.examYear || ""}
           </span>
-          {course.isNewBatch && (
+          {course.isEnrolled ? (
+            <span className="bg-emerald-500 text-white font-extrabold text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-md shadow-2xs flex items-center gap-1">
+              <span className="material-symbols-outlined text-[12px]">verified</span>
+              Enrolled
+            </span>
+          ) : course.isNewBatch ? (
             <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md font-extrabold text-[10px] uppercase tracking-wider shadow-2xs">
               Batch
             </span>
-          )}
+          ) : null}
         </div>
 
         {course.studentsCount > 0 && (
@@ -111,32 +117,55 @@ export function CourseCard({ course }: { course: CourseData }) {
 
         {/* Price & Action Row */}
         <div className="mt-auto pt-1">
-          <div className="flex items-end gap-2 mb-2.5">
-            <span className="text-lg font-black text-[#031635]">₹{course.price.toLocaleString("en-IN")}</span>
-            {course.originalPrice > course.price && (
-              <>
-                <span className="text-xs text-slate-400 line-through mb-0.5">₹{course.originalPrice.toLocaleString("en-IN")}</span>
-                <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded ml-1 mb-0.5">
-                  {discount}% OFF
+          {course.isEnrolled ? (
+            <div className="space-y-2.5 pt-2 border-t border-slate-100">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1 text-emerald-700 font-bold text-xs">
+                  <span className="material-symbols-outlined text-sm text-emerald-600">verified</span>
+                  Enrolled &amp; Active
                 </span>
-              </>
-            )}
-          </div>
+                <span className="text-[10px] uppercase font-mono font-semibold text-slate-400">
+                  Full Access
+                </span>
+              </div>
+              <Link
+                href={`/courses/${course.slug}`}
+                className="w-full bg-[#031635] hover:bg-[#1a237e] text-white font-bold text-xs py-2.5 rounded-xl shadow-xs transition-all text-center flex items-center justify-center gap-1.5"
+              >
+                <span>Open Batch</span>
+                <span className="material-symbols-outlined text-sm">arrow_forward</span>
+              </Link>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-end gap-2 mb-2.5">
+                <span className="text-lg font-black text-[#031635]">₹{course.price.toLocaleString("en-IN")}</span>
+                {course.originalPrice > course.price && (
+                  <>
+                    <span className="text-xs text-slate-400 line-through mb-0.5">₹{course.originalPrice.toLocaleString("en-IN")}</span>
+                    <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded ml-1 mb-0.5">
+                      {discount}% OFF
+                    </span>
+                  </>
+                )}
+              </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            <Link
-              href={`/courses/${course.slug}`}
-              className="border border-slate-300 text-slate-700 font-bold text-xs py-2 rounded-xl hover:bg-slate-50 transition-colors text-center flex items-center justify-center"
-            >
-              View Batch
-            </Link>
-            <Link
-              href={`/checkout/${course.slug}`}
-              className="bg-[#6b46c1] hover:bg-[#5b3da5] text-white font-bold text-xs py-2 rounded-xl shadow-2xs transition-all text-center flex items-center justify-center"
-            >
-              Enroll Now
-            </Link>
-          </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Link
+                  href={`/courses/${course.slug}`}
+                  className="border border-slate-300 text-slate-700 font-bold text-xs py-2 rounded-xl hover:bg-slate-50 transition-colors text-center flex items-center justify-center"
+                >
+                  View Batch
+                </Link>
+                <Link
+                  href={`/checkout/${course.slug}`}
+                  className="bg-[#6b46c1] hover:bg-[#5b3da5] text-white font-bold text-xs py-2 rounded-xl shadow-2xs transition-all text-center flex items-center justify-center"
+                >
+                  Enroll Now
+                </Link>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </article>

@@ -2,12 +2,18 @@ import "server-only";
 
 /** Same resolution order as lib/invitations.ts / lib/auth/reset-tokens.ts — kept in one place now that a third caller needs it. */
 export function getAppBaseUrl(): string {
-  return (
+  let base = (
     process.env.NEXT_PUBLIC_APP_URL ||
     process.env.APP_URL ||
     process.env.NEXTAUTH_URL ||
     "https://ap.atomicpathshala.in"
   ).replace(/\/$/, "");
+
+  if (base.includes("vercel.app")) {
+    base = "https://ap.atomicpathshala.in";
+  }
+
+  return base;
 }
 
 export function getLoginUrl(): string {

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
+import { SecureDeleteResourceModal } from "@/components/common/SecureDeleteResourceModal";
 
 export interface UserItem {
   id: string;
@@ -240,6 +241,8 @@ export function UserManagementConsole() {
       toast.error(err.message);
     }
   };
+
+  const [deleteTarget, setDeleteTarget] = useState<UserItem | null>(null);
 
   // Filtered Users
   const filteredUsers = useMemo(() => {
@@ -649,6 +652,15 @@ export function UserManagementConsole() {
                             <span>Remove role</span>
                           </button>
                         )}
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget(u)}
+                          className="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-[11px] font-bold transition flex items-center gap-1"
+                          title="Permanently delete this account"
+                        >
+                          <span className="material-symbols-outlined text-sm">delete_forever</span>
+                          <span>Delete</span>
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -883,6 +895,22 @@ export function UserManagementConsole() {
             </form>
           </div>
         </div>
+      )}
+
+      {deleteTarget && (
+        <SecureDeleteResourceModal
+          isOpen={Boolean(deleteTarget)}
+          onClose={() => setDeleteTarget(null)}
+          resourceId={deleteTarget.email}
+          resourceTitle={deleteTarget.name}
+          resourceType="USER"
+          deleteEndpoint={`/api/team/users/${deleteTarget.id}`}
+          method="DELETE"
+          onDeleted={() => {
+            setDeleteTarget(null);
+            loadUsers();
+          }}
+        />
       )}
     </div>
   );

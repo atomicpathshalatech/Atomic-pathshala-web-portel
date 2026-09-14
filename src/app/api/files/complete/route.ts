@@ -28,7 +28,8 @@ export async function POST(request: NextRequest) {
       return apiError("File asset not found", 404);
     }
 
-    if (fileAsset.ownerId !== session.user.id && session.user.role !== "ADMIN") {
+    const isAdmin = ["SUPER_ADMIN", "ADMIN", "FOUNDER"].includes(session.user.role || "");
+    if (fileAsset.ownerId !== session.user.id && !isAdmin) {
       return apiError("Forbidden", 403);
     }
 

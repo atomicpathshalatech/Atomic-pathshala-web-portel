@@ -324,6 +324,26 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 }
 
+/**
+ * Permanently removes a staff/team member's account. Deliberately distinct
+ * from the PATCH status toggle (handleToggleStatus in
+ * UserManagementConsole.tsx) that already covers "deactivate without
+ * losing anything" — this route used to just call that same soft
+ * deactivation under the DELETE verb, which meant no real delete
+ * capability existed anywhere for staff/team accounts despite USER_DELETE
+ * already being enforced here and PERMISSIONS.USER_DELETE only ever being
+ * held by SUPER_ADMIN/FOUNDER/ADMIN (see hasPermission's role bypass in
+ * src/lib/rbac/guard.ts).
+ *
+ * If the target has a Teacher profile, the same Lecture-instructor guard
+ * deleteTeacherCascading uses is applied first (Lecture.teacherId has no
+ * onDelete clause in schema.prisma, so it would otherwise fail with a raw
+ * FK violation). Any other unexpected FK restriction is caught and turned
+ * into a clear, actionable error instead of a 500 — this schema is large
+ * enough that auditing every one of User's relations up front isn't
+ * practical; this mirrors the same safety net src/app/api/team/resources/
+ * delete/route.ts already uses for exactly this class of risk.
+ */
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions);
@@ -337,17 +357,40 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     }
 
     const userId = params.id;
-
-    // Safety rule: Soft deactivate user to preserve all tests, questions, audits, and history
-    const user = await prisma.user.update({
+    const user = await prisma.user.findUnique({
       where: { id: userId },
-      data: { status: "INACTIVE" },
+      select: { id: true, name: true, email: true, teacher: { select: { id: true } } },
     });
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    if (user.teacher) {
+      const lectureCount = await prisma.lecture.count({ where: { teacherId: user.teacher.id } });
+      if (lectureCount > 0) {
+        return NextResponse.json(
+          {
+            error: `This user is still the instructor of record on ${lectureCount} lecture(s). Reassign or delete those lectures first, then delete the user.`,
+          },
+          { status: 409 }
+        );
+      }
+    }
+
+    try {
+      await prisma.user.delete({ where: { id: userId } });
+    } catch (deleteErr: any) {
+      const reason =
+        typeof deleteErr?.message === "string" && deleteErr.message.includes("Foreign key constraint")
+          ? "This user still has records referencing their account that couldn't be automatically removed. Deactivate the account instead, or clear those records first."
+          : deleteErr?.message || "Failed to delete user.";
+      return NextResponse.json({ error: reason }, { status: 409 });
+    }
 
     await prisma.auditLog.create({
       data: {
         userId: session.user.id,
-        action: "USER_DEACTIVATED",
+        action: "USER_DELETED",
         entityType: "USER",
         entityId: userId,
         metadata: {
@@ -357,9 +400,9 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       },
     });
 
-    return NextResponse.json({ success: true, message: "User deactivated successfully" });
+    return NextResponse.json({ success: true, message: "User permanently deleted." });
   } catch (error: any) {
     console.error("Error in DELETE /api/team/users/[id]:", error);
-    return NextResponse.json({ error: error.message || "Failed to deactivate user" }, { status: 500 });
+    return NextResponse.json({ error: error.message || "Failed to delete user" }, { status: 500 });
   }
 }

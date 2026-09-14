@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { ChapterImportModal } from "./ChapterImportModal";
 import { BatchTeacherManager } from "./BatchTeacherManager";
 import { BatchEnrollmentManager } from "./BatchEnrollmentManager";
@@ -105,8 +106,20 @@ export function BatchDetailClient({
   canManageEnrollment,
   canManageSchedule,
 }: BatchDetailClientProps) {
+  const searchParams = useSearchParams();
+  const VALID_TABS = ["flow", "pdfs", "materials", "timetable", "teachers", "students", "notifications"] as const;
+  const requestedTab = searchParams.get("tab");
+  const initialTab = (VALID_TABS as readonly string[]).includes(requestedTab || "")
+    ? (requestedTab as (typeof VALID_TABS)[number])
+    : "flow";
+
   const [showImportModal, setShowImportModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<"flow" | "pdfs" | "materials" | "timetable" | "teachers" | "students" | "notifications">("flow");
+  const [activeTab, setActiveTab] = useState<"flow" | "pdfs" | "materials" | "timetable" | "teachers" | "students" | "notifications">(initialTab);
+  const [blockedBannerDismissed, setBlockedBannerDismissed] = useState(false);
+  const blockedReason =
+    searchParams.get("blocked") === "1"
+      ? searchParams.get("reason") || "That class isn't accessible right now."
+      : null;
 
   /**
    * The chapters actually imported into this batch, de-duplicated.
@@ -163,6 +176,20 @@ export function BatchDetailClient({
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto pb-16">
+      {blockedReason && !blockedBannerDismissed && (
+        <div className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/40 dark:border-amber-800 px-4 py-3 text-xs sm:text-sm text-amber-800 dark:text-amber-200">
+          <span className="material-symbols-outlined text-base mt-0.5">info</span>
+          <p className="flex-1">{blockedReason}</p>
+          <button
+            type="button"
+            aria-label="Dismiss"
+            onClick={() => setBlockedBannerDismissed(true)}
+            className="text-amber-500 hover:text-amber-700 dark:hover:text-amber-100"
+          >
+            <span className="material-symbols-outlined text-base">close</span>
+          </button>
+        </div>
+      )}
       {/* Header & Controls */}
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 border-b border-outline-variant/20 pb-6">
         <div>
@@ -445,6 +472,7 @@ export function BatchDetailClient({
               id: t.teacherId,
               user: { name: t.teacher.user.name },
             }))}
+            canManageSchedule={canManageSchedule}
           />
         </section>
       )}

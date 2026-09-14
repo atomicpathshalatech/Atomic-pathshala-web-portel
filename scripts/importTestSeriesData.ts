@@ -23,7 +23,7 @@ try {
 
 const TARGET_DB_URL =
   process.env.DATABASE_URL ||
-  "postgresql://postgres.itronpjlguvyrfwzxijh:AtomicPathshala9812@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true";
+  "postgresql://postgres.nsubtmwavgzfyxuhlmjx:AtomicPathshala9812@aws-0-ap-south-1.pooler.supabase.com:6543/postgres?pgbouncer=true";
 
 const NEON_DB_URL =
   process.env.NEON_DATABASE_URL ||
