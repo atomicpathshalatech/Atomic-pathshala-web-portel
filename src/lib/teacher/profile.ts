@@ -213,13 +213,32 @@ export async function getTeacherProfileBySlug(slug: string): Promise<TeacherFull
     },
   });
 
-  // Match by slug, ID, or employeeCode
-  const dbTeacher = allTeachers.find(
-    (t) =>
-      generateSlug(t.user.name) === cleanSlug ||
-      t.id === cleanSlug ||
-      t.employeeCode.toLowerCase() === cleanSlug
-  );
+  // Match by slug, ID, employeeCode, or name aliases
+  const dbTeacher = allTeachers.find((t) => {
+    const teacherSlug = generateSlug(t.user.name);
+    const empCode = t.employeeCode.toLowerCase();
+    const id = t.id.toLowerCase();
+
+    // Exact matches
+    if (teacherSlug === cleanSlug || empCode === cleanSlug || id === cleanSlug) return true;
+
+    // Common aliases & suffix variations (e.g. -sir)
+    const normalizedTarget = cleanSlug.replace(/-(sir|mam|maam)$/i, "");
+    if (teacherSlug === normalizedTarget) return true;
+
+    // Name tokens check (e.g. "rehan-ali" matches "Rehan ali", "firoz" matches "Firoz (Test Login)")
+    if (cleanSlug === "firoz-ali" && (teacherSlug.includes("firoz") || t.user.name.toLowerCase().includes("firoz"))) return true;
+    if (cleanSlug === "yaman-khan" && (teacherSlug.includes("yaman") || t.user.name.toLowerCase().includes("yaman"))) return true;
+
+    // Check if target tokens are included in teacher tokens
+    const targetTokens = cleanSlug.split("-").filter(Boolean);
+    const teacherTokens = teacherSlug.split("-").filter(Boolean);
+    if (targetTokens.length > 0 && targetTokens.every((tok) => teacherTokens.includes(tok))) {
+      return true;
+    }
+
+    return false;
+  });
 
   if (!dbTeacher) {
     return null;
