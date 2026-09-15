@@ -145,7 +145,7 @@ export async function streamNcertQuestionsToQuestionBank({
     language: NCERTLanguage;
   };
   pageNumber: number;
-  questions: CandidateNcertQuestion[];
+  questions: any[];
   userId?: string | null;
 }): Promise<number> {
   const subjectName = document.academicSubject?.name || "General";
@@ -153,20 +153,23 @@ export async function streamNcertQuestionsToQuestionBank({
   const className = document.academicClass?.name || "";
   const isHindi = document.language === NCERTLanguage.HINDI;
 
-  const safeUserId = (await resolveUserId(userId)) || (await prisma.user.findFirst({ select: { id: true } }))?.id;
+  const safeUserId =
+    (await resolveUserId(userId)) ||
+    (await resolveUserId(document.uploadedById)) ||
+    (await prisma.user.findFirst({ select: { id: true } }))?.id;
   if (!safeUserId) return 0;
 
   let savedCount = 0;
 
   for (const q of questions) {
     try {
-      const trimmedStatement = q.question.trim();
-      if (!trimmedStatement) continue;
+      const rawQuestionText = (q.question || "").trim();
+      if (!rawQuestionText) continue;
 
       // Duplicate prevention: check if translation already exists with identical text
       const existingTranslation = await prisma.questionTranslation.findFirst({
         where: {
-          statement: trimmedStatement,
+          statement: rawQuestionText,
           language: isHindi ? "HINDI" : "ENGLISH",
         },
         select: { id: true },
@@ -177,15 +180,37 @@ export async function streamNcertQuestionsToQuestionBank({
       }
 
       const code = await generateQuestionId(prisma, subjectName);
-      const correctLetter = q.correctAnswer;
-      const optionsMap: Record<string, string> = {
-        A: q.options.find((o) => o.id === "A")?.text || "",
-        B: q.options.find((o) => o.id === "B")?.text || "",
-        C: q.options.find((o) => o.id === "C")?.text || "",
-        D: q.options.find((o) => o.id === "D")?.text || "",
-      };
+      const correctLetter = q.correctAnswer || "A";
+
+      let optionsMap: Record<string, string> = { A: "", B: "", C: "", D: "" };
+      if (Array.isArray(q.options)) {
+        for (const opt of q.options) {
+          if (typeof opt === "string") {
+            const letter = String.fromCharCode(65 + q.options.indexOf(opt));
+            if (["A", "B", "C", "D"].includes(letter)) optionsMap[letter] = opt;
+          } else if (opt && typeof opt === "object") {
+            const key = String(opt.id || opt.key || opt.label || "").toUpperCase();
+            const text = String(opt.text || opt.value || "");
+            if (["A", "B", "C", "D"].includes(key)) {
+              optionsMap[key] = text;
+            }
+          }
+        }
+        if (!optionsMap.A && q.options[0]) optionsMap.A = typeof q.options[0] === "string" ? q.options[0] : (q.options[0].text || "");
+        if (!optionsMap.B && q.options[1]) optionsMap.B = typeof q.options[1] === "string" ? q.options[1] : (q.options[1].text || "");
+        if (!optionsMap.C && q.options[2]) optionsMap.C = typeof q.options[2] === "string" ? q.options[2] : (q.options[2].text || "");
+        if (!optionsMap.D && q.options[3]) optionsMap.D = typeof q.options[3] === "string" ? q.options[3] : (q.options[3].text || "");
+      } else if (q.options && typeof q.options === "object") {
+        optionsMap = {
+          A: String((q.options as any).A || ""),
+          B: String((q.options as any).B || ""),
+          C: String((q.options as any).C || ""),
+          D: String((q.options as any).D || ""),
+        };
+      }
 
       const structuredSolution = q.solution || q.explanation || "";
+      const structuredExtras = extractStructuredQuestionData(q.options);
 
       let pType: QuestionType = QuestionType.SINGLE_CORRECT;
       const typeStr = String(q.questionType).toUpperCase();
@@ -204,7 +229,7 @@ export async function streamNcertQuestionsToQuestionBank({
           category: "NCERT_HUB",
           status: "DRAFT",
           solution: structuredSolution,
-          tags: `NCERT_HUB, CLASS_${className.replace(/\s+/g, "_")}, CHAPTER_${chapterTitle.replace(/\s+/g, "_")}, PAGE_${pageNumber}`,
+          tags: `ATOMIC_GURU_GENERATED, AI_GENERATED, NCERT_HUB, NCERT_CHAPTERWISE, SOURCE_NCERT_HUB, CLASS_${className.replace(/\s+/g, "_")}, CHAPTER_${chapterTitle.replace(/\s+/g, "_")}, PAGE_${pageNumber}`,
           ncertBook: subjectName,
           ncertClass: className,
           ncertChapter: chapterTitle,
@@ -214,7 +239,7 @@ export async function streamNcertQuestionsToQuestionBank({
             create: [
               {
                 language: isHindi ? "HINDI" : "ENGLISH",
-                statement: trimmedStatement,
+                statement: rawQuestionText,
                 options: optionsMap,
                 correctOptionIds: [correctLetter],
                 solution: structuredSolution,
@@ -227,24 +252,24 @@ export async function streamNcertQuestionsToQuestionBank({
               editedById: safeUserId,
               changeType: "CREATE",
               snapshot: {
-                statement: trimmedStatement,
+                statement: rawQuestionText,
                 options: optionsMap,
                 correctOption: correctLetter,
-                explainQuestion: q.explainQuestion,
-                concept: q.concept,
+                explainQuestion: q.explainQuestion || structuredExtras.explainQuestion,
+                concept: q.concept || structuredExtras.concept,
                 solution: structuredSolution,
-                finalAnswer: q.finalAnswer,
+                finalAnswer: q.finalAnswer || structuredExtras.finalAnswer,
                 subject: subjectName,
                 chapter: chapterTitle,
                 pageNumber,
                 sourceTextReference: q.sourceTextReference,
                 sourceModule: "NCERT_HUB",
                 extras: {
-                  assertionText: q.assertionText,
-                  reasonText: q.reasonText,
-                  statements: q.statements,
-                  columnI: q.columnI,
-                  columnII: q.columnII,
+                  assertionText: q.assertionText || structuredExtras.assertionText,
+                  reasonText: q.reasonText || structuredExtras.reasonText,
+                  statements: q.statements || structuredExtras.statements,
+                  columnI: q.columnI || structuredExtras.columnI,
+                  columnII: q.columnII || structuredExtras.columnII,
                 },
               },
             },
@@ -259,6 +284,37 @@ export async function streamNcertQuestionsToQuestionBank({
   }
 
   return savedCount;
+}
+
+/**
+ * Ensures previously existing NCERT page questions are synced to the central Question Bank.
+ */
+export async function syncExistingPageQuestionsToQuestionBank(
+  pageId: string,
+  questions: any[],
+  userId?: string | null
+): Promise<number> {
+  if (!questions || questions.length === 0) return 0;
+  const page = await prisma.ncertPage.findUnique({
+    where: { id: pageId },
+    include: {
+      document: {
+        include: {
+          academicSubject: true,
+          academicChapter: true,
+          academicClass: true,
+        },
+      },
+    },
+  });
+  if (!page || !page.document) return 0;
+
+  return streamNcertQuestionsToQuestionBank({
+    document: page.document,
+    pageNumber: page.pageNumber,
+    questions,
+    userId: userId || page.document.uploadedById,
+  });
 }
 
 export interface SubmissionEvaluationResult {
@@ -280,7 +336,8 @@ export interface SubmissionEvaluationResult {
  */
 export async function getOrGeneratePageQuestionPool(
   pageId: string,
-  poolSet: number = 1
+  poolSet: number = 1,
+  userId?: string | null
 ): Promise<NcertPageQuestion[]> {
   // 1. Check existing questions in DB
   const existing = await prisma.ncertPageQuestion.findMany({
@@ -293,6 +350,10 @@ export async function getOrGeneratePageQuestionPool(
   });
 
   if (existing.length > 0) {
+    // Proactively ensure existing questions are in Question Bank
+    syncExistingPageQuestionsToQuestionBank(pageId, existing, userId).catch((err) => {
+      console.warn("[NCERT Question Pool] Background Question Bank sync error:", err);
+    });
     return existing;
   }
 
@@ -401,6 +462,7 @@ export async function getOrGeneratePageQuestionPool(
     document: page.document,
     pageNumber: page.pageNumber,
     questions: approvedCandidates,
+    userId: userId || page.document.uploadedById,
   }).catch((err) => {
     console.warn("[NCERT Question Pool] Background Question Bank stream error:", err);
   });
@@ -670,8 +732,9 @@ export async function preparePageReattempt(params: {
   studentId: string;
   documentId: string;
   pageId: string;
+  userId?: string | null;
 }): Promise<{ questions: ClientQuestionView[]; attemptNumber: number; remainingReattempts: number }> {
-  const { studentId, documentId, pageId } = params;
+  const { studentId, documentId, pageId, userId } = params;
 
   let pageProgress = await prisma.ncertStudentPageProgress.findUnique({
     where: { studentId_pageId: { studentId, pageId } },
@@ -699,7 +762,7 @@ export async function preparePageReattempt(params: {
   });
 
   // Get or generate next set from same page
-  const questions = await getOrGeneratePageQuestionPool(pageId, poolSet);
+  const questions = await getOrGeneratePageQuestionPool(pageId, poolSet, userId);
   const remaining = Math.max(0, 1 + MAX_REATTEMPTS_PER_PAGE - nextAttemptNumber);
 
   return {

@@ -92,12 +92,20 @@ export default async function QuestionBankPage({
       where.OR = [
         { category: { startsWith: "AI_GENERATED" } },
         { category: { contains: "ATOMIC_GURU" } },
+        { category: { contains: "NCERT" } },
         { tags: { contains: "ATOMIC_GURU" } },
+        { tags: { contains: "NCERT" } },
+        { tags: { contains: "AI_GENERATED" } },
       ];
     } else if (sourceFilter === "ATOMIC_GURU") {
       where.OR = [
         { category: { contains: "ATOMIC_GURU" } },
         { tags: { contains: "ATOMIC_GURU" } },
+      ];
+    } else if (sourceFilter === "NCERT_HUB") {
+      where.OR = [
+        { category: { contains: "NCERT" } },
+        { tags: { contains: "NCERT" } },
       ];
     } else if (sourceFilter === "AI_ONLY") {
       where.category = "AI_GENERATED:AI";
@@ -108,7 +116,7 @@ export default async function QuestionBankPage({
         { category: null },
         {
           category: {
-            notIn: ["AI_GENERATED:AI", "AI_GENERATED:PDF", "ATOMIC_GURU"],
+            notIn: ["AI_GENERATED:AI", "AI_GENERATED:PDF", "ATOMIC_GURU", "NCERT_HUB"],
           },
         },
       ];
@@ -166,9 +174,11 @@ export default async function QuestionBankPage({
         OR: [
           { category: { startsWith: "AI" } },
           { category: { contains: "ATOMIC_GURU" } },
+          { category: { contains: "NCERT" } },
           { tags: { contains: "AI_AUTO_DRAFT" } },
           { tags: { contains: "AI_GENERATED" } },
           { tags: { contains: "ATOMIC_GURU" } },
+          { tags: { contains: "NCERT" } },
         ],
       },
     }),

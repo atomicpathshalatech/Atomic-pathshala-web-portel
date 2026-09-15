@@ -1,4 +1,4 @@
-﻿import type { Metadata } from "next";
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -32,9 +32,11 @@ export default async function AiDraftsPage() {
       OR: [
         { category: { startsWith: "AI" } },
         { category: { contains: "ATOMIC_GURU" } },
+        { category: { contains: "NCERT" } },
         { tags: { contains: "AI_AUTO_DRAFT" } },
         { tags: { contains: "AI_GENERATED" } },
         { tags: { contains: "ATOMIC_GURU" } },
+        { tags: { contains: "NCERT" } },
       ],
     },
     include: {

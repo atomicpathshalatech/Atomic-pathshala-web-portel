@@ -59,7 +59,11 @@ export async function POST(
 
     const poolSet = pageProgress.attemptCount || 1;
     // Prepare or fetch questions
-    const questions = await getOrGeneratePageQuestionPool(page.id, poolSet);
+    const questions = await getOrGeneratePageQuestionPool(
+      page.id,
+      poolSet,
+      auth.student.userId || auth.user?.id
+    );
 
     if (questions.length === 0) {
       return NextResponse.json({

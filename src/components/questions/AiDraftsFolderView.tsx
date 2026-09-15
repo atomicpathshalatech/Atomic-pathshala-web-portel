@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useMemo } from "react";
 import Link from "next/link";
@@ -72,11 +72,19 @@ function getSourceInfo(category?: string | null, tags?: string | null): {
   label: string;
   badgeClass: string;
   icon: string;
-  sourceKey: "DIRECT" | "PDF" | "AI_STUDIO" | "ATOMIC_GURU" | "OTHER";
+  sourceKey: "DIRECT" | "PDF" | "AI_STUDIO" | "ATOMIC_GURU" | "NCERT_HUB" | "OTHER";
 } {
   const cat = (category || "").toUpperCase();
   const t = (tags || "").toUpperCase();
 
+  if (cat.includes("NCERT") || t.includes("NCERT")) {
+    return {
+      label: "NCERT Practice Hub",
+      badgeClass: "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800",
+      icon: "book-open",
+      sourceKey: "NCERT_HUB",
+    };
+  }
   if (cat.includes("DIRECT") || t.includes("SOURCE_DIRECT")) {
     return {
       label: "Direct OCR / Paste",
@@ -139,6 +147,7 @@ export function AiDraftsFolderView({
     let pdfCount = 0;
     let aiStudioCount = 0;
     let atomicGuruCount = 0;
+    let ncertHubCount = 0;
 
     drafts.forEach((d) => {
       const { sourceKey } = getSourceInfo(d.category, d.tags);
@@ -146,6 +155,7 @@ export function AiDraftsFolderView({
       else if (sourceKey === "PDF") pdfCount++;
       else if (sourceKey === "AI_STUDIO") aiStudioCount++;
       else if (sourceKey === "ATOMIC_GURU") atomicGuruCount++;
+      else if (sourceKey === "NCERT_HUB") ncertHubCount++;
     });
 
     return {
@@ -154,6 +164,7 @@ export function AiDraftsFolderView({
       pdfCount,
       aiStudioCount,
       atomicGuruCount,
+      ncertHubCount,
     };
   }, [drafts]);
 
@@ -333,7 +344,7 @@ export function AiDraftsFolderView({
       </div>
 
       {/* 2. STATS OVERVIEW CARDS */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <button
           type="button"
           onClick={() => setSelectedSource("ALL")}
@@ -345,6 +356,22 @@ export function AiDraftsFolderView({
         >
           <p className="text-xs font-bold text-slate-500">All AI Drafts</p>
           <h3 className="text-2xl font-black text-blue-900 mt-1">{stats.total}</h3>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setSelectedSource("NCERT_HUB")}
+          className={`p-4 rounded-2xl border text-left transition ${
+            selectedSource === "NCERT_HUB"
+              ? "bg-emerald-50/80 border-emerald-500 shadow-sm"
+              : "bg-white border-slate-200 hover:border-slate-300"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-bold text-emerald-700">NCERT Hub</p>
+            <span className="material-symbols-outlined text-sm text-emerald-600">menu_book</span>
+          </div>
+          <h3 className="text-2xl font-black text-emerald-700 mt-1">{stats.ncertHubCount}</h3>
         </button>
 
         <button

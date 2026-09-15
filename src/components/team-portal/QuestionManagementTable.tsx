@@ -22,6 +22,7 @@ import {
   ChevronRight,
   ShieldCheck,
   UserCheck,
+  BookOpen,
 } from "lucide-react";
 import { SecureDeleteResourceModal } from "@/components/common/SecureDeleteResourceModal";
 
@@ -476,6 +477,7 @@ export function QuestionManagementTable({
             >
               <option value="">Source: All</option>
               <option value="AI_ALL">✨ AI Generated (All)</option>
+              <option value="NCERT_HUB">📖 NCERT Practice Hub</option>
               <option value="ATOMIC_GURU">🧠 Atomic Guru Generated</option>
               <option value="AI_ONLY">🤖 AI Mode</option>
               <option value="PDF_ONLY">📄 PDF Mode</option>

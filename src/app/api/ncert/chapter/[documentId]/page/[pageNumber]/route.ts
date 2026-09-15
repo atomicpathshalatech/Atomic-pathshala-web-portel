@@ -5,6 +5,7 @@ import {
   sanitizeQuestionsForClient,
   extractStructuredQuestionData,
   MAX_REATTEMPTS_PER_PAGE,
+  syncExistingPageQuestionsToQuestionBank,
 } from "@/lib/ncert/question-pool";
 import { NCERTPageProgressStatus, NCERTVerificationStatus } from "@prisma/client";
 
@@ -78,6 +79,16 @@ export async function GET(
       },
       orderBy: { createdAt: "asc" },
     });
+
+    if (existingQuestions.length > 0) {
+      syncExistingPageQuestionsToQuestionBank(
+        page.id,
+        existingQuestions,
+        auth.student.userId
+      ).catch((err) => {
+        console.warn("[NCERT Page GET] Background QB sync error:", err);
+      });
+    }
 
     const isCompleted = pageProgress?.status === NCERTPageProgressStatus.COMPLETED;
     const isSkipped = pageProgress?.status === NCERTPageProgressStatus.SKIPPED;
