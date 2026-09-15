@@ -6,6 +6,7 @@ import { AuthSessionProvider } from "@/components/providers/AuthSessionProvider"
 import { CapacitorProvider } from "@/components/providers/CapacitorProvider";
 import { PwaProvider } from "@/components/pwa/PwaProvider";
 import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 /**
  * Inter is the app's body/label font (used on effectively every screen).
@@ -89,6 +90,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <PwaProvider />
         <Analytics />
         <Toaster richColors position="top-center" />
+        <SpeedInsights />
       </body>
     </html>
   );
