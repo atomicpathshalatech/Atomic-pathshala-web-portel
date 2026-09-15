@@ -1,10 +1,15 @@
 import Link from "next/link";
 import { requireStudentSession } from "@/lib/auth/session";
 import { formatDate } from "@/lib/utils/date";
+import { prisma } from "@/lib/db";
 
 export default async function ProfilePage() {
   const { student } = await requireStudentSession();
   const { user } = student;
+
+  const ncertPagesCompleted = await prisma.ncertStudentPageProgress.count({
+    where: { studentId: student.id, status: "COMPLETED" },
+  });
 
   const initials = (user.name || "Student")
     .split(" ")
@@ -124,19 +129,35 @@ export default async function ProfilePage() {
             <h3 className="font-headline-md text-headline-md mb-4">Quick Links</h3>
             <div className="space-y-3">
               <SidebarLink href="/id-card" icon="badge" label="Digital ID Card" />
+              <SidebarLink href="/practice/ncert" icon="menu_book" label="NCERT Question Practice" />
               <SidebarLink href="/courses" icon="video_library" label="My Courses" />
               <SidebarLink href="/tests" icon="quiz" label="Test Series" />
             </div>
           </section>
 
-          <section className="glass-card rounded-xl p-stack-lg text-center space-y-2">
-            <span className="material-symbols-outlined text-primary/40" style={{ fontSize: 36 }}>
-              insights
-            </span>
-            <p className="font-label-md text-label-md text-on-surface-variant">
-              Test performance, activity history, and achievement badges will appear here once the
-              Course and Test modules are live.
+          {/* NCERT Progress Highlight Card */}
+          <section className="rounded-xl p-5 bg-gradient-to-br from-teal-50 to-emerald-50 dark:from-teal-950/40 dark:to-emerald-950/20 border border-teal-200/60 dark:border-teal-800/40 space-y-3">
+            <div className="flex items-center gap-2 text-teal-800 dark:text-teal-300">
+              <span className="material-symbols-outlined text-2xl">menu_book</span>
+              <h4 className="font-bold text-sm">NCERT Question Practice</h4>
+            </div>
+            <p className="text-xs text-slate-600 dark:text-slate-400">
+              Read authentic NCERT pages and solve locked verified NEET questions page-by-page.
             </p>
+            <div className="flex items-center justify-between pt-1">
+              <div>
+                <span className="text-xl font-black text-teal-700 dark:text-teal-300">
+                  {ncertPagesCompleted}
+                </span>
+                <span className="text-[11px] text-slate-500 ml-1">Pages Completed</span>
+              </div>
+              <Link
+                href="/practice/ncert"
+                className="px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition shadow-xs"
+              >
+                Practice &rarr;
+              </Link>
+            </div>
           </section>
         </div>
       </div>

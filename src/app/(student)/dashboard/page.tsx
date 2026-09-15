@@ -11,6 +11,7 @@ import { QuickAccessGrid, type QuickAccessItem } from "@/components/student/home
 import { ContinueLearningCard } from "@/components/student/home/ContinueLearningCard";
 import { RecommendedCourses } from "@/components/student/home/RecommendedCourses";
 import { PromoCard } from "@/components/student/home/PromoCard";
+import { NcertPracticeBanner } from "@/components/student/home/NcertPracticeBanner";
 
 export const metadata: Metadata = {
   title: "Home",
@@ -248,10 +249,12 @@ export default async function StudentDashboardPage() {
         )}
       </section>
 
-      <section className="space-y-2.5">
+      <section className="space-y-3">
         <SectionHeader title="Practice &amp; revise" />
+        <NcertPracticeBanner />
         <QuickAccessGrid
           items={[
+            { label: "NCERT Practice", icon: "menu_book", href: "/practice/ncert", accent: "emerald", badge: "NEW" },
             { label: "Question Practice", icon: "edit_note", href: "/practice", accent: "violet", badge: null },
             { label: "PYQ Practice", icon: "history_edu", href: "/tests", accent: "blue", badge: null },
             { label: "Daily DPP", icon: "assignment", href: "/dpp", accent: "rose", badge: dppCount ? `${dppCount}` : null },

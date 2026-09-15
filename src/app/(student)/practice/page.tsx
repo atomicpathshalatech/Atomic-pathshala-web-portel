@@ -22,8 +22,17 @@ const QuizMode = dynamic(
   }
 );
 
+import { NcertPracticeBanner } from "@/components/student/home/NcertPracticeBanner";
+
 export default function StudentQuestionPracticePage() {
   const router = useRouter();
 
-  return <QuizMode onClose={() => router.push("/dashboard")} />;
+  return (
+    <div className="space-y-4">
+      <div className="mx-auto max-w-4xl px-2 pt-2">
+        <NcertPracticeBanner />
+      </div>
+      <QuizMode onClose={() => router.push("/dashboard")} />
+    </div>
+  );
 }

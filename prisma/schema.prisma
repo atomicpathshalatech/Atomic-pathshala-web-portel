@@ -123,6 +123,7 @@ model User {
   aiSourcePdfs           AiSourcePdf[]     @relation("AiSourcePdfUploadedBy")
   aiGenerationBatches    AiGenerationBatch[] @relation("AiGenerationBatchCreatedBy")
   taxonomyTopicMemories  TaxonomyTopicMemory[] @relation("TaxonomyTopicMemoryCreatedBy")
+  ncertUploads           NcertDocument[]       @relation("NCERTUploadedBy")
 
   // --- Centralized Email & Communication System ---------------------------
   emailLogsReceived      EmailLog[]        @relation("EmailLogRecipient")
@@ -274,6 +275,8 @@ model Student {
   directConversations TeacherDirectConversation[]
   classFeedbacks  StudentClassFeedback[]
   activityEvents  StudentActivityEvent[]
+  ncertChapterProgress NcertStudentChapterProgress[]
+  ncertPageProgress    NcertStudentPageProgress[]
 
   @@index([city, state])
   @@index([targetExam])
@@ -4256,15 +4259,16 @@ enum ProgramName {
 }
 
 model AcademicClass {
-  id           String            @id @default(cuid())
-  name         String            @unique // e.g. "Class 11", "Class 12"
-  numericValue Int               @unique // 11, 12
-  order        Int               @default(0)
-  isActive     Boolean           @default(true)
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
-  subjects     AcademicSubject[]
-  programs     ProgramMapping[]
+  id              String            @id @default(cuid())
+  name            String            @unique // e.g. "Class 11", "Class 12"
+  numericValue    Int               @unique // 11, 12
+  order           Int               @default(0)
+  isActive        Boolean           @default(true)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  subjects        AcademicSubject[]
+  programs        ProgramMapping[]
+  ncertDocuments  NcertDocument[]
 
   @@map("academic_classes")
 }
@@ -4284,6 +4288,7 @@ model AcademicSubject {
   books           AcademicBook[]
   chapters        AcademicChapter[]
   programMappings ProgramMapping[]
+  ncertDocuments  NcertDocument[]
 
   @@unique([classId, name])
   @@index([classId])
@@ -4291,18 +4296,19 @@ model AcademicSubject {
 }
 
 model AcademicBook {
-  id          String            @id @default(cuid())
-  subjectId   String
-  title       String // e.g. "Physics Part I", "Chemistry Part I"
-  titleHindi  String? // e.g. "भौतिकी भाग 1"
-  partNumber  Int               @default(1)
-  editionYear String?           @default("2024-25 Rationalised")
-  isSystem    Boolean           @default(true)
-  order       Int               @default(0)
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
-  subject     AcademicSubject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-  chapters    AcademicChapter[]
+  id              String            @id @default(cuid())
+  subjectId       String
+  title           String // e.g. "Physics Part I", "Chemistry Part I"
+  titleHindi      String? // e.g. "भौतिकी भाग 1"
+  partNumber      Int               @default(1)
+  editionYear     String?           @default("2024-25 Rationalised")
+  isSystem        Boolean           @default(true)
+  order           Int               @default(0)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  subject         AcademicSubject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  chapters        AcademicChapter[]
+  ncertDocuments  NcertDocument[]
 
   @@index([subjectId])
   @@map("academic_books")
@@ -4325,6 +4331,7 @@ model AcademicChapter {
   book            AcademicBook?      @relation(fields: [bookId], references: [id], onDelete: SetNull)
   topics          AcademicTopic[]
   programMappings ProgramMapping[]
+  ncertDocuments  NcertDocument[]
 
   @@unique([subjectId, chapterNumber])
   @@index([subjectId])
@@ -5475,3 +5482,205 @@ model GeneratedCreative {
   @@index([sourceEntityType, sourceEntityId])
   @@map("generated_creatives")
 }
+
+// ==========================================================================
+// NCERT QUESTION PRACTICE — PAGE-WISE EXTRACTION, QUESTION POOL & LEARNING
+// ==========================================================================
+
+enum NCERTLanguage {
+  ENGLISH
+  HINDI
+}
+
+enum NCERTDocumentStatus {
+  UPLOADING
+  PROCESSING
+  READY
+  FAILED
+  PUBLISHED
+  UNPUBLISHED
+}
+
+enum NCERTQuestionType {
+  SINGLE_CORRECT_MCQ
+  ASSERTION_REASON
+  STATEMENT_BASED
+  MATCH_FOLLOWING
+  DIAGRAM_BASED
+  CONCEPTUAL_MCQ
+}
+
+enum NCERTVerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum NCERTPageProgressStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  SKIPPED
+}
+
+model NcertDocument {
+  id                 String              @id @default(cuid())
+  academicClassId    String
+  academicSubjectId  String
+  academicBookId     String?
+  academicChapterId  String
+  language           NCERTLanguage
+  fileUrl            String
+  fileName           String
+  fileSize           Int                 @default(0)
+  version            Int                 @default(1)
+  status             NCERTDocumentStatus @default(PROCESSING)
+  totalPages         Int                 @default(0)
+  uploadedById       String
+
+  academicClass      AcademicClass       @relation(fields: [academicClassId], references: [id])
+  academicSubject    AcademicSubject     @relation(fields: [academicSubjectId], references: [id])
+  academicBook       AcademicBook?       @relation(fields: [academicBookId], references: [id])
+  academicChapter    AcademicChapter     @relation(fields: [academicChapterId], references: [id])
+  uploadedBy         User                @relation("NCERTUploadedBy", fields: [uploadedById], references: [id])
+
+  pages              NcertPage[]
+  chapterProgress    NcertStudentChapterProgress[]
+  pageProgress       NcertStudentPageProgress[]
+
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  @@unique([academicChapterId, language, version])
+  @@index([academicClassId, academicSubjectId])
+  @@map("ncert_documents")
+}
+
+model NcertPage {
+  id                 String              @id @default(cuid())
+  documentId         String
+  pageNumber         Int
+  pageImageUrl       String?
+  extractedText      String              @db.Text
+  extractedElements  Json?
+  processingStatus   String              @default("READY")
+
+  document           NcertDocument       @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  questions          NcertPageQuestion[]
+  studentProgress    NcertStudentPageProgress[]
+
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  @@unique([documentId, pageNumber])
+  @@index([documentId])
+  @@map("ncert_pages")
+}
+
+model NcertPageQuestion {
+  id                   String                  @id @default(cuid())
+  pageId               String
+  documentId           String
+  chapterId            String
+  pageNumber           Int
+  language             NCERTLanguage
+  questionType         NCERTQuestionType       @default(SINGLE_CORRECT_MCQ)
+  question             String                  @db.Text
+  options              Json
+  correctAnswer        String
+  explanation          String                  @db.Text
+  sourceTextReference  String                  @db.Text
+  sourceImageReference String?
+  verificationStatus   NCERTVerificationStatus @default(APPROVED)
+  verificationReason   String?
+  poolSet              Int                     @default(1)
+
+  page                 NcertPage               @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+
+  @@index([pageId, poolSet])
+  @@index([documentId, pageNumber])
+  @@map("ncert_page_questions")
+}
+
+model NcertStudentChapterProgress {
+  id                      String              @id @default(cuid())
+  studentId               String
+  documentId              String
+  chapterId               String
+  language                NCERTLanguage
+  currentPageNumber       Int                 @default(1)
+  status                  String              @default("IN_PROGRESS")
+  pagesCompleted          Int                 @default(0)
+  pagesSkipped            Int                 @default(0)
+  totalQuestionsAttempted Int                 @default(0)
+  totalCorrect            Int                 @default(0)
+  totalIncorrect          Int                 @default(0)
+  accuracy                Float               @default(0.0)
+
+  student                 Student             @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  document                NcertDocument       @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  startedAt               DateTime            @default(now())
+  lastActiveAt            DateTime            @default(now())
+  completedAt             DateTime?
+
+  @@unique([studentId, documentId])
+  @@index([studentId])
+  @@map("ncert_student_chapter_progress")
+}
+
+model NcertStudentPageProgress {
+  id                 String                  @id @default(cuid())
+  studentId          String
+  documentId         String
+  chapterId          String
+  pageId             String
+  pageNumber         Int
+  language           NCERTLanguage
+  status             NCERTPageProgressStatus @default(NOT_STARTED)
+  attemptCount       Int                     @default(0)
+  questionsAttempted Int                     @default(0)
+  correctAnswers     Int                     @default(0)
+  incorrectAnswers   Int                     @default(0)
+  accuracy           Float                   @default(0.0)
+  score              Int                     @default(0)
+
+  student            Student                 @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  document           NcertDocument           @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  page               NcertPage               @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  attempts           NcertStudentAttempt[]
+
+  startedAt          DateTime                @default(now())
+  completedAt        DateTime?
+  skippedAt          DateTime?
+
+  @@unique([studentId, pageId])
+  @@index([studentId, documentId])
+  @@map("ncert_student_page_progress")
+}
+
+model NcertStudentAttempt {
+  id             String                   @id @default(cuid())
+  studentId      String
+  pageId         String
+  pageProgressId String
+  attemptNumber  Int
+  questionIds    Json
+  answers        Json
+  score          Int
+  totalQuestions Int
+  correctCount   Int
+  accuracy       Float
+
+  pageProgress   NcertStudentPageProgress @relation(fields: [pageProgressId], references: [id], onDelete: Cascade)
+
+  createdAt      DateTime                 @default(now())
+
+  @@index([pageProgressId])
+  @@index([studentId, pageId])
+  @@map("ncert_student_attempts")
+}
+

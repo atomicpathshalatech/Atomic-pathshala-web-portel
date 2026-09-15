@@ -30,6 +30,7 @@ const NAV_SECTIONS: { title?: string; items: { href: string; label: string; icon
       { href: "/team/questions/ai-generated", label: "AI Generated Questions", icon: "psychology", permission: PERMISSIONS.QUESTION_CREATE },
       { href: "/team/question-extract", label: "Question Extract", icon: "document_scanner", permission: PERMISSIONS.QUESTION_CREATE },
       { href: "/team/dpp", label: "DPP", icon: "task_alt", permission: PERMISSIONS.DPP_READ },
+      { href: "/team/ncert", label: "NCERT Practice Hub", icon: "menu_book", permission: PERMISSIONS.CHAPTER_READ },
       { href: "/team/download-center", label: "Download Center", icon: "download_for_offline", permission: PERMISSIONS.TEAM_PORTAL_ACCESS },
       { href: "/team/doubts", label: "Doubt Desk", icon: "live_help", permission: PERMISSIONS.DOUBT_READ },
     ],
