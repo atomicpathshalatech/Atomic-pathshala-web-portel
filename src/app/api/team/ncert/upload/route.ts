@@ -45,11 +45,20 @@ export async function POST(request: NextRequest) {
 
     let fileUrl = "";
     try {
-      await uploadBufferToR2({ key: r2Key, buffer: fileBuffer, contentType: "application/pdf" });
-      fileUrl = `/uploads/ncert/${r2Key}`;
-    } catch (uploadErr) {
-      console.warn("[NCERT Upload] R2 upload skipped or failed, using local/relative path:", uploadErr);
-      fileUrl = `/uploads/ncert/${r2Key}`;
+      const { uploadFile } = await import("@/lib/storage");
+      fileUrl = await uploadFile({
+        key: r2Key,
+        body: fileBuffer,
+        contentType: "application/pdf",
+      });
+    } catch {
+      try {
+        await uploadBufferToR2({ key: r2Key, buffer: fileBuffer, contentType: "application/pdf" });
+        fileUrl = r2Key;
+      } catch (uploadErr) {
+        console.warn("[NCERT Upload] R2 upload skipped or failed, using key:", uploadErr);
+        fileUrl = r2Key;
+      }
     }
 
     // 3. Determine next version for this chapter and language

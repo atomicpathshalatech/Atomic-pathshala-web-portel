@@ -28,6 +28,25 @@ interface DocumentMeta {
 
 import { MathText } from "@/components/ai-chat/MathText";
 import { Sparkles } from "lucide-react";
+import dynamic from "next/dynamic";
+
+const NcertOriginalPageViewer = dynamic(
+  () =>
+    import("@/components/ncert/NcertOriginalPageViewer").then(
+      (m) => m.NcertOriginalPageViewer
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-full w-full flex-col items-center justify-center p-12 text-slate-400 space-y-2">
+        <span className="material-symbols-outlined animate-spin text-2xl text-emerald-600">
+          progress_activity
+        </span>
+        <span className="text-xs font-semibold text-slate-600">Loading Original NCERT Book Page...</span>
+      </div>
+    ),
+  }
+);
 
 interface QuestionOption {
   id: "A" | "B" | "C" | "D";
@@ -214,7 +233,6 @@ export default function NcertChapterReaderPage() {
   const [skippingPage, setSkippingPage] = useState<boolean>(false);
 
   // Reader Controls
-  const [fontSize, setFontSize] = useState<number>(15);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState<boolean>(false);
 
   // Fetch page details
@@ -487,114 +505,27 @@ export default function NcertChapterReaderPage() {
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* ================= LEFT PANEL: NCERT READER ================= */}
         <div className="flex-1 lg:w-1/2 flex flex-col border-r border-slate-200 bg-white overflow-hidden">
-          {/* Reader controls toolbar */}
-          <div className="flex h-10 shrink-0 items-center justify-between border-b border-slate-100 bg-slate-50/70 px-4 text-xs text-slate-600">
-            <div className="flex items-center gap-2 font-medium">
-              <span className="material-symbols-outlined text-base text-emerald-600">menu_book</span>
-              <span>NCERT Source Document (Page {currentPageNum})</span>
+          {pageData ? (
+            <NcertOriginalPageViewer
+              documentId={documentId}
+              fileUrl={pageData.fileUrl}
+              pageNumber={currentPageNum}
+              totalPages={pageData.totalPages || 1}
+              extractedText={pageData.extractedText}
+              extractedElements={pageData.extractedElements}
+            />
+          ) : loadingPage ? (
+            <div className="flex flex-col items-center justify-center h-full p-8 text-slate-400 space-y-3">
+              <span className="material-symbols-outlined animate-spin text-3xl text-emerald-600">
+                progress_activity
+              </span>
+              <p className="text-xs font-semibold text-slate-600">Loading NCERT Page {currentPageNum}...</p>
             </div>
-
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => setFontSize((s) => Math.max(12, s - 1))}
-                className="h-6 w-6 rounded hover:bg-slate-200/70 font-mono text-xs flex items-center justify-center"
-                title="Decrease font size"
-              >
-                A-
-              </button>
-              <span className="text-[11px] text-slate-400 font-mono">{fontSize}px</span>
-              <button
-                type="button"
-                onClick={() => setFontSize((s) => Math.min(22, s + 1))}
-                className="h-6 w-6 rounded hover:bg-slate-200/70 font-mono text-xs flex items-center justify-center"
-                title="Increase font size"
-              >
-                A+
-              </button>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full p-8 text-slate-400">
+              <p className="text-sm">Page not found.</p>
             </div>
-          </div>
-
-          {/* Reader text body */}
-          <div className="flex-1 overflow-y-auto p-5 sm:p-8 select-text">
-            {loadingPage ? (
-              <div className="space-y-4 max-w-2xl mx-auto py-8">
-                <div className="h-6 w-1/3 animate-pulse rounded bg-slate-200" />
-                <div className="space-y-2">
-                  <div className="h-4 w-full animate-pulse rounded bg-slate-100" />
-                  <div className="h-4 w-11/12 animate-pulse rounded bg-slate-100" />
-                  <div className="h-4 w-4/5 animate-pulse rounded bg-slate-100" />
-                </div>
-                <div className="h-24 w-full animate-pulse rounded-xl bg-slate-100" />
-              </div>
-            ) : pageData ? (
-              <article
-                className="max-w-2xl mx-auto space-y-4 text-slate-800 leading-relaxed font-serif"
-                style={{ fontSize: `${fontSize}px` }}
-              >
-                {/* Structured elements if available */}
-                {pageData.extractedElements && pageData.extractedElements.length > 0 ? (
-                  pageData.extractedElements.map((el, idx) => {
-                    if (el.type === "heading") {
-                      return (
-                        <h3
-                          key={idx}
-                          className="pt-2 font-sans font-bold tracking-tight text-slate-900 border-b border-emerald-100 pb-1"
-                          style={{ fontSize: `${fontSize * 1.25}px` }}
-                        >
-                          {el.content}
-                        </h3>
-                      );
-                    }
-                    if (el.type === "diagram_caption") {
-                      return (
-                        <div
-                          key={idx}
-                          className="my-3 rounded-lg border border-emerald-200 bg-emerald-50/50 p-3 text-emerald-950 font-sans text-xs italic"
-                        >
-                          <span className="font-bold not-italic mr-1.5">NCERT Diagram / Table:</span>
-                          {el.content}
-                        </div>
-                      );
-                    }
-                    if (el.type === "formula") {
-                      return (
-                        <div
-                          key={idx}
-                          className="my-2 rounded bg-slate-100 px-3 py-1.5 font-mono text-xs text-indigo-900 overflow-x-auto"
-                        >
-                          {el.content}
-                        </div>
-                      );
-                    }
-                    if (el.type === "list") {
-                      return (
-                        <li key={idx} className="ml-4 list-disc pl-1 font-serif">
-                          {el.content}
-                        </li>
-                      );
-                    }
-                    return (
-                      <p key={idx} className="text-justify font-serif">
-                        {el.content}
-                      </p>
-                    );
-                  })
-                ) : (
-                  // Fallback plain paragraph rendering
-                  pageData.extractedText.split("\n\n").map((para, idx) => (
-                    <p key={idx} className="text-justify font-serif">
-                      {para}
-                    </p>
-                  ))
-                )}
-              </article>
-            ) : (
-              <div className="py-20 text-center text-slate-400">
-                <p>No content found for this page.</p>
-              </div>
-            )}
-          </div>
+          )}
 
           {/* Mobile bottom sticky action bar (shows only on mobile screens < lg) */}
           <div className="lg:hidden shrink-0 border-t border-slate-200 bg-white p-3 flex gap-2">
