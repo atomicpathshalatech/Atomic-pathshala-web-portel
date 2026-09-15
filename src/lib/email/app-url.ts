@@ -13,6 +13,12 @@ export function getAppBaseUrl(): string {
     base = "https://ap.atomicpathshala.in";
   }
 
+  try {
+    new URL(base);
+  } catch {
+    base = "https://ap.atomicpathshala.in";
+  }
+
   return base;
 }
 

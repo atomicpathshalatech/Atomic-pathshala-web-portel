@@ -167,8 +167,8 @@ export async function streamNcertQuestionsToQuestionBank({
   const isHindi = document.language === NCERTLanguage.HINDI;
 
   const safeUserId =
-    (await resolveUserId(userId)) ||
-    (await resolveUserId(document.uploadedById)) ||
+    (await resolveSafeUserId(userId)) ||
+    (await resolveSafeUserId(document.uploadedById)) ||
     (await prisma.user.findFirst({ select: { id: true } }))?.id;
   if (!safeUserId) return 0;
 
