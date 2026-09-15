@@ -113,7 +113,53 @@ export function validateNcertQuestion(
     }
   }
 
-  // Check 5: Deduplication against existing questions on this page
+  // Check 5: Atomic Guru Question Type & Structural Integrity
+  if (candidate.questionType === "ASSERTION_REASON") {
+    const hasAssertion = Boolean(candidate.assertionText?.trim() || /(?:Assertion|अभिकथन)\s*[\(:]/i.test(candidate.question));
+    const hasReason = Boolean(candidate.reasonText?.trim() || /(?:Reason|कारण)\s*[\(:]/i.test(candidate.question));
+    if (!hasAssertion || !hasReason) {
+      return {
+        isValid: false,
+        rejectReason: "Assertion-Reason question must include both Assertion (A) and Reason (R)",
+      };
+    }
+  }
+
+  if (candidate.questionType === "STATEMENT_BASED") {
+    const hasStatements =
+      Boolean(candidate.statements && candidate.statements.length >= 2) ||
+      /(?:Statement|कथन)\s*(?:I|1|A)/i.test(candidate.question);
+    if (!hasStatements) {
+      return {
+        isValid: false,
+        rejectReason: "Statement-based question must provide at least two statements",
+      };
+    }
+  }
+
+  if (candidate.questionType === "MATCH_FOLLOWING") {
+    const hasColumns =
+      Boolean(candidate.columnI?.length && candidate.columnII?.length) ||
+      /(?:column|स्तंभ|match)/i.test(candidate.question);
+    if (!hasColumns) {
+      return {
+        isValid: false,
+        rejectReason: "Match the following question must provide pairing items",
+      };
+    }
+  }
+
+  // Check 6: Diagram-based strict fidelity
+  if (candidate.questionType === "DIAGRAM_BASED" || candidate.imageRequired) {
+    if (!candidate.sourceImageReference) {
+      return {
+        isValid: false,
+        rejectReason: "Diagram-based question rejected: no authentic NCERT page image/figure is attached",
+      };
+    }
+  }
+
+  // Check 7: Deduplication against existing questions on this page
   for (const eq of existingQuestions) {
     const similarity = jaccardSimilarity(candidate.question, eq);
     if (similarity > 0.7) {

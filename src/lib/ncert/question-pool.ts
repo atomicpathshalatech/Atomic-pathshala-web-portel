@@ -4,9 +4,13 @@ import {
   NcertPageQuestion,
   NCERTVerificationStatus,
   NCERTPageProgressStatus,
+  QuestionType,
+  Difficulty,
 } from "@prisma/client";
-import { generatePageQuestions } from "./ai-generator";
+import { generatePageQuestions, type CandidateNcertQuestion } from "./ai-generator";
 import { validateNcertQuestion } from "./question-validator";
+import { generateQuestionId } from "@/lib/questions/id-generator";
+import { resolveUserId } from "@/lib/ai-chat/atomicGuruPipeline";
 
 export const MAX_REATTEMPTS_PER_PAGE = 3; // Initial attempt (Set 1) + 3 reattempts (Set 2, 3, 4) = max 4 sets
 
@@ -16,6 +20,20 @@ export interface ClientQuestionView {
   question: string;
   options: { id: "A" | "B" | "C" | "D"; text: string }[];
   sourceImageReference?: string | null;
+
+  // Atomic Guru structured components
+  assertionText?: string;
+  reasonText?: string;
+  statements?: string[];
+  columnI?: { label: string; text: string }[];
+  columnII?: { label: string; text: string }[];
+  columnIII?: { label: string; text: string }[];
+  sequenceItems?: { label: string; text: string }[];
+  tableHeaders?: string[];
+  tableRows?: string[][];
+  passage?: string;
+  imageRequired?: boolean;
+  imageDescription?: string;
 }
 
 export interface StudentSubmissionAnswer {
@@ -25,6 +43,7 @@ export interface StudentSubmissionAnswer {
 
 export interface QuestionGradingReview {
   id: string;
+  questionType?: string;
   question: string;
   options: { id: "A" | "B" | "C" | "D"; text: string }[];
   selectedOption: string;
@@ -32,6 +51,214 @@ export interface QuestionGradingReview {
   isCorrect: boolean;
   explanation: string;
   sourceTextReference: string;
+  sourceImageReference?: string | null;
+
+  // Atomic Guru structured components
+  assertionText?: string;
+  reasonText?: string;
+  statements?: string[];
+  columnI?: { label: string; text: string }[];
+  columnII?: { label: string; text: string }[];
+  columnIII?: { label: string; text: string }[];
+  sequenceItems?: { label: string; text: string }[];
+  tableHeaders?: string[];
+  tableRows?: string[][];
+  passage?: string;
+  imageRequired?: boolean;
+  imageDescription?: string;
+
+  // 4-Part Structured Solution
+  explainQuestion?: string;
+  concept?: string;
+  solution?: string;
+  finalAnswer?: string;
+}
+
+export interface StructuredQuestionData {
+  choices: { id: "A" | "B" | "C" | "D"; text: string }[];
+  assertionText?: string;
+  reasonText?: string;
+  statements?: string[];
+  columnI?: { label: string; text: string }[];
+  columnII?: { label: string; text: string }[];
+  columnIII?: { label: string; text: string }[];
+  sequenceItems?: { label: string; text: string }[];
+  tableHeaders?: string[];
+  tableRows?: string[][];
+  passage?: string;
+  imageRequired?: boolean;
+  imageDescription?: string;
+  explainQuestion?: string;
+  concept?: string;
+  solution?: string;
+  finalAnswer?: string;
+}
+
+/**
+ * Safely extracts rich Atomic Guru structured elements from NcertPageQuestion.options JSON
+ * with complete backward compatibility for legacy flat arrays.
+ */
+export function extractStructuredQuestionData(optionsJson: any): StructuredQuestionData {
+  if (Array.isArray(optionsJson)) {
+    return { choices: optionsJson };
+  }
+  if (optionsJson && typeof optionsJson === "object") {
+    const choices = Array.isArray(optionsJson.choices) ? optionsJson.choices : [];
+    return {
+      choices,
+      assertionText: optionsJson.assertionText || undefined,
+      reasonText: optionsJson.reasonText || undefined,
+      statements: Array.isArray(optionsJson.statements) ? optionsJson.statements : undefined,
+      columnI: Array.isArray(optionsJson.columnI) ? optionsJson.columnI : undefined,
+      columnII: Array.isArray(optionsJson.columnII) ? optionsJson.columnII : undefined,
+      columnIII: Array.isArray(optionsJson.columnIII) ? optionsJson.columnIII : undefined,
+      sequenceItems: Array.isArray(optionsJson.sequenceItems) ? optionsJson.sequenceItems : undefined,
+      tableHeaders: Array.isArray(optionsJson.tableHeaders) ? optionsJson.tableHeaders : undefined,
+      tableRows: Array.isArray(optionsJson.tableRows) ? optionsJson.tableRows : undefined,
+      passage: optionsJson.passage || undefined,
+      imageRequired: Boolean(optionsJson.imageRequired),
+      imageDescription: optionsJson.imageDescription || undefined,
+      explainQuestion: optionsJson.explainQuestion || undefined,
+      concept: optionsJson.concept || undefined,
+      solution: optionsJson.solution || undefined,
+      finalAnswer: optionsJson.finalAnswer || undefined,
+    };
+  }
+  return { choices: [] };
+}
+
+/**
+ * Streams verified NCERT page questions directly into the central Question Bank (prisma.question & translations)
+ * using the exact same schema and architecture as Atomic Guru.
+ * Guaranteed duplicate prevention via statement check.
+ */
+export async function streamNcertQuestionsToQuestionBank({
+  document,
+  pageNumber,
+  questions,
+  userId,
+}: {
+  document: {
+    academicChapter?: { title: string } | null;
+    academicSubject?: { name: string } | null;
+    academicClass?: { name: string } | null;
+    language: NCERTLanguage;
+  };
+  pageNumber: number;
+  questions: CandidateNcertQuestion[];
+  userId?: string | null;
+}): Promise<number> {
+  const subjectName = document.academicSubject?.name || "General";
+  const chapterTitle = document.academicChapter?.title || "NCERT Practice";
+  const className = document.academicClass?.name || "";
+  const isHindi = document.language === NCERTLanguage.HINDI;
+
+  const safeUserId = (await resolveUserId(userId)) || (await prisma.user.findFirst({ select: { id: true } }))?.id;
+  if (!safeUserId) return 0;
+
+  let savedCount = 0;
+
+  for (const q of questions) {
+    try {
+      const trimmedStatement = q.question.trim();
+      if (!trimmedStatement) continue;
+
+      // Duplicate prevention: check if translation already exists with identical text
+      const existingTranslation = await prisma.questionTranslation.findFirst({
+        where: {
+          statement: trimmedStatement,
+          language: isHindi ? "HINDI" : "ENGLISH",
+        },
+        select: { id: true },
+      });
+
+      if (existingTranslation) {
+        continue;
+      }
+
+      const code = await generateQuestionId(prisma, subjectName);
+      const correctLetter = q.correctAnswer;
+      const optionsMap: Record<string, string> = {
+        A: q.options.find((o) => o.id === "A")?.text || "",
+        B: q.options.find((o) => o.id === "B")?.text || "",
+        C: q.options.find((o) => o.id === "C")?.text || "",
+        D: q.options.find((o) => o.id === "D")?.text || "",
+      };
+
+      const structuredSolution = q.solution || q.explanation || "";
+
+      let pType: QuestionType = QuestionType.SINGLE_CORRECT;
+      const typeStr = String(q.questionType).toUpperCase();
+      if (typeStr.includes("ASSERTION")) pType = QuestionType.ASSERTION_REASON;
+      else if (typeStr.includes("STATEMENT")) pType = QuestionType.STATEMENT_BASED;
+      else if (typeStr.includes("MATCH")) pType = QuestionType.MATCH_COLUMN;
+
+      await prisma.question.create({
+        data: {
+          questionCode: code,
+          subject: subjectName,
+          chapter: chapterTitle,
+          topic: `NCERT Page ${pageNumber}`,
+          type: pType,
+          difficulty: Difficulty.MEDIUM,
+          category: "NCERT_HUB",
+          status: "DRAFT",
+          solution: structuredSolution,
+          tags: `NCERT_HUB, CLASS_${className.replace(/\s+/g, "_")}, CHAPTER_${chapterTitle.replace(/\s+/g, "_")}, PAGE_${pageNumber}`,
+          ncertBook: subjectName,
+          ncertClass: className,
+          ncertChapter: chapterTitle,
+          ncertPage: String(pageNumber),
+          createdById: safeUserId,
+          translations: {
+            create: [
+              {
+                language: isHindi ? "HINDI" : "ENGLISH",
+                statement: trimmedStatement,
+                options: optionsMap,
+                correctOptionIds: [correctLetter],
+                solution: structuredSolution,
+              },
+            ],
+          },
+          versions: {
+            create: {
+              versionNumber: 1,
+              editedById: safeUserId,
+              changeType: "CREATE",
+              snapshot: {
+                statement: trimmedStatement,
+                options: optionsMap,
+                correctOption: correctLetter,
+                explainQuestion: q.explainQuestion,
+                concept: q.concept,
+                solution: structuredSolution,
+                finalAnswer: q.finalAnswer,
+                subject: subjectName,
+                chapter: chapterTitle,
+                pageNumber,
+                sourceTextReference: q.sourceTextReference,
+                sourceModule: "NCERT_HUB",
+                extras: {
+                  assertionText: q.assertionText,
+                  reasonText: q.reasonText,
+                  statements: q.statements,
+                  columnI: q.columnI,
+                  columnII: q.columnII,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      savedCount++;
+    } catch (err) {
+      console.warn("[NCERT Question Bank Stream] Failed to stream question:", err);
+    }
+  }
+
+  return savedCount;
 }
 
 export interface SubmissionEvaluationResult {
@@ -102,12 +329,14 @@ export async function getOrGeneratePageQuestionPool(
     className: page.document.academicClass.name,
     language: page.document.language,
     pageText: page.extractedText,
+    pageImageUrl: page.pageImageUrl,
     targetCount: 5,
     excludeQuestions: excludeQuestionTexts,
   });
 
   // 4. Validate candidates
   const approvedRows: any[] = [];
+  const approvedCandidates: CandidateNcertQuestion[] = [];
   const currentBatchTexts: string[] = [...excludeQuestionTexts];
 
   for (const candidate of candidates) {
@@ -120,6 +349,7 @@ export async function getOrGeneratePageQuestionPool(
 
     if (validation.isValid) {
       currentBatchTexts.push(candidate.question);
+      approvedCandidates.push(candidate);
       approvedRows.push({
         pageId: page.id,
         documentId: page.documentId,
@@ -128,7 +358,25 @@ export async function getOrGeneratePageQuestionPool(
         language: page.document.language,
         questionType: candidate.questionType,
         question: candidate.question,
-        options: candidate.options,
+        options: {
+          choices: candidate.options,
+          assertionText: candidate.assertionText,
+          reasonText: candidate.reasonText,
+          statements: candidate.statements,
+          columnI: candidate.columnI,
+          columnII: candidate.columnII,
+          columnIII: candidate.columnIII,
+          sequenceItems: candidate.sequenceItems,
+          tableHeaders: candidate.tableHeaders,
+          tableRows: candidate.tableRows,
+          passage: candidate.passage,
+          imageRequired: candidate.imageRequired,
+          imageDescription: candidate.imageDescription,
+          explainQuestion: candidate.explainQuestion,
+          concept: candidate.concept,
+          solution: candidate.solution,
+          finalAnswer: candidate.finalAnswer,
+        },
         correctAnswer: candidate.correctAnswer,
         explanation: candidate.explanation,
         sourceTextReference: candidate.sourceTextReference,
@@ -148,6 +396,15 @@ export async function getOrGeneratePageQuestionPool(
     data: approvedRows,
   });
 
+  // 6. Automatically stream verified NCERT questions to central Question Bank
+  await streamNcertQuestionsToQuestionBank({
+    document: page.document,
+    pageNumber: page.pageNumber,
+    questions: approvedCandidates,
+  }).catch((err) => {
+    console.warn("[NCERT Question Pool] Background Question Bank stream error:", err);
+  });
+
   return prisma.ncertPageQuestion.findMany({
     where: { pageId, poolSet, verificationStatus: NCERTVerificationStatus.APPROVED },
     orderBy: { createdAt: "asc" },
@@ -158,13 +415,28 @@ export async function getOrGeneratePageQuestionPool(
  * Strips correct answers and explanations before sending to client prior to submission.
  */
 export function sanitizeQuestionsForClient(questions: NcertPageQuestion[]): ClientQuestionView[] {
-  return questions.map((q) => ({
-    id: q.id,
-    questionType: q.questionType,
-    question: q.question,
-    options: q.options as { id: "A" | "B" | "C" | "D"; text: string }[],
-    sourceImageReference: q.sourceImageReference,
-  }));
+  return questions.map((q) => {
+    const structured = extractStructuredQuestionData(q.options);
+    return {
+      id: q.id,
+      questionType: q.questionType,
+      question: q.question,
+      options: structured.choices.length > 0 ? structured.choices : (q.options as any),
+      sourceImageReference: q.sourceImageReference,
+      assertionText: structured.assertionText,
+      reasonText: structured.reasonText,
+      statements: structured.statements,
+      columnI: structured.columnI,
+      columnII: structured.columnII,
+      columnIII: structured.columnIII,
+      sequenceItems: structured.sequenceItems,
+      tableHeaders: structured.tableHeaders,
+      tableRows: structured.tableRows,
+      passage: structured.passage,
+      imageRequired: structured.imageRequired,
+      imageDescription: structured.imageDescription,
+    };
+  });
 }
 
 /**
@@ -254,15 +526,35 @@ export async function evaluateStudentSubmission(params: {
       isCorrect,
     });
 
+    const structured = extractStructuredQuestionData(q.options);
+
     reviews.push({
       id: q.id,
+      questionType: q.questionType,
       question: q.question,
-      options: q.options as { id: "A" | "B" | "C" | "D"; text: string }[],
+      options: structured.choices.length > 0 ? structured.choices : (q.options as any),
       selectedOption: selected,
       correctAnswer: q.correctAnswer,
       isCorrect,
       explanation: q.explanation,
       sourceTextReference: q.sourceTextReference,
+      sourceImageReference: q.sourceImageReference,
+      assertionText: structured.assertionText,
+      reasonText: structured.reasonText,
+      statements: structured.statements,
+      columnI: structured.columnI,
+      columnII: structured.columnII,
+      columnIII: structured.columnIII,
+      sequenceItems: structured.sequenceItems,
+      tableHeaders: structured.tableHeaders,
+      tableRows: structured.tableRows,
+      passage: structured.passage,
+      imageRequired: structured.imageRequired,
+      imageDescription: structured.imageDescription,
+      explainQuestion: structured.explainQuestion,
+      concept: structured.concept,
+      solution: structured.solution || q.explanation,
+      finalAnswer: structured.finalAnswer,
     });
   }
 

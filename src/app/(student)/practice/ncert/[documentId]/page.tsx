@@ -26,12 +26,30 @@ interface DocumentMeta {
   className: string;
 }
 
+import { MathText } from "@/components/ai-chat/MathText";
+import { Sparkles } from "lucide-react";
+
 interface QuestionOption {
   id: "A" | "B" | "C" | "D";
   text: string;
 }
 
-interface ClientQuestion {
+interface QuestionExtrasData {
+  assertionText?: string;
+  reasonText?: string;
+  statements?: string[];
+  columnI?: { label: string; text: string }[];
+  columnII?: { label: string; text: string }[];
+  columnIII?: { label: string; text: string }[];
+  sequenceItems?: { label: string; text: string }[];
+  tableHeaders?: string[];
+  tableRows?: string[][];
+  passage?: string;
+  imageRequired?: boolean;
+  imageDescription?: string;
+}
+
+interface ClientQuestion extends QuestionExtrasData {
   id: string;
   questionType: string;
   question: string;
@@ -39,8 +57,9 @@ interface ClientQuestion {
   sourceImageReference?: string | null;
 }
 
-interface QuestionReview {
+interface QuestionReview extends QuestionExtrasData {
   id: string;
+  questionType?: string;
   question: string;
   options: QuestionOption[];
   selectedOption: string;
@@ -48,12 +67,118 @@ interface QuestionReview {
   isCorrect: boolean;
   explanation: string;
   sourceTextReference: string;
+  sourceImageReference?: string | null;
+
+  // 4-Part Structured Solution
+  explainQuestion?: string;
+  concept?: string;
+  solution?: string;
+  finalAnswer?: string;
 }
 
 interface EvaluationResult {
   score: number;
   accuracy: number;
   reviews: QuestionReview[];
+}
+
+function PracticeQuestionExtras({ item }: { item: QuestionExtrasData & { sourceImageReference?: string | null } }) {
+  const hasPassage = Boolean(item.passage?.trim());
+  const hasAssertionReason = Boolean(item.assertionText?.trim() && item.reasonText?.trim());
+  const hasStatements = Boolean(item.statements?.length);
+  const hasColumns = Boolean(item.columnI?.length && item.columnII?.length);
+  const hasImage = Boolean(item.sourceImageReference || item.imageRequired);
+
+  return (
+    <div className="space-y-2.5">
+      {hasPassage && (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs italic text-slate-700">
+          <MathText text={item.passage ?? ""} />
+        </div>
+      )}
+
+      {hasAssertionReason && (
+        <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-3 text-xs space-y-1.5 text-slate-800">
+          <div>
+            <strong className="text-blue-900 font-bold">Assertion (A): </strong>
+            <MathText text={item.assertionText ?? ""} />
+          </div>
+          <div>
+            <strong className="text-blue-900 font-bold">Reason (R): </strong>
+            <MathText text={item.reasonText ?? ""} />
+          </div>
+        </div>
+      )}
+
+      {hasStatements && (
+        <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3 text-xs space-y-1.5 text-slate-800">
+          {item.statements!.map((stmt, idx) => (
+            <div key={idx} className="leading-relaxed">
+              <MathText text={stmt} />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {hasColumns && (
+        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+          <table className="w-full border-collapse text-xs">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200 text-slate-600">
+                <th className="p-2 text-left font-semibold">Column-I</th>
+                <th className="p-2 text-left font-semibold">Column-II</th>
+                {item.columnIII?.length ? <th className="p-2 text-left font-semibold">Column-III</th> : null}
+              </tr>
+            </thead>
+            <tbody>
+              {item.columnI!.map((col, idx) => {
+                const right = item.columnII?.[idx];
+                const third = item.columnIII?.[idx];
+                return (
+                  <tr key={col.label} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50">
+                    <td className="p-2 align-top">
+                      <strong>({col.label})</strong> <MathText text={col.text} />
+                    </td>
+                    <td className="p-2 align-top">
+                      {right ? (
+                        <>
+                          <strong>({right.label})</strong> <MathText text={right.text} />
+                        </>
+                      ) : null}
+                    </td>
+                    {item.columnIII?.length ? (
+                      <td className="p-2 align-top">
+                        {third ? (
+                          <>
+                            <strong>({third.label})</strong> <MathText text={third.text} />
+                          </>
+                        ) : null}
+                      </td>
+                    ) : null}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {hasImage && item.sourceImageReference && (
+        <div className="rounded-xl border border-slate-200 overflow-hidden bg-slate-50 p-2.5 text-center">
+          <img
+            src={item.sourceImageReference}
+            alt="NCERT Figure"
+            className="mx-auto max-h-64 rounded-lg object-contain border border-slate-100 shadow-sm"
+          />
+          {item.imageDescription && (
+            <p className="mt-1.5 text-[11px] font-medium text-slate-600 italic">
+              {item.imageDescription}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function NcertChapterReaderPage() {
@@ -614,15 +739,18 @@ export default function NcertChapterReaderPage() {
                           <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[11px] font-bold text-slate-700 mt-0.5">
                             {qIndex + 1}
                           </span>
-                          <div className="space-y-1">
+                          <div className="space-y-1 flex-1">
                             <span className="inline-block text-[10px] font-bold uppercase tracking-wider text-slate-400">
                               {q.questionType.replace(/_/g, " ")}
                             </span>
-                            <p className="text-sm font-medium text-slate-900 leading-snug">
-                              {q.question}
-                            </p>
+                            <div className="text-sm font-medium text-slate-900 leading-snug">
+                              <MathText text={q.question} />
+                            </div>
                           </div>
                         </div>
+
+                        {/* Atomic Guru Question Extras (Assertion/Reason, Statements, Columns, Diagrams) */}
+                        <PracticeQuestionExtras item={q} />
 
                         {/* Options */}
                         <div className="space-y-2 pt-1">
@@ -648,7 +776,9 @@ export default function NcertChapterReaderPage() {
                                 >
                                   {opt.id}
                                 </span>
-                                <span className="flex-1">{opt.text}</span>
+                                <span className="flex-1">
+                                  <MathText text={opt.text} />
+                                </span>
                               </button>
                             );
                           })}
@@ -764,16 +894,21 @@ export default function NcertChapterReaderPage() {
                   {lastResult.reviews.map((r, rIdx) => (
                     <div
                       key={r.id}
-                      className={`rounded-xl border p-4 shadow-sm space-y-3 ${
+                      className={`rounded-xl border p-4 shadow-sm space-y-3.5 ${
                         r.isCorrect
                           ? "border-emerald-200 bg-emerald-50/20"
                           : "border-rose-200 bg-rose-50/20"
                       }`}
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <span className="text-xs font-bold text-slate-800">
-                          Q{rIdx + 1}. {r.question}
-                        </span>
+                        <div className="flex items-start gap-2 flex-1">
+                          <span className="text-xs font-bold text-slate-800">
+                            Q{rIdx + 1}.
+                          </span>
+                          <div className="text-xs font-bold text-slate-800 flex-1">
+                            <MathText text={r.question} />
+                          </div>
+                        </div>
                         <span
                           className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${
                             r.isCorrect
@@ -781,9 +916,12 @@ export default function NcertChapterReaderPage() {
                               : "bg-rose-100 text-rose-800"
                           }`}
                         >
-                          {r.isCorrect ? "Correct" : "Incorrect"}
+                          {r.isCorrect ? "Correct (+4)" : "Incorrect (-1)"}
                         </span>
                       </div>
+
+                      {/* Atomic Guru Question Extras (Assertion/Reason, Statements, Columns, Diagrams) */}
+                      <PracticeQuestionExtras item={r} />
 
                       {/* Options review */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs">
@@ -812,7 +950,9 @@ export default function NcertChapterReaderPage() {
                               >
                                 {opt.id}
                               </span>
-                              <span className="truncate">{opt.text}</span>
+                              <div className="flex-1 leading-snug">
+                                <MathText text={opt.text} />
+                              </div>
                             </div>
                           );
                         })}
@@ -829,12 +969,57 @@ export default function NcertChapterReaderPage() {
                         </div>
                       )}
 
-                      {/* Explanation */}
-                      {r.explanation && (
-                        <p className="text-xs text-slate-600 bg-white p-2.5 rounded-lg border border-slate-200">
-                          <strong>Explanation:</strong> {r.explanation}
-                        </p>
-                      )}
+                      {/* Atomic Guru 4-Part Structured Solution Box */}
+                      <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-2.5 text-xs">
+                        <div className="flex items-center gap-1.5 border-b border-slate-200 pb-1.5 font-bold uppercase tracking-wider text-slate-800">
+                          <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+                          <span>Detailed NCERT Solution &amp; Concept</span>
+                        </div>
+
+                        {/* 1. Explain Question */}
+                        {r.explainQuestion && (
+                          <div className="rounded-lg border border-blue-100 bg-white p-2.5">
+                            <p className="mb-0.5 font-bold text-blue-600">
+                              🔍 EXPLAIN QUESTION:
+                            </p>
+                            <div className="text-slate-700 leading-relaxed">
+                              <MathText text={r.explainQuestion} />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* 2. Concept */}
+                        {r.concept && (
+                          <div className="rounded-lg border border-blue-100 bg-white p-2.5">
+                            <p className="mb-0.5 font-bold text-blue-600">
+                              💡 CONCEPT:
+                            </p>
+                            <div className="text-slate-700 leading-relaxed">
+                              <MathText text={r.concept} />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* 3. Step-by-Step Solution */}
+                        <div className="rounded-lg border border-amber-100 bg-white p-2.5">
+                          <p className="mb-0.5 font-bold text-amber-600">
+                            📝 STEP-BY-STEP SOLUTION:
+                          </p>
+                          <div className="whitespace-pre-line text-slate-700 leading-relaxed">
+                            <MathText text={r.solution || r.explanation || "Refer to NCERT textbook principles."} />
+                          </div>
+                        </div>
+
+                        {/* 4. Final Answer */}
+                        <div className="rounded-lg border border-emerald-200 bg-emerald-50/70 p-2.5">
+                          <p className="mb-0.5 font-bold text-emerald-800">
+                            🎯 FINAL ANSWER:
+                          </p>
+                          <div className="font-semibold text-emerald-950">
+                            <MathText text={r.finalAnswer || `Option (${r.correctAnswer}) is the correct answer.`} />
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>

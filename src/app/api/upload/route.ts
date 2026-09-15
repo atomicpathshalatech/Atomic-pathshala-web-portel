@@ -17,9 +17,20 @@ const ALLOWED_MIME_TYPES: Record<string, string> = {
   "image/webp": "webp",
   "image/gif": "gif",
   "image/svg+xml": "svg",
+  "audio/webm": "webm",
+  "audio/mp4": "mp4",
+  "audio/m4a": "m4a",
+  "audio/x-m4a": "m4a",
+  "audio/ogg": "ogg",
+  "audio/wav": "wav",
+  "audio/x-wav": "wav",
+  "audio/mpeg": "mp3",
+  "audio/mp3": "mp3",
+  "audio/aac": "aac",
 };
 
 const IMAGE_EXTS = new Set(["jpg", "png", "webp", "gif", "svg"]);
+const AUDIO_EXTS = new Set(["webm", "mp4", "m4a", "ogg", "wav", "mp3", "aac"]);
 
 /**
  * Sniff the first bytes so a file can't lie about being an image via its
@@ -71,13 +82,21 @@ export async function POST(request: NextRequest) {
       else if (name.endsWith(".webp")) ext = "webp";
       else if (name.endsWith(".gif")) ext = "gif";
       else if (name.endsWith(".svg")) ext = "svg";
+      else if (name.endsWith(".webm")) ext = "webm";
+      else if (name.endsWith(".mp4")) ext = "mp4";
+      else if (name.endsWith(".m4a")) ext = "m4a";
+      else if (name.endsWith(".ogg")) ext = "ogg";
+      else if (name.endsWith(".wav")) ext = "wav";
+      else if (name.endsWith(".mp3")) ext = "mp3";
+      else if (name.endsWith(".aac")) ext = "aac";
     }
 
     if (!ext) {
-      return apiError("Unsupported file type. Please upload an image, PDF, PPT, or PPTX file.", 400);
+      return apiError("Unsupported file type. Please upload an image, audio recording, PDF, PPT, or PPTX file.", 400);
     }
 
     const isImage = IMAGE_EXTS.has(ext);
+    const isAudio = AUDIO_EXTS.has(ext);
     const buffer = Buffer.from(await file.arrayBuffer());
 
     // Content sniff for images — reject a spoofed content-type / extension.
@@ -85,14 +104,26 @@ export async function POST(request: NextRequest) {
       return apiError("That file does not look like a valid image. Please upload a real PNG, JPG, WEBP, GIF or SVG.", 400);
     }
 
-    // Generate clean, short unique filename (e.g. q_lh8w2_7a9f.png)
+    // Generate clean, short unique filename (e.g. q_lh8w2_7a9f.png, voice_lh8w2_7a9f.webm)
     const shortRandom = Math.random().toString(36).substring(2, 7);
     const shortTime = Date.now().toString(36);
     const shortFileName = isImage
       ? `q_${shortTime}_${shortRandom}.${ext}`
+      : isAudio
+      ? `voice_${shortTime}_${shortRandom}.${ext}`
       : `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
 
-    const subDir = isImage ? "questions" : targetFolder === "presentations" ? "presentations" : "files";
+    const subDir = isImage
+      ? "questions"
+      : isAudio
+      ? "doubt-audio"
+      : targetFolder === "presentations"
+      ? "presentations"
+      : targetFolder === "doubt-audio"
+      ? "doubt-audio"
+      : targetFolder === "ncert-diagrams"
+      ? "ncert-diagrams"
+      : "files";
     const key = `${subDir}/${shortFileName}`;
 
     // 1. Cloud object storage — the source of truth whenever it's configured.
@@ -106,7 +137,7 @@ export async function POST(request: NextRequest) {
         const publicUrl = await uploadFile({
           key,
           body: buffer,
-          contentType: file.type || (isImage ? `image/${ext}` : "application/octet-stream"),
+          contentType: file.type || (isImage ? `image/${ext}` : isAudio ? `audio/${ext}` : "application/octet-stream"),
         });
 
         return apiSuccess({

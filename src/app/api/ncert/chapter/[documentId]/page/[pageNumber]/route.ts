@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getAuthenticatedStudent } from "@/lib/ncert/auth-helper";
 import {
   sanitizeQuestionsForClient,
+  extractStructuredQuestionData,
   MAX_REATTEMPTS_PER_PAGE,
 } from "@/lib/ncert/question-pool";
 import { NCERTPageProgressStatus, NCERTVerificationStatus } from "@prisma/client";
@@ -97,15 +98,34 @@ export async function GET(
 
       reviews = existingQuestions.map((q) => {
         const selected = answersMap.get(q.id) || "";
+        const structured = extractStructuredQuestionData(q.options);
         return {
           id: q.id,
+          questionType: q.questionType,
           question: q.question,
-          options: q.options,
+          options: structured.choices.length > 0 ? structured.choices : (q.options as any),
           selectedOption: selected,
           correctAnswer: q.correctAnswer,
           isCorrect: selected === q.correctAnswer,
           explanation: q.explanation,
           sourceTextReference: q.sourceTextReference,
+          sourceImageReference: q.sourceImageReference,
+          assertionText: structured.assertionText,
+          reasonText: structured.reasonText,
+          statements: structured.statements,
+          columnI: structured.columnI,
+          columnII: structured.columnII,
+          columnIII: structured.columnIII,
+          sequenceItems: structured.sequenceItems,
+          tableHeaders: structured.tableHeaders,
+          tableRows: structured.tableRows,
+          passage: structured.passage,
+          imageRequired: structured.imageRequired,
+          imageDescription: structured.imageDescription,
+          explainQuestion: structured.explainQuestion,
+          concept: structured.concept,
+          solution: structured.solution || q.explanation,
+          finalAnswer: structured.finalAnswer,
         };
       });
     } else if (existingQuestions.length > 0 && isInProgress) {

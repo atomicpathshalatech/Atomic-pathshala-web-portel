@@ -144,9 +144,10 @@ export function VoiceRecorder({
     setStatus("uploading");
 
     try {
-      const ext = audioBlob.type.includes("mp4") ? "mp4" : "webm";
+      const ext = audioBlob.type.includes("mp4") ? "mp4" : audioBlob.type.includes("ogg") ? "ogg" : "webm";
+      const mime = audioBlob.type || (ext === "mp4" ? "audio/mp4" : ext === "ogg" ? "audio/ogg" : "audio/webm");
       const file = new File([audioBlob], `doubt-voice-${Date.now()}.${ext}`, {
-        type: audioBlob.type,
+        type: mime,
       });
 
       const fd = new FormData();
