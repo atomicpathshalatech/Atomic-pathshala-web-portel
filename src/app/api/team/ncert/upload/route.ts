@@ -15,6 +15,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    if (request.headers.get("content-type")?.includes("application/json")) {
+      const { POST: handleComplete } = await import("./complete/route");
+      return handleComplete(request);
+    }
+
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
     const academicClassId = formData.get("academicClassId") as string | null;

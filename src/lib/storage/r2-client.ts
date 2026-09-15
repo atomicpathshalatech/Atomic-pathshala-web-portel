@@ -67,10 +67,10 @@ function getR2Credentials() {
   // working — same production/local drift as the earlier duplicate STORAGE_*
   // block issue, recurring in this second, independent storage client. This
   // one is now immune to whatever STORAGE_ENDPOINT happens to be set to.
-  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
-  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-  const bucketName = process.env.R2_BUCKET_NAME || "atomic-pathshala";
+  const accountId = (process.env.CLOUDFLARE_ACCOUNT_ID || "").replace(/^["']|["']$/g, "").trim();
+  const accessKeyId = (process.env.R2_ACCESS_KEY_ID || "").replace(/^["']|["']$/g, "").trim();
+  const secretAccessKey = (process.env.R2_SECRET_ACCESS_KEY || "").replace(/^["']|["']$/g, "").trim();
+  const bucketName = (process.env.R2_BUCKET_NAME || "atomic-pathshala").replace(/^["']|["']$/g, "").trim();
 
   if (!accountId) throw new R2StorageNotConfiguredError("CLOUDFLARE_ACCOUNT_ID");
   if (!accessKeyId) throw new R2StorageNotConfiguredError("R2_ACCESS_KEY_ID");

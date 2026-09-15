@@ -168,6 +168,99 @@ export default function NcertAdminClient() {
     fetchDocuments();
   }, [selectedClassId, selectedSubjectId, selectedLanguage]);
 
+  // Helper to extract pages in browser worker without server payload limits
+  const extractNcertPagesClient = async (
+    file: File,
+    onProgress: (msg: string) => void
+  ): Promise<{ totalPages: number; pages: any[] }> => {
+    onProgress("Initializing PDF engine in browser...");
+    const pdfjsLib = await import("pdfjs-dist");
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+
+    const arrayBuffer = await file.arrayBuffer();
+    const loadingTask = pdfjsLib.getDocument({
+      data: new Uint8Array(arrayBuffer),
+      cMapUrl: "https://unpkg.com/pdfjs-dist@4.0.0/cmaps/",
+      cMapPacked: true,
+    });
+
+    const doc = await loadingTask.promise;
+    const totalPages = doc.numPages;
+    const pages: any[] = [];
+
+    for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+      onProgress(`Extracting page contents (${pageNum}/${totalPages})...`);
+      const page = await doc.getPage(pageNum);
+      const textContent = await page.getTextContent();
+
+      // Group items by line based on vertical coordinate Y
+      const lineMap = new Map<number, string[]>();
+      for (const item of textContent.items) {
+        if (!("str" in item) || !item.str.trim()) continue;
+        const transform = (item as any).transform;
+        const y = Math.round(transform[5] / 4) * 4;
+        if (!lineMap.has(y)) {
+          lineMap.set(y, []);
+        }
+        lineMap.get(y)!.push(item.str);
+      }
+
+      const sortedY = Array.from(lineMap.keys()).sort((a, b) => b - a);
+      const lines: string[] = [];
+      for (const y of sortedY) {
+        const lineText = lineMap.get(y)!.join(" ").trim();
+        if (lineText) lines.push(lineText);
+      }
+      const fullPageText = lines.join("\n").trim();
+
+      const extractedElements: any[] = [];
+      let currentParagraphLines: string[] = [];
+      const flushParagraph = () => {
+        if (currentParagraphLines.length > 0) {
+          const pText = currentParagraphLines.join(" ").trim();
+          if (pText) extractedElements.push({ type: "paragraph", content: pText });
+          currentParagraphLines = [];
+        }
+      };
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        if (
+          /^(figure|fig\.|चित्र|table|सारणी|diagram)\s+[\d\.]+/i.test(trimmed) ||
+          /^चित्र\s*[\d\.]+/i.test(trimmed)
+        ) {
+          flushParagraph();
+          extractedElements.push({ type: "diagram_caption", content: trimmed });
+          continue;
+        }
+        if (
+          /^[0-9]+(\.[0-9]+)*\s+[A-Z\u0900-\u097F]/.test(trimmed) ||
+          (/^[A-Z\s]{4,}$/.test(trimmed) && trimmed.length < 80)
+        ) {
+          flushParagraph();
+          extractedElements.push({ type: "heading", content: trimmed });
+          continue;
+        }
+        if (/^[•\-\*\u2022]\s+/.test(trimmed) || /^\([a-z0-9]+\)\s+/i.test(trimmed)) {
+          flushParagraph();
+          extractedElements.push({ type: "list", content: trimmed });
+          continue;
+        }
+        currentParagraphLines.push(trimmed);
+      }
+      flushParagraph();
+
+      pages.push({
+        pageNumber: pageNum,
+        extractedText: fullPageText,
+        extractedElements,
+      });
+    }
+
+    return { totalPages, pages };
+  };
+
   // Handle Upload
   const handleUploadSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -178,35 +271,151 @@ export default function NcertAdminClient() {
 
     setIsUploading(true);
     setUploadError(null);
-    setUploadProgressMsg("Uploading PDF to storage and processing page contents...");
 
     try {
-      const formData = new FormData();
-      formData.append("academicClassId", uploadClassId);
-      formData.append("academicSubjectId", uploadSubjectId);
-      formData.append("academicChapterId", uploadChapterId);
-      formData.append("language", uploadLanguage);
-      formData.append("file", uploadFile);
-
-      const res = await fetch("/api/team/ncert/upload", {
-        method: "POST",
-        body: formData,
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Upload or processing failed");
+      // 1. Extract pages in browser using pdfjs
+      let clientExtraction: { totalPages: number; pages: any[] } | null = null;
+      try {
+        clientExtraction = await extractNcertPagesClient(uploadFile, (msg) => {
+          setUploadProgressMsg(msg);
+        });
+      } catch (pdfErr: any) {
+        console.warn("[NCERT Client Extraction] Browser extraction skipped, falling back to server:", pdfErr);
       }
 
-      setUploadProgressMsg(`Success! Extracted ${data.extractedPages || 0} pages.`);
-      setTimeout(() => {
-        setIsUploadOpen(false);
-        setIsUploading(false);
-        setUploadFile(null);
-        setUploadProgressMsg("");
-        fetchDocuments();
-      }, 1200);
+      // 2. Request presigned upload URL from server
+      setUploadProgressMsg("Preparing direct storage upload...");
+      let presignSuccessful = false;
+      try {
+        const presignRes = await fetch("/api/team/ncert/upload/presign", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            academicClassId: uploadClassId,
+            academicSubjectId: uploadSubjectId,
+            academicChapterId: uploadChapterId,
+            language: uploadLanguage,
+            fileName: uploadFile.name,
+            contentType: "application/pdf",
+          }),
+        });
+
+        if (presignRes.ok) {
+          const presignData = await presignRes.json();
+          const { uploadUrl, r2Key } = presignData;
+
+          // 3. Upload directly to Cloudflare R2 (bypassing Vercel 4.5MB payload limit completely)
+          setUploadProgressMsg(
+            `Uploading PDF directly to storage (${(uploadFile.size / (1024 * 1024)).toFixed(1)} MB)...`
+          );
+          const r2UploadRes = await fetch(uploadUrl, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/pdf",
+            },
+            body: uploadFile,
+          });
+
+          if (!r2UploadRes.ok) {
+            const r2ErrText = await r2UploadRes.text().catch(() => "");
+            throw new Error(`Direct storage upload failed (${r2UploadRes.status}): ${r2ErrText || r2UploadRes.statusText}`);
+          }
+
+          // 4. Finalize document & pages
+          setUploadProgressMsg(`Saving chapter pages (${clientExtraction?.totalPages || 0} pages)...`);
+          const completeRes = await fetch("/api/team/ncert/upload/complete", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              academicClassId: uploadClassId,
+              academicSubjectId: uploadSubjectId,
+              academicChapterId: uploadChapterId,
+              language: uploadLanguage,
+              r2Key,
+              fileName: uploadFile.name,
+              fileSize: uploadFile.size,
+              totalPages: clientExtraction?.totalPages || 0,
+              pages: clientExtraction?.pages || [],
+            }),
+          });
+
+          const completeText = await completeRes.text();
+          let completeData: any = null;
+          try {
+            completeData = JSON.parse(completeText);
+          } catch {
+            throw new Error(completeText || `Finalizing upload failed (${completeRes.status})`);
+          }
+
+          if (!completeRes.ok) {
+            throw new Error(completeData?.error || "Failed to finalize upload");
+          }
+
+          setUploadProgressMsg(`Success! Extracted ${completeData.extractedPages || 0} pages.`);
+          setTimeout(() => {
+            setIsUploadOpen(false);
+            setIsUploading(false);
+            setUploadFile(null);
+            setUploadProgressMsg("");
+            fetchDocuments();
+          }, 1200);
+          presignSuccessful = true;
+          return;
+        }
+      } catch (directErr: any) {
+        console.warn("[NCERT Upload] Direct storage upload error, trying gateway fallback:", directErr);
+        if (uploadFile.size > 4.5 * 1024 * 1024) {
+          throw new Error(directErr.message || "Failed to upload file to storage.");
+        }
+      }
+
+      if (!presignSuccessful) {
+        // Fallback: If presign route is not available or returned non-ok, attempt standard upload
+        setUploadProgressMsg("Uploading PDF via gateway fallback...");
+        const formData = new FormData();
+        formData.append("academicClassId", uploadClassId);
+        formData.append("academicSubjectId", uploadSubjectId);
+        formData.append("academicChapterId", uploadChapterId);
+        formData.append("language", uploadLanguage);
+        formData.append("file", uploadFile);
+
+        const res = await fetch("/api/team/ncert/upload", {
+          method: "POST",
+          body: formData,
+        });
+
+        const resText = await res.text();
+        let data: any = null;
+        try {
+          data = JSON.parse(resText);
+        } catch {
+          if (
+            res.status === 413 ||
+            resText.toLowerCase().includes("request entity too large") ||
+            resText.toLowerCase().includes("payload too large")
+          ) {
+            throw new Error(
+              `File is too large (${(uploadFile.size / (1024 * 1024)).toFixed(1)} MB). Server gateway limit is 4.5 MB. Direct storage upload is required.`
+            );
+          }
+          throw new Error(resText || `Upload failed (${res.status})`);
+        }
+
+        if (!res.ok) {
+          throw new Error(data?.error || "Upload or processing failed");
+        }
+
+        setUploadProgressMsg(`Success! Extracted ${data.extractedPages || 0} pages.`);
+        setTimeout(() => {
+          setIsUploadOpen(false);
+          setIsUploading(false);
+          setUploadFile(null);
+          setUploadProgressMsg("");
+          fetchDocuments();
+        }, 1200);
+      }
     } catch (err: any) {
+      console.error("[NCERT Upload Error]:", err);
       setUploadError(err.message || "Upload failed");
       setIsUploading(false);
     }
