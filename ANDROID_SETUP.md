@@ -57,7 +57,7 @@ npm run dev
 ```
 
 ### 2. Configure Local Development URL in `capacitor.config.ts`
-By default, `capacitor.config.ts` uses `https://app.atomicpathshala.com`. For local testing on an Android emulator:
+By default, `capacitor.config.ts` uses `https://ap.atomicpathshala.in`. For local testing on an Android emulator:
 - Set environment variable: `CAPACITOR_SERVER_URL=http://10.0.2.2:3000`
 - Or run on a physical device connected to your local Wi-Fi: `CAPACITOR_SERVER_URL=http://<YOUR_LOCAL_IP>:3000`
 
@@ -135,7 +135,7 @@ The app is pre-configured to handle both custom schemes and verified HTTPS App L
 - URL format: `atomicpathshala://live-class/session-123` or `atomicpathshala://tests/neet-mock-1`
 - Handled automatically by `src/lib/platform/deep-links.ts`.
 
-### 2. Android App Links (`https://app.atomicpathshala.com`):
+### 2. Android App Links (`https://ap.atomicpathshala.in`):
 To enable direct opening of web links inside the app without browser prompts:
 1. Generate your SHA-256 fingerprint from your keystore:
    ```bash
@@ -143,7 +143,7 @@ To enable direct opening of web links inside the app without browser prompts:
    ```
 2. Host the `assetlinks.json` file on your domain at:
    ```
-   https://app.atomicpathshala.com/.well-known/assetlinks.json
+   https://ap.atomicpathshala.in/.well-known/assetlinks.json
    ```
    Content format:
    ```json
@@ -231,4 +231,4 @@ Upload this `.aab` directly to the **Google Play Console** under Production / In
 3. **Camera / Mic Permission Denied in Live Classroom**:
    - `RECORD_AUDIO` and `CAMERA` permissions are declared in `AndroidManifest.xml`. Ensure permissions are granted when prompted on device.
 4. **NextAuth Session Cookie Not Persisting**:
-   - Capacitor WebView uses standard Chromium engine. Session cookies over HTTPS (`app.atomicpathshala.com`) persist automatically across restarts.
+   - Capacitor WebView uses standard Chromium engine. Session cookies over HTTPS (`ap.atomicpathshala.in`) persist automatically across restarts.

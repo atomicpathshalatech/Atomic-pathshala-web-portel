@@ -5,7 +5,7 @@ import { Navbar } from "@/components/landing/Navbar";
 import { Footer } from "@/components/landing/Footer";
 import { getActiveFounder, parseFounderSocialLinks } from "@/lib/founder";
 
-const SITE = process.env.APP_BASE_URL || "https://atomicpathshala.com";
+const SITE = process.env.APP_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || "https://ap.atomicpathshala.in";
 
 export async function generateMetadata(): Promise<Metadata> {
   const founder = await getActiveFounder();

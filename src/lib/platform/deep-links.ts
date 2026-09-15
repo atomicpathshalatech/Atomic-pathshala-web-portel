@@ -3,7 +3,7 @@ import { isNativeApp } from './index';
 
 /**
  * Universal Deep Link & Android App Link Parser
- * Converts incoming native URLs (e.g. `atomicpathshala://live-class/123`, `atomicpathshala:///tests/456`, `https://app.atomicpathshala.com/watch/abc?t=120`)
+ * Converts incoming native URLs (e.g. `atomicpathshala://live-class/123`, `atomicpathshala:///tests/456`, `https://ap.atomicpathshala.in/watch/abc?t=120`)
  * into internal Next.js App Router paths.
  */
 export function parseDeepLinkUrl(rawUrl: string): string | null {

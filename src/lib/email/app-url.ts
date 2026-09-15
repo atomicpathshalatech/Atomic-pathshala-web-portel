@@ -9,7 +9,7 @@ export function getAppBaseUrl(): string {
     "https://ap.atomicpathshala.in"
   ).replace(/\/$/, "");
 
-  if (base.includes("vercel.app")) {
+  if (base.includes("vercel.app") || (process.env.NODE_ENV === "production" && base.includes("localhost"))) {
     base = "https://ap.atomicpathshala.in";
   }
 

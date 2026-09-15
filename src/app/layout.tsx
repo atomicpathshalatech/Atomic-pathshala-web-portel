@@ -35,6 +35,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://ap.atomicpathshala.in"),
   title: {
     default: "Atomic Pathshala | Accelerating Excellence",
     template: "%s | Atomic Pathshala",

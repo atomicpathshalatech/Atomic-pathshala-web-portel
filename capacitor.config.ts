@@ -14,7 +14,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 const serverUrl =
   process.env.CAPACITOR_SERVER_URL ||
   process.env.NEXT_PUBLIC_APP_URL ||
-  'https://app.atomicpathshala.com';
+  'https://ap.atomicpathshala.in';
 
 const config: CapacitorConfig = {
   appId: 'com.atomicpathshala.app',
@@ -25,6 +25,8 @@ const config: CapacitorConfig = {
     url: serverUrl,
     cleartext: true, // Enables local HTTP testing on Android emulator (10.0.2.2) or LAN
     allowNavigation: [
+      'ap.atomicpathshala.in',
+      '*.atomicpathshala.in',
       'app.atomicpathshala.com',
       '*.atomicpathshala.com',
       '*.livekit.cloud',

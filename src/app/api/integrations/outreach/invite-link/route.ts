@@ -56,10 +56,12 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const appUrl = (process.env.APP_URL ?? process.env.NEXTAUTH_URL ?? "http://localhost:3000").replace(
-      /\/$/,
-      ""
-    );
+    const appUrl = (
+      process.env.NEXT_PUBLIC_APP_URL ??
+      process.env.APP_URL ??
+      process.env.NEXTAUTH_URL ??
+      "https://ap.atomicpathshala.in"
+    ).replace(/\/$/, "");
 
     return apiSuccess(
       { registrationUrl: `${appUrl}/register?invite=${token}`, expiresAt },
