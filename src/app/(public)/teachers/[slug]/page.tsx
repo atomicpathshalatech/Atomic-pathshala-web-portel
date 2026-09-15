@@ -190,6 +190,12 @@ export default async function TeacherProfilePage({
                 )}
               </div>
 
+              {profile.headline && (
+                <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
+                  {profile.headline}
+                </p>
+              )}
+
               {/* Subject Tag */}
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-blue-600 text-white text-xs font-bold shadow-sm shadow-blue-600/20">

@@ -332,7 +332,7 @@ export function ChapterDetailView({
                   </p>
                   <p className="text-xs text-slate-600 dark:text-slate-300 pt-1 leading-relaxed">
                     • {data.teacher.bio ||
-                      `Dedicated educator simplifying ${data.subjectName} concepts, helping thousands of NEET & JEE aspirants score top marks.`}
+                      `Dedicated educator simplifying ${data.subjectName} concepts, helping students master core fundamentals and achieve academic excellence.`}
                   </p>
                 </div>
               </div>
