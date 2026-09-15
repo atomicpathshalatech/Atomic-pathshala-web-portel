@@ -62,7 +62,7 @@ export async function POST(
     const questions = await getOrGeneratePageQuestionPool(
       page.id,
       poolSet,
-      auth.student.userId || auth.user?.id
+      auth.userId || auth.student.userId
     );
 
     if (questions.length === 0) {

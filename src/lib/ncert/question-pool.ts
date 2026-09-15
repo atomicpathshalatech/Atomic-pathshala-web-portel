@@ -10,7 +10,19 @@ import {
 import { generatePageQuestions, type CandidateNcertQuestion } from "./ai-generator";
 import { validateNcertQuestion } from "./question-validator";
 import { generateQuestionId } from "@/lib/questions/id-generator";
-import { resolveUserId } from "@/lib/ai-chat/atomicGuruPipeline";
+
+async function resolveSafeUserId(userId?: string | null): Promise<string | null> {
+  try {
+    if (userId) {
+      const existing = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+      if (existing) return existing.id;
+    }
+    const firstUser = await prisma.user.findFirst({ select: { id: true } });
+    return firstUser?.id || null;
+  } catch {
+    return null;
+  }
+}
 
 export const MAX_REATTEMPTS_PER_PAGE = 3; // Initial attempt (Set 1) + 3 reattempts (Set 2, 3, 4) = max 4 sets
 
@@ -143,6 +155,7 @@ export async function streamNcertQuestionsToQuestionBank({
     academicSubject?: { name: string } | null;
     academicClass?: { name: string } | null;
     language: NCERTLanguage;
+    uploadedById?: string | null;
   };
   pageNumber: number;
   questions: any[];

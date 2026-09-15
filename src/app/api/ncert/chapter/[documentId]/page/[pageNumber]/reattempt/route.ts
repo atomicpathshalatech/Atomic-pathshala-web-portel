@@ -33,7 +33,7 @@ export async function POST(
       studentId: auth.student.id,
       documentId,
       pageId: page.id,
-      userId: auth.student.userId || auth.user?.id,
+      userId: auth.userId || auth.student.userId,
     });
 
     return NextResponse.json(reattemptResult);

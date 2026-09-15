@@ -209,6 +209,7 @@ export default function NcertChapterReaderPage() {
   const initialPage = parseInt(searchParams.get("page") || "1", 10) || 1;
 
   const [currentPageNum, setCurrentPageNum] = useState<number>(initialPage);
+  const [totalPages, setTotalPages] = useState<number>(1);
   const [pageData, setPageData] = useState<PageData | null>(null);
   const [documentMeta, setDocumentMeta] = useState<DocumentMeta | null>(null);
 
@@ -235,8 +236,9 @@ export default function NcertChapterReaderPage() {
   // Reader Controls
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState<boolean>(false);
 
-  // Fetch page details
+  // Fetch page details (non-blocking for PDF viewer)
   useEffect(() => {
+    let isCurrent = true;
     async function loadPage(pageNo: number) {
       setLoadingPage(true);
       setSelectedAnswers({});
@@ -246,11 +248,16 @@ export default function NcertChapterReaderPage() {
           throw new Error("Failed to load page");
         }
         const data = await res.json();
+        if (!isCurrent) return;
+
         setPageData(data.page);
+        if (data.page?.totalPages) {
+          setTotalPages(data.page.totalPages);
+        }
         setDocumentMeta(data.document);
-        setAttemptCount(data.progress.attemptCount || 1);
-        setRemainingReattempts(data.progress.remainingReattempts ?? 3);
-        setCanReattempt(data.progress.canReattempt ?? true);
+        setAttemptCount(data.progress?.attemptCount || 1);
+        setRemainingReattempts(data.progress?.remainingReattempts ?? 3);
+        setCanReattempt(data.progress?.canReattempt ?? true);
 
         if (data.lastResult) {
           setLastResult(data.lastResult);
@@ -264,13 +271,21 @@ export default function NcertChapterReaderPage() {
           setViewState("READING");
         }
       } catch (err: any) {
-        toast.error(err.message || "Error loading page");
+        if (isCurrent) {
+          toast.error(err.message || "Error loading page");
+        }
       } finally {
-        setLoadingPage(false);
+        if (isCurrent) {
+          setLoadingPage(false);
+        }
       }
     }
 
     loadPage(currentPageNum);
+
+    return () => {
+      isCurrent = false;
+    };
   }, [documentId, currentPageNum]);
 
   // Handle NEXT / Start Practice
@@ -481,18 +496,18 @@ export default function NcertChapterReaderPage() {
           <div className="flex items-center gap-1 border-l border-slate-200 pl-2">
             <button
               type="button"
-              disabled={currentPageNum <= 1 || loadingPage}
+              disabled={currentPageNum <= 1}
               onClick={handleGoToPrevPage}
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 hover:bg-slate-100 disabled:opacity-40 disabled:pointer-events-none"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 hover:bg-slate-100 disabled:opacity-40 disabled:pointer-events-none transition-colors"
               title="Previous page"
             >
               <span className="material-symbols-outlined text-base">chevron_left</span>
             </button>
             <button
               type="button"
-              disabled={!pageData || currentPageNum >= pageData.totalPages || loadingPage}
+              disabled={currentPageNum >= totalPages}
               onClick={handleGoToNextPage}
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 hover:bg-slate-100 disabled:opacity-40 disabled:pointer-events-none"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 hover:bg-slate-100 disabled:opacity-40 disabled:pointer-events-none transition-colors"
               title="Next page"
             >
               <span className="material-symbols-outlined text-base">chevron_right</span>
@@ -504,28 +519,19 @@ export default function NcertChapterReaderPage() {
       {/* 2. MAIN SPLIT WORKSPACE (50% NCERT Reader, 50% Practice Area on Desktop) */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* ================= LEFT PANEL: NCERT READER ================= */}
-        <div className="flex-1 lg:w-1/2 flex flex-col border-r border-slate-200 bg-white overflow-hidden">
-          {pageData ? (
-            <NcertOriginalPageViewer
-              documentId={documentId}
-              fileUrl={pageData.fileUrl}
-              pageNumber={currentPageNum}
-              totalPages={pageData.totalPages || 1}
-              extractedText={pageData.extractedText}
-              extractedElements={pageData.extractedElements}
-            />
-          ) : loadingPage ? (
-            <div className="flex flex-col items-center justify-center h-full p-8 text-slate-400 space-y-3">
-              <span className="material-symbols-outlined animate-spin text-3xl text-emerald-600">
-                progress_activity
-              </span>
-              <p className="text-xs font-semibold text-slate-600">Loading NCERT Page {currentPageNum}...</p>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full p-8 text-slate-400">
-              <p className="text-sm">Page not found.</p>
-            </div>
-          )}
+        <div className="flex-1 lg:w-1/2 flex flex-col border-r border-slate-200 bg-slate-900 overflow-hidden">
+          <NcertOriginalPageViewer
+            documentId={documentId}
+            fileUrl={pageData?.fileUrl}
+            pageNumber={currentPageNum}
+            totalPages={totalPages}
+            onPageChange={(newPage) => {
+              if (newPage >= 1 && newPage <= totalPages) {
+                setCurrentPageNum(newPage);
+                setMobileDrawerOpen(false);
+              }
+            }}
+          />
 
           {/* Mobile bottom sticky action bar (shows only on mobile screens < lg) */}
           <div className="lg:hidden shrink-0 border-t border-slate-200 bg-white p-3 flex gap-2">

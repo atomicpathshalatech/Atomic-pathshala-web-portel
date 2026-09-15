@@ -36,6 +36,7 @@ export interface QuestionRow {
   type: string;
   difficulty: string;
   category?: string | null;
+  tags?: string | null;
   status: string; // DRAFT | REVIEW_1 | REVIEW_2 | PUBLISHED | REJECTED
   version: number;
   isPublished: boolean;
@@ -581,6 +582,12 @@ export function QuestionManagementTable({
                             <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded inline-flex items-center gap-1">
                               <Sparkles className="w-2.5 h-2.5 text-amber-600" />
                               <span>Atomic Guru Draft</span>
+                            </span>
+                          )}
+                          {(q.category === "NCERT_HUB" || q.category?.includes("NCERT") || q.tags?.includes("NCERT")) && (
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded inline-flex items-center gap-1">
+                              <BookOpen className="w-2.5 h-2.5 text-emerald-600" />
+                              <span>NCERT Practice Hub</span>
                             </span>
                           )}
                         </div>

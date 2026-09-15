@@ -46,6 +46,11 @@ export async function GET(request: NextRequest) {
         { category: { contains: "ATOMIC_GURU", mode: "insensitive" } },
         { tags: { contains: "ATOMIC_GURU", mode: "insensitive" } },
       ];
+    } else if (source === "NCERT_HUB" || category === "NCERT_HUB" || source === "NCERT") {
+      where.OR = [
+        { category: { contains: "NCERT", mode: "insensitive" } },
+        { tags: { contains: "NCERT", mode: "insensitive" } },
+      ];
     } else if (category && category !== "ALL") {
       where.category = { contains: category, mode: "insensitive" };
     }
