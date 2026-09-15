@@ -106,13 +106,15 @@ export async function processSourcePdf(params: {
   }
 
   // 2. Extract Pages & Text via pdfjs-dist
-  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const { loadServerPdfJs } = await import("@/lib/pdf/server-pdf");
+  const pdfjs = await loadServerPdfJs();
   const uint8Data = new Uint8Array(params.fileBuffer);
   const doc = await pdfjs.getDocument({
     data: uint8Data,
     useWorkerFetch: false,
     isEvalSupported: false,
     disableFontFace: true,
+    verbosity: 0,
   }).promise;
 
   const pageCount = doc.numPages;

@@ -24,14 +24,17 @@ export interface PdfProcessingResult {
  * - Full page text with spacing preserved
  * - Structured elements: headings (uppercase or short bold-like lines), paragraphs, lists, diagram captions, formulas
  */
+import { loadServerPdfJs } from "@/lib/pdf/server-pdf";
+
 export async function extractNcertPagesFromPdf(fileBuffer: Buffer): Promise<PdfProcessingResult> {
-  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const pdfjs = await loadServerPdfJs();
   const data = new Uint8Array(fileBuffer);
   const doc = await pdfjs.getDocument({
     data,
     useWorkerFetch: false,
     isEvalSupported: false,
     disableFontFace: true,
+    verbosity: 0,
   }).promise;
 
   const totalPages = doc.numPages;

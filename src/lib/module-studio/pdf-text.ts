@@ -15,10 +15,12 @@ export type ExtractedPage = {
   text: string;
 };
 
+import { loadServerPdfJs } from "@/lib/pdf/server-pdf";
+
 export async function extractPdfPages(fileBuffer: Buffer): Promise<{ pages: ExtractedPage[]; pageCount: number }> {
-  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const pdfjs = await loadServerPdfJs();
   const data = new Uint8Array(fileBuffer);
-  const doc = await pdfjs.getDocument({ data, useWorkerFetch: false, isEvalSupported: false, disableFontFace: true }).promise;
+  const doc = await pdfjs.getDocument({ data, useWorkerFetch: false, isEvalSupported: false, disableFontFace: true, verbosity: 0 }).promise;
 
   const pages: ExtractedPage[] = [];
   for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber++) {

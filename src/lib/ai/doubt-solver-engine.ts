@@ -211,7 +211,14 @@ export async function solveDoubtWithAi(input: SolveDoubtInput): Promise<AiDoubtS
           .replace(/\s*```$/, "")
           .trim();
 
-        const parsed: AiDoubtSolution = JSON.parse(cleanedJson);
+        let parsed: AiDoubtSolution;
+        try {
+          parsed = JSON.parse(cleanedJson);
+        } catch {
+          // LLM outputs unescaped LaTeX like \text, \times, \alpha inside JSON strings
+          const fixedJson = cleanedJson.replace(/\\(?!(["\\/bfnrt]|u[0-9a-fA-F]{4}))/g, "\\\\");
+          parsed = JSON.parse(fixedJson);
+        }
 
         // Sanitize response to ensure direct answer and explanation are non-empty
         if (!parsed.directAnswer && parsed.explanation) {
