@@ -6,7 +6,7 @@ import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 
-export const BADGE_PRESETS: Record<string, { title: string; description: string; icon: string }> = {
+const BADGE_PRESETS: Record<string, { title: string; description: string; icon: string }> = {
   STUDENT_FAVOURITE: {
     title: "Student Favourite",
     description: "Loved by students for engaging and relatable teaching style",
