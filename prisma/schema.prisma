@@ -75,6 +75,8 @@ model User {
   createdAt              DateTime       @default(now())
   updatedAt              DateTime       @updatedAt
   lastLoginAt            DateTime?
+  allowedDeviceTypes     String[]       @default(["DESKTOP", "TABLET", "MOBILE"])
+  maxActiveDevices       Int            @default(3)
   auditLogs              AuditLog[]
   userPermissionOverrides UserPermissionOverride[]
   accessRequests         AccessRequest[]
@@ -1242,31 +1244,41 @@ model CollegeAllotment {
 // device a user has logged in from; `revokedAt` set when an admin or the
 // user themselves signs it out remotely.
 model DeviceSession {
-  id            String    @id @default(cuid())
-  userId        String
-  deviceHash    String
-  deviceType    String
-  browser       String?
-  os            String?
-  timezone      String?
-  screenRes     String?
-  ipAddress     String?
-  revokedAt     DateTime?
-  revokedReason String?
-  createdAt     DateTime  @default(now())
+  id             String    @id @default(cuid())
+  userId         String
+  deviceId       String?   // Persistent client UUID (localStorage / cookie)
+  deviceName     String?   // Human readable label e.g. "MacBook Pro", "Samsung Galaxy S24"
+  deviceCategory String    @default("DESKTOP") // "DESKTOP", "TABLET", "MOBILE"
+  deviceHash     String
+  deviceType     String
+  browser        String?
+  os             String?
+  timezone       String?
+  screenRes      String?
+  ipAddress      String?
+  isBlocked      Boolean   @default(false)
+  lastActiveAt   DateTime  @default(now())
+  revokedAt      DateTime?
+  revokedReason  String?
+  createdAt      DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([userId, deviceCategory, revokedAt])
+  @@index([userId, deviceId])
   @@map("device_sessions")
 }
 
 // Singleton — one row, id "singleton", read with findUnique. Global
-// multi-login policy (e.g. "SINGLE_SESSION" forces new login to revoke
-// older DeviceSessions) toggled by a Super Admin in Security Center.
+// multi-login policy (e.g. "CATEGORY_MANAGED", "MULTI_SESSION", "SINGLE_SESSION")
+// toggled by a Super Admin in Security Center.
 model SecurityConfig {
-  id     String @id @default("singleton")
-  policy String @default("SINGLE_SESSION")
+  id                  String   @id @default("singleton")
+  policy              String   @default("CATEGORY_MANAGED")
+  defaultAllowedTypes String[] @default(["DESKTOP", "TABLET", "MOBILE"])
+  defaultMaxDevices   Int      @default(3)
+  maxPerCategory      Int      @default(1)
 
   @@map("security_config")
 }

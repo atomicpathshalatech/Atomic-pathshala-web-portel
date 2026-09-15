@@ -2,9 +2,13 @@
 
 import {
   ArrowLeft,
-  BookOpenCheck,
+  CheckCircle2,
+  Eye,
+  EyeOff,
   FileQuestion,
+  GraduationCap,
   Loader2,
+  Printer,
   RefreshCw,
   Sparkles,
 } from "lucide-react";
@@ -16,6 +20,7 @@ import {
   LANGUAGES,
   MODES,
   SUBJECTS_BY_CLASS,
+  YEARS,
   type BoardClass,
   type BoardLanguage,
   type BoardMode,
@@ -23,111 +28,185 @@ import {
   type BoardSubPart,
 } from "@/lib/ai-chat/boardExam";
 
-function SubPartBlock({ part, index }: { part: BoardSubPart; index: number }) {
-  const [revealed, setRevealed] = useState(false);
+interface SubPartBlockProps {
+  part: BoardSubPart;
+  index: number;
+  globalReveal?: boolean;
+}
+
+function SubPartBlock({ part, index, globalReveal }: SubPartBlockProps) {
+  const [localRevealed, setLocalRevealed] = useState<boolean | null>(null);
+  const revealed = localRevealed !== null ? localRevealed : Boolean(globalReveal);
   const label = String.fromCharCode(97 + index);
 
   return (
-    <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-      <div className="flex items-start justify-between gap-2">
-        <p className="text-sm">
-          <span className="mr-1.5 font-semibold text-atomic-orange">({part.label ?? label})</span>
+    <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs transition-colors dark:border-slate-800 dark:bg-slate-950/60">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-sm leading-relaxed text-slate-800 dark:text-slate-200">
+          <span className="mr-1.5 font-bold text-amber-600 dark:text-amber-400">
+            ({part.label ?? label})
+          </span>
           {part.text}
         </p>
-        <span className="whitespace-nowrap rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500 dark:bg-slate-800">
-          {part.marks} {part.marks === 1 ? "mark" : "marks"}
+        <span className="shrink-0 whitespace-nowrap rounded-md bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+          {part.marks} {part.marks === 1 ? "Mark" : "Marks"}
         </span>
       </div>
 
       {(part.type === "mcq" || part.type === "assertion_reason") && part.options && (
-        <div className="mt-2 space-y-1 pl-4">
-          {part.options.map((option, optIndex) => (
-            <p
-              key={optIndex}
-              className={`text-sm ${
-                revealed && optIndex === part.correctIndex
-                  ? "font-semibold text-emerald-600"
-                  : "text-slate-600 dark:text-slate-300"
-              }`}
-            >
-              ({String.fromCharCode(105 + optIndex)}) {option}
-            </p>
-          ))}
+        <div className="mt-3 grid gap-1.5 pl-3 sm:grid-cols-2">
+          {part.options.map((option, optIndex) => {
+            const isCorrect = optIndex === part.correctIndex;
+            return (
+              <div
+                key={optIndex}
+                className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs transition-all ${
+                  revealed && isCorrect
+                    ? "border-emerald-500 bg-emerald-50 font-bold text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200"
+                    : "border-slate-200 bg-slate-50/70 text-slate-700 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-300"
+                }`}
+              >
+                <span className="font-mono font-semibold">
+                  ({String.fromCharCode(105 + optIndex)})
+                </span>
+                <span className="flex-1">{option}</span>
+                {revealed && isCorrect && (
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
       {(part.type === "short" || part.type === "long") && part.answer && revealed && (
-        <p className="mt-2 rounded bg-emerald-50 p-2 pl-3 text-sm text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300">
+        <div className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-50/80 p-3 text-xs leading-relaxed text-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200">
+          <span className="mb-1 block font-bold text-emerald-700 dark:text-emerald-400">
+            Model Solution & Scheme:
+          </span>
           {part.answer}
-        </p>
+        </div>
       )}
 
       {(part.options || part.answer) && (
-        <button
-          type="button"
-          onClick={() => setRevealed((v) => !v)}
-          className="mt-2 text-xs font-semibold text-atomic-orange hover:underline"
-        >
-          {revealed ? "Hide answer" : "Show answer"}
-        </button>
+        <div className="mt-2.5 flex items-center justify-end">
+          <button
+            type="button"
+            onClick={() => setLocalRevealed(!revealed)}
+            className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 hover:underline dark:text-blue-400"
+          >
+            {revealed ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+            {revealed ? "Hide Answer" : "Reveal Answer & Solution"}
+          </button>
+        </div>
       )}
     </div>
   );
 }
 
 function PaperView({ paper, onReset }: { paper: BoardPaper; onReset: () => void }) {
+  const [globalReveal, setGlobalReveal] = useState(false);
   const boardLabel = BOARDS.find((b) => b.value === paper.board)?.label ?? paper.board;
 
+  const handlePrint = () => {
+    if (typeof window !== "undefined") {
+      window.print();
+    }
+  };
+
   return (
-    <div className="mx-auto max-w-3xl px-4 py-7 sm:px-6">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-5 dark:border-slate-700">
+    <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
+      {/* Header Banner */}
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-6 dark:border-slate-800">
         <div>
-          <p className="text-sm font-medium text-atomic-orange">
-            {boardLabel} - Class {paper.className}
-          </p>
-          <h1 className="text-2xl font-bold">{paper.subject}</h1>
-          <p className="mt-1 text-xs text-slate-500">
-            {paper.mode === "pyq" ? "PYQ-style practice" : "Model paper"} - Total marks:{" "}
-            {paper.totalMarks} - Time: {paper.timeAllowed}
+          <div className="flex items-center gap-2">
+            <span className="rounded-md bg-blue-100 px-2.5 py-0.5 text-xs font-bold text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
+              {boardLabel}
+            </span>
+            <span className="rounded-md bg-amber-100 px-2.5 py-0.5 text-xs font-bold text-amber-700 dark:bg-amber-950/60 dark:text-amber-300">
+              Class {paper.className}
+            </span>
+            {paper.year && (
+              <span className="rounded-md bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                Year: {paper.year}
+              </span>
+            )}
+          </div>
+          <h1 className="mt-2 text-2xl font-extrabold text-slate-900 dark:text-white sm:text-3xl">
+            {paper.subject}
+          </h1>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            {paper.mode === "pyq" ? "Previous Year Question (PYQ) Practice" : "Expected Model Paper"}{" "}
+            • Total Marks: <span className="font-semibold text-slate-700 dark:text-slate-200">{paper.totalMarks}</span> • Time Allowed:{" "}
+            <span className="font-semibold text-slate-700 dark:text-slate-200">{paper.timeAllowed}</span>
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onReset}
-          className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
-        >
-          <RefreshCw className="h-4 w-4" />
-          New paper
-        </button>
+
+        <div className="flex items-center gap-2 print:hidden">
+          <button
+            type="button"
+            onClick={() => setGlobalReveal((v) => !v)}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-xs hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+          >
+            {globalReveal ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            {globalReveal ? "Hide All Answers" : "Show All Answers"}
+          </button>
+          <button
+            type="button"
+            onClick={handlePrint}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-xs hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+          >
+            <Printer className="h-3.5 w-3.5" />
+            Print / PDF
+          </button>
+          <button
+            type="button"
+            onClick={onReset}
+            className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white shadow-xs hover:bg-blue-700"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            New Paper
+          </button>
+        </div>
       </div>
 
-      <div className="mt-3 rounded-lg border-l-4 border-amber-400 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
-        AI-generated practice questions in the board&apos;s usual style and pattern - not an
-        official leaked or copied paper. Use it for practice, not as a guaranteed paper.
+      <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3.5 text-xs text-amber-800 dark:text-amber-200">
+        <span className="font-bold">Important Instructions:</span> All questions are compulsory. Internal choices are provided in Long Answer sections. Read each question carefully before attempting.
       </div>
 
-      <div className="mt-6 space-y-8">
+      {/* Questions Stack */}
+      <div className="mt-8 space-y-8">
         {paper.questions.map((question) => (
-          <div key={question.id}>
-            <p className="mb-2 text-xs font-bold uppercase tracking-widest text-slate-400">
-              {question.sectionTitle}
-            </p>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4 dark:border-slate-700 dark:bg-slate-900/60">
-              <p className="mb-2 text-sm font-bold">Q{question.questionNumber}.</p>
-              <div className="space-y-3">
+          <div key={question.id} className="space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-200/80 pb-2 dark:border-slate-800">
+              <span className="text-xs font-extrabold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                {question.sectionTitle}
+              </span>
+              <span className="text-xs font-medium text-slate-400">
+                Question {question.questionNumber}
+              </span>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 shadow-xs dark:border-slate-800 dark:bg-slate-900/50">
+              <div className="space-y-3.5">
                 {question.subParts.map((part, i) => (
-                  <SubPartBlock key={i} part={part} index={i} />
+                  <SubPartBlock key={i} part={part} index={i} globalReveal={globalReveal} />
                 ))}
               </div>
 
               {question.orAlternative && question.orAlternative.length > 0 && (
-                <div className="mt-4">
-                  <p className="mb-2 text-center text-xs font-bold uppercase tracking-widest text-slate-400">
-                    OR
-                  </p>
-                  <div className="space-y-3">
+                <div className="mt-5 pt-3">
+                  <div className="relative my-4 text-center">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-slate-200 dark:border-slate-700" />
+                    </div>
+                    <span className="relative rounded-full bg-slate-200 px-3 py-1 text-xs font-black tracking-widest text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                      OR
+                    </span>
+                  </div>
+                  <div className="space-y-3.5">
                     {question.orAlternative.map((part, i) => (
-                      <SubPartBlock key={i} part={part} index={i} />
+                      <SubPartBlock key={i} part={part} index={i} globalReveal={globalReveal} />
                     ))}
                   </div>
                 </div>
@@ -140,12 +219,21 @@ function PaperView({ paper, onReset }: { paper: BoardPaper; onReset: () => void 
   );
 }
 
-export function BoardExamHub() {
-  const [board, setBoard] = useState("");
+interface BoardExamHubProps {
+  backUrl?: string;
+  backLabel?: string;
+}
+
+export function BoardExamHub({
+  backUrl = "/practice",
+  backLabel = "Return to Practice",
+}: BoardExamHubProps) {
+  const [board, setBoard] = useState("CBSE");
   const [className, setClassName] = useState<BoardClass>("12th");
-  const [subject, setSubject] = useState("");
+  const [subject, setSubject] = useState("Physics");
   const [language, setLanguage] = useState<BoardLanguage>("hindi");
   const [mode, setMode] = useState<BoardMode>("pyq");
+  const [year, setYear] = useState("2024");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [paper, setPaper] = useState<BoardPaper | null>(null);
@@ -154,7 +242,7 @@ export function BoardExamHub() {
 
   const handleGenerate = async () => {
     if (!board || !subject) {
-      setError("Board aur subject select karo pehle.");
+      setError("Please select both a Board and a Subject.");
       return;
     }
     setLoading(true);
@@ -163,7 +251,7 @@ export function BoardExamHub() {
       const response = await fetch("/api/ai-chat/board-exam", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ board, className, subject, language, mode }),
+        body: JSON.stringify({ board, className, subject, language, mode, year }),
       });
       const data = (await response.json()) as { paper?: BoardPaper; error?: string };
       if (!response.ok || !data.paper) {
@@ -179,46 +267,55 @@ export function BoardExamHub() {
 
   if (paper) {
     return (
-      <main className="min-h-dvh bg-white dark:bg-atomic-navy">
+      <main className="min-h-dvh bg-white dark:bg-slate-950">
         <PaperView paper={paper} onReset={() => setPaper(null)} />
       </main>
     );
   }
 
   return (
-    <main className="min-h-dvh bg-white dark:bg-atomic-navy">
-      <div className="mx-auto max-w-2xl px-4 py-7 sm:px-6">
-        <div className="flex items-center justify-between gap-4 border-b border-slate-200 pb-5 dark:border-slate-700">
-          <div className="flex items-center gap-2">
-            <BookOpenCheck className="h-6 w-6 text-atomic-orange" />
+    <main className="min-h-dvh bg-slate-50/60 dark:bg-slate-950">
+      <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
+        {/* Top bar */}
+        <div className="flex items-center justify-between gap-4 border-b border-slate-200 pb-5 dark:border-slate-800">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white shadow-md shadow-blue-500/20">
+              <GraduationCap className="h-6 w-6" />
+            </div>
             <div>
-              <p className="text-sm font-medium text-atomic-orange">Atomic Pathshala</p>
-              <h1 className="text-2xl font-bold">Board Exam Hub</h1>
+              <p className="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                Atomic Pathshala
+              </p>
+              <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">
+                Board Exam Hub
+              </h1>
             </div>
           </div>
           <Link
-            href="/guru"
-            className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+            href={backUrl}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
           >
-            <ArrowLeft className="mr-1 inline h-4 w-4" />
-            Return to chat
+            <ArrowLeft className="h-4 w-4" />
+            {backLabel}
           </Link>
         </div>
 
-        <p className="mt-4 text-sm text-slate-500">
-          Board, class, subject, language aur paper type select karo - AI board ke pattern ke
-          hisaab se ek practice paper bana dega.
+        <p className="mt-4 text-sm text-slate-600 dark:text-slate-400">
+          Select your Board, Class, Subject, and Mode. Practice authentic previous-year style papers and expected model exam papers with detailed step-by-step marking schemes.
         </p>
 
-        <div className="mt-6 space-y-5">
+        {/* Configuration Card */}
+        <div className="mt-6 space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          {/* Board Selector */}
           <div>
-            <label className="mb-1.5 block text-sm font-semibold">Board</label>
+            <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+              1. Select Board
+            </label>
             <select
               value={board}
               onChange={(event) => setBoard(event.target.value)}
-              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-900"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-medium text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-800/80 dark:text-white"
             >
-              <option value="">Select board</option>
               {BOARDS.map((item) => (
                 <option key={item.value} value={item.value}>
                   {item.label}
@@ -227,21 +324,25 @@ export function BoardExamHub() {
             </select>
           </div>
 
+          {/* Class Selector */}
           <div>
-            <label className="mb-1.5 block text-sm font-semibold">Class</label>
-            <div className="flex gap-2">
+            <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+              2. Select Class
+            </label>
+            <div className="grid grid-cols-2 gap-3">
               {CLASSES.map((item) => (
                 <button
                   key={item.value}
                   type="button"
                   onClick={() => {
                     setClassName(item.value);
-                    setSubject("");
+                    const newSubs = SUBJECTS_BY_CLASS[item.value];
+                    if (newSubs && newSubs[0]) setSubject(newSubs[0]);
                   }}
-                  className={`flex-1 rounded-lg border px-3 py-2.5 text-sm font-semibold transition-colors ${
+                  className={`rounded-xl border px-4 py-2.5 text-sm font-bold transition-all ${
                     className === item.value
-                      ? "border-atomic-orange bg-atomic-orange/10 text-atomic-orange"
-                      : "border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                      ? "border-blue-600 bg-blue-50 text-blue-700 shadow-xs dark:bg-blue-950/40 dark:text-blue-300"
+                      : "border-slate-200 bg-slate-50/50 text-slate-600 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-800/60 dark:text-slate-400"
                   }`}
                 >
                   {item.label}
@@ -250,93 +351,136 @@ export function BoardExamHub() {
             </div>
           </div>
 
+          {/* Subject Selector */}
           <div>
-            <label className="mb-1.5 block text-sm font-semibold">Subject</label>
-            <select
-              value={subject}
-              onChange={(event) => setSubject(event.target.value)}
-              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-900"
-            >
-              <option value="">Select subject</option>
+            <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+              3. Select Subject
+            </label>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {subjects.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="mb-1.5 block text-sm font-semibold">Language</label>
-            <div className="flex gap-2">
-              {LANGUAGES.map((item) => (
                 <button
-                  key={item.value}
+                  key={item}
                   type="button"
-                  onClick={() => setLanguage(item.value)}
-                  className={`flex-1 rounded-lg border px-3 py-2.5 text-sm font-semibold transition-colors ${
-                    language === item.value
-                      ? "border-atomic-orange bg-atomic-orange/10 text-atomic-orange"
-                      : "border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                  onClick={() => setSubject(item)}
+                  className={`rounded-xl border px-3 py-2 text-xs font-semibold transition-all ${
+                    subject === item
+                      ? "border-blue-600 bg-blue-600 text-white shadow-xs"
+                      : "border-slate-200 bg-slate-50/50 text-slate-700 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-800/60 dark:text-slate-300"
                   }`}
                 >
-                  {item.label}
+                  {item}
                 </button>
               ))}
             </div>
           </div>
 
-          <div>
-            <label className="mb-1.5 block text-sm font-semibold">Paper type</label>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {MODES.map((item) => (
-                <button
-                  key={item.value}
-                  type="button"
-                  onClick={() => setMode(item.value)}
-                  className={`rounded-lg border p-3 text-left transition-colors ${
-                    mode === item.value
-                      ? "border-atomic-orange bg-atomic-orange/10"
-                      : "border-slate-200 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
-                  }`}
-                >
-                  <p className={`text-sm font-bold ${mode === item.value ? "text-atomic-orange" : ""}`}>
-                    {item.label}
-                  </p>
-                  <p className="mt-0.5 text-xs text-slate-500">{item.description}</p>
-                </button>
-              ))}
+          {/* Paper Mode & Year Grid */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            {/* Paper Mode */}
+            <div>
+              <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                4. Paper Type
+              </label>
+              <div className="space-y-2">
+                {MODES.map((item) => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    onClick={() => setMode(item.value)}
+                    className={`w-full rounded-xl border p-3 text-left transition-all ${
+                      mode === item.value
+                        ? "border-blue-600 bg-blue-50/80 dark:bg-blue-950/30"
+                        : "border-slate-200 bg-slate-50/50 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-800/50"
+                    }`}
+                  >
+                    <p
+                      className={`text-xs font-bold ${
+                        mode === item.value
+                          ? "text-blue-700 dark:text-blue-300"
+                          : "text-slate-900 dark:text-white"
+                      }`}
+                    >
+                      {item.label}
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                      {item.description}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Year Focus */}
+            <div>
+              <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                5. Target Year / Trend
+              </label>
+              <select
+                value={year}
+                onChange={(e) => setYear(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-medium text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-800/80 dark:text-white"
+              >
+                {YEARS.map((y) => (
+                  <option key={y.value} value={y.value}>
+                    {y.label}
+                  </option>
+                ))}
+              </select>
+
+              {/* Language Selector */}
+              <div className="mt-4">
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                  6. Medium / Language
+                </label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {LANGUAGES.map((item) => (
+                    <button
+                      key={item.value}
+                      type="button"
+                      onClick={() => setLanguage(item.value)}
+                      className={`rounded-lg border px-2 py-1.5 text-center text-xs font-semibold transition-all ${
+                        language === item.value
+                          ? "border-amber-500 bg-amber-500 text-white shadow-xs"
+                          : "border-slate-200 bg-slate-50/50 text-slate-600 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-400"
+                      }`}
+                    >
+                      {item.label.split(" ")[0]}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
 
           {error && (
-            <p className="rounded-lg border-l-4 border-red-500 bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">
+            <p className="rounded-xl border-l-4 border-red-500 bg-red-50 p-3 text-xs font-medium text-red-700 dark:bg-red-950/30 dark:text-red-300">
               {error}
             </p>
           )}
 
+          {/* Action Button */}
           <button
             type="button"
             onClick={() => void handleGenerate()}
             disabled={loading}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-atomic-orange py-3 text-sm font-bold text-white transition-transform active:scale-95 disabled:opacity-60"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 py-3.5 text-sm font-bold text-white shadow-lg shadow-blue-500/25 transition-all hover:brightness-110 active:scale-[0.99] disabled:opacity-60"
           >
             {loading ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Generating paper...
+                Generating Official-Pattern Paper...
               </>
             ) : (
               <>
                 <Sparkles className="h-4 w-4" />
-                Generate Paper
+                Generate & Start Board Exam Paper
               </>
             )}
           </button>
 
-          <p className="flex items-center gap-1.5 text-xs text-slate-400">
+          <p className="flex items-center justify-center gap-1.5 text-center text-xs text-slate-400">
             <FileQuestion className="h-3.5 w-3.5" />
-            Papers are freshly AI-generated each time, in the board&apos;s usual pattern.
+            Complete authentic pattern with MCQs, Assertion-Reason, Short & Long Answer with OR choice.
           </p>
         </div>
       </div>

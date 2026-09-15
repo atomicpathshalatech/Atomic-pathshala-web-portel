@@ -55,6 +55,17 @@ export const MODES: { value: BoardMode; label: string; description: string }[] =
   },
 ];
 
+export type BoardYear = "2025" | "2024" | "2023" | "2022" | "2021" | "2020" | "all";
+
+export const YEARS: { value: string; label: string }[] = [
+  { value: "2025", label: "2025 (Expected / Model)" },
+  { value: "2024", label: "2024 (Latest Board Paper)" },
+  { value: "2023", label: "2023 Board Paper" },
+  { value: "2022", label: "2022 Board Paper" },
+  { value: "2021", label: "2021 Board Paper" },
+  { value: "2020", label: "2020 Board Paper" },
+];
+
 export type BoardQuestionType = "mcq" | "assertion_reason" | "short" | "long";
 
 export interface BoardSubPart {
@@ -80,6 +91,7 @@ export interface BoardPaper {
   className: BoardClass;
   subject: string;
   mode: BoardMode;
+  year?: string;
   totalMarks: number;
   timeAllowed: string;
   questions: BoardQuestion[];
@@ -92,10 +104,11 @@ interface BuildPromptParams {
   subject: string;
   language: BoardLanguage;
   mode: BoardMode;
+  year?: string;
 }
 
 export function buildBoardExamPrompt(params: BuildPromptParams): string {
-  const { boardLabel, className, subject, language, mode } = params;
+  const { boardLabel, className, subject, language, mode, year } = params;
 
   const languageLine =
     language === "hindi"
@@ -104,15 +117,18 @@ export function buildBoardExamPrompt(params: BuildPromptParams): string {
         ? "Write in Hinglish (Hindi conversational tone using Roman/English script)."
         : "Write in clear English.";
 
+  const yearContext = year && year !== "all" ? `targeting the ${year} pattern/syllabus trend` : "matching recent official exam patterns";
+
   const modeLine =
     mode === "pyq"
-      ? "Generate PYQ-style practice questions: match the exact difficulty, phrasing style, and section pattern seen in this board's real past-year papers. Do NOT copy any actual official question verbatim - generate original questions in that same style."
-      : "Generate one complete model/expected question paper: prioritize topics and question types that repeat most often in this board's exam trend, so it reads like a realistic 'most expected paper' for this subject, while still following the board's official section pattern below.";
+      ? `Generate PYQ-style practice questions (${yearContext}): match the exact difficulty, phrasing style, and section pattern seen in this board's real past-year papers. Do NOT copy any actual official question verbatim - generate high-quality original questions in that exact style.`
+      : `Generate one complete model/expected question paper (${yearContext}): prioritize topics and question types that repeat most often in this board's exam trend, so it reads like a realistic 'most expected paper' for this subject, while still following the board's official section pattern below.`;
 
   return `Generate a board exam paper for:
 Board: ${boardLabel}
 Class: ${className}
 Subject: ${subject}
+${year ? `Year Focus: ${year}` : ""}
 
 ${modeLine}
 ${languageLine}
@@ -169,7 +185,8 @@ export function parseBoardExamJson(
   board: string,
   className: BoardClass,
   subject: string,
-  mode: BoardMode
+  mode: BoardMode,
+  year?: string
 ): BoardPaper | null {
   const match = content.match(JSON_BLOCK);
   // match[1] is typed string | undefined under noUncheckedIndexedAccess
@@ -198,6 +215,7 @@ export function parseBoardExamJson(
       className,
       subject,
       mode,
+      year,
       totalMarks: parsed.totalMarks ?? computedTotal,
       timeAllowed: parsed.timeAllowed ?? "3 hours 15 minutes",
       questions: parsed.questions,

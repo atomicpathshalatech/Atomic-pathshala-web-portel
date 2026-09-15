@@ -23,6 +23,7 @@ export async function POST(request: NextRequest) {
       subject?: string;
       language?: string;
       mode?: string;
+      year?: string;
     };
 
     const boardEntry = BOARDS.find((b) => b.value === body.board);
@@ -40,6 +41,7 @@ export async function POST(request: NextRequest) {
       : "hindi";
     const mode = VALID_MODES.includes(body.mode as BoardMode) ? (body.mode as BoardMode) : "pyq";
     const className = body.className as BoardClass;
+    const year = body.year?.trim() || undefined;
 
     const user = await getCurrentUser();
     if (user) {
@@ -65,10 +67,11 @@ export async function POST(request: NextRequest) {
       subject: body.subject.trim(),
       language,
       mode,
+      year,
     });
 
     const raw = await generateBoardExamContent(prompt);
-    const paper = parseBoardExamJson(raw, boardEntry.value, className, body.subject.trim(), mode);
+    const paper = parseBoardExamJson(raw, boardEntry.value, className, body.subject.trim(), mode, year);
 
     if (!paper) {
       return NextResponse.json(

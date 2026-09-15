@@ -3,28 +3,42 @@ import { AUTH_SECRET } from "@/lib/auth-secret";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
-import { createDeviceSession, extractRequestMeta, isDeviceSessionValid } from "@/lib/security/device-session";
+import {
+  checkDeviceLoginAllowed,
+  createDeviceSession,
+  extractRequestMeta,
+  isDeviceSessionValid,
+  type RequestDeviceMeta,
+  type DeviceCategory,
+} from "@/lib/security/device-session";
 import { normaliseLoginIdentifier } from "@/lib/validation/auth";
 
 /**
- * Auth policy (locked):
- * - Password authentication only.
- * - Never use SMS OTP.
- * - Email verification is a future addition, not required at Phase 1.
- *
- * Security Center (device sessions / single-session enforcement) added on
- * top without changing this shape: authorize() now also opens a
- * DeviceSession row (see @/lib/security/device-session.ts) and its id
- * rides along in the JWT; the session callback re-validates it on every
- * call. A user with SecurityConfig.policy=SINGLE_SESSION who logs in on a
- * second device gets their first device's DeviceSession row revoked —
- * their next request there fails the revalidation check below, and
- * session.user.id/.role are simply left unset, which every existing route
- * already treats as "not signed in" via `if (!session?.user?.id)`. No
- * route/page guard needed to change for this to work.
+ * Enterprise Authentication & Session Policy:
+ * - 30-day persistent rolling sessions (maxAge: 30 days, updateAge: 24h).
+ * - Multi-device category policy: default allows 1 Laptop, 1 Tablet, 1 Mobile.
+ * - Persistent device recognition: client passes deviceId + deviceCategory + deviceName.
+ * - Device replacement workflow for users switching phones/computers.
+ * - Admin per-user controls for allowed device categories and max limits.
  */
 export const authOptions: NextAuthOptions = {
-  session: { strategy: "jwt" },
+  session: {
+    strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60, // 30 days persistent session
+    updateAge: 24 * 60 * 60,   // update token once every 24 hours
+  },
+  cookies: {
+    sessionToken: {
+      name: process.env.NODE_ENV === "production" ? "__Secure-next-auth.session-token" : "next-auth.session-token",
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+        maxAge: 30 * 24 * 60 * 60, // 30 days cookie
+      },
+    },
+  },
   pages: {
     signIn: "/login",
   },
@@ -34,14 +48,16 @@ export const authOptions: NextAuthOptions = {
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
+        deviceId: { label: "Device ID", type: "text" },
+        deviceName: { label: "Device Name", type: "text" },
+        deviceCategory: { label: "Device Category", type: "text" },
+        replaceSessionId: { label: "Replace Session ID", type: "text" },
       },
       async authorize(credentials, req) {
         if (!credentials?.email || !credentials?.password) {
           return null;
         }
 
-        // The `email` credential carries either the account's email or its
-        // 10-digit mobile number — resolve whichever it is.
         const id = normaliseLoginIdentifier(credentials.email);
         const user = await prisma.user.findFirst({
           where: id.kind === "phone" ? { phone: id.value } : { email: id.value },
@@ -49,8 +65,7 @@ export const authOptions: NextAuthOptions = {
         });
 
         if (!user) return null;
-        // Statuses that may still sign in (they'll land on a "no access yet"
-        // screen in the team portal); everything else is a hard block.
+
         const CAN_SIGN_IN: string[] = [
           "ACTIVE",
           "PENDING_VERIFICATION",
@@ -68,8 +83,30 @@ export const authOptions: NextAuthOptions = {
           data: { lastLoginAt: new Date() },
         });
 
-        const meta = extractRequestMeta(req?.headers as Record<string, string | string[] | undefined>);
-        const deviceSessionId = await createDeviceSession(user.id, meta);
+        const headerMeta = extractRequestMeta(req?.headers as Record<string, string | string[] | undefined>);
+        const meta: RequestDeviceMeta = {
+          ...headerMeta,
+          deviceId: (credentials as any).deviceId || headerMeta.deviceId || undefined,
+          deviceName: (credentials as any).deviceName || headerMeta.deviceName || undefined,
+          deviceCategory: ((credentials as any).deviceCategory as DeviceCategory) || headerMeta.deviceCategory || undefined,
+        };
+
+        const replaceSessionId = (credentials as any).replaceSessionId || undefined;
+
+        // Verify device allowance and category limits
+        if (!replaceSessionId) {
+          const check = await checkDeviceLoginAllowed(user.id, meta);
+          if (!check.allowed) {
+            const payload = JSON.stringify({
+              code: check.reason,
+              message: check.message,
+              conflictingSession: check.conflictingSession,
+            });
+            throw new Error(`DEVICE_RESTRICTION:${payload}`);
+          }
+        }
+
+        const deviceSessionId = await createDeviceSession(user.id, meta, replaceSessionId);
 
         return {
           id: user.id,
@@ -83,16 +120,6 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    /**
-     * The DeviceSession revalidation used to run in the `session` callback,
-     * i.e. one cross-region Postgres round trip on EVERY `getServerSession()`
-     * — every page load and every one of the ~300 API routes. That check now
-     * lives here and is throttled: the result + a timestamp are cached on the
-     * (encrypted, httpOnly) JWT and the DB is only re-queried once the cache
-     * is older than DEVICE_CHECK_TTL_MS. Effect on the single-session policy:
-     * a revoked device is detected on its next request after the TTL window
-     * instead of literally the next request — a <=60s delay, not a hole.
-     */
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
@@ -103,13 +130,14 @@ export const authOptions: NextAuthOptions = {
         return token;
       }
 
+      // Check device validity every 60s
       const DEVICE_CHECK_TTL_MS = 60_000;
       const checkedAt = typeof token.deviceCheckedAt === "number" ? token.deviceCheckedAt : 0;
       if (Date.now() - checkedAt > DEVICE_CHECK_TTL_MS) {
         try {
           token.deviceValid = await isDeviceSessionValid(token.deviceSessionId ?? undefined);
         } catch {
-          // never lock everyone out on a transient DB error
+          // Never lock everyone out on a transient DB error
           token.deviceValid = true;
         }
         token.deviceCheckedAt = Date.now();
@@ -120,9 +148,6 @@ export const authOptions: NextAuthOptions = {
       const valid = token.deviceValid !== false;
       if (session.user && valid && token.id) {
         session.user.id = token.id as string;
-        // No implicit "STUDENT" fallback — a user with no role must read as
-        // roleless so the team portal shows the "no role assigned" screen
-        // instead of silently treating them as a student.
         session.user.role = (token.role as string | null) ?? null;
       } else if (session.user && !valid) {
         delete (session as any).user;
