@@ -87,6 +87,11 @@ export default function NcertAdminClient() {
   const [inspectPages, setInspectPages] = useState<PageInspectorItem[]>([]);
   const [inspectLoading, setInspectLoading] = useState(false);
 
+  // Delete modal state
+  const [docToDelete, setDocToDelete] = useState<NcertDocItem | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   // Fetch initial classes and documents
   useEffect(() => {
     fetchClasses();
@@ -456,6 +461,28 @@ export default function NcertAdminClient() {
     }
   };
 
+  // Delete Document
+  const handleDeleteDocument = async () => {
+    if (!docToDelete) return;
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/team/ncert/documents/${docToDelete.id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to delete chapter document");
+      }
+      setDocuments((prev) => prev.filter((d) => d.id !== docToDelete.id));
+      setDocToDelete(null);
+    } catch (err: any) {
+      setDeleteError(err.message || "Failed to delete chapter");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   // Filtered documents by search
   const filteredDocs = documents.filter((doc) => {
     if (!searchQuery.trim()) return true;
@@ -757,6 +784,17 @@ export default function NcertAdminClient() {
                           {doc.status === "READY" ? "archive" : "unarchive"}
                         </span>
                       </button>
+
+                      <button
+                        onClick={() => {
+                          setDeleteError(null);
+                          setDocToDelete(doc);
+                        }}
+                        className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-semibold text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition"
+                        title="Delete chapter document"
+                      >
+                        <span className="material-symbols-outlined text-sm">delete</span>
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -1014,6 +1052,97 @@ export default function NcertAdminClient() {
               >
                 Close
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {docToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden">
+            <div className="p-6 space-y-4">
+              <div className="w-12 h-12 rounded-2xl bg-rose-100 dark:bg-rose-950/80 text-rose-600 flex items-center justify-center">
+                <span className="material-symbols-outlined text-2xl">delete_forever</span>
+              </div>
+
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                  Delete Chapter Document?
+                </h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                  Are you sure you want to permanently delete{" "}
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">
+                    "{docToDelete.chapterTitle}" (v{docToDelete.version})
+                  </span>
+                  ?
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 text-xs space-y-1.5 text-slate-600 dark:text-slate-300">
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Class & Subject:</span>
+                  <span className="font-medium">{docToDelete.className} • {docToDelete.subjectName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Language:</span>
+                  <span className="font-medium">{docToDelete.language}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Extracted Pages:</span>
+                  <span className="font-medium">{docToDelete.totalPages} pages ({docToDelete.pageRecordsCount} indexed)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">File:</span>
+                  <span className="font-medium truncate max-w-[200px]">{docToDelete.fileName}</span>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-xs text-rose-700 dark:text-rose-400 flex items-start gap-2">
+                <span className="material-symbols-outlined text-base shrink-0 mt-0.5">warning</span>
+                <span>
+                  This will permanently delete all extracted pages, associated page questions, and student progress for this document. This action cannot be undone.
+                </span>
+              </div>
+
+              {deleteError && (
+                <div className="p-3 rounded-xl bg-rose-100 dark:bg-rose-950 text-xs text-rose-700 dark:text-rose-300 font-medium">
+                  {deleteError}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={() => {
+                    setDocToDelete(null);
+                    setDeleteError(null);
+                  }}
+                  className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={handleDeleteDocument}
+                  className="inline-flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-sm shadow-rose-600/20 transition disabled:opacity-50"
+                >
+                  {isDeleting ? (
+                    <>
+                      <span className="material-symbols-outlined text-base animate-spin">progress_activity</span>
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <span className="material-symbols-outlined text-base">delete</span>
+                      Delete Chapter
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
