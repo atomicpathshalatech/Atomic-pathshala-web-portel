@@ -7,6 +7,9 @@ import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { BatchDetailClient } from "@/components/team-portal/BatchDetailClient";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export const metadata: Metadata = {
   title: "Batch Management & Course Flow",
 };

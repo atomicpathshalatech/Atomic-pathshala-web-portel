@@ -6,6 +6,9 @@ import { prisma } from "@/lib/db";
 import { CourseDetailMasterView } from "@/components/course-platform/CourseDetailMasterView";
 import { SAMPLE_COURSES } from "@/components/course-platform/sample-courses";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export const metadata: Metadata = {
   title: "Batch & Course — Atomic Pathshala",
 };
