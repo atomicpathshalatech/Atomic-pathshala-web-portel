@@ -21,6 +21,7 @@ import {
 import { getPusherClient } from "@/lib/realtime/pusher-client";
 import { sessionChannel, teacherChannel, WB_EVENTS } from "@/lib/realtime/events";
 import { VideoStrip } from "@/components/live-class/VideoStrip";
+import type { TeacherConnectedStudent } from "@/components/live-class/LiveVideoCallModal";
 import { MessagesPanel } from "@/components/live-class/MessagesPanel";
 import { ParticipantsPanel } from "@/components/live-class/ParticipantsPanel";
 import { Simulation3DModal } from "@/components/live-class/Simulation3DModal";
@@ -464,6 +465,7 @@ export function TeacherLiveClassRoom({
 
   const [studentCount, setStudentCount] = useState(0);
   const [handRaiseQueue, setHandRaiseQueue] = useState<HandRaiseQueueItem[]>([]);
+  const [connectedStudents, setConnectedStudents] = useState<TeacherConnectedStudent[]>([]);
   const [rightTab, setRightTab] = useState<"messages" | "questions" | "roster">("messages");
   const [unreadMessages, setUnreadMessages] = useState(0);
 
@@ -787,6 +789,56 @@ export function TeacherLiveClassRoom({
     teacherCh.bind(WB_EVENTS.HAND_RAISE_LIST, onHandRaiseUpdate);
     presence.bind(WB_EVENTS.HAND_RAISE_LIST, onHandRaiseUpdate);
 
+    // Track active teacher-connected students
+    const onTeacherConnectUpdated = (data: { studentId: string; studentName?: string; studentUserId?: string; audioConnected: boolean; videoConnected: boolean }) => {
+      if (!data?.studentId) return;
+      setConnectedStudents((prev) => {
+        if (!data.audioConnected && !data.videoConnected) {
+          return prev.filter((s) => s.studentId !== data.studentId);
+        }
+        const updatedItem: TeacherConnectedStudent = {
+          studentId: data.studentId,
+          studentName: data.studentName || "Student",
+          studentUserId: data.studentUserId || data.studentId,
+          audioConnected: !!data.audioConnected,
+          videoConnected: !!data.videoConnected,
+        };
+        const idx = prev.findIndex((s) => s.studentId === data.studentId);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = updatedItem;
+          return next;
+        }
+        return [...prev, updatedItem];
+      });
+    };
+    presence.bind(WB_EVENTS.TEACHER_CONNECT_UPDATED, onTeacherConnectUpdated);
+
+    // Track approved hand-raise speakers as connected students
+    const onSpeakerApproved = (data: { studentId: string; studentName: string; studentUserId: string; requestType: "AUDIO" | "VIDEO" }) => {
+      if (!data?.studentId) return;
+      setConnectedStudents((prev) => {
+        const item: TeacherConnectedStudent = {
+          studentId: data.studentId,
+          studentName: data.studentName,
+          studentUserId: data.studentUserId,
+          audioConnected: true,
+          videoConnected: data.requestType === "VIDEO",
+        };
+        if (prev.some((s) => s.studentId === data.studentId)) {
+          return prev.map((s) => (s.studentId === data.studentId ? item : s));
+        }
+        return [...prev, item];
+      });
+    };
+    presence.bind(WB_EVENTS.SPEAKER_APPROVED, onSpeakerApproved);
+
+    const onSpeakerRevoked = (data: { studentId: string }) => {
+      if (!data?.studentId) return;
+      setConnectedStudents((prev) => prev.filter((s) => s.studentId !== data.studentId));
+    };
+    presence.bind(WB_EVENTS.SPEAKER_REVOKED, onSpeakerRevoked);
+
     teacherCh.bind(
       WB_EVENTS.QUIZ_METRICS,
       (data: { quizSessionId: string; counts: Record<string, number>; totalResponses: number }) => {
@@ -806,6 +858,24 @@ export function TeacherLiveClassRoom({
         .catch(() => {});
     };
     refreshHandRaises();
+
+    // Initial teacher-connect snapshot
+    getJson(`/api/whiteboard/sessions/${wbSession.id}/teacher-connect`)
+      .then((data) => {
+        if (Array.isArray(data?.connections)) {
+          const active = data.connections
+            .filter((c: any) => c.audioConnected || c.videoConnected)
+            .map((c: any) => ({
+              studentId: c.studentId,
+              studentName: c.studentName || "Student",
+              studentUserId: c.studentUserId,
+              audioConnected: !!c.audioConnected,
+              videoConnected: !!c.videoConnected,
+            }));
+          setConnectedStudents(active);
+        }
+      })
+      .catch(() => {});
 
     // 3-second fallback interval so teacher never misses a hand raise due to socket latency
     const handRaisePoll = setInterval(refreshHandRaises, 3000);
@@ -1216,7 +1286,12 @@ export function TeacherLiveClassRoom({
         !isBackgroundImageUrl(currentPg.background);
 
       for (let i = 1; i <= doc.numPages; i++) {
-        setPdfLoadState({ loading: true, progress: `Rendering page ${i} of ${doc.numPages}…`, error: null });
+        const pct = Math.round(((i - 1) / doc.numPages) * 100);
+        setPdfLoadState({
+          loading: true,
+          progress: `Loading presentation… ${pct}% (slide ${i} of ${doc.numPages})`,
+          error: null,
+        });
 
         const pdfPage = await doc.getPage(i);
         const unscaledViewport = pdfPage.getViewport({ scale: 1 });
@@ -1257,7 +1332,6 @@ export function TeacherLiveClassRoom({
           targetPageNumber = newPage.pageNumber;
         }
 
-        setPdfLoadState({ loading: true, progress: `Uploading page ${i} of ${doc.numPages}…`, error: null });
         const background = await uploadPageBackgroundImage(sessionId, targetPageId, dataUrl);
         setWbSession((prev) =>
           prev
@@ -1265,10 +1339,16 @@ export function TeacherLiveClassRoom({
             : prev
         );
 
-        if (firstNewPageNumber === null) firstNewPageNumber = targetPageNumber;
+        if (firstNewPageNumber === null) {
+          firstNewPageNumber = targetPageNumber;
+          // Switch to page 1 immediately so educator can begin without waiting for all remaining slides
+          await switchToPage(targetPageNumber);
+        }
       }
 
-      if (firstNewPageNumber !== null) await switchToPage(firstNewPageNumber);
+      if (firstNewPageNumber !== null && currentPage?.pageNumber !== firstNewPageNumber) {
+        await switchToPage(firstNewPageNumber);
+      }
       setPdfLoadState({ loading: false, progress: null, error: null });
     } catch (err) {
       if (firstNewPageNumber !== null) switchToPage(firstNewPageNumber).catch(() => undefined);
@@ -1580,6 +1660,20 @@ export function TeacherLiveClassRoom({
     return handleHandRaiseAction(id, "clear");
   }
 
+  async function handleDisconnectStudent(studentId: string) {
+    if (!wbSession) return;
+    try {
+      await postJson(`/api/whiteboard/sessions/${wbSession.id}/teacher-connect/${studentId}/disconnect`);
+      setConnectedStudents((prev) => prev.filter((s) => s.studentId !== studentId));
+      const approvedRaise = handRaiseQueue.find((h) => h.studentId === studentId && h.status === "APPROVED");
+      if (approvedRaise) {
+        resolveHandRaise(approvedRaise.id);
+      }
+    } catch {
+      // non-fatal
+    }
+  }
+
 
   // ---- Quiz ------------------------------------------------------------------
   async function launchQuiz() {
@@ -1618,10 +1712,13 @@ export function TeacherLiveClassRoom({
     }
   }
 
-  async function revealQuiz() {
+  async function revealQuiz(overrideCorrectOption?: string) {
     if (!wbSession || !activeQuiz) return;
     try {
-      const data = await postJson(`/api/whiteboard/sessions/${wbSession.id}/quiz/${activeQuiz.id}/reveal`);
+      const optionToReveal = overrideCorrectOption || quizForm.correctOption || activeQuiz.correctOption || undefined;
+      const data = await postJson(`/api/whiteboard/sessions/${wbSession.id}/quiz/${activeQuiz.id}/reveal`, {
+        correctOption: optionToReveal,
+      });
       setActiveQuiz(data.quiz);
       setQuizMetrics({ counts: data.counts, totalResponses: data.totalResponses });
     } catch (err) {
@@ -1981,8 +2078,15 @@ export function TeacherLiveClassRoom({
                 <span className="flex-1">{pdfLoadState.error}</span>
                 <button
                   type="button"
+                  onClick={() => handleLoadPresentationPdf()}
+                  className="px-2 py-0.5 rounded bg-red-800 hover:bg-red-700 text-white font-bold text-[11px] shrink-0 transition cursor-pointer"
+                >
+                  Retry
+                </button>
+                <button
+                  type="button"
                   onClick={() => setPdfLoadState({ loading: false, progress: null, error: null })}
-                  className="text-red-300 hover:text-white shrink-0"
+                  className="text-red-300 hover:text-white shrink-0 ml-1"
                   title="Dismiss"
                 >
                   <span className="material-symbols-outlined text-sm">close</span>
@@ -2313,7 +2417,13 @@ export function TeacherLiveClassRoom({
         className="live-panel bg-[#1a1b23] border-l border-[#2d2e3b] flex flex-col min-h-0"
       >
         <div className="h-56 bg-black relative border-b border-[#2d2e3b] shrink-0">
-          <VideoStrip whiteboardSessionId={wbSession.id} variant="panel" settingsPortalRef={settingsPortalRef} />
+          <VideoStrip
+            whiteboardSessionId={wbSession.id}
+            variant="panel"
+            settingsPortalRef={settingsPortalRef}
+            connectedStudents={connectedStudents}
+            onDisconnectStudent={handleDisconnectStudent}
+          />
         </div>
 
         <div className="flex border-b border-[#2d2e3b] px-3 pt-3 shrink-0 gap-1 overflow-x-auto">
@@ -3108,6 +3218,7 @@ export function TeacherLiveClassRoom({
       {pollOpen && (
         <PollModal
           onClose={() => setPollOpen(false)}
+          sessionId={wbSession.id}
           activeQuiz={activeQuiz}
           quizMetrics={quizMetrics}
           form={quizForm}
@@ -3115,7 +3226,7 @@ export function TeacherLiveClassRoom({
           error={quizError}
           launching={launchingQuiz}
           onLaunch={launchQuiz}
-          onReveal={revealQuiz}
+          onReveal={(opt) => revealQuiz(opt)}
           onClose2={closeQuiz}
           pollModalTab={pollModalTab}
           setPollModalTab={setPollModalTab}
@@ -3782,6 +3893,7 @@ function ThemeModal({
 
 function PollModal({
   onClose,
+  sessionId,
   activeQuiz,
   quizMetrics,
   form,
@@ -3797,6 +3909,7 @@ function PollModal({
   setPollType,
 }: {
   onClose: () => void;
+  sessionId?: string;
   activeQuiz: ActiveQuiz | null;
   quizMetrics: { counts: Record<string, number>; totalResponses: number } | null;
   form: {
@@ -3818,13 +3931,48 @@ function PollModal({
   error: string | null;
   launching: boolean;
   onLaunch: () => void;
-  onReveal: () => void;
+  onReveal: (chosenCorrectOption?: string) => void;
   onClose2: () => void;
   pollModalTab: "quiz" | "ranks";
   setPollModalTab: (t: "quiz" | "ranks") => void;
   pollType: "mcq4" | "yesno";
   setPollType: (t: "mcq4" | "yesno") => void;
 }) {
+  const [leaderboardScope, setLeaderboardScope] = useState<"session" | "chapter">("session");
+  const [leaderboardData, setLeaderboardData] = useState<{
+    rankings: Array<{
+      studentId: string;
+      name: string;
+      photoUrl: string | null;
+      totalAttempted: number;
+      correctCount: number;
+      accuracyPct: number;
+      avgResponseTimeMs: number;
+      rank: number;
+    }>;
+    stats: {
+      totalParticipants: number;
+      totalPolls: number;
+      averageAccuracy: number;
+    };
+  } | null>(null);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+
+  useEffect(() => {
+    if (pollModalTab === "ranks" && sessionId) {
+      setLeaderboardLoading(true);
+      fetch(`/api/whiteboard/sessions/${sessionId}/quiz/leaderboard?scope=${leaderboardScope}`)
+        .then((res) => res.json())
+        .then((json) => {
+          if (json.success && json.data) {
+            setLeaderboardData(json.data);
+          }
+        })
+        .catch((err) => console.error("Leaderboard load error:", err))
+        .finally(() => setLeaderboardLoading(false));
+    }
+  }, [pollModalTab, sessionId, leaderboardScope, activeQuiz?.status]);
+
   return (
     <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
       <div className="bg-[#12131c] w-full max-w-sm rounded-2xl shadow-2xl border border-[#2d2e3b] flex flex-col max-h-[90vh] text-white overflow-hidden">
@@ -3906,33 +4054,101 @@ function PollModal({
             />
           ) : (
             <div className="space-y-3">
-              <div className="flex items-center justify-between pb-2 border-b border-[#242634]">
-                <h3 className="text-xs font-bold text-gray-200">Class Session Ranks</h3>
-                <span className="text-[10px] text-gray-400 font-medium">Real-time Leaderboard</span>
+              {/* Leaderboard Scope Switcher (Session vs Full Chapter) */}
+              <div className="flex items-center justify-between gap-1 bg-[#10111a] p-1 rounded-xl border border-[#242634]">
+                <button
+                  type="button"
+                  onClick={() => setLeaderboardScope("session")}
+                  className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold transition ${
+                    leaderboardScope === "session"
+                      ? "bg-blue-600 text-white shadow-xs"
+                      : "text-gray-400 hover:text-gray-200"
+                  }`}
+                >
+                  This Class Session
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLeaderboardScope("chapter")}
+                  className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold transition ${
+                    leaderboardScope === "chapter"
+                      ? "bg-blue-600 text-white shadow-xs"
+                      : "text-gray-400 hover:text-gray-200"
+                  }`}
+                >
+                  Full Chapter
+                </button>
               </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#171924] border border-[#2d2e3b]">
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 text-xs font-bold flex items-center justify-center">1</span>
-                    <span className="text-xs font-semibold text-gray-200">Aarav Sharma</span>
-                  </div>
-                  <span className="text-xs font-mono font-bold text-emerald-400">100% · 2.1s</span>
+
+              {/* Stats Summary Strip */}
+              {leaderboardData && (
+                <div className="flex items-center justify-between text-[11px] px-2.5 py-1.5 rounded-lg bg-[#171924] border border-[#2d2e3b] text-gray-300">
+                  <span>{leaderboardData.stats.totalParticipants} Participants</span>
+                  <span>{leaderboardData.stats.totalPolls} Polls</span>
+                  <span className="text-emerald-400 font-bold">{leaderboardData.stats.averageAccuracy}% Avg Accuracy</span>
                 </div>
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#171924] border border-[#2d2e3b]">
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-5 h-5 rounded-full bg-gray-500/20 text-gray-300 text-xs font-bold flex items-center justify-center">2</span>
-                    <span className="text-xs font-semibold text-gray-200">Priya Patel</span>
-                  </div>
-                  <span className="text-xs font-mono font-bold text-emerald-400">100% · 3.4s</span>
+              )}
+
+              {leaderboardLoading ? (
+                <div className="py-12 text-center text-xs text-gray-400">
+                  <span className="material-symbols-outlined animate-spin text-xl text-blue-400 mb-2 block">
+                    progress_activity
+                  </span>
+                  Loading real-time rankings…
                 </div>
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#171924] border border-[#2d2e3b]">
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-5 h-5 rounded-full bg-amber-700/20 text-amber-600 text-xs font-bold flex items-center justify-center">3</span>
-                    <span className="text-xs font-semibold text-gray-200">Rohan Verma</span>
-                  </div>
-                  <span className="text-xs font-mono font-bold text-emerald-400">100% · 4.8s</span>
+              ) : !leaderboardData?.rankings.length ? (
+                <div className="py-10 text-center text-xs text-gray-400 space-y-1.5 bg-[#171924]/60 rounded-xl p-4 border border-[#2d2e3b]">
+                  <span className="material-symbols-outlined text-2xl text-gray-500 block">leaderboard</span>
+                  <p className="font-semibold text-gray-300">No poll responses recorded yet</p>
+                  <p className="text-[11px] text-gray-500">
+                    Launch a poll in the Live Quiz tab and have students submit answers to populate the leaderboard.
+                  </p>
                 </div>
-              </div>
+              ) : (
+                <div className="space-y-1.5 max-h-72 overflow-y-auto pr-0.5">
+                  {leaderboardData.rankings.map((student) => {
+                    const isTop3 = student.rank <= 3;
+                    const badgeColor =
+                      student.rank === 1
+                        ? "bg-amber-500/20 text-amber-300 border-amber-400/40"
+                        : student.rank === 2
+                        ? "bg-slate-400/20 text-slate-200 border-slate-300/40"
+                        : student.rank === 3
+                        ? "bg-amber-800/30 text-amber-500 border-amber-700/40"
+                        : "bg-gray-800 text-gray-400 border-gray-700";
+
+                    return (
+                      <div
+                        key={student.studentId}
+                        className={`flex items-center justify-between p-2.5 rounded-xl border transition ${
+                          student.rank === 1
+                            ? "bg-gradient-to-r from-amber-500/10 to-[#171924] border-amber-500/30"
+                            : "bg-[#171924] border-[#2d2e3b]"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span
+                            className={`w-6 h-6 rounded-full text-xs font-black font-mono flex items-center justify-center shrink-0 border ${badgeColor}`}
+                          >
+                            {student.rank}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-gray-200 truncate">{student.name}</p>
+                            <p className="text-[10px] text-gray-400 font-mono">
+                              {student.correctCount}/{student.totalAttempted} correct · {(student.avgResponseTimeMs / 1000).toFixed(1)}s avg
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className="text-xs font-mono font-black text-emerald-400">
+                            {student.accuracyPct}%
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -3975,11 +4191,23 @@ function QuizPanel({
   error: string | null;
   launching: boolean;
   onLaunch: () => void;
-  onReveal: () => void;
+  onReveal: (chosenCorrectOption?: string) => void;
   onClose: () => void;
   pollType: "mcq4" | "yesno";
   setPollType: (t: "mcq4" | "yesno") => void;
 }) {
+  const [selectedRevealOption, setSelectedRevealOption] = useState<string>(
+    activeQuiz?.correctOption || form.correctOption || "A"
+  );
+
+  useEffect(() => {
+    if (activeQuiz?.correctOption) {
+      setSelectedRevealOption(activeQuiz.correctOption);
+    } else if (form.correctOption) {
+      setSelectedRevealOption(form.correctOption);
+    }
+  }, [activeQuiz?.id, activeQuiz?.correctOption, form.correctOption]);
+
   if (activeQuiz && activeQuiz.status !== "CLOSED") {
     return (
       <div className="space-y-4">
@@ -3992,26 +4220,80 @@ function QuizPanel({
           </span>
         </div>
 
+        {/* Option selection bar while active before reveal */}
+        {activeQuiz.status === "ACTIVE" && (
+          <div className="bg-[#10111a] border border-[#2d2e3b] p-2.5 rounded-xl space-y-1.5">
+            <div className="flex items-center justify-between text-[11px] font-bold text-gray-300">
+              <span className="flex items-center gap-1">
+                <span className="material-symbols-outlined text-xs text-amber-400">check_circle</span>
+                SET CORRECT ANSWER FOR REVEAL:
+              </span>
+              <span className="text-emerald-400 font-mono font-bold">Option {selectedRevealOption}</span>
+            </div>
+            <div className="grid grid-cols-4 gap-1.5">
+              {activeQuiz.options.map((o) => (
+                <button
+                  key={o.key}
+                  type="button"
+                  onClick={() => setSelectedRevealOption(o.key)}
+                  className={`py-1.5 rounded-lg text-xs font-bold font-mono transition border ${
+                    selectedRevealOption === o.key
+                      ? "bg-emerald-600 text-white border-emerald-400 shadow-md shadow-emerald-600/30"
+                      : "bg-[#171924] text-gray-300 border-[#2b2d3c] hover:border-emerald-500/50"
+                  }`}
+                >
+                  {o.key} {selectedRevealOption === o.key ? "✓" : ""}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <ul className="space-y-2">
           {activeQuiz.options.map((o) => {
             const count = quizMetrics?.counts[o.key] ?? 0;
             const total = quizMetrics?.totalResponses ?? 0;
             const pct = total > 0 ? Math.round((count / total) * 100) : 0;
-            const isCorrect = activeQuiz.status === "REVEALED" && activeQuiz.correctOption === o.key;
+            const isCorrect =
+              activeQuiz.status === "REVEALED"
+                ? activeQuiz.correctOption === o.key
+                : selectedRevealOption === o.key;
+
             return (
-              <li key={o.key} className="relative overflow-hidden rounded-xl border border-[#2d2e3b] bg-[#10111a]">
+              <li
+                key={o.key}
+                onClick={() => {
+                  if (activeQuiz.status === "ACTIVE") {
+                    setSelectedRevealOption(o.key);
+                  }
+                }}
+                className={`relative overflow-hidden rounded-xl border transition cursor-pointer ${
+                  isCorrect && activeQuiz.status === "ACTIVE"
+                    ? "border-emerald-500/80 bg-[#10111a] ring-1 ring-emerald-500/50"
+                    : "border-[#2d2e3b] bg-[#10111a]"
+                }`}
+              >
                 <div
                   className={`absolute inset-y-0 left-0 transition-all duration-300 ${
-                    isCorrect ? "bg-emerald-500/25" : "bg-blue-500/15"
+                    activeQuiz.status === "REVEALED" && activeQuiz.correctOption === o.key
+                      ? "bg-emerald-500/25"
+                      : "bg-blue-500/15"
                   }`}
                   style={{ width: `${pct}%` }}
                 />
                 <div className="relative flex items-center justify-between px-3.5 py-2.5 text-xs">
-                  <span className={`font-semibold ${isCorrect ? "text-emerald-400" : "text-gray-200"}`}>
-                    <span className="inline-block w-5 h-5 rounded-md bg-white/10 text-center leading-5 mr-2 font-mono">
+                  <span className={`font-semibold flex items-center gap-1.5 ${isCorrect ? "text-emerald-400" : "text-gray-200"}`}>
+                    <span
+                      className={`inline-block w-5 h-5 rounded-md text-center leading-5 font-mono ${
+                        isCorrect ? "bg-emerald-600 text-white font-bold" : "bg-white/10"
+                      }`}
+                    >
                       {o.key}
                     </span>
-                    {o.label}
+                    <span>{o.label}</span>
+                    {activeQuiz.status === "ACTIVE" && selectedRevealOption === o.key && (
+                      <span className="text-[10px] text-emerald-400 font-bold ml-1">(Correct)</span>
+                    )}
                   </span>
                   <span className="font-mono text-gray-400">
                     {count} {total > 0 ? `(${pct}%)` : ""}
@@ -4030,10 +4312,10 @@ function QuizPanel({
           <div className="flex gap-2 pt-1">
             <button
               type="button"
-              onClick={onReveal}
+              onClick={() => onReveal(selectedRevealOption)}
               className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 rounded-xl text-xs font-bold transition shadow-md shadow-emerald-600/30"
             >
-              Reveal Answer
+              Reveal Answer ({selectedRevealOption})
             </button>
             <button
               type="button"

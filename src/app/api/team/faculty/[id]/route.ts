@@ -50,7 +50,15 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         employeeCode: data.employeeCode,
         department: data.department,
         subjects: data.subjects,
+        displayName: data.displayName || null,
+        targetExams: data.targetExams,
+        classes: data.classes,
+        languages: data.languages,
+        experienceYears: data.experienceYears || null,
+        qualifications: data.qualifications,
+        experienceList: data.experienceList,
         bio: data.bio || null,
+        ...(data.photoUrl ? { user: { update: { photoUrl: data.photoUrl } } } : {}),
       },
     });
 

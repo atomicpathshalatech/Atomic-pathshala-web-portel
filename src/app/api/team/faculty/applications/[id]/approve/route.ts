@@ -87,8 +87,27 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return { user, teacher, application: updatedApplication };
     });
 
+    let emailDelivered = false;
+    try {
+      const { sendStaffApprovalEmail } = await import("@/lib/email/credentials");
+      const { getLoginUrl } = await import("@/lib/email/app-url");
+      const emailResult = await sendStaffApprovalEmail({
+        idempotencyKey: `teacher:application-approve:${result.user.id}`,
+        recipientUserId: result.user.id,
+        fullName: result.user.name,
+        email: result.user.email,
+        password: input.password,
+        loginUrl: getLoginUrl(),
+        roleLabel: "Faculty",
+        department: input.department,
+      });
+      emailDelivered = emailResult.outcome === "sent";
+    } catch (err) {
+      console.error("[application/approve] Credentials email error:", err);
+    }
+
     return apiSuccess(
-      { userId: result.user.id, teacherId: result.teacher.id, email: result.user.email },
+      { userId: result.user.id, teacherId: result.teacher.id, email: result.user.email, emailDelivered },
       201
     );
   } catch (error) {

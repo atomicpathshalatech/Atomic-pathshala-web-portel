@@ -242,6 +242,8 @@ export function ChapterLecturesTab({
     }
   };
 
+  const totalChapterScheduledMin = lectures.reduce((sum, l) => sum + (l.durationMin || 0), 0);
+
   return (
     <div className="space-y-4">
       {/* Header Bar */}
@@ -252,9 +254,12 @@ export function ChapterLecturesTab({
             <span className="px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 text-xs font-mono font-bold">
               {lectures.length} Total
             </span>
+            <span className="px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 text-xs font-mono font-bold">
+              {totalChapterScheduledMin} Mins Scheduled
+            </span>
           </h3>
           <p className="text-xs text-slate-500">
-            Schedule lecture roadmap with live studio access &amp; attached class notes.
+            Schedule lecture roadmap with live studio access &amp; attached class notes. Total scheduled chapter duration: {totalChapterScheduledMin} mins.
           </p>
         </div>
 

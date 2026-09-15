@@ -67,6 +67,7 @@ export default async function BatchCoursePage({
                 user: { select: { name: true } },
               },
             },
+            liveWhiteboardSession: true,
           },
         },
         _count: { select: { enrollments: true, schedules: true } },

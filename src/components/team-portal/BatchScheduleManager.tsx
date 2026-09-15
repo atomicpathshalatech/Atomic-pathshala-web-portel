@@ -23,6 +23,13 @@ type ScheduleEntry = {
   notes: string | null;
   teacherId: string | null;
   teacher: { user: { name: string } } | null;
+  liveWhiteboardSession?: {
+    id?: string;
+    status?: string;
+    livePhase?: string;
+    actualStartedAt?: string | null;
+    actualEndedAt?: string | null;
+  } | null;
 };
 
 type TeacherOption = { id: string; user: { name: string } };
@@ -48,6 +55,11 @@ import {
   formatISTTime,
   formatISTDate,
 } from "@/lib/date-utils";
+import {
+  getEffectiveScheduleStatus,
+  canTeacherStartClass,
+  canTeacherEnterClass,
+} from "@/lib/schedule/access-rules";
 
 const inputClass =
   "w-full rounded-xl border border-outline-variant/40 bg-surface-container-lowest py-2.5 px-3.5 text-body-sm outline-none focus:ring-2 focus:ring-primary/30";
@@ -240,62 +252,107 @@ export function BatchScheduleManager({
           No timetable entries yet for this batch.
         </div>
       ) : (
-        <ul className="space-y-2.5">
-          {schedules.map((s) => (
-            <li
-              key={s.id}
-              className="bg-surface-container-lowest border border-outline-variant/20 rounded-2xl p-4 hover:border-primary/40 transition-all space-y-2"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-bold uppercase tracking-wide bg-primary/10 text-primary px-2.5 py-0.5 rounded-full">
-                    {TYPE_LABELS[s.type]}
-                  </span>
-                  <span
-                    className={`text-[10px] font-bold uppercase tracking-wide px-2.5 py-0.5 rounded-full ${STATUS_STYLES[s.status]}`}
-                  >
-                    {s.status}
-                  </span>
+        <ul className="space-y-2">
+          {schedules.map((s) => {
+            const scheduleTarget = {
+              id: s.id,
+              startsAt: s.startsAt,
+              endsAt: s.endsAt,
+              status: s.status,
+              type: s.type,
+              liveWhiteboardSession: s.liveWhiteboardSession,
+            };
+            const now = new Date();
+            const effectiveStatus = getEffectiveScheduleStatus(scheduleTarget, now);
+            const teacherStartEval = canTeacherStartClass(scheduleTarget, now);
+            const isCompleted = effectiveStatus === "COMPLETED";
+            const isLive = effectiveStatus === "LIVE";
+            const isCancelled = effectiveStatus === "CANCELLED";
+
+            return (
+              <li
+                key={s.id}
+                className="bg-surface-container-lowest border border-outline-variant/20 rounded-2xl p-3.5 sm:p-4 hover:border-primary/40 transition-all space-y-1.5"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wide bg-primary/10 text-primary px-2.5 py-0.5 rounded-full">
+                      {TYPE_LABELS[s.type]}
+                    </span>
+                    {isLive ? (
+                      <span className="text-[10px] font-bold uppercase tracking-wide px-2.5 py-0.5 rounded-full bg-emerald-600 text-white flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                        LIVE
+                      </span>
+                    ) : isCompleted ? (
+                      <span className="text-[10px] font-bold uppercase tracking-wide px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                        COMPLETED
+                      </span>
+                    ) : isCancelled ? (
+                      <span className="text-[10px] font-bold uppercase tracking-wide px-2.5 py-0.5 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300">
+                        CANCELLED
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold uppercase tracking-wide px-2.5 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant">
+                        UPCOMING
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 text-xs">
+                    {s.type === "LIVE_CLASS" && (
+                      isCompleted ? null : isLive ? (
+                        <Link
+                          href={`/team/live-class/${s.id}`}
+                          className="flex items-center gap-1 text-emerald-600 font-bold hover:underline"
+                        >
+                          <span className="material-symbols-outlined text-base">cast</span>
+                          Resume Class
+                        </Link>
+                      ) : teacherStartEval.allowed ? (
+                        <Link
+                          href={`/team/live-class/${s.id}`}
+                          className="flex items-center gap-1 text-primary font-bold hover:underline"
+                        >
+                          <span className="material-symbols-outlined text-base">cast</span>
+                          Start Class
+                        </Link>
+                      ) : (
+                        <span className="flex items-center gap-1 text-on-surface-variant/50 font-medium text-[11px] select-none">
+                          <span className="material-symbols-outlined text-xs">lock</span>
+                          Opens {formatISTTime(teacherStartEval.startOpensAt)}
+                        </span>
+                      )
+                    )}
+                    {canManageSchedule && (
+                      <>
+                        <button type="button" onClick={() => startEdit(s)} className="text-primary font-bold hover:underline">
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          disabled={submitting}
+                          onClick={() => remove(s.id)}
+                          className="text-error font-bold hover:underline disabled:opacity-50"
+                        >
+                          Delete
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-3 text-xs">
-                  {s.type === "LIVE_CLASS" && (
-                    <Link
-                      href={`/team/live-class/${s.id}`}
-                      className="flex items-center gap-1 text-primary font-bold hover:underline"
-                    >
-                      <span className="material-symbols-outlined text-base">cast</span>
-                      Start Class
-                    </Link>
-                  )}
-                  {canManageSchedule && (
-                    <>
-                      <button type="button" onClick={() => startEdit(s)} className="text-primary font-bold hover:underline">
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        disabled={submitting}
-                        onClick={() => remove(s.id)}
-                        className="text-error font-bold hover:underline disabled:opacity-50"
-                      >
-                        Delete
-                      </button>
-                    </>
-                  )}
+                <p className="font-bold text-sm text-on-surface">{s.title}</p>
+                <div className="flex flex-wrap items-center gap-2 text-xs text-on-surface-variant">
+                  {s.subject && <span className="font-semibold text-primary">{s.subject} &middot;</span>}
+                  <span>
+                    {formatISTDate(s.startsAt)} &middot;{" "}
+                    {formatISTTime(s.startsAt)} →{" "}
+                    {formatISTTime(s.endsAt)} (IST)
+                  </span>
+                  {s.teacher && <span className="font-medium bg-surface-container-high px-2 py-0.5 rounded">Faculty: {s.teacher.user.name}</span>}
                 </div>
-              </div>
-              <p className="font-bold text-sm text-on-surface">{s.title}</p>
-              <div className="flex flex-wrap items-center gap-2 text-xs text-on-surface-variant">
-                {s.subject && <span className="font-semibold text-primary">{s.subject} &middot;</span>}
-                <span>
-                  {formatISTDate(s.startsAt)} &middot;{" "}
-                  {formatISTTime(s.startsAt)} →{" "}
-                  {formatISTTime(s.endsAt)} (IST)
-                </span>
-                {s.teacher && <span className="font-medium bg-surface-container-high px-2 py-0.5 rounded">Faculty: {s.teacher.user.name}</span>}
-              </div>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       )}
 

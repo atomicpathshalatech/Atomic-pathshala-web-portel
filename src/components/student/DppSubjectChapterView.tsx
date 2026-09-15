@@ -14,10 +14,11 @@ export interface RealDPPItem {
   questionCount: number;
   durationMins: number;
   totalMarks: number;
-  status: "PENDING" | "IN_PROGRESS" | "COMPLETED";
+  status: "PENDING" | "IN_PROGRESS" | "COMPLETED" | "UPCOMING";
   score?: number | null;
   pdfUrl?: string | null;
   testId?: string | null;
+  startsAt?: string | null;
 }
 
 export interface RealChapterGroup {
@@ -278,47 +279,70 @@ export function DppSubjectChapterView({
                               </div>
 
                               {/* Actions & Status */}
-                              <div className="pt-4 mt-2 border-t border-outline-variant/20 flex items-center justify-between gap-2">
-                                {dpp.status === "COMPLETED" ? (
-                                  <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-bold">
-                                    <span className="material-symbols-outlined text-base">check_circle</span>
-                                    <span>Score: {dpp.score ?? dpp.totalMarks}/{dpp.totalMarks}</span>
-                                  </div>
-                                ) : dpp.status === "IN_PROGRESS" ? (
-                                  <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 font-bold">
-                                    <span className="material-symbols-outlined text-base animate-spin">refresh</span>
-                                    <span>In Progress</span>
-                                  </div>
-                                ) : (
-                                  <span className="text-[11px] text-on-surface-variant font-medium">
-                                    Not Started
-                                  </span>
-                                )}
+                              {(() => {
+                                const isUpcoming =
+                                  dpp.status === "UPCOMING" ||
+                                  Boolean(dpp.startsAt && new Date(dpp.startsAt).getTime() > Date.now());
 
-                                <div className="flex items-center gap-1.5">
-                                  {/* Download PDF Action */}
-                                  <button
-                                    type="button"
-                                    onClick={() => toast.success(`Downloading ${dpp.title} PDF Worksheet...`)}
-                                    className="p-1.5 rounded-lg border border-outline-variant/30 hover:bg-surface-container text-on-surface-variant hover:text-primary transition"
-                                    title="Download DPP Worksheet"
-                                  >
-                                    <span className="material-symbols-outlined text-sm">download</span>
-                                  </button>
+                                return (
+                                  <div className="pt-4 mt-2 border-t border-outline-variant/20 flex items-center justify-between gap-2">
+                                    {dpp.status === "COMPLETED" ? (
+                                      <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-bold">
+                                        <span className="material-symbols-outlined text-base">check_circle</span>
+                                        <span>Score: {dpp.score ?? dpp.totalMarks}/{dpp.totalMarks}</span>
+                                      </div>
+                                    ) : dpp.status === "IN_PROGRESS" ? (
+                                      <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 font-bold">
+                                        <span className="material-symbols-outlined text-base animate-spin">refresh</span>
+                                        <span>In Progress</span>
+                                      </div>
+                                    ) : isUpcoming ? (
+                                      <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                                        Upcoming
+                                      </span>
+                                    ) : (
+                                      <span className="text-[11px] text-on-surface-variant font-medium">
+                                        Not Started
+                                      </span>
+                                    )}
 
-                                  {/* Attempt / Practice Button */}
-                                  <Link
-                                    href={dpp.testId ? `/tests/${dpp.testId}/attempt` : `/practice?dppId=${dpp.id}`}
-                                    className={`px-3 py-1.5 rounded-xl font-bold text-xs transition shadow-sm ${
-                                      dpp.status === "COMPLETED"
-                                        ? "bg-surface-container-high text-on-surface hover:bg-surface-container-highest"
-                                        : "bg-primary text-on-primary hover:opacity-90 active:scale-95"
-                                    }`}
-                                  >
-                                    {dpp.status === "COMPLETED" ? "Re-attempt" : dpp.status === "IN_PROGRESS" ? "Resume" : "Attempt Now"}
-                                  </Link>
-                                </div>
-                              </div>
+                                    <div className="flex items-center gap-1.5">
+                                      {/* Download PDF Action */}
+                                      <button
+                                        type="button"
+                                        onClick={() => toast.success(`Downloading ${dpp.title} PDF Worksheet...`)}
+                                        className="p-1.5 rounded-lg border border-outline-variant/30 hover:bg-surface-container text-on-surface-variant hover:text-primary transition"
+                                        title="Download DPP Worksheet"
+                                      >
+                                        <span className="material-symbols-outlined text-sm">download</span>
+                                      </button>
+
+                                      {/* Attempt / Practice Button */}
+                                      {isUpcoming ? (
+                                        <button
+                                          type="button"
+                                          disabled
+                                          aria-disabled="true"
+                                          className="px-3 py-1.5 rounded-xl font-bold text-xs bg-slate-100 text-slate-400 dark:bg-surface-container-high dark:text-slate-500 cursor-not-allowed"
+                                        >
+                                          Upcoming
+                                        </button>
+                                      ) : (
+                                        <Link
+                                          href={dpp.testId ? `/tests/${dpp.testId}/attempt` : `/practice?dppId=${dpp.id}`}
+                                          className={`px-3 py-1.5 rounded-xl font-bold text-xs transition shadow-sm ${
+                                            dpp.status === "COMPLETED"
+                                              ? "bg-surface-container-high text-on-surface hover:bg-surface-container-highest"
+                                              : "bg-primary text-on-primary hover:opacity-90 active:scale-95"
+                                          }`}
+                                        >
+                                          {dpp.status === "COMPLETED" ? "Re-attempt" : dpp.status === "IN_PROGRESS" ? "Resume" : "Attempt Now"}
+                                        </Link>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })()}
                             </div>
                           );
                         })}

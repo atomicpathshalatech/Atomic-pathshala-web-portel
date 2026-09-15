@@ -38,7 +38,15 @@ export default async function EditFacultyPage({ params }: { params: { id: string
           employeeCode: teacher.employeeCode,
           department: teacher.department as (typeof DEPARTMENT_OPTIONS)[number],
           subjects: teacher.subjects,
+          displayName: teacher.displayName ?? undefined,
+          targetExams: teacher.targetExams ?? [],
+          classes: teacher.classes ?? [],
+          languages: teacher.languages ?? [],
+          experienceYears: teacher.experienceYears ?? undefined,
+          qualifications: (teacher.qualifications as any) ?? [],
+          experienceList: (teacher.experienceList as any) ?? [],
           bio: teacher.bio ?? undefined,
+          photoUrl: teacher.user.photoUrl ?? undefined,
         }}
       />
     </div>

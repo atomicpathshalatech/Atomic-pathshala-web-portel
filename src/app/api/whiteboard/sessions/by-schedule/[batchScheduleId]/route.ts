@@ -59,76 +59,7 @@ export async function GET(
       },
     });
 
-    if (!wbSession && schedule.type === "LIVE_CLASS") {
-      const assignedTeacherId =
-        schedule.teacherId ??
-        (await prisma.batchTeacher.findFirst({ where: { batchId: schedule.batchId } }))?.teacherId;
 
-      if (assignedTeacherId) {
-        try {
-          wbSession = await prisma.whiteboardSession.upsert({
-            where: { batchScheduleId: params.batchScheduleId },
-            update: {},
-            create: {
-              batchScheduleId: schedule.id,
-              teacherId: assignedTeacherId,
-              title: schedule.title,
-              livePhase: "PREPARING",
-              status: "ACTIVE",
-              scheduledStart: schedule.startsAt ? new Date(schedule.startsAt) : new Date(),
-              scheduledEnd: schedule.endsAt ? new Date(schedule.endsAt) : new Date(Date.now() + 60 * 60 * 1000),
-              pages: { create: { pageNumber: 1, objects: [] } },
-            },
-            select: {
-              id: true,
-              title: true,
-              status: true,
-              livePhase: true,
-              videoTransport: true,
-              youtubeVideoId: true,
-              startedAt: true,
-              endedAt: true,
-              presentationUrl: true,
-              presentationName: true,
-              presentationType: true,
-              classroomTheme: true,
-              cameraShape: true,
-              cameraPosition: true,
-              scheduledStart: true,
-              scheduledEnd: true,
-              actualStartedAt: true,
-              actualEndedAt: true,
-              totalExtendedMinutes: true,
-            },
-          });
-        } catch {
-          wbSession = await prisma.whiteboardSession.findUnique({
-            where: { batchScheduleId: params.batchScheduleId },
-            select: {
-              id: true,
-              title: true,
-              status: true,
-              livePhase: true,
-              videoTransport: true,
-              youtubeVideoId: true,
-              startedAt: true,
-              endedAt: true,
-              presentationUrl: true,
-              presentationName: true,
-              presentationType: true,
-              classroomTheme: true,
-              cameraShape: true,
-              cameraPosition: true,
-              scheduledStart: true,
-              scheduledEnd: true,
-              actualStartedAt: true,
-              actualEndedAt: true,
-              totalExtendedMinutes: true,
-            },
-          });
-        }
-      }
-    }
 
     const {
       canStudentJoinClass,

@@ -37,8 +37,17 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
       where: { id: params.id },
       include: { batchSchedule: true },
     });
-    if (!wbSession) return apiError("Whiteboard session not found", 404);
-    if (wbSession.status !== "ACTIVE") return apiError("This class isn't live right now.", 409);
+    if (!wbSession) {
+      return apiError("Class session not found.", 404);
+    }
+    if (
+      wbSession.status !== "ACTIVE" ||
+      wbSession.livePhase === "ENDED" ||
+      wbSession.livePhase === "ENDING" ||
+      wbSession.batchSchedule?.status === "COMPLETED"
+    ) {
+      return apiError("This class has already ended.", 409);
+    }
 
     // For non-LIVE phases (pre-class prep), enforce the start window.
     // Once a class is LIVE, bypass the window — the session IS live.

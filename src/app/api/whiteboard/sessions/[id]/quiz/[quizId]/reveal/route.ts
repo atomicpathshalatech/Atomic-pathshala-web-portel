@@ -9,7 +9,7 @@ import { pusherServer, sessionChannel, WB_EVENTS } from "@/lib/realtime/pusher-s
 
 /** Teacher reveals the correct answer + final tally to everyone in the session. */
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: { id: string; quizId: string } }
 ) {
   try {
@@ -24,10 +24,27 @@ export async function POST(
     if (!quiz) return apiError("Quiz not found", 404);
     if (quiz.status === "REVEALED") return apiSuccess({ quiz });
 
+    let body: any = null;
+    try {
+      body = await request.json();
+    } catch {
+      // Body may be empty
+    }
+
+    const effectiveCorrectOption = body?.correctOption || quiz.correctOption;
+
     const updated = await prisma.quizSession.update({
       where: { id: quiz.id },
-      data: { status: "REVEALED", revealedAt: new Date() },
+      data: {
+        status: "REVEALED",
+        revealedAt: new Date(),
+        ...(effectiveCorrectOption ? { correctOption: effectiveCorrectOption } : {}),
+      },
     });
+
+    if (effectiveCorrectOption) {
+      await prisma.$executeRaw`UPDATE quiz_responses SET "isCorrect" = ("selectedOption" = ${effectiveCorrectOption}) WHERE "quizSessionId" = ${quiz.id}`;
+    }
 
     // Independent queries, run in parallel rather than three sequential
     // round-trips — same reasoning as pushQuizMetrics in src/lib/whiteboard/
@@ -41,9 +58,9 @@ export async function POST(
         _count: { _all: true },
       }),
       prisma.quizResponse.count({ where: { quizSessionId: quiz.id } }),
-      quiz.correctOption
+      effectiveCorrectOption
         ? prisma.quizResponse.count({
-            where: { quizSessionId: quiz.id, selectedOption: quiz.correctOption },
+            where: { quizSessionId: quiz.id, selectedOption: effectiveCorrectOption },
           })
         : Promise.resolve(null),
     ]);
@@ -56,7 +73,7 @@ export async function POST(
     try {
       await pusherServer.trigger(sessionChannel(params.id), WB_EVENTS.QUIZ_REVEALED, {
         id: quiz.id,
-        correctOption: quiz.correctOption,
+        correctOption: effectiveCorrectOption,
         counts,
         totalResponses,
         correctCount,

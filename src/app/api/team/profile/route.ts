@@ -34,7 +34,18 @@ export async function PATCH(request: NextRequest) {
 
     const teacher = await prisma.teacher.update({
       where: { userId: session.user.id },
-      data: { subjects: data.subjects, bio: data.bio || null },
+      data: {
+        subjects: data.subjects,
+        displayName: data.displayName || null,
+        targetExams: data.targetExams,
+        classes: data.classes,
+        languages: data.languages,
+        experienceYears: data.experienceYears || null,
+        qualifications: data.qualifications,
+        experienceList: data.experienceList,
+        bio: data.bio || null,
+        ...(data.photoUrl ? { user: { update: { photoUrl: data.photoUrl } } } : {}),
+      },
     });
 
     return apiSuccess({ teacher });

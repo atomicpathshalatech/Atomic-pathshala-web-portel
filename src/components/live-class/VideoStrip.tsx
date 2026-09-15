@@ -14,6 +14,7 @@ import {
 } from "@livekit/components-react";
 import { Track, ConnectionState, VideoQuality, Participant, VideoPresets } from "livekit-client";
 import type { RoomOptions } from "livekit-client";
+import { LiveVideoCallModal, type TeacherConnectedStudent } from "@/components/live-class/LiveVideoCallModal";
 
 // Previously `<LiveKitRoom>` connected with zero custom options - raw SDK
 // defaults, meaning adaptiveStream/dynacast were both off and there were no
@@ -40,6 +41,7 @@ export interface VideoStripProps {
   role?: "TEACHER" | "STUDENT";
   teacherName?: string | null;
   isApprovedSpeaker?: boolean;
+  speakerRequestType?: "AUDIO" | "VIDEO" | null;
   speakerToken?: string | null;
   // Teacher-initiated connect (independent of hand-raise's isApprovedSpeaker
   // above — a separate grant, not a different name for the same thing).
@@ -47,6 +49,9 @@ export interface VideoStripProps {
   teacherVideoConnected?: boolean;
   teacherConnectionToken?: string | null;
   settingsPortalRef?: RefObject<HTMLDivElement>;
+  connectedStudents?: TeacherConnectedStudent[];
+  onDisconnectStudent?: (studentId: string) => Promise<void> | void;
+  onEndCall?: () => Promise<void> | void;
 }
 
 export function VideoStrip({
@@ -55,11 +60,15 @@ export function VideoStrip({
   role = "TEACHER",
   teacherName,
   isApprovedSpeaker = false,
+  speakerRequestType = null,
   speakerToken = null,
   teacherAudioConnected = false,
   teacherVideoConnected = false,
   teacherConnectionToken = null,
   settingsPortalRef,
+  connectedStudents = [],
+  onDisconnectStudent,
+  onEndCall,
 }: VideoStripProps) {
   const [creds, setCreds] = useState<{ token: string; url: string } | null>(null);
   const [tokenError, setTokenError] = useState<string | null>(null);
@@ -147,9 +156,13 @@ export function VideoStrip({
         role={role}
         teacherName={teacherName}
         isApprovedSpeaker={isApprovedSpeaker}
+        speakerRequestType={speakerRequestType}
         teacherAudioConnected={teacherAudioConnected}
         teacherVideoConnected={teacherVideoConnected}
         settingsPortalRef={settingsPortalRef}
+        connectedStudents={connectedStudents}
+        onDisconnectStudent={onDisconnectStudent}
+        onEndCall={onEndCall}
       />
     </LiveKitRoom>
   );
@@ -163,17 +176,25 @@ function VideoStripInner({
   role = "TEACHER",
   teacherName,
   isApprovedSpeaker = false,
+  speakerRequestType = null,
   teacherAudioConnected = false,
   teacherVideoConnected = false,
   settingsPortalRef,
+  connectedStudents = [],
+  onDisconnectStudent,
+  onEndCall,
 }: {
   variant: "header" | "panel";
   role?: "TEACHER" | "STUDENT";
   teacherName?: string | null;
   isApprovedSpeaker?: boolean;
+  speakerRequestType?: "AUDIO" | "VIDEO" | null;
   teacherAudioConnected?: boolean;
   teacherVideoConnected?: boolean;
   settingsPortalRef?: RefObject<HTMLDivElement>;
+  connectedStudents?: TeacherConnectedStudent[];
+  onDisconnectStudent?: (studentId: string) => Promise<void> | void;
+  onEndCall?: () => Promise<void> | void;
 }) {
   const connectionState = useConnectionState();
   const tracks = useTracks([Track.Source.Camera, Track.Source.Microphone], { onlySubscribed: false });
@@ -218,14 +239,24 @@ function VideoStripInner({
         }
       })();
     } else if (role === "STUDENT" && isApprovedSpeaker) {
-      // Student is approved to speak -> request microphone & video camera
+      // Student is approved to speak -> request microphone, and camera only if VIDEO
       (async () => {
         try {
           await localParticipant.setMicrophoneEnabled(true);
-          await localParticipant.setCameraEnabled(true);
           if (!cancelled) setMicError(null);
         } catch (err) {
           if (!cancelled) setMicError(describeMediaError(err));
+        }
+
+        if (speakerRequestType === "VIDEO") {
+          try {
+            await localParticipant.setCameraEnabled(true);
+            if (!cancelled) setCamError(null);
+          } catch (err) {
+            if (!cancelled) setCamError(describeMediaError(err));
+          }
+        } else {
+          localParticipant.setCameraEnabled(false).catch(() => {});
         }
       })();
     } else if (role === "STUDENT" && (teacherAudioConnected || teacherVideoConnected)) {
@@ -256,7 +287,7 @@ function VideoStripInner({
     return () => {
       cancelled = true;
     };
-  }, [localParticipant, role, isApprovedSpeaker, teacherAudioConnected, teacherVideoConnected]);
+  }, [localParticipant, role, isApprovedSpeaker, speakerRequestType, teacherAudioConnected, teacherVideoConnected]);
 
   // Handle speaker sink selection if supported
   const handleSpeakerSelect = async (deviceId: string) => {
@@ -374,23 +405,12 @@ function VideoStripInner({
           </div>
         )}
 
-        {/* Floating Live Student Video Call Tile (Picture-in-Picture on Teacher Screen) */}
-        {remoteStudentVideoTracks.length > 0 && (
-          <div className="absolute top-2 right-2 z-30 flex flex-col gap-1.5">
-            {remoteStudentVideoTracks.map((stTrack) => (
-              <div
-                key={stTrack.participant.identity}
-                className="w-36 sm:w-44 aspect-video rounded-xl overflow-hidden border-2 border-blue-500 shadow-2xl bg-slate-950 relative animate-in zoom-in-95 duration-200 ring-2 ring-blue-400/40"
-              >
-                <VideoTrack trackRef={stTrack} className="w-full h-full object-cover" />
-                <div className="absolute top-1 left-1 bg-black/80 backdrop-blur-sm px-1.5 py-0.5 rounded text-[9px] font-bold text-blue-200 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-ping" />
-                  <span className="truncate max-w-[80px]">{stTrack.participant.name || "Student"}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        {/* Persistent Floating Live Student Video / Audio Call Modal */}
+        <LiveVideoCallModal
+          role="TEACHER"
+          connectedStudents={connectedStudents}
+          onDisconnectStudent={onDisconnectStudent}
+        />
 
         {/* Reconnecting Overlay */}
         {isReconnecting && (
@@ -507,6 +527,16 @@ function VideoStripInner({
           <span>{connectionState === ConnectionState.Connected ? "HD Stream" : connectionState}</span>
         </div>
       </div>
+
+      {/* Persistent Live Video Call Modal for Student (Mute, Camera toggle, End call, Self-view) */}
+      <LiveVideoCallModal
+        role="STUDENT"
+        isApprovedSpeaker={isApprovedSpeaker}
+        requestType={speakerRequestType || "AUDIO"}
+        teacherAudioConnected={teacherAudioConnected}
+        teacherVideoConnected={teacherVideoConnected}
+        onEndCall={onEndCall}
+      />
 
       {/* Approved Speaker Badge & Local Mic Controls for Student */}
       {isApprovedSpeaker && (

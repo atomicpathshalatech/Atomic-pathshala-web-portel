@@ -40,6 +40,7 @@ export default async function BatchDetailPage({ params }: { params: { id: string
         // Batch → Chapter relation.
         include: {
           teacher: { include: { user: true } },
+          liveWhiteboardSession: true,
           chapter: {
             select: {
               id: true,
@@ -187,6 +188,15 @@ export default async function BatchDetailPage({ params }: { params: { id: string
         notes: s.notes,
         teacherId: s.teacherId,
         teacher: s.teacher ? { user: { name: s.teacher.user.name } } : null,
+        liveWhiteboardSession: s.liveWhiteboardSession
+          ? {
+              id: s.liveWhiteboardSession.id,
+              status: s.liveWhiteboardSession.status,
+              livePhase: s.liveWhiteboardSession.livePhase,
+              actualStartedAt: s.liveWhiteboardSession.actualStartedAt?.toISOString() ?? null,
+              actualEndedAt: s.liveWhiteboardSession.actualEndedAt?.toISOString() ?? null,
+            }
+          : null,
         chapter: s.chapter
           ? {
               id: s.chapter.id,

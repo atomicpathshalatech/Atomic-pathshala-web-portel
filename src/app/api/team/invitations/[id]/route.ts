@@ -21,6 +21,7 @@ const bodySchema = z.object({
   reviewNote: z.string().trim().max(500).optional(),
   // On approve: optionally assign a role now (overrides intendedRoleName).
   roleName: z.string().trim().optional().nullable(),
+  password: z.string().min(8).optional(),
 });
 
 async function audit(actorId: string, action: string, entityId: string, metadata: unknown) {
@@ -42,7 +43,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     await requirePermission(session.user.id, PERMISSIONS.STAFF_INVITE);
     const actorId = session.user.id;
 
-    const { action, reviewNote, roleName } = bodySchema.parse(await request.json());
+    const { action, reviewNote, roleName, password: adminPassword } = bodySchema.parse(await request.json());
 
     const invitation = await prisma.staffInvitation.findUnique({
       where: { id: params.id },
@@ -150,10 +151,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       assignedRoleLabel = role.label;
     }
 
-    // Generate + hash a temp password ONLY for a genuine first approval —
-    // an already-active user having their role changed later through this
-    // same endpoint must never have their real password silently replaced.
-    const tempPassword = isFirstApproval ? generateTempPassword() : null;
+    // Use Admin-selected password if provided; otherwise generate temp password on genuine first approval
+    const tempPassword = adminPassword || (isFirstApproval ? generateTempPassword() : null);
     const newPasswordHash = tempPassword ? await bcrypt.hash(tempPassword, 12) : undefined;
 
     await prisma.$transaction([

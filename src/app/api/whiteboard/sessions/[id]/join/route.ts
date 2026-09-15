@@ -38,7 +38,12 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
     });
     if (!wbSession) return apiError("Whiteboard session not found", 404);
 
-    if (wbSession.livePhase === "ENDING" || wbSession.livePhase === "ENDED" || wbSession.status === "ENDED") {
+    if (
+      wbSession.livePhase === "ENDING" ||
+      wbSession.livePhase === "ENDED" ||
+      wbSession.status === "ENDED" ||
+      wbSession.batchSchedule?.status === "COMPLETED"
+    ) {
       return apiError("Class has ended or is concluding. New student entries are closed.", 403, {
         code: "CLASS_ALREADY_ENDED",
       });

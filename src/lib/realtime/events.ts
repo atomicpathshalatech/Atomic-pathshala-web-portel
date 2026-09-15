@@ -74,3 +74,11 @@ export const WB_EVENTS = {
   TEACHER_CONNECT_UPDATED: "teacher-connect-updated",
 } as const;
 
+export function directConversationChannel(conversationId: string) {
+  return `direct-chat-${conversationId}`;
+}
+
+export const DIRECT_MESSAGE_EVENTS = {
+  NEW_MESSAGE: "new-message",
+} as const;
+

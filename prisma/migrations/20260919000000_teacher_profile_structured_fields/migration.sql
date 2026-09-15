@@ -1,0 +1,8 @@
+-- AlterTable
+ALTER TABLE "teachers" ADD COLUMN IF NOT EXISTS "displayName" TEXT;
+ALTER TABLE "teachers" ADD COLUMN IF NOT EXISTS "targetExams" TEXT[] DEFAULT ARRAY[]::TEXT[];
+ALTER TABLE "teachers" ADD COLUMN IF NOT EXISTS "classes" TEXT[] DEFAULT ARRAY[]::TEXT[];
+ALTER TABLE "teachers" ADD COLUMN IF NOT EXISTS "languages" TEXT[] DEFAULT ARRAY[]::TEXT[];
+ALTER TABLE "teachers" ADD COLUMN IF NOT EXISTS "experienceYears" TEXT;
+ALTER TABLE "teachers" ADD COLUMN IF NOT EXISTS "qualifications" JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE "teachers" ADD COLUMN IF NOT EXISTS "experienceList" JSONB DEFAULT '[]'::jsonb;

@@ -57,6 +57,9 @@ export default async function StudentLiveClassPage({
   const { canStudentJoinClass } = await import("@/lib/schedule/access-rules");
   const accessEval = canStudentJoinClass(schedule, new Date());
   if (!accessEval.allowed) {
+    if (accessEval.isCompleted) {
+      redirect(`/schedule?completedClass=${schedule.id}`);
+    }
     redirect(`/schedule?blocked=1&reason=${encodeURIComponent(accessEval.reason || "Class is not accessible yet.")}`);
   }
 

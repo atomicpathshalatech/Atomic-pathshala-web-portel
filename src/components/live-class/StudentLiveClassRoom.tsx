@@ -210,6 +210,7 @@ export function StudentLiveClassRoom({
   const [handRaiseModalOpen, setHandRaiseModalOpen] = useState(false);
   const [participationType, setParticipationType] = useState<"CHAT" | "AUDIO" | "VIDEO">("AUDIO");
   const [isApprovedSpeaker, setIsApprovedSpeaker] = useState(false);
+  const [speakerRequestType, setSpeakerRequestType] = useState<"AUDIO" | "VIDEO" | null>(null);
   const [speakerToken, setSpeakerToken] = useState<string | null>(null);
 
   // Teacher-initiated connect — independent of the hand-raise flow above
@@ -225,13 +226,13 @@ export function StudentLiveClassRoom({
   const [quizError, setQuizError] = useState<string | null>(null);
   const [quizDismissed, setQuizDismissed] = useState(false);
 
-  // Auto-dismiss quiz 5 seconds after results are revealed or closed
+  // Auto-dismiss quiz 6 seconds after results are revealed or closed
   useEffect(() => {
     if (quiz?.status === "REVEALED" || quiz?.status === "CLOSED") {
-      const t = setTimeout(() => {
+      const timer = setTimeout(() => {
         setQuizDismissed(true);
-      }, 5000);
-      return () => clearTimeout(t);
+      }, 6000);
+      return () => clearTimeout(timer);
     }
   }, [quiz?.status]);
 
@@ -477,6 +478,7 @@ export function StudentLiveClassRoom({
       (data: { studentUserId: string; requestType: "AUDIO" | "VIDEO"; speakerToken?: string }) => {
         if (data.studentUserId === currentUserId) {
           setIsApprovedSpeaker(true);
+          setSpeakerRequestType(data.requestType || "AUDIO");
           if (data.speakerToken) setSpeakerToken(data.speakerToken);
         }
       }
@@ -487,6 +489,7 @@ export function StudentLiveClassRoom({
       if (data.studentUserId === currentUserId) {
         setIsApprovedSpeaker(false);
         setSpeakerToken(null);
+        setSpeakerRequestType(null);
         setHandRaised(false);
       }
     });
@@ -588,6 +591,20 @@ export function StudentLiveClassRoom({
 
   async function toggleHandRaise() {
     return handleRaiseHandClick();
+  }
+
+  async function handleEndCall() {
+    try {
+      if (wbSession?.id) {
+        await fetch(`/api/whiteboard/sessions/${wbSession.id}/hand-raise`, { method: "DELETE" });
+      }
+    } catch {}
+    setIsApprovedSpeaker(false);
+    setSpeakerToken(null);
+    setSpeakerRequestType(null);
+    setHandRaised(false);
+    setTeacherAudioConnected(false);
+    setTeacherVideoConnected(false);
   }
 
 
@@ -993,6 +1010,35 @@ export function StudentLiveClassRoom({
                   </div>
                 </div>
                 {quizError && <p className="text-xs text-rose-400 font-medium">{quizError}</p>}
+                {quiz.status === "REVEALED" && (
+                  <div className="animate-in fade-in slide-in-from-top-1 duration-200">
+                    {mySelection === quiz.correctOption ? (
+                      <div className="p-3 rounded-xl bg-emerald-500/20 border-2 border-emerald-500/60 text-emerald-300 text-xs font-bold flex items-center gap-2.5">
+                        <span className="text-xl">🎉</span>
+                        <div>
+                          <p className="font-extrabold text-white text-sm">Congratulations! Your answer is correct.</p>
+                          <p className="text-[11px] text-emerald-300/90 font-medium">Option {quiz.correctOption} is the correct answer.</p>
+                        </div>
+                      </div>
+                    ) : mySelection ? (
+                      <div className="p-3 rounded-xl bg-rose-500/20 border-2 border-rose-500/60 text-rose-300 text-xs font-bold flex items-center gap-2.5">
+                        <span className="text-xl">❌</span>
+                        <div>
+                          <p className="font-extrabold text-white text-sm">Your answer is incorrect.</p>
+                          <p className="text-[11px] text-rose-300/90 font-medium">The correct answer is Option {quiz.correctOption}.</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-3 rounded-xl bg-blue-500/20 border-2 border-blue-500/60 text-blue-300 text-xs font-bold flex items-center gap-2.5">
+                        <span className="text-xl">ℹ️</span>
+                        <div>
+                          <p className="font-extrabold text-white text-sm">Poll Ended</p>
+                          <p className="text-[11px] text-blue-300/90 font-medium">The correct answer is Option {quiz.correctOption}.</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                   {quiz.options.map((o) => {
                     const selected = mySelection === o.key;
@@ -1037,10 +1083,12 @@ export function StudentLiveClassRoom({
                 role="STUDENT"
                 teacherName={teacherName}
                 isApprovedSpeaker={isApprovedSpeaker}
+                speakerRequestType={speakerRequestType}
                 speakerToken={speakerToken}
                 teacherAudioConnected={teacherAudioConnected}
                 teacherVideoConnected={teacherVideoConnected}
                 teacherConnectionToken={teacherConnectionToken}
+                onEndCall={handleEndCall}
               />
             )}
           </div>
@@ -1127,10 +1175,12 @@ export function StudentLiveClassRoom({
                     role="STUDENT"
                     teacherName={teacherName}
                     isApprovedSpeaker={isApprovedSpeaker}
+                    speakerRequestType={speakerRequestType}
                     speakerToken={speakerToken}
                     teacherAudioConnected={teacherAudioConnected}
                     teacherVideoConnected={teacherVideoConnected}
                     teacherConnectionToken={teacherConnectionToken}
+                    onEndCall={handleEndCall}
                   />
                 </div>
               )}
@@ -1224,6 +1274,35 @@ export function StudentLiveClassRoom({
                       )}
                     </div>
                     {quizError && <p className="text-xs text-rose-400 font-medium">{quizError}</p>}
+                    {quiz.status === "REVEALED" && (
+                      <div className="animate-in fade-in slide-in-from-top-1 duration-200">
+                        {mySelection === quiz.correctOption ? (
+                          <div className="p-3 rounded-xl bg-emerald-500/20 border-2 border-emerald-500/60 text-emerald-300 text-xs font-bold flex items-center gap-2.5">
+                            <span className="text-xl">🎉</span>
+                            <div>
+                              <p className="font-extrabold text-white text-sm">Congratulations! Your answer is correct.</p>
+                              <p className="text-[11px] text-emerald-300/90 font-medium">Option {quiz.correctOption} is the correct answer.</p>
+                            </div>
+                          </div>
+                        ) : mySelection ? (
+                          <div className="p-3 rounded-xl bg-rose-500/20 border-2 border-rose-500/60 text-rose-300 text-xs font-bold flex items-center gap-2.5">
+                            <span className="text-xl">❌</span>
+                            <div>
+                              <p className="font-extrabold text-white text-sm">Your answer is incorrect.</p>
+                              <p className="text-[11px] text-rose-300/90 font-medium">The correct answer is Option {quiz.correctOption}.</p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-3 rounded-xl bg-blue-500/20 border-2 border-blue-500/60 text-blue-300 text-xs font-bold flex items-center gap-2.5">
+                            <span className="text-xl">ℹ️</span>
+                            <div>
+                              <p className="font-extrabold text-white text-sm">Poll Ended</p>
+                              <p className="text-[11px] text-blue-300/90 font-medium">The correct answer is Option {quiz.correctOption}.</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <div className="grid grid-cols-1 gap-2.5">
                       {quiz.options.map((o) => {
                         const selected = mySelection === o.key;

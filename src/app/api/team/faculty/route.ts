@@ -8,6 +8,9 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { teacherCreateSchema } from "@/lib/validation/teacher";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 
+import { sendStaffApprovalEmail } from "@/lib/email/credentials";
+import { getLoginUrl } from "@/lib/email/app-url";
+
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
@@ -60,6 +63,7 @@ export async function POST(request: NextRequest) {
           email: input.email.toLowerCase(),
           passwordHash,
           name: input.name,
+          photoUrl: input.photoUrl || null,
           roleId: teacherRole.id,
           status: "ACTIVE",
         },
@@ -71,6 +75,13 @@ export async function POST(request: NextRequest) {
           employeeCode: input.employeeCode,
           department: input.department,
           subjects: input.subjects,
+          displayName: input.displayName || null,
+          targetExams: input.targetExams,
+          classes: input.classes,
+          languages: input.languages,
+          experienceYears: input.experienceYears || null,
+          qualifications: input.qualifications,
+          experienceList: input.experienceList,
           bio: input.bio || null,
         },
       });
@@ -88,8 +99,26 @@ export async function POST(request: NextRequest) {
       return { user, teacher };
     });
 
+    // Send credentials email to teacher with the Admin-entered initial password (single source of truth)
+    let emailDelivered = false;
+    try {
+      const emailResult = await sendStaffApprovalEmail({
+        idempotencyKey: `teacher:created:${created.user.id}`,
+        recipientUserId: created.user.id,
+        fullName: created.user.name,
+        email: created.user.email,
+        password: input.password,
+        loginUrl: getLoginUrl(),
+        roleLabel: "Faculty",
+        department: input.department,
+      });
+      emailDelivered = emailResult.outcome === "sent";
+    } catch (err) {
+      console.error("[team/faculty POST] Failed to send credentials email:", err);
+    }
+
     return apiSuccess(
-      { userId: created.user.id, teacherId: created.teacher.id },
+      { userId: created.user.id, teacherId: created.teacher.id, emailDelivered },
       201
     );
   } catch (error) {

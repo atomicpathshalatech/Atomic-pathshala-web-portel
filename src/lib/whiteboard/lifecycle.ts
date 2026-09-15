@@ -62,11 +62,17 @@ export async function endWhiteboardSession(
     prisma.whiteboardSession.update({
       where: { id: sessionId },
       data: {
-        livePhase: "ENDING",
+        status: "ENDED",
+        livePhase: "ENDED",
         endedAt: existing.endedAt || now,
         actualEndedAt: existing.actualEndedAt || now,
         ...(isRecordingActive && { recordingStatus: "PROCESSING" }),
       },
+    }),
+
+    prisma.batchSchedule.update({
+      where: { id: existing.batchScheduleId },
+      data: { status: "COMPLETED" },
     }),
 
     prisma.handRaiseEvent.updateMany({
@@ -82,16 +88,16 @@ export async function endWhiteboardSession(
   // Realtime broadcast to transition students immediately to post-class feedback screen
   try {
     await pusherServer.trigger(sessionChannel(sessionId), WB_EVENTS.SESSION_ENDED, {
-      livePhase: "ENDING",
+      livePhase: "ENDED",
       endedAt: now.toISOString(),
     });
     await pusherServer.trigger(sessionChannel(sessionId), WB_EVENTS.LIVE_PHASE_CHANGED, {
-      phase: "ENDING",
-      livePhase: "ENDING",
+      phase: "ENDED",
+      livePhase: "ENDED",
       endedAt: now.toISOString(),
     });
     await pusherServer.trigger(teacherChannel(sessionId), WB_EVENTS.SESSION_ENDED, {
-      livePhase: "ENDING",
+      livePhase: "ENDED",
       endedAt: now.toISOString(),
     });
   } catch (err) {

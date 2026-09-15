@@ -10,8 +10,10 @@ export interface ChapterwiseTestItem {
   durationMin: number;
   questionCount: number;
   totalMarks: number;
-  status: "PENDING" | "IN_PROGRESS" | "COMPLETED";
+  status: "PENDING" | "IN_PROGRESS" | "COMPLETED" | "UPCOMING";
   score?: number | null;
+  startsAt?: string | null;
+  availableFrom?: string | null;
 }
 
 export interface ChapterGroupedTests {
@@ -471,71 +473,96 @@ export function AtomicPracticeTestArena({
                           </p>
                         ) : (
                           <div className="space-y-2 pt-2.5">
-                            {chapter.tests.map((test) => (
-                              <div
-                                key={test.id}
-                                className="bg-white border border-slate-200/90 rounded-xl p-3 sm:px-4 sm:py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-slate-300 hover:shadow-2xs transition-all"
-                              >
-                                <div className="flex items-start sm:items-center gap-3 min-w-0">
-                                  <div className="shrink-0 pt-0.5 sm:pt-0">
-                                    {test.status === "COMPLETED" ? (
-                                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                        Score: {test.score}/{test.totalMarks}
-                                      </span>
-                                    ) : test.status === "IN_PROGRESS" ? (
-                                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                                        In Progress
-                                      </span>
-                                    ) : (
-                                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                                        Available
-                                      </span>
-                                    )}
-                                  </div>
+                            {chapter.tests.map((test) => {
+                              const isUpcoming =
+                                test.status === "UPCOMING" ||
+                                Boolean(test.startsAt && new Date(test.startsAt).getTime() > Date.now()) ||
+                                Boolean(test.availableFrom && new Date(test.availableFrom).getTime() > Date.now());
 
-                                  <div className="min-w-0">
-                                    <h4 className="font-bold text-xs sm:text-sm text-slate-900 truncate">
-                                      {test.name}
-                                    </h4>
-                                    <div className="flex items-center gap-2.5 text-[11px] text-slate-500 pt-0.5">
-                                      <span>{test.questionCount} Questions</span>
-                                      <span>&middot;</span>
-                                      <span>{test.durationMin} Mins</span>
-                                      <span>&middot;</span>
-                                      <span>{test.totalMarks} Marks</span>
+                              return (
+                                <div
+                                  key={test.id}
+                                  className="bg-white border border-slate-200/90 rounded-xl p-3 sm:px-4 sm:py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-slate-300 hover:shadow-2xs transition-all"
+                                >
+                                  <div className="flex items-start sm:items-center gap-3 min-w-0">
+                                    <div className="shrink-0 pt-0.5 sm:pt-0">
+                                      {test.status === "COMPLETED" ? (
+                                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                          Score: {test.score}/{test.totalMarks}
+                                        </span>
+                                      ) : test.status === "IN_PROGRESS" ? (
+                                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                          In Progress
+                                        </span>
+                                      ) : isUpcoming ? (
+                                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                                          Upcoming
+                                        </span>
+                                      ) : (
+                                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                          Available
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    <div className="min-w-0">
+                                      <h4 className="font-bold text-xs sm:text-sm text-slate-900 truncate">
+                                        {test.name}
+                                      </h4>
+                                      <div className="flex items-center gap-2.5 text-[11px] text-slate-500 pt-0.5">
+                                        <span>{test.questionCount} Questions</span>
+                                        <span>&middot;</span>
+                                        <span>{test.durationMin} Mins</span>
+                                        <span>&middot;</span>
+                                        <span>{test.totalMarks} Marks</span>
+                                      </div>
                                     </div>
                                   </div>
-                                </div>
 
-                                <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
-                                  <TestPdfDownloadModal
-                                    testId={test.id}
-                                    testName={test.name}
-                                    triggerButton={
+                                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                                    <TestPdfDownloadModal
+                                      testId={test.id}
+                                      testName={test.name}
+                                      triggerButton={
+                                        <button
+                                          type="button"
+                                          title="Download Test PDF"
+                                          className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition shadow-2xs cursor-pointer"
+                                        >
+                                          <span className="material-symbols-outlined text-[16px] text-blue-600">picture_as_pdf</span>
+                                          <span>Download PDF</span>
+                                        </button>
+                                      }
+                                    />
+
+                                    {test.status === "COMPLETED" ? (
+                                      <Link
+                                        href={`/tests/${test.id}/result`}
+                                        className="px-3.5 py-1.5 rounded-lg font-bold text-xs transition shadow-2xs text-center bg-slate-100 hover:bg-slate-200 text-slate-800"
+                                      >
+                                        View Analysis
+                                      </Link>
+                                    ) : isUpcoming ? (
                                       <button
                                         type="button"
-                                        title="Download Test PDF"
-                                        className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition shadow-2xs cursor-pointer"
+                                        disabled
+                                        aria-disabled="true"
+                                        className="px-3.5 py-1.5 rounded-lg font-bold text-xs bg-slate-100 text-slate-400 cursor-not-allowed text-center"
                                       >
-                                        <span className="material-symbols-outlined text-[16px] text-blue-600">picture_as_pdf</span>
-                                        <span>Download PDF</span>
+                                        Upcoming
                                       </button>
-                                    }
-                                  />
-
-                                  <Link
-                                    href={test.status === "COMPLETED" ? `/tests/${test.id}/result` : `/tests/${test.id}/attempt`}
-                                    className={`px-3.5 py-1.5 rounded-lg font-bold text-xs transition shadow-2xs text-center ${
-                                      test.status === "COMPLETED"
-                                        ? "bg-slate-100 hover:bg-slate-200 text-slate-800"
-                                        : "bg-orange-500 hover:bg-orange-600 text-white active:scale-95"
-                                    }`}
-                                  >
-                                    {test.status === "COMPLETED" ? "View Analysis" : test.status === "IN_PROGRESS" ? "Resume" : "Start Test"}
-                                  </Link>
+                                    ) : (
+                                      <Link
+                                        href={`/tests/${test.id}/attempt`}
+                                        className="px-3.5 py-1.5 rounded-lg font-bold text-xs transition shadow-2xs text-center bg-orange-500 hover:bg-orange-600 text-white active:scale-95"
+                                      >
+                                        {test.status === "IN_PROGRESS" ? "Resume" : "Start Test"}
+                                      </Link>
+                                    )}
+                                  </div>
                                 </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         )}
                       </div>

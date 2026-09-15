@@ -29,10 +29,12 @@ export function PrepareSlidesModal({
   const [fileUrl, setFileUrl] = useState<string | null>(null);
   const [fileType, setFileType] = useState<"PDF" | "PPTX">("PDF");
   const [error, setError] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null);
 
   async function handleFileSelect(file: File) {
     setUploading(true);
     setError(null);
+    setUploadProgress("Uploading presentation file…");
     try {
       const formData = new FormData();
       formData.append("file", file);
@@ -47,10 +49,29 @@ export function PrepareSlidesModal({
       setFileName(data.data.filename);
       setFileUrl(data.data.url);
       setFileType(data.data.fileType);
+
+      setUploadProgress("Saving slides configuration…");
+      const saveRes = await fetch(`/api/team/live-class/${scheduleId}/preflight`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          presentationUrl: data.data.url,
+          presentationName: data.data.filename,
+          presentationType: data.data.fileType,
+        }),
+      });
+      const saveData = await saveRes.json();
+      if (!saveRes.ok || !saveData.success) {
+        throw new Error(saveData.error || "Could not save slides for this class.");
+      }
+      toast.success("Slides prepared — they'll auto-load when you start this class.");
+      onSaved?.();
+      onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed.");
     } finally {
       setUploading(false);
+      setUploadProgress(null);
     }
   }
 
@@ -102,10 +123,19 @@ export function PrepareSlidesModal({
         </p>
 
         <label className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-6 cursor-pointer hover:border-blue-400 transition">
-          <span className="material-symbols-outlined text-3xl text-slate-400">upload_file</span>
-          <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-            {uploading ? "Uploading…" : fileName || "Click to choose a PDF or PPTX"}
+          <span className="material-symbols-outlined text-3xl text-slate-400">
+            {uploading ? "hourglass_top" : "upload_file"}
           </span>
+          <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+            {uploading ? (uploadProgress || "Uploading…") : fileName || "Click to choose a PDF or PPTX"}
+          </span>
+          {uploading && (
+            <div className="w-full max-w-xs mt-2">
+              <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                <div className="h-full bg-blue-500 rounded-full animate-pulse w-3/4" />
+              </div>
+            </div>
+          )}
           <input
             type="file"
             accept=".pdf,.ppt,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation"
@@ -118,7 +148,24 @@ export function PrepareSlidesModal({
           />
         </label>
 
-        {error && <p className="mt-3 text-xs font-semibold text-red-500">{error}</p>}
+        {error && (
+          <div className="mt-3 p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl flex items-center justify-between">
+            <p className="text-xs font-semibold text-red-600 dark:text-red-400">{error}</p>
+            <label className="text-xs font-bold text-red-700 dark:text-red-300 underline cursor-pointer hover:text-red-800">
+              Retry
+              <input
+                type="file"
+                accept=".pdf,.ppt,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                className="hidden"
+                disabled={uploading || saving}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleFileSelect(file);
+                }}
+              />
+            </label>
+          </div>
+        )}
 
         <div className="mt-5 flex justify-end gap-2">
           <button

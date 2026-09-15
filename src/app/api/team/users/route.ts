@@ -240,6 +240,24 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // Send credentials email to teacher/staff using the Admin-entered password
+    try {
+      const { sendStaffApprovalEmail } = await import("@/lib/email/credentials");
+      const { getLoginUrl } = await import("@/lib/email/app-url");
+      await sendStaffApprovalEmail({
+        idempotencyKey: `user:created:${newUser.id}`,
+        recipientUserId: newUser.id,
+        fullName: newUser.name,
+        email: newUser.email,
+        password: password,
+        loginUrl: getLoginUrl(),
+        roleLabel: role.label,
+        department: newUser.department || "Academic",
+      });
+    } catch (err) {
+      console.error("[team/users POST] Failed to send credentials email:", err);
+    }
+
     return NextResponse.json({
       success: true,
       user: {

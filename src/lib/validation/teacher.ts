@@ -8,6 +8,56 @@ export const DEPARTMENT_OPTIONS = [
   "General/Foundation",
 ] as const;
 
+export const EXAM_OPTIONS = [
+  "NEET",
+  "JEE Main",
+  "JEE Advanced",
+  "Class 11-12",
+  "Foundation",
+  "Board",
+] as const;
+
+export const CLASS_OPTIONS = [
+  "Class 11",
+  "Class 12",
+  "11–12",
+  "Dropper",
+  "Class 9-10",
+] as const;
+
+export const LANGUAGE_OPTIONS = [
+  "Hindi",
+  "English",
+  "Hindi + English",
+] as const;
+
+export const EXPERIENCE_OPTIONS = [
+  "1 Year",
+  "2 Years",
+  "3 Years",
+  "4 Years",
+  "5 Years",
+  "6+ Years",
+  "7+ Years",
+  "10+ Years",
+] as const;
+
+export const qualificationItemSchema = z.object({
+  degree: z.string().min(1, "Degree is required"),
+  institution: z.string().min(1, "Institution / University is required"),
+  year: z.string().optional(),
+});
+export type QualificationItem = z.infer<typeof qualificationItemSchema>;
+
+export const experienceItemSchema = z.object({
+  organization: z.string().min(1, "Organization name is required"),
+  designation: z.string().min(1, "Designation is required"),
+  startYear: z.string().min(1, "Start year is required"),
+  endYear: z.string().min(1, "End year is required"),
+  description: z.string().optional(),
+});
+export type ExperienceItem = z.infer<typeof experienceItemSchema>;
+
 /**
  * Onboarding a new educator creates both the login (User, role TEACHER) and
  * the Teacher profile in one step — this is what an Academic Head/HR uses
@@ -20,29 +70,53 @@ export const teacherCreateSchema = z.object({
   employeeCode: z.string().min(2, "Employee code is required"),
   department: z.enum(DEPARTMENT_OPTIONS),
   subjects: z.array(z.string()).default([]),
+  displayName: z.string().optional(),
+  targetExams: z.array(z.string()).default([]),
+  classes: z.array(z.string()).default([]),
+  languages: z.array(z.string()).default([]),
+  experienceYears: z.string().optional(),
+  qualifications: z.array(qualificationItemSchema).default([]),
+  experienceList: z.array(experienceItemSchema).default([]),
   bio: z.string().optional(),
+  photoUrl: z.string().optional(),
 });
 
-export type TeacherCreateInput = z.infer<typeof teacherCreateSchema>;
+export type TeacherCreateInput = z.input<typeof teacherCreateSchema>;
 
 /** Admin edit — everything except login credentials. */
 export const teacherAdminUpdateSchema = z.object({
   employeeCode: z.string().min(2, "Employee code is required"),
   department: z.enum(DEPARTMENT_OPTIONS),
   subjects: z.array(z.string()).default([]),
+  displayName: z.string().optional(),
+  targetExams: z.array(z.string()).default([]),
+  classes: z.array(z.string()).default([]),
+  languages: z.array(z.string()).default([]),
+  experienceYears: z.string().optional(),
+  qualifications: z.array(qualificationItemSchema).default([]),
+  experienceList: z.array(experienceItemSchema).default([]),
   bio: z.string().optional(),
+  photoUrl: z.string().optional(),
 });
 
-export type TeacherAdminUpdateInput = z.infer<typeof teacherAdminUpdateSchema>;
+export type TeacherAdminUpdateInput = z.input<typeof teacherAdminUpdateSchema>;
 
 /** Self-service — a teacher editing their own profile can't change their
- * employee code or department (HR-controlled), only their bio and subjects. */
+ * employee code or department (HR-controlled), only their profile info. */
 export const teacherSelfUpdateSchema = z.object({
   subjects: z.array(z.string()).default([]),
+  displayName: z.string().optional(),
+  targetExams: z.array(z.string()).default([]),
+  classes: z.array(z.string()).default([]),
+  languages: z.array(z.string()).default([]),
+  experienceYears: z.string().optional(),
+  qualifications: z.array(qualificationItemSchema).default([]),
+  experienceList: z.array(experienceItemSchema).default([]),
   bio: z.string().optional(),
+  photoUrl: z.string().optional(),
 });
 
-export type TeacherSelfUpdateInput = z.infer<typeof teacherSelfUpdateSchema>;
+export type TeacherSelfUpdateInput = z.input<typeof teacherSelfUpdateSchema>;
 
 export const SUBJECT_EXPERTISE_OPTIONS = [
   "Physics",

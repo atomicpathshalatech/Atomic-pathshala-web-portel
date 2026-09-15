@@ -62,6 +62,13 @@ type BatchDetailClientProps = {
     notes: string | null;
     teacherId: string | null;
     teacher: { user: { name: string } } | null;
+    liveWhiteboardSession?: {
+      id?: string;
+      status?: string;
+      livePhase?: string;
+      actualStartedAt?: string | null;
+      actualEndedAt?: string | null;
+    } | null;
     /** Set when this schedule was created by importing a master chapter. */
     chapter: {
       id: string;

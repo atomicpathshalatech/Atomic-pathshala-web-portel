@@ -50,7 +50,20 @@ export default async function MyProfilePage() {
             initialCreativePngUrl={teacher.creativePngUrl}
             initialHasAlpha={teacher.creativePngHasAlpha}
           />
-          <SelfProfileForm initialData={{ subjects: teacher.subjects, bio: teacher.bio ?? undefined }} />
+          <SelfProfileForm
+            initialData={{
+              subjects: teacher.subjects,
+              displayName: teacher.displayName ?? undefined,
+              targetExams: teacher.targetExams ?? [],
+              classes: teacher.classes ?? [],
+              languages: teacher.languages ?? [],
+              experienceYears: teacher.experienceYears ?? undefined,
+              qualifications: (teacher.qualifications as any) ?? [],
+              experienceList: (teacher.experienceList as any) ?? [],
+              bio: teacher.bio ?? undefined,
+              photoUrl: teacher.user.photoUrl ?? undefined,
+            }}
+          />
         </>
       )}
     </div>

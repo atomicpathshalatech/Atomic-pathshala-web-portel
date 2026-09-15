@@ -131,9 +131,15 @@ export function NextClassCard({
       ? "LIVE NOW · LIVE CLASS"
       : "NEXT SCHEDULED CLASS · LIVE CLASS";
 
-  const buttonLabel = !isLiveClassType ? "View Classroom" : isLive ? "Join Live Class" : "Join Class";
-  const href = isLiveClassType ? `/live-class/${scheduleId}` : "/schedule";
   const buttonDisabled = isLiveClassType && !canJoinNow;
+  const buttonLabel = !isLiveClassType
+    ? "View Classroom"
+    : isLive
+      ? "Join Live Class"
+      : buttonDisabled
+        ? "Upcoming"
+        : "Join Class";
+  const href = isLiveClassType ? `/live-class/${scheduleId}` : "/schedule";
 
   return (
     <section

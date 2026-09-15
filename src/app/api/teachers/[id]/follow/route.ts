@@ -29,14 +29,15 @@ async function requireStudent(request: NextRequest) {
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.id) throw new UnauthorizedError();
-
     const followerCount = await prisma.teacherFollow.count({ where: { teacherId: params.id } });
 
-    const student = await prisma.student.findUnique({ where: { userId: session.user.id } });
-    const following = student
-      ? (await prisma.teacherFollow.count({ where: { studentId: student.id, teacherId: params.id } })) > 0
-      : false;
+    let following = false;
+    if (session?.user?.id) {
+      const student = await prisma.student.findUnique({ where: { userId: session.user.id } });
+      if (student) {
+        following = (await prisma.teacherFollow.count({ where: { studentId: student.id, teacherId: params.id } })) > 0;
+      }
+    }
 
     return apiSuccess({ followerCount, following });
   } catch (error) {

@@ -7,9 +7,30 @@ export type TeacherQualification = {
 };
 
 export type TeacherExperience = {
-  role: string;
   organization: string;
+  designation: string;
+  startYear?: string;
+  endYear?: string;
+  role?: string;
   duration?: string;
+  description?: string;
+};
+
+export type TeacherBadgeItem = {
+  id: string;
+  badgeType: string;
+  title: string;
+  description: string | null;
+  icon: string | null;
+};
+
+export type TeacherTestimonialItem = {
+  id: string;
+  studentName: string;
+  studentPhoto: string | null;
+  rating: number;
+  content: string;
+  createdAt: Date;
 };
 
 export type TeacherFullProfile = {
@@ -28,8 +49,18 @@ export type TeacherFullProfile = {
   isVerified: boolean;
   experienceYears: string;
   qualifications: TeacherQualification[];
+  qualificationSummary: string | null;
   experienceList: TeacherExperience[];
+  /** Day + Month only (e.g. "15 August"). Year is strictly hidden from student-facing profile */
+  dobDayMonth: string | null;
   rating: number | null;
+  averageRating: number | null;
+  reviewCount: number;
+  followerCount: number;
+  studentsTaughtCount: number;
+  totalLecturesCount: number;
+  badges: TeacherBadgeItem[];
+  testimonials: TeacherTestimonialItem[];
   batches: Array<{ id: string; name: string; code: string; courseTitle?: string }>;
   upcomingClasses: Array<{
     id: string;
@@ -38,131 +69,19 @@ export type TeacherFullProfile = {
     endsAt: Date;
     status: string;
     batchName: string;
+    batchId?: string;
   }>;
   lectures: Array<{
     id: string;
     title: string;
     chapterTitle?: string;
+    subjectName?: string;
+    chapterId?: string;
+    subjectId?: string;
+    batchId?: string;
     videoUrl?: string;
+    durationMin?: number | null;
   }>;
-};
-
-export const DEFAULT_FACULTY_PROFILES: Record<string, Partial<TeacherFullProfile>> = {
-  "firoz-ali": {
-    name: "Firoz Ali (Firoz Sir)",
-    headline: "Founder & Lead Chemistry Educator | NEET & JEE Specialist",
-    department: "Chemistry",
-    subjects: ["Physical Chemistry", "Organic Chemistry", "Inorganic Chemistry"],
-    targetExams: ["NEET UG", "JEE Main", "Class 11-12"],
-    classes: ["Class 11", "Class 12", "Dropper"],
-    languages: ["Hindi", "English", "Hinglish"],
-    experienceYears: "5+ Years",
-    isVerified: true,
-    bio: "Firoz Sir is the founder of Atomic Pathshala and one of India's leading Chemistry educators. Former faculty at Unacademy and Doubtnut, he specializes in making complex chemical reactions, thermodynamics, and mechanisms intuitive and high-scoring through NCERT line-by-line mastery.",
-    qualifications: [
-      { degree: "M.Sc. Chemistry", institution: "Aligarh Muslim University" },
-      { degree: "B.Sc. Chemistry (Hons.)", institution: "University of Delhi" },
-    ],
-    experienceList: [
-      { role: "Founder & Lead Chemistry Educator", organization: "Atomic Pathshala", duration: "2024 — Present" },
-      { role: "Senior Chemistry Educator", organization: "Unacademy", duration: "2021 — 2024" },
-      { role: "Chemistry Faculty & Content Head", organization: "Doubtnut", duration: "2019 — 2021" },
-    ],
-  },
-  "sanu-yadav": {
-    name: "Sanu Yadav Sir",
-    headline: "Senior Physics Faculty | Mechanics & Modern Physics Expert",
-    department: "Physics",
-    subjects: ["Physics", "Mechanics", "Electricity & Magnetism", "Modern Physics"],
-    targetExams: ["NEET UG", "JEE Main", "JEE Advanced"],
-    classes: ["Class 11", "Class 12", "Dropper"],
-    languages: ["Hindi", "English"],
-    experienceYears: "6+ Years",
-    isVerified: true,
-    bio: "Sanu Yadav Sir teaches Physics conceptually rather than through rote formula memorization. His lectures emphasize visualization, free-body diagrams, and systematic numerical problem solving.",
-    qualifications: [
-      { degree: "B.Tech Mechanical Engineering", institution: "NIT Allahabad" },
-    ],
-    experienceList: [
-      { role: "Senior Physics Faculty", organization: "Atomic Pathshala", duration: "2024 — Present" },
-      { role: "Physics Educator", organization: "Kota Institute", duration: "2020 — 2024" },
-    ],
-  },
-  "yaman-khan": {
-    name: "Yaman Khan Sir",
-    headline: "Biology Educator | Human Physiology & Zoology Specialist",
-    department: "Biology",
-    subjects: ["Biology", "Zoology", "Human Physiology", "Embryology"],
-    targetExams: ["NEET UG", "CBSE Board", "Class 11-12"],
-    classes: ["Class 11", "Class 12", "Dropper"],
-    languages: ["Hindi", "English"],
-    experienceYears: "5+ Years",
-    isVerified: true,
-    bio: "Yaman Khan Sir is a specialized Biology mentor for medical aspirants. He teaches through an NCERT-first approach accompanied by clear anatomical diagrams and high-yield mnemonics.",
-    qualifications: [
-      { degree: "M.Sc. Embryology", institution: "Delhi University" },
-      { degree: "B.Sc. Zoology", institution: "AMU" },
-    ],
-    experienceList: [
-      { role: "Senior Biology Faculty", organization: "Atomic Pathshala", duration: "2024 — Present" },
-      { role: "Zoology Educator", organization: "Medical Academy", duration: "2020 — 2024" },
-    ],
-  },
-  "mukul-kashyap": {
-    name: "Mukul Kashyap Sir",
-    headline: "Physics Faculty | Optics, Thermodynamics & Advanced Problem Solving",
-    department: "Physics",
-    subjects: ["Physics", "Thermodynamics", "Wave Optics", "Ray Optics"],
-    targetExams: ["NEET UG", "JEE Main"],
-    classes: ["Class 11", "Class 12"],
-    languages: ["Hindi", "English"],
-    experienceYears: "7+ Years",
-    isVerified: true,
-    bio: "Mukul Kashyap Sir is known for simplifying the most difficult Physics numericals for NEET & JEE through logical derivations and step-by-step problem dissection.",
-    qualifications: [
-      { degree: "M.Sc. Physics", institution: "IIT Roorkee" },
-    ],
-    experienceList: [
-      { role: "Physics Educator", organization: "Atomic Pathshala", duration: "2024 — Present" },
-      { role: "Senior Faculty", organization: "Apex Classes", duration: "2018 — 2024" },
-    ],
-  },
-  "mohsin-ali": {
-    name: "Mohsin Ali Sir",
-    headline: "Chemistry Educator | Physical & Inorganic Chemistry Specialist",
-    department: "Chemistry",
-    subjects: ["Chemistry", "Physical Chemistry", "Inorganic Chemistry"],
-    targetExams: ["NEET UG", "JEE Main"],
-    classes: ["Class 11", "Class 12"],
-    languages: ["Hindi", "English"],
-    experienceYears: "4+ Years",
-    isVerified: true,
-    bio: "Mohsin Ali Sir helps students build solid fundamental clarity in Chemistry through structured lectures, regular DPP practice, and formula sheets.",
-    qualifications: [
-      { degree: "B.Tech Chemical Engineering", institution: "Jamia Millia Islamia" },
-    ],
-    experienceList: [
-      { role: "Chemistry Faculty", organization: "Atomic Pathshala", duration: "2024 — Present" },
-    ],
-  },
-  "rehan-ali": {
-    name: "Rehan Ali Sir",
-    headline: "Biology Doubt Expert & Educator | Human Anatomy Mentor",
-    department: "Biology",
-    subjects: ["Biology", "Human Anatomy", "Botany Doubts"],
-    targetExams: ["NEET UG"],
-    classes: ["Class 11", "Class 12", "Dropper"],
-    languages: ["Hindi", "English"],
-    experienceYears: "4+ Years",
-    isVerified: true,
-    bio: "Rehan Ali Sir provides patient, comprehensive NCERT doubt clarification and conceptual reinforcement for NEET medical aspirants.",
-    qualifications: [
-      { degree: "BAMS (Bachelor of Ayurvedic Medicine & Surgery)", institution: "State Medical Faculty" },
-    ],
-    experienceList: [
-      { role: "Biology Doubt Expert", organization: "Atomic Pathshala", duration: "2024 — Present" },
-    ],
-  },
 };
 
 export function generateSlug(name: string): string {
@@ -173,80 +92,287 @@ export function generateSlug(name: string): string {
 }
 
 /**
- * Fetch a teacher profile by slug or ID with real database connections
+ * Format DOB strictly as Day + Month (e.g. "15 August", "1 September").
+ * The Year is strictly withheld to preserve teacher privacy.
+ */
+export function formatDobDayMonth(dob?: Date | null): string | null {
+  if (!dob) return null;
+  try {
+    const d = new Date(dob);
+    if (isNaN(d.getTime())) return null;
+    return d.toLocaleDateString("en-IN", { day: "numeric", month: "long" });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Clean bio text — if legacy concatenated string exists, clean out DOB and qualification metadata
+ */
+function sanitizeBio(rawBio?: string | null): string {
+  if (!rawBio) return "";
+  const trimmed = rawBio.trim();
+
+  // Check if legacy concatenated format: Qualification: ... · Experience: ... · DOB: ...
+  if (trimmed.startsWith("Qualification:") && trimmed.includes("DOB:")) {
+    const parts = trimmed.split(/DOB:\s*\d{4}-\d{2}-\d{2}/i);
+    if (parts[1]) {
+      const extra = parts[1].replace(/^[·\s-]+/, "").trim();
+      return extra;
+    }
+    return "";
+  }
+
+  // Remove any dangling DOB text
+  return trimmed.replace(/·?\s*DOB:\s*\d{4}-\d{2}-\d{2}/gi, "").trim();
+}
+
+/**
+ * Dynamically build professional headline from strictly database-backed subjects & exams
+ */
+function buildHeadline(
+  displayName?: string | null,
+  subjects?: string[],
+  department?: string,
+  targetExams?: string[]
+): string {
+  if (displayName && displayName.trim()) {
+    return displayName.trim();
+  }
+
+  const primarySubject =
+    subjects && subjects.length > 0 ? subjects[0] : department || "Faculty";
+  const subjectPart = `${primarySubject} Faculty`;
+
+  if (targetExams && targetExams.length > 0) {
+    const examsPart = `${targetExams.join(" & ")} Educator`;
+    return `${subjectPart} | ${examsPart}`;
+  }
+
+  return subjectPart;
+}
+
+/**
+ * Fetch a teacher profile by slug or ID with real database connections only.
+ * Absolutely no fake/default/hardcoded profiles.
  */
 export async function getTeacherProfileBySlug(slug: string): Promise<TeacherFullProfile | null> {
   const cleanSlug = slug.toLowerCase().trim();
 
-  // 1. Search database teachers with relations
+  // Search database teachers with relations
   const allTeachers = await prisma.teacher.findMany({
+    where: {
+      onboardingStatus: { not: "REJECTED" },
+      user: { status: "ACTIVE" },
+    },
     include: {
       user: true,
-      batchAssignments: { include: { batch: { include: { course: true } } } },
+      batchAssignments: {
+        include: {
+          batch: {
+            include: {
+              course: true,
+              enrollments: {
+                select: { studentId: true },
+              },
+            },
+          },
+        },
+      },
       scheduleSessions: {
-        where: { startsAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
+        where: { startsAt: { gte: new Date(Date.now() - 4 * 60 * 60 * 1000) } },
         orderBy: { startsAt: "asc" },
         include: { batch: true },
-        take: 5,
+        take: 6,
       },
       lectures: {
-        include: { chapter: { include: { subject: true } } },
-        take: 6,
+        include: {
+          chapter: { include: { subject: true } },
+          batchSchedules: { select: { batchId: true }, take: 1 },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 8,
+      },
+      badges: {
+        orderBy: { assignedAt: "desc" },
+      },
+      testimonials: {
+        where: { status: "APPROVED" },
+        orderBy: { createdAt: "desc" },
+        include: {
+          student: {
+            include: {
+              user: {
+                select: { name: true, photoUrl: true },
+              },
+            },
+          },
+        },
+        take: 10,
       },
     },
   });
 
-  // Match by slug or id
-  const dbTeacher = allTeachers.find((t) => generateSlug(t.user.name) === cleanSlug || t.id === cleanSlug);
-  const fallback = DEFAULT_FACULTY_PROFILES[cleanSlug] || (dbTeacher ? {} : DEFAULT_FACULTY_PROFILES["firoz-ali"]);
+  // Match by slug, ID, or employeeCode
+  const dbTeacher = allTeachers.find(
+    (t) =>
+      generateSlug(t.user.name) === cleanSlug ||
+      t.id === cleanSlug ||
+      t.employeeCode.toLowerCase() === cleanSlug
+  );
 
-  if (!dbTeacher && !DEFAULT_FACULTY_PROFILES[cleanSlug]) {
+  if (!dbTeacher) {
     return null;
   }
 
-  const name = dbTeacher?.user?.name || fallback?.name || "Faculty Member";
-  const department = dbTeacher?.department || fallback?.department || "Science";
-  const subjects = dbTeacher?.subjects && dbTeacher.subjects.length > 0 ? dbTeacher.subjects : fallback?.subjects || [department];
+  const name = dbTeacher.user.name || "Faculty Member";
+  const department = dbTeacher.department || "Science";
+  const subjects = dbTeacher.subjects && dbTeacher.subjects.length > 0 ? dbTeacher.subjects : [department];
+  const targetExams = dbTeacher.targetExams && dbTeacher.targetExams.length > 0 ? dbTeacher.targetExams : [];
+  const classes = dbTeacher.classes && dbTeacher.classes.length > 0 ? dbTeacher.classes : [];
+  const languages = dbTeacher.languages && dbTeacher.languages.length > 0 ? dbTeacher.languages : [];
+  const experienceYears = dbTeacher.experienceYears || "";
+
+  // Parse structured qualifications
+  let qualifications: TeacherQualification[] = [];
+  if (Array.isArray(dbTeacher.qualifications)) {
+    qualifications = (dbTeacher.qualifications as any[]).map((q) => ({
+      degree: q.degree || "",
+      institution: q.institution || "",
+      year: q.year || undefined,
+    }));
+  }
+
+  // Create clean summary (e.g. "BAMS", "M.Sc., B.Ed.")
+  const qualificationSummary =
+    qualifications.length > 0
+      ? qualifications
+          .map((q) => q.degree)
+          .filter(Boolean)
+          .join(", ") || null
+      : null;
+
+  // Parse structured experienceList
+  let experienceList: TeacherExperience[] = [];
+  if (Array.isArray(dbTeacher.experienceList)) {
+    experienceList = (dbTeacher.experienceList as any[]).map((e) => ({
+      organization: e.organization || "",
+      designation: e.designation || "",
+      startYear: e.startYear || undefined,
+      endYear: e.endYear || undefined,
+      role: e.designation || e.role || "",
+      duration:
+        e.startYear && e.endYear
+          ? `${e.startYear} — ${e.endYear}`
+          : e.startYear || e.duration || "",
+      description: e.description || undefined,
+    }));
+  }
+
+  const headline = buildHeadline(dbTeacher.displayName, subjects, department, targetExams);
+  const cleanBio = sanitizeBio(dbTeacher.bio);
+
+  // Strict DOB Day + Month only (Year completely hidden)
+  const dobDayMonth = formatDobDayMonth(dbTeacher.dob);
+
+  // Real database metrics
+  const [followerCount, totalLecturesCount] = await Promise.all([
+    prisma.teacherFollow.count({ where: { teacherId: dbTeacher.id } }),
+    prisma.lecture.count({ where: { teacherId: dbTeacher.id } }),
+  ]);
+
+  // Distinct students taught across all assigned batches
+  const enrolledStudentIds = new Set<string>();
+  dbTeacher.batchAssignments?.forEach((ba) => {
+    ba.batch?.enrollments?.forEach((e) => {
+      if (e.studentId) enrolledStudentIds.add(e.studentId);
+    });
+  });
+  const studentsTaughtCount = enrolledStudentIds.size;
+
+  // Testimonials calculation
+  const approvedTestimonials: TeacherTestimonialItem[] = (dbTeacher.testimonials || []).map((t) => ({
+    id: t.id,
+    studentName: t.student?.user?.name || "Student",
+    studentPhoto: t.student?.user?.photoUrl || null,
+    rating: t.rating,
+    content: t.content,
+    createdAt: t.createdAt,
+  }));
+
+  const reviewCount = approvedTestimonials.length;
+  let averageRating: number | null = null;
+  if (reviewCount > 0) {
+    const sum = approvedTestimonials.reduce((acc, curr) => acc + curr.rating, 0);
+    averageRating = Math.round((sum / reviewCount) * 10) / 10;
+  } else if (dbTeacher.rating !== null && dbTeacher.rating !== undefined) {
+    averageRating = Math.round(dbTeacher.rating * 10) / 10;
+  }
+
+  // Badges
+  const badges: TeacherBadgeItem[] = (dbTeacher.badges || []).map((b) => ({
+    id: b.id,
+    badgeType: b.badgeType,
+    title: b.title,
+    description: b.description,
+    icon: b.icon,
+  }));
 
   return {
-    id: dbTeacher?.id || cleanSlug,
+    id: dbTeacher.id,
     name,
-    email: dbTeacher?.user?.email || "faculty@atomicpathshala.com",
-    photoUrl: null,
-    slug: cleanSlug,
-    headline: fallback?.headline || `${department} Faculty | NEET & JEE Educator`,
+    email: dbTeacher.user.email,
+    photoUrl: dbTeacher.user.photoUrl || null,
+    slug: generateSlug(name),
+    headline,
     department,
     subjects,
-    targetExams: fallback?.targetExams || ["NEET UG", "JEE Main", "Class 11-12"],
-    classes: fallback?.classes || ["Class 11", "Class 12", "Dropper"],
-    languages: fallback?.languages || ["Hindi", "English"],
-    bio: dbTeacher?.bio || fallback?.bio || "Dedicated educator at Atomic Pathshala committed to conceptual learning.",
-    isVerified: fallback?.isVerified ?? true,
-    experienceYears: fallback?.experienceYears || "5+ Years",
-    qualifications: fallback?.qualifications || [{ degree: "M.Sc. / B.Tech", institution: "Premier University" }],
-    experienceList: fallback?.experienceList || [
-      { role: "Faculty Educator", organization: "Atomic Pathshala", duration: "2024 — Present" },
-    ],
-    rating: dbTeacher?.rating || 4.9,
-    batches: dbTeacher?.batchAssignments?.map((ba) => ({
-      id: ba.batch.id,
-      name: ba.batch.name,
-      code: ba.batch.code,
-      courseTitle: ba.batch.course?.title,
-    })) || [{ id: "batch_1", name: "NEET 2027 Phoenix Batch", code: "NEET-27", courseTitle: "NEET 2-Year Program" }],
-    upcomingClasses: dbTeacher?.scheduleSessions?.map((ss) => ({
-      id: ss.id,
-      title: ss.title,
-      startsAt: ss.startsAt,
-      endsAt: ss.endsAt,
-      status: ss.status,
-      batchName: ss.batch.name,
-    })) || [],
-    lectures: dbTeacher?.lectures?.map((lec) => ({
-      id: lec.id,
-      title: lec.title,
-      chapterTitle: lec.chapter?.title,
-      videoUrl: lec.videoUrl,
-    })) || [],
+    targetExams,
+    classes,
+    languages,
+    bio: cleanBio,
+    isVerified: dbTeacher.onboardingStatus === "ACTIVE" || dbTeacher.user.status === "ACTIVE",
+    experienceYears,
+    qualifications,
+    qualificationSummary,
+    experienceList,
+    dobDayMonth,
+    rating: dbTeacher.rating ?? null,
+    averageRating,
+    reviewCount,
+    followerCount,
+    studentsTaughtCount,
+    totalLecturesCount,
+    badges,
+    testimonials: approvedTestimonials,
+    batches:
+      dbTeacher.batchAssignments?.map((ba) => ({
+        id: ba.batch.id,
+        name: ba.batch.name,
+        code: ba.batch.code,
+        courseTitle: ba.batch.course?.title,
+      })) || [],
+    upcomingClasses:
+      dbTeacher.scheduleSessions?.map((ss) => ({
+        id: ss.id,
+        title: ss.title,
+        startsAt: ss.startsAt,
+        endsAt: ss.endsAt,
+        status: ss.status,
+        batchName: ss.batch?.name || "Live Class",
+        batchId: ss.batch?.id,
+      })) || [],
+    lectures:
+      dbTeacher.lectures?.map((lec) => ({
+        id: lec.id,
+        title: lec.title,
+        chapterTitle: lec.chapter?.title,
+        subjectName: lec.chapter?.subject?.title,
+        chapterId: lec.chapter?.id,
+        subjectId: lec.chapter?.subject?.id,
+        batchId: lec.batchSchedules?.[0]?.batchId,
+        videoUrl: lec.videoUrl,
+        durationMin: lec.durationMin,
+      })) || [],
   };
 }

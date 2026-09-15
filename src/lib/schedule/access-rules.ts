@@ -126,8 +126,8 @@ export function canTeacherEnterClass(
   const isCancelled = schedule.status === "CANCELLED";
   const isCompleted =
     schedule.status === "COMPLETED" ||
-    (schedule.liveWhiteboardSession?.status === "ENDED" &&
-      schedule.liveWhiteboardSession?.livePhase === "ENDED");
+    schedule.liveWhiteboardSession?.status === "ENDED" ||
+    schedule.liveWhiteboardSession?.livePhase === "ENDED";
   const isLive = isScheduleGenuinelyLive(schedule);
 
   const secondsUntilWindowOpens = Math.max(0, Math.ceil((opensAt.getTime() - nowMs) / 1000));
@@ -293,8 +293,8 @@ export function canTeacherPrepareClass(
   const isCancelled = schedule.status === "CANCELLED";
   const isCompleted =
     schedule.status === "COMPLETED" ||
-    (schedule.liveWhiteboardSession?.status === "ENDED" &&
-      schedule.liveWhiteboardSession?.livePhase === "ENDED");
+    schedule.liveWhiteboardSession?.status === "ENDED" ||
+    schedule.liveWhiteboardSession?.livePhase === "ENDED";
 
   const secondsUntilWindowOpens = Math.max(0, Math.ceil((opensAt.getTime() - nowMs) / 1000));
   const secondsUntilStartOpens = Math.max(0, Math.ceil((startOpensAt.getTime() - nowMs) / 1000));
@@ -375,8 +375,8 @@ export function canTeacherStartClass(
   const isCancelled = schedule.status === "CANCELLED";
   const isCompleted =
     schedule.status === "COMPLETED" ||
-    (schedule.liveWhiteboardSession?.status === "ENDED" &&
-      schedule.liveWhiteboardSession?.livePhase === "ENDED");
+    schedule.liveWhiteboardSession?.status === "ENDED" ||
+    schedule.liveWhiteboardSession?.livePhase === "ENDED";
   const isLive = isScheduleGenuinelyLive(schedule);
 
   const secondsUntilWindowOpens = Math.max(0, Math.ceil((opensAt.getTime() - nowMs) / 1000));
@@ -518,8 +518,8 @@ export function canStudentJoinClass(
   const isCancelled = schedule.status === "CANCELLED";
   const isCompleted =
     schedule.status === "COMPLETED" ||
-    (schedule.liveWhiteboardSession?.status === "ENDED" &&
-      schedule.liveWhiteboardSession?.livePhase === "ENDED");
+    schedule.liveWhiteboardSession?.status === "ENDED" ||
+    schedule.liveWhiteboardSession?.livePhase === "ENDED";
   const isLive = isScheduleGenuinelyLive(schedule);
 
   const secondsUntilWindowOpens = Math.max(0, Math.ceil((opensAt.getTime() - nowMs) / 1000));
@@ -546,7 +546,7 @@ export function canStudentJoinClass(
     };
   }
 
-  if (isCompleted && !isLive) {
+  if (isCompleted) {
     return {
       allowed: false,
       status: "COMPLETED",

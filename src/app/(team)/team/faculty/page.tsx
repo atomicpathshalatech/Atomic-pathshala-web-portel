@@ -6,7 +6,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
-import { FacultyCard } from "@/components/team-portal/FacultyCard";
+import { FacultyManagementView } from "@/components/team-portal/FacultyManagementView";
 
 export const metadata: Metadata = {
   title: "Faculty",
@@ -56,27 +56,16 @@ export default async function FacultyListPage() {
         )}
       </div>
 
-      {teachers.length === 0 ? (
-        <div className="glass-card rounded-2xl p-12 text-center text-on-surface-variant font-body-md">
-          No educators onboarded yet.
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-gutter">
-          {teachers.map((t) => (
-            <FacultyCard
-              key={t.id}
-              teacher={{
-                id: t.id,
-                employeeCode: t.employeeCode,
-                department: t.department,
-                subjects: t.subjects,
-                user: { name: t.user.name },
-              }}
-              canDelete={canDelete}
-            />
-          ))}
-        </div>
-      )}
+      <FacultyManagementView
+        teachers={teachers.map((t) => ({
+          id: t.id,
+          employeeCode: t.employeeCode,
+          department: t.department,
+          subjects: t.subjects,
+          user: { name: t.user.name },
+        }))}
+        canDelete={canDelete}
+      />
     </div>
   );
 }

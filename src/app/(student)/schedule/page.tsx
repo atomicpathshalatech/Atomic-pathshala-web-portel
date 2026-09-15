@@ -41,6 +41,11 @@ export default async function SchedulePage({
                     recordingStatus: true,
                     recordingStorageKey: true,
                     recordingEgressId: true,
+                    pdfStatus: true,
+                    pdfStorageKey: true,
+                    presentationUrl: true,
+                    youtubeArchiveVideoUrl: true,
+                    youtubeVideoId: true,
                   },
                 },
               },
@@ -156,6 +161,11 @@ export default async function SchedulePage({
           livePhase: s.liveWhiteboardSession.livePhase,
           recordingStatus: s.liveWhiteboardSession.recordingStatus,
           recordingStorageKey: s.liveWhiteboardSession.recordingStorageKey,
+          pdfStatus: s.liveWhiteboardSession.pdfStatus,
+          pdfStorageKey: s.liveWhiteboardSession.pdfStorageKey,
+          presentationUrl: s.liveWhiteboardSession.presentationUrl,
+          youtubeArchiveVideoUrl: s.liveWhiteboardSession.youtubeArchiveVideoUrl,
+          youtubeVideoId: s.liveWhiteboardSession.youtubeVideoId,
         }
       : null,
   }));

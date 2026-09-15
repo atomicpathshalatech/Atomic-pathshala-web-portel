@@ -35,6 +35,7 @@ function statusOfDpp(
 
 export default async function DppPortalPage() {
   const { student } = await requireStudentSession();
+  const now = new Date();
 
   // 1. Fetch Student Enrolled Batches
   const enrollments = await prisma.batchEnrollment.findMany({
@@ -199,10 +200,13 @@ export default async function DppPortalPage() {
     }
 
     const attempt = b.test?.attempts?.[0];
-    const status: "PENDING" | "IN_PROGRESS" | "COMPLETED" = attempt
+    const isFuture = b.startsAt && new Date(b.startsAt) > now;
+    const status: "PENDING" | "IN_PROGRESS" | "COMPLETED" | "UPCOMING" = attempt
       ? attempt.status === "IN_PROGRESS"
         ? "IN_PROGRESS"
         : "COMPLETED"
+      : isFuture
+      ? "UPCOMING"
       : "PENDING";
 
     subjectMap[subjName]![chapterName]!.push({
@@ -218,6 +222,7 @@ export default async function DppPortalPage() {
       status,
       score: attempt?.score ?? null,
       testId: b.test?.id,
+      startsAt: b.startsAt?.toISOString(),
     });
   }
 
