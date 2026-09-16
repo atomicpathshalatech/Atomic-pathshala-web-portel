@@ -36,6 +36,7 @@ export default async function StudentLiveClassPage({
       batch: true,
       teacher: { include: { user: true } },
       liveWhiteboardSession: true,
+      chapter: { select: { title: true } },
     },
   });
   if (!schedule) notFound();
@@ -69,6 +70,8 @@ export default async function StudentLiveClassPage({
       scheduleTitle={schedule.title}
       batchName={schedule.batch?.name || "Live Classroom"}
       teacherName={schedule.teacher?.user?.name ?? null}
+      subject={schedule.subject ?? null}
+      chapterTitle={schedule.chapter?.title ?? null}
       currentUserId={student.userId}
     />
   );

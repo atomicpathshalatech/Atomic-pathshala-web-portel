@@ -817,7 +817,7 @@ function TimelineLectureRow({
                   }`}
                 >
                   <span className="material-symbols-outlined text-[14px]">videocam</span>
-                  <span>{isLive ? "Enter Live Class" : "Join Waiting Room (Ready)"}</span>
+                  <span>{isLive ? "Enter Live Class" : "Enter Classroom"}</span>
                 </Link>
               ) : (
                 <button

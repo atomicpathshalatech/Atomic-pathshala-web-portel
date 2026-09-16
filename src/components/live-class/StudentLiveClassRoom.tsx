@@ -198,12 +198,16 @@ export function StudentLiveClassRoom({
   scheduleTitle,
   batchName,
   teacherName,
+  subject = null,
+  chapterTitle = null,
   currentUserId,
 }: {
   batchScheduleId: string;
   scheduleTitle: string;
   batchName: string;
   teacherName: string | null;
+  subject?: string | null;
+  chapterTitle?: string | null;
   currentUserId: string;
 }) {
   const [phase, setPhase] = useState<"waiting" | "lobby" | "live" | "ended">("waiting");
@@ -702,10 +706,12 @@ export function StudentLiveClassRoom({
     );
   }
 
-  // ---------------- WAITING ROOM (PRE-CLASS LOBBY) ----------------
-  // If the class has not started yet, students stay in this dedicated Waiting Room.
-  // The Whiteboard Canvas, video broadcast, and teacher slides are strictly NOT mounted or revealed
-  // until the educator starts the session (livePhase: "LIVE").
+  // ---------------- PRE-CLASS CLASSROOM ----------------
+  // Before the educator starts the session (livePhase: "LIVE"), students see
+  // this pre-class classroom view instead — class info, countdown, teacher,
+  // and chat, not a bare "waiting room" placeholder. The whiteboard canvas,
+  // video broadcast, and teacher slides are strictly NOT mounted or revealed
+  // until livePhase flips to "LIVE".
   if (!isLive) {
     const hours = Math.floor(Math.max(0, secondsUntilStart) / 3600);
     const minutes = Math.floor((Math.max(0, secondsUntilStart) % 3600) / 60);
@@ -713,7 +719,7 @@ export function StudentLiveClassRoom({
 
     return (
       <div className="min-h-screen-safe w-full bg-[#0b0d14] text-white flex flex-col justify-between select-none">
-        {/* Top Waiting Room Header */}
+        {/* Top pre-class classroom header */}
         <header className="h-14 px-4 sm:px-6 shrink-0 flex items-center justify-between border-b border-slate-800/80 bg-[#10131d]">
           <div className="flex items-center gap-3 min-w-0">
             <Link
@@ -734,14 +740,14 @@ export function StudentLiveClassRoom({
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="flex items-center gap-1.5 text-xs font-bold text-amber-400 border border-amber-500/40 bg-amber-950/60 px-3 py-1 rounded-full shadow-xs">
-              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-              WAITING ROOM
+            <span className="flex items-center gap-1.5 text-xs font-bold text-blue-400 border border-blue-500/40 bg-blue-950/60 px-3 py-1 rounded-full shadow-xs">
+              <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+              CLASSROOM
             </span>
           </div>
         </header>
 
-        {/* Central Waiting Room Content */}
+        {/* Central pre-class classroom content */}
         <main className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 flex flex-col lg:flex-row items-stretch justify-center gap-6 my-auto">
           {/* Left Column: Hero & Countdown */}
           <div className="flex-1 bg-[#121422] border border-slate-800 rounded-3xl p-6 sm:p-8 flex flex-col justify-between shadow-2xl space-y-6">
@@ -756,6 +762,13 @@ export function StudentLiveClassRoom({
               <p className="text-sm text-slate-400">
                 Batch: <span className="text-blue-300 font-semibold">{batchName}</span>
               </p>
+              {(subject || chapterTitle) && (
+                <p className="text-sm text-slate-400">
+                  {subject && <span className="text-blue-300 font-semibold">{subject}</span>}
+                  {subject && chapterTitle && <span className="text-slate-600"> &middot; </span>}
+                  {chapterTitle && <span>{chapterTitle}</span>}
+                </p>
+              )}
             </div>
 
             {/* Countdown / Status Box */}

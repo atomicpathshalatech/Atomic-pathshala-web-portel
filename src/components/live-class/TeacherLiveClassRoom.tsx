@@ -1982,7 +1982,7 @@ export function TeacherLiveClassRoom({
             <div className="flex items-center gap-2">
               <span className="flex items-center gap-1.5 text-xs font-bold text-amber-400 border border-amber-500/40 bg-amber-950/40 px-3 py-1 rounded-full">
                 <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                WAITING ROOM
+                PRE-CLASS
               </span>
               {secondsUntilStart > 0 ? (
                 <span className="text-xs font-mono font-medium text-amber-300 bg-amber-950/30 border border-amber-800/40 px-2.5 py-1 rounded-md">
