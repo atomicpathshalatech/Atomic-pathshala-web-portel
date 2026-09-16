@@ -170,10 +170,30 @@ export function TeacherForm(props: Props) {
         </fieldset>
       )}
 
+      {/* 1. Account & Identity (Edit Mode) */}
+      {!isCreate && (
+        <fieldset className="glass-card p-6 md:p-8 rounded-2xl space-y-4">
+          <legend className="font-headline-md text-headline-md text-primary font-bold mb-2">
+            1. User Account &amp; Identity
+          </legend>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Field label="Full Name *" error={"name" in errors ? (errors as any).name?.message : undefined}>
+              <input className={inputClass} placeholder="e.g. Rehan Ali" {...register("name" as any)} />
+            </Field>
+            <Field label="Email Address *" error={"email" in errors ? (errors as any).email?.message : undefined}>
+              <input type="email" className={inputClass} placeholder="teacher@atomicpathshala.com" {...register("email" as any)} />
+            </Field>
+            <Field label="Mobile / Phone" error={"phone" in errors ? (errors as any).phone?.message : undefined}>
+              <input type="tel" className={inputClass} placeholder="+91 9876543210" {...register("phone" as any)} />
+            </Field>
+          </div>
+        </fieldset>
+      )}
+
       {/* 2. Basic Profile & Branding */}
       <fieldset className="glass-card p-6 md:p-8 rounded-2xl space-y-4">
         <legend className="font-headline-md text-headline-md text-primary font-bold mb-2">
-          {isCreate ? "2." : "1."} Basic Profile &amp; Headline
+          {isCreate ? "2." : "2."} Basic Profile &amp; Headline
         </legend>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Field label="Employee Code *" error={errors.employeeCode?.message}>

@@ -35,6 +35,9 @@ export default async function EditFacultyPage({ params }: { params: { id: string
         mode="edit"
         teacherId={teacher.id}
         initialData={{
+          name: teacher.user.name,
+          email: teacher.user.email,
+          phone: teacher.user.phone ?? undefined,
           employeeCode: teacher.employeeCode,
           department: teacher.department as (typeof DEPARTMENT_OPTIONS)[number],
           subjects: teacher.subjects,

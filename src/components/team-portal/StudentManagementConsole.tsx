@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
+import { AdminEditProfileModal } from "./AdminEditProfileModal";
 
 export interface StudentItem {
   id: string;
@@ -98,6 +99,7 @@ export function StudentManagementConsole() {
   const [selectedBatchToGrant, setSelectedBatchToGrant] = useState("");
   const [isGrantingAccess, setIsGrantingAccess] = useState(false);
   const [isRevokingAccess, setIsRevokingAccess] = useState<string | null>(null);
+  const [editingStudent, setEditingStudent] = useState<StudentItem | null>(null);
 
   const loadStudents = async () => {
     try {
@@ -573,6 +575,15 @@ export function StudentManagementConsole() {
                         </Link>
                         <button
                           type="button"
+                          onClick={() => setEditingStudent(student)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition"
+                          title="Edit student profile"
+                        >
+                          <span className="material-symbols-outlined text-sm">edit</span>
+                          Edit
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => setSelectedStudentForAccess(student)}
                           className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition"
                           title="Grant or revoke batch/course access"
@@ -748,7 +759,7 @@ export function StudentManagementConsole() {
                   Add &amp; Enroll New Student
                 </h3>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  Create student account with credentials and assign batch access.
+                  Creates student account, credentials, and activates immediate batch access.
                 </p>
               </div>
 
@@ -762,62 +773,60 @@ export function StudentManagementConsole() {
             </div>
 
             <form onSubmit={handleAddStudent} className="space-y-3">
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Full Name *</label>
-                <input
-                  type="text"
-                  required
-                  value={addForm.name}
-                  onChange={(e) => setAddForm({ ...addForm, name: e.target.value })}
-                  placeholder="Student Full Name"
-                  className="w-full px-3 py-2 text-sm rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                />
-              </div>
-
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-gray-700">Full Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={addForm.name}
+                    onChange={(e) => setAddForm({ ...addForm, name: e.target.value })}
+                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g. Aarav Sharma"
+                  />
+                </div>
+
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Email Address *</label>
+                  <label className="block text-xs font-semibold text-gray-700">Email Address *</label>
                   <input
                     type="email"
                     required
                     value={addForm.email}
                     onChange={(e) => setAddForm({ ...addForm, email: e.target.value })}
+                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="student@example.com"
-                    className="w-full px-3 py-2 text-sm rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Login Password *</label>
+                  <label className="block text-xs font-semibold text-gray-700">Mobile Phone</label>
+                  <input
+                    type="tel"
+                    value={addForm.phone}
+                    onChange={(e) => setAddForm({ ...addForm, phone: e.target.value })}
+                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="+91 9876543210"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-gray-700">Initial Password *</label>
                   <input
                     type="password"
                     required
                     value={addForm.password}
                     onChange={(e) => setAddForm({ ...addForm, password: e.target.value })}
-                    placeholder="Set student password"
-                    className="w-full px-3 py-2 text-sm rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Mobile / WhatsApp</label>
-                  <input
-                    type="tel"
-                    value={addForm.phone}
-                    onChange={(e) => setAddForm({ ...addForm, phone: e.target.value })}
-                    placeholder="+91 9876543210"
-                    className="w-full px-3 py-2 text-sm rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Min 8 characters"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Target Class</label>
+                  <label className="block text-xs font-semibold text-gray-700">Target Class</label>
                   <select
                     value={addForm.targetClass}
                     onChange={(e) => setAddForm({ ...addForm, targetClass: e.target.value })}
-                    className="w-full px-3 py-2 text-sm rounded-xl border border-gray-300 bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                   >
                     {CLASS_OPTIONS.filter((c) => c !== "ALL").map((c) => (
                       <option key={c} value={c}>
@@ -826,35 +835,33 @@ export function StudentManagementConsole() {
                     ))}
                   </select>
                 </div>
-              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Target Exam</label>
+                  <label className="block text-xs font-semibold text-gray-700">Target Exam</label>
                   <select
                     value={addForm.targetExam}
                     onChange={(e) => setAddForm({ ...addForm, targetExam: e.target.value })}
-                    className="w-full px-3 py-2 text-sm rounded-xl border border-gray-300 bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                   >
-                    {TARGET_EXAM_OPTIONS.filter((e) => e !== "ALL").map((e) => (
-                      <option key={e} value={e}>
-                        {e}
+                    {TARGET_EXAM_OPTIONS.filter((e) => e !== "ALL").map((ex) => (
+                      <option key={ex} value={ex}>
+                        {ex}
                       </option>
                     ))}
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Initial Batch / Course</label>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-gray-700">Initial Batch Enrollment</label>
                   <select
                     value={addForm.batchId}
                     onChange={(e) => setAddForm({ ...addForm, batchId: e.target.value })}
-                    className="w-full px-3 py-2 text-sm rounded-xl border border-gray-300 bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                   >
-                    <option value="">Select Batch (Optional)</option>
+                    <option value="">Enroll in Batch Later</option>
                     {availableBatches.map((b) => (
                       <option key={b.id} value={b.id}>
-                        {b.title} ({b.grade})
+                        {b.title} ({b.grade} - {b.targetExam})
                       </option>
                     ))}
                   </select>
@@ -881,6 +888,32 @@ export function StudentManagementConsole() {
             </form>
           </div>
         </div>
+      )}
+
+      {editingStudent && (
+        <AdminEditProfileModal
+          isOpen={Boolean(editingStudent)}
+          onClose={() => setEditingStudent(null)}
+          onSuccess={() => {
+            loadStudents();
+          }}
+          targetId={editingStudent.id}
+          userType="student"
+          initialData={{
+            name: editingStudent.name,
+            email: editingStudent.email,
+            phone: editingStudent.phone,
+            photoUrl: editingStudent.photoUrl,
+            studentId: editingStudent.id,
+            class: editingStudent.class,
+            targetExam: editingStudent.targetExam,
+            fatherName: editingStudent.fatherName,
+            motherName: editingStudent.motherName,
+            city: editingStudent.city,
+            state: editingStudent.state,
+            academicStatus: editingStudent.academicStatus,
+          }}
+        />
       )}
     </div>
   );

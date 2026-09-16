@@ -10,12 +10,17 @@ import { pusherServer, sessionChannel, WB_EVENTS } from "@/lib/realtime/pusher-s
 import { videoRoomName } from "@/lib/livekit/server";
 import { startRoomRecording, recordingStorageKey } from "@/lib/livekit/egress";
 import { canTeacherStartClass } from "@/lib/schedule/access-rules";
+import { extractYouTubeVideoId } from "@/lib/live-class/youtube";
 
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: { scheduleId: string } }
 ) {
   try {
+    const body = await request.json().catch(() => ({}));
+    const requestedTransport = body?.videoTransport === "YOUTUBE" ? "YOUTUBE" : "LIVEKIT";
+    const requestedYouTubeId = body?.youtubeVideoId ? extractYouTubeVideoId(String(body.youtubeVideoId)) : null;
+
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.WHITEBOARD_ACCESS);
@@ -146,6 +151,8 @@ export async function POST(
         update: {
           livePhase: "LIVE",
           status: "ACTIVE",
+          videoTransport: requestedTransport,
+          youtubeVideoId: requestedYouTubeId,
           actualStartedAt: schedule.liveWhiteboardSession?.actualStartedAt || now,
           startedAt: schedule.liveWhiteboardSession?.startedAt || now,
           activePageNumber: 1,
@@ -187,6 +194,8 @@ export async function POST(
           title: schedule.title,
           status: "ACTIVE",
           livePhase: "LIVE",
+          videoTransport: requestedTransport,
+          youtubeVideoId: requestedYouTubeId,
           actualStartedAt: now,
           startedAt: now,
           scheduledStart,
@@ -212,52 +221,56 @@ export async function POST(
     const wbSession = txResults[txResults.length - 1];
 
     // 5. Start Room Recording (Room Composite Egress -> R2) - Idempotent, single identity
-    const isAlreadyRecording =
-      wbSession.recordingStatus === "RECORDING" ||
-      wbSession.recordingStatus === "RECORDING_STARTING" ||
-      wbSession.recordingStatus === "STARTING" ||
-      Boolean(wbSession.recordingEgressId);
-
-    // Surfaced in the response below (never just console-logged) so the
-    // teacher UI can show a visible "recording could not start" banner
-    // instead of a class silently running with no recording at all.
     let recordingWarning: string | null = null;
 
-    if (!isAlreadyRecording) {
-      try {
-        await prisma.whiteboardSession
-          .update({ where: { id: wbSession.id }, data: { recordingStatus: "RECORDING_STARTING" } })
-          .catch(() => null);
+    if (requestedTransport !== "YOUTUBE") {
+      const isAlreadyRecording =
+        wbSession.recordingStatus === "RECORDING" ||
+        wbSession.recordingStatus === "RECORDING_STARTING" ||
+        wbSession.recordingStatus === "STARTING" ||
+        Boolean(wbSession.recordingEgressId);
 
-        const storageKey = recordingStorageKey(wbSession.id);
-        const egress = await startRoomRecording(videoRoomName(wbSession.id), storageKey);
-        if (egress?.egressId) {
+      if (!isAlreadyRecording) {
+        try {
           await prisma.whiteboardSession
-            .update({
-              where: { id: wbSession.id },
-              data: { recordingEgressId: egress.egressId, recordingStatus: "RECORDING" },
-            })
+            .update({ where: { id: wbSession.id }, data: { recordingStatus: "RECORDING_STARTING" } })
             .catch(() => null);
-        } else {
-          recordingWarning = "Recording could not be confirmed as started. This class may not be recorded.";
+
+          const storageKey = recordingStorageKey(wbSession.id);
+          const egress = await startRoomRecording(videoRoomName(wbSession.id), storageKey);
+          if (egress?.egressId) {
+            await prisma.whiteboardSession
+              .update({
+                where: { id: wbSession.id },
+                data: { recordingEgressId: egress.egressId, recordingStatus: "RECORDING" },
+              })
+              .catch(() => null);
+          } else {
+            recordingWarning = "Recording could not be confirmed as started. This class may not be recorded.";
+          }
+        } catch (recordingError) {
+          console.error("[live_class_recording_start_error]", recordingError);
+          await prisma.whiteboardSession
+            .update({ where: { id: wbSession.id }, data: { recordingStatus: "RECORDING_FAILED" } })
+            .catch(() => null);
+          recordingWarning = "Recording failed to start for this class. Students will not get a recorded video for it.";
         }
-      } catch (recordingError) {
-        console.error("[live_class_recording_start_error]", recordingError);
-        await prisma.whiteboardSession
-          .update({ where: { id: wbSession.id }, data: { recordingStatus: "RECORDING_FAILED" } })
-          .catch(() => null);
-        recordingWarning = "Recording failed to start for this class. Students will not get a recorded video for it.";
       }
     }
-
 
     // 6. Realtime Broadcast State Change
     try {
       await pusherServer.trigger(sessionChannel(wbSession.id), WB_EVENTS.LIVE_PHASE_CHANGED, {
         phase: "LIVE",
         livePhase: "LIVE",
+        videoTransport: requestedTransport,
+        youtubeVideoId: requestedYouTubeId,
         actualStartedAt: (wbSession.actualStartedAt || now).toISOString(),
         serverTime: now.toISOString(),
+      });
+      await pusherServer.trigger(sessionChannel(wbSession.id), WB_EVENTS.CONFIG_UPDATED, {
+        videoTransport: requestedTransport,
+        youtubeVideoId: requestedYouTubeId,
       });
     } catch (pushErr) {
       console.warn("Realtime broadcast warning:", pushErr);

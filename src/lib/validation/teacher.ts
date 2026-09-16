@@ -85,6 +85,9 @@ export type TeacherCreateInput = z.input<typeof teacherCreateSchema>;
 
 /** Admin edit — everything except login credentials. */
 export const teacherAdminUpdateSchema = z.object({
+  name: z.string().min(2).optional(),
+  email: z.string().email().optional(),
+  phone: z.string().optional(),
   employeeCode: z.string().min(2, "Employee code is required"),
   department: z.enum(DEPARTMENT_OPTIONS),
   subjects: z.array(z.string()).default([]),
@@ -97,6 +100,7 @@ export const teacherAdminUpdateSchema = z.object({
   experienceList: z.array(experienceItemSchema).default([]),
   bio: z.string().optional(),
   photoUrl: z.string().optional(),
+  dob: z.coerce.date().optional(),
 });
 
 export type TeacherAdminUpdateInput = z.input<typeof teacherAdminUpdateSchema>;

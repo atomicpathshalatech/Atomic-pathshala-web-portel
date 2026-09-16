@@ -5,6 +5,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { PERMISSIONS, ROLE_PERMISSION_DEFAULTS } from "@/lib/rbac/permissions";
 import { OpsBackButton } from "@/components/common/OpsBackButton";
+import { AdminEditProfileModal } from "@/components/team-portal/AdminEditProfileModal";
 
 // Every real role from the RBAC catalogue (Phase 1), minus GUEST which is
 // never assigned. Used by the Assign-Role control.
@@ -156,6 +157,7 @@ export function UserDetailEffectiveAccessView({ userId }: { userId: string }) {
   const [editContractNote, setEditContractNote] = useState("");
   const [roleReason, setRoleReason] = useState("");
   const [roleBusy, setRoleBusy] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   const loadUser = async () => {
     try {
@@ -327,13 +329,27 @@ export function UserDetailEffectiveAccessView({ userId }: { userId: string }) {
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-blue-600 text-white font-black text-xl flex items-center justify-center shadow-md">
-              {user.name.charAt(0).toUpperCase()}
-            </div>
+            {user.photoUrl ? (
+              <img
+                src={user.photoUrl}
+                alt={user.name}
+                className="w-14 h-14 rounded-2xl object-cover shadow-md border border-slate-200 dark:border-slate-700"
+              />
+            ) : (
+              <div className="w-14 h-14 rounded-2xl bg-blue-600 text-white font-black text-xl flex items-center justify-center shadow-md">
+                {user.name.charAt(0).toUpperCase()}
+              </div>
+            )}
             <div>
               <h1 className="text-2xl font-black text-[#031635] dark:text-white">{user.name}</h1>
               <div className="flex flex-wrap items-center gap-2 mt-1">
                 <span className="text-xs font-mono text-slate-500">{user.email}</span>
+                {user.phone && (
+                  <>
+                    <span className="text-slate-300">•</span>
+                    <span className="text-xs font-mono text-slate-500">{user.phone}</span>
+                  </>
+                )}
                 <span className="text-slate-300">•</span>
                 <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-[11px] font-bold">
                   {user.role.replace(/_/g, " ")}
@@ -347,6 +363,14 @@ export function UserDetailEffectiveAccessView({ userId }: { userId: string }) {
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsEditModalOpen(true)}
+              className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold transition shadow-sm flex items-center gap-1.5"
+            >
+              <span className="material-symbols-outlined text-base">edit</span>
+              <span>Edit Profile</span>
+            </button>
             <button
               type="button"
               onClick={handleSaveProfile}
@@ -767,6 +791,17 @@ export function UserDetailEffectiveAccessView({ userId }: { userId: string }) {
             )}
           </div>
         </div>
+      )}
+
+      {user && (
+        <AdminEditProfileModal
+          isOpen={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
+          onSuccess={loadUser}
+          userType="user"
+          targetId={user.id}
+          initialData={user}
+        />
       )}
     </div>
   );

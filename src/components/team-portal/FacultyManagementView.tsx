@@ -11,6 +11,7 @@ interface TeacherData {
   subjects: string[];
   user: {
     name: string;
+    photoUrl?: string | null;
   };
 }
 
@@ -32,8 +33,8 @@ export function FacultyManagementView({
           onClick={() => setActiveTab("directory")}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
             activeTab === "directory"
-              ? "bg-primary text-white shadow-md shadow-primary/20"
-              : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800"
+              ? "bg-[#031635] text-white shadow-sm"
+              : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
           }`}
         >
           <span className="material-symbols-outlined text-base">badge</span>
@@ -45,8 +46,8 @@ export function FacultyManagementView({
           onClick={() => setActiveTab("tracking")}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
             activeTab === "tracking"
-              ? "bg-primary text-white shadow-md shadow-primary/20"
-              : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800"
+              ? "bg-[#031635] text-white shadow-sm"
+              : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
           }`}
         >
           <span className="material-symbols-outlined text-base">monitoring</span>
@@ -69,7 +70,7 @@ export function FacultyManagementView({
                   employeeCode: t.employeeCode || "",
                   department: t.department || "",
                   subjects: t.subjects,
-                  user: { name: t.user.name },
+                  user: { name: t.user.name, photoUrl: t.user.photoUrl },
                 }}
                 canDelete={canDelete}
               />

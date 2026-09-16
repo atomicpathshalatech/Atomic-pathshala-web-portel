@@ -38,11 +38,7 @@ export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 /** Forgot-password step 2: the emailed token + a new password. */
 export const emailResetPasswordSchema = z.object({
   token: z.string().trim().min(20, "Invalid or expired reset link"),
-  newPassword: z
-    .string()
-    .min(8, "Password must be at least 8 characters")
-    .regex(/[A-Z]/, "Add an uppercase letter")
-    .regex(/[0-9]/, "Add a number"),
+  newPassword: z.string().min(8, "Password must be at least 8 characters"),
 });
 export type EmailResetPasswordInput = z.infer<typeof emailResetPasswordSchema>;
 

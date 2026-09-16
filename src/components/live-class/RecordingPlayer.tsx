@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { WhiteboardPdfDownloadButton } from "@/components/whiteboard/WhiteboardPdfDownloadButton";
+import { LectureVideoPlayer } from "@/components/video-player/LectureVideoPlayer";
 
 const SPEEDS = [0.25, 0.5, 1, 1.25, 1.5, 2, 3] as const;
 
@@ -124,41 +125,57 @@ export function RecordingPlayer({ whiteboardSessionId }: { whiteboardSessionId: 
   }
 
 
+  const isYouTube = Boolean(
+    state.url && (state.url.includes("youtube.com") || state.url.includes("youtu.be"))
+  );
+
   return (
     <div className="w-full rounded-xl overflow-hidden border border-[#252836] bg-black">
-      <video
-        ref={videoRef}
-        src={state.url}
-        controls
-        className="w-full aspect-video bg-black"
-        onLoadedMetadata={() => {
-          if (videoRef.current) videoRef.current.playbackRate = speed;
-        }}
-      />
-      <div className="flex items-center justify-between gap-3 px-3 py-2 bg-[#12131c] border-t border-[#252836] overflow-x-auto">
-        <div className="flex items-center gap-1.5 shrink-0">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 mr-1 shrink-0">
-            Speed
-          </span>
-          {SPEEDS.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setSpeed(s)}
-              className={`shrink-0 px-2.5 py-1 rounded-full text-xs font-bold transition ${
-                speed === s
-                  ? "bg-blue-500 text-white"
-                  : "bg-[#1a1b23] text-gray-400 hover:bg-[#22232e] hover:text-gray-200"
-              }`}
-            >
-              {s}x
-            </button>
-          ))}
+      {isYouTube ? (
+        <div className="w-full aspect-video bg-black">
+          <LectureVideoPlayer
+            mode="recorded"
+            videoUrl={state.url!}
+            title="Class Recording Replay"
+          />
         </div>
+      ) : (
+        <video
+          ref={videoRef}
+          src={state.url!}
+          controls
+          className="w-full aspect-video bg-black"
+          onLoadedMetadata={() => {
+            if (videoRef.current) videoRef.current.playbackRate = speed;
+          }}
+        />
+      )}
+      <div className="flex items-center justify-between gap-3 px-3 py-2 bg-[#12131c] border-t border-[#252836] overflow-x-auto">
+        {!isYouTube && (
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 mr-1 shrink-0">
+              Speed
+            </span>
+            {SPEEDS.map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setSpeed(s)}
+                className={`shrink-0 px-2.5 py-1 rounded-full text-xs font-bold transition ${
+                  speed === s
+                    ? "bg-blue-500 text-white"
+                    : "bg-[#1a1b23] text-gray-400 hover:bg-[#22232e] hover:text-gray-200"
+                }`}
+              >
+                {s}x
+              </button>
+            ))}
+          </div>
+        )}
 
         <WhiteboardPdfDownloadButton
           sessionId={whiteboardSessionId}
-          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white transition shadow-sm shrink-0 disabled:opacity-60"
+          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white transition shadow-sm shrink-0 disabled:opacity-60 ml-auto"
           title="Download Board Notes PDF"
         >
           <span className="material-symbols-outlined text-sm">picture_as_pdf</span>

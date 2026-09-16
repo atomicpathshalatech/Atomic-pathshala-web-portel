@@ -26,13 +26,27 @@ export interface StudentZone {
 export interface StudentCompleteProfile {
   student: {
     id: string;
+    userId: string;
     name: string | null;
     email: string | null;
     phone: string | null;
+    photoUrl?: string | null;
     studentIdCode: string;
     enrollmentNumber: string;
     class: string;
     targetExam: string;
+    fatherName?: string;
+    motherName?: string;
+    dob?: Date;
+    gender?: string;
+    school?: string;
+    city?: string;
+    state?: string;
+    address?: string | null;
+    bloodGroup?: string | null;
+    emergencyContact?: string | null;
+    academicStatus?: string;
+    board?: string | null;
     createdAt: Date;
   };
   subscription: {
@@ -102,7 +116,7 @@ export async function getStudentCompleteProfile(studentId: string): Promise<Stud
   const student = await prisma.student.findUnique({
     where: { id: studentId },
     include: {
-      user: { select: { name: true, email: true, phone: true } },
+      user: { select: { id: true, name: true, email: true, phone: true, photoUrl: true, status: true } },
       subscription: true,
       batchEnrollments: {
         where: { status: "ACTIVE" },
@@ -256,13 +270,27 @@ export async function getStudentCompleteProfile(studentId: string): Promise<Stud
   return {
     student: {
       id: student.id,
+      userId: student.userId,
       name: student.user.name,
       email: student.user.email,
       phone: student.user.phone,
+      photoUrl: student.user.photoUrl,
       studentIdCode: student.studentIdCode,
       enrollmentNumber: student.enrollmentNumber,
       class: student.class,
       targetExam: student.targetExam,
+      fatherName: student.fatherName,
+      motherName: student.motherName,
+      dob: student.dob,
+      gender: student.gender,
+      school: student.school,
+      city: student.city,
+      state: student.state,
+      address: student.address,
+      bloodGroup: student.bloodGroup,
+      emergencyContact: student.emergencyContact,
+      academicStatus: student.status,
+      board: student.board,
       createdAt: student.createdAt,
     },
     subscription: student.subscription

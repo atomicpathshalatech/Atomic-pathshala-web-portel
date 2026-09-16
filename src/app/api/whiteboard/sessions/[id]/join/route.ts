@@ -101,10 +101,14 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
       return apiSuccess({ joined: false });
     }
 
-    // Real, backend-driven XP — not a display placeholder. This is the
-    // first XPReason actually wired end-to-end (see src/lib/gamification/xp.ts);
-    // test/DPP/doubt-resolution awards are still TODO in their own routes.
+    // Real, backend-driven XP — not a display placeholder.
     await awardXp(access.entityId, 20, "LIVE_CLASS_ATTENDANCE", { whiteboardSessionId: params.id });
+
+    const studentUser = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { photoUrl: true },
+    });
+    const authorPhotoUrl = studentUser?.photoUrl || null;
 
     const message = await prisma.whiteboardMessage.create({
       data: {
@@ -122,12 +126,13 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
       authorRole: "STUDENT",
       authorUserId: session.user.id,
       authorName: access.name,
+      authorPhotoUrl,
       body: message.body,
       createdAt: message.createdAt.toISOString(),
       isSystemMessage: true,
     });
 
-    return apiSuccess({ joined: true, message }, 201);
+    return apiSuccess({ joined: true, message: { ...message, authorPhotoUrl } }, 201);
   } catch (error) {
     return handleApiError(error);
   }

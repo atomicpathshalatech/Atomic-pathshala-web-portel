@@ -62,7 +62,7 @@ export default async function FacultyListPage() {
           employeeCode: t.employeeCode,
           department: t.department,
           subjects: t.subjects,
-          user: { name: t.user.name },
+          user: { name: t.user.name, photoUrl: t.user.photoUrl },
         }))}
         canDelete={canDelete}
       />

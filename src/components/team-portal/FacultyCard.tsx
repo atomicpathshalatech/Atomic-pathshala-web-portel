@@ -14,7 +14,7 @@ export function FacultyCard({
     employeeCode: string;
     department: string;
     subjects: string[];
-    user: { name: string };
+    user: { name: string; photoUrl?: string | null };
   };
   canDelete: boolean;
 }) {
@@ -27,13 +27,21 @@ export function FacultyCard({
         href={`/team/faculty/${teacher.id}/edit`}
         className="glass-card rounded-2xl p-6 space-y-3 hover:shadow-lg hover:-translate-y-0.5 transition-all block"
       >
-        <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-lg">
-          {teacher.user.name
-            .split(" ")
-            .map((p) => p[0])
-            .slice(0, 2)
-            .join("")}
-        </div>
+        {teacher.user.photoUrl ? (
+          <img
+            src={teacher.user.photoUrl}
+            alt={teacher.user.name}
+            className="w-14 h-14 rounded-full object-cover border border-outline-variant/30"
+          />
+        ) : (
+          <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-lg">
+            {teacher.user.name
+              .split(" ")
+              .map((p) => p[0])
+              .slice(0, 2)
+              .join("")}
+          </div>
+        )}
         <div>
           <h3 className="font-headline-md text-headline-md text-on-surface">{teacher.user.name}</h3>
           <p className="text-label-sm font-label-sm text-primary">{teacher.department}</p>

@@ -16,9 +16,7 @@ export const studentRegistrationSchema = z.object({
     .regex(/^[6-9]\d{9}$/, "Enter a valid 10-digit Indian mobile number"),
   password: z
     .string()
-    .min(8, "Password must be at least 8 characters")
-    .regex(/[A-Z]/, "Password must contain an uppercase letter")
-    .regex(/[0-9]/, "Password must contain a number"),
+    .min(8, "Password must be at least 8 characters"),
   dob: z.coerce.date().refine((d) => d < new Date(), "DOB must be in the past"),
   gender: z.enum(["MALE", "FEMALE", "OTHER"]),
   class: z.string().min(1, "Class is required"),
@@ -60,9 +58,5 @@ export const passwordResetVerificationSchema = z.object({
 
 export const passwordResetSchema = z.object({
   token: z.string().min(10),
-  newPassword: z
-    .string()
-    .min(8)
-    .regex(/[A-Z]/, "Password must contain an uppercase letter")
-    .regex(/[0-9]/, "Password must contain a number"),
+  newPassword: z.string().min(8, "Password must be at least 8 characters"),
 });

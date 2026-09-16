@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { SecureDeleteResourceModal } from "@/components/common/SecureDeleteResourceModal";
+import { AdminEditProfileModal } from "@/components/team-portal/AdminEditProfileModal";
 
 export interface UserItem {
   id: string;
@@ -243,6 +244,7 @@ export function UserManagementConsole() {
   };
 
   const [deleteTarget, setDeleteTarget] = useState<UserItem | null>(null);
+  const [editTarget, setEditTarget] = useState<UserItem | null>(null);
 
   // Filtered Users
   const filteredUsers = useMemo(() => {
@@ -552,9 +554,17 @@ export function UserManagementConsole() {
                 filteredUsers.map((u) => (
                   <tr key={u.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition group">
                     <td className="py-3.5 px-4 font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-black text-xs flex items-center justify-center shrink-0 border border-slate-200 dark:border-slate-700">
-                        {u.name.charAt(0).toUpperCase()}
-                      </div>
+                      {u.photoUrl ? (
+                        <img
+                          src={u.photoUrl}
+                          alt={u.name}
+                          className="w-8 h-8 rounded-full object-cover shrink-0 border border-slate-200 dark:border-slate-700"
+                        />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-black text-xs flex items-center justify-center shrink-0 border border-slate-200 dark:border-slate-700">
+                          {u.name.charAt(0).toUpperCase()}
+                        </div>
+                      )}
                       <div>
                         <Link href={`/team/users/${u.id}`} className="hover:text-blue-600 transition">
                           {u.name}
@@ -626,6 +636,15 @@ export function UserManagementConsole() {
 
                     <td className="py-3.5 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setEditTarget(u)}
+                          className="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-[11px] font-bold transition flex items-center gap-1"
+                          title="Edit Profile"
+                        >
+                          <span className="material-symbols-outlined text-sm">edit</span>
+                          <span>Edit</span>
+                        </button>
                         <Link
                           href={`/team/users/${u.id}`}
                           className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-blue-50 text-slate-700 hover:text-blue-600 text-[11px] font-bold transition flex items-center gap-1"
@@ -910,6 +929,17 @@ export function UserManagementConsole() {
             setDeleteTarget(null);
             loadUsers();
           }}
+        />
+      )}
+
+      {editTarget && (
+        <AdminEditProfileModal
+          isOpen={Boolean(editTarget)}
+          onClose={() => setEditTarget(null)}
+          onSuccess={loadUsers}
+          userType="user"
+          targetId={editTarget.id}
+          initialData={editTarget}
         />
       )}
     </div>

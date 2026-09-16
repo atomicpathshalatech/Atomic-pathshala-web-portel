@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
+import { requirePermission, hasPermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { teacherAdminUpdateSchema } from "@/lib/validation/teacher";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
@@ -29,12 +29,21 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
-    await requirePermission(session.user.id, PERMISSIONS.TEACHER_UPDATE);
 
-    const existing = await prisma.teacher.findUnique({ where: { id: params.id } });
+    const canUpdate =
+      (await hasPermission(session.user.id, PERMISSIONS.TEACHER_UPDATE)) ||
+      (await hasPermission(session.user.id, PERMISSIONS.USER_UPDATE)) ||
+      (await hasPermission(session.user.id, PERMISSIONS.USER_PROFILE_EDIT));
+    if (!canUpdate) return apiError("Forbidden", 403);
+
+    const existing = await prisma.teacher.findUnique({
+      where: { id: params.id },
+      include: { user: true },
+    });
     if (!existing) return apiError("Teacher not found", 404);
 
     const data = teacherAdminUpdateSchema.parse(await request.json());
+    const auditChanges: Record<string, { old: any; new: any }> = {};
 
     if (data.employeeCode !== existing.employeeCode) {
       const codeTaken = await prisma.teacher.findUnique({
@@ -42,6 +51,76 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         select: { id: true },
       });
       if (codeTaken) return apiError("This employee code is already in use.", 409);
+      auditChanges.employeeCode = { old: existing.employeeCode, new: data.employeeCode };
+    }
+
+    const userUpdateData: any = {};
+
+    // 1. User Name
+    if (data.name !== undefined && data.name.trim() !== "" && data.name.trim() !== existing.user.name) {
+      userUpdateData.name = data.name.trim();
+      auditChanges.name = { old: existing.user.name, new: userUpdateData.name };
+    }
+
+    // 2. User Email uniqueness
+    if (data.email !== undefined) {
+      const trimmedEmail = data.email.trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+        return apiError("Enter a valid email address.", 400);
+      }
+      if (trimmedEmail !== existing.user.email.toLowerCase()) {
+        const emailTaken = await prisma.user.findFirst({
+          where: {
+            email: { equals: trimmedEmail, mode: "insensitive" },
+            id: { not: existing.userId },
+          },
+          select: { id: true },
+        });
+        if (emailTaken) {
+          return apiError("Email address is already associated with another account.", 409);
+        }
+        userUpdateData.email = trimmedEmail;
+        auditChanges.email = { old: existing.user.email, new: trimmedEmail };
+      }
+    }
+
+    // 3. User Phone uniqueness
+    let cleanPhone: string | null | undefined = undefined;
+    if (data.phone !== undefined) {
+      const rawPhone = data.phone ? data.phone.trim() : null;
+      cleanPhone = rawPhone ? rawPhone.replace(/\D/g, "").replace(/^0+/, "").replace(/^91(?=\d{10}$)/, "") : null;
+      if (cleanPhone && !/^[6-9]\d{9}$/.test(cleanPhone)) {
+        return apiError("Enter a valid 10-digit Indian mobile number.", 400);
+      }
+      if (cleanPhone !== existing.user.phone) {
+        if (cleanPhone) {
+          const phoneTaken = await prisma.user.findFirst({
+            where: {
+              phone: cleanPhone,
+              id: { not: existing.userId },
+            },
+            select: { id: true },
+          });
+          if (phoneTaken) {
+            return apiError("Mobile number is already associated with another account.", 409);
+          }
+        }
+        userUpdateData.phone = cleanPhone;
+        auditChanges.phone = { old: existing.user.phone, new: cleanPhone };
+      }
+    }
+
+    // 4. Photo URL
+    if (data.photoUrl !== undefined && data.photoUrl !== existing.user.photoUrl) {
+      userUpdateData.photoUrl = data.photoUrl || null;
+      auditChanges.photoUrl = { old: existing.user.photoUrl, new: userUpdateData.photoUrl };
+    }
+
+    if (data.department !== existing.department) {
+      auditChanges.department = { old: existing.department, new: data.department };
+    }
+    if (data.displayName !== existing.displayName) {
+      auditChanges.displayName = { old: existing.displayName, new: data.displayName };
     }
 
     const teacher = await prisma.teacher.update({
@@ -58,18 +137,28 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         qualifications: data.qualifications,
         experienceList: data.experienceList,
         bio: data.bio || null,
-        ...(data.photoUrl ? { user: { update: { photoUrl: data.photoUrl } } } : {}),
+        ...(data.dob ? { dob: data.dob } : {}),
+        ...(Object.keys(userUpdateData).length > 0 ? { user: { update: userUpdateData } } : {}),
       },
+      include: { user: true },
     });
 
-    await prisma.auditLog.create({
-      data: {
-        userId: session.user.id,
-        action: "TEACHER_UPDATE",
-        entityType: "Teacher",
-        entityId: teacher.id,
-      },
-    });
+    if (Object.keys(auditChanges).length > 0) {
+      await prisma.auditLog.create({
+        data: {
+          userId: session.user.id,
+          action: "TEACHER_PROFILE_UPDATE",
+          entityType: "Teacher",
+          entityId: teacher.id,
+          metadata: {
+            targetUserId: existing.userId,
+            targetUserName: existing.user.name,
+            changedFields: Object.keys(auditChanges),
+            changes: auditChanges,
+          },
+        },
+      });
+    }
 
     return apiSuccess({ teacher });
   } catch (error) {

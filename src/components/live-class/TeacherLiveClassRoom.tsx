@@ -31,13 +31,10 @@ import { TeacherPostClassModal } from "@/components/live-class/TeacherPostClassM
 import { SlideTemplatesModal } from "@/components/live-class/SlideTemplatesModal";
 import { PageThumbnail } from "@/components/live-class/PageThumbnail";
 import { GRACE_PERIOD_MINUTES, END_WARNING_MINUTES } from "@/lib/whiteboard/constants";
+import { playHandRaiseChime } from "@/lib/live-class/live-sound-effects";
+import { extractYouTubeVideoId } from "@/lib/live-class/youtube";
 
 type WhiteboardPage = { id: string; pageNumber: number; objects: StrokeObject[]; background: string };
-// Only the values this component actually branches on are spelled out —
-// anything else (WAITING_FOR_STREAM, PROCESSING_RECORDING, etc. — see
-// LiveClassPhase in schema.prisma) is a real value the field can hold but
-// isn't reachable through this teacher UI, so it's covered by the string
-// fallback rather than listed here.
 type LivePhase = "SCHEDULED" | "PREPARING" | "LIVE" | "ENDED" | (string & {});
 type WhiteboardSession = {
   id: string;
@@ -47,6 +44,8 @@ type WhiteboardSession = {
   activePageNumber: number;
   chatEnabled: boolean;
   handRaiseEnabled: boolean;
+  videoTransport?: "LIVEKIT" | "YOUTUBE" | "BOTH";
+  youtubeVideoId?: string | null;
   presentationUrl?: string | null;
   presentationName?: string | null;
   presentationType?: "PDF" | "PPTX" | string | null;
@@ -456,6 +455,12 @@ export function TeacherLiveClassRoom({
   const [recordingWarning, setRecordingWarning] = useState<string | null>(null);
   const [slideTemplatesOpen, setSlideTemplatesOpen] = useState(false);
 
+  // Start Class Mode Modal State (Application vs YouTube)
+  const [startClassModalOpen, setStartClassModalOpen] = useState(false);
+  const [selectedStartMode, setSelectedStartMode] = useState<"LIVEKIT" | "YOUTUBE">("LIVEKIT");
+  const [youtubeInputUrl, setYoutubeInputUrl] = useState("");
+  const [youtubeInputError, setYoutubeInputError] = useState<string | null>(null);
+
   // Pre-flight & Authoritative System State
   const [showPreFlightWizard, setShowPreFlightWizard] = useState(false);
   const [extendingTime, setExtendingTime] = useState(false);
@@ -783,7 +788,12 @@ export function TeacherLiveClassRoom({
     const teacherCh = client.subscribe(teacherChannel(wbSession.id));
     const onHandRaiseUpdate = (data: { queue: HandRaiseQueueItem[] }) => {
       if (Array.isArray(data?.queue)) {
-        setHandRaiseQueue(data.queue);
+        setHandRaiseQueue((prev) => {
+          if (data.queue.length > prev.length) {
+            playHandRaiseChime();
+          }
+          return data.queue;
+        });
       }
     };
     teacherCh.bind(WB_EVENTS.HAND_RAISE_LIST, onHandRaiseUpdate);
@@ -1341,12 +1351,10 @@ export function TeacherLiveClassRoom({
 
         if (firstNewPageNumber === null) {
           firstNewPageNumber = targetPageNumber;
-          // Switch to page 1 immediately so educator can begin without waiting for all remaining slides
-          await switchToPage(targetPageNumber);
         }
       }
 
-      if (firstNewPageNumber !== null && currentPage?.pageNumber !== firstNewPageNumber) {
+      if (firstNewPageNumber !== null) {
         await switchToPage(firstNewPageNumber);
       }
       setPdfLoadState({ loading: false, progress: null, error: null });
@@ -1521,22 +1529,39 @@ export function TeacherLiveClassRoom({
   }, [wbSession?.livePhase]);
 
   // ---- Start class (authoritative server validation) -------------------
-  async function startClass() {
+  async function startClass(modeOverride?: "LIVEKIT" | "YOUTUBE", ytVideoIdOverride?: string | null) {
     if (!wbSession || startingClass) return;
     setStartingClass(true);
     setStartClassError(null);
     setRecordingWarning(null);
+    setYoutubeInputError(null);
+
+    const mode = modeOverride || selectedStartMode;
+    const ytId =
+      mode === "YOUTUBE"
+        ? ytVideoIdOverride !== undefined
+          ? ytVideoIdOverride
+          : extractYouTubeVideoId(youtubeInputUrl)
+        : null;
+
+    if (mode === "YOUTUBE" && !ytId) {
+      setYoutubeInputError("Please enter a valid YouTube Live URL or 11-character Video ID.");
+      setStartingClass(false);
+      return;
+    }
+
     try {
-      const data = await postJson(`/api/team/live-class/${batchScheduleId}/start`, {});
+      const data = await postJson(`/api/team/live-class/${batchScheduleId}/start`, {
+        videoTransport: mode,
+        youtubeVideoId: ytId || undefined,
+      });
       if (data.whiteboardSession) {
         setWbSession((prev) =>
           prev ? { ...prev, ...data.whiteboardSession, livePhase: "LIVE" } : data.whiteboardSession
         );
       }
-      // Recording-start failures used to be silently logged server-side
-      // only, so a class could run with no recording and nobody noticed
-      // until playback. Now surfaced as a visible banner instead.
       if (data.recordingWarning) setRecordingWarning(data.recordingWarning);
+      setStartClassModalOpen(false);
     } catch (err) {
       setStartClassError(err instanceof Error ? err.message : "Could not start the class.");
     } finally {
@@ -1937,6 +1962,21 @@ export function TeacherLiveClassRoom({
                   </div>
                 </div>
               ) : null}
+
+              {/* YouTube Live Stream Indicator when running on YouTube */}
+              {wbSession?.videoTransport === "YOUTUBE" && wbSession?.youtubeVideoId && (
+                <a
+                  href={`https://www.youtube.com/watch?v=${wbSession.youtubeVideoId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 px-2.5 py-1 bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/40 rounded-lg text-xs font-bold transition ml-1.5"
+                  title="Open YouTube Live Broadcast in new tab"
+                >
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                  <span>YouTube Live Active</span>
+                  <span className="material-symbols-outlined text-xs">open_in_new</span>
+                </a>
+              )}
             </div>
           ) : (
             <div className="flex items-center gap-2">
@@ -1967,7 +2007,7 @@ export function TeacherLiveClassRoom({
               <button
                 type="button"
                 disabled={startingClass || !canStartClass}
-                onClick={startClass}
+                onClick={() => setStartClassModalOpen(true)}
                 className={`flex items-center gap-1.5 text-xs font-bold px-4 py-1.5 rounded-lg shadow-md transition active:scale-95 ${
                   canStartClass
                     ? "text-white bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/30 ring-2 ring-emerald-400/40 animate-pulse cursor-pointer"
@@ -2066,11 +2106,26 @@ export function TeacherLiveClassRoom({
         )}
 
         {(pdfLoadState.loading || pdfLoadState.error) && (
-          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 max-w-md w-[92%]">
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 max-w-md w-[92%] animate-in fade-in slide-in-from-top duration-200">
             {pdfLoadState.loading ? (
-              <div className="flex items-center gap-2 bg-[#1a1b23] border border-blue-500/40 text-blue-200 text-xs px-4 py-2 rounded-xl shadow-2xl">
-                <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
-                <span className="truncate">{pdfLoadState.progress ?? "Loading presentation…"}</span>
+              <div className="bg-[#141624]/95 backdrop-blur-md border border-blue-500/50 text-white text-xs p-4 rounded-2xl shadow-2xl space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-base text-blue-400 animate-spin">
+                      progress_activity
+                    </span>
+                    <span className="font-bold text-sm text-white">Importing Presentation Slides</span>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-300 truncate font-mono">
+                  {pdfLoadState.progress ?? "Pre-processing slides…"}
+                </p>
+                <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden border border-slate-700">
+                  <div className="bg-gradient-to-r from-blue-500 to-indigo-500 h-full rounded-full transition-all duration-300 animate-pulse w-full" />
+                </div>
+                <p className="text-[10px] text-slate-400">
+                  All pages are rendered and uploaded in the background. Canvas will open with ready presentation.
+                </p>
               </div>
             ) : (
               <div className="flex items-start gap-2 bg-red-950/90 border border-red-500/50 text-red-100 text-xs px-4 py-2.5 rounded-xl shadow-2xl">
@@ -3279,6 +3334,189 @@ export function TeacherLiveClassRoom({
           sessionTitle={scheduleTitle}
           onClose={() => setShowPostClassModal(false)}
         />
+      )}
+
+      {/* Start Class Mode Selection Modal (Application Class vs YouTube Live Class) */}
+      {startClassModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-xl bg-[#121422] border border-slate-700/80 rounded-2xl shadow-2xl p-6 text-white space-y-6">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div>
+                <h3 className="text-lg font-black text-white flex items-center gap-2">
+                  <span className="material-symbols-outlined text-rose-500">sensors</span>
+                  Start Live Class — Select Teaching Mode
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Choose how you want to broadcast this live lecture to enrolled students.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setStartClassModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-xl">close</span>
+              </button>
+            </div>
+
+            {/* Mode Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Option 1: Application Class */}
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedStartMode("LIVEKIT");
+                  setYoutubeInputError(null);
+                }}
+                className={`text-left p-4 rounded-xl border-2 transition-all flex flex-col justify-between space-y-3 cursor-pointer ${
+                  selectedStartMode === "LIVEKIT"
+                    ? "bg-blue-950/40 border-blue-500 shadow-lg shadow-blue-500/20 ring-1 ring-blue-400"
+                    : "bg-[#181a2c] border-slate-800 hover:border-slate-700 text-slate-300"
+                }`}
+              >
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="w-10 h-10 rounded-xl bg-blue-600/20 text-blue-400 flex items-center justify-center">
+                      <span className="material-symbols-outlined text-2xl">draw</span>
+                    </div>
+                    {selectedStartMode === "LIVEKIT" && (
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-500 text-white shadow-xs">
+                        Selected
+                      </span>
+                    )}
+                  </div>
+                  <h4 className="text-sm font-black text-white">Application Class</h4>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    Interactive HD Whiteboard + LiveKit camera/audio + 2-way student video/audio calls + synchronized chat &amp; polls.
+                  </p>
+                </div>
+                <span className="text-[11px] font-bold text-blue-400 flex items-center gap-1">
+                  <span>Recommended for Interactive Teaching</span>
+                  <span className="material-symbols-outlined text-xs">arrow_forward</span>
+                </span>
+              </button>
+
+              {/* Option 2: YouTube Live Class */}
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedStartMode("YOUTUBE");
+                  setYoutubeInputError(null);
+                }}
+                className={`text-left p-4 rounded-xl border-2 transition-all flex flex-col justify-between space-y-3 cursor-pointer ${
+                  selectedStartMode === "YOUTUBE"
+                    ? "bg-red-950/40 border-red-500 shadow-lg shadow-red-500/20 ring-1 ring-red-400"
+                    : "bg-[#181a2c] border-slate-800 hover:border-slate-700 text-slate-300"
+                }`}
+              >
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="w-10 h-10 rounded-xl bg-red-600/20 text-red-400 flex items-center justify-center">
+                      <span className="material-symbols-outlined text-2xl">smart_display</span>
+                    </div>
+                    {selectedStartMode === "YOUTUBE" && (
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-red-500 text-white shadow-xs">
+                        Selected
+                      </span>
+                    )}
+                  </div>
+                  <h4 className="text-sm font-black text-white">YouTube Live Class</h4>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    Stream externally via YouTube Live / OBS / Studio while students watch and participate via Atomic Pathshala chat &amp; polls.
+                  </p>
+                </div>
+                <span className="text-[11px] font-bold text-red-400 flex items-center gap-1">
+                  <span>For OBS &amp; Studio Broadcasts</span>
+                  <span className="material-symbols-outlined text-xs">arrow_forward</span>
+                </span>
+              </button>
+            </div>
+
+            {/* YouTube URL input (Shown when YouTube is selected) */}
+            {selectedStartMode === "YOUTUBE" && (
+              <div className="bg-[#181a2c] border border-slate-700/80 rounded-xl p-4 space-y-3 animate-in fade-in slide-in-from-top-2 duration-150">
+                <label className="block text-xs font-bold text-slate-300">
+                  YouTube Live Stream URL or Video ID <span className="text-red-400">*</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-slate-500">
+                    <span className="material-symbols-outlined text-base">link</span>
+                  </span>
+                  <input
+                    type="text"
+                    value={youtubeInputUrl}
+                    onChange={(e) => {
+                      setYoutubeInputUrl(e.target.value);
+                      setYoutubeInputError(null);
+                    }}
+                    placeholder="https://www.youtube.com/watch?v=... or Video ID"
+                    className="w-full pl-9 pr-3 py-2 bg-[#0e101b] border border-slate-700 rounded-lg text-xs text-white placeholder-slate-500 outline-none focus:border-red-500"
+                  />
+                </div>
+
+                {/* Auto-extracted ID verification */}
+                {(() => {
+                  const extractedId = extractYouTubeVideoId(youtubeInputUrl);
+                  if (extractedId) {
+                    return (
+                      <div className="flex items-center gap-3 p-2.5 bg-emerald-950/30 border border-emerald-500/40 rounded-lg text-emerald-300 text-xs">
+                        <img
+                          src={`https://img.youtube.com/vi/${extractedId}/default.jpg`}
+                          alt="Thumbnail preview"
+                          className="w-16 aspect-video rounded object-cover border border-emerald-600/40 shrink-0"
+                        />
+                        <div className="min-w-0">
+                          <p className="font-bold">Valid Video ID: <span className="font-mono text-white">{extractedId}</span></p>
+                          <p className="text-[10px] text-emerald-400/80">Students will connect automatically to this stream when class starts.</p>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+
+                {youtubeInputError && (
+                  <p className="text-xs text-red-400 font-semibold flex items-center gap-1">
+                    <span className="material-symbols-outlined text-sm">error</span>
+                    {youtubeInputError}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setStartClassModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={startingClass}
+                onClick={() => startClass()}
+                className={`px-5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-lg ${
+                  selectedStartMode === "YOUTUBE"
+                    ? "bg-red-600 hover:bg-red-500 text-white shadow-red-600/30"
+                    : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/30"
+                } disabled:opacity-50 cursor-pointer`}
+              >
+                <span className="material-symbols-outlined text-base">
+                  {startingClass ? "progress_activity" : "sensors"}
+                </span>
+                <span>
+                  {startingClass
+                    ? "Starting Broadcast…"
+                    : selectedStartMode === "YOUTUBE"
+                    ? "Start YouTube Class"
+                    : "Start Application Class"}
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

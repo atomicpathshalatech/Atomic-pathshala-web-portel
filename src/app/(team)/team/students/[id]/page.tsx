@@ -6,6 +6,7 @@ import { authOptions } from "@/lib/auth";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { getStudentCompleteProfile } from "@/lib/student/profile";
+import { StudentProfileHeaderActions } from "@/components/team-portal/StudentProfileHeaderActions";
 
 export const metadata: Metadata = {
   title: "Student Profile — Atomic Pathshala",
@@ -54,12 +55,7 @@ export default async function StudentProfilePage({ params }: { params: { id: str
             {profile.student.studentIdCode} · {profile.student.email || "No email"} · {profile.student.phone || "No phone"}
           </p>
         </div>
-        <Link
-          href={`/team/subscriptions/${profile.student.id}`}
-          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white transition"
-        >
-          Manage Subscription
-        </Link>
+        <StudentProfileHeaderActions student={profile.student} />
       </div>
 
       {/* Basic Info */}

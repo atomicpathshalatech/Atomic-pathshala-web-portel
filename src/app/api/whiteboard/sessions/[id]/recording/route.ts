@@ -41,6 +41,8 @@ export async function GET(
         createdAt: true,
         youtubeArchiveStatus: true,
         youtubeArchiveVideoUrl: true,
+        youtubeVideoId: true,
+        videoTransport: true,
       },
     });
 
@@ -66,15 +68,17 @@ export async function GET(
 
     const isReady = effective.recordingStatus === "READY" && Boolean(effective.recordingStorageKey);
 
-    // Prefer the archived YouTube (unlisted) video once it's fully
-    // uploaded — playable inline via AtomicVideoPlayer's YouTube-embed
-    // auto-detection, never requiring a redirect to youtube.com. Falls
-    // back to the direct R2 presigned URL otherwise.
+    // YouTube archive or live YouTube stream replay
     const youtubeReady = wbSession.youtubeArchiveStatus === "COMPLETED" && Boolean(wbSession.youtubeArchiveVideoUrl);
+    const directYouTubeUrl = wbSession.youtubeVideoId
+      ? `https://www.youtube.com/watch?v=${wbSession.youtubeVideoId}`
+      : null;
 
     let presignedUrl: string | null = null;
     if (youtubeReady) {
       presignedUrl = wbSession.youtubeArchiveVideoUrl;
+    } else if (directYouTubeUrl) {
+      presignedUrl = directYouTubeUrl;
     } else if (isReady && effective.recordingStorageKey) {
       presignedUrl = await createPresignedDownloadUrl({
         key: effective.recordingStorageKey,

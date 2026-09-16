@@ -251,9 +251,33 @@ export function MessagesPanel({
         ) : (
           messages.map((m) => {
             if (m.isSystemMessage) {
+              const isJoin = m.body.toLowerCase().includes("joined");
+              const initial = (m.authorName || "S").trim().charAt(0).toUpperCase();
+
               return (
-                <div key={m.id} className="text-center py-1">
-                  <span className={`text-[11px] italic ${t.authorLabel}`}>{m.body}</span>
+                <div key={m.id} className="flex justify-center my-2">
+                  {isJoin ? (
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-emerald-900 dark:text-emerald-300 shadow-2xs">
+                      {m.authorPhotoUrl ? (
+                        <img
+                          src={m.authorPhotoUrl}
+                          alt={m.authorName}
+                          className="w-4 h-4 rounded-full object-cover shrink-0"
+                        />
+                      ) : (
+                        <div className="w-4 h-4 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[9px] font-bold shrink-0">
+                          {initial}
+                        </div>
+                      )}
+                      <span>{m.body}</span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                    </div>
+                  ) : (
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium bg-slate-100 dark:bg-slate-800/70 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                      <span className="material-symbols-outlined text-[13px]">info</span>
+                      <span>{m.body}</span>
+                    </div>
+                  )}
                 </div>
               );
             }
@@ -305,15 +329,15 @@ export function MessagesPanel({
 
                 {/* 2. Beside photo: Student name on top, message box underneath */}
                 <div className="flex-1 min-w-0">
-                  {/* Name line */}
+                  {/* Name line with WCAG high contrast */}
                   <div className="flex items-center gap-1.5 leading-none">
                     <span
                       className={`text-xs font-bold truncate ${
                         isTeacher
-                          ? "text-[#a33900] dark:text-orange-400"
+                          ? "text-[#992600] dark:text-orange-400"
                           : mine
-                          ? "text-blue-600 dark:text-blue-400"
-                          : "text-slate-800 dark:text-slate-200"
+                          ? "text-blue-700 dark:text-blue-400"
+                          : "text-slate-900 dark:text-slate-100"
                       }`}
                     >
                       {m.authorName}

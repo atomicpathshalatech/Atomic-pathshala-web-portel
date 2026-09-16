@@ -23,9 +23,7 @@ const otpRegisterSchema = z.object({
   email: z.string().trim().email().toLowerCase(),
   password: z
     .string()
-    .min(8, "Password must be at least 8 characters")
-    .regex(/[A-Z]/, "Password must contain an uppercase letter")
-    .regex(/[0-9]/, "Password must contain a number"),
+    .min(8, "Password must be at least 8 characters"),
 });
 
 export async function POST(req: NextRequest) {

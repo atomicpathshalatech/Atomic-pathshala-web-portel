@@ -1,4 +1,4 @@
-﻿import { jsPDF } from "jspdf";
+import { jsPDF } from "jspdf";
 import { StrokeObject, VIRTUAL_WIDTH, VIRTUAL_HEIGHT } from "@/lib/canvas/canvas-engine";
 import { SLIDE_WATERMARK, getLogoBase64 } from "@/lib/whiteboard/branding";
 
@@ -119,8 +119,27 @@ async function fetchBackgroundImage(
 }
 
 async function drawSlideBackground(doc: jsPDF, bg: string, w: number, h: number): Promise<void> {
-  if (/^https?:\/\//.test(bg)) {
-    const img = await fetchBackgroundImage(bg);
+  if (!bg) {
+    doc.setFillColor(255, 255, 255);
+    doc.rect(0, 0, w, h, "F");
+    return;
+  }
+
+  if (bg.startsWith("data:image/")) {
+    try {
+      const format = bg.includes("jpeg") || bg.includes("jpg") ? "JPEG" : bg.includes("webp") ? "WEBP" : "PNG";
+      doc.addImage(bg, format, 0, 0, w, h);
+      return;
+    } catch (err) {
+      console.warn("[PDF Generator] Data URL addImage error:", err);
+    }
+  }
+
+  if (/^https?:\/\//.test(bg) || bg.startsWith("/")) {
+    const fullUrl = bg.startsWith("/")
+      ? `${process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}${bg}`
+      : bg;
+    const img = await fetchBackgroundImage(fullUrl);
     if (img) {
       try {
         doc.addImage(img.dataUrl, img.format, 0, 0, w, h);

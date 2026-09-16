@@ -11,6 +11,11 @@ import { VideoStrip } from "@/components/live-class/VideoStrip";
 import { RecordingPlayer } from "@/components/live-class/RecordingPlayer";
 import { StudentPostClassFeedback } from "@/components/live-class/StudentPostClassFeedback";
 import { DraggableFloatingCamera } from "@/components/live-class/DraggableFloatingCamera";
+import {
+  playPollAlert,
+  playPollRevealChime,
+  playCallIncomingRingtone,
+} from "@/lib/live-class/live-sound-effects";
 
 
 type QuizOption = { key: string; label: string };
@@ -226,32 +231,50 @@ export function StudentLiveClassRoom({
   const [quizError, setQuizError] = useState<string | null>(null);
   const [quizDismissed, setQuizDismissed] = useState(false);
 
-  // Auto-dismiss quiz 6 seconds after results are revealed or closed
+  // Auto-dismiss quiz 5 seconds after results are revealed or closed
   useEffect(() => {
     if (quiz?.status === "REVEALED" || quiz?.status === "CLOSED") {
       const timer = setTimeout(() => {
         setQuizDismissed(true);
-      }, 6000);
+      }, 5000);
       return () => clearTimeout(timer);
     }
   }, [quiz?.status]);
 
   const [activeMobileTab, setActiveMobileTab] = useState<"chat" | "quiz" | "info">("chat");
   const [isFullscreen, setIsFullscreen] = useState(false);
-  // Governs the single merged teacher-video + chat popup on desktop (see
-  // the floating panel in the lg:flex branch below). Mobile's chat lives in
-  // its own always-visible tab and isn't gated by this.
   const [showChat, setShowChat] = useState(true);
 
-  // Exactly one <VideoStrip> must ever be mounted per student: it opens its
-  // own LiveKit connection using this student's fixed participant identity,
-  // and LiveKit only allows one live connection per identity per room - a
-  // second one joining makes the server boot the first ("client leave
-  // request received"), which immediately reconnects and boots the new one
-  // right back, forever. The desktop/mobile layouts below are pure CSS
-  // toggles (hidden lg:flex / lg:hidden) so both are always mounted in
-  // React - track the viewport ourselves so only the visible layout's
-  // VideoStrip actually renders.
+  // Manual orientation mode toggle ("auto" | "portrait" | "landscape")
+  const [orientationMode, setOrientationMode] = useState<"auto" | "portrait" | "landscape">("auto");
+
+  // VisualViewport listener for mobile virtual keyboard and soft-keyboard resize
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const update = () => {
+      if (window.visualViewport) {
+        setViewportHeight(window.visualViewport.height);
+      } else {
+        setViewportHeight(window.innerHeight);
+      }
+    };
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", update);
+      window.visualViewport.addEventListener("scroll", update);
+      update();
+    }
+    window.addEventListener("resize", update);
+    return () => {
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener("resize", update);
+        window.visualViewport.removeEventListener("scroll", update);
+      }
+      window.removeEventListener("resize", update);
+    };
+  }, []);
+
+  // Exactly one <VideoStrip> must ever be mounted per student
   const [isDesktopViewport, setIsDesktopViewport] = useState(true);
   useEffect(() => {
     const mql = window.matchMedia("(min-width: 1024px)");
@@ -459,12 +482,19 @@ export function StudentLiveClassRoom({
       setMySelection(null);
       setQuizError(null);
       setQuizDismissed(false);
+      playPollAlert();
     });
 
     channel.bind(
       WB_EVENTS.QUIZ_REVEALED,
       (data: { id: string; correctOption: string | null }) => {
-        setQuiz((prev) => (prev && prev.id === data.id ? { ...prev, status: "REVEALED", correctOption: data.correctOption } : prev));
+        setQuiz((prev) => {
+          if (prev && prev.id === data.id) {
+            playPollRevealChime(mySelection === data.correctOption);
+            return { ...prev, status: "REVEALED", correctOption: data.correctOption };
+          }
+          return prev;
+        });
       }
     );
 
@@ -480,6 +510,7 @@ export function StudentLiveClassRoom({
           setIsApprovedSpeaker(true);
           setSpeakerRequestType(data.requestType || "AUDIO");
           if (data.speakerToken) setSpeakerToken(data.speakerToken);
+          playCallIncomingRingtone();
         }
       }
     );
@@ -507,6 +538,9 @@ export function StudentLiveClassRoom({
         setTeacherAudioConnected(data.audioConnected);
         setTeacherVideoConnected(data.videoConnected);
         setTeacherConnectionToken(data.connectionToken);
+        if (data.audioConnected || data.videoConnected) {
+          playCallIncomingRingtone();
+        }
       }
     );
 
@@ -830,7 +864,13 @@ export function StudentLiveClassRoom({
 
   // ---------------- COMPLETE WHITEBOARD STUDIO (ACTIVE FOR ALL STUDENTS ONCE LIVE) ----------------
   return (
-    <div className={`fixed inset-0 w-full h-full h-screen-safe flex flex-col overflow-hidden select-none z-50 ${isThemeDark ? "bg-[#0b0d14] text-white" : "bg-slate-900 text-slate-100"}`}>
+    <div
+      style={{
+        height: viewportHeight ? `${viewportHeight}px` : "100dvh",
+        maxHeight: viewportHeight ? `${viewportHeight}px` : "100dvh",
+      }}
+      className={`fixed inset-0 w-full flex flex-col overflow-hidden select-none z-50 ${isThemeDark ? "bg-[#0b0d14] text-white" : "bg-slate-900 text-slate-100"}`}
+    >
       {/* Top Authoritative Studio Header */}
       <header className="h-12 sm:h-14 px-3 sm:px-4 shrink-0 flex items-center justify-between border-b border-slate-800/80 bg-[#10131d] z-20">
         <div className="flex items-center gap-2.5 min-w-0">
@@ -903,9 +943,28 @@ export function StudentLiveClassRoom({
             <span className="hidden xs:inline">{handRaised ? "Raised" : "Raise"}</span>
           </button>
 
-          {/* Local Hide/Show Teacher-Video-&-Chat Popup (Student Preference).
-              Desktop-only: on mobile, video is a PiP corner overlay and chat
-              is its own always-visible tab, neither gated by this toggle. */}
+          {/* Mobile Orientation Toggle Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setOrientationMode((prev) =>
+                prev === "auto" ? "landscape" : prev === "landscape" ? "portrait" : "auto"
+              );
+            }}
+            className="lg:hidden flex items-center gap-1 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] sm:text-xs font-semibold border border-slate-700 transition"
+            title={`Orientation: ${orientationMode.toUpperCase()} (Click to toggle)`}
+          >
+            <span className="material-symbols-outlined text-sm">
+              {orientationMode === "landscape"
+                ? "stay_current_landscape"
+                : orientationMode === "portrait"
+                ? "stay_current_portrait"
+                : "screen_rotation"}
+            </span>
+            <span className="text-[10px] uppercase font-bold hidden xs:inline">{orientationMode}</span>
+          </button>
+
+          {/* Local Hide/Show Teacher-Video-&-Chat Popup (Student Preference). */}
           <button
             type="button"
             onClick={() => setShowChat((v) => !v)}
@@ -1148,9 +1207,25 @@ export function StudentLiveClassRoom({
       {/* ========================================================================= */}
       {/* MOBILE & TABLET VIEW (< lg): Top Video/Canvas Stage + Bottom Tabbed Console */}
       {/* ========================================================================= */}
-      <div className="lg:hidden flex-1 min-h-0 flex flex-col landscape:flex-row overflow-hidden bg-[#0b0d14]">
+      <div
+        className={`lg:hidden flex-1 min-h-0 flex ${
+          orientationMode === "landscape"
+            ? "flex-row"
+            : orientationMode === "portrait"
+            ? "flex-col"
+            : "flex-col landscape:flex-row"
+        } overflow-hidden bg-[#0b0d14]`}
+      >
         {/* Top Media Area: 16:9 Canvas or YouTube Player */}
-        <div className="w-full landscape:w-3/5 landscape:h-full shrink-0 aspect-video landscape:aspect-auto max-h-[38dvh] sm:max-h-[45dvh] landscape:max-h-full bg-black relative flex items-center justify-center overflow-hidden border-b landscape:border-b-0 landscape:border-r border-slate-800/80">
+        <div
+          className={`${
+            orientationMode === "landscape"
+              ? "w-3/5 h-full border-b-0 border-r"
+              : orientationMode === "portrait"
+              ? "w-full aspect-video max-h-[38dvh] sm:max-h-[45dvh] border-b"
+              : "w-full landscape:w-3/5 landscape:h-full aspect-video landscape:aspect-auto max-h-[38dvh] sm:max-h-[45dvh] landscape:max-h-full border-b landscape:border-b-0 landscape:border-r"
+          } shrink-0 bg-black relative flex items-center justify-center overflow-hidden border-slate-800/80`}
+        >
           {isYouTube ? (
             <YouTubeLivePlayer
               youtubeVideoId={wbSession?.youtubeVideoId ?? null}
@@ -1189,7 +1264,15 @@ export function StudentLiveClassRoom({
         </div>
 
         {/* Bottom Interactive Area (Tabs: Chat | Quiz | Details) */}
-        <div className="flex-1 landscape:w-2/5 min-h-0 flex flex-col bg-[#10121d] overflow-hidden">
+        <div
+          className={`flex-1 ${
+            orientationMode === "landscape"
+              ? "w-2/5"
+              : orientationMode === "portrait"
+              ? "w-full"
+              : "landscape:w-2/5"
+          } min-h-0 flex flex-col bg-[#10121d] overflow-hidden`}
+        >
           {/* Tab Selection Bar */}
           <div className="flex items-center justify-around bg-[#0a0b12] border-b border-slate-800 shrink-0 px-2">
             <button

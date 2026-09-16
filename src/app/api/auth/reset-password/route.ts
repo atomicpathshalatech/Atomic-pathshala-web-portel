@@ -30,9 +30,7 @@ const phoneSchema = z.object({
   verifyToken: z.string().trim().min(20),
   newPassword: z
     .string()
-    .min(8, "Password must be at least 8 characters")
-    .regex(/[A-Z]/, "Password must contain an uppercase letter")
-    .regex(/[0-9]/, "Password must contain a number"),
+    .min(8, "Password must be at least 8 characters"),
 });
 
 export async function POST(request: NextRequest) {

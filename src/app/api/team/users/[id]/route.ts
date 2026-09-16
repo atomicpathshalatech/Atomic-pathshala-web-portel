@@ -113,13 +113,32 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const canUpdate = await hasPermission(session.user.id, PERMISSIONS.USER_UPDATE);
-    if (!canUpdate) {
+    const userId = params.id;
+    const isSelf = session.user.id === userId;
+    const canUpdate =
+      (await hasPermission(session.user.id, PERMISSIONS.USER_UPDATE)) ||
+      (await hasPermission(session.user.id, PERMISSIONS.USER_PROFILE_EDIT));
+
+    if (!canUpdate && !isSelf) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const userId = params.id;
     const body = await req.json();
+
+    // Self-edit without admin permissions can only update identity fields
+    if (!canUpdate && isSelf) {
+      delete body.roleName;
+      delete body.removeRole;
+      delete body.status;
+      delete body.department;
+      delete body.position;
+      delete body.contractType;
+      delete body.contractStart;
+      delete body.contractEnd;
+      delete body.contractNote;
+      delete body.subjectScope;
+      delete body.batchScope;
+    }
 
     const currentUser = await prisma.user.findUnique({
       where: { id: userId },
@@ -133,14 +152,65 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const updateData: any = {};
     const auditChanges: Record<string, { old: any; new: any }> = {};
 
-    if (body.name !== undefined && body.name !== currentUser.name) {
-      updateData.name = body.name;
-      auditChanges.name = { old: currentUser.name, new: body.name };
+    if (body.name !== undefined && body.name.trim() !== "" && body.name.trim() !== currentUser.name) {
+      updateData.name = body.name.trim();
+      auditChanges.name = { old: currentUser.name, new: updateData.name };
     }
 
-    if (body.phone !== undefined && body.phone !== currentUser.phone) {
-      updateData.phone = body.phone;
-      auditChanges.phone = { old: currentUser.phone, new: body.phone };
+    if (body.email !== undefined) {
+      const trimmedEmail = body.email.trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+        return NextResponse.json({ error: "Enter a valid email address." }, { status: 400 });
+      }
+      if (trimmedEmail !== currentUser.email.toLowerCase()) {
+        const emailTaken = await prisma.user.findFirst({
+          where: {
+            email: { equals: trimmedEmail, mode: "insensitive" },
+            id: { not: userId },
+          },
+          select: { id: true },
+        });
+        if (emailTaken) {
+          return NextResponse.json(
+            { error: "Email address is already associated with another account." },
+            { status: 409 }
+          );
+        }
+        updateData.email = trimmedEmail;
+        auditChanges.email = { old: currentUser.email, new: trimmedEmail };
+      }
+    }
+
+    if (body.phone !== undefined) {
+      const rawPhone = body.phone ? body.phone.trim() : null;
+      const cleanPhone = rawPhone ? rawPhone.replace(/\D/g, "").replace(/^0+/, "").replace(/^91(?=\d{10}$)/, "") : null;
+      if (cleanPhone && !/^[6-9]\d{9}$/.test(cleanPhone)) {
+        return NextResponse.json({ error: "Enter a valid 10-digit Indian mobile number." }, { status: 400 });
+      }
+      if (cleanPhone !== currentUser.phone) {
+        if (cleanPhone) {
+          const phoneTaken = await prisma.user.findFirst({
+            where: {
+              phone: cleanPhone,
+              id: { not: userId },
+            },
+            select: { id: true },
+          });
+          if (phoneTaken) {
+            return NextResponse.json(
+              { error: "Mobile number is already associated with another account." },
+              { status: 409 }
+            );
+          }
+        }
+        updateData.phone = cleanPhone;
+        auditChanges.phone = { old: currentUser.phone, new: cleanPhone };
+      }
+    }
+
+    if (body.photoUrl !== undefined && body.photoUrl !== currentUser.photoUrl) {
+      updateData.photoUrl = body.photoUrl || null;
+      auditChanges.photoUrl = { old: currentUser.photoUrl, new: updateData.photoUrl };
     }
 
     if (body.status !== undefined && body.status !== currentUser.status) {
@@ -273,11 +343,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       await prisma.auditLog.create({
         data: {
           userId: session.user.id,
-          action: "USER_UPDATED",
-          entityType: "USER",
+          action: "USER_PROFILE_UPDATE",
+          entityType: "User",
           entityId: userId,
           metadata: {
+            targetUserId: userId,
             targetUserName: updatedUser.name,
+            changedFields: Object.keys(auditChanges),
             changes: auditChanges,
           },
         },
@@ -312,6 +384,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         id: updatedUser.id,
         name: updatedUser.name,
         email: updatedUser.email,
+        phone: updatedUser.phone,
+        photoUrl: updatedUser.photoUrl,
         status: updatedUser.status,
         role: updatedUser.role?.name ?? "NONE",
         department: updatedUser.department,
