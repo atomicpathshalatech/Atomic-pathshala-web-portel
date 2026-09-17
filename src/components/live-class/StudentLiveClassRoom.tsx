@@ -281,14 +281,7 @@ export function StudentLiveClassRoom({
   // reimplemented inline here specifically so it can be applied to the
   // persistent wrapper instead of swapping in a different component
   // (which would remount VideoStrip and restart the call).
-  // Starts as a fixed, SSR-safe default (not null) so the floating bubble
-  // always has a real position/size to render with — the effect below
-  // just corrects it to a proper top-right default (or the saved spot)
-  // once the window is available. Previously this started as null and
-  // the bubble's inline position/size styles were skipped entirely until
-  // the effect ran, which could render a zero-size/invisible camera for
-  // that first frame.
-  const [floatCamPos, setFloatCamPos] = useState<{ x: number; y: number }>({ x: 16, y: 70 });
+  const [floatCamPos, setFloatCamPos] = useState<{ x: number; y: number } | null>(null);
   const floatCamDraggingRef = useRef(false);
   const floatCamDragOffsetRef = useRef({ x: 0, y: 0 });
 
@@ -1282,7 +1275,7 @@ export function StudentLiveClassRoom({
             onPointerUp={!showChat ? handleFloatCamPointerUp : undefined}
             onPointerCancel={!showChat ? handleFloatCamPointerUp : undefined}
             style={
-              !showChat
+              !showChat && floatCamPos
                 ? { position: "fixed", top: floatCamPos.y, left: floatCamPos.x, width: FLOAT_CAM_SIZE, height: FLOAT_CAM_SIZE, touchAction: "none" }
                 : undefined
             }
