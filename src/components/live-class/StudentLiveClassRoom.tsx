@@ -10,7 +10,6 @@ import { YouTubeLivePlayer } from "@/components/live-class/YouTubeLivePlayer";
 import { VideoStrip } from "@/components/live-class/VideoStrip";
 import { RecordingPlayer } from "@/components/live-class/RecordingPlayer";
 import { StudentPostClassFeedback } from "@/components/live-class/StudentPostClassFeedback";
-import { DraggableFloatingCamera } from "@/components/live-class/DraggableFloatingCamera";
 import {
   playPollAlert,
   playPollRevealChime,
@@ -50,6 +49,10 @@ interface WhiteboardSessionData {
   totalExtendedMinutes?: number;
   chatEnabled?: boolean;
 }
+
+// Diameter (px) of the floating teacher-camera bubble shown when the
+// sidebar is hidden — see floatCamPos in StudentLiveClassRoom.
+const FLOAT_CAM_SIZE = 104;
 
 function isBackgroundImageUrl(background: string | undefined): background is string {
   return typeof background === "string" && /^https?:\/\//.test(background);
@@ -262,6 +265,84 @@ export function StudentLiveClassRoom({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showChat, setShowChat] = useState(true);
 
+  // Live student count — reuses the SAME presence channel already
+  // subscribed below for chat/board/quiz events (Pusher's built-in member
+  // tracking, the same mechanism ParticipantsPanel already uses on the
+  // teacher side), rather than polling a new endpoint or inventing a count.
+  const [onlineCount, setOnlineCount] = useState(0);
+
+  // Floating teacher camera position, used only while the sidebar is
+  // hidden (see the camera wrapper below). <VideoStrip> itself is mounted
+  // exactly once, in a single stable wrapper div, and NEVER moves in the
+  // React tree — only this wrapper's CSS (docked vs. fixed-position
+  // bubble) changes with `showChat`, so the LiveKit connection it holds
+  // is never dropped by a hide/show toggle. This mirrors the drag math in
+  // the existing (otherwise-unused) DraggableFloatingCamera component,
+  // reimplemented inline here specifically so it can be applied to the
+  // persistent wrapper instead of swapping in a different component
+  // (which would remount VideoStrip and restart the call).
+  const [floatCamPos, setFloatCamPos] = useState<{ x: number; y: number } | null>(null);
+  const floatCamDraggingRef = useRef(false);
+  const floatCamDragOffsetRef = useRef({ x: 0, y: 0 });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const saved = localStorage.getItem("atomic_student_floating_cam_pos");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.x === "number" && typeof parsed.y === "number") {
+          setFloatCamPos(parsed);
+          return;
+        }
+      }
+    } catch {
+      // fallback below
+    }
+    setFloatCamPos({ x: Math.max(16, window.innerWidth - FLOAT_CAM_SIZE - 16), y: 70 });
+  }, []);
+
+  function handleFloatCamPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest("button")) return;
+    floatCamDraggingRef.current = true;
+    const rect = e.currentTarget.getBoundingClientRect();
+    floatCamDragOffsetRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+
+  function handleFloatCamPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!floatCamDraggingRef.current) return;
+    const maxX = Math.max(10, window.innerWidth - FLOAT_CAM_SIZE - 12);
+    const maxY = Math.max(10, window.innerHeight - FLOAT_CAM_SIZE - 12);
+    let nx = e.clientX - floatCamDragOffsetRef.current.x;
+    let ny = e.clientY - floatCamDragOffsetRef.current.y;
+    nx = Math.max(8, Math.min(nx, maxX));
+    ny = Math.max(56, Math.min(ny, maxY));
+    setFloatCamPos({ x: nx, y: ny });
+  }
+
+  function handleFloatCamPointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    if (!floatCamDraggingRef.current) return;
+    floatCamDraggingRef.current = false;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
+    setFloatCamPos((pos) => {
+      if (pos) {
+        try {
+          localStorage.setItem("atomic_student_floating_cam_pos", JSON.stringify(pos));
+        } catch {
+          // ignore
+        }
+      }
+      return pos;
+    });
+  }
+
   // Notification chimes (poll alert/reveal, call ring/connected) fire from
   // realtime events, not a user gesture — browser autoplay policy keeps
   // the shared AudioContext suspended without one. Unlock it on the
@@ -463,6 +544,16 @@ export function StudentLiveClassRoom({
     if (!wbSession?.id) return;
     const client = getPusherClient();
     const channel = client.subscribe(sessionChannel(wbSession.id));
+
+    // Live student count — sessionChannel is a Pusher presence channel
+    // (see pusher/auth/route.ts), so membership is already tracked
+    // server-side; this just reads that count, the same mechanism
+    // ParticipantsPanel uses for its "Online" badge on the teacher side.
+    channel.bind("pusher:subscription_succeeded", (members: any) => {
+      if (members?.count != null) setOnlineCount(members.count);
+    });
+    channel.bind("pusher:member_added", () => setOnlineCount((c) => c + 1));
+    channel.bind("pusher:member_removed", () => setOnlineCount((c) => Math.max(0, c - 1)));
 
     channel.bind(WB_EVENTS.SESSION_ENDED, () => {
       setPhase("ended");
@@ -1159,20 +1250,41 @@ export function StudentLiveClassRoom({
           </div>
         </div>
 
-        {/* Right Fixed Sidebar (Teacher Video on Top + Live Chat Console on Bottom).
-            Width ramps up with viewport instead of a fixed desktop-only
-            w-80 - narrow enough on a phone to leave the main stage usable,
-            same structure the reference classroom UI (and this component's
-            own desktop layout, previously lg-and-up only) already uses. */}
+        {/* Right Classroom Sidebar — Teacher Camera, Chat, Doubt/Hand Raise,
+            Student Count, then a Settings control that hides/shows this
+            whole panel (reference classroom layout). Width ramps up with
+            viewport via Tailwind breakpoints alone (desktop/tablet/mobile
+            each get a naturally-scaled width) rather than a JS viewport
+            check, so there's no separate "mode" to keep in sync. */}
         <aside
           className={`${
             showChat
-              ? "w-[34%] min-w-[104px] max-w-[170px] xs:max-w-[210px] sm:w-64 sm:max-w-none md:w-72 lg:w-80 xl:w-88"
-              : "w-20 xs:w-24 sm:w-32"
-          } h-full shrink-0 flex flex-col bg-[#10121d] rounded-2xl border border-slate-800/80 overflow-hidden shadow-2xl transition-[width] duration-200`}
+              ? "w-[38%] min-w-[132px] max-w-[230px] xs:max-w-[250px] sm:w-64 sm:max-w-none md:w-72 lg:w-80 xl:w-88 border border-slate-800/80"
+              : "w-0 border-0"
+          } h-full shrink-0 flex flex-col bg-[#10121d] rounded-2xl overflow-hidden shadow-2xl transition-[width] duration-200`}
         >
-          {/* Pinned Teacher Video on Top */}
-          <div className="h-24 xs:h-28 sm:h-48 md:h-52 bg-black relative border-b border-slate-800 shrink-0">
+          {/* 1. Teacher Camera. <VideoStrip> is mounted exactly once, in
+              this one wrapper, and never moves in the tree — only the
+              wrapper's own CSS switches between "docked at sidebar top"
+              and "fixed-position draggable bubble over the main stage"
+              when the sidebar is hidden, so the LiveKit connection it
+              holds is never dropped by toggling the sidebar. */}
+          <div
+            onPointerDown={!showChat ? handleFloatCamPointerDown : undefined}
+            onPointerMove={!showChat ? handleFloatCamPointerMove : undefined}
+            onPointerUp={!showChat ? handleFloatCamPointerUp : undefined}
+            onPointerCancel={!showChat ? handleFloatCamPointerUp : undefined}
+            style={
+              !showChat && floatCamPos
+                ? { position: "fixed", top: floatCamPos.y, left: floatCamPos.x, width: FLOAT_CAM_SIZE, height: FLOAT_CAM_SIZE, touchAction: "none" }
+                : undefined
+            }
+            className={
+              !showChat
+                ? "z-40 rounded-full overflow-hidden border-2 border-blue-500 shadow-2xl bg-black cursor-grab active:cursor-grabbing select-none"
+                : "h-24 xs:h-28 sm:h-48 md:h-52 bg-black relative border-b border-slate-800 shrink-0"
+            }
+          >
             <VideoStrip
               whiteboardSessionId={wbSession?.id || batchScheduleId}
               variant="panel"
@@ -1187,6 +1299,17 @@ export function StudentLiveClassRoom({
               onEndCall={handleEndCall}
               classSpeaker={activeClassSpeaker}
             />
+
+            {!showChat && (
+              <button
+                type="button"
+                onClick={() => setShowChat(true)}
+                title="Show sidebar"
+                className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-slate-800 hover:bg-blue-600 text-white flex items-center justify-center border-2 border-slate-900 shadow-md transition"
+              >
+                <span className="material-symbols-outlined text-[13px]">open_in_full</span>
+              </button>
+            )}
           </div>
 
           {showChat && (
@@ -1225,7 +1348,8 @@ export function StudentLiveClassRoom({
                 </span>
               </div>
 
-              {/* Fixed Scrollable Chat Console */}
+              {/* 2. Chat — the flexible section, everything else below is a
+                  compact fixed-height row. */}
               <div className="flex-1 min-h-0 p-2 flex flex-col bg-[#0d0f18]">
                 {wbSession?.id ? (
                   <MessagesPanel
@@ -1240,70 +1364,61 @@ export function StudentLiveClassRoom({
                   </div>
                 )}
               </div>
+
+              {/* 3. Doubt + Hand Raise — one compact row instead of two
+                  separate sections. Doubt pings a quick chat-only
+                  hand-raise request; Hand Raise opens the existing
+                  audio/video participation modal below. Both still go
+                  through the same hand-raise backend as before. */}
+              <div className="shrink-0 grid grid-cols-2 gap-1.5 px-2 pt-1.5 pb-2 bg-[#0d0f18] border-t border-slate-800/60">
+                <button
+                  type="button"
+                  disabled={handRaiseBusy}
+                  onClick={() => (handRaised && participationType === "CHAT" ? handleRaiseHandClick() : submitHandRaise("CHAT"))}
+                  className={`flex items-center justify-center gap-1.5 py-2 rounded-xl text-[11px] font-bold border transition disabled:opacity-60 ${
+                    handRaised && participationType === "CHAT"
+                      ? "bg-amber-500 border-amber-300 text-slate-950"
+                      : "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-sm">contact_support</span>
+                  Ask Doubt
+                </button>
+                <button
+                  type="button"
+                  disabled={handRaiseBusy}
+                  onClick={toggleHandRaise}
+                  className={`flex items-center justify-center gap-1.5 py-2 rounded-xl text-[11px] font-bold border transition disabled:opacity-60 ${
+                    handRaised
+                      ? "bg-amber-500 border-amber-300 text-slate-950"
+                      : "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-sm">back_hand</span>
+                  {handRaised ? "Lower" : "Raise Hand"}
+                </button>
+              </div>
+
+              {/* 4. Student Count — real presence-channel membership, not a
+                  static/fake number. */}
+              <div className="shrink-0 px-3 py-1.5 border-t border-slate-800 flex items-center justify-center gap-1.5 text-xs bg-[#0a0b12]">
+                <span className="material-symbols-outlined text-sm text-emerald-400">group</span>
+                <span className="font-bold text-white">{onlineCount}</span>
+                <span className="text-slate-500">{onlineCount === 1 ? "Student" : "Students"} Online</span>
+              </div>
+
+              {/* 5. Settings / Hide Sidebar */}
+              <button
+                type="button"
+                onClick={() => setShowChat(false)}
+                className="shrink-0 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold text-slate-300 hover:text-white bg-[#0a0b12] hover:bg-slate-800 border-t border-slate-800 transition"
+              >
+                <span className="material-symbols-outlined text-sm">visibility_off</span>
+                Hide Sidebar
+              </button>
             </>
           )}
         </aside>
-
-        {/* Far-Right Vertical Icon Strip — chat / doubt / hand-raise / exit,
-            mirroring the reference classroom UI's right-edge icon column
-            (competitor screenshot the product owner asked to match "same to
-            same"). Each icon reuses an already-existing action rather than
-            adding new behavior: Chat = the sidebar toggle above; Doubt =
-            a quick chat-only hand-raise ping (no modal); Hand Raise = the
-            full audio/video participation request (opens the modal below);
-            Exit = leave back to the schedule. */}
-        <div className="w-11 sm:w-14 h-full shrink-0 flex flex-col items-center justify-between py-2 sm:py-3">
-          <div className="flex flex-col items-center gap-2.5 sm:gap-3">
-            <button
-              type="button"
-              onClick={() => setShowChat((v) => !v)}
-              className={`w-9 h-9 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition shadow-lg border ${
-                showChat
-                  ? "bg-blue-600 border-blue-400 text-white"
-                  : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
-              }`}
-              title={showChat ? "Hide chat" : "Show chat"}
-            >
-              <span className="material-symbols-outlined text-lg">chat</span>
-            </button>
-
-            <button
-              type="button"
-              disabled={handRaiseBusy}
-              onClick={() => (handRaised ? handleRaiseHandClick() : submitHandRaise("CHAT"))}
-              className={`w-9 h-9 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition shadow-lg border disabled:opacity-60 ${
-                handRaised && participationType === "CHAT"
-                  ? "bg-amber-500 border-amber-300 text-slate-950"
-                  : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
-              }`}
-              title="Ask a doubt"
-            >
-              <span className="material-symbols-outlined text-lg">contact_support</span>
-            </button>
-
-            <button
-              type="button"
-              disabled={handRaiseBusy}
-              onClick={toggleHandRaise}
-              className={`w-9 h-9 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition shadow-lg border disabled:opacity-60 ${
-                handRaised
-                  ? "bg-amber-500 border-amber-300 text-slate-950"
-                  : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
-              }`}
-              title={handRaised ? "Lower hand" : "Raise hand"}
-            >
-              <span className="material-symbols-outlined text-lg">back_hand</span>
-            </button>
-          </div>
-
-          <Link
-            href="/schedule"
-            className="w-9 h-9 sm:w-11 sm:h-11 rounded-full flex items-center justify-center bg-rose-600 hover:bg-rose-500 text-white transition shadow-lg border border-rose-400"
-            title="Leave class"
-          >
-            <span className="material-symbols-outlined text-lg">logout</span>
-          </Link>
-        </div>
       </div>
 
       {/* Student Hand Raise Participation Modal */}
