@@ -7,33 +7,73 @@ const DAILY_FREE_LIMIT = 5;
 // Uses the AI Chat UserAccess model — the "effective access" record.
 // Active + non-FREE plan + not expired = unlimited questions.
 export async function hasActiveSubscription(userId: string): Promise<boolean> {
+  // 1. Uses the AI Chat UserAccess model — the "effective access" record.
   const access = await prisma.userAccess.findUnique({ where: { userId } });
-  if (!access) return false;
-  if (access.plan === "FREE") return false;
-  if (access.status !== "ACTIVE") return false;
-  if (access.expiresAt && access.expiresAt < new Date()) return false;
-  return true;
+  if (access && access.plan !== "FREE" && access.status === "ACTIVE") {
+    if (!access.expiresAt || access.expiresAt >= new Date()) {
+      return true;
+    }
+  }
+
+  // 2. Check main platform Student Subscription
+  try {
+    const student = await prisma.student.findUnique({
+      where: { userId },
+      include: { subscription: true },
+    });
+    if (student?.subscription) {
+      const sub = student.subscription;
+      if (sub.status === "ACTIVE" || sub.status === "TRIAL") {
+        if (sub.currentPeriodEnd > new Date()) return true;
+      }
+    }
+  } catch (err) {
+    console.warn("[Access] Student subscription check warning:", err);
+  }
+
+  // 3. Staff and Admins always have unlimited access
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: { select: { name: true } } },
+    });
+    if (
+      user?.role?.name &&
+      ["ADMIN", "SUPER_ADMIN", "SUB_ADMIN", "TEACHER", "FOUNDER"].includes(user.role.name)
+    ) {
+      return true;
+    }
+  } catch (err) {
+    console.warn("[Access] User role check warning:", err);
+  }
+
+  return false;
 }
 
-// Counts today's QUESTION_ASKED events for a user using the AI Chat UsageEvent model.
-export async function getDailyQuestionsUsed(userId: string): Promise<number> {
+// Counts today's events for a user using the AI Chat UsageEvent model.
+export async function getDailyQuestionsUsed(
+  userId: string,
+  event: string = "QUESTION_ASKED"
+): Promise<number> {
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
 
   return prisma.usageEvent.count({
     where: {
       userId,
-      event: "QUESTION_ASKED",
+      event,
       createdAt: { gte: startOfToday },
     },
   });
 }
 
-// Call this AFTER successfully answering a question (not before), so failed
-// answers don't eat into the user's daily quota.
-export async function recordQuestionUsage(userId: string) {
+// Call this AFTER successfully fulfilling a request, specifying the feature event
+export async function recordQuestionUsage(
+  userId: string,
+  event: string = "QUESTION_ASKED"
+) {
   await prisma.usageEvent.create({
-    data: { userId, event: "QUESTION_ASKED" },
+    data: { userId, event },
   });
 }
 

@@ -427,7 +427,7 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
   );
 
   const runQuizRequest = useCallback(
-    async (url: string, body: Record<string, unknown>) => {
+    async (url: string, body: Record<string, unknown>, originStage: QuizStage = "modeSelect") => {
       setStage("loading");
       setError(null);
       try {
@@ -445,7 +445,7 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
         };
         if (!response.ok || !data.questions || !data.entries) {
           setError(data.error ?? "Could not generate the quiz. Please try again.");
-          setStage("modeSelect");
+          setStage(originStage);
           return;
         }
         setQuestions(data.questions);
@@ -492,7 +492,7 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
         setStage("active");
       } catch {
         setError("Network error. Please try again.");
-        setStage("modeSelect");
+        setStage(originStage);
       }
     },
     []
@@ -503,13 +503,17 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
     setQuizId(generateQuizId());
     setActiveLevel(subjectLevel);
     setActiveChapter(undefined);
-    void runQuizRequest("/api/ai-chat/quiz", {
-      subject,
-      language: quizLanguage,
-      level: subjectLevel,
-      format: subjectFormat || undefined,
-      sourceModule: "NEET_QUIZ",
-    });
+    void runQuizRequest(
+      "/api/ai-chat/quiz",
+      {
+        subject,
+        language: quizLanguage,
+        level: subjectLevel,
+        format: subjectFormat || undefined,
+        sourceModule: "NEET_QUIZ",
+      },
+      "subjectForm"
+    );
   }, [quizLanguage, runQuizRequest, subject, subjectLevel, subjectFormat]);
   const startTopicQuiz = useCallback(() => {
     if (!topicText.trim()) {
@@ -524,15 +528,19 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
     setQuizId(generateQuizId());
     setActiveLevel(topicLevel);
     setActiveChapter(topicText.trim());
-    void runQuizRequest("/api/ai-chat/quiz", {
-      subject: topicSubject,
-      language: topicLanguage,
-      topic: finalTopic,
-      questionCount: topicQuestionCount,
-      level: topicLevel,
-      format: topicFormat || undefined,
-      sourceModule: "TOPIC_WISE_QUIZ",
-    });
+    void runQuizRequest(
+      "/api/ai-chat/quiz",
+      {
+        subject: topicSubject,
+        language: topicLanguage,
+        topic: finalTopic,
+        questionCount: topicQuestionCount,
+        level: topicLevel,
+        format: topicFormat || undefined,
+        sourceModule: "TOPIC_WISE_QUIZ",
+      },
+      "topicForm"
+    );
   }, [
     runQuizRequest,
     topicLanguage,
@@ -550,12 +558,16 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
     setQuizId(generateQuizId());
     setActiveLevel("Hard");
     setActiveChapter(undefined);
-    void runQuizRequest("/api/ai-chat/quiz/pyq", {
-      subject: pyqSubject,
-      years: pyqYear === "all" ? undefined : [Number(pyqYear)],
-      questionCount: pyqQuestionCount,
-      sourceModule: "PYQ_PRACTICE",
-    });
+    void runQuizRequest(
+      "/api/ai-chat/quiz/pyq",
+      {
+        subject: pyqSubject,
+        years: pyqYear === "all" ? undefined : [Number(pyqYear)],
+        questionCount: pyqQuestionCount,
+        sourceModule: "PYQ_PRACTICE",
+      },
+      "pyqForm"
+    );
   }, [runQuizRequest, pyqSubject, pyqYear, pyqQuestionCount]);
 
   const startNcertQuiz = useCallback(() => {
@@ -569,15 +581,19 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
     setQuizId(generateQuizId());
     setActiveLevel(ncertLevel);
     setActiveChapter(ncertChapter.trim());
-    void runQuizRequest("/api/ai-chat/quiz", {
-      subject: ncertSubject,
-      language: ncertLanguage,
-      topic: ncertChapter.trim(),
-      questionCount: ncertQuestionCount,
-      level: ncertLevel,
-      format: ncertFormat || undefined,
-      sourceModule: "NCERT_QUIZ",
-    });
+    void runQuizRequest(
+      "/api/ai-chat/quiz",
+      {
+        subject: ncertSubject,
+        language: ncertLanguage,
+        topic: ncertChapter.trim(),
+        questionCount: ncertQuestionCount,
+        level: ncertLevel,
+        format: ncertFormat || undefined,
+        sourceModule: "NCERT_QUIZ",
+      },
+      "ncertForm"
+    );
   }, [
     runQuizRequest,
     ncertSubject,
@@ -1213,7 +1229,10 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
             <div className="space-y-3">
               <button
                 type="button"
-                onClick={() => setStage("subjectForm")}
+                onClick={() => {
+                  setError(null);
+                  setStage("subjectForm");
+                }}
                 className="flex w-full items-center gap-4 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 p-4 text-left shadow-md transition hover:brightness-105 active:scale-[0.99]"
               >
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/20 text-white">
@@ -1231,7 +1250,10 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
 
               <button
                 type="button"
-                onClick={() => setStage("topicForm")}
+                onClick={() => {
+                  setError(null);
+                  setStage("topicForm");
+                }}
                 className="flex w-full items-center gap-4 rounded-2xl bg-blue-600 p-4 text-left shadow-md transition hover:brightness-105 active:scale-[0.99]"
               >
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/20 text-white">
@@ -1249,7 +1271,10 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
 
               <button
                 type="button"
-                onClick={() => setStage("pyqForm")}
+                onClick={() => {
+                  setError(null);
+                  setStage("pyqForm");
+                }}
                 className="flex w-full items-center gap-4 rounded-2xl bg-blue-600 p-4 text-left shadow-md transition hover:brightness-105 active:scale-[0.99]"
               >
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/20 text-white">
@@ -1269,6 +1294,7 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
               <button
                 type="button"
                 onClick={() => {
+                  setError(null);
                   setNcertChapter(NCERT_CHAPTERS[ncertSubject]?.[0] || "");
                   setStage("ncertForm");
                 }}
@@ -1294,7 +1320,10 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
           <div className="mx-auto w-full max-w-md">
             <button
               type="button"
-              onClick={() => setStage("modeSelect")}
+              onClick={() => {
+                setError(null);
+                setStage("modeSelect");
+              }}
               className="mb-4 flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-atomic-orange hover:bg-orange-50 hover:text-atomic-orange active:scale-95 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-orange-950/20"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
@@ -1374,6 +1403,12 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
                 <li>Biology: 60s/question, Physics &amp; Chemistry: 90s/question</li>
               </ul>
             </div>
+            {error && (
+              <p className="mb-4 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600 dark:border-red-900 dark:bg-red-900/20 dark:text-red-300">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                {error}
+              </p>
+            )}
             <button
               type="button"
               onClick={startSubjectQuiz}
@@ -1388,7 +1423,10 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
           <div className="mx-auto w-full max-w-md">
             <button
               type="button"
-              onClick={() => setStage("modeSelect")}
+              onClick={() => {
+                setError(null);
+                setStage("modeSelect");
+              }}
               className="mb-4 flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-atomic-orange"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
@@ -1521,7 +1559,10 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
           <div className="mx-auto w-full max-w-md">
             <button
               type="button"
-              onClick={() => setStage("modeSelect")}
+              onClick={() => {
+                setError(null);
+                setStage("modeSelect");
+              }}
               className="mb-4 flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-atomic-orange"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
@@ -1597,7 +1638,10 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
           <div className="mx-auto w-full max-w-lg">
             <button
               type="button"
-              onClick={() => setStage("modeSelect")}
+              onClick={() => {
+                setError(null);
+                setStage("modeSelect");
+              }}
               className="mb-4 flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 active:scale-95 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
@@ -2016,7 +2060,10 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
               </button>
               <button
                 type="button"
-                onClick={() => setStage("modeSelect")}
+                onClick={() => {
+                  setError(null);
+                  setStage("modeSelect");
+                }}
                 className="flex-1 rounded-xl bg-atomic-orange px-4 py-3 text-sm font-semibold text-white hover:bg-atomic-orange-dark"
               >
                 New quiz
@@ -2099,7 +2146,10 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
             </div>
             <button
               type="button"
-              onClick={() => setStage("modeSelect")}
+              onClick={() => {
+                setError(null);
+                setStage("modeSelect");
+              }}
               className="w-full rounded-xl bg-atomic-orange px-4 py-3 text-sm font-semibold text-white hover:bg-atomic-orange-dark"
             >
               New quiz
