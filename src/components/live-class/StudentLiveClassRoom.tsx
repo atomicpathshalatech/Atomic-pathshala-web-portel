@@ -259,7 +259,6 @@ export function StudentLiveClassRoom({
     }
   }, [quiz?.status]);
 
-  const [activeMobileTab, setActiveMobileTab] = useState<"chat" | "quiz" | "info">("chat");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showChat, setShowChat] = useState(true);
 
@@ -1417,199 +1416,23 @@ export function StudentLiveClassRoom({
             effectiveOrientation === "landscape" ? "w-2/5" : "w-full"
           } min-h-0 flex flex-col bg-[#10121d] overflow-hidden`}
         >
-          {/* Tab Selection Bar */}
-          <div className="flex items-center justify-around bg-[#0a0b12] border-b border-slate-800 shrink-0 px-2">
-            <button
-              type="button"
-              onClick={() => setActiveMobileTab("chat")}
-              className={`flex-1 py-2.5 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border-b-2 ${
-                activeMobileTab === "chat"
-                  ? "text-blue-400 border-blue-500 bg-blue-950/20"
-                  : "text-slate-400 border-transparent hover:text-slate-200"
-              }`}
-            >
-              <span className="material-symbols-outlined text-base">chat</span>
-              <span>Live Chat</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveMobileTab("quiz")}
-              className={`flex-1 py-2.5 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border-b-2 relative ${
-                activeMobileTab === "quiz"
-                  ? "text-blue-400 border-blue-500 bg-blue-950/20"
-                  : "text-slate-400 border-transparent hover:text-slate-200"
-              }`}
-            >
-              <span className="material-symbols-outlined text-base">quiz</span>
-              <span>Quiz &amp; Polls</span>
-              {quiz && quiz.status === "ACTIVE" && (
-                <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping absolute top-2 right-3" />
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveMobileTab("info")}
-              className={`flex-1 py-2.5 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border-b-2 ${
-                activeMobileTab === "info"
-                  ? "text-blue-400 border-blue-500 bg-blue-950/20"
-                  : "text-slate-400 border-transparent hover:text-slate-200"
-              }`}
-            >
-              <span className="material-symbols-outlined text-base">info</span>
-              <span>Class Info</span>
-            </button>
-          </div>
-
-          {/* Active Tab Body */}
-          <div className="flex-1 min-h-0 overflow-y-auto">
-            {activeMobileTab === "chat" && (
-              <div className="h-full p-2">
-                {wbSession?.id ? (
-                  <MessagesPanel
-                    whiteboardSessionId={wbSession.id}
-                    currentUserId={currentUserId}
-                    role="STUDENT"
-                    theme={isThemeDark ? "dark" : "light"}
-                  />
-                ) : (
-                  <div className="h-full flex items-center justify-center text-xs text-slate-500">
-                    Connecting live chat...
-                  </div>
-                )}
-              </div>
-            )}
-
-            {activeMobileTab === "quiz" && (
-              <div className="p-4 space-y-4">
-                {quiz ? (
-                  <div className="bg-[#13172b] border-2 border-blue-500 rounded-2xl p-4 shadow-2xl space-y-3">
-                    <div className="flex items-center justify-between pb-1 border-b border-blue-900/60">
-                      <h3 className="text-sm font-black text-white flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-ping" />
-                        {quiz.questionText || "Live Class Quiz"}
-                      </h3>
-                      {quiz.status === "ACTIVE" ? (
-                        <span className="text-xs font-mono font-black text-slate-950 bg-amber-400 border border-amber-300 px-2.5 py-0.5 rounded-full shadow">
-                          {remainingSec}s
-                        </span>
-                      ) : (
-                        <span className="text-xs font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-500/50 px-2.5 py-0.5 rounded-full">
-                          {quiz.status === "REVEALED" ? "Results Revealed" : "Closed"}
-                        </span>
-                      )}
-                    </div>
-                    {quizError && <p className="text-xs text-rose-400 font-medium">{quizError}</p>}
-                    {quiz.status === "REVEALED" && (
-                      <div className="animate-in fade-in slide-in-from-top-1 duration-200">
-                        {mySelection === quiz.correctOption ? (
-                          <div className="p-3 rounded-xl bg-emerald-500/20 border-2 border-emerald-500/60 text-emerald-300 text-xs font-bold flex items-center gap-2.5">
-                            <span className="text-xl">🎉</span>
-                            <div>
-                              <p className="font-extrabold text-white text-sm">Congratulations! Your answer is correct.</p>
-                              <p className="text-[11px] text-emerald-300/90 font-medium">Option {quiz.correctOption} is the correct answer.</p>
-                            </div>
-                          </div>
-                        ) : mySelection ? (
-                          <div className="p-3 rounded-xl bg-rose-500/20 border-2 border-rose-500/60 text-rose-300 text-xs font-bold flex items-center gap-2.5">
-                            <span className="text-xl">❌</span>
-                            <div>
-                              <p className="font-extrabold text-white text-sm">Your answer is incorrect.</p>
-                              <p className="text-[11px] text-rose-300/90 font-medium">The correct answer is Option {quiz.correctOption}.</p>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="p-3 rounded-xl bg-blue-500/20 border-2 border-blue-500/60 text-blue-300 text-xs font-bold flex items-center gap-2.5">
-                            <span className="text-xl">ℹ️</span>
-                            <div>
-                              <p className="font-extrabold text-white text-sm">Poll Ended</p>
-                              <p className="text-[11px] text-blue-300/90 font-medium">The correct answer is Option {quiz.correctOption}.</p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    <div className="grid grid-cols-1 gap-2.5">
-                      {quiz.options.map((o) => {
-                        const selected = mySelection === o.key;
-                        const revealed = quiz.status === "REVEALED";
-                        const isCorrect = revealed && quiz.correctOption === o.key;
-                        const isWrong = revealed && selected && quiz.correctOption !== o.key;
-                        return (
-                          <button
-                            key={o.key}
-                            type="button"
-                            disabled={Boolean(mySelection) || quiz.status !== "ACTIVE" || submittingAnswer}
-                            onClick={() => submitAnswer(o.key)}
-                            className={`text-left px-4 py-3 rounded-xl border-2 text-xs font-bold transition active:scale-[0.98] touch-manipulation cursor-pointer shadow-md ${
-                              isCorrect
-                                ? "border-emerald-400 bg-emerald-600 text-white shadow-emerald-500/50 ring-2 ring-emerald-300"
-                                : isWrong
-                                ? "border-rose-500 bg-rose-950/80 text-rose-200"
-                                : selected
-                                ? "border-white bg-blue-600 text-white shadow-blue-500/50 ring-2 ring-blue-400"
-                                : "bg-[#1a2038] hover:bg-[#252d4e] border-[#333d6b] text-white"
-                            } disabled:cursor-default`}
-                          >
-                            <span className={`font-mono font-black mr-2 text-sm pointer-events-none ${selected || isCorrect ? "text-white" : "text-blue-400"}`}>{o.key}.</span>
-                            <span className="pointer-events-none text-white">{o.label}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center py-12 text-slate-500 space-y-2">
-                    <span className="material-symbols-outlined text-3xl">hourglass_empty</span>
-                    <p className="text-xs font-semibold">No active quiz or poll at this moment.</p>
-                    <p className="text-[11px]">When the teacher launches a live poll, it will appear here instantly.</p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {activeMobileTab === "info" && (
-              <div className="p-4 space-y-4 text-xs">
-                {/* Full Teacher Video Preview in Info */}
-                {!isYouTube && (
-                  <div className="space-y-1.5">
-                    <p className="font-bold text-slate-400 text-[11px] uppercase tracking-wider">Teacher Video Stream</p>
-                    <div className="w-full aspect-video rounded-xl overflow-hidden bg-[#0a0b12] border border-slate-800 shadow-md flex flex-col items-center justify-center gap-2">
-                      <div className="w-10 h-10 rounded-2xl bg-blue-500/20 border border-blue-500/40 text-blue-400 flex items-center justify-center">
-                        <span className="material-symbols-outlined text-xl">videocam</span>
-                      </div>
-                      <p className="text-xs font-bold text-white">{teacherName || "Instructor"}</p>
-                      <span className="text-[10px] text-blue-300 flex items-center gap-1.5">
-                        <span className={`w-1.5 h-1.5 rounded-full ${isLive ? "bg-rose-500 animate-ping" : "bg-amber-400 animate-pulse"}`} />
-                        {isLive ? "Live Teaching" : "Awaiting Class"}
-                      </span>
-                    </div>
-                  </div>
-                )}
-
-                <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-3.5 space-y-2">
-                  <div className="flex justify-between items-center py-1 border-b border-slate-800">
-                    <span className="text-slate-400">Batch:</span>
-                    <span className="font-bold text-white truncate max-w-[200px]">{batchName}</span>
-                  </div>
-                  <div className="flex justify-between items-center py-1 border-b border-slate-800">
-                    <span className="text-slate-400">Topic:</span>
-                    <span className="font-bold text-white truncate max-w-[200px]">{scheduleTitle}</span>
-                  </div>
-                  {teacherName && (
-                    <div className="flex justify-between items-center py-1 border-b border-slate-800">
-                      <span className="text-slate-400">Teacher:</span>
-                      <span className="font-bold text-blue-300">{teacherName}</span>
-                    </div>
-                  )}
-                  {wbSession?.presentationName && (
-                    <div className="flex justify-between items-center py-1">
-                      <span className="text-slate-400">Material:</span>
-                      <span className="font-mono text-[11px] text-blue-400">{wbSession.presentationName}</span>
-                    </div>
-                  )}
-                </div>
+          {/* Live Chat — the "Quiz & Polls" and "Class Info" tabs that used
+              to live here were removed: the quiz now shows directly on the
+              main stage (see the overlay above) instead of a separate tab
+              a student had to remember to open, and Class Info added no
+              information a student didn't already see in the header. Live
+              Chat is the only thing this bottom panel needs now. */}
+          <div className="flex-1 min-h-0 overflow-y-auto p-2">
+            {wbSession?.id ? (
+              <MessagesPanel
+                whiteboardSessionId={wbSession.id}
+                currentUserId={currentUserId}
+                role="STUDENT"
+                theme={isThemeDark ? "dark" : "light"}
+              />
+            ) : (
+              <div className="h-full flex items-center justify-center text-xs text-slate-500">
+                Connecting live chat...
               </div>
             )}
           </div>

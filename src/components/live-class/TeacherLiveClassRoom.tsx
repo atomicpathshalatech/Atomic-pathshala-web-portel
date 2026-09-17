@@ -31,7 +31,7 @@ import { TeacherPostClassModal } from "@/components/live-class/TeacherPostClassM
 import { SlideTemplatesModal } from "@/components/live-class/SlideTemplatesModal";
 import { PageThumbnail } from "@/components/live-class/PageThumbnail";
 import { GRACE_PERIOD_MINUTES, END_WARNING_MINUTES } from "@/lib/whiteboard/constants";
-import { playHandRaiseChime, playMessageChime, playCallConnectedChime, unlockAudioForNotifications } from "@/lib/live-class/live-sound-effects";
+import { playHandRaiseChime, playCallConnectedChime, unlockAudioForNotifications } from "@/lib/live-class/live-sound-effects";
 import { extractYouTubeVideoId } from "@/lib/live-class/youtube";
 
 type WhiteboardPage = { id: string; pageNumber: number; objects: StrokeObject[]; background: string };
@@ -772,8 +772,11 @@ export function TeacherLiveClassRoom({
     presence.bind("pusher:member_added", () => setStudentCount((c) => c + 1));
     presence.bind("pusher:member_removed", () => setStudentCount((c) => Math.max(0, c - 1)));
     presence.bind(WB_EVENTS.MESSAGE_SENT, () => {
+      // No sound here on purpose — the product owner found a chime on
+      // every chat message too disruptive during a live class. Sound is
+      // reserved for hand-raise and call-connect only (playHandRaiseChime/
+      // playCallConnectedChime elsewhere in this file).
       if (rightTabRef.current !== "messages") setUnreadMessages((c) => c + 1);
-      playMessageChime();
     });
     presence.bind(WB_EVENTS.SESSION_EXTENDED, (data: { addedMinutes: number; newScheduledEnd: string; totalExtendedMinutes: number }) => {
       setWbSession((prev) =>

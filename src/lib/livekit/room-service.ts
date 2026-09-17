@@ -27,6 +27,46 @@ function getRoomServiceClient(): RoomServiceClient {
 }
 
 /**
+ * Upgrades (or downgrades) an ALREADY-CONNECTED participant's publish
+ * permission in real time via LiveKit's server API.
+ *
+ * This is the actual fix for "approved student's mic/camera never turn
+ * on": a hand-raise approval used to only mint a new canPublish:true JWT
+ * (speakerToken) and hand it to the client as a new `token` prop on
+ * <LiveKitRoom>. That looks like it should reconnect with the upgraded
+ * grant, but livekit-client's Room.connect() short-circuits immediately
+ * when the room is already Connected (see node_modules/livekit-client's
+ * connect() - `if (this.state === ConnectionState.Connected) return`) -
+ * so the new token is silently never sent, the student's connection keeps
+ * its original view-only grant, and setMicrophoneEnabled(true)/
+ * setCameraEnabled(true) are then called against a connection LiveKit's
+ * own server never actually authorized to publish.
+ *
+ * updateParticipant() pushes the permission change to the SAME live
+ * connection over LiveKit's existing signaling channel - no reconnect,
+ * no flicker, and the server-side grant is what actually gates publish,
+ * so this is the correct fix rather than trying to force a client
+ * reconnect. Mirrors the exact grant shape createApprovedSpeakerToken()
+ * already issues (canPublish: true, canSubscribe: true, canPublishData:
+ * false) so the live permission matches what the token would have
+ * granted on a fresh connection.
+ */
+export async function setParticipantPublishPermission(
+  roomName: string,
+  identity: string,
+  canPublish: boolean
+): Promise<void> {
+  try {
+    const client = getRoomServiceClient();
+    await client.updateParticipant(roomName, identity, {
+      permission: { canPublish, canSubscribe: true, canPublishData: false },
+    });
+  } catch (err) {
+    console.error(`[room-service] setParticipantPublishPermission(${canPublish}) failed for ${identity} in ${roomName}:`, err);
+  }
+}
+
+/**
  * Force-mutes every track a participant currently has published (audio
  * and/or video). Never throws — callers use this as a best-effort backstop
  * after the DB/Pusher disconnect has already completed, so a LiveKit-side

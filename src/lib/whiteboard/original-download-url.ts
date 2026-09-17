@@ -30,7 +30,12 @@ export async function resolveOriginalDownloadUrl(
   ) {
     return createPresignedDownloadUrl({
       key: urlOrKey,
-      expiresInSeconds: 900,
+      // 1 hour (was 900s/15min) — a student opening the post-class modal
+      // and browsing before deciding to download was hitting a genuine
+      // R2 "ExpiredRequest" error on the presigned URL; matches the
+      // annotated-notes PDF's own 3600s expiry (assets/route.ts) for
+      // consistency.
+      expiresInSeconds: 3600,
       contentDisposition: `attachment; filename="${encodeURIComponent(fallbackFilename)}"`,
     });
   }
@@ -44,7 +49,12 @@ export async function resolveOriginalDownloadUrl(
     if (fileAsset?.storageKey) {
       return createPresignedDownloadUrl({
         key: fileAsset.storageKey,
-        expiresInSeconds: 900,
+        // 1 hour (was 900s/15min) — a student opening the post-class modal
+      // and browsing before deciding to download was hitting a genuine
+      // R2 "ExpiredRequest" error on the presigned URL; matches the
+      // annotated-notes PDF's own 3600s expiry (assets/route.ts) for
+      // consistency.
+      expiresInSeconds: 3600,
         contentDisposition: `attachment; filename="${encodeURIComponent(
           fallbackFilename || fileAsset.originalFilename
         )}"`,
@@ -59,7 +69,12 @@ export async function resolveOriginalDownloadUrl(
     if (pathnameKey && (pathnameKey.startsWith("modules/") || pathnameKey.startsWith("documents/") || pathnameKey.startsWith("classes/"))) {
       return createPresignedDownloadUrl({
         key: pathnameKey,
-        expiresInSeconds: 900,
+        // 1 hour (was 900s/15min) — a student opening the post-class modal
+      // and browsing before deciding to download was hitting a genuine
+      // R2 "ExpiredRequest" error on the presigned URL; matches the
+      // annotated-notes PDF's own 3600s expiry (assets/route.ts) for
+      // consistency.
+      expiresInSeconds: 3600,
         contentDisposition: `attachment; filename="${encodeURIComponent(fallbackFilename)}"`,
       });
     }

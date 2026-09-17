@@ -8,6 +8,7 @@ import { resolveWhiteboardAccess } from "@/lib/whiteboard/access";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { pusherServer, sessionChannel, WB_EVENTS } from "@/lib/realtime/pusher-server";
 import { createApprovedSpeakerToken, videoRoomName } from "@/lib/livekit/server";
+import { setParticipantPublishPermission } from "@/lib/livekit/room-service";
 
 const connectSchema = z.object({
   studentId: z.string().min(1),
@@ -71,6 +72,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     } catch (err) {
       console.warn("[teacher-connect] LiveKit token generation warning:", err);
     }
+
+    // Same fix as the hand-raise approval route: the student is almost
+    // always already connected as a subscribe-only viewer by this point,
+    // and handing them a new token alone does not upgrade that live
+    // connection (livekit-client no-ops a reconnect once already
+    // Connected). Push the permission upgrade directly.
+    await setParticipantPublishPermission(videoRoomName(params.id), targetStudent.user.id, true);
 
     const now = new Date();
     const connection = await prisma.teacherStudentConnection.upsert({
