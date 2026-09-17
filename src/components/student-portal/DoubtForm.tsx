@@ -15,6 +15,8 @@ export function DoubtForm() {
   const [submitting, setSubmitting] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [lastCreatedDoubtId, setLastCreatedDoubtId] = useState<string | null>(null);
+  const [deletingLast, setDeletingLast] = useState(false);
 
   const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
@@ -74,15 +76,41 @@ export function DoubtForm() {
         setServerError(body.error ?? "Could not submit your doubt. Please try again.");
         return;
       }
+      const createdId = body.data?.doubt?.id || null;
+      setLastCreatedDoubtId(createdId);
       reset();
       setAttachmentUrl(null);
       setSuccess(true);
       router.refresh();
-      setTimeout(() => setSuccess(false), 3000);
+      setTimeout(() => {
+        setSuccess(false);
+      }, 10000);
     } catch {
       setServerError("Something went wrong. Please check your connection and try again.");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleDeleteLast() {
+    if (!lastCreatedDoubtId) return;
+    setDeletingLast(true);
+    try {
+      const res = await fetch(`/api/doubts/${lastCreatedDoubtId}`, {
+        method: "DELETE",
+      });
+      const body = await res.json();
+      if (!res.ok || !body.success) {
+        setServerError(body.error ?? "Could not delete doubt.");
+        return;
+      }
+      setLastCreatedDoubtId(null);
+      setSuccess(false);
+      router.refresh();
+    } catch {
+      setServerError("Something went wrong. Please check your connection and try again.");
+    } finally {
+      setDeletingLast(false);
     }
   }
 
@@ -91,10 +119,27 @@ export function DoubtForm() {
       <h2 className="font-headline-md text-headline-md text-on-surface">Ask a Doubt</h2>
 
       {success && (
-        <div className="bg-tertiary-container/30 border border-tertiary/20 rounded-xl px-4 py-3">
-          <p className="text-label-sm font-label-sm text-tertiary">
-            Submitted! A subject expert will get back to you soon.
-          </p>
+        <div className="bg-tertiary-container/30 border border-tertiary/20 rounded-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
+          <div>
+            <p className="text-label-sm font-semibold text-tertiary">
+              Doubt submitted successfully!
+            </p>
+            <p className="text-xs text-on-surface-variant">
+              A subject expert will get back to you soon.
+            </p>
+          </div>
+          {lastCreatedDoubtId && (
+            <button
+              type="button"
+              onClick={handleDeleteLast}
+              disabled={deletingLast}
+              className="text-xs font-semibold text-error hover:bg-error/10 border border-error/20 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 shrink-0 self-start sm:self-auto disabled:opacity-50"
+              title="Sent by mistake? Click to delete this doubt immediately."
+            >
+              <span className="material-symbols-outlined text-sm">delete</span>
+              {deletingLast ? "Deleting..." : "Sent by mistake? Delete"}
+            </button>
+          )}
         </div>
       )}
       {serverError && (

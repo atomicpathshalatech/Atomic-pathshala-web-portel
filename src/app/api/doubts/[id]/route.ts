@@ -30,3 +30,34 @@ export async function GET(_request: Request, { params }: { params: { id: string 
     return handleApiError(error);
   }
 }
+
+/**
+ * Delete a student's own doubt — allows students to delete a doubt
+ * if submitted by mistake.
+ */
+export async function DELETE(_request: Request, { params }: { params: { id: string } }) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) throw new UnauthorizedError();
+
+    const student = await prisma.student.findUnique({ where: { userId: session.user.id } });
+    if (!student) return apiError("No student profile found for this account.", 404);
+
+    const doubt = await prisma.doubt.findUnique({
+      where: { id: params.id },
+    });
+    if (!doubt) return apiError("Doubt not found.", 404);
+    if (doubt.studentId !== student.id) {
+      throw new ForbiddenError("This doubt doesn't belong to your account.");
+    }
+
+    await prisma.doubt.delete({
+      where: { id: params.id },
+    });
+
+    return apiSuccess({ message: "Doubt deleted successfully.", id: params.id });
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+

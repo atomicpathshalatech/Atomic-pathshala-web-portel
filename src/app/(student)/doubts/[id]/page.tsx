@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { requireStudentSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { VoicePlayer } from "@/components/doubt/VoicePlayer";
+import { DeleteDoubtButton } from "@/components/student-portal/DeleteDoubtButton";
 
 export const metadata: Metadata = {
   title: "Doubt Detail",
@@ -32,23 +33,27 @@ export default async function DoubtDetailPage({ params }: { params: { id: string
 
   return (
     <div className="space-y-stack-lg max-w-3xl">
-      <div className="flex items-center gap-3">
-        <Link
-          href="/doubts"
-          className="p-2 rounded-full border border-outline-variant/40 bg-surface-container-lowest hover:bg-surface-container-high transition-colors"
-        >
-          <span className="material-symbols-outlined">arrow_back</span>
-        </Link>
-        <div className="flex items-center gap-2">
-          {doubt.subject && <span className="text-label-sm text-on-surface-variant">{doubt.subject}</span>}
-          <span
-            className={`text-label-sm font-semibold px-2.5 py-1 rounded-full ${
-              STATUS_CLASS[doubt.status] ?? "bg-surface-container text-on-surface-variant"
-            }`}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <Link
+            href="/doubts"
+            className="p-2 rounded-full border border-outline-variant/40 bg-surface-container-lowest hover:bg-surface-container-high transition-colors"
           >
-            {STATUS_LABEL[doubt.status] ?? doubt.status}
-          </span>
+            <span className="material-symbols-outlined">arrow_back</span>
+          </Link>
+          <div className="flex items-center gap-2">
+            {doubt.subject && <span className="text-label-sm text-on-surface-variant">{doubt.subject}</span>}
+            <span
+              className={`text-label-sm font-semibold px-2.5 py-1 rounded-full ${
+                STATUS_CLASS[doubt.status] ?? "bg-surface-container text-on-surface-variant"
+              }`}
+            >
+              {STATUS_LABEL[doubt.status] ?? doubt.status}
+            </span>
+          </div>
         </div>
+
+        <DeleteDoubtButton doubtId={doubt.id} />
       </div>
 
       <div className="glass-card rounded-2xl p-5 space-y-3">
