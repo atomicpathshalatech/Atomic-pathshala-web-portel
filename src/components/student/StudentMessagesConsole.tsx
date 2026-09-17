@@ -141,6 +141,7 @@ export function StudentMessagesConsole({
                   body: incomingMsg.body,
                   createdAt: incomingMsg.createdAt,
                   senderUserId: incomingMsg.senderUserId,
+                  senderName: incomingMsg.senderName || incomingMsg.senderRole || "User",
                   senderRole: incomingMsg.senderRole,
                   isUnread: false,
                 },

@@ -14,7 +14,8 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const type = searchParams.get("type"); // "TEACHER" | "STUDENT" | "ADMIN"
+    const rawType = searchParams.get("type") || searchParams.get("role");
+    const type = rawType ? rawType.toUpperCase() : null; // "TEACHER" | "STUDENT" | "ADMIN"
     const query = (searchParams.get("q") || "").trim().toLowerCase();
 
     const userRole = (session.user as any).role || "STUDENT";

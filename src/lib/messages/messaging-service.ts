@@ -12,17 +12,26 @@ export interface ParticipantInfo {
   phone?: string | null;
   studentId?: string;
   teacherId?: string;
+  class?: string | null;
+  enrollmentNumber?: string | null;
+  department?: string | null;
 }
 
 export interface ConversationSummary {
   id: string;
   type: string; // "TEACHER_STUDENT" | "STUDENT_ADMIN" | "TEACHER_ADMIN"
+  title: string; // e.g. "Rahul (Student) ↔ Firoz Sir (Teacher)"
+  subtitle: string; // e.g. "Direct Academic Discussion"
+  categoryLabel: string; // "Teacher ↔ Student", "Student Helpdesk Query", "Staff Direct"
   otherParticipant: ParticipantInfo;
+  primaryParticipant: ParticipantInfo;
+  secondaryParticipant?: ParticipantInfo | null;
   lastMessage: {
     id: string;
     body: string;
     createdAt: string;
     senderUserId: string;
+    senderName?: string;
     senderRole: string;
     isUnread: boolean;
   } | null;
@@ -30,15 +39,29 @@ export interface ConversationSummary {
   updatedAt: string;
   student?: {
     id: string;
+    userId: string;
     name: string;
     photoUrl: string | null;
     email: string;
+    phone?: string | null;
+    class?: string | null;
+    enrollmentNumber?: string | null;
   } | null;
   teacher?: {
     id: string;
+    userId: string;
     name: string;
     photoUrl: string | null;
+    email?: string | null;
+    phone?: string | null;
     department?: string | null;
+  } | null;
+  adminUser?: {
+    id: string;
+    name: string;
+    email: string;
+    photoUrl: string | null;
+    role?: string;
   } | null;
 }
 
@@ -73,13 +96,17 @@ export async function getConversationsForUser(
 
   if (isAdmin) {
     // Admin system-level access
-    if (options?.tab === "admin_desk") {
-      whereClause = {
-        type: { in: ["STUDENT_ADMIN", "TEACHER_ADMIN"] },
-      };
-    } else if (options?.tab === "teacher_directs") {
+    if (options?.tab === "teacher_directs" || options?.tab === "teacher_student") {
       whereClause = {
         type: "TEACHER_STUDENT",
+      };
+    } else if (options?.tab === "admin_desk" || options?.tab === "helpdesk" || options?.tab === "student_admin") {
+      whereClause = {
+        type: "STUDENT_ADMIN",
+      };
+    } else if (options?.tab === "staff_direct" || options?.tab === "teacher_admin") {
+      whereClause = {
+        type: "TEACHER_ADMIN",
       };
     } else {
       // All conversations across the platform
@@ -112,7 +139,10 @@ export async function getConversationsForUser(
     where: whereClause,
     include: {
       student: {
-        include: {
+        select: {
+          id: true,
+          class: true,
+          enrollmentNumber: true,
           user: {
             select: {
               id: true,
@@ -125,7 +155,9 @@ export async function getConversationsForUser(
         },
       },
       teacher: {
-        include: {
+        select: {
+          id: true,
+          department: true,
           user: {
             select: {
               id: true,
@@ -174,105 +206,153 @@ export async function getConversationsForUser(
     unreadCountMap[msg.conversationId] = (unreadCountMap[msg.conversationId] || 0) + 1;
   }
 
+  // Lookup sender names for all last messages
+  const lastMsgSenderIds = Array.from(
+    new Set(rawConversations.map((c) => c.messages[0]?.senderUserId).filter(Boolean) as string[])
+  );
+  const senderUsers = await prisma.user.findMany({
+    where: { id: { in: lastMsgSenderIds } },
+    select: { id: true, name: true, photoUrl: true },
+  });
+  const senderUserMap = new Map(senderUsers.map((u) => [u.id, u]));
+
   const results: ConversationSummary[] = [];
 
   for (const conv of rawConversations) {
     const lastMsg = conv.messages[0] || null;
 
-    // Determine other participant relative to caller
-    let otherParticipant: ParticipantInfo = {
-      id: "admin",
-      name: "Admin / Support Desk",
-      email: "support@atomicpathshala.com",
-      role: "ADMIN",
+    const studentInfo: ParticipantInfo | null = conv.student?.user
+      ? {
+          id: conv.student.user.id,
+          name: conv.student.user.name,
+          email: conv.student.user.email,
+          phone: conv.student.user.phone,
+          role: "STUDENT",
+          photoUrl: conv.student.user.photoUrl,
+          studentId: conv.student.id,
+          class: conv.student.class,
+          enrollmentNumber: conv.student.enrollmentNumber,
+        }
+      : null;
+
+    const teacherInfo: ParticipantInfo | null = conv.teacher?.user
+      ? {
+          id: conv.teacher.user.id,
+          name: conv.teacher.user.name,
+          email: conv.teacher.user.email,
+          phone: conv.teacher.user.phone,
+          role: "TEACHER",
+          photoUrl: conv.teacher.user.photoUrl,
+          teacherId: conv.teacher.id,
+          department: conv.teacher.department,
+        }
+      : null;
+
+    const adminInfo: ParticipantInfo | null = conv.adminUser
+      ? {
+          id: conv.adminUser.id,
+          name: conv.adminUser.name,
+          email: conv.adminUser.email,
+          phone: conv.adminUser.phone,
+          role: conv.adminUser.role?.name || "ADMIN",
+          photoUrl: conv.adminUser.photoUrl,
+        }
+      : null;
+
+    let primaryParticipant: ParticipantInfo = studentInfo || teacherInfo || adminInfo || {
+      id: "unknown",
+      name: "User",
+      email: "",
+      role: "USER",
       photoUrl: null,
     };
 
+    let secondaryParticipant: ParticipantInfo | null = null;
+    let title = "";
+    let subtitle = "";
+    let categoryLabel = "Direct Message";
+
+    if (conv.type === "TEACHER_STUDENT") {
+      primaryParticipant = studentInfo || primaryParticipant;
+      secondaryParticipant = teacherInfo;
+      const sName = studentInfo?.name || "Student";
+      const tName = teacherInfo?.name || "Teacher";
+      title = `${sName} ↔ ${tName}`;
+      subtitle = `Conversation with ${tName} (${teacherInfo?.department || "Teacher"})`;
+      categoryLabel = "Teacher ↔ Student";
+    } else if (conv.type === "STUDENT_ADMIN") {
+      primaryParticipant = studentInfo || primaryParticipant;
+      secondaryParticipant = adminInfo || {
+        id: "admin",
+        name: "Admin / Support Desk",
+        email: "support@atomicpathshala.com",
+        role: "ADMIN",
+        photoUrl: null,
+      };
+      const sName = studentInfo?.name || "Student";
+      title = `${sName}`;
+      subtitle = `Helpdesk Query / Support Request`;
+      categoryLabel = "Student Query";
+    } else if (conv.type === "TEACHER_ADMIN") {
+      primaryParticipant = teacherInfo || primaryParticipant;
+      secondaryParticipant = adminInfo || {
+        id: "admin",
+        name: "Administration",
+        email: "admin@atomicpathshala.com",
+        role: "ADMIN",
+        photoUrl: null,
+      };
+      const tName = teacherInfo?.name || "Teacher";
+      title = `${tName}`;
+      subtitle = `Faculty & Staff Communication`;
+      categoryLabel = "Staff Direct";
+    } else {
+      title = primaryParticipant.name;
+      subtitle = "Direct Conversation";
+      categoryLabel = "Direct Message";
+    }
+
+    // Determine otherParticipant relative to caller
+    let otherParticipant = primaryParticipant;
     if (student && conv.studentId === student.id) {
-      // Caller is student -> other participant is teacher or admin
-      if (conv.type === "STUDENT_ADMIN") {
-        otherParticipant = {
-          id: conv.adminUser?.id || "admin",
-          name: conv.adminUser?.name || "Admin / Support Desk",
-          email: conv.adminUser?.email || "support@atomicpathshala.com",
-          role: "ADMIN",
-          photoUrl: conv.adminUser?.photoUrl || null,
-        };
-      } else if (conv.teacher?.user) {
-        otherParticipant = {
-          id: conv.teacher.user.id,
-          name: conv.teacher.user.name,
-          email: conv.teacher.user.email,
-          phone: conv.teacher.user.phone,
-          role: "TEACHER",
-          photoUrl: conv.teacher.user.photoUrl,
-          teacherId: conv.teacher.id,
-        };
-      }
+      otherParticipant = secondaryParticipant || adminInfo || primaryParticipant;
     } else if (teacher && conv.teacherId === teacher.id) {
-      // Caller is teacher -> other participant is student or admin
-      if (conv.type === "TEACHER_ADMIN") {
-        otherParticipant = {
-          id: conv.adminUser?.id || "admin",
-          name: conv.adminUser?.name || "Administration",
-          email: conv.adminUser?.email || "admin@atomicpathshala.com",
-          role: "ADMIN",
-          photoUrl: conv.adminUser?.photoUrl || null,
-        };
-      } else if (conv.student?.user) {
-        otherParticipant = {
-          id: conv.student.user.id,
-          name: conv.student.user.name,
-          email: conv.student.user.email,
-          phone: conv.student.user.phone,
-          role: "STUDENT",
-          photoUrl: conv.student.user.photoUrl,
-          studentId: conv.student.id,
-        };
-      }
+      otherParticipant = primaryParticipant.role === "TEACHER" && secondaryParticipant ? secondaryParticipant : primaryParticipant;
     } else if (isAdmin) {
-      // Caller is Admin -> show the primary counterparty
-      if (conv.student?.user) {
-        otherParticipant = {
-          id: conv.student.user.id,
-          name: conv.student.user.name,
-          email: conv.student.user.email,
-          phone: conv.student.user.phone,
-          role: "STUDENT",
-          photoUrl: conv.student.user.photoUrl,
-          studentId: conv.student.id,
-        };
-      } else if (conv.teacher?.user) {
-        otherParticipant = {
-          id: conv.teacher.user.id,
-          name: conv.teacher.user.name,
-          email: conv.teacher.user.email,
-          phone: conv.teacher.user.phone,
-          role: "TEACHER",
-          photoUrl: conv.teacher.user.photoUrl,
-          teacherId: conv.teacher.id,
-        };
-      }
+      otherParticipant = primaryParticipant;
     }
 
     // Filter by search query if provided
     if (options?.search) {
       const q = options.search.toLowerCase();
-      const matchName = otherParticipant.name.toLowerCase().includes(q);
-      const matchEmail = otherParticipant.email.toLowerCase().includes(q);
-      if (!matchName && !matchEmail) continue;
+      const matchPrimary = primaryParticipant.name.toLowerCase().includes(q) || primaryParticipant.email.toLowerCase().includes(q);
+      const matchSecondary = secondaryParticipant?.name.toLowerCase().includes(q) || secondaryParticipant?.email.toLowerCase().includes(q);
+      const matchTitle = title.toLowerCase().includes(q);
+      const matchSubtitle = subtitle.toLowerCase().includes(q);
+      const matchBody = lastMsg?.body.toLowerCase().includes(q);
+      if (!matchPrimary && !matchSecondary && !matchTitle && !matchSubtitle && !matchBody) {
+        continue;
+      }
     }
 
     results.push({
       id: conv.id,
       type: conv.type,
+      title,
+      subtitle,
+      categoryLabel,
       otherParticipant,
+      primaryParticipant,
+      secondaryParticipant,
       lastMessage: lastMsg
         ? {
             id: lastMsg.id,
             body: lastMsg.body,
             createdAt: lastMsg.createdAt.toISOString(),
             senderUserId: lastMsg.senderUserId,
+            senderName:
+              senderUserMap.get(lastMsg.senderUserId)?.name ||
+              (lastMsg.senderRole === "ADMIN" ? "Admin" : lastMsg.senderRole === "TEACHER" ? "Teacher" : "Student"),
             senderRole: lastMsg.senderRole,
             isUnread: lastMsg.readAt === null && lastMsg.senderUserId !== userId,
           }
@@ -282,17 +362,33 @@ export async function getConversationsForUser(
       student: conv.student
         ? {
             id: conv.student.id,
+            userId: conv.student.user.id,
             name: conv.student.user.name,
             photoUrl: conv.student.user.photoUrl,
             email: conv.student.user.email,
+            phone: conv.student.user.phone,
+            class: conv.student.class,
+            enrollmentNumber: conv.student.enrollmentNumber,
           }
         : null,
       teacher: conv.teacher
         ? {
             id: conv.teacher.id,
+            userId: conv.teacher.user.id,
             name: conv.teacher.user.name,
             photoUrl: conv.teacher.user.photoUrl,
+            email: conv.teacher.user.email,
+            phone: conv.teacher.user.phone,
             department: conv.teacher.department,
+          }
+        : null,
+      adminUser: conv.adminUser
+        ? {
+            id: conv.adminUser.id,
+            name: conv.adminUser.name,
+            email: conv.adminUser.email,
+            photoUrl: conv.adminUser.photoUrl,
+            role: conv.adminUser.role?.name || "ADMIN",
           }
         : null,
     });
@@ -307,9 +403,10 @@ export async function getConversationsForUser(
 export async function getConversationThread(
   conversationId: string,
   userId: string,
-  userRole: string
+  userRole: string | boolean
 ) {
   const isAdmin =
+    userRole === true ||
     userRole === "SUPER_ADMIN" ||
     userRole === "ADMIN" ||
     userRole === "FOUNDER" ||
@@ -333,11 +430,11 @@ export async function getConversationThread(
         },
       },
       adminUser: {
-        select: { id: true, name: true, email: true, phone: true, photoUrl: true },
+        select: { id: true, name: true, email: true, phone: true, photoUrl: true, role: { select: { name: true } } },
       },
       messages: {
         orderBy: { createdAt: "asc" },
-        take: 200,
+        take: 300,
       },
     },
   });
@@ -393,36 +490,62 @@ export async function getConversationThread(
     }
   }
 
-  // Build sender map for display names and avatars
-  const senderUserIds = Array.from(new Set(conversation.messages.map((m) => m.senderUserId)));
+  // Build sender & recipient map for display names and avatars
+  const allUserIds = Array.from(
+    new Set([
+      ...conversation.messages.map((m) => m.senderUserId),
+      ...conversation.messages.map((m) => m.recipientUserId).filter(Boolean) as string[],
+    ])
+  );
   const users = await prisma.user.findMany({
-    where: { id: { in: senderUserIds } },
+    where: { id: { in: allUserIds } },
     select: { id: true, name: true, photoUrl: true, role: { select: { name: true } } },
   });
   const userMap = new Map(users.map((u) => [u.id, u]));
 
   const messages = conversation.messages.map((m) => {
     const sender = userMap.get(m.senderUserId);
+    const recipient = m.recipientUserId ? userMap.get(m.recipientUserId) : null;
     return {
       id: m.id,
       conversationId: m.conversationId,
       senderUserId: m.senderUserId,
-      senderName: sender?.name || (m.senderRole === "ADMIN" ? "Admin" : "User"),
+      senderName: sender?.name || (m.senderRole === "ADMIN" ? "Admin" : m.senderRole === "TEACHER" ? "Teacher" : "Student"),
       senderPhotoUrl: sender?.photoUrl || null,
       senderRole: m.senderRole,
       recipientUserId: m.recipientUserId,
+      recipientName: recipient?.name || (m.recipientRole === "ADMIN" ? "Admin" : m.recipientRole === "TEACHER" ? "Teacher" : m.recipientRole === "STUDENT" ? "Student" : null),
+      recipientPhotoUrl: recipient?.photoUrl || null,
       recipientRole: m.recipientRole,
       body: m.body,
       readAt: m.readAt ? m.readAt.toISOString() : null,
+      isRead: m.readAt !== null,
       createdAt: m.createdAt.toISOString(),
       isSelf: m.senderUserId === userId,
     };
   });
 
+  const studentName = conversation.student?.user.name || "Student";
+  const teacherName = conversation.teacher?.user.name || "Teacher";
+  let title = "Conversation";
+  let subtitle = "";
+  if (conversation.type === "TEACHER_STUDENT") {
+    title = `${studentName} ↔ ${teacherName}`;
+    subtitle = `Conversation between ${studentName} (Student) and ${teacherName} (Teacher)`;
+  } else if (conversation.type === "STUDENT_ADMIN") {
+    title = `${studentName}`;
+    subtitle = `Helpdesk Query / Student Support`;
+  } else if (conversation.type === "TEACHER_ADMIN") {
+    title = `${teacherName}`;
+    subtitle = `Faculty & Staff Communication`;
+  }
+
   return {
     conversation: {
       id: conversation.id,
       type: conversation.type,
+      title,
+      subtitle,
       student: conversation.student,
       teacher: conversation.teacher,
       adminUser: conversation.adminUser,
@@ -667,6 +790,17 @@ export async function sendMessage({
     data: { updatedAt: new Date() },
   });
 
+  let targetRecipientName: string | null = null;
+  let targetRecipientPhotoUrl: string | null = null;
+  if (targetRecipientUserId) {
+    const recUser = await prisma.user.findUnique({
+      where: { id: targetRecipientUserId },
+      select: { name: true, photoUrl: true },
+    });
+    targetRecipientName = recUser?.name || null;
+    targetRecipientPhotoUrl = recUser?.photoUrl || null;
+  }
+
   // Realtime Broadcast via Pusher to conversation channel
   const messagePayload = {
     id: createdMsg.id,
@@ -676,6 +810,14 @@ export async function sendMessage({
     senderPhotoUrl: sender.photoUrl,
     senderRole,
     recipientUserId: targetRecipientUserId,
+    recipientName:
+      targetRecipientName ||
+      (finalRecipientRole === "ADMIN"
+        ? "Admin"
+        : finalRecipientRole === "TEACHER"
+        ? "Teacher"
+        : "Student"),
+    recipientPhotoUrl: targetRecipientPhotoUrl,
     recipientRole: finalRecipientRole,
     body: createdMsg.body,
     readAt: null,
