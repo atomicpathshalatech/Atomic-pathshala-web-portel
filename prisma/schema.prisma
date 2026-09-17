@@ -131,6 +131,7 @@ model User {
   emailLogsReceived      EmailLog[]        @relation("EmailLogRecipient")
   emailTemplatesCreated  EmailTemplate[]   @relation("EmailTemplateCreatedBy")
   emailCampaignsCreated  EmailCampaign[]   @relation("EmailCampaignCreatedBy")
+  adminDirectConversations TeacherDirectConversation[] @relation("AdminDirectConversations")
 
   // --- AI Chat / Atomic Guru integration (imported from _import_atomic-ai-chat) ---
   // Reuses this existing User for login — the imported app's own User/Account/
@@ -450,34 +451,41 @@ model TeacherTestimonial {
 }
 
 model TeacherDirectConversation {
-  id        String   @id @default(cuid())
-  studentId String
-  teacherId String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  studentId   String?
+  teacherId   String?
+  adminUserId String?
+  type        String   @default("TEACHER_STUDENT") // "TEACHER_STUDENT" | "STUDENT_ADMIN" | "TEACHER_ADMIN"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  student  Student                @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  teacher  Teacher                @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  messages TeacherDirectMessage[]
+  student   Student?               @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  teacher   Teacher?               @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  adminUser User?                  @relation("AdminDirectConversations", fields: [adminUserId], references: [id], onDelete: Cascade)
+  messages  TeacherDirectMessage[]
 
-  @@unique([studentId, teacherId])
   @@index([studentId])
   @@index([teacherId])
+  @@index([adminUserId])
+  @@index([type])
   @@map("teacher_direct_conversations")
 }
 
 model TeacherDirectMessage {
-  id             String   @id @default(cuid())
-  conversationId String
-  senderUserId   String
-  senderRole     String   // "STUDENT" | "TEACHER" | "ADMIN"
-  body           String
-  readAt         DateTime?
-  createdAt      DateTime @default(now())
+  id              String   @id @default(cuid())
+  conversationId  String
+  senderUserId    String
+  senderRole      String   // "STUDENT" | "TEACHER" | "ADMIN"
+  recipientUserId String?
+  recipientRole   String?  // "STUDENT" | "TEACHER" | "ADMIN"
+  body            String
+  readAt          DateTime?
+  createdAt       DateTime @default(now())
 
   conversation TeacherDirectConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   @@index([conversationId, createdAt])
+  @@index([recipientUserId, readAt])
   @@map("teacher_direct_messages")
 }
 

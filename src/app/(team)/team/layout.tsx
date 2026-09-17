@@ -11,6 +11,7 @@ const NAV_SECTIONS: { title?: string; items: { href: string; label: string; icon
   {
     items: [
       { href: "/team", label: "Dashboard", icon: "space_dashboard", permission: PERMISSIONS.TEAM_PORTAL_ACCESS },
+      { href: "/team/messages", label: "Messages & Inbox", icon: "forum", permission: PERMISSIONS.MESSAGE_READ },
       { href: "/", label: "Website Homepage", icon: "public", permission: PERMISSIONS.TEAM_PORTAL_ACCESS },
     ],
   },

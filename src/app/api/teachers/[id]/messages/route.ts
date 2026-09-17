@@ -6,6 +6,7 @@ import { UnauthorizedError, ForbiddenError } from "@/lib/rbac/guard";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { pusherServer } from "@/lib/realtime/pusher-server";
 import { directConversationChannel, DIRECT_MESSAGE_EVENTS } from "@/lib/realtime/events";
+import { sendUserRealtimeNotification } from "@/lib/notifications/realtime";
 
 export async function GET(
   request: NextRequest,
@@ -35,12 +36,10 @@ export async function GET(
 
     // If caller is student, get or create conversation with this teacher
     if (student) {
-      let conversation = await prisma.teacherDirectConversation.findUnique({
+      let conversation = await prisma.teacherDirectConversation.findFirst({
         where: {
-          studentId_teacherId: {
-            studentId: student.id,
-            teacherId: teacher.id,
-          },
+          studentId: student.id,
+          teacherId: teacher.id,
         },
         include: {
           messages: {
@@ -104,12 +103,10 @@ export async function GET(
         return apiSuccess({ conversations });
       }
 
-      const conversation = await prisma.teacherDirectConversation.findUnique({
+      const conversation = await prisma.teacherDirectConversation.findFirst({
         where: {
-          studentId_teacherId: {
-            studentId,
-            teacherId: teacher.id,
-          },
+          studentId,
+          teacherId: teacher.id,
         },
         include: {
           messages: {
@@ -170,19 +167,21 @@ export async function POST(
 
     let conversationId = body.conversationId;
     let senderRole = "STUDENT";
+    let recipientUserId: string | null = null;
+    let recipientRole = "TEACHER";
 
     if (student) {
       senderRole = "STUDENT";
+      recipientUserId = teacher.userId;
+      recipientRole = "TEACHER";
       const conversation = await prisma.teacherDirectConversation.upsert({
         where: {
-          studentId_teacherId: {
-            studentId: student.id,
-            teacherId: teacher.id,
-          },
+          id: conversationId || "non-existent-id",
         },
         create: {
           studentId: student.id,
           teacherId: teacher.id,
+          type: "TEACHER_STUDENT",
         },
         update: {
           updatedAt: new Date(),
@@ -192,19 +191,33 @@ export async function POST(
     } else if (isTeacherSelf) {
       senderRole = "TEACHER";
       if (!conversationId) return apiError("conversationId is required", 400);
+      const conv = await prisma.teacherDirectConversation.findUnique({
+        where: { id: conversationId },
+        include: { student: { include: { user: true } } },
+      });
+      recipientUserId = conv?.student?.user?.id || null;
+      recipientRole = "STUDENT";
     } else if (isAdmin) {
       senderRole = "ADMIN";
       if (!conversationId) return apiError("conversationId is required", 400);
+      const conv = await prisma.teacherDirectConversation.findUnique({
+        where: { id: conversationId },
+        include: { student: { include: { user: true } } },
+      });
+      recipientUserId = conv?.student?.user?.id || teacher.userId;
+      recipientRole = conv?.student ? "STUDENT" : "TEACHER";
     } else {
       throw new ForbiddenError("Only students, the educator, or administrators can send messages.");
     }
 
-    // Save message
+    // Save message with recipient mapping
     const message = await prisma.teacherDirectMessage.create({
       data: {
         conversationId,
         senderUserId: session.user.id,
         senderRole,
+        recipientUserId,
+        recipientRole,
         body: messageText,
       },
     });
@@ -213,6 +226,11 @@ export async function POST(
     await prisma.teacherDirectConversation.update({
       where: { id: conversationId },
       data: { updatedAt: new Date() },
+    });
+
+    const senderUser = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { name: true, photoUrl: true },
     });
 
     // Broadcast via Pusher for realtime sync
@@ -224,13 +242,58 @@ export async function POST(
           id: message.id,
           conversationId,
           senderUserId: message.senderUserId,
+          senderName: senderUser?.name || "User",
+          senderPhotoUrl: senderUser?.photoUrl || null,
           senderRole: message.senderRole,
+          recipientUserId,
+          recipientRole,
           body: message.body,
           createdAt: message.createdAt.toISOString(),
         }
       );
     } catch (pusherErr) {
       console.warn("Pusher direct message trigger skipped or failed:", pusherErr);
+    }
+
+    // Create Notification and trigger realtime counter for recipient
+    if (recipientUserId) {
+      try {
+        const previewText = messageText.length > 100 ? messageText.substring(0, 97) + "..." : messageText;
+        const notifTitle = `New message from ${senderUser?.name || "User"}`;
+        const deepLink = recipientRole === "STUDENT"
+          ? `/messages?conversationId=${conversationId}`
+          : `/team/messages?conversationId=${conversationId}`;
+
+        await prisma.notification.create({
+          data: {
+            userId: recipientUserId,
+            title: notifTitle,
+            body: previewText,
+            type: "GENERAL",
+            category: "SYSTEM",
+            channel: "IN_APP",
+            actionUrl: deepLink,
+            deepLink,
+            metadata: { conversationId, senderUserId: session.user.id },
+          },
+        });
+
+        const unreadCount = await prisma.notification.count({
+          where: { userId: recipientUserId, isRead: false },
+        });
+
+        await sendUserRealtimeNotification(recipientUserId, {
+          id: `msg_${message.id}`,
+          title: notifTitle,
+          body: previewText,
+          type: "GENERAL",
+          deepLink,
+          createdAt: message.createdAt.toISOString(),
+          unreadCount,
+        });
+      } catch (notifErr) {
+        console.warn("Notification creation failed:", notifErr);
+      }
     }
 
     return apiSuccess({ message }, 201);
