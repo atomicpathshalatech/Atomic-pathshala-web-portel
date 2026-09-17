@@ -15,9 +15,6 @@ export type ChatMessage = {
   // Server-generated announcements ("X has joined the class") — rendered as
   // a centered note rather than a chat bubble. See .../join/route.ts.
   isSystemMessage?: boolean;
-  // Teacher-pinned to the top of the chat for the whole class. Null/absent
-  // means not pinned.
-  pinnedAt?: string | null;
 };
 
 async function getJson(url: string) {
@@ -172,11 +169,6 @@ export function MessagesPanel({
     };
     channel.bind(WB_EVENTS.MESSAGE_DELETED, deletedHandler);
 
-    const pinnedHandler = (data: { id: string; pinnedAt: string | null }) => {
-      setMessages((prev) => prev.map((m) => (m.id === data.id ? { ...m, pinnedAt: data.pinnedAt } : m)));
-    };
-    channel.bind(WB_EVENTS.MESSAGE_PINNED, pinnedHandler);
-
     const configHandler = (cfg: { chatEnabled?: boolean }) => {
       if (typeof cfg?.chatEnabled === "boolean") {
         setChatEnabled(cfg.chatEnabled);
@@ -187,7 +179,6 @@ export function MessagesPanel({
     return () => {
       channel.unbind(WB_EVENTS.MESSAGE_SENT, handler);
       channel.unbind(WB_EVENTS.MESSAGE_DELETED, deletedHandler);
-      channel.unbind(WB_EVENTS.MESSAGE_PINNED, pinnedHandler);
       channel.unbind(WB_EVENTS.CONFIG_UPDATED, configHandler);
     };
   }, [whiteboardSessionId]);
@@ -249,23 +240,6 @@ export function MessagesPanel({
     }
   }
 
-  async function handleTogglePin(messageId: string, currentlyPinned: boolean) {
-    // Optimistic — same reasoning as handleDeleteMessage: the server
-    // broadcast re-confirming this is a no-op merge if it arrives after.
-    const prevMessages = messages;
-    setMessages((prev) =>
-      prev.map((m) => (m.id === messageId ? { ...m, pinnedAt: currentlyPinned ? null : new Date().toISOString() } : m))
-    );
-    try {
-      await patchJson(`/api/whiteboard/sessions/${whiteboardSessionId}/messages/${messageId}`, {
-        pinned: !currentlyPinned,
-      });
-    } catch (err) {
-      setMessages(prevMessages);
-      setError(err instanceof Error ? err.message : "Could not pin that message.");
-    }
-  }
-
   async function handleToggleChat() {
     setTogglingChat(true);
     try {
@@ -279,34 +253,9 @@ export function MessagesPanel({
   }
 
   const canSend = role === "TEACHER" || chatEnabled;
-  const pinnedMessages = messages.filter((m) => m.pinnedAt && !m.isSystemMessage);
 
   return (
     <div className="flex flex-col h-full">
-      {pinnedMessages.length > 0 && (
-        <div className={`mb-2 rounded-lg border overflow-hidden shrink-0 ${theme === "dark" ? "border-amber-700/50 bg-amber-950/20" : "border-amber-300 bg-amber-50"}`}>
-          {pinnedMessages.map((m) => (
-            <div key={m.id} className={`flex items-start gap-2 px-2.5 py-1.5 text-xs ${theme === "dark" ? "text-amber-200" : "text-amber-900"}`}>
-              <span className="material-symbols-outlined text-sm shrink-0 mt-0.5">push_pin</span>
-              <div className="min-w-0 flex-1">
-                <span className="font-bold">{m.authorName}: </span>
-                <span className="break-words">{m.body}</span>
-              </div>
-              {role === "TEACHER" && (
-                <button
-                  type="button"
-                  onClick={() => handleTogglePin(m.id, true)}
-                  title="Unpin"
-                  className="shrink-0 opacity-70 hover:opacity-100"
-                >
-                  <span className="material-symbols-outlined text-sm">close</span>
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
       {role === "TEACHER" && showOwnToggle && (
         <button
           type="button"
@@ -437,19 +386,6 @@ export function MessagesPanel({
                       <span className="text-[10px] text-slate-400 dark:text-slate-500 ml-auto tabular-nums">
                         {timeStr}
                       </span>
-                    )}
-
-                    {role === "TEACHER" && !m.id.startsWith("opt_") && (
-                      <button
-                        type="button"
-                        onClick={() => handleTogglePin(m.id, Boolean(m.pinnedAt))}
-                        title={m.pinnedAt ? "Unpin this message" : "Pin this message"}
-                        className={`transition-opacity shrink-0 ${
-                          m.pinnedAt ? "text-amber-500" : "opacity-0 group-hover:opacity-100 text-slate-400 hover:text-amber-500"
-                        }`}
-                      >
-                        <span className="material-symbols-outlined text-[14px]">push_pin</span>
-                      </button>
                     )}
 
                     {mine && !m.id.startsWith("opt_") && (

@@ -79,7 +79,3 @@ export const quizResponseSchema = z
 export const messageCreateSchema = z.object({
   body: z.string().min(1, "Message cannot be empty").max(2000),
 });
-
-export const messagePinSchema = z.object({
-  pinned: z.boolean(),
-});

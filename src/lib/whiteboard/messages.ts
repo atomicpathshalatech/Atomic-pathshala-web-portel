@@ -41,13 +41,3 @@ export async function pushMessageDeleted(whiteboardSessionId: string, messageId:
     console.error("[pusher_trigger_error]", err);
   }
 }
-
-/** Broadcasts a pin/unpin so every client updates that one message locally
- * without a full history re-fetch. */
-export async function pushMessagePinned(whiteboardSessionId: string, messageId: string, pinnedAt: string | null) {
-  try {
-    await pusherServer.trigger(sessionChannel(whiteboardSessionId), WB_EVENTS.MESSAGE_PINNED, { id: messageId, pinnedAt });
-  } catch (err) {
-    console.error("[pusher_trigger_error]", err);
-  }
-}
