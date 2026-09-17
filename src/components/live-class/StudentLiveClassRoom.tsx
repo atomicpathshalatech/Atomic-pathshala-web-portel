@@ -985,22 +985,6 @@ export function StudentLiveClassRoom({
             </span>
           ) : null}
 
-          {/* Raise Hand Button */}
-          <button
-            type="button"
-            disabled={handRaiseBusy}
-            onClick={toggleHandRaise}
-            className={`flex items-center gap-1 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition shadow-sm ${
-              handRaised
-                ? "bg-amber-500 text-slate-950 ring-2 ring-amber-400/50"
-                : "bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
-            }`}
-            title={handRaised ? "Lower Hand" : "Raise Hand to ask Doubt"}
-          >
-            <span className="material-symbols-outlined text-sm">back_hand</span>
-            <span className="hidden xs:inline">{handRaised ? "Raised" : "Raise"}</span>
-          </button>
-
           {/* Mobile Orientation Toggle Button */}
           <button
             type="button"
@@ -1020,29 +1004,6 @@ export function StudentLiveClassRoom({
                 : "screen_rotation"}
             </span>
             <span className="text-[10px] uppercase font-bold hidden xs:inline">{orientationMode}</span>
-          </button>
-
-          {/* Local Hide/Show Teacher-Video-&-Chat Sidebar (Student Preference).
-              Previously desktop-only (hidden lg:flex) and, on top of that,
-              never actually wired to anything that hid the sidebar - toggling
-              it changed the button's own look with no real effect. Now
-              visible at every size (matters more on a phone, where the
-              sidebar takes real space from the stage) and actually collapses
-              the sidebar below. */}
-          <button
-            type="button"
-            onClick={() => setShowChat((v) => !v)}
-            className={`flex items-center gap-1 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition shadow-sm border ${
-              showChat
-                ? "bg-slate-800 hover:bg-slate-700 text-blue-300 border-blue-500/40"
-                : "bg-slate-800/60 hover:bg-slate-700/80 text-slate-400 border-slate-700"
-            }`}
-            title={showChat ? "Minimize teacher video & chat (distraction-free focus)" : "Show teacher video & chat"}
-          >
-            <span className="material-symbols-outlined text-sm">
-              {showChat ? "chat" : "chat_bubble_outline"}
-            </span>
-            <span className="hidden xs:inline">{showChat ? "Chat" : "Chat Off"}</span>
           </button>
 
           {/* Fullscreen Toggle */}
@@ -1282,6 +1243,67 @@ export function StudentLiveClassRoom({
             </>
           )}
         </aside>
+
+        {/* Far-Right Vertical Icon Strip — chat / doubt / hand-raise / exit,
+            mirroring the reference classroom UI's right-edge icon column
+            (competitor screenshot the product owner asked to match "same to
+            same"). Each icon reuses an already-existing action rather than
+            adding new behavior: Chat = the sidebar toggle above; Doubt =
+            a quick chat-only hand-raise ping (no modal); Hand Raise = the
+            full audio/video participation request (opens the modal below);
+            Exit = leave back to the schedule. */}
+        <div className="w-11 sm:w-14 h-full shrink-0 flex flex-col items-center justify-between py-2 sm:py-3">
+          <div className="flex flex-col items-center gap-2.5 sm:gap-3">
+            <button
+              type="button"
+              onClick={() => setShowChat((v) => !v)}
+              className={`w-9 h-9 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition shadow-lg border ${
+                showChat
+                  ? "bg-blue-600 border-blue-400 text-white"
+                  : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
+              }`}
+              title={showChat ? "Hide chat" : "Show chat"}
+            >
+              <span className="material-symbols-outlined text-lg">chat</span>
+            </button>
+
+            <button
+              type="button"
+              disabled={handRaiseBusy}
+              onClick={() => (handRaised ? handleRaiseHandClick() : submitHandRaise("CHAT"))}
+              className={`w-9 h-9 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition shadow-lg border disabled:opacity-60 ${
+                handRaised && participationType === "CHAT"
+                  ? "bg-amber-500 border-amber-300 text-slate-950"
+                  : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
+              }`}
+              title="Ask a doubt"
+            >
+              <span className="material-symbols-outlined text-lg">contact_support</span>
+            </button>
+
+            <button
+              type="button"
+              disabled={handRaiseBusy}
+              onClick={toggleHandRaise}
+              className={`w-9 h-9 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition shadow-lg border disabled:opacity-60 ${
+                handRaised
+                  ? "bg-amber-500 border-amber-300 text-slate-950"
+                  : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
+              }`}
+              title={handRaised ? "Lower hand" : "Raise hand"}
+            >
+              <span className="material-symbols-outlined text-lg">back_hand</span>
+            </button>
+          </div>
+
+          <Link
+            href="/schedule"
+            className="w-9 h-9 sm:w-11 sm:h-11 rounded-full flex items-center justify-center bg-rose-600 hover:bg-rose-500 text-white transition shadow-lg border border-rose-400"
+            title="Leave class"
+          >
+            <span className="material-symbols-outlined text-lg">logout</span>
+          </Link>
+        </div>
       </div>
 
       {/* Student Hand Raise Participation Modal */}

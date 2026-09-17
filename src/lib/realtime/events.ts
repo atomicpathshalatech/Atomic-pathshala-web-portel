@@ -56,6 +56,10 @@ export const WB_EVENTS = {
   // deletedAt). Carries just the id so every client can remove/hide it
   // locally without a full history re-fetch.
   MESSAGE_DELETED: "message-deleted",
+  // Teacher pinned/unpinned a message (WhiteboardMessage.pinnedAt). Carries
+  // the id + new pinnedAt so every client can update that one message
+  // locally without a full history re-fetch, same shape as MESSAGE_DELETED.
+  MESSAGE_PINNED: "message-pinned",
   // Pre-class lobby → live transition (WhiteboardSession.livePhase flipping
   // to LIVE when the teacher clicks Start Class). A poller would catch this
   // within 5s anyway (see StudentLiveClassRoom's by-schedule poll), but this
