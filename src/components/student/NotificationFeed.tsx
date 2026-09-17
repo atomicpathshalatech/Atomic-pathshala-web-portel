@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
 import { getNotificationVisual } from "@/lib/utils/notification-visual";
@@ -45,13 +44,20 @@ const ACTION_LABELS: Record<string, string> = {
   VIEW_SCHEDULE: "View Schedule",
 };
 
-export function NotificationFeed({ initial }: { initial: Notification[] }) {
+export function NotificationFeed({
+  initial,
+  userRole = "STUDENT",
+}: {
+  initial: Notification[];
+  userRole?: string;
+}) {
   const router = useRouter();
   const [notifications, setNotifications] = useState<Notification[]>(initial);
   const [filter, setFilter] = useState<string>("all");
   const [isPending, startTransition] = useTransition();
   const [pushStatus, setPushStatus] = useState<"default" | "enabled" | "denied">("default");
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -88,6 +94,13 @@ export function NotificationFeed({ initial }: { initial: Notification[] }) {
     return notifications.filter((n) => n.category === filter);
   }, [notifications, filter]);
 
+  const activeCategoryItem =
+    CATEGORY_ITEMS.find((c) => c.key === filter) ?? {
+      key: "all",
+      label: "All Notifications",
+      icon: "notifications",
+    };
+
   function markOneRead(id: string) {
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)));
     startTransition(() => {
@@ -104,7 +117,7 @@ export function NotificationFeed({ initial }: { initial: Notification[] }) {
 
   async function handleActionClick(item: Notification) {
     markOneRead(item.id);
-    const target = item.actionUrl || item.deepLink || "/";
+    const rawTarget = item.actionUrl || item.deepLink;
 
     // Track action
     try {
@@ -118,6 +131,21 @@ export function NotificationFeed({ initial }: { initial: Notification[] }) {
         }),
       }).catch(() => {});
     } catch {}
+
+    // If no target URL, do not redirect to home or arbitrary page
+    if (!rawTarget || rawTarget === "/" || rawTarget === "#") {
+      return;
+    }
+
+    let target = rawTarget;
+    // Safe route resolution for Teachers & Admins
+    if (userRole !== "STUDENT" && userRole !== "PARENT") {
+      if (target.startsWith("/messages?")) {
+        target = target.replace("/messages?", "/team/messages?");
+      } else if (target === "/messages") {
+        target = "/team/messages";
+      }
+    }
 
     router.push(target);
   }
@@ -136,240 +164,327 @@ export function NotificationFeed({ initial }: { initial: Notification[] }) {
     } catch {}
   }
 
+  const handleGoBack = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+    } else {
+      router.push(userRole === "STUDENT" ? "/dashboard" : "/team");
+    }
+  };
+
   return (
-    <div className="flex flex-col md:flex-row gap-gutter max-w-6xl mx-auto">
-      {/* Left Navigation / Filters */}
-      <aside className="w-full md:w-1/4 space-y-stack-md shrink-0">
-        <div className="glass-card rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-            <h2 className="font-headline-md text-base font-bold text-on-surface">Categories</h2>
-            {unreadCount > 0 && (
-              <span className="px-2 py-0.5 text-xs font-bold bg-red-500 text-white rounded-full">
-                {unreadCount} unread
-              </span>
-            )}
-          </div>
-
-          <nav className="space-y-1">
-            {CATEGORY_ITEMS.map((c) => {
-              const active = filter === c.key;
-              const count =
-                c.key === "all"
-                  ? notifications.length
-                  : c.key === "unread"
-                  ? unreadCount
-                  : notifications.filter((n) => n.category === c.key).length;
-
-              return (
-                <button
-                  key={c.key}
-                  onClick={() => setFilter(c.key)}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-all ${
-                    active
-                      ? "bg-primary text-white font-bold shadow-sm"
-                      : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60"
-                  }`}
-                >
-                  <span className="flex items-center gap-2.5 truncate">
-                    <span className="material-symbols-outlined text-lg shrink-0">{c.icon}</span>
-                    <span className="truncate">{c.label}</span>
-                  </span>
-                  <span
-                    className={`text-xs px-2 py-0.5 rounded-full ${
-                      active ? "bg-white/20 text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-500"
-                    }`}
-                  >
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-          </nav>
-
-          {/* Settings Section */}
-          <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-3">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Preferences</h3>
-
-            {/* Sound Toggle */}
+    <div className="max-w-4xl mx-auto space-y-3 pb-8">
+      {/* 1. TOP HEADER TOOLBAR WITH BACK BUTTON & CATEGORY DRAWER TRIGGER */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-3 sm:p-4 shadow-sm flex flex-col gap-3">
+        <div className="flex items-center justify-between gap-2">
+          {/* Back button + Title */}
+          <div className="flex items-center gap-2.5 min-w-0">
             <button
-              onClick={toggleSound}
-              className="w-full flex items-center justify-between text-xs text-slate-600 dark:text-slate-300 hover:text-primary transition-colors py-1"
+              type="button"
+              onClick={handleGoBack}
+              className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition flex items-center justify-center shrink-0 active:scale-95"
+              title="Go Back"
+              aria-label="Go Back"
             >
-              <span className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-base">
-                  {soundEnabled ? "volume_up" : "volume_off"}
-                </span>
-                Sound Alerts
-              </span>
-              <span className={`font-bold ${soundEnabled ? "text-emerald-500" : "text-slate-400"}`}>
-                {soundEnabled ? "ON" : "OFF"}
-              </span>
+              <span className="material-symbols-outlined text-lg">arrow_back</span>
             </button>
 
-            {/* Browser Push Button */}
-            <button
-              onClick={toggleBrowserPush}
-              disabled={pushStatus === "enabled"}
-              className={`w-full flex items-center justify-between text-xs py-1 transition-colors ${
-                pushStatus === "enabled"
-                  ? "text-emerald-600 dark:text-emerald-400 font-bold"
-                  : "text-slate-600 dark:text-slate-300 hover:text-primary"
-              }`}
-            >
-              <span className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-base">notifications_active</span>
-                Browser Push
-              </span>
-              <span className="font-bold">
-                {pushStatus === "enabled" ? "Active" : pushStatus === "denied" ? "Blocked" : "Enable"}
-              </span>
-            </button>
-          </div>
-        </div>
-      </aside>
-
-      {/* Main Feed Content */}
-      <main className="w-full md:w-3/4 space-y-4">
-        {/* Header toolbar */}
-        <div className="flex items-center justify-between gap-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-          <div>
-            <h1 className="font-headline-lg text-lg font-bold text-on-surface">
-              {CATEGORY_ITEMS.find((c) => c.key === filter)?.label || "Notifications"}
-            </h1>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Showing {visible.length} notification{visible.length === 1 ? "" : "s"}
-            </p>
+            <div className="min-w-0">
+              <h1 className="font-headline-lg text-base sm:text-lg font-black text-slate-900 dark:text-white flex items-center gap-1.5 truncate">
+                <span>Notifications</span>
+                {unreadCount > 0 && (
+                  <span className="px-1.5 py-0.2 text-[10px] font-extrabold bg-red-500 text-white rounded-full">
+                    {unreadCount}
+                  </span>
+                )}
+              </h1>
+            </div>
           </div>
 
+          {/* Mark All As Read */}
           {unreadCount > 0 && (
             <button
               onClick={markAllRead}
               disabled={isPending}
-              className="flex items-center gap-1.5 text-xs font-bold text-primary hover:text-primary-dark px-3 py-1.5 rounded-lg border border-primary/20 hover:bg-primary/5 transition-all active:scale-95"
+              className="flex items-center gap-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 px-2.5 py-1.5 rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50/50 dark:bg-blue-950/40 transition active:scale-95 shrink-0"
             >
-              <span className="material-symbols-outlined text-base">done_all</span>
-              Mark all as read
+              <span className="material-symbols-outlined text-sm">done_all</span>
+              <span className="hidden sm:inline">Mark all read</span>
             </button>
           )}
         </div>
 
-        {/* Notifications List */}
+        {/* Category Trigger Pill Bar (Right under back button) */}
+        <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800/80">
+          <button
+            type="button"
+            onClick={() => setIsDrawerOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 text-white text-xs font-bold shadow-xs hover:bg-blue-700 transition active:scale-95"
+          >
+            <span className="material-symbols-outlined text-base">tune</span>
+            <span>Category: {activeCategoryItem.label}</span>
+            <span className="material-symbols-outlined text-sm">expand_more</span>
+          </button>
+
+          <span className="text-[11px] text-slate-400 font-medium">
+            {visible.length} update{visible.length === 1 ? "" : "s"}
+          </span>
+        </div>
+      </div>
+
+      {/* 2. SIDEBAR POPUP DRAWER (CATEGORIES, FILTERS & PREFERENCES) */}
+      {isDrawerOpen && (
+        <div className="fixed inset-0 z-50 flex">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity animate-in fade-in"
+            onClick={() => setIsDrawerOpen(false)}
+          />
+
+          {/* Slide-over Drawer Panel */}
+          <div className="relative w-80 max-w-[85vw] bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 shadow-2xl z-50 flex flex-col justify-between p-5 overflow-y-auto animate-in slide-in-from-left duration-200">
+            <div className="space-y-4">
+              {/* Drawer Header */}
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-blue-600 text-xl">category</span>
+                  <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">
+                    Filter by Category
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsDrawerOpen(false)}
+                  className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-800 dark:hover:text-white flex items-center justify-center transition"
+                >
+                  <span className="material-symbols-outlined text-lg">close</span>
+                </button>
+              </div>
+
+              {/* Category List Items */}
+              <nav className="space-y-1">
+                {CATEGORY_ITEMS.map((c) => {
+                  const active = filter === c.key;
+                  const count =
+                    c.key === "all"
+                      ? notifications.length
+                      : c.key === "unread"
+                      ? unreadCount
+                      : notifications.filter((n) => n.category === c.key).length;
+
+                  return (
+                    <button
+                      key={c.key}
+                      onClick={() => {
+                        setFilter(c.key);
+                        setIsDrawerOpen(false);
+                      }}
+                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+                        active
+                          ? "bg-blue-600 text-white font-bold shadow-xs"
+                          : "text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2.5 truncate">
+                        <span className="material-symbols-outlined text-base shrink-0">{c.icon}</span>
+                        <span className="truncate">{c.label}</span>
+                      </span>
+                      <span
+                        className={`text-[10px] px-2 py-0.5 rounded-full ${
+                          active
+                            ? "bg-white/20 text-white font-bold"
+                            : "bg-slate-100 dark:bg-slate-800 text-slate-500"
+                        }`}
+                      >
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </nav>
+            </div>
+
+            {/* Preferences Section at bottom of drawer */}
+            <div className="pt-4 mt-6 border-t border-slate-100 dark:border-slate-800 space-y-2.5">
+              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                Notification Preferences
+              </h4>
+
+              {/* Sound Toggle */}
+              <button
+                type="button"
+                onClick={toggleSound}
+                className="w-full flex items-center justify-between text-xs text-slate-600 dark:text-slate-300 hover:text-blue-600 transition-colors py-1"
+              >
+                <span className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-base">
+                    {soundEnabled ? "volume_up" : "volume_off"}
+                  </span>
+                  Sound Alerts
+                </span>
+                <span className={`text-[10px] font-bold ${soundEnabled ? "text-emerald-500" : "text-slate-400"}`}>
+                  {soundEnabled ? "ON" : "OFF"}
+                </span>
+              </button>
+
+              {/* Browser Push Button */}
+              <button
+                type="button"
+                onClick={toggleBrowserPush}
+                disabled={pushStatus === "enabled"}
+                className={`w-full flex items-center justify-between text-xs py-1 transition-colors ${
+                  pushStatus === "enabled"
+                    ? "text-emerald-600 dark:text-emerald-400 font-bold"
+                    : "text-slate-600 dark:text-slate-300 hover:text-blue-600"
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-base">notifications_active</span>
+                  Push Alerts
+                </span>
+                <span className="text-[10px] font-bold">
+                  {pushStatus === "enabled" ? "Active" : pushStatus === "denied" ? "Blocked" : "Enable"}
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. COMPACT NOTIFICATIONS FEED (STREAMLINED BOXES, FULL SCREEN LENGTH) */}
+      <main className="space-y-2">
         {visible.length === 0 ? (
           <div className="text-center py-16 px-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-            <span className="material-symbols-outlined text-5xl text-slate-300 dark:text-slate-600">
+            <span className="material-symbols-outlined text-4xl text-slate-300 dark:text-slate-600 mb-1">
               notifications_off
             </span>
-            <h3 className="font-headline-md text-base font-bold text-slate-700 dark:text-slate-200 mt-3">
-              No notifications here
+            <h3 className="font-bold text-sm text-slate-700 dark:text-slate-200">
+              No notifications in this category
             </h3>
             <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1">
-              You are all caught up! Updates about your classes, tests, and materials will appear here.
+              All caught up! New updates regarding classes, materials, and tests will appear here.
             </p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {visible.map((n) => {
-              const visual = getNotificationVisual(n.type ?? "SYSTEM_ANNOUNCEMENT");
-              const actionLabel = n.actionType
-                ? ACTION_LABELS[n.actionType] || n.actionType.replace(/_/g, " ")
-                : n.actionUrl || n.deepLink
-                ? "Open"
-                : null;
+          visible.map((n) => {
+            const visual = getNotificationVisual(n.type ?? "SYSTEM_ANNOUNCEMENT");
+            const actionLabel = n.actionType
+              ? ACTION_LABELS[n.actionType] || n.actionType.replace(/_/g, " ")
+              : n.actionUrl || n.deepLink
+              ? "Open"
+              : null;
 
-              const isUrgent = n.priority === "URGENT";
-              const isHigh = n.priority === "HIGH";
+            const isUrgent = n.priority === "URGENT";
+            const isHigh = n.priority === "HIGH";
 
-              return (
-                <div
-                  key={n.id}
-                  className={`p-4 rounded-2xl border transition-all duration-200 ${
-                    !n.isRead
-                      ? "bg-white dark:bg-slate-900 border-primary/30 shadow-md ring-1 ring-primary/10"
-                      : "bg-white/80 dark:bg-slate-900/80 border-slate-200/80 dark:border-slate-800 shadow-xs hover:border-slate-300"
-                  }`}
-                >
-                  <div className="flex items-start gap-3.5">
-                    {/* Visual Icon */}
-                    <div
-                      className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                        isUrgent
-                          ? "bg-red-50 text-red-600 dark:bg-red-950/50 dark:text-red-400 border border-red-200 dark:border-red-900/50"
-                          : isHigh
-                          ? "bg-amber-50 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400 border border-amber-200 dark:border-amber-900/50"
-                          : "bg-primary/10 text-primary border border-primary/20"
-                      }`}
-                    >
-                      <span className="material-symbols-outlined text-xl">{visual.icon}</span>
-                    </div>
+            const categoryName =
+              CATEGORY_ITEMS.find((c) => c.key === n.category)?.label ||
+              n.category ||
+              "Notice";
 
-                    {/* Content */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h4 className="font-headline-md text-sm font-bold text-slate-900 dark:text-slate-100">
-                            {n.title}
-                          </h4>
-                          {isUrgent && (
-                            <span className="px-1.5 py-0.5 text-[10px] font-extrabold bg-red-500 text-white rounded uppercase tracking-wider">
-                              URGENT
-                            </span>
-                          )}
-                          {isHigh && (
-                            <span className="px-1.5 py-0.5 text-[10px] font-extrabold bg-amber-500 text-black rounded uppercase tracking-wider">
-                              HIGH
-                            </span>
-                          )}
-                          {!n.isRead && (
-                            <span className="w-2 h-2 rounded-full bg-primary inline-block" />
-                          )}
-                        </div>
+            return (
+              <div
+                key={n.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => handleActionClick(n)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    handleActionClick(n);
+                  }
+                }}
+                className={`w-full p-2.5 sm:p-3 rounded-xl border transition-all duration-150 cursor-pointer text-left group select-none ${
+                  !n.isRead
+                    ? "bg-white dark:bg-slate-900 border-blue-300 dark:border-blue-900/80 shadow-xs ring-1 ring-blue-500/10 hover:border-blue-500"
+                    : "bg-white/80 dark:bg-slate-900/80 border-slate-200/90 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-white dark:hover:bg-slate-900 shadow-2xs"
+                } active:scale-[0.99]`}
+              >
+                <div className="flex items-start gap-2.5 sm:gap-3">
+                  {/* Compact Visual Icon */}
+                  <div
+                    className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
+                      isUrgent
+                        ? "bg-red-50 text-red-600 dark:bg-red-950/50 dark:text-red-400 border border-red-200 dark:border-red-900/50"
+                        : isHigh
+                        ? "bg-amber-50 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400 border border-amber-200 dark:border-amber-900/50"
+                        : "bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400 border border-blue-200/80 dark:border-blue-900/40"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-sm sm:text-base">
+                      {visual.icon}
+                    </span>
+                  </div>
 
-                        <span className="text-[11px] text-slate-400 whitespace-nowrap shrink-0">
-                          {formatDistanceToNow(new Date(n.createdAt), { addSuffix: true })}
-                        </span>
-                      </div>
-
-                      <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
-                        {n.body}
-                      </p>
-
-                      {/* Action Button & Mark Read */}
-                      <div className="mt-3 flex items-center justify-between gap-3 pt-2 border-t border-slate-100 dark:border-slate-800/60">
-                        <div>
-                          {actionLabel && (
-                            <button
-                              type="button"
-                              onClick={() => handleActionClick(n)}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs ${
-                                isUrgent
-                                  ? "bg-red-600 hover:bg-red-700 text-white"
-                                  : isHigh
-                                  ? "bg-amber-500 hover:bg-amber-600 text-black"
-                                  : "bg-primary hover:bg-primary/90 text-white"
-                              } active:scale-95`}
-                            >
-                              {actionLabel}
-                            </button>
-                          )}
-                        </div>
-
+                  {/* Notification Content */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-1.5">
+                      <div className="flex items-center gap-1.5 min-w-0">
                         {!n.isRead && (
-                          <button
-                            type="button"
-                            onClick={() => markOneRead(n.id)}
-                            className="text-[11px] text-slate-400 hover:text-primary transition-colors flex items-center gap-1"
-                          >
-                            <span className="material-symbols-outlined text-sm">check</span>
-                            Mark as read
-                          </button>
+                          <span
+                            className="w-2 h-2 rounded-full bg-blue-600 shrink-0"
+                            title="Unread"
+                          />
+                        )}
+                        <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-slate-100 truncate">
+                          {n.title}
+                        </h4>
+                        {isUrgent && (
+                          <span className="px-1 py-0.2 text-[8px] font-black bg-red-600 text-white rounded shrink-0 uppercase tracking-wider">
+                            URGENT
+                          </span>
+                        )}
+                        {isHigh && (
+                          <span className="px-1 py-0.2 text-[8px] font-black bg-amber-500 text-black rounded shrink-0 uppercase tracking-wider">
+                            HIGH
+                          </span>
                         )}
                       </div>
+
+                      <span className="text-[10px] text-slate-400 whitespace-nowrap shrink-0">
+                        {formatDistanceToNow(new Date(n.createdAt), { addSuffix: true })}
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5 line-clamp-2 leading-relaxed">
+                      {n.body}
+                    </p>
+
+                    {/* Compact Footer Line */}
+                    <div className="mt-1.5 flex items-center justify-between gap-2 pt-1 border-t border-slate-100/80 dark:border-slate-800/60">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9px] px-1.5 py-0.2 rounded font-semibold bg-slate-100 dark:bg-slate-800 text-slate-500 uppercase">
+                          {categoryName}
+                        </span>
+
+                        {actionLabel && (
+                          <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 group-hover:underline flex items-center gap-0.5">
+                            <span>{actionLabel}</span>
+                            <span className="material-symbols-outlined text-xs">arrow_forward</span>
+                          </span>
+                        )}
+                      </div>
+
+                      {!n.isRead && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            markOneRead(n.id);
+                          }}
+                          className="text-[10px] text-slate-400 hover:text-blue-600 flex items-center gap-0.5 px-1 py-0.5 rounded transition"
+                          title="Mark as read"
+                        >
+                          <span className="material-symbols-outlined text-xs">done</span>
+                          <span className="hidden sm:inline">Mark read</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            );
+          })
         )}
       </main>
     </div>
