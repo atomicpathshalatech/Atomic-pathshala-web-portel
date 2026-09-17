@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState } from "react";
+import Link from "next/link";
 import { formatISTDate, formatISTTime } from "@/lib/date-utils";
 
 export interface CompletedClassAssets {
@@ -31,8 +32,6 @@ export interface CompletedClassAssets {
   };
 }
 
-const SPEEDS = [0.5, 1, 1.25, 1.5, 2] as const;
-
 export function CompletedClassModal({
   scheduleId,
   classTitle,
@@ -55,10 +54,7 @@ export function CompletedClassModal({
   const [loading, setLoading] = useState(true);
   const [assets, setAssets] = useState<CompletedClassAssets | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [speed, setSpeed] = useState<number>(1);
   const [notesType, setNotesType] = useState<"annotated" | "original">("annotated");
-  const videoRef = useRef<HTMLVideoElement>(null);
 
   // Close on Escape key
   useEffect(() => {
@@ -101,13 +97,6 @@ export function CompletedClassModal({
       active = false;
     };
   }, [scheduleId]);
-
-  // Apply playback speed
-  useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.playbackRate = speed;
-    }
-  }, [speed, isPlaying]);
 
   const durationMin = assets?.recording.durationSeconds
     ? Math.round(assets.recording.durationSeconds / 60)
@@ -218,76 +207,13 @@ export function CompletedClassModal({
                 </div>
 
                 {assets?.recording.status === "READY" && assets.recording.url ? (
-                  isPlaying ? (
-                    <div className="mt-3 space-y-2">
-                      <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-black shadow-inner">
-                        {assets.recording.type === "YOUTUBE" ? (
-                          <iframe
-                            src={
-                              assets.recording.url.includes("embed")
-                                ? assets.recording.url
-                                : `https://www.youtube.com/embed/${
-                                    assets.recording.url.match(/(?:v=|\/embed\/|\.be\/)([^&?]+)/)?.[1] || ""
-                                  }?autoplay=1`
-                            }
-                            className="w-full h-full border-0"
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                            allowFullScreen
-                            title="Class Recording"
-                          />
-                        ) : (
-                          <video
-                            ref={videoRef}
-                            src={assets.recording.url}
-                            controls
-                            autoPlay
-                            className="w-full h-full object-contain"
-                          />
-                        )}
-                      </div>
-
-                      {assets.recording.type === "VIDEO" && (
-                        <div className="flex items-center justify-between gap-2 px-1 pt-1 text-xs">
-                          <div className="flex items-center gap-1">
-                            <span className="text-[10px] font-bold uppercase text-slate-500 mr-1">
-                              Speed:
-                            </span>
-                            {SPEEDS.map((s) => (
-                              <button
-                                key={s}
-                                type="button"
-                                onClick={() => setSpeed(s)}
-                                className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition cursor-pointer ${
-                                  speed === s
-                                    ? "bg-orange-600 text-white"
-                                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200"
-                                }`}
-                              >
-                                {s}x
-                              </button>
-                            ))}
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => setIsPlaying(false)}
-                            className="text-[11px] font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition cursor-pointer"
-                          >
-                            Hide Player
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setIsPlaying(true)}
-                      className="w-full mt-2 py-2.5 px-4 bg-[#a33900] hover:bg-orange-800 text-white rounded-xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 shadow-sm hover:shadow transition active:scale-[0.99] cursor-pointer"
-                    >
-                      <span className="material-symbols-outlined text-[18px]">play_arrow</span>
-                      <span>Play Class</span>
-                    </button>
-                  )
+                  <Link
+                    href={`/live-class/${scheduleId}/recording`}
+                    className="w-full mt-2 py-2.5 px-4 bg-[#a33900] hover:bg-orange-800 text-white rounded-xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 shadow-sm hover:shadow transition active:scale-[0.99] cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">play_arrow</span>
+                    <span>Play Class</span>
+                  </Link>
                 ) : assets?.recording.status === "PROCESSING" ? (
                   <div className="mt-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 text-xs flex items-center gap-2.5">
                     <span className="w-4 h-4 border-2 border-amber-600 border-t-transparent rounded-full animate-spin shrink-0" />
