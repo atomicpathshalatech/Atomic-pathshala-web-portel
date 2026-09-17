@@ -31,7 +31,7 @@ import { TeacherPostClassModal } from "@/components/live-class/TeacherPostClassM
 import { SlideTemplatesModal } from "@/components/live-class/SlideTemplatesModal";
 import { PageThumbnail } from "@/components/live-class/PageThumbnail";
 import { GRACE_PERIOD_MINUTES, END_WARNING_MINUTES } from "@/lib/whiteboard/constants";
-import { playHandRaiseChime } from "@/lib/live-class/live-sound-effects";
+import { playHandRaiseChime, playMessageChime, playCallConnectedChime, unlockAudioForNotifications } from "@/lib/live-class/live-sound-effects";
 import { extractYouTubeVideoId } from "@/lib/live-class/youtube";
 
 type WhiteboardPage = { id: string; pageNumber: number; objects: StrokeObject[]; background: string };
@@ -745,6 +745,21 @@ export function TeacherLiveClassRoom({
 
   const handleCanvasPointerLeave = useCallback(() => setCursorPos(null), []);
 
+  // Notification chimes (hand-raise, chat, call-connected) fire from
+  // realtime events, not a user gesture — browser autoplay policy keeps
+  // the shared AudioContext suspended without one, so the very first
+  // chime of the class would otherwise silently fail. Unlock it on the
+  // teacher's first interaction with the room.
+  useEffect(() => {
+    const unlock = () => unlockAudioForNotifications();
+    window.addEventListener("pointerdown", unlock, { once: true });
+    window.addEventListener("keydown", unlock, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, []);
+
   // ---- Pusher: roster presence + teacher-only hand-raise/quiz channels ----
   useEffect(() => {
     if (!wbSession) return;
@@ -758,6 +773,7 @@ export function TeacherLiveClassRoom({
     presence.bind("pusher:member_removed", () => setStudentCount((c) => Math.max(0, c - 1)));
     presence.bind(WB_EVENTS.MESSAGE_SENT, () => {
       if (rightTabRef.current !== "messages") setUnreadMessages((c) => c + 1);
+      playMessageChime();
     });
     presence.bind(WB_EVENTS.SESSION_EXTENDED, (data: { addedMinutes: number; newScheduledEnd: string; totalExtendedMinutes: number }) => {
       setWbSession((prev) =>
@@ -805,6 +821,15 @@ export function TeacherLiveClassRoom({
       setConnectedStudents((prev) => {
         if (!data.audioConnected && !data.videoConnected) {
           return prev.filter((s) => s.studentId !== data.studentId);
+        }
+        // A confirmation chime the moment the call actually connects
+        // (distinct from the hand-raise-request chime that already fires
+        // when the request first arrives) - only on the true
+        // not-connected -> connected transition, not on every subsequent
+        // state update for an already-connected student.
+        const wasConnected = prev.find((s) => s.studentId === data.studentId);
+        if (!wasConnected || (!wasConnected.audioConnected && !wasConnected.videoConnected)) {
+          playCallConnectedChime();
         }
         const updatedItem: TeacherConnectedStudent = {
           studentId: data.studentId,
@@ -1746,6 +1771,26 @@ export function TeacherLiveClassRoom({
       });
       setActiveQuiz(data.quiz);
       setQuizMetrics({ counts: data.counts, totalResponses: data.totalResponses });
+      // Previously the reveal-confirmation screen (QuizPanel's
+      // activeQuiz.status !== "ACTIVE" branch) stayed up until the teacher
+      // manually clicked "Finish & Dismiss" - the poll popup never closed
+      // on its own and there was no clearly-labeled way to start the next
+      // one. Auto-closing a couple seconds after reveal lets the teacher
+      // see the "revealed" confirmation briefly, then the same panel falls
+      // through to its create-quiz form - which is the actual "Next Quiz"
+      // entry point - without an extra click. Calls the real close
+      // endpoint directly (rather than the closeQuiz() function, whose
+      // closure would capture this render's now-stale activeQuiz) so the
+      // quiz is properly marked CLOSED server-side, not just forgotten
+      // client-side; the functional setState form guards against a
+      // manual close/new-launch already having moved past this quiz by
+      // the time the timer fires.
+      const revealedQuizId = data.quiz.id;
+      window.setTimeout(() => {
+        postJson(`/api/whiteboard/sessions/${wbSession.id}/quiz/${revealedQuizId}/close`).catch(() => {});
+        setActiveQuiz((prev) => (prev?.id === revealedQuizId ? null : prev));
+        setQuizMetrics((prev) => (prev ? null : prev));
+      }, 2500);
     } catch (err) {
       setQuizError(err instanceof Error ? err.message : "Could not reveal the answer.");
     }
@@ -4565,13 +4610,13 @@ function QuizPanel({
           </div>
         ) : (
           <div className="text-center pt-1">
-            <p className="text-xs text-emerald-400 font-bold mb-2">Answer revealed to class.</p>
+            <p className="text-xs text-emerald-400 font-bold mb-2">Answer revealed to class. Closing automatically…</p>
             <button
               type="button"
               onClick={onClose}
-              className="w-full bg-[#202230] hover:bg-[#2c2f42] text-gray-200 py-2 rounded-xl text-xs font-semibold transition"
+              className="w-full bg-blue-600 hover:bg-blue-500 text-white py-2 rounded-xl text-xs font-bold transition"
             >
-              Finish &amp; Dismiss
+              Next Quiz →
             </button>
           </div>
         )}

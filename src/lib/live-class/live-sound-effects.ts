@@ -27,6 +27,19 @@ function getAudioContext(): AudioContext | null {
 }
 
 /**
+ * Every chime below only actually plays once the shared AudioContext has
+ * been resumed - but most of these fire from a realtime (Pusher) event
+ * handler, not a user gesture, and browser autoplay policy blocks/keeps
+ * an AudioContext suspended without one. Call this once, from a click/
+ * touchstart on the live-class room itself, so the context is already
+ * running by the time the first realtime-triggered chime needs to play.
+ * Safe to call repeatedly - a no-op once already running.
+ */
+export function unlockAudioForNotifications() {
+  getAudioContext();
+}
+
+/**
  * Play a short 2-tone melodic chime for Hand Raise
  */
 export function playHandRaiseChime() {
@@ -183,5 +196,67 @@ export function playPollRevealChime(isCorrect?: boolean) {
     }
   } catch (err) {
     console.debug("[AudioFX] Poll reveal tone error", err);
+  }
+}
+
+/**
+ * Play a short single-tone "pop" for a new chat/doubt message — the
+ * teacher previously had zero audio cue for an incoming message, only a
+ * silently-incrementing unread badge.
+ */
+export function playMessageChime() {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+
+  try {
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(784, now); // G5
+
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(0.14, now + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.25);
+  } catch (err) {
+    console.debug("[AudioFX] Message chime error", err);
+  }
+}
+
+/**
+ * Play a short confirmation chime the moment an audio/video call actually
+ * connects — distinct from playCallIncomingRingtone (which rings for the
+ * pending invite before it's picked up).
+ */
+export function playCallConnectedChime() {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+
+  try {
+    const now = ctx.currentTime;
+    const freqs = [523.25, 783.99]; // C5 -> G5, quick confirming rise
+    freqs.forEach((freq, idx) => {
+      const startTime = now + idx * 0.07;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, startTime);
+      gain.gain.setValueAtTime(0.001, startTime);
+      gain.gain.linearRampToValueAtTime(0.16, startTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.3);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(startTime);
+      osc.stop(startTime + 0.32);
+    });
+  } catch (err) {
+    console.debug("[AudioFX] Call connected chime error", err);
   }
 }

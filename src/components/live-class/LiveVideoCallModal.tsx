@@ -28,6 +28,11 @@ interface LiveVideoCallModalProps {
   teacherAudioConnected?: boolean;
   teacherVideoConnected?: boolean;
   onEndCall?: () => Promise<void> | void;
+  // A DIFFERENT student who is currently an approved video speaker — the
+  // rest of the class previously had no way to see a classmate's video at
+  // all, only the teacher did. Read-only: no mic/camera/end-call controls,
+  // since this viewer isn't the one on the call.
+  classSpeaker?: { studentUserId: string; studentName: string } | null;
 }
 
 export function LiveVideoCallModal({
@@ -39,6 +44,7 @@ export function LiveVideoCallModal({
   teacherAudioConnected = false,
   teacherVideoConnected = false,
   onEndCall,
+  classSpeaker = null,
 }: LiveVideoCallModalProps) {
   const { isCameraEnabled, isMicrophoneEnabled, localParticipant } = useLocalParticipant();
   const tracks = useTracks([Track.Source.Camera, Track.Source.Microphone], { onlySubscribed: false });
@@ -199,6 +205,32 @@ export function LiveVideoCallModal({
   const isVideoMode = requestType === "VIDEO" || teacherVideoConnected;
   const isAudioActive = isApprovedSpeaker || teacherAudioConnected || teacherVideoConnected;
   const localCameraTrack = tracks.find((t) => t.participant.isLocal && t.source === Track.Source.Camera);
+
+  // Not this viewer's own call — but a classmate is currently an approved
+  // video speaker. Everyone in the room already subscribes to every
+  // published track (see ROOM_OPTIONS in VideoStrip.tsx / the room's
+  // subscribe grant), so their track is already reachable here by
+  // identity; only the UI to show it for a non-speaking student was
+  // missing.
+  if (!isAudioActive && classSpeaker) {
+    const classmateTrack = tracks.find(
+      (t) => t.source === Track.Source.Camera && t.participant.identity === classSpeaker.studentUserId
+    );
+    if (!classmateTrack) return null;
+    return (
+      <div className="fixed bottom-20 right-4 z-40 w-40 sm:w-48 rounded-xl overflow-hidden bg-slate-950 border-2 border-blue-500/80 shadow-2xl animate-in fade-in slide-in-from-bottom duration-200">
+        <div className="relative aspect-video">
+          <VideoTrack trackRef={classmateTrack} className="w-full h-full object-cover" />
+          <div className="absolute top-1.5 left-1.5 flex items-center gap-1 bg-black/80 backdrop-blur-xs px-1.5 py-0.5 rounded-md border border-white/10">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-[10px] font-bold text-white truncate max-w-[100px]">
+              {classSpeaker.studentName}
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!isAudioActive) return null;
 

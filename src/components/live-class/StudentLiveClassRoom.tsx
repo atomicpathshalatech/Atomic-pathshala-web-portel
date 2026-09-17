@@ -15,6 +15,8 @@ import {
   playPollAlert,
   playPollRevealChime,
   playCallIncomingRingtone,
+  playCallConnectedChime,
+  unlockAudioForNotifications,
 } from "@/lib/live-class/live-sound-effects";
 
 
@@ -226,6 +228,18 @@ export function StudentLiveClassRoom({
   // (teacher grants directly, no request from the student involved).
   const [teacherAudioConnected, setTeacherAudioConnected] = useState(false);
   const [teacherVideoConnected, setTeacherVideoConnected] = useState(false);
+  // The Pusher handler below is registered once per wbSession.id (see this
+  // effect's dependency array), so a state variable read inside it would
+  // stay captured at its initial value forever - a ref is the correct way
+  // to read the latest "was already connected" value from inside that
+  // stable closure.
+  const teacherConnectedRef = useRef(false);
+
+  // A DIFFERENT student who is currently an approved video speaker — shown
+  // to the rest of the class as a small popup (see LiveVideoCallModal's
+  // classSpeaker branch). Previously only the teacher could see a speaking
+  // classmate's video at all.
+  const [activeClassSpeaker, setActiveClassSpeaker] = useState<{ studentUserId: string; studentName: string } | null>(null);
   const [teacherConnectionToken, setTeacherConnectionToken] = useState<string | null>(null);
 
   const [quiz, setQuiz] = useState<LiveQuiz | null>(null);
@@ -248,6 +262,20 @@ export function StudentLiveClassRoom({
   const [activeMobileTab, setActiveMobileTab] = useState<"chat" | "quiz" | "info">("chat");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showChat, setShowChat] = useState(true);
+
+  // Notification chimes (poll alert/reveal, call ring/connected) fire from
+  // realtime events, not a user gesture — browser autoplay policy keeps
+  // the shared AudioContext suspended without one. Unlock it on the
+  // student's first interaction with the room.
+  useEffect(() => {
+    const unlock = () => unlockAudioForNotifications();
+    window.addEventListener("pointerdown", unlock, { once: true });
+    window.addEventListener("keydown", unlock, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, []);
 
   // Manual orientation mode toggle ("auto" | "portrait" | "landscape") — a
   // student can still force one, but "auto" (the default) now tracks the
@@ -527,12 +555,19 @@ export function StudentLiveClassRoom({
     // Handle teacher approving speaking permission for this student
     channel.bind(
       WB_EVENTS.SPEAKER_APPROVED,
-      (data: { studentUserId: string; requestType: "AUDIO" | "VIDEO"; speakerToken?: string }) => {
+      (data: { studentUserId: string; studentName?: string; requestType: "AUDIO" | "VIDEO"; speakerToken?: string }) => {
         if (data.studentUserId === currentUserId) {
           setIsApprovedSpeaker(true);
           setSpeakerRequestType(data.requestType || "AUDIO");
           if (data.speakerToken) setSpeakerToken(data.speakerToken);
           playCallIncomingRingtone();
+        } else if (data.requestType === "VIDEO" && data.studentName) {
+          // A classmate (not me) just got approved for video — surface
+          // their feed to the rest of the class too (see
+          // LiveVideoCallModal's classSpeaker prop). This event already
+          // broadcasts to every student on the shared session channel;
+          // it was just being ignored for anyone but the approved student.
+          setActiveClassSpeaker({ studentUserId: data.studentUserId, studentName: data.studentName });
         }
       }
     );
@@ -545,6 +580,7 @@ export function StudentLiveClassRoom({
         setSpeakerRequestType(null);
         setHandRaised(false);
       }
+      setActiveClassSpeaker((prev) => (prev?.studentUserId === data.studentUserId ? null : prev));
     });
 
     // Teacher-initiated connect/disconnect — independent of hand-raise above.
@@ -557,12 +593,14 @@ export function StudentLiveClassRoom({
         connectionToken: string | null;
       }) => {
         if (data.studentUserId !== currentUserId) return;
+        const nowConnected = data.audioConnected || data.videoConnected;
+        if (nowConnected && !teacherConnectedRef.current) {
+          playCallConnectedChime();
+        }
+        teacherConnectedRef.current = nowConnected;
         setTeacherAudioConnected(data.audioConnected);
         setTeacherVideoConnected(data.videoConnected);
         setTeacherConnectionToken(data.connectionToken);
-        if (data.audioConnected || data.videoConnected) {
-          playCallIncomingRingtone();
-        }
       }
     );
 
@@ -1179,6 +1217,7 @@ export function StudentLiveClassRoom({
                 teacherVideoConnected={teacherVideoConnected}
                 teacherConnectionToken={teacherConnectionToken}
                 onEndCall={handleEndCall}
+                classSpeaker={activeClassSpeaker}
               />
             )}
           </div>
@@ -1281,11 +1320,95 @@ export function StudentLiveClassRoom({
                     teacherVideoConnected={teacherVideoConnected}
                     teacherConnectionToken={teacherConnectionToken}
                     onEndCall={handleEndCall}
+                    classSpeaker={activeClassSpeaker}
                   />
                 </div>
               )}
             </div>
           ) : null}
+
+          {/* Mobile Quiz / Poll — shown directly on the main display the
+              moment the teacher launches one, regardless of which bottom
+              tab is active, instead of only inside the separate "Quiz &
+              Polls" tab a student had to remember to tap into. */}
+          {quiz && !quizDismissed && (
+            <div className="absolute bottom-2 left-2 right-2 bg-[#13172b]/95 backdrop-blur-md border-2 border-blue-500 shadow-[0_0_25px_rgba(99,102,241,0.35)] rounded-xl p-3 space-y-2 z-30 animate-in slide-in-from-bottom duration-200 max-h-full overflow-y-auto">
+              <div className="flex items-center justify-between pb-1 border-b border-blue-900/60">
+                <h3 className="text-xs font-black text-white flex items-center gap-1.5 min-w-0">
+                  <span className="w-2 h-2 rounded-full bg-blue-400 animate-ping shrink-0" />
+                  <span className="truncate">{quiz.questionText || "Live Class Quiz"}</span>
+                </h3>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {quiz.status === "ACTIVE" ? (
+                    <span className="text-[10px] font-mono font-black text-slate-950 bg-amber-400 border border-amber-300 px-2 py-0.5 rounded-full shadow">
+                      {remainingSec}s
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-500/50 px-2 py-0.5 rounded-full">
+                      {quiz.status === "REVEALED" ? "Revealed" : "Closed"}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setQuizDismissed(true)}
+                    className="text-slate-400 hover:text-white p-0.5 rounded-lg hover:bg-slate-800 transition"
+                    title="Dismiss Quiz"
+                  >
+                    <span className="material-symbols-outlined text-sm">close</span>
+                  </button>
+                </div>
+              </div>
+              {quizError && <p className="text-[11px] text-rose-400 font-medium">{quizError}</p>}
+              {quiz.status === "REVEALED" && (
+                <div className="animate-in fade-in slide-in-from-top-1 duration-200">
+                  {mySelection === quiz.correctOption ? (
+                    <div className="p-2 rounded-lg bg-emerald-500/20 border-2 border-emerald-500/60 text-emerald-300 text-[11px] font-bold flex items-center gap-2">
+                      <span className="text-base">🎉</span>
+                      <p className="font-extrabold text-white">Correct! Option {quiz.correctOption} is right.</p>
+                    </div>
+                  ) : mySelection ? (
+                    <div className="p-2 rounded-lg bg-rose-500/20 border-2 border-rose-500/60 text-rose-300 text-[11px] font-bold flex items-center gap-2">
+                      <span className="text-base">❌</span>
+                      <p className="font-extrabold text-white">Incorrect. Correct answer: Option {quiz.correctOption}.</p>
+                    </div>
+                  ) : (
+                    <div className="p-2 rounded-lg bg-blue-500/20 border-2 border-blue-500/60 text-blue-300 text-[11px] font-bold flex items-center gap-2">
+                      <span className="text-base">ℹ️</span>
+                      <p className="font-extrabold text-white">Poll ended. Correct answer: Option {quiz.correctOption}.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-1.5">
+                {quiz.options.map((o) => {
+                  const selected = mySelection === o.key;
+                  const revealed = quiz.status === "REVEALED";
+                  const isCorrect = revealed && quiz.correctOption === o.key;
+                  const isWrong = revealed && selected && quiz.correctOption !== o.key;
+                  return (
+                    <button
+                      key={o.key}
+                      type="button"
+                      disabled={Boolean(mySelection) || quiz.status !== "ACTIVE" || submittingAnswer}
+                      onClick={() => submitAnswer(o.key)}
+                      className={`text-left px-2.5 py-2 rounded-lg border-2 text-[11px] font-bold transition active:scale-[0.98] touch-manipulation cursor-pointer shadow-sm ${
+                        isCorrect
+                          ? "border-emerald-400 bg-emerald-600 text-white shadow-emerald-500/50 ring-2 ring-emerald-300"
+                          : isWrong
+                          ? "border-rose-500 bg-rose-950/80 text-rose-200"
+                          : selected
+                          ? "border-white bg-blue-600 text-white shadow-blue-500/50 ring-2 ring-blue-400"
+                          : "bg-[#1a2038] hover:bg-[#252d4e] border-[#333d6b] text-white"
+                      } disabled:cursor-default`}
+                    >
+                      <span className={`font-mono font-black mr-1 pointer-events-none ${selected || isCorrect ? "text-white" : "text-blue-400"}`}>{o.key}.</span>
+                      <span className="pointer-events-none text-white">{o.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Bottom Interactive Area (Tabs: Chat | Quiz | Details) */}
