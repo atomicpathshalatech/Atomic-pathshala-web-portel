@@ -323,16 +323,6 @@ export function StudentLiveClassRoom({
     };
   }, []);
 
-  // Exactly one <VideoStrip> must ever be mounted per student
-  const [isDesktopViewport, setIsDesktopViewport] = useState(true);
-  useEffect(() => {
-    const mql = window.matchMedia("(min-width: 1024px)");
-    setIsDesktopViewport(mql.matches);
-    const handler = (e: MediaQueryListEvent) => setIsDesktopViewport(e.matches);
-    mql.addEventListener("change", handler);
-    return () => mql.removeEventListener("change", handler);
-  }, []);
-
   // Time & countdown state (Synchronized with authoritative server clock)
   const [currentTimeMs, setCurrentTimeMs] = useState(Date.now());
   const serverTimeOffsetRef = useRef<number>(0);
@@ -1032,11 +1022,17 @@ export function StudentLiveClassRoom({
             <span className="text-[10px] uppercase font-bold hidden xs:inline">{orientationMode}</span>
           </button>
 
-          {/* Local Hide/Show Teacher-Video-&-Chat Popup (Student Preference). */}
+          {/* Local Hide/Show Teacher-Video-&-Chat Sidebar (Student Preference).
+              Previously desktop-only (hidden lg:flex) and, on top of that,
+              never actually wired to anything that hid the sidebar - toggling
+              it changed the button's own look with no real effect. Now
+              visible at every size (matters more on a phone, where the
+              sidebar takes real space from the stage) and actually collapses
+              the sidebar below. */}
           <button
             type="button"
             onClick={() => setShowChat((v) => !v)}
-            className={`hidden lg:flex items-center gap-1 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition shadow-sm border ${
+            className={`flex items-center gap-1 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition shadow-sm border ${
               showChat
                 ? "bg-slate-800 hover:bg-slate-700 text-blue-300 border-blue-500/40"
                 : "bg-slate-800/60 hover:bg-slate-700/80 text-slate-400 border-slate-700"
@@ -1064,9 +1060,12 @@ export function StudentLiveClassRoom({
       </header>
 
       {/* ========================================================================= */}
-      {/* DESKTOP & LAPTOP VIEW (lg and up): Fixed 2-Column Split */}
+      {/* Main stage + right sidebar (video on top, chat below) — one layout
+          at every screen size and orientation, matching the reference
+          classroom UI the product owner asked to mirror, rather than
+          switching to a separate stacked mobile layout below `lg`. */}
       {/* ========================================================================= */}
-      <div className="hidden lg:flex flex-1 min-h-0 flex-row p-3 gap-3 overflow-hidden bg-[#0b0d14]">
+      <div className="flex flex-1 min-h-0 flex-row p-1.5 sm:p-3 gap-1.5 sm:gap-3 overflow-hidden bg-[#0b0d14]">
         {/* Left Main Stage (Whiteboard Canvas / YouTube Player + Overlaid Quiz Drawer) */}
         <div className="flex-1 min-w-0 h-full flex flex-col bg-[#10121d] rounded-2xl border border-slate-800/80 overflow-hidden relative shadow-2xl">
           {/* Presentation Title Banner */}
@@ -1098,14 +1097,14 @@ export function StudentLiveClassRoom({
                   livePhase={isLive ? "LIVE" : "PREPARING"}
                 />
               </div>
-            ) : isDesktopViewport ? (
+            ) : (
               <StudentWhiteboardMirror
                 boardBackground={boardBackground}
                 boardEmpty={boardEmpty}
                 isLive={isLive}
                 objects={boardObjects}
               />
-            ) : null}
+            )}
 
             {/* Desktop Quiz / Poll Floating Drawer (High Contrast + Close Button + Auto-Dismiss) */}
             {quiz && !quizDismissed && (
@@ -1199,269 +1198,90 @@ export function StudentLiveClassRoom({
           </div>
         </div>
 
-        {/* Right Fixed Sidebar (Teacher Video on Top + Live Chat Console on Bottom) */}
-        <aside className="w-80 xl:w-88 h-full shrink-0 flex flex-col bg-[#10121d] rounded-2xl border border-slate-800/80 overflow-hidden shadow-2xl">
-          {/* Pinned Teacher Video on Top */}
-          <div className="h-48 sm:h-52 bg-black relative border-b border-slate-800 shrink-0">
-            {isDesktopViewport && (
-              <VideoStrip
-                whiteboardSessionId={wbSession?.id || batchScheduleId}
-                variant="panel"
-                role="STUDENT"
-                teacherName={teacherName}
-                isApprovedSpeaker={isApprovedSpeaker}
-                speakerRequestType={speakerRequestType}
-                speakerToken={speakerToken}
-                teacherAudioConnected={teacherAudioConnected}
-                teacherVideoConnected={teacherVideoConnected}
-                teacherConnectionToken={teacherConnectionToken}
-                onEndCall={handleEndCall}
-                classSpeaker={activeClassSpeaker}
-              />
-            )}
-          </div>
-
-          {/* Approved Speaker Banner */}
-          {isApprovedSpeaker && (
-            <div className="mx-3 my-2 bg-emerald-950/80 border border-emerald-500/60 rounded-xl px-3 py-1.5 flex items-center justify-between text-xs text-emerald-200 font-bold shrink-0">
-              <span className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                Speaking Active
-              </span>
-              <span className="text-[10px] text-emerald-400 font-normal">Mic Connected</span>
-            </div>
-          )}
-
-          {/* Teacher-Connected Banner — informational only, no accept/reject
-              (same as hand-raise approval above, the teacher's action is
-              already authoritative by the time this fires). */}
-          {(teacherAudioConnected || teacherVideoConnected) && (
-            <div className="mx-3 my-2 bg-blue-950/80 border border-blue-500/60 rounded-xl px-3 py-1.5 flex items-center justify-between text-xs text-blue-200 font-bold shrink-0">
-              <span className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-blue-400 animate-ping" />
-                {teacherVideoConnected ? "Teacher connected your camera & mic" : "Teacher connected your mic"}
-              </span>
-              <span className="text-[10px] text-blue-400 font-normal">
-                {teacherVideoConnected ? "Camera + Mic" : "Mic Only"}
-              </span>
-            </div>
-          )}
-
-          {/* Sidebar Header Tabs */}
-          <div className="flex border-b border-slate-800 px-3 pt-2 shrink-0 bg-[#0a0b12]">
-            <span className="px-3 py-2 text-xs font-bold text-blue-400 border-b-2 border-blue-500 flex items-center gap-1.5">
-              <span className="material-symbols-outlined text-sm">chat</span>
-              Live Classroom Chat
-            </span>
-          </div>
-
-          {/* Fixed Scrollable Chat Console */}
-          <div className="flex-1 min-h-0 p-2 flex flex-col bg-[#0d0f18]">
-            {wbSession?.id ? (
-              <MessagesPanel
-                whiteboardSessionId={wbSession.id}
-                currentUserId={currentUserId}
-                role="STUDENT"
-                theme="dark"
-              />
-            ) : (
-              <div className="h-full flex items-center justify-center text-xs text-slate-500">
-                Connecting chat...
-              </div>
-            )}
-          </div>
-        </aside>
-      </div>
-
-      {/* ========================================================================= */}
-      {/* MOBILE & TABLET VIEW (< lg): Top Video/Canvas Stage + Bottom Tabbed Console */}
-      {/* ========================================================================= */}
-      <div
-        className={`lg:hidden flex-1 min-h-0 flex ${
-          effectiveOrientation === "landscape" ? "flex-row" : "flex-col"
-        } overflow-hidden bg-[#0b0d14]`}
-      >
-        {/* Top Media Area: 16:9 Canvas or YouTube Player */}
-        <div
+        {/* Right Fixed Sidebar (Teacher Video on Top + Live Chat Console on Bottom).
+            Width ramps up with viewport instead of a fixed desktop-only
+            w-80 - narrow enough on a phone to leave the main stage usable,
+            same structure the reference classroom UI (and this component's
+            own desktop layout, previously lg-and-up only) already uses. */}
+        <aside
           className={`${
-            effectiveOrientation === "landscape"
-              ? "w-2/3 h-full border-b-0 border-r"
-              : "w-full aspect-video max-h-[38dvh] sm:max-h-[45dvh] border-b"
-          } shrink-0 bg-black relative flex items-center justify-center overflow-hidden border-slate-800/80`}
+            showChat
+              ? "w-[34%] min-w-[104px] max-w-[170px] xs:max-w-[210px] sm:w-64 sm:max-w-none md:w-72 lg:w-80 xl:w-88"
+              : "w-20 xs:w-24 sm:w-32"
+          } h-full shrink-0 flex flex-col bg-[#10121d] rounded-2xl border border-slate-800/80 overflow-hidden shadow-2xl transition-[width] duration-200`}
         >
-          {/* Remaining class time, next to the slide/stage area as requested
-              — previously only shown in the teacher's own header, nowhere
-              on the student side at all. */}
-          {isLive && remainingSeconds > 0 && (
-            <span
-              className={`absolute top-2 left-2 z-20 flex items-center gap-1 text-[10px] sm:text-[11px] font-mono font-bold px-2 py-1 rounded-md border ${
-                remainingSeconds <= 300
-                  ? "text-amber-300 bg-amber-950/80 border-amber-500/50 animate-pulse"
-                  : "text-slate-200 bg-black/70 border-slate-700/60"
-              }`}
-            >
-              <span className="material-symbols-outlined text-xs">timer</span>
-              {formatHms(remainingSeconds)}
-            </span>
-          )}
-
-          {isYouTube ? (
-            <YouTubeLivePlayer
-              youtubeVideoId={wbSession?.youtubeVideoId ?? null}
-              title={scheduleTitle}
-              subject={batchName}
-              livePhase={isLive ? "LIVE" : "PREPARING"}
+          {/* Pinned Teacher Video on Top */}
+          <div className="h-24 xs:h-28 sm:h-48 md:h-52 bg-black relative border-b border-slate-800 shrink-0">
+            <VideoStrip
+              whiteboardSessionId={wbSession?.id || batchScheduleId}
+              variant="panel"
+              role="STUDENT"
+              teacherName={teacherName}
+              isApprovedSpeaker={isApprovedSpeaker}
+              speakerRequestType={speakerRequestType}
+              speakerToken={speakerToken}
+              teacherAudioConnected={teacherAudioConnected}
+              teacherVideoConnected={teacherVideoConnected}
+              teacherConnectionToken={teacherConnectionToken}
+              onEndCall={handleEndCall}
+              classSpeaker={activeClassSpeaker}
             />
-          ) : !isDesktopViewport ? (
-            <div className="relative aspect-[16/9] w-full h-full max-w-full max-h-full overflow-hidden">
-              <StudentWhiteboardMirror
-                boardBackground={boardBackground}
-                boardEmpty={boardEmpty}
-                isLive={isLive}
-                objects={boardObjects}
-              />
-              {/* Mobile PiP Teacher Video (Corner Preview) */}
-              {!isYouTube && (
-                <div className="absolute top-2 right-2 w-28 xs:w-32 aspect-video rounded-lg overflow-hidden border border-blue-500/60 shadow-xl bg-[#10121d] z-20">
-                  <VideoStrip
-                    whiteboardSessionId={wbSession?.id || batchScheduleId}
-                    variant="panel"
+          </div>
+
+          {showChat && (
+            <>
+              {/* Approved Speaker Banner */}
+              {isApprovedSpeaker && (
+                <div className="mx-3 my-2 bg-emerald-950/80 border border-emerald-500/60 rounded-xl px-3 py-1.5 flex items-center justify-between text-xs text-emerald-200 font-bold shrink-0">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                    Speaking Active
+                  </span>
+                  <span className="text-[10px] text-emerald-400 font-normal">Mic Connected</span>
+                </div>
+              )}
+
+              {/* Teacher-Connected Banner — informational only, no accept/reject
+                  (same as hand-raise approval above, the teacher's action is
+                  already authoritative by the time this fires). */}
+              {(teacherAudioConnected || teacherVideoConnected) && (
+                <div className="mx-3 my-2 bg-blue-950/80 border border-blue-500/60 rounded-xl px-3 py-1.5 flex items-center justify-between text-xs text-blue-200 font-bold shrink-0">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-blue-400 animate-ping" />
+                    {teacherVideoConnected ? "Teacher connected your camera & mic" : "Teacher connected your mic"}
+                  </span>
+                  <span className="text-[10px] text-blue-400 font-normal">
+                    {teacherVideoConnected ? "Camera + Mic" : "Mic Only"}
+                  </span>
+                </div>
+              )}
+
+              {/* Sidebar Header Tabs */}
+              <div className="flex border-b border-slate-800 px-3 pt-2 shrink-0 bg-[#0a0b12]">
+                <span className="px-3 py-2 text-xs font-bold text-blue-400 border-b-2 border-blue-500 flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-sm">chat</span>
+                  Live Classroom Chat
+                </span>
+              </div>
+
+              {/* Fixed Scrollable Chat Console */}
+              <div className="flex-1 min-h-0 p-2 flex flex-col bg-[#0d0f18]">
+                {wbSession?.id ? (
+                  <MessagesPanel
+                    whiteboardSessionId={wbSession.id}
+                    currentUserId={currentUserId}
                     role="STUDENT"
-                    teacherName={teacherName}
-                    isApprovedSpeaker={isApprovedSpeaker}
-                    speakerRequestType={speakerRequestType}
-                    speakerToken={speakerToken}
-                    teacherAudioConnected={teacherAudioConnected}
-                    teacherVideoConnected={teacherVideoConnected}
-                    teacherConnectionToken={teacherConnectionToken}
-                    onEndCall={handleEndCall}
-                    classSpeaker={activeClassSpeaker}
+                    theme="dark"
                   />
-                </div>
-              )}
-            </div>
-          ) : null}
-
-          {/* Mobile Quiz / Poll — shown directly on the main display the
-              moment the teacher launches one, regardless of which bottom
-              tab is active, instead of only inside the separate "Quiz &
-              Polls" tab a student had to remember to tap into. */}
-          {quiz && !quizDismissed && (
-            <div className="absolute bottom-2 left-2 right-2 bg-[#13172b]/95 backdrop-blur-md border-2 border-blue-500 shadow-[0_0_25px_rgba(99,102,241,0.35)] rounded-xl p-3 space-y-2 z-30 animate-in slide-in-from-bottom duration-200 max-h-full overflow-y-auto">
-              <div className="flex items-center justify-between pb-1 border-b border-blue-900/60">
-                <h3 className="text-xs font-black text-white flex items-center gap-1.5 min-w-0">
-                  <span className="w-2 h-2 rounded-full bg-blue-400 animate-ping shrink-0" />
-                  <span className="truncate">{quiz.questionText || "Live Class Quiz"}</span>
-                </h3>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {quiz.status === "ACTIVE" ? (
-                    <span className="text-[10px] font-mono font-black text-slate-950 bg-amber-400 border border-amber-300 px-2 py-0.5 rounded-full shadow">
-                      {remainingSec}s
-                    </span>
-                  ) : (
-                    <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-500/50 px-2 py-0.5 rounded-full">
-                      {quiz.status === "REVEALED" ? "Revealed" : "Closed"}
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setQuizDismissed(true)}
-                    className="text-slate-400 hover:text-white p-0.5 rounded-lg hover:bg-slate-800 transition"
-                    title="Dismiss Quiz"
-                  >
-                    <span className="material-symbols-outlined text-sm">close</span>
-                  </button>
-                </div>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-xs text-slate-500">
+                    Connecting chat...
+                  </div>
+                )}
               </div>
-              {quizError && <p className="text-[11px] text-rose-400 font-medium">{quizError}</p>}
-              {quiz.status === "REVEALED" && (
-                <div className="animate-in fade-in slide-in-from-top-1 duration-200">
-                  {mySelection === quiz.correctOption ? (
-                    <div className="p-2 rounded-lg bg-emerald-500/20 border-2 border-emerald-500/60 text-emerald-300 text-[11px] font-bold flex items-center gap-2">
-                      <span className="text-base">🎉</span>
-                      <p className="font-extrabold text-white">Correct! Option {quiz.correctOption} is right.</p>
-                    </div>
-                  ) : mySelection ? (
-                    <div className="p-2 rounded-lg bg-rose-500/20 border-2 border-rose-500/60 text-rose-300 text-[11px] font-bold flex items-center gap-2">
-                      <span className="text-base">❌</span>
-                      <p className="font-extrabold text-white">Incorrect. Correct answer: Option {quiz.correctOption}.</p>
-                    </div>
-                  ) : (
-                    <div className="p-2 rounded-lg bg-blue-500/20 border-2 border-blue-500/60 text-blue-300 text-[11px] font-bold flex items-center gap-2">
-                      <span className="text-base">ℹ️</span>
-                      <p className="font-extrabold text-white">Poll ended. Correct answer: Option {quiz.correctOption}.</p>
-                    </div>
-                  )}
-                </div>
-              )}
-              <div className="grid grid-cols-2 gap-1.5">
-                {quiz.options.map((o) => {
-                  const selected = mySelection === o.key;
-                  const revealed = quiz.status === "REVEALED";
-                  const isCorrect = revealed && quiz.correctOption === o.key;
-                  const isWrong = revealed && selected && quiz.correctOption !== o.key;
-                  return (
-                    <button
-                      key={o.key}
-                      type="button"
-                      disabled={Boolean(mySelection) || quiz.status !== "ACTIVE" || submittingAnswer}
-                      onClick={() => submitAnswer(o.key)}
-                      className={`text-left px-2.5 py-2 rounded-lg border-2 text-[11px] font-bold transition active:scale-[0.98] touch-manipulation cursor-pointer shadow-sm ${
-                        isCorrect
-                          ? "border-emerald-400 bg-emerald-600 text-white shadow-emerald-500/50 ring-2 ring-emerald-300"
-                          : isWrong
-                          ? "border-rose-500 bg-rose-950/80 text-rose-200"
-                          : selected
-                          ? "border-white bg-blue-600 text-white shadow-blue-500/50 ring-2 ring-blue-400"
-                          : "bg-[#1a2038] hover:bg-[#252d4e] border-[#333d6b] text-white"
-                      } disabled:cursor-default`}
-                    >
-                      <span className={`font-mono font-black mr-1 pointer-events-none ${selected || isCorrect ? "text-white" : "text-blue-400"}`}>{o.key}.</span>
-                      <span className="pointer-events-none text-white">{o.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+            </>
           )}
-        </div>
-
-        {/* Bottom Interactive Area (Tabs: Chat | Quiz | Details) */}
-        <div
-          className={`flex-1 ${
-            effectiveOrientation === "landscape" ? "w-1/3" : "w-full"
-          } min-h-0 flex flex-col bg-[#10121d] overflow-hidden`}
-        >
-          {/* Live Chat — the "Quiz & Polls" and "Class Info" tabs that used
-              to live here were removed: the quiz now shows directly on the
-              main stage (see the overlay above) instead of a separate tab
-              a student had to remember to open, and Class Info added no
-              information a student didn't already see in the header. Live
-              Chat is the only thing this bottom panel needs now. */}
-          {/* Header matches the desktop sidebar's "Live Classroom Chat"
-              label (and the teacher's own panel) instead of dropping
-              straight into the message list with no heading at all. */}
-          <div className="flex border-b border-slate-800 px-3 pt-2 shrink-0 bg-[#0a0b12]">
-            <span className="px-1 py-2 text-xs font-bold text-blue-400 border-b-2 border-blue-500 flex items-center gap-1.5">
-              <span className="material-symbols-outlined text-sm">chat</span>
-              Live Classroom Chat
-            </span>
-          </div>
-          <div className="flex-1 min-h-0 overflow-y-auto p-2">
-            {wbSession?.id ? (
-              <MessagesPanel
-                whiteboardSessionId={wbSession.id}
-                currentUserId={currentUserId}
-                role="STUDENT"
-                theme={isThemeDark ? "dark" : "light"}
-              />
-            ) : (
-              <div className="h-full flex items-center justify-center text-xs text-slate-500">
-                Connecting live chat...
-              </div>
-            )}
-          </div>
-        </div>
+        </aside>
       </div>
 
       {/* Student Hand Raise Participation Modal */}
