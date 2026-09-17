@@ -226,6 +226,7 @@
 
 .live-rail {
   grid-area: rail;
+  display: flex;
 }
 .live-header {
   grid-area: header;
@@ -240,12 +241,27 @@
   grid-area: panel;
 }
 
-/* Below lg the panel is not part of the grid: it slides in over the
-   canvas instead of permanently eating a third of a small screen. It stays
-   mounted at all times - only `transform` changes. */
+/* Below lg neither the rail nor the panel is part of the grid: both slide
+   in over the canvas as fixed overlays instead of permanently eating a
+   chunk of a small screen. Both stay mounted at all times - only
+   `transform` changes (the panel holds VideoStrip's single LiveKit
+   connection; the rail has no such constraint, but the same toggle
+   pattern keeps mobile/tablet behavior consistent between the two). */
 @media (max-width: 1023.98px) {
   .live-rail {
-    display: none;
+    position: fixed;
+    top: var(--live-header-h);
+    left: 0;
+    bottom: var(--live-toolbar-h);
+    width: min(4.5rem, 22vw);
+    z-index: 40;
+    transform: translateX(-101%);
+    transition: transform 0.2s ease;
+    will-change: transform;
+    box-shadow: 12px 0 32px rgba(0, 0, 0, 0.45);
+  }
+  .live-rail[data-open="true"] {
+    transform: translateX(0);
   }
   .live-panel {
     position: fixed;
@@ -264,24 +280,17 @@
   }
 }
 
-/* Tablet: the rail comes back, the panel is still an overlay. */
+/* Tablet: taller chrome, rail/panel remain overlays until lg. */
 @media (min-width: 768px) {
   .live-shell {
     --live-header-h: 3.5rem; /* 56px */
     --live-toolbar-h: 4rem; /* 64px */
-    grid-template-columns: var(--live-rail-w) minmax(0, 1fr);
-    grid-template-areas:
-      "rail header"
-      "rail canvas"
-      "rail toolbar";
-  }
-  .live-rail {
-    display: flex;
   }
 }
 
-/* Laptop: the panel joins the grid, slightly narrower than on desktop so
-   the board keeps a usable share of a 1024px screen. */
+/* Laptop: the rail and panel both join the grid — the panel slightly
+   narrower than on desktop so the board keeps a usable share of a 1024px
+   screen. */
 @media (min-width: 1024px) {
   .live-shell {
     --live-panel-w: 15rem; /* 240px — trimmed so the white board gets more width */
