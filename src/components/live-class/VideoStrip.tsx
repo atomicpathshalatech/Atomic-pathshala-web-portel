@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState, type RefObject } from "react";
+import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState, type RefObject } from "react";
 import {
   LiveKitRoom,
   RoomAudioRenderer,
@@ -37,7 +37,7 @@ const ROOM_OPTIONS: RoomOptions = {
 
 export interface VideoStripProps {
   whiteboardSessionId: string;
-  variant?: "header" | "panel";
+  variant?: "header" | "panel" | "bubble";
   role?: "TEACHER" | "STUDENT";
   teacherName?: string | null;
   isApprovedSpeaker?: boolean;
@@ -56,9 +56,24 @@ export interface VideoStripProps {
   // video speaker, so the rest of the class can see them too (previously
   // only the teacher could).
   classSpeaker?: { studentUserId: string; studentName: string } | null;
+  // TEACHER role only — reports live mic/camera/screen-share state up to a
+  // parent-owned control surface (e.g. the bottom toolbar) that sits
+  // outside the <LiveKitRoom> context this component owns, so it can
+  // reflect state without duplicating LiveKit logic. Fires on every change,
+  // not just mount.
+  onStateChange?: (state: { isMicOn: boolean; isCameraOn: boolean; isScreenSharing: boolean }) => void;
 }
 
-export function VideoStrip({
+// Imperative controls for a parent that renders outside the <LiveKitRoom>
+// context VideoStrip owns internally (see onStateChange above for why this
+// exists instead of prop-drilling local participant state down).
+export interface VideoStripHandle {
+  toggleMic: () => void;
+  toggleCamera: () => void;
+  toggleScreenShare: () => void;
+}
+
+export const VideoStrip = forwardRef<VideoStripHandle, VideoStripProps>(function VideoStrip({
   whiteboardSessionId,
   variant = "panel",
   role = "TEACHER",
@@ -74,7 +89,8 @@ export function VideoStrip({
   onDisconnectStudent,
   onEndCall,
   classSpeaker = null,
-}: VideoStripProps) {
+  onStateChange,
+}: VideoStripProps, ref) {
   const [creds, setCreds] = useState<{ token: string; url: string } | null>(null);
   const [tokenError, setTokenError] = useState<string | null>(null);
   const [useFallbackCamera, setUseFallbackCamera] = useState(false);
@@ -169,10 +185,12 @@ export function VideoStrip({
         onDisconnectStudent={onDisconnectStudent}
         onEndCall={onEndCall}
         classSpeaker={classSpeaker}
+        onStateChange={onStateChange}
+        controlsRef={ref}
       />
     </LiveKitRoom>
   );
-}
+});
 
 /**
  * Inner LiveKit Component
@@ -190,8 +208,10 @@ function VideoStripInner({
   onDisconnectStudent,
   onEndCall,
   classSpeaker = null,
+  onStateChange,
+  controlsRef,
 }: {
-  variant: "header" | "panel";
+  variant: "header" | "panel" | "bubble";
   role?: "TEACHER" | "STUDENT";
   teacherName?: string | null;
   isApprovedSpeaker?: boolean;
@@ -203,10 +223,37 @@ function VideoStripInner({
   onDisconnectStudent?: (studentId: string) => Promise<void> | void;
   onEndCall?: () => Promise<void> | void;
   classSpeaker?: { studentUserId: string; studentName: string } | null;
+  onStateChange?: (state: { isMicOn: boolean; isCameraOn: boolean; isScreenSharing: boolean }) => void;
+  controlsRef?: React.ForwardedRef<VideoStripHandle>;
 }) {
   const connectionState = useConnectionState();
-  const tracks = useTracks([Track.Source.Camera, Track.Source.Microphone], { onlySubscribed: false });
-  const { isCameraEnabled, isMicrophoneEnabled, localParticipant } = useLocalParticipant();
+  const tracks = useTracks(
+    [Track.Source.Camera, Track.Source.Microphone, Track.Source.ScreenShare, Track.Source.ScreenShareAudio],
+    { onlySubscribed: false }
+  );
+  const { isCameraEnabled, isMicrophoneEnabled, isScreenShareEnabled, localParticipant } = useLocalParticipant();
+
+  // Bridge for a parent control surface (e.g. the bottom toolbar) that
+  // renders outside this <LiveKitRoom> context — see VideoStripProps.onStateChange.
+  useImperativeHandle(
+    controlsRef,
+    () => ({
+      toggleMic: () => {
+        localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled).catch(() => {});
+      },
+      toggleCamera: () => {
+        localParticipant.setCameraEnabled(!isCameraEnabled).catch(() => {});
+      },
+      toggleScreenShare: () => {
+        localParticipant.setScreenShareEnabled(!isScreenShareEnabled, { audio: true }).catch(() => {});
+      },
+    }),
+    [localParticipant, isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled]
+  );
+
+  useEffect(() => {
+    onStateChange?.({ isMicOn: isMicrophoneEnabled, isCameraOn: isCameraEnabled, isScreenSharing: isScreenShareEnabled });
+  }, [onStateChange, isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled]);
 
   const mic = useMediaDeviceSelect({ kind: "audioinput" });
   const cam = useMediaDeviceSelect({ kind: "videoinput" });
@@ -320,6 +367,14 @@ function VideoStripInner({
   // Find any active remote student video/audio tracks connected to the room
   const remoteStudentVideoTracks = tracks.filter((t) => t.source === Track.Source.Camera && !t.participant.isLocal);
 
+  // Screen share — same local/remote split as the camera track above. When
+  // present it takes over the primary video surface (camera demotes to a
+  // small inset), for both the teacher's own preview and every student's view.
+  const screenShareTrack =
+    role === "STUDENT"
+      ? tracks.find((t) => t.source === Track.Source.ScreenShare && !t.participant.isLocal)
+      : tracks.find((t) => t.source === Track.Source.ScreenShare && t.participant.isLocal);
+
   // Fullscreen toggle
   const toggleFullscreen = () => {
     if (!containerRef.current) return;
@@ -380,6 +435,38 @@ function VideoStripInner({
   }
 
   // ===========================================================================
+  // BUBBLE VARIANT — minimal video-only tile for the small floating camera
+  // circle (TeacherLiveClassRoom.tsx). No badges/controls: those live in
+  // the bottom toolbar (driven by the controlsRef/onStateChange bridge
+  // above), which would otherwise overflow a ~128px circle.
+  // ===========================================================================
+  if (variant === "bubble") {
+    const primaryTrack = screenShareTrack && !screenShareTrack.publication?.isMuted ? screenShareTrack : cameraTrack;
+    const showVideo = primaryTrack === screenShareTrack || (cameraTrack && cameraTrack.publication && !cameraTrack.publication.isMuted && isCameraEnabled);
+    return (
+      <div className="relative w-full h-full flex items-center justify-center bg-[#0a0b12]">
+        <RoomAudioRenderer />
+        {showVideo && primaryTrack ? (
+          <VideoTrack
+            trackRef={primaryTrack}
+            className={`w-full h-full object-cover ${primaryTrack === cameraTrack ? "transform scale-x-[-1]" : ""}`}
+          />
+        ) : (
+          <span className="material-symbols-outlined text-3xl text-blue-400/70">account_circle</span>
+        )}
+        <span className="absolute bottom-1.5 inset-x-0 flex items-center justify-center gap-1 bg-black/60 mx-auto w-fit px-2 py-0.5 rounded-full pointer-events-none">
+          <span className={`w-1.5 h-1.5 rounded-full ${isMicrophoneEnabled ? "bg-emerald-400 animate-pulse" : "bg-rose-500"}`} />
+        </span>
+        {/* Same persistent call modal the full teacher tile renders — the
+            bubble is a smaller video surface, not a smaller feature set. */}
+        {role === "TEACHER" && (
+          <LiveVideoCallModal role="TEACHER" connectedStudents={connectedStudents} onDisconnectStudent={onDisconnectStudent} />
+        )}
+      </div>
+    );
+  }
+
+  // ===========================================================================
   // TEACHER VIEW
   // ===========================================================================
   if (role === "TEACHER") {
@@ -388,8 +475,12 @@ function VideoStripInner({
         {/* Audio Renderer for any approved student speakers */}
         <RoomAudioRenderer />
 
-        {/* Video Canvas */}
-        {cameraTrack && cameraTrack.publication && !cameraTrack.publication.isMuted && isCameraEnabled ? (
+        {/* Video Canvas — screen share (if active) takes the primary surface,
+            camera demotes to a small inset tile so the teacher can still see
+            themselves while sharing. */}
+        {screenShareTrack && screenShareTrack.publication && !screenShareTrack.publication.isMuted ? (
+          <VideoTrack trackRef={screenShareTrack} className="w-full h-full object-contain bg-black" />
+        ) : cameraTrack && cameraTrack.publication && !cameraTrack.publication.isMuted && isCameraEnabled ? (
           <VideoTrack trackRef={cameraTrack} className="w-full h-full object-cover transform scale-x-[-1]" />
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center bg-[#0d0f18] p-4 text-center">
@@ -410,6 +501,21 @@ function VideoStripInner({
                 Retry camera access
               </button>
             )}
+          </div>
+        )}
+
+        {/* Camera inset while screen sharing — same track, small corner tile */}
+        {screenShareTrack && cameraTrack && cameraTrack.publication && !cameraTrack.publication.isMuted && isCameraEnabled && (
+          <div className="absolute bottom-2 right-2 w-1/4 max-w-[96px] aspect-square rounded-lg overflow-hidden border-2 border-white/20 shadow-lg z-20">
+            <VideoTrack trackRef={cameraTrack} className="w-full h-full object-cover transform scale-x-[-1]" />
+          </div>
+        )}
+
+        {/* Screen-share badge */}
+        {screenShareTrack && (
+          <div className="absolute top-2 right-2 z-20 flex items-center gap-1 bg-blue-600/90 px-2 py-0.5 rounded-md text-[10px] font-bold text-white backdrop-blur-sm">
+            <span className="material-symbols-outlined text-xs">screen_share</span>
+            Screen Sharing
           </div>
         )}
 
@@ -484,6 +590,7 @@ function VideoStripInner({
   // ===========================================================================
   // STUDENT VIEW — FULL PRODUCTION VIDEO PLAYER
   // ===========================================================================
+  const hasTeacherScreenShare = Boolean(screenShareTrack?.publication && !screenShareTrack.publication.isMuted && !isPaused);
   const hasTeacherVideo = Boolean(cameraTrack?.publication && !cameraTrack.publication.isMuted && !isPaused);
 
   return (
@@ -496,8 +603,10 @@ function VideoStripInner({
       {/* Authoritative LiveKit Audio Renderer (controlled by volume & isMuted state) */}
       <RoomAudioRenderer volume={isMuted ? 0 : volume} />
 
-      {/* Main Video Stream */}
-      {hasTeacherVideo && cameraTrack ? (
+      {/* Main Video Stream — teacher's screen share takes priority over camera */}
+      {hasTeacherScreenShare && screenShareTrack ? (
+        <VideoTrack trackRef={screenShareTrack} className="w-full h-full object-contain bg-black" />
+      ) : hasTeacherVideo && cameraTrack ? (
         <VideoTrack trackRef={cameraTrack} className="w-full h-full object-cover" />
       ) : (
         <div className="w-full h-full flex flex-col items-center justify-center bg-[#0d0f18] p-4 text-center">
@@ -512,6 +621,14 @@ function VideoStripInner({
         </div>
       )}
 
+      {/* Camera inset while the teacher is screen sharing */}
+      {hasTeacherScreenShare && hasTeacherVideo && cameraTrack && (
+        <div className="absolute bottom-14 right-2 w-1/4 max-w-[88px] aspect-square rounded-lg overflow-hidden border-2 border-white/20 shadow-lg z-20">
+          <VideoTrack trackRef={cameraTrack} className="w-full h-full object-cover" />
+        </div>
+      )}
+
+
       {/* Buffering / Connecting / Reconnecting Overlay */}
       {(isConnecting || isReconnecting) && (
         <div className="absolute inset-0 bg-black/80 backdrop-blur-xs flex flex-col items-center justify-center z-30 text-center p-2">
@@ -525,8 +642,11 @@ function VideoStripInner({
       {/* Top Header: Instructor Name & Network Quality Indicator */}
       <div className="absolute top-2 left-2 right-2 flex items-center justify-between z-20 pointer-events-none">
         <div className="bg-black/80 backdrop-blur-sm px-2.5 py-1 rounded-lg text-xs font-bold text-white border border-white/10 flex items-center gap-1.5">
-          <span className={`w-2 h-2 rounded-full ${hasTeacherVideo ? "bg-emerald-500 animate-pulse" : "bg-amber-400"}`} />
+          <span className={`w-2 h-2 rounded-full ${hasTeacherVideo || hasTeacherScreenShare ? "bg-emerald-500 animate-pulse" : "bg-amber-400"}`} />
           <span className="truncate max-w-[130px]">{teacherName || "Instructor"}</span>
+          {hasTeacherScreenShare && (
+            <span className="material-symbols-outlined text-xs text-blue-400" title="Sharing screen">screen_share</span>
+          )}
         </div>
 
         {/* Network status */}
@@ -779,7 +899,7 @@ function LocalWebcamPreview({
   variant,
   teacherName,
 }: {
-  variant: "header" | "panel";
+  variant: "header" | "panel" | "bubble";
   teacherName?: string | null;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
