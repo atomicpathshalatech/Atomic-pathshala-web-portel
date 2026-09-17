@@ -249,8 +249,26 @@ export function StudentLiveClassRoom({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showChat, setShowChat] = useState(true);
 
-  // Manual orientation mode toggle ("auto" | "portrait" | "landscape")
+  // Manual orientation mode toggle ("auto" | "portrait" | "landscape") — a
+  // student can still force one, but "auto" (the default) now tracks the
+  // device's real physical rotation via matchMedia below, rather than
+  // relying solely on Tailwind's CSS `landscape:` variant. JS-driven state
+  // repaints reliably across browsers/WebViews where the CSS orientation
+  // media query alone doesn't (this is also blocked entirely for installed
+  // PWA users while manifest.ts locks orientation to "portrait" — see that
+  // file for the matching fix).
   const [orientationMode, setOrientationMode] = useState<"auto" | "portrait" | "landscape">("auto");
+  const [deviceIsLandscape, setDeviceIsLandscape] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mql = window.matchMedia("(orientation: landscape)");
+    setDeviceIsLandscape(mql.matches);
+    const handler = (e: MediaQueryListEvent) => setDeviceIsLandscape(e.matches);
+    mql.addEventListener("change", handler);
+    return () => mql.removeEventListener("change", handler);
+  }, []);
+  const effectiveOrientation: "portrait" | "landscape" =
+    orientationMode === "auto" ? (deviceIsLandscape ? "landscape" : "portrait") : orientationMode;
 
   // VisualViewport listener for mobile virtual keyboard and soft-keyboard resize
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
@@ -1222,21 +1240,15 @@ export function StudentLiveClassRoom({
       {/* ========================================================================= */}
       <div
         className={`lg:hidden flex-1 min-h-0 flex ${
-          orientationMode === "landscape"
-            ? "flex-row"
-            : orientationMode === "portrait"
-            ? "flex-col"
-            : "flex-col landscape:flex-row"
+          effectiveOrientation === "landscape" ? "flex-row" : "flex-col"
         } overflow-hidden bg-[#0b0d14]`}
       >
         {/* Top Media Area: 16:9 Canvas or YouTube Player */}
         <div
           className={`${
-            orientationMode === "landscape"
+            effectiveOrientation === "landscape"
               ? "w-3/5 h-full border-b-0 border-r"
-              : orientationMode === "portrait"
-              ? "w-full aspect-video max-h-[38dvh] sm:max-h-[45dvh] border-b"
-              : "w-full landscape:w-3/5 landscape:h-full aspect-video landscape:aspect-auto max-h-[38dvh] sm:max-h-[45dvh] landscape:max-h-full border-b landscape:border-b-0 landscape:border-r"
+              : "w-full aspect-video max-h-[38dvh] sm:max-h-[45dvh] border-b"
           } shrink-0 bg-black relative flex items-center justify-center overflow-hidden border-slate-800/80`}
         >
           {isYouTube ? (
@@ -1279,11 +1291,7 @@ export function StudentLiveClassRoom({
         {/* Bottom Interactive Area (Tabs: Chat | Quiz | Details) */}
         <div
           className={`flex-1 ${
-            orientationMode === "landscape"
-              ? "w-2/5"
-              : orientationMode === "portrait"
-              ? "w-full"
-              : "landscape:w-2/5"
+            effectiveOrientation === "landscape" ? "w-2/5" : "w-full"
           } min-h-0 flex flex-col bg-[#10121d] overflow-hidden`}
         >
           {/* Tab Selection Bar */}

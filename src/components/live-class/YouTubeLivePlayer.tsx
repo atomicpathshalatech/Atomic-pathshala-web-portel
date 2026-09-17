@@ -14,6 +14,69 @@ export type YouTubeLivePlayerProps = {
 
 const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
+// Live-edge tolerance: YouTube's reported duration for an ongoing live
+// broadcast keeps growing (it's "how much has been broadcast so far," not
+// a fixed length) - a few seconds of encoder/API lag between
+// getCurrentTime() and getDuration() is normal even when genuinely caught
+// up, so treat anything within this window as "at the live edge."
+const LIVE_EDGE_TOLERANCE_SECONDS = 4;
+
+// Minimal ambient types for exactly the YT IFrame API surface this
+// component uses - avoids pulling in an @types/youtube dependency for a
+// handful of methods.
+type YTPlayerInstance = {
+  getCurrentTime: () => number;
+  getDuration: () => number;
+  seekTo: (seconds: number, allowSeekAhead: boolean) => void;
+  setPlaybackRate: (rate: number) => void;
+  playVideo: () => void;
+  destroy: () => void;
+};
+type YTNamespace = {
+  Player: new (
+    el: HTMLElement,
+    opts: {
+      videoId: string;
+      host?: string;
+      playerVars?: Record<string, string | number>;
+      events?: {
+        onReady?: () => void;
+        onPlaybackRateChange?: (e: { data: number }) => void;
+      };
+    }
+  ) => YTPlayerInstance;
+};
+declare global {
+  interface Window {
+    YT?: YTNamespace;
+    onYouTubeIframeAPIReady?: () => void;
+  }
+}
+
+// Module-level singleton loader: multiple player instances (or a remount)
+// must never inject a second <script> tag or race on the same global
+// ready callback.
+let youtubeApiPromise: Promise<YTNamespace> | null = null;
+function loadYouTubeIframeApi(): Promise<YTNamespace> {
+  if (typeof window === "undefined") return Promise.reject(new Error("no window"));
+  if (window.YT?.Player) return Promise.resolve(window.YT);
+  if (youtubeApiPromise) return youtubeApiPromise;
+
+  youtubeApiPromise = new Promise((resolve) => {
+    const previousCallback = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      previousCallback?.();
+      resolve(window.YT as YTNamespace);
+    };
+    if (!document.querySelector('script[src="https://www.youtube.com/iframe_api"]')) {
+      const script = document.createElement("script");
+      script.src = "https://www.youtube.com/iframe_api";
+      document.head.appendChild(script);
+    }
+  });
+  return youtubeApiPromise;
+}
+
 export function YouTubeLivePlayer({
   youtubeVideoId,
   title,
@@ -24,7 +87,8 @@ export function YouTubeLivePlayer({
   className = "",
 }: YouTubeLivePlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const mountRef = useRef<HTMLDivElement>(null);
+  const playerRef = useRef<YTPlayerInstance | null>(null);
 
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
@@ -33,41 +97,84 @@ export function YouTubeLivePlayer({
   const [showControls, setShowControls] = useState(true);
   const hideControlsTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Send postMessage command to YouTube iframe API
-  const sendYouTubeCommand = useCallback((func: string, args: unknown[] = []) => {
-    try {
-      if (iframeRef.current?.contentWindow) {
-        iframeRef.current.contentWindow.postMessage(
-          JSON.stringify({ event: "command", func, args }),
-          "*"
-        );
+  // Mount the real YT.Player against the video currently live - torn down
+  // and recreated whenever the video id changes (e.g. the teacher re-maps
+  // a fresh broadcast onto the same schedule).
+  useEffect(() => {
+    if (!youtubeVideoId || !mountRef.current) return;
+    let cancelled = false;
+
+    loadYouTubeIframeApi().then((YT) => {
+      if (cancelled || !mountRef.current) return;
+      playerRef.current = new YT.Player(mountRef.current, {
+        videoId: youtubeVideoId,
+        host: "https://www.youtube-nocookie.com",
+        playerVars: {
+          autoplay: 1,
+          rel: 0,
+          modestbranding: 1,
+          playsinline: 1,
+          controls: 1,
+          origin: window.location.origin,
+        },
+        events: {
+          onPlaybackRateChange: (e) => setPlaybackSpeed(e.data),
+        },
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      playerRef.current?.destroy();
+      playerRef.current = null;
+    };
+  }, [youtubeVideoId]);
+
+  // Poll current-vs-live-edge position so the LIVE/GO LIVE indicator stays
+  // accurate as the student watches, not only right after a manual seek.
+  useEffect(() => {
+    if (!youtubeVideoId) return;
+    const interval = setInterval(() => {
+      const player = playerRef.current;
+      if (!player) return;
+      try {
+        const behindLiveEdge = player.getDuration() - player.getCurrentTime();
+        setIsLiveEdge(behindLiveEdge <= LIVE_EDGE_TOLERANCE_SECONDS);
+      } catch {
+        // Player not fully ready yet - ignore until the next tick.
       }
-    } catch (err) {
-      console.debug("[YouTubeLivePlayer] Command dispatch error", err);
-    }
-  }, []);
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [youtubeVideoId]);
 
   const handleSpeedChange = (speed: number) => {
     setPlaybackSpeed(speed);
-    sendYouTubeCommand("setPlaybackRate", [speed]);
+    playerRef.current?.setPlaybackRate(speed);
     setShowSpeedMenu(false);
   };
 
+  // A real relative seek - reads the player's own current position rather
+  // than guessing, unlike the previous version which had no way to know
+  // current time over raw postMessage and just jumped to buffer-start or
+  // live-edge for both -10s and +10s.
   const handleSeek = (offsetSeconds: number) => {
-    // Offset seek via YouTube API
+    const player = playerRef.current;
+    if (!player) return;
+    const target = Math.max(0, player.getCurrentTime() + offsetSeconds);
+    player.seekTo(target, true);
     setIsLiveEdge(false);
-    // Ask for current time, or trigger relative seek
-    sendYouTubeCommand("seekTo", [offsetSeconds > 0 ? 999999 : 0, true]);
-    // Note: YouTube doesn't expose a native relative seek in standard postMessage without keeping track of time,
-    // so we send seekTo with approximate buffer jump
   };
 
   const handleGoLive = () => {
-    // Jump to live edge
-    sendYouTubeCommand("seekTo", [999999, true]);
-    sendYouTubeCommand("playVideo", []);
+    const player = playerRef.current;
+    if (!player) return;
+    // A YouTube live broadcast's own reported duration IS the live edge
+    // (it grows as the broadcast continues) - seeking to it is the
+    // documented way to jump back to live.
+    player.seekTo(player.getDuration(), true);
+    player.playVideo();
     setPlaybackSpeed(1);
-    sendYouTubeCommand("setPlaybackRate", [1]);
+    player.setPlaybackRate(1);
     setIsLiveEdge(true);
   };
 
@@ -86,21 +193,6 @@ export function YouTubeLivePlayer({
     };
     document.addEventListener("fullscreenchange", handleFsChange);
     return () => document.removeEventListener("fullscreenchange", handleFsChange);
-  }, []);
-
-  // Listen for YouTube player state messages
-  useEffect(() => {
-    const handleMessage = (e: MessageEvent) => {
-      if (typeof e.data !== "string") return;
-      try {
-        const parsed = JSON.parse(e.data);
-        if (parsed.event === "onPlaybackRateChange") {
-          setPlaybackSpeed(parsed.info);
-        }
-      } catch {}
-    };
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
   }, []);
 
   const resetControlsTimer = useCallback(() => {
@@ -155,8 +247,6 @@ export function YouTubeLivePlayer({
     );
   }
 
-  const embedUrl = `https://www.youtube-nocookie.com/embed/${youtubeVideoId}?autoplay=1&enablejsapi=1&rel=0&modestbranding=1&playsinline=1&controls=1&origin=${typeof window !== "undefined" ? window.location.origin : ""}`;
-
   return (
     <div
       ref={containerRef}
@@ -164,15 +254,8 @@ export function YouTubeLivePlayer({
       onTouchStart={resetControlsTimer}
       className={`relative w-full aspect-video bg-black rounded-2xl overflow-hidden group select-none ${className}`}
     >
-      {/* YouTube Iframe Player */}
-      <iframe
-        ref={iframeRef}
-        src={embedUrl}
-        title={title}
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-        allowFullScreen
-        className="w-full h-full border-0"
-      />
+      {/* YouTube IFrame API player mounts here */}
+      <div ref={mountRef} className="w-full h-full" />
 
       {/* Top Floating Info Banner (Fades on inactivity) */}
       <div
