@@ -125,6 +125,10 @@ export async function POST(request: NextRequest) {
       solutionHi,
       tags = [],
       category,
+      pyqExam,
+      pyqYear,
+      pyqMonth,
+      pyqQuestionNumber,
       pyqSource,
       figureUrl,
       referenceImageUrl,
@@ -133,6 +137,18 @@ export async function POST(request: NextRequest) {
       dppId,
       testSectionId,
     } = body;
+
+    let formattedPyqSource = pyqSource?.trim() || null;
+    if (pyqExam) {
+      const qNum = pyqQuestionNumber?.trim() || "Question 01";
+      if (pyqExam === "NEET") {
+        formattedPyqSource = `NEET ${pyqYear || ""} — ${qNum}`.replace("  —", " —");
+      } else if (pyqExam === "JEE_MAINS") {
+        formattedPyqSource = `JEE Main ${pyqYear || ""}${pyqMonth ? ` — ${pyqMonth}` : ""} — ${qNum}`.replace("  —", " —");
+      } else if (pyqExam === "JEE_ADVANCED") {
+        formattedPyqSource = `JEE Advanced ${pyqYear || ""} — ${qNum}`.replace("  —", " —");
+      }
+    }
 
     const resolvedCorrectOptionIds = Array.isArray(correctAnswer)
       ? correctAnswer
@@ -195,7 +211,11 @@ export async function POST(request: NextRequest) {
         difficulty: difficulty as Difficulty,
         imageUrl: figureUrl?.trim() || referenceImageUrl?.trim() || null,
         category: category?.trim() || null,
-        pyqSource: pyqSource?.trim() || null,
+        pyqExam: pyqExam?.trim() || null,
+        pyqYear: pyqYear ? parseInt(String(pyqYear), 10) || null : null,
+        pyqMonth: pyqMonth?.trim() || null,
+        pyqQuestionNumber: pyqQuestionNumber?.trim() || null,
+        pyqSource: formattedPyqSource,
         questionCode,
         solution: solutionEn?.trim() || solutionHi?.trim() || null,
         tags: tagsString,
@@ -350,6 +370,10 @@ export async function PUT(request: NextRequest) {
       type = "SINGLE_CORRECT",
       difficulty = "MEDIUM",
       category,
+      pyqExam,
+      pyqYear,
+      pyqMonth,
+      pyqQuestionNumber,
       pyqSource,
       statementEn,
       statementHi,
@@ -373,6 +397,23 @@ export async function PUT(request: NextRequest) {
       include: { translations: true },
     });
     if (!existing) return apiError("Question not found.", 404);
+
+    const targetExam = pyqExam !== undefined ? (pyqExam ? pyqExam.trim() : null) : existing.pyqExam;
+    const targetYear = pyqYear !== undefined ? (pyqYear ? parseInt(String(pyqYear), 10) || null : null) : existing.pyqYear;
+    const targetMonth = pyqMonth !== undefined ? (pyqMonth ? pyqMonth.trim() : null) : existing.pyqMonth;
+    const targetQNum = pyqQuestionNumber !== undefined ? (pyqQuestionNumber ? pyqQuestionNumber.trim() : null) : existing.pyqQuestionNumber;
+
+    let formattedPyqSource = pyqSource !== undefined ? (pyqSource ? pyqSource.trim() : null) : existing.pyqSource;
+    if (targetExam) {
+      const qNum = targetQNum || "Question 01";
+      if (targetExam === "NEET") {
+        formattedPyqSource = `NEET ${targetYear || ""} — ${qNum}`.replace("  —", " —");
+      } else if (targetExam === "JEE_MAINS") {
+        formattedPyqSource = `JEE Main ${targetYear || ""}${targetMonth ? ` — ${targetMonth}` : ""} — ${qNum}`.replace("  —", " —");
+      } else if (targetExam === "JEE_ADVANCED") {
+        formattedPyqSource = `JEE Advanced ${targetYear || ""} — ${qNum}`.replace("  —", " —");
+      }
+    }
 
     const resolvedCorrectOptionIds = Array.isArray(correctAnswer) ? correctAnswer : [correctAnswer || "A"];
     const tagsString = Array.isArray(tags) ? tags.join(", ") : (tags || "");
@@ -434,7 +475,11 @@ export async function PUT(request: NextRequest) {
         type: type as QuestionType,
         difficulty: difficulty as Difficulty,
         category: category !== undefined ? category?.trim() || null : existing.category,
-        pyqSource: pyqSource !== undefined ? pyqSource?.trim() || null : existing.pyqSource,
+        pyqExam: targetExam,
+        pyqYear: targetYear,
+        pyqMonth: targetMonth,
+        pyqQuestionNumber: targetQNum,
+        pyqSource: formattedPyqSource,
         solution: solutionEn?.trim() || solutionHi?.trim() || existing.solution,
         imageUrl: figureUrl?.trim() || referenceImageUrl?.trim() || existing.imageUrl,
         tags: tagsString || existing.tags,

@@ -2067,6 +2067,10 @@ model Question {
   imageUrl      String?
   category      String?
   pyqSource     String?
+  pyqExam       String?
+  pyqYear       Int?
+  pyqMonth      String?
+  pyqQuestionNumber String?
   questionCode  String?      @unique
   solution      String?
   tags          String?
@@ -2113,6 +2117,7 @@ model Question {
   @@index([subject])
   @@index([difficulty])
   @@index([isPublished])
+  @@index([pyqExam, pyqYear])
   @@map("questions")
 }
 
@@ -4568,6 +4573,9 @@ model ExtractionJob {
   reportJson      Json?    // Detailed Validation Report, issue list, and count reconciliation
   examName        String?
   year            String?
+  pyqExam         String?  // "NEET" | "JEE_MAINS" | "JEE_ADVANCED"
+  pyqYear         Int?
+  pyqMonth        String?  // "January" | "April"
   subject         String?  // Configured or Auto-detected
   chapter         String?
   tags            String[] @default([])
@@ -4589,6 +4597,10 @@ model ExtractedQuestion {
   job                  ExtractionJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
   questionIndex        Int           // Sequence index (1, 2, 3...)
   originalNumber       Int           // Exact printed number in source (e.g. 37)
+  pyqExam              String?
+  pyqYear              Int?
+  pyqMonth             String?
+  pyqQuestionNumber    String?
   sourceName           String        // Permanent source (e.g. "ALLEN")
   sourcePdfUrl         String
   sourcePdfName        String

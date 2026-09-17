@@ -40,11 +40,33 @@ export async function importVerifiedQuestionsToDraft(
 
   for (const eq of job.questions) {
     const questionCode = await generateQuestionId(prisma, eq.subject || "General");
+    const pyqExam = eq.pyqExam || job.pyqExam || (job.examName?.includes("JEE Adv") ? "JEE_ADVANCED" : job.examName?.includes("JEE") ? "JEE_MAINS" : job.examName?.includes("NEET") ? "NEET" : null);
+    const pyqYear = eq.pyqYear ?? (job.pyqYear ?? (job.year ? parseInt(job.year, 10) || null : null));
+    const pyqMonth = eq.pyqMonth || job.pyqMonth || null;
+    const paddedQNum = String(eq.originalNumber).padStart(2, "0");
+    const pyqQuestionNumber = eq.pyqQuestionNumber || `Question ${paddedQNum}`;
+
+    let formattedPyqSource: string | null = null;
+    if (pyqExam === "NEET") {
+      formattedPyqSource = `NEET ${pyqYear || ""} — ${pyqQuestionNumber}`.replace("  —", " —");
+    } else if (pyqExam === "JEE_MAINS") {
+      formattedPyqSource = `JEE Main ${pyqYear || ""}${pyqMonth ? ` — ${pyqMonth}` : ""} — ${pyqQuestionNumber}`.replace("  —", " —");
+    } else if (pyqExam === "JEE_ADVANCED") {
+      formattedPyqSource = `JEE Advanced ${pyqYear || ""} — ${pyqQuestionNumber}`.replace("  —", " —");
+    } else if (job.year) {
+      formattedPyqSource = `${job.sourceName} ${job.year} — ${pyqQuestionNumber}`;
+    } else {
+      formattedPyqSource = `${job.sourceName} — ${pyqQuestionNumber}`;
+    }
+
     const tagsArray = [
       "Extracted",
       `Source:${job.sourceName}`,
       `Q.${eq.originalNumber}`,
-      job.examName || "NEET",
+      pyqExam || job.examName || "NEET",
+      pyqYear ? String(pyqYear) : null,
+      pyqMonth,
+      pyqQuestionNumber,
       eq.questionType,
     ].filter(Boolean);
 
@@ -63,8 +85,12 @@ export async function importVerifiedQuestionsToDraft(
         subTopic: eq.subTopic || null,
         type: pType,
         difficulty: (eq.difficulty as Difficulty) || Difficulty.MEDIUM,
-        category: `Source: ${job.sourceName}`,
-        pyqSource: job.year ? `${job.sourceName} ${job.year} Q.${eq.originalNumber}` : `${job.sourceName} Q.${eq.originalNumber}`,
+        category: pyqExam ? `${pyqExam}_PYQ` : `Source: ${job.sourceName}`,
+        pyqExam,
+        pyqYear,
+        pyqMonth,
+        pyqQuestionNumber,
+        pyqSource: formattedPyqSource,
         questionCode,
         solution: eq.solution || null,
         imageUrl: eq.imageUrl || null,

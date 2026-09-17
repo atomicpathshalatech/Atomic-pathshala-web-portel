@@ -27,6 +27,7 @@ export default async function QuestionBankPage({
     createdById?: string;
     reviewedById?: string;
     editedById?: string;
+    pyqCategory?: string;
     page?: string;
   };
 }) {
@@ -139,6 +140,43 @@ export default async function QuestionBankPage({
     where.editedById = searchParams.editedById;
   }
 
+  // Filter by PYQ Category
+  if (searchParams.pyqCategory && searchParams.pyqCategory !== "ALL") {
+    if (searchParams.pyqCategory === "NEET_PYQ") {
+      where.OR = [
+        ...(where.OR || []),
+        { pyqExam: "NEET" },
+        { category: "NEET_PYQ" },
+        { pyqSource: { contains: "NEET", mode: "insensitive" } },
+        { tags: { contains: "NEET", mode: "insensitive" } },
+      ];
+    } else if (searchParams.pyqCategory === "JEE_MAINS_PYQ") {
+      where.OR = [
+        ...(where.OR || []),
+        { pyqExam: "JEE_MAINS" },
+        { category: "JEE_MAINS_PYQ" },
+        { pyqSource: { contains: "JEE Main", mode: "insensitive" } },
+        { tags: { contains: "JEE Main", mode: "insensitive" } },
+      ];
+    } else if (searchParams.pyqCategory === "JEE_ADVANCED_PYQ") {
+      where.OR = [
+        ...(where.OR || []),
+        { pyqExam: "JEE_ADVANCED" },
+        { category: "JEE_ADVANCED_PYQ" },
+        { pyqSource: { contains: "JEE Advanced", mode: "insensitive" } },
+        { tags: { contains: "JEE Advanced", mode: "insensitive" } },
+      ];
+    } else if (searchParams.pyqCategory === "ALL_PYQ") {
+      where.OR = [
+        ...(where.OR || []),
+        { pyqExam: { not: null } },
+        { pyqSource: { not: null } },
+        { category: { contains: "PYQ" } },
+        { tags: { contains: "PYQ" } },
+      ];
+    }
+  }
+
   const [
     questions,
     total,
@@ -148,6 +186,7 @@ export default async function QuestionBankPage({
     draftCount,
     aiDraftCount,
     usersList,
+    teamMembersList,
   ] = await Promise.all([
     prisma.question.findMany({
       where,
@@ -182,8 +221,43 @@ export default async function QuestionBankPage({
         ],
       },
     }),
+    // All Creators for Created By (existing behavior)
     prisma.user.findMany({
       where: { status: "ACTIVE" },
+      select: { id: true, name: true, email: true },
+      orderBy: { name: "asc" },
+      take: 100,
+    }),
+    // Team Members only for Reviewed By (excludes normal registered students)
+    prisma.user.findMany({
+      where: {
+        status: "ACTIVE",
+        role: {
+          name: { notIn: ["STUDENT", "PARENT"] },
+        },
+        OR: [
+          { staffInvitation: { isNot: null } },
+          { staffInvitationsSent: { some: {} } },
+          { teacher: { isNot: null } },
+          {
+            role: {
+              name: {
+                in: [
+                  "ADMIN",
+                  "SUPER_ADMIN",
+                  "SUB_ADMIN",
+                  "FOUNDER",
+                  "TEACHER",
+                  "QUESTION_TEAM",
+                  "CONTENT_TEAM",
+                  "SME",
+                  "ACADEMIC_HEAD",
+                ],
+              },
+            },
+          },
+        ],
+      },
       select: { id: true, name: true, email: true },
       orderBy: { name: "asc" },
       take: 100,
@@ -263,6 +337,7 @@ export default async function QuestionBankPage({
           aiDraft: aiDraftCount,
         }}
         usersList={usersList}
+        teamMembersList={teamMembersList}
         canCreate={canCreate}
         canVerify={canVerify}
         currentUserId={session.user.id}
