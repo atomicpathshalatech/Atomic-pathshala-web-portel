@@ -1285,10 +1285,26 @@ export function StudentLiveClassRoom({
         <div
           className={`${
             effectiveOrientation === "landscape"
-              ? "w-3/5 h-full border-b-0 border-r"
+              ? "w-2/3 h-full border-b-0 border-r"
               : "w-full aspect-video max-h-[38dvh] sm:max-h-[45dvh] border-b"
           } shrink-0 bg-black relative flex items-center justify-center overflow-hidden border-slate-800/80`}
         >
+          {/* Remaining class time, next to the slide/stage area as requested
+              — previously only shown in the teacher's own header, nowhere
+              on the student side at all. */}
+          {isLive && remainingSeconds > 0 && (
+            <span
+              className={`absolute top-2 left-2 z-20 flex items-center gap-1 text-[10px] sm:text-[11px] font-mono font-bold px-2 py-1 rounded-md border ${
+                remainingSeconds <= 300
+                  ? "text-amber-300 bg-amber-950/80 border-amber-500/50 animate-pulse"
+                  : "text-slate-200 bg-black/70 border-slate-700/60"
+              }`}
+            >
+              <span className="material-symbols-outlined text-xs">timer</span>
+              {formatHms(remainingSeconds)}
+            </span>
+          )}
+
           {isYouTube ? (
             <YouTubeLivePlayer
               youtubeVideoId={wbSession?.youtubeVideoId ?? null}
@@ -1413,7 +1429,7 @@ export function StudentLiveClassRoom({
         {/* Bottom Interactive Area (Tabs: Chat | Quiz | Details) */}
         <div
           className={`flex-1 ${
-            effectiveOrientation === "landscape" ? "w-2/5" : "w-full"
+            effectiveOrientation === "landscape" ? "w-1/3" : "w-full"
           } min-h-0 flex flex-col bg-[#10121d] overflow-hidden`}
         >
           {/* Live Chat — the "Quiz & Polls" and "Class Info" tabs that used
@@ -1422,6 +1438,15 @@ export function StudentLiveClassRoom({
               a student had to remember to open, and Class Info added no
               information a student didn't already see in the header. Live
               Chat is the only thing this bottom panel needs now. */}
+          {/* Header matches the desktop sidebar's "Live Classroom Chat"
+              label (and the teacher's own panel) instead of dropping
+              straight into the message list with no heading at all. */}
+          <div className="flex border-b border-slate-800 px-3 pt-2 shrink-0 bg-[#0a0b12]">
+            <span className="px-1 py-2 text-xs font-bold text-blue-400 border-b-2 border-blue-500 flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-sm">chat</span>
+              Live Classroom Chat
+            </span>
+          </div>
           <div className="flex-1 min-h-0 overflow-y-auto p-2">
             {wbSession?.id ? (
               <MessagesPanel
