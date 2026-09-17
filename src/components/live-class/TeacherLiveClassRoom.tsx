@@ -432,6 +432,16 @@ export function TeacherLiveClassRoom({
     progress: string | null;
     error: string | null;
   }>({ loading: false, progress: null, error: null });
+  // handleLoadPresentationPdf has 5 call sites (an auto-trigger on mount
+  // plus several manual buttons/menu items) with no mutual exclusion - if
+  // it were ever invoked twice close together (a remount racing a manual
+  // click, a double-click, StrictMode's dev-only double-invoke), each call
+  // independently creates a full new set of pages via its own for-loop,
+  // duplicating the whole presentation rather than reusing what the first
+  // call already created. This ref is a simple in-flight guard against
+  // exactly that - the actual observed "PDF loads page-by-page again"
+  // symptom.
+  const pdfConversionInFlightRef = useRef(false);
   const [openPopup, setOpenPopup] = useState<PopupId>(null);
   const [themeModalOpen, setThemeModalOpen] = useState(false);
   const [sim3dOpen, setSim3dOpen] = useState(false);
@@ -1276,6 +1286,7 @@ export function TeacherLiveClassRoom({
    * teacher sees it, instead of the page quietly staying blank.
    */
   async function handleLoadPresentationPdf(sessionArg?: WhiteboardSession) {
+    if (pdfConversionInFlightRef.current) return;
     const activeSess = sessionArg || wbSession;
     if (!activeSess) return;
     const url = activeSess.presentationUrl;
@@ -1296,6 +1307,7 @@ export function TeacherLiveClassRoom({
     setPdfLoadState({ loading: true, progress: "Downloading PDF…", error: null });
     const sessionId = activeSess.id;
     let firstNewPageNumber: number | null = null;
+    pdfConversionInFlightRef.current = true;
 
     try {
       const fileRes = await fetch(url);
@@ -1393,6 +1405,8 @@ export function TeacherLiveClassRoom({
         progress: null,
         error: err instanceof Error ? err.message : "Could not load the presentation onto the board.",
       });
+    } finally {
+      pdfConversionInFlightRef.current = false;
     }
   }
 
@@ -1867,9 +1881,9 @@ export function TeacherLiveClassRoom({
       </aside>
 
       {/* Header */}
-      <header className="live-header flex items-center justify-between gap-2 sm:gap-4 px-3 sm:px-4 lg:px-6 border-b border-[#2d2e3b] bg-[#1a1b23] min-w-0">
-        <div className="min-w-0 flex items-center gap-3">
-          <div>
+      <header className="live-header flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 sm:gap-x-4 px-3 sm:px-4 lg:px-6 py-1.5 border-b border-[#2d2e3b] bg-[#1a1b23] min-w-0">
+        <div className="min-w-0 flex flex-wrap items-center gap-x-3 gap-y-1">
+          <div className="min-w-0">
             <p className="text-[11px] text-gray-500 truncate">{batchName}</p>
             <h1 className="text-sm font-medium text-gray-200 truncate">{scheduleTitle}</h1>
           </div>
@@ -1895,7 +1909,7 @@ export function TeacherLiveClassRoom({
           ) : null}
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
           <SaveIndicator state={saveState} />
 
           {/* Pre-Flight Wizard Trigger */}
