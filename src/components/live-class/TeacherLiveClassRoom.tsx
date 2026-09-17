@@ -2534,7 +2534,7 @@ export function TeacherLiveClassRoom({
       </aside>
 
       {/* Header */}
-      <header className="live-header flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 sm:gap-x-4 px-3 sm:px-4 lg:px-6 py-1.5 border-b border-[#2d2e3b] bg-[#1a1b23] min-w-0">
+      <header className="live-header relative z-[55] flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 sm:gap-x-4 px-3 sm:px-4 lg:px-6 py-1.5 border-b border-[#2d2e3b] bg-[#1a1b23] min-w-0">
         <div className="min-w-0 flex flex-wrap items-center gap-x-3 gap-y-1">
           <div className="min-w-0">
             <p className="text-[11px] text-gray-500 truncate">{batchName}</p>
@@ -2747,13 +2747,8 @@ export function TeacherLiveClassRoom({
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={() => setSettingsOpen(true)}
-            className="text-xs font-semibold text-gray-300 border border-gray-600 px-3 py-1.5 rounded-md hover:bg-gray-700 transition"
-          >
-            SETTINGS
-          </button>
+          {/* Settings now lives in the bottom bar's live-controls group,
+              not here — this header stays focused on status + End Class. */}
 
           {isClassLive && (!confirmingEnd ? (
             <button

@@ -217,7 +217,18 @@
   height: 100vh;
   height: 100dvh; /* mobile browser chrome must not hide the toolbar */
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: var(--live-header-h) minmax(0, 1fr) var(--live-toolbar-h);
+  /* The header row is `minmax(h, auto)`, not a bare `h` - a bare fixed
+     track silently clips anything that doesn't fit. The header holds a
+     flex-wrap row of badges/timers/buttons whose combined width isn't
+     bounded (a long class title, or - as happened with the test-lab's
+     placeholder far-future end date - a "Time Left: 3272166h" string)
+     could wrap onto a second line. With a fixed track, the header's own
+     box stayed at `--live-header-h` while `.live-shell`'s overflow-hidden
+     clipped that wrapped second line entirely - Settings and End Class
+     were still in the DOM, just invisible. `auto` lets the row grow to
+     fit real content instead; the canvas row (`minmax(0, 1fr)`) absorbs
+     whatever's left, so this only costs canvas height on the rare wrap. */
+  grid-template-rows: minmax(var(--live-header-h), auto) minmax(0, 1fr) var(--live-toolbar-h);
   grid-template-areas:
     "header"
     "canvas"
