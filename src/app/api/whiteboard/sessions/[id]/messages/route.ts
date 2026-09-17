@@ -29,7 +29,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     if (!wbSession) return apiError("Whiteboard session not found", 404);
 
     const messages = await prisma.whiteboardMessage.findMany({
-      where: { whiteboardSessionId: params.id, deletedAt: null },
+      where: { whiteboardSessionId: params.id },
       orderBy: { createdAt: "asc" },
       take: HISTORY_LIMIT,
     });

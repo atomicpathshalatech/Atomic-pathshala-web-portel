@@ -223,17 +223,8 @@ export async function runArchiveUpload(whiteboardSessionId: string): Promise<voi
   if (!session) return;
   if (!["QUEUED", "UPLOADING", "RETRYING"].includes(session.youtubeArchiveStatus)) return;
 
-  // These three early-exit failures previously called markFailed() without
-  // an `attempts` value, which only ever records it when explicitly
-  // passed (see markFailed below) - so youtubeArchiveUploadAttempts stayed
-  // at 0 forever on this path. The once-daily cron's retry selection
-  // filters on `attempts < 5` (process/route.ts), so a session stuck here
-  // was silently re-selected and re-failed the same way every day,
-  // indefinitely, with no way to ever stop retrying.
-  const nextAttempts = session.youtubeArchiveUploadAttempts + 1;
-
   if (!session.recordingStorageKey) {
-    await markFailed(whiteboardSessionId, new Error("Session has no recordingStorageKey to archive."), nextAttempts);
+    await markFailed(whiteboardSessionId, new Error("Session has no recordingStorageKey to archive."));
     return;
   }
 
@@ -241,7 +232,7 @@ export async function runArchiveUpload(whiteboardSessionId: string): Promise<voi
     throw new Error(`Could not read recording metadata from storage: ${err instanceof Error ? err.message : err}`);
   });
   if (!objectInfo.exists || !objectInfo.contentLength) {
-    await markFailed(whiteboardSessionId, new Error("Recording file not found in R2 storage."), nextAttempts);
+    await markFailed(whiteboardSessionId, new Error("Recording file not found in R2 storage."));
     return;
   }
   const totalSize = objectInfo.contentLength;
@@ -249,7 +240,7 @@ export async function runArchiveUpload(whiteboardSessionId: string): Promise<voi
 
   const snapshot = session.youtubeArchiveMetadataSnapshot as unknown as MetadataSnapshot | null;
   if (!snapshot?.final) {
-    await markFailed(whiteboardSessionId, new Error("Missing YouTube metadata snapshot — cannot upload."), nextAttempts);
+    await markFailed(whiteboardSessionId, new Error("Missing YouTube metadata snapshot — cannot upload."));
     return;
   }
 

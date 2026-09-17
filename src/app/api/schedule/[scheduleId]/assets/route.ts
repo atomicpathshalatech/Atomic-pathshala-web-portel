@@ -8,7 +8,64 @@ import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { reconcileRecordingStatus } from "@/lib/livekit/egress";
 import { createPresignedDownloadUrl } from "@/lib/storage/r2-client";
-import { resolveOriginalDownloadUrl } from "@/lib/whiteboard/original-download-url";
+
+/**
+ * Resolves original uploaded presentation download URL
+ */
+async function resolveOriginalDownloadUrl(
+  urlOrKey: string,
+  fallbackFilename: string
+): Promise<string> {
+  if (
+    !urlOrKey.startsWith("http://") &&
+    !urlOrKey.startsWith("https://") &&
+    !urlOrKey.startsWith("/api/") &&
+    !urlOrKey.startsWith("blob:")
+  ) {
+    return createPresignedDownloadUrl({
+      key: urlOrKey,
+      expiresInSeconds: 900,
+      contentDisposition: `attachment; filename="${encodeURIComponent(fallbackFilename)}"`,
+    });
+  }
+
+  const fileIdMatch = urlOrKey.match(/\/api\/files\/([a-zA-Z0-9_-]+)\/access/);
+  if (fileIdMatch && fileIdMatch[1]) {
+    const fileAsset = await prisma.fileAsset.findUnique({
+      where: { id: fileIdMatch[1] },
+    });
+    if (fileAsset?.storageKey) {
+      return createPresignedDownloadUrl({
+        key: fileAsset.storageKey,
+        expiresInSeconds: 900,
+        contentDisposition: `attachment; filename="${encodeURIComponent(
+          fallbackFilename || fileAsset.originalFilename
+        )}"`,
+      });
+    }
+  }
+
+  try {
+    const parsed = new URL(urlOrKey);
+    const pathnameKey = parsed.pathname.replace(/^\/+/, "");
+    if (
+      pathnameKey &&
+      (pathnameKey.startsWith("modules/") ||
+        pathnameKey.startsWith("documents/") ||
+        pathnameKey.startsWith("classes/"))
+    ) {
+      return createPresignedDownloadUrl({
+        key: pathnameKey,
+        expiresInSeconds: 900,
+        contentDisposition: `attachment; filename="${encodeURIComponent(fallbackFilename)}"`,
+      });
+    }
+  } catch {
+    // URL parse fallback
+  }
+
+  return urlOrKey;
+}
 
 /**
  * Authoritative Class Asset Access Endpoint.
@@ -172,20 +229,13 @@ export async function GET(
       // Check original presentation uploaded before/during class
       const presUrl = wbSession.presentationUrl;
       if (presUrl) {
+        hasOriginalSlides = true;
         originalFilename =
           wbSession.presentationName || `${schedule.title.replace(/[^a-zA-Z0-9_-]/g, "_")}_Presentation.pdf`;
-        try {
-          originalDownloadUrl = await resolveOriginalDownloadUrl(presUrl, originalFilename);
-          hasOriginalSlides = true;
-        } catch (err) {
-          // A stale "blob:" URL (an old session predating the current
-          // upload pipeline) - resolveOriginalDownloadUrl throws rather
-          // than returning a dead link the browser can't open. Surface
-          // this as "no original slides" instead of failing the whole
-          // assets request.
-          console.warn("[schedule_assets_original_slides_error]", err);
-          originalFilename = null;
-        }
+        originalDownloadUrl = await resolveOriginalDownloadUrl(
+          presUrl,
+          originalFilename
+        );
       }
 
       // Check annotated PDF export
@@ -213,16 +263,10 @@ export async function GET(
       if (activePdfKey && wbSession.pdfStatus === "READY") {
         notesStatus = "READY";
         notesFilename = `${schedule.title.replace(/[^a-zA-Z0-9_-]/g, "_")}_Notes.pdf`;
-        // "inline" (not "attachment") — matches the whiteboard slides
-        // route's own format=pdf behavior (slides/route.ts:173). A
-        // student previously had no way to VIEW this PDF at all, only
-        // force-download it; inline disposition opens it in the
-        // browser's native PDF viewer, which still offers its own save
-        // button, so downloading is still possible from there.
         notesDownloadUrl = await createPresignedDownloadUrl({
           key: activePdfKey,
           expiresInSeconds: 3600,
-          contentDisposition: `inline; filename="${encodeURIComponent(notesFilename)}"`,
+          contentDisposition: `attachment; filename="${encodeURIComponent(notesFilename)}"`,
         });
       } else if (wbSession.pdfStatus === "GENERATING") {
         notesStatus = "PROCESSING";
@@ -231,18 +275,15 @@ export async function GET(
         notesStatus = "READY";
         notesDownloadUrl = originalDownloadUrl;
         notesFilename = originalFilename;
+      } else if (schedule.lecture?.slidesUrl) {
+        notesStatus = "READY";
+        notesDownloadUrl = schedule.lecture.slidesUrl;
+        notesFilename = `${schedule.title.replace(/[^a-zA-Z0-9_-]/g, "_")}_Notes.pdf`;
       }
-      // NOTE: previously also fell back to schedule.lecture.slidesUrl here
-      // when neither the annotated export nor the original slides were
-      // available. That field is set by finalizeWhiteboardSlides to an
-      // internal API path ("/api/whiteboard/sessions/<id>/slides?format=pdf")
-      // that returns JSON ({success, data:{downloadUrl}}), not PDF bytes -
-      // handing it to the browser as a direct <a href> made the student's
-      // download show raw JSON text instead of a file. By this point the
-      // real annotated-PDF resolution above (activePdfKey/pdfStatus) has
-      // already been attempted and genuinely failed, so there's nothing
-      // real to link to; notesStatus correctly falls through to
-      // UNAVAILABLE below instead of promising a broken link.
+    } else if (schedule.lecture?.slidesUrl) {
+      notesStatus = "READY";
+      notesDownloadUrl = schedule.lecture.slidesUrl;
+      notesFilename = `${schedule.title.replace(/[^a-zA-Z0-9_-]/g, "_")}_Notes.pdf`;
     }
 
     return apiSuccess({

@@ -46,13 +46,6 @@ async function patchJson(url: string, body: unknown) {
   return json.data;
 }
 
-async function deleteJson(url: string) {
-  const res = await fetch(url, { method: "DELETE" });
-  const json = await res.json();
-  if (!res.ok || !json.success) throw new Error(json.error ?? "Request failed");
-  return json.data;
-}
-
 // The "dark" palette matches the live-class whiteboard's dedicated dark
 // theme (see TeacherLiveClassRoom.tsx) exactly, rather than the app's
 // shared design tokens — those are tuned for the rest of the (light) app
@@ -164,11 +157,6 @@ export function MessagesPanel({
     };
     channel.bind(WB_EVENTS.MESSAGE_SENT, handler);
 
-    const deletedHandler = (data: { id: string }) => {
-      setMessages((prev) => prev.filter((m) => m.id !== data.id));
-    };
-    channel.bind(WB_EVENTS.MESSAGE_DELETED, deletedHandler);
-
     const configHandler = (cfg: { chatEnabled?: boolean }) => {
       if (typeof cfg?.chatEnabled === "boolean") {
         setChatEnabled(cfg.chatEnabled);
@@ -178,7 +166,6 @@ export function MessagesPanel({
 
     return () => {
       channel.unbind(WB_EVENTS.MESSAGE_SENT, handler);
-      channel.unbind(WB_EVENTS.MESSAGE_DELETED, deletedHandler);
       channel.unbind(WB_EVENTS.CONFIG_UPDATED, configHandler);
     };
   }, [whiteboardSessionId]);
@@ -223,20 +210,6 @@ export function MessagesPanel({
       setError(err instanceof Error ? err.message : "Could not send that message.");
     } finally {
       setSending(false);
-    }
-  }
-
-  async function handleDeleteMessage(messageId: string) {
-    // Optimistic removal — the server-authoritative MESSAGE_DELETED
-    // broadcast (including to this same client) is a no-op re-filter if
-    // it arrives after this, so no risk of a duplicate/incorrect state.
-    const prevMessages = messages;
-    setMessages((prev) => prev.filter((m) => m.id !== messageId));
-    try {
-      await deleteJson(`/api/whiteboard/sessions/${whiteboardSessionId}/messages/${messageId}`);
-    } catch (err) {
-      setMessages(prevMessages);
-      setError(err instanceof Error ? err.message : "Could not delete that message.");
     }
   }
 
@@ -386,17 +359,6 @@ export function MessagesPanel({
                       <span className="text-[10px] text-slate-400 dark:text-slate-500 ml-auto tabular-nums">
                         {timeStr}
                       </span>
-                    )}
-
-                    {mine && !m.id.startsWith("opt_") && (
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteMessage(m.id)}
-                        title="Delete this message"
-                        className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-rose-500 shrink-0"
-                      >
-                        <span className="material-symbols-outlined text-[14px]">delete</span>
-                      </button>
                     )}
                   </div>
 

@@ -9,7 +9,6 @@ import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 
 import { pusherServer, sessionChannel, WB_EVENTS } from "@/lib/realtime/pusher-server";
 import { createApprovedSpeakerToken, videoRoomName } from "@/lib/livekit/server";
-import { setParticipantPublishPermission } from "@/lib/livekit/room-service";
 
 /** Teacher acts on one raised hand: APPROVE, REJECT, or CLEAR/RESOLVE. */
 export async function PATCH(
@@ -53,16 +52,6 @@ export async function PATCH(
       } catch (err) {
         console.warn("LiveKit speaker token generation warning:", err);
       }
-
-      // The student's browser is almost always already connected to the
-      // room (as a subscribe-only viewer) by the time this approval
-      // happens — handing them a new canPublish:true token does NOT
-      // upgrade that existing connection (livekit-client's Room.connect()
-      // no-ops once already Connected, so the new token is never actually
-      // sent). This pushes the permission upgrade directly onto the live
-      // connection instead, which is what actually lets their
-      // setMicrophoneEnabled/setCameraEnabled calls succeed.
-      await setParticipantPublishPermission(videoRoomName(params.id), handRaise.student.userId, true);
 
       await prisma.handRaiseEvent.update({
         where: { id: params.handRaiseId },
@@ -108,15 +97,7 @@ export async function PATCH(
         console.error("Pusher trigger error:", err);
       }
     } else {
-      // Default: RESOLVE / CLEAR — ends an already-approved speaking turn,
-      // so (unlike REJECT, which only ever applies to a still-pending
-      // request that was never granted publish rights) the live
-      // connection's permission needs to be downgraded here too, the same
-      // way the APPROVE branch upgrades it.
-      if (handRaise.liveKitGranted) {
-        await setParticipantPublishPermission(videoRoomName(params.id), handRaise.student.userId, false);
-      }
-
+      // Default: RESOLVE / CLEAR
       await prisma.handRaiseEvent.update({
         where: { id: params.handRaiseId },
         data: {

@@ -18,13 +18,7 @@ export default function manifest(): MetadataRoute.Manifest {
     scope: "/",
     display: "standalone",
     display_override: ["standalone", "minimal-ui"],
-    // Was "portrait" — that locks the OS/browser shell to portrait for
-    // anyone running the installed PWA, which blocks a live class from
-    // ever physically rotating to landscape at all, before any in-page
-    // orientation handling (see StudentLiveClassRoom.tsx) gets a chance to
-    // run. "any" lets the device rotate freely; nothing elsewhere in the
-    // app is orientation-restricted.
-    orientation: "any",
+    orientation: "portrait",
     background_color: "#090D16",
     theme_color: "#090D16",
     lang: "en-IN",

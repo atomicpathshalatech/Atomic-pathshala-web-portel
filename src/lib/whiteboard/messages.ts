@@ -31,13 +31,3 @@ export async function pushMessage(whiteboardSessionId: string, message: Whiteboa
     console.error("[pusher_trigger_error]", err);
   }
 }
-
-/** Broadcasts a soft-delete so every client removes the message locally
- * without a full history re-fetch. */
-export async function pushMessageDeleted(whiteboardSessionId: string, messageId: string) {
-  try {
-    await pusherServer.trigger(sessionChannel(whiteboardSessionId), WB_EVENTS.MESSAGE_DELETED, { id: messageId });
-  } catch (err) {
-    console.error("[pusher_trigger_error]", err);
-  }
-}

@@ -141,27 +141,7 @@ export async function reconcileRecordingStatus(
 
     if (info.status === EgressStatus.EGRESS_COMPLETE) {
       const file = info.fileResults?.[0];
-      if (!file?.filename) {
-        // LiveKit reports the egress finished but returned no file result -
-        // the old fallback here fabricated a `.../final.mp4` key and wrote
-        // recordingStatus: READY against it regardless, which is a lie:
-        // nothing was ever confirmed to exist at that path. Both student
-        // playback (this same recordingStorageKey field) and the YouTube
-        // archive upload (which then correctly failed with "Recording
-        // file not found in R2 storage" against the bogus key - confirmed
-        // against real data) silently broke as a result. Mark FAILED
-        // instead of inventing a path.
-        return await prisma.whiteboardSession.update({
-          where: { id: session.id },
-          data: { recordingStatus: "FAILED" },
-          select: {
-            recordingStatus: true,
-            recordingStorageKey: true,
-            recordingDurationSeconds: true,
-          },
-        });
-      }
-      const storageKey = file.filename;
+      const storageKey = file?.filename || `recordings/${session.id}/final.mp4`;
       const durationSeconds = file?.duration
         ? Math.round(Number(file.duration) / 1_000_000_000)
         : null;

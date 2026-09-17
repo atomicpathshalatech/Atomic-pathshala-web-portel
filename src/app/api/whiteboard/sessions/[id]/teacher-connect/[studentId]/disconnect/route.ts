@@ -7,7 +7,7 @@ import { resolveWhiteboardAccess } from "@/lib/whiteboard/access";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { pusherServer, sessionChannel, WB_EVENTS } from "@/lib/realtime/pusher-server";
 import { videoRoomName } from "@/lib/livekit/server";
-import { muteStudentPublishedTracks, setParticipantPublishPermission } from "@/lib/livekit/room-service";
+import { muteStudentPublishedTracks } from "@/lib/livekit/room-service";
 
 /**
  * Teacher disconnects a student's audio/video. Never removes the student
@@ -52,7 +52,6 @@ export async function POST(
     }
 
     await muteStudentPublishedTracks(videoRoomName(params.id), existing.student.user.id);
-    await setParticipantPublishPermission(videoRoomName(params.id), existing.student.user.id, false);
 
     return apiSuccess({ disconnected: true });
   } catch (error) {

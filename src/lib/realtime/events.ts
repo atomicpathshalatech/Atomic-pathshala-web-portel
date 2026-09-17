@@ -52,10 +52,6 @@ export const WB_EVENTS = {
   // message the way a stroke-heavy board does. Sent to sessionChannel (not
   // teacherChannel) since both teacher and students see the same chat.
   MESSAGE_SENT: "message-sent",
-  // A message's own author deleted it (soft delete - WhiteboardMessage.
-  // deletedAt). Carries just the id so every client can remove/hide it
-  // locally without a full history re-fetch.
-  MESSAGE_DELETED: "message-deleted",
   // Pre-class lobby → live transition (WhiteboardSession.livePhase flipping
   // to LIVE when the teacher clicks Start Class). A poller would catch this
   // within 5s anyway (see StudentLiveClassRoom's by-schedule poll), but this
@@ -84,6 +80,5 @@ export function directConversationChannel(conversationId: string) {
 
 export const DIRECT_MESSAGE_EVENTS = {
   NEW_MESSAGE: "new-message",
-  MESSAGES_READ: "messages-read",
 } as const;
 

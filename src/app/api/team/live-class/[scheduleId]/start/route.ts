@@ -120,24 +120,8 @@ export async function POST(
     // occurrence is over (isAlreadyLive above already returned early for a
     // genuinely still-live class), so it's safe - and correct per "every
     // class must start from a blank first slide" - to reset here.
-    //
-    // BUT: `livePhase !== "LIVE"` alone also matches "PREPARING" - the
-    // state the preflight route (preflight/route.ts) sets the moment a
-    // teacher uploads slides in advance via "Prepare Slides," before the
-    // class has ever gone live even once. That session's `pages` already
-    // hold the just-converted, real presentation - not leftovers from a
-    // previous occurrence - so wiping them here (and every start after,
-    // since presentationUrl survives the wipe and re-triggers client-side
-    // PDF conversion from scratch) was the actual cause of "PDF re-uploads
-    // page-by-page every time and any annotations vanish." The correct
-    // signal for "a previous occurrence genuinely happened and ended" is
-    // whether the session was EVER actually started before
-    // (actualStartedAt set) - a merely-prepared session has none.
     const existingSession = schedule.liveWhiteboardSession;
-    const isNewOccurrence =
-      Boolean(existingSession) &&
-      existingSession!.livePhase !== "LIVE" &&
-      Boolean(existingSession!.actualStartedAt);
+    const isNewOccurrence = Boolean(existingSession) && existingSession!.livePhase !== "LIVE";
 
     if (isNewOccurrence && (existingSession!.pdfStatus === "GENERATING" || existingSession!.pptxStatus === "GENERATING")) {
       return apiError(

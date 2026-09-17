@@ -6,7 +6,68 @@ import { UnauthorizedError, ForbiddenError } from "@/lib/rbac/guard";
 import { resolveWhiteboardAccess } from "@/lib/whiteboard/access";
 import { createPresignedDownloadUrl } from "@/lib/storage/r2-client";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
-import { resolveOriginalDownloadUrl } from "@/lib/whiteboard/original-download-url";
+
+/**
+ * Resolves a direct presigned download URL for an original uploaded presentation or document file.
+ */
+async function resolveOriginalDownloadUrl(
+  urlOrKey: string,
+  fallbackFilename: string
+): Promise<string> {
+  // Case 1: Pure R2 storage key (e.g. "modules/live-classes/...")
+  if (
+    !urlOrKey.startsWith("http://") &&
+    !urlOrKey.startsWith("https://") &&
+    !urlOrKey.startsWith("/api/") &&
+    !urlOrKey.startsWith("blob:")
+  ) {
+    return createPresignedDownloadUrl({
+      key: urlOrKey,
+      expiresInSeconds: 900,
+      contentDisposition: `attachment; filename="${encodeURIComponent(fallbackFilename)}"`,
+    });
+  }
+
+  // Case 2: FileAsset access URL (e.g. "/api/files/<id>/access")
+  const fileIdMatch = urlOrKey.match(/\/api\/files\/([a-zA-Z0-9_-]+)\/access/);
+  if (fileIdMatch && fileIdMatch[1]) {
+    const fileAsset = await prisma.fileAsset.findUnique({
+      where: { id: fileIdMatch[1] },
+    });
+    if (fileAsset?.storageKey) {
+      return createPresignedDownloadUrl({
+        key: fileAsset.storageKey,
+        expiresInSeconds: 900,
+        contentDisposition: `attachment; filename="${encodeURIComponent(
+          fallbackFilename || fileAsset.originalFilename
+        )}"`,
+      });
+    }
+  }
+
+  // Case 3: Absolute R2 URL with pathname
+  try {
+    const parsed = new URL(urlOrKey);
+    const pathnameKey = parsed.pathname.replace(/^\/+/, "");
+    if (pathnameKey && (pathnameKey.startsWith("modules/") || pathnameKey.startsWith("documents/") || pathnameKey.startsWith("classes/"))) {
+      return createPresignedDownloadUrl({
+        key: pathnameKey,
+        expiresInSeconds: 900,
+        contentDisposition: `attachment; filename="${encodeURIComponent(fallbackFilename)}"`,
+      });
+    }
+  } catch {
+    // ignore URL parse errors for relative paths
+  }
+
+  // If the stored URL is a local blob, throw user-friendly error instead of navigating to dead tab
+  if (urlOrKey.startsWith("blob:")) {
+    throw new Error("The presentation material was not saved to permanent cloud storage. Please upload the document again in Material Setup.");
+  }
+
+  // Fallback: return as-is
+  return urlOrKey;
+}
 
 /**
  * Generates presigned download URLs for class teaching materials & whiteboard exports:
