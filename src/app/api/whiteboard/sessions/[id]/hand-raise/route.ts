@@ -36,6 +36,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
         status: h.status,
         liveKitGranted: h.liveKitGranted,
         raisedAt: h.raisedAt,
+        imageUrl: h.imageUrl,
       })),
       handRaiseEnabled: wbSession?.handRaiseEnabled ?? true,
     });
@@ -56,10 +57,16 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     if (!access || access.role !== "STUDENT") throw new ForbiddenError();
 
     let requestType = "CHAT";
+    let imageUrl: string | undefined;
     try {
       const body = await request.json();
       if (body?.requestType && ["CHAT", "AUDIO", "VIDEO"].includes(body.requestType)) {
         requestType = body.requestType;
+      }
+      // A photographed doubt — only meaningful for a CHAT-type raise (no
+      // audio/video call involved), uploaded first via .../hand-raise/attachment.
+      if (typeof body?.imageUrl === "string" && body.imageUrl.startsWith("http")) {
+        imageUrl = body.imageUrl;
       }
     } catch {
       // Body may be empty
@@ -80,7 +87,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     if (existing) {
       handRaise = await prisma.handRaiseEvent.update({
         where: { id: existing.id },
-        data: { requestType, status: "PENDING" },
+        data: { requestType, status: "PENDING", ...(imageUrl && { imageUrl }) },
       });
     } else {
       handRaise = await prisma.handRaiseEvent.create({
@@ -89,6 +96,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           studentId: access.entityId,
           requestType,
           status: "PENDING",
+          imageUrl,
         },
       });
     }

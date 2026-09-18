@@ -73,6 +73,9 @@ type HandRaiseQueueItem = {
   requestType?: "CHAT" | "AUDIO" | "VIDEO";
   status?: "PENDING" | "APPROVED" | "REJECTED" | "RESOLVED";
   liveKitGranted?: boolean;
+  // A photographed doubt attached to a CHAT-type raise — see
+  // handlePickDoubt/HandRaisePanel.
+  imageUrl?: string | null;
 };
 
 type QuizOption = { key: string; label: string };
@@ -1848,6 +1851,59 @@ export function TeacherLiveClassRoom({
     return handleHandRaiseAction(id, "clear");
   }
 
+  /** Teacher-only hard delete of a hand-raise entry (e.g. a photographed
+   * doubt that's no longer needed) — distinct from "clear", which keeps it
+   * around as RESOLVED history. */
+  async function handleDeleteHandRaise(id: string) {
+    if (!wbSession) return;
+    try {
+      await fetch(`/api/whiteboard/sessions/${wbSession.id}/hand-raise/${id}`, { method: "DELETE" });
+    } catch {
+      // queue re-syncs on the next Pusher push / manual refresh either way
+    }
+  }
+
+  /** "Pick" a photographed doubt onto the board: creates a new slide with
+   * the doubt's image as its background and a text label naming who sent
+   * it, switches to it, then removes the entry from the queue (same
+   * create-then-patch two-step handleAddPageWithTemplate already uses,
+   * rather than teaching the create route a new body shape). */
+  async function handlePickDoubt(item: HandRaiseQueueItem) {
+    if (!wbSession || !item.imageUrl) return;
+    try {
+      const data = await postJson(`/api/whiteboard/sessions/${wbSession.id}/pages`);
+      const newPage = data.page as WhiteboardPage;
+      const nameLabel = {
+        id: crypto.randomUUID(),
+        type: "text" as const,
+        text: `Doubt from ${item.studentName}`,
+        color: "#dc2626",
+        size: 46,
+        position: { x: 40, y: 30 },
+        width: Math.max(240, item.studentName.length * 26),
+        height: 60,
+      };
+      await patchJson(`/api/whiteboard/sessions/${wbSession.id}/pages/${newPage.id}`, {
+        background: item.imageUrl,
+        objects: [nameLabel],
+      });
+      const updatedPage = { ...newPage, background: item.imageUrl, objects: [nameLabel] };
+      setWbSession((prev) =>
+        prev
+          ? {
+              ...prev,
+              pages: [...prev.pages.filter((p) => p.id !== newPage.id), updatedPage],
+              activePageNumber: updatedPage.pageNumber,
+            }
+          : prev
+      );
+      engineRef.current?.loadObjects([nameLabel] as unknown as StrokeObject[]);
+      await handleDeleteHandRaise(item.id);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Could not pick that doubt onto the board.");
+    }
+  }
+
   async function handleDisconnectStudent(studentId: string) {
     if (!wbSession) return;
     try {
@@ -2752,6 +2808,8 @@ export function TeacherLiveClassRoom({
               queue={handRaiseQueue}
               onResolve={resolveHandRaise}
               onAction={handleHandRaiseAction}
+              onPick={handlePickDoubt}
+              onDelete={handleDeleteHandRaise}
               enabled={wbSession.handRaiseEnabled}
             />
           ) : (
@@ -3817,11 +3875,15 @@ function HandRaisePanel({
   queue,
   onResolve,
   onAction,
+  onPick,
+  onDelete,
   enabled,
 }: {
   queue: HandRaiseQueueItem[];
   onResolve: (id: string) => void;
   onAction?: (id: string, action: "approve" | "reject" | "clear") => void;
+  onPick?: (item: HandRaiseQueueItem) => void;
+  onDelete?: (id: string) => void;
   enabled: boolean;
 }) {
   return (
@@ -3876,6 +3938,15 @@ function HandRaisePanel({
                   </span>
                 </div>
 
+                {h.imageUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={h.imageUrl}
+                    alt={`Doubt photo from ${h.studentName}`}
+                    className="w-full max-h-40 object-cover rounded-lg border border-[#2d2e3b]"
+                  />
+                )}
+
                 <div className="flex items-center justify-between pt-1 border-t border-[#1e202e]">
                   <span className="text-[10px] text-gray-500">
                     {isApproved ? (
@@ -3883,44 +3954,71 @@ function HandRaisePanel({
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
                         Speaking Permission Active
                       </span>
+                    ) : h.imageUrl ? (
+                      "Photographed doubt"
                     ) : (
                       "Waiting for approval"
                     )}
                   </span>
 
-                  <div className="flex items-center gap-1.5">
-                    {!isApproved && onAction && (
+                  {h.imageUrl ? (
+                    <div className="flex items-center gap-1.5">
+                      {onPick && (
+                        <button
+                          type="button"
+                          onClick={() => onPick(h)}
+                          className="flex items-center gap-1 text-xs font-bold text-blue-300 bg-blue-950/60 hover:bg-blue-900/80 border border-blue-700/60 px-2.5 py-1 rounded-lg transition active:scale-95"
+                          title="Bring this doubt onto a new slide"
+                        >
+                          <span className="material-symbols-outlined text-xs">add_photo_alternate</span>
+                          Pick
+                        </button>
+                      )}
                       <button
                         type="button"
-                        onClick={() => onAction(h.id, "approve")}
-                        className="flex items-center gap-1 text-xs font-bold text-emerald-300 bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-700/60 px-2.5 py-1 rounded-lg transition active:scale-95"
-                        title="Allow student to speak"
+                        onClick={() => (onDelete ? onDelete(h.id) : onResolve(h.id))}
+                        className="flex items-center gap-1 text-xs font-medium text-rose-300 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/40 px-2.5 py-1 rounded-lg transition"
+                        title="Delete this doubt"
                       >
-                        <span className="material-symbols-outlined text-xs">check</span>
-                        Approve
+                        <span className="material-symbols-outlined text-xs">delete</span>
+                        Delete
                       </button>
-                    )}
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      {!isApproved && onAction && (
+                        <button
+                          type="button"
+                          onClick={() => onAction(h.id, "approve")}
+                          className="flex items-center gap-1 text-xs font-bold text-emerald-300 bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-700/60 px-2.5 py-1 rounded-lg transition active:scale-95"
+                          title="Allow student to speak"
+                        >
+                          <span className="material-symbols-outlined text-xs">check</span>
+                          Approve
+                        </button>
+                      )}
 
-                    {!isApproved && onAction && (
+                      {!isApproved && onAction && (
+                        <button
+                          type="button"
+                          onClick={() => onAction(h.id, "reject")}
+                          className="flex items-center gap-1 text-xs font-medium text-rose-300 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/40 px-2 py-1 rounded-lg transition"
+                          title="Decline request"
+                        >
+                          <span className="material-symbols-outlined text-xs">close</span>
+                        </button>
+                      )}
+
                       <button
                         type="button"
-                        onClick={() => onAction(h.id, "reject")}
-                        className="flex items-center gap-1 text-xs font-medium text-rose-300 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/40 px-2 py-1 rounded-lg transition"
-                        title="Decline request"
+                        onClick={() => (onAction ? onAction(h.id, "clear") : onResolve(h.id))}
+                        className="text-xs text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-gray-800 transition"
+                        title={isApproved ? "Revoke speaking permission" : "Dismiss"}
                       >
-                        <span className="material-symbols-outlined text-xs">close</span>
+                        {isApproved ? "End Turn" : "Clear"}
                       </button>
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={() => (onAction ? onAction(h.id, "clear") : onResolve(h.id))}
-                      className="text-xs text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-gray-800 transition"
-                      title={isApproved ? "Revoke speaking permission" : "Dismiss"}
-                    >
-                      {isApproved ? "End Turn" : "Clear"}
-                    </button>
-                  </div>
+                    </div>
+                  )}
                 </div>
               </li>
             );

@@ -683,18 +683,51 @@ export function StudentLiveClassRoom({
     }
   }
 
-  async function submitHandRaise(type: "CHAT" | "AUDIO" | "VIDEO") {
+  async function submitHandRaise(type: "CHAT" | "AUDIO" | "VIDEO", imageUrl?: string) {
     if (!wbSession?.id || handRaiseBusy) return;
     setHandRaiseBusy(true);
     setHandRaiseModalOpen(false);
     setHandRaised(true);
     setParticipationType(type);
     try {
-      await postJson(`/api/whiteboard/sessions/${wbSession.id}/hand-raise`, { requestType: type });
+      await postJson(`/api/whiteboard/sessions/${wbSession.id}/hand-raise`, {
+        requestType: type,
+        ...(imageUrl && { imageUrl }),
+      });
     } catch {
       setHandRaised(false);
     } finally {
       setHandRaiseBusy(false);
+    }
+  }
+
+  // A photographed doubt (notebook/textbook page) attached to the
+  // "Chat Queue Only" option — upload first, then raise the hand with the
+  // resulting URL, same two-step shape as the plain doubts-page attachment.
+  const [uploadingDoubtImage, setUploadingDoubtImage] = useState(false);
+  const [doubtImageError, setDoubtImageError] = useState<string | null>(null);
+  const doubtImageInputRef = useRef<HTMLInputElement | null>(null);
+
+  async function handleDoubtImageSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !wbSession?.id || uploadingDoubtImage || handRaiseBusy) return;
+    setUploadingDoubtImage(true);
+    setDoubtImageError(null);
+    try {
+      const formData = new FormData();
+      formData.append("attachment", file);
+      const res = await fetch(`/api/whiteboard/sessions/${wbSession.id}/hand-raise/attachment`, {
+        method: "POST",
+        body: formData,
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error ?? "Could not upload that image.");
+      await submitHandRaise("CHAT", json.data.url as string);
+    } catch (err) {
+      setDoubtImageError(err instanceof Error ? err.message : "Could not upload that image.");
+    } finally {
+      setUploadingDoubtImage(false);
     }
   }
 
@@ -1641,22 +1674,49 @@ export function StudentLiveClassRoom({
                 </div>
               </button>
 
-              <button
-                type="button"
-                onClick={() => submitHandRaise("CHAT")}
-                disabled={handRaiseBusy}
-                className="w-full flex items-center gap-3 p-3.5 rounded-xl border border-slate-700 hover:border-slate-500 bg-slate-800/60 hover:bg-slate-800 text-left transition group"
-              >
-                <div className="w-10 h-10 rounded-xl bg-slate-700/50 text-slate-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
-                  <span className="material-symbols-outlined text-xl">chat</span>
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-white transition">Chat Queue Only</h4>
-                  <p className="text-[11px] text-slate-400">
-                    Alert the teacher to read your question in the classroom chat.
-                  </p>
-                </div>
-              </button>
+              <div className="w-full flex items-stretch gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => submitHandRaise("CHAT")}
+                  disabled={handRaiseBusy || uploadingDoubtImage}
+                  className="flex-1 flex items-center gap-3 p-3.5 rounded-xl border border-slate-700 hover:border-slate-500 bg-slate-800/60 hover:bg-slate-800 text-left transition group"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-slate-700/50 text-slate-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
+                    <span className="material-symbols-outlined text-xl">chat</span>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-white transition">Chat Queue Only</h4>
+                    <p className="text-[11px] text-slate-400">
+                      Alert the teacher, or attach a photo of your doubt.
+                    </p>
+                  </div>
+                </button>
+
+                <input
+                  ref={doubtImageInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={handleDoubtImageSelected}
+                />
+                <button
+                  type="button"
+                  onClick={() => doubtImageInputRef.current?.click()}
+                  disabled={handRaiseBusy || uploadingDoubtImage}
+                  title="Attach a photo of your doubt (notebook/textbook page)"
+                  className="w-14 shrink-0 flex flex-col items-center justify-center gap-1 rounded-xl border border-slate-700 hover:border-blue-500 bg-slate-800/60 hover:bg-blue-950/30 transition disabled:opacity-60"
+                >
+                  {uploadingDoubtImage ? (
+                    <span className="material-symbols-outlined text-lg text-blue-400 animate-spin">progress_activity</span>
+                  ) : (
+                    <span className="material-symbols-outlined text-lg text-blue-400">add_a_photo</span>
+                  )}
+                  <span className="text-[9px] font-bold text-slate-400">Photo</span>
+                </button>
+              </div>
+              {doubtImageError && (
+                <p className="text-[11px] text-rose-400 -mt-1">{doubtImageError}</p>
+              )}
             </div>
 
             <div className="pt-2 flex justify-end">

@@ -9,6 +9,7 @@ import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 
 import { pusherServer, sessionChannel, WB_EVENTS } from "@/lib/realtime/pusher-server";
 import { createApprovedSpeakerToken, videoRoomName } from "@/lib/livekit/server";
+import { deleteFile, keyFromPublicUrl } from "@/lib/storage";
 
 /** Teacher acts on one raised hand: APPROVE, REJECT, or CLEAR/RESOLVE. */
 export async function PATCH(
@@ -121,6 +122,39 @@ export async function PATCH(
 
     const queue = await pushHandRaiseQueue(params.id);
     return apiSuccess({ queue });
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
+/**
+ * Teacher-only: permanently removes one hand-raise entry (e.g. a picked or
+ * no-longer-needed photographed doubt) — distinct from PATCH's
+ * REJECT/RESOLVE, which keep the row around as RESOLVED/REJECTED history.
+ * Cleans up the attached doubt image in R2, if any.
+ */
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: { id: string; handRaiseId: string } }
+) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) throw new UnauthorizedError();
+    const access = await resolveWhiteboardAccess(session.user.id, params.id);
+    if (!access || access.role !== "TEACHER") throw new ForbiddenError();
+
+    const handRaise = await prisma.handRaiseEvent.findUnique({ where: { id: params.handRaiseId } });
+    if (!handRaise || handRaise.whiteboardSessionId !== params.id) {
+      return apiError("Hand raise not found.", 404);
+    }
+
+    await prisma.handRaiseEvent.delete({ where: { id: params.handRaiseId } });
+
+    const imageKey = handRaise.imageUrl ? keyFromPublicUrl(handRaise.imageUrl) : null;
+    if (imageKey) deleteFile(imageKey).catch(() => undefined);
+
+    const queue = await pushHandRaiseQueue(params.id);
+    return apiSuccess({ deleted: true, queue });
   } catch (error) {
     return handleApiError(error);
   }

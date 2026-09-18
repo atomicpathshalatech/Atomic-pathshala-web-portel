@@ -1549,6 +1549,10 @@ model HandRaiseEvent {
   rejectedAt          DateTime?
   // Whether LiveKit publish permission was granted for this hand raise
   liveKitGranted      Boolean         @default(false)
+  // A photographed doubt (notebook/textbook page) attached to a CHAT-type
+  // hand raise, so the teacher can pick it straight onto the whiteboard as
+  // a new slide instead of the student having to describe it verbally.
+  imageUrl            String?         @db.Text
 
   whiteboardSession WhiteboardSession @relation(fields: [whiteboardSessionId], references: [id], onDelete: Cascade)
   student           Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)

@@ -26,6 +26,7 @@ export async function pushHandRaiseQueue(whiteboardSessionId: string) {
     status: h.status,
     liveKitGranted: h.liveKitGranted,
     raisedAt: h.raisedAt,
+    imageUrl: h.imageUrl,
   }));
 
   try {
