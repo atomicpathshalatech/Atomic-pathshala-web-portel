@@ -19,11 +19,14 @@ import {
   AlertCircle,
   FileText,
   Sparkles,
+  ChevronLeft,
   ChevronRight,
   ShieldCheck,
   UserCheck,
   BookOpen,
+  Flag,
 } from "lucide-react";
+import { FormulaText } from "@/components/test-portal/FormulaText";
 import { SecureDeleteResourceModal } from "@/components/common/SecureDeleteResourceModal";
 
 export interface QuestionRow {
@@ -36,6 +39,13 @@ export interface QuestionRow {
   type: string;
   difficulty: string;
   category?: string | null;
+  pyqExam?: string | null;
+  pyqYear?: number | null;
+  pyqMonth?: string | null;
+  pyqQuestionNumber?: string | null;
+  pyqSource?: string | null;
+  imageUrl?: string | null;
+  solution?: string | null;
   tags?: string | null;
   status: string; // DRAFT | REVIEW_1 | REVIEW_2 | PUBLISHED | REJECTED
   version: number;
@@ -65,8 +75,12 @@ export interface QuestionRow {
     statement: string;
     solution?: string | null;
     options?: any;
+    correctOptionIds?: any;
   }>;
   isBilingual?: boolean;
+  _count?: {
+    reports?: number;
+  };
 }
 
 interface Props {
@@ -83,6 +97,7 @@ interface Props {
     aiDraft?: number;
   };
   usersList: Array<{ id: string; name: string | null; email: string }>;
+  teamMembersList?: Array<{ id: string; name: string | null; email: string }>;
   canCreate: boolean;
   canVerify: boolean;
   currentUserId?: string;
@@ -95,6 +110,7 @@ export function QuestionManagementTable({
   pageSize,
   counts,
   usersList,
+  teamMembersList,
   canCreate,
   canVerify,
   currentUserId,
@@ -114,6 +130,12 @@ export function QuestionManagementTable({
   const [reviewedById, setReviewedById] = useState(searchParams.get("reviewedById") || "");
   const [editedById, setEditedById] = useState(searchParams.get("editedById") || "");
   const [source, setSource] = useState(searchParams.get("source") || "");
+  const [pyqCategory, setPyqCategory] = useState(searchParams.get("pyqCategory") || "");
+
+  // CBT Question View / Preview Modal State
+  const [viewQuestionIndex, setViewQuestionIndex] = useState<number | null>(null);
+  const [viewQuestionLang, setViewQuestionLang] = useState<"ENGLISH" | "HINDI">("ENGLISH");
+  const [showSolution, setShowSolution] = useState(false);
 
   // Modals
   const [reviewModalQuestion, setReviewModalQuestion] = useState<{
@@ -147,6 +169,7 @@ export function QuestionManagementTable({
     if (type) params.set("type", type);
     if (status) params.set("status", status);
     if (source) params.set("source", source);
+    if (pyqCategory) params.set("pyqCategory", pyqCategory);
     if (createdById) params.set("createdById", createdById);
     if (reviewedById) params.set("reviewedById", reviewedById);
     if (editedById) params.set("editedById", editedById);
@@ -163,6 +186,7 @@ export function QuestionManagementTable({
     setType("");
     setStatus("");
     setSource("");
+    setPyqCategory("");
     setCreatedById("");
     setReviewedById("");
     setEditedById("");
@@ -424,13 +448,13 @@ export function QuestionManagementTable({
           </div>
         </div>
 
-        {/* Row 2: Difficulty, Question Type, Workflow Status, Generation Source, Created By, Reviewed By */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-7 gap-3 pt-1 border-t border-slate-100">
+        {/* Row 2: Difficulty, Question Type, Workflow Status, Generation Source, PYQ Category, Created By, Reviewed By */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-2.5 pt-2 border-t border-slate-100">
           <div>
             <select
               value={difficulty}
               onChange={(e) => setDifficulty(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 outline-none focus:border-blue-500"
+              className="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 outline-none focus:border-blue-500"
             >
               <option value="">All Difficulty</option>
               <option value="EASY">Easy</option>
@@ -443,7 +467,7 @@ export function QuestionManagementTable({
             <select
               value={type}
               onChange={(e) => setType(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 outline-none focus:border-blue-500"
+              className="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 outline-none focus:border-blue-500"
             >
               <option value="">All Question Types</option>
               <option value="SINGLE_CORRECT">Single Correct (MCQ)</option>
@@ -459,7 +483,7 @@ export function QuestionManagementTable({
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 outline-none focus:border-blue-500"
+              className="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 outline-none focus:border-blue-500"
             >
               <option value="">All Status</option>
               <option value="DRAFT">Draft</option>
@@ -474,7 +498,7 @@ export function QuestionManagementTable({
             <select
               value={source}
               onChange={(e) => setSource(e.target.value)}
-              className="w-full px-3 py-2 bg-blue-50/50 border border-blue-200 rounded-xl text-xs text-blue-900 font-semibold outline-none focus:border-blue-500"
+              className="w-full px-2.5 py-2 bg-blue-50/50 border border-blue-200 rounded-xl text-xs text-blue-900 font-semibold outline-none focus:border-blue-500"
             >
               <option value="">Source: All</option>
               <option value="AI_ALL">✨ AI Generated (All)</option>
@@ -486,11 +510,26 @@ export function QuestionManagementTable({
             </select>
           </div>
 
+          {/* PYQ Category Filter */}
+          <div>
+            <select
+              value={pyqCategory}
+              onChange={(e) => setPyqCategory(e.target.value)}
+              className="w-full px-2.5 py-2 bg-indigo-50/70 border border-indigo-200 rounded-xl text-xs text-indigo-950 font-bold outline-none focus:border-indigo-500"
+            >
+              <option value="">PYQ: All</option>
+              <option value="NEET_PYQ">🎯 NEET PYQs</option>
+              <option value="JEE_MAINS_PYQ">⚡ JEE Mains PYQs</option>
+              <option value="JEE_ADVANCED_PYQ">🚀 JEE Advanced PYQs</option>
+              <option value="ALL_PYQ">📚 All PYQs</option>
+            </select>
+          </div>
+
           <div>
             <select
               value={createdById}
               onChange={(e) => setCreatedById(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 outline-none focus:border-blue-500"
+              className="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 outline-none focus:border-blue-500"
             >
               <option value="">Created By (All)</option>
               {usersList.map((u) => (
@@ -505,10 +544,11 @@ export function QuestionManagementTable({
             <select
               value={reviewedById}
               onChange={(e) => setReviewedById(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 outline-none focus:border-blue-500"
+              className="w-full px-2.5 py-2 bg-amber-50/50 border border-amber-200 rounded-xl text-xs text-amber-950 font-semibold outline-none focus:border-amber-500"
+              title="Filter by verified Team Members only"
             >
-              <option value="">Reviewed By (All)</option>
-              {usersList.map((u) => (
+              <option value="">Reviewed By: Team Member</option>
+              {(teamMembersList || usersList).map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.name || u.email}
                 </option>
@@ -516,10 +556,10 @@ export function QuestionManagementTable({
             </select>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <button
               type="submit"
-              className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-sm transition"
+              className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-sm transition"
             >
               Apply
             </button>
@@ -588,6 +628,11 @@ export function QuestionManagementTable({
                             <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded inline-flex items-center gap-1">
                               <BookOpen className="w-2.5 h-2.5 text-emerald-600" />
                               <span>NCERT Practice Hub</span>
+                            </span>
+                          )}
+                          {(q.pyqExam || q.pyqSource) && (
+                            <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded inline-flex items-center gap-1 font-mono">
+                              <span>{q.pyqSource || `${q.pyqExam} ${q.pyqYear || ""}`}</span>
                             </span>
                           )}
                         </div>
@@ -662,6 +707,17 @@ export function QuestionManagementTable({
                         <span className="text-[10px] text-slate-400 block">
                           By: {q.createdBy?.name || q.createdBy?.email || "Team"}
                         </span>
+
+                        {q._count?.reports && q._count.reports > 0 ? (
+                          <Link
+                            href={`/team/questions/reports?search=${encodeURIComponent(q.questionCode || q.id)}`}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200 transition mt-1"
+                            title={`${q._count.reports} student report(s) filed. Click to review.`}
+                          >
+                            <Flag className="w-2.5 h-2.5 text-amber-700" />
+                            <span>⚠️ {q._count.reports} {q._count.reports === 1 ? "Report" : "Reports"}</span>
+                          </Link>
+                        ) : null}
                       </div>
                     </td>
 
@@ -747,6 +803,21 @@ export function QuestionManagementTable({
                             <span>Review 2</span>
                           </button>
                         )}
+
+                        {/* View Question in Student CBT Interface */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const idx = questions.findIndex((item) => item.id === q.id);
+                            setViewQuestionIndex(idx >= 0 ? idx : 0);
+                            setShowSolution(false);
+                          }}
+                          className="px-2.5 py-1.5 rounded-lg border border-blue-200 bg-blue-50/80 hover:bg-blue-100 text-blue-700 hover:text-blue-800 font-bold transition flex items-center gap-1 shadow-2xs"
+                          title="View Question in Student CBT Test Interface"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-blue-600" />
+                          <span className="text-[11px] font-bold">View</span>
+                        </button>
 
                         {/* Edit Question */}
                         <Link
@@ -1048,6 +1119,276 @@ export function QuestionManagementTable({
           }}
         />
       )}
+
+      {/* 7. CBT STUDENT TEST INTERFACE PREVIEW MODAL WITH SEQUENTIAL QUESTION NAVIGATION */}
+      {viewQuestionIndex !== null && questions[viewQuestionIndex] && (() => {
+        const viewingQuestion = questions[viewQuestionIndex];
+        const translationEn = viewingQuestion.translations.find((t) => t.language === "ENGLISH");
+        const translationHi = viewingQuestion.translations.find((t) => t.language === "HINDI");
+        const activeTranslation =
+          viewQuestionLang === "HINDI" && translationHi ? translationHi : (translationEn || viewingQuestion.translations[0]);
+
+        const statement = activeTranslation?.statement || "";
+        const optionsObj: Record<string, string> =
+          typeof activeTranslation?.options === "object" && activeTranslation?.options !== null
+            ? (activeTranslation.options as Record<string, string>)
+            : {};
+
+        const correctOptionIds: string[] = Array.isArray(activeTranslation?.correctOptionIds)
+          ? activeTranslation.correctOptionIds
+          : [];
+
+        const hasHindi = Boolean(translationHi);
+        const OPTION_KEYS = ["A", "B", "C", "D"] as const;
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-3 sm:p-6 backdrop-blur-sm overflow-y-auto">
+            <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-4xl w-full shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95">
+              {/* Modal Header: CBT Title Bar */}
+              <div className="px-6 py-4 bg-white dark:bg-slate-850 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="px-3 py-1 rounded-full bg-blue-600 text-white font-black text-xs shadow-xs">
+                    Question {viewQuestionIndex + 1} of {questions.length}
+                  </span>
+
+                  <span className="font-mono font-bold text-xs text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-0.5 rounded-lg border border-blue-200 dark:border-blue-800">
+                    {viewingQuestion.questionCode || `Q-${viewingQuestion.id.slice(0, 6).toUpperCase()}`}
+                  </span>
+
+                  {viewingQuestion.pyqSource && (
+                    <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800 px-2.5 py-0.5 rounded-lg font-mono">
+                      {viewingQuestion.pyqSource}
+                    </span>
+                  )}
+
+                  <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                    {viewingQuestion.subject} {viewingQuestion.chapter ? `• ${viewingQuestion.chapter}` : ""}
+                  </span>
+
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                    {viewingQuestion.difficulty}
+                  </span>
+
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                    {viewingQuestion.type.replace("_", " ")}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  {hasHindi && (
+                    <button
+                      type="button"
+                      onClick={() => setViewQuestionLang((prev) => (prev === "ENGLISH" ? "HINDI" : "ENGLISH"))}
+                      className="px-3 py-1 rounded-full text-xs font-bold bg-slate-100 dark:bg-slate-800 hover:bg-blue-50 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition"
+                    >
+                      {viewQuestionLang === "HINDI" ? "🌐 Switch to English" : "🌐 हिंदी में देखें"}
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setViewQuestionIndex(null)}
+                    className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Modal Body: Test-Taking Interface Card */}
+              <div className="p-6 sm:p-8 overflow-y-auto space-y-6 flex-1 bg-white dark:bg-slate-900">
+                {/* Question Statement in Student Test Format */}
+                <div className="p-5 sm:p-6 rounded-2xl bg-slate-50/70 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/80 space-y-3">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-500 pb-1 border-b border-slate-200/60 dark:border-slate-700">
+                    <span className="text-blue-600 dark:text-blue-400 uppercase tracking-wider">
+                      Question Statement ({viewQuestionLang})
+                    </span>
+                    {viewingQuestion.topic && <span>Topic: {viewingQuestion.topic}</span>}
+                  </div>
+
+                  <FormulaText
+                    text={statement || "No statement text available."}
+                    className="text-sm sm:text-base font-bold text-slate-900 dark:text-white leading-relaxed block"
+                  />
+
+                  {/* Question Image (if present) */}
+                  {viewingQuestion.imageUrl && (
+                    <div className="pt-2">
+                      <img
+                        src={viewingQuestion.imageUrl}
+                        alt="Question Reference Figure"
+                        className="max-h-72 max-w-full rounded-xl object-contain border border-slate-200 dark:border-slate-700 shadow-sm bg-white"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Options List in Student Test CBT format */}
+                <div className="space-y-3">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block px-1">
+                    Options (Student CBT Display)
+                  </span>
+
+                  <div className="grid grid-cols-1 gap-2.5">
+                    {OPTION_KEYS.map((key) => {
+                      const optVal = optionsObj[key] ?? optionsObj[key.toLowerCase()];
+                      if (!optVal && optVal !== "") return null;
+
+                      const isCorrect =
+                        correctOptionIds.includes(key) ||
+                        correctOptionIds.includes(key.toLowerCase()) ||
+                        (viewingQuestion as any).correctAnswer === key;
+
+                      return (
+                        <div
+                          key={key}
+                          className={`p-4 rounded-2xl border text-left transition flex items-center gap-3.5 ${
+                            isCorrect
+                              ? "bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-500 ring-2 ring-emerald-500/20 shadow-xs text-emerald-950 dark:text-emerald-100"
+                              : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200"
+                          }`}
+                        >
+                          <span
+                            className={`w-7 h-7 rounded-xl flex items-center justify-center font-mono font-bold text-xs shrink-0 ${
+                              isCorrect
+                                ? "bg-emerald-600 text-white shadow-xs"
+                                : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
+                            }`}
+                          >
+                            {key}
+                          </span>
+
+                          <div className="flex-1 min-w-0">
+                            <FormulaText
+                              text={optVal || ""}
+                              className="text-xs sm:text-sm font-medium leading-relaxed block"
+                            />
+                          </div>
+
+                          {isCorrect && (
+                            <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/60 px-2.5 py-0.5 rounded-full flex items-center gap-1 shrink-0">
+                              <Check className="w-3.5 h-3.5" />
+                              <span>Correct Key</span>
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Explanation / Solution Toggle */}
+                {(activeTranslation?.solution || viewingQuestion.solution) && (
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowSolution((prev) => !prev)}
+                      className="px-4 py-2 rounded-xl bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 text-blue-700 dark:text-blue-300 font-bold text-xs transition flex items-center gap-1.5 border border-blue-200 dark:border-blue-800 cursor-pointer"
+                    >
+                      <BookOpen className="w-4 h-4" />
+                      <span>{showSolution ? "Hide Solution / Explanation" : "View Solution / Explanation"}</span>
+                    </button>
+
+                    {showSolution && (
+                      <div className="mt-3 p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2 animate-in fade-in duration-150">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block">
+                          Step-by-Step Solution
+                        </span>
+                        <FormulaText
+                          text={activeTranslation?.solution || viewingQuestion.solution || ""}
+                          className="text-xs sm:text-sm font-normal text-slate-800 dark:text-slate-200 leading-relaxed block whitespace-pre-wrap"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer: Navigation Controls (Prev, Next, Edit, Review Actions) */}
+              <div className="px-6 py-4 bg-slate-50 dark:bg-slate-850 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+                {/* Left: Previous & Next Question Buttons */}
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    disabled={viewQuestionIndex <= 0}
+                    onClick={() => {
+                      setViewQuestionIndex((prev) => (prev !== null ? Math.max(0, prev - 1) : 0));
+                      setShowSolution(false);
+                    }}
+                    className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed font-bold text-xs text-slate-700 dark:text-slate-200 flex items-center justify-center gap-1.5 transition shadow-2xs cursor-pointer"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    <span>Previous</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={viewQuestionIndex >= questions.length - 1}
+                    onClick={() => {
+                      setViewQuestionIndex((prev) => (prev !== null ? Math.min(questions.length - 1, prev + 1) : 0));
+                      setShowSolution(false);
+                    }}
+                    className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed font-bold text-xs text-slate-700 dark:text-slate-200 flex items-center justify-center gap-1.5 transition shadow-2xs cursor-pointer"
+                  >
+                    <span>Next</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Right: Separate Edit Action & Review Controls */}
+                <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+                  {canVerify && viewingQuestion.status === "REVIEW_1" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReviewModalQuestion({ question: viewingQuestion, stage: "REVIEW_1" });
+                        setReviewAction("APPROVE");
+                        setReviewNotes("");
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow-sm transition flex items-center gap-1 cursor-pointer"
+                    >
+                      <UserCheck className="w-3.5 h-3.5" />
+                      <span>Review 1</span>
+                    </button>
+                  )}
+
+                  {canVerify && viewingQuestion.status === "REVIEW_2" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReviewModalQuestion({ question: viewingQuestion, stage: "REVIEW_2" });
+                        setReviewAction("APPROVE");
+                        setReviewNotes("");
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-sm transition flex items-center gap-1 cursor-pointer"
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      <span>Review 2</span>
+                    </button>
+                  )}
+
+                  <Link
+                    href={`/team/questions/${viewingQuestion.id}/edit`}
+                    className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition active:scale-95 cursor-pointer"
+                    title="Transition to Edit Mode"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                    <span>Edit Question</span>
+                  </Link>
+
+                  <button
+                    type="button"
+                    onClick={() => setViewQuestionIndex(null)}
+                    className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs hover:bg-slate-100 transition cursor-pointer"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

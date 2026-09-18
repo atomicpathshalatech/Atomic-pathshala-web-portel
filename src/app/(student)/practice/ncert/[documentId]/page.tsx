@@ -29,6 +29,7 @@ interface DocumentMeta {
 import { MathText } from "@/components/ai-chat/MathText";
 import { Sparkles } from "lucide-react";
 import dynamic from "next/dynamic";
+import { ReportQuestionButton } from "@/components/student/ReportQuestionButton";
 
 const NcertOriginalPageViewer = dynamic(
   () =>
@@ -956,6 +957,28 @@ export default function NcertChapterReaderPage() {
                             <MathText text={r.finalAnswer || `Option (${r.correctAnswer}) is the correct answer.`} />
                           </div>
                         </div>
+                      </div>
+
+                      {/* Report Question CTA */}
+                      <div className="pt-2 flex items-center justify-between border-t border-slate-200/80">
+                        <span className="text-[11px] text-slate-400 font-medium">
+                          NCERT Practice • Page {currentPageNum}
+                        </span>
+                        <ReportQuestionButton
+                          questionId={r.id}
+                          variant="text"
+                          label="Answer seems wrong? Report it"
+                          questionMeta={{
+                            statement: r.question,
+                            options: r.options,
+                            correctAnswer: r.correctAnswer,
+                            solution: r.solution || r.explanation || r.finalAnswer,
+                            subject: documentMeta?.subjectName,
+                            chapter: documentMeta?.chapterTitle,
+                            source: "NCERT_PRACTICE",
+                            language: documentMeta?.language,
+                          }}
+                        />
                       </div>
                     </div>
                   ))}

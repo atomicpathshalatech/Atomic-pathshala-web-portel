@@ -52,6 +52,10 @@ export interface VideoStripProps {
   connectedStudents?: TeacherConnectedStudent[];
   onDisconnectStudent?: (studentId: string) => Promise<void> | void;
   onEndCall?: () => Promise<void> | void;
+  // STUDENT role only — a DIFFERENT student who is currently an approved
+  // video speaker, so the rest of the class can see them too (previously
+  // only the teacher could).
+  classSpeaker?: { studentUserId: string; studentName: string } | null;
 }
 
 export function VideoStrip({
@@ -69,6 +73,7 @@ export function VideoStrip({
   connectedStudents = [],
   onDisconnectStudent,
   onEndCall,
+  classSpeaker = null,
 }: VideoStripProps) {
   const [creds, setCreds] = useState<{ token: string; url: string } | null>(null);
   const [tokenError, setTokenError] = useState<string | null>(null);
@@ -163,6 +168,7 @@ export function VideoStrip({
         connectedStudents={connectedStudents}
         onDisconnectStudent={onDisconnectStudent}
         onEndCall={onEndCall}
+        classSpeaker={classSpeaker}
       />
     </LiveKitRoom>
   );
@@ -183,6 +189,7 @@ function VideoStripInner({
   connectedStudents = [],
   onDisconnectStudent,
   onEndCall,
+  classSpeaker = null,
 }: {
   variant: "header" | "panel";
   role?: "TEACHER" | "STUDENT";
@@ -195,6 +202,7 @@ function VideoStripInner({
   connectedStudents?: TeacherConnectedStudent[];
   onDisconnectStudent?: (studentId: string) => Promise<void> | void;
   onEndCall?: () => Promise<void> | void;
+  classSpeaker?: { studentUserId: string; studentName: string } | null;
 }) {
   const connectionState = useConnectionState();
   const tracks = useTracks([Track.Source.Camera, Track.Source.Microphone], { onlySubscribed: false });
@@ -536,6 +544,7 @@ function VideoStripInner({
         teacherAudioConnected={teacherAudioConnected}
         teacherVideoConnected={teacherVideoConnected}
         onEndCall={onEndCall}
+        classSpeaker={classSpeaker}
       />
 
       {/* Approved Speaker Badge & Local Mic Controls for Student */}

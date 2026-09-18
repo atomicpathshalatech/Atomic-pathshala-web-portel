@@ -16,9 +16,22 @@ export const QUESTION_REPORT_REASONS = [
 
 export const questionReportCreateSchema = z.object({
   testId: z.string().optional(),
-  reasonTags: z.array(z.enum(QUESTION_REPORT_REASONS)).min(1, "Select at least one issue."),
+  reasonTags: z.array(z.string()).min(1, "Select at least one issue."),
   comment: z.string().trim().max(2000).optional().or(z.literal("")),
   screenshotUrl: z.string().url().optional().or(z.literal("")),
+  questionMeta: z
+    .object({
+      statement: z.string().optional(),
+      options: z.any().optional(),
+      correctAnswer: z.string().optional(),
+      solution: z.string().optional(),
+      subject: z.string().optional(),
+      chapter: z.string().optional(),
+      topic: z.string().optional(),
+      source: z.string().optional(),
+      language: z.string().optional(),
+    })
+    .optional(),
 });
 
 export type QuestionReportCreateInput = z.infer<typeof questionReportCreateSchema>;

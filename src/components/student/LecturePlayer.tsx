@@ -127,6 +127,8 @@ export function LecturePlayer({
   const [doubtSubmitting, setDoubtSubmitting] = useState(false);
   const [doubtSuccess, setDoubtSuccess] = useState(false);
   const [doubtError, setDoubtError] = useState<string | null>(null);
+  const [lastDoubtId, setLastDoubtId] = useState<string | null>(null);
+  const [doubtDeleting, setDoubtDeleting] = useState(false);
 
   // Restore saved playback speed
   useEffect(() => {
@@ -382,13 +384,34 @@ export function LecturePlayer({
         setDoubtError(data.error || "Could not submit doubt. Please try again.");
         return;
       }
+      const newDoubtId = data.data?.doubt?.id || null;
+      setLastDoubtId(newDoubtId);
       setDoubtSuccess(true);
       setDoubtText("");
-      setTimeout(() => setDoubtSuccess(false), 4000);
+      setTimeout(() => setDoubtSuccess(false), 10000);
     } catch {
       setDoubtError("Network error while submitting doubt. Please try again.");
     } finally {
       setDoubtSubmitting(false);
+    }
+  }
+
+  async function deleteLastDoubt() {
+    if (!lastDoubtId) return;
+    setDoubtDeleting(true);
+    try {
+      const res = await fetch(`/api/doubts/${lastDoubtId}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setDoubtError(data.error || "Could not delete doubt.");
+        return;
+      }
+      setLastDoubtId(null);
+      setDoubtSuccess(false);
+    } catch {
+      setDoubtError("Network error while deleting doubt.");
+    } finally {
+      setDoubtDeleting(false);
     }
   }
 
@@ -705,8 +728,20 @@ export function LecturePlayer({
               </div>
 
               {doubtSuccess && (
-                <div className="bg-tertiary-container/30 border border-tertiary/20 rounded-xl p-2.5 text-xs text-tertiary font-semibold">
-                  Doubt submitted successfully! You can track it in Doubt Portal.
+                <div className="bg-tertiary-container/30 border border-tertiary/20 rounded-xl p-2.5 text-xs text-tertiary font-semibold flex items-center justify-between gap-2">
+                  <span>Doubt submitted! Track in Doubt Portal.</span>
+                  {lastDoubtId && (
+                    <button
+                      type="button"
+                      onClick={deleteLastDoubt}
+                      disabled={doubtDeleting}
+                      className="text-error hover:underline text-[11px] font-bold shrink-0 flex items-center gap-0.5 disabled:opacity-50"
+                      title="Sent by mistake? Delete this doubt"
+                    >
+                      <span className="material-symbols-outlined text-xs">delete</span>
+                      {doubtDeleting ? "Deleting..." : "Delete"}
+                    </button>
+                  )}
                 </div>
               )}
               {doubtError && (

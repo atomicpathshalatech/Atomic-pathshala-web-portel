@@ -237,10 +237,24 @@ export function PreFlightSetupWizard({
       try {
         const formData = new FormData();
         formData.append("file", file);
-        const serverRes = await fetch(`/api/team/live-class/${scheduleId}/upload-presentation`, {
-          method: "POST",
-          body: formData,
-        });
+        let serverRes: Response;
+        try {
+          serverRes = await fetch(`/api/team/live-class/${scheduleId}/upload-presentation`, {
+            method: "POST",
+            body: formData,
+          });
+        } catch {
+          // Both upload paths failed at the network level. The direct-to-R2
+          // path (err above) already told us cloud storage CORS is likely
+          // the cause; this server-proxy path additionally has no way to
+          // handle files much larger than a few MB (the whole file passes
+          // through one serverless function call, which platform request
+          // size limits will reject before this code ever runs) - large
+          // files are the most likely trigger here specifically.
+          throw new Error(
+            "Upload failed: could not reach the server, and this file may be too large for the fallback upload path. Configure direct cloud storage access for this domain, or try a smaller file."
+          );
+        }
         const serverJson = await serverRes.json();
         if (serverRes.ok && serverJson.success && serverJson.data?.url) {
           setPresentationUrl(serverJson.data.url);

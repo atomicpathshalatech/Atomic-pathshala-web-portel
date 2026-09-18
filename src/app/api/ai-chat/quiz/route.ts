@@ -45,11 +45,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid quiz subject." }, { status: 400 });
     }
 
+    const sourceModule =
+      body.sourceModule ||
+      (subject === "Full NEET" ? "NEET_QUIZ" : topic ? "TOPIC_WISE_QUIZ" : "NEET_QUIZ");
+
+    const isNcertPractice =
+      sourceModule === "NCERT_QUIZ" ||
+      sourceModule === "NCERT_PRACTICE" ||
+      body.sourceModule === "NCERT_QUIZ" ||
+      body.sourceModule === "NCERT_PRACTICE" ||
+      subject === "NCERT";
+
     const user = await getCurrentUser();
-    if (user) {
+    // Only apply daily free-quiz quota to non-NCERT quizzes (NEET Quiz / Topic-wise Quiz)
+    if (user && !isNcertPractice) {
       const isSubscribed = await hasActiveSubscription(user.id);
       if (!isSubscribed) {
-        const used = await getDailyQuestionsUsed(user.id);
+        const used = await getDailyQuestionsUsed(user.id, "QUIZ_GENERATED");
         if (used >= DAILY_FREE_LIMIT) {
           return NextResponse.json(
             {
@@ -61,10 +73,6 @@ export async function POST(request: NextRequest) {
         }
       }
     }
-
-    const sourceModule =
-      body.sourceModule ||
-      (subject === "Full NEET" ? "NEET_QUIZ" : topic ? "TOPIC_WISE_QUIZ" : "NEET_QUIZ");
 
     const entries = getEntriesForSubject(subject as QuizSubject, body.questionCount);
     const requestedCount = entries.reduce((sum, e) => sum + e.questionCount, 0);
@@ -100,8 +108,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (user) {
-      await recordQuestionUsage(user.id);
+    if (user && !isNcertPractice) {
+      await recordQuestionUsage(user.id, "QUIZ_GENERATED");
     }
 
     // 1. Update Generation Job to COMPLETED

@@ -94,6 +94,21 @@ export function UnifiedQuestionEditor({
   const [marks, setMarks] = useState<number>(initialQuestion?.marks || 4);
   const [negativeMarks, setNegativeMarks] = useState<number>(initialQuestion?.negativeMarks || 1);
 
+  // PYQ Metadata States
+  const [pyqExam, setPyqExam] = useState<string>(
+    initialQuestion?.pyqExam ||
+    (initialQuestion?.category === "NEET_PYQ" ? "NEET" :
+     initialQuestion?.category === "JEE_MAINS_PYQ" ? "JEE_MAINS" :
+     initialQuestion?.category === "JEE_ADVANCED_PYQ" ? "JEE_ADVANCED" : "")
+  );
+  const [pyqYear, setPyqYear] = useState<string>(
+    initialQuestion?.pyqYear ? String(initialQuestion.pyqYear) : "2025"
+  );
+  const [pyqMonth, setPyqMonth] = useState<string>(initialQuestion?.pyqMonth || "January");
+  const [pyqQuestionNumber, setPyqQuestionNumber] = useState<string>(
+    initialQuestion?.pyqQuestionNumber || "Question 01"
+  );
+
   // Taxonomy Lists (Dynamic from Master NCERT Catalog + Memory)
   const [subjectsList, setSubjectsList] = useState<Array<{ id: string; name: string }>>([]);
   const [chaptersList, setChaptersList] = useState<Array<{ id: string; title: string; displayTitle?: string }>>([]);
@@ -923,6 +938,10 @@ export function UnifiedQuestionEditor({
         type: questionType,
         difficulty,
         category,
+        pyqExam: pyqExam || undefined,
+        pyqYear: pyqExam && pyqYear ? parseInt(pyqYear, 10) : undefined,
+        pyqMonth: pyqExam === "JEE_MAINS" ? pyqMonth : undefined,
+        pyqQuestionNumber: pyqExam && pyqQuestionNumber ? pyqQuestionNumber.trim() : undefined,
         marks,
         negativeMarks,
         statementEn: statementEn.trim() || undefined,
@@ -1324,15 +1343,104 @@ export function UnifiedQuestionEditor({
             <label className="block font-bold text-slate-700 mb-1.5">Category</label>
             <select
               value={category}
-              onChange={(e) => setCategory(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setCategory(val);
+                if (val === "NEET_PYQ") {
+                  setPyqExam("NEET");
+                } else if (val === "JEE_MAINS_PYQ") {
+                  setPyqExam("JEE_MAINS");
+                } else if (val === "JEE_ADVANCED_PYQ") {
+                  setPyqExam("JEE_ADVANCED");
+                }
+              }}
               className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl font-semibold text-slate-800 outline-none transition focus:bg-white focus:border-blue-500"
             >
               <option value="NCERT Canonical">NCERT Canonical (Line-by-Line)</option>
+              <option value="NEET_PYQ">NEET PYQs</option>
+              <option value="JEE_MAINS_PYQ">JEE Mains PYQs</option>
+              <option value="JEE_ADVANCED_PYQ">JEE Advanced PYQs</option>
               <option value="PYQ Inspired">PYQ Inspired</option>
               <option value="Exemplar">NCERT Exemplar</option>
               <option value="High-Yield Concept">High-Yield Concept</option>
             </select>
           </div>
+
+          {/* PYQ Details (if Category is a PYQ or pyqExam is set) */}
+          {(category === "NEET_PYQ" || category === "JEE_MAINS_PYQ" || category === "JEE_ADVANCED_PYQ" || pyqExam) && (
+            <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black tracking-wide text-amber-900 uppercase">
+                  PYQ Source &amp; Numbering
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full bg-amber-200/80 text-amber-900 font-mono text-[11px] font-bold">
+                  {pyqExam === "NEET" && `NEET ${pyqYear} — ${pyqQuestionNumber}`}
+                  {pyqExam === "JEE_MAINS" && `JEE Main ${pyqYear} — ${pyqMonth} — ${pyqQuestionNumber}`}
+                  {pyqExam === "JEE_ADVANCED" && `JEE Advanced ${pyqYear} — ${pyqQuestionNumber}`}
+                  {!["NEET", "JEE_MAINS", "JEE_ADVANCED"].includes(pyqExam) && `${pyqExam || "PYQ"} ${pyqYear} — ${pyqQuestionNumber}`}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Exam</label>
+                  <select
+                    value={pyqExam}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setPyqExam(val);
+                      if (val === "NEET") setCategory("NEET_PYQ");
+                      else if (val === "JEE_MAINS") setCategory("JEE_MAINS_PYQ");
+                      else if (val === "JEE_ADVANCED") setCategory("JEE_ADVANCED_PYQ");
+                    }}
+                    className="w-full px-3 py-2 bg-white border border-amber-300 rounded-xl font-medium text-slate-800 outline-none"
+                  >
+                    <option value="NEET">NEET</option>
+                    <option value="JEE_MAINS">JEE Mains</option>
+                    <option value="JEE_ADVANCED">JEE Advanced</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Year</label>
+                  <select
+                    value={pyqYear}
+                    onChange={(e) => setPyqYear(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-amber-300 rounded-xl font-medium text-slate-800 outline-none"
+                  >
+                    {Array.from({ length: 20 }, (_, i) => 2026 - i).map((y) => (
+                      <option key={y} value={String(y)}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {pyqExam === "JEE_MAINS" && (
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Session / Month</label>
+                    <select
+                      value={pyqMonth}
+                      onChange={(e) => setPyqMonth(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-amber-300 rounded-xl font-medium text-slate-800 outline-none"
+                    >
+                      <option value="January">January</option>
+                      <option value="April">April</option>
+                    </select>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Question Number</label>
+                  <input
+                    type="text"
+                    value={pyqQuestionNumber}
+                    onChange={(e) => setPyqQuestionNumber(e.target.value)}
+                    placeholder="e.g. Question 01"
+                    className="w-full px-3 py-2 bg-white border border-amber-300 rounded-xl font-mono text-xs text-slate-800 outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Subtopic (Optional with Custom Add to Catalog) */}
           <div>

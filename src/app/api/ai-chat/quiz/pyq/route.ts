@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     if (user) {
       const isSubscribed = await hasActiveSubscription(user.id);
       if (!isSubscribed) {
-        const used = await getDailyQuestionsUsed(user.id);
+        const used = await getDailyQuestionsUsed(user.id, "QUIZ_GENERATED");
         if (used >= DAILY_FREE_LIMIT) {
           return NextResponse.json(
             {
@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
     ];
 
     if (user) {
-      await recordQuestionUsage(user.id);
+      await recordQuestionUsage(user.id, "QUIZ_GENERATED");
     }
 
     let dbQuizId: string | undefined;

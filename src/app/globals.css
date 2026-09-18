@@ -217,7 +217,15 @@
   height: 100vh;
   height: 100dvh; /* mobile browser chrome must not hide the toolbar */
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: var(--live-header-h) minmax(0, 1fr) var(--live-toolbar-h);
+  /* `minmax(h, auto)`, not a bare `h` - the header holds a flex-wrap row
+     of badges/timers/buttons with no bounded total width (a long class
+     title, or a remaining-time string blown up by an unusually far-future
+     scheduled end date, can wrap onto a second line). A bare fixed track
+     clips that wrapped line entirely, since .live-shell has
+     overflow-hidden - Settings/End Class stayed in the DOM but were
+     invisible. `auto` lets the row grow to fit real content instead; the
+     canvas row (`minmax(0, 1fr)`) absorbs whatever's left. */
+  grid-template-rows: minmax(var(--live-header-h), auto) minmax(0, 1fr) var(--live-toolbar-h);
   grid-template-areas:
     "header"
     "canvas"

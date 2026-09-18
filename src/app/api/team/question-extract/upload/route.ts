@@ -23,6 +23,10 @@ export async function POST(request: NextRequest) {
     const endNumber = Math.max(startNumber, parseInt((formData.get("endNumber") as string) || "180", 10));
     const examName = (formData.get("examName") as string)?.trim() || null;
     const year = (formData.get("year") as string)?.trim() || null;
+    const pyqExam = (formData.get("pyqExam") as string)?.trim() || null;
+    const pyqYearRaw = formData.get("pyqYear") as string | null;
+    const pyqYear = pyqYearRaw ? parseInt(pyqYearRaw, 10) || (year ? parseInt(year, 10) || null : null) : (year ? parseInt(year, 10) || null : null);
+    const pyqMonth = (formData.get("pyqMonth") as string)?.trim() || null;
     const subject = (formData.get("subject") as string)?.trim() || "Auto Detect";
     const chapter = (formData.get("chapter") as string)?.trim() || null;
     const rawPastedText = (formData.get("rawText") as string)?.trim();
@@ -53,7 +57,10 @@ export async function POST(request: NextRequest) {
         progress: 15,
         currentStep: "Parsing Document Stream...",
         examName,
-        year,
+        year: year || (pyqYear ? String(pyqYear) : null),
+        pyqExam,
+        pyqYear,
+        pyqMonth,
         subject: subject !== "Auto Detect" ? subject : null,
         chapter,
         createdById: session.user.id,
@@ -106,6 +113,10 @@ export async function POST(request: NextRequest) {
           jobId: job.id,
           questionIndex: q.questionIndex,
           originalNumber: q.originalNumber,
+          pyqExam: job.pyqExam,
+          pyqYear: job.pyqYear,
+          pyqMonth: job.pyqMonth,
+          pyqQuestionNumber: `Question ${String(q.originalNumber).padStart(2, "0")}`,
           sourceName: q.sourceName,
           sourcePdfUrl: q.sourcePdfUrl,
           sourcePdfName: q.sourcePdfName,

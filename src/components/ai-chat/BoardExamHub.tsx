@@ -27,14 +27,21 @@ import {
   type BoardPaper,
   type BoardSubPart,
 } from "@/lib/ai-chat/boardExam";
+import { ReportQuestionButton } from "@/components/student/ReportQuestionButton";
 
 interface SubPartBlockProps {
   part: BoardSubPart;
   index: number;
   globalReveal?: boolean;
+  paperInfo?: {
+    board: string;
+    className: string;
+    subject: string;
+    year?: string;
+  };
 }
 
-function SubPartBlock({ part, index, globalReveal }: SubPartBlockProps) {
+function SubPartBlock({ part, index, globalReveal, paperInfo }: SubPartBlockProps) {
   const [localRevealed, setLocalRevealed] = useState<boolean | null>(null);
   const revealed = localRevealed !== null ? localRevealed : Boolean(globalReveal);
   const label = String.fromCharCode(97 + index);
@@ -89,7 +96,21 @@ function SubPartBlock({ part, index, globalReveal }: SubPartBlockProps) {
       )}
 
       {(part.options || part.answer) && (
-        <div className="mt-2.5 flex items-center justify-end">
+        <div className="mt-2.5 flex items-center justify-between border-t border-slate-100 pt-2 dark:border-slate-800/80">
+          <ReportQuestionButton
+            questionId={`board_${paperInfo?.board || "BOARD"}_${paperInfo?.className || "12"}_${part.label || index}`}
+            variant="text"
+            label="Answer seems wrong? Report it"
+            questionMeta={{
+              statement: part.text,
+              options: part.options,
+              correctAnswer: part.correctIndex !== undefined && part.options ? part.options[part.correctIndex] : undefined,
+              solution: part.answer,
+              subject: paperInfo?.subject,
+              chapter: `${paperInfo?.board || "Board"} Class ${paperInfo?.className || "12"}`,
+              source: "BOARD_EXAM_HUB",
+            }}
+          />
           <button
             type="button"
             onClick={() => setLocalRevealed(!revealed)}
@@ -190,7 +211,18 @@ function PaperView({ paper, onReset }: { paper: BoardPaper; onReset: () => void 
             <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 shadow-xs dark:border-slate-800 dark:bg-slate-900/50">
               <div className="space-y-3.5">
                 {question.subParts.map((part, i) => (
-                  <SubPartBlock key={i} part={part} index={i} globalReveal={globalReveal} />
+                  <SubPartBlock
+                    key={i}
+                    part={part}
+                    index={i}
+                    globalReveal={globalReveal}
+                    paperInfo={{
+                      board: paper.board,
+                      className: paper.className,
+                      subject: paper.subject,
+                      year: paper.year,
+                    }}
+                  />
                 ))}
               </div>
 
@@ -206,7 +238,18 @@ function PaperView({ paper, onReset }: { paper: BoardPaper; onReset: () => void 
                   </div>
                   <div className="space-y-3.5">
                     {question.orAlternative.map((part, i) => (
-                      <SubPartBlock key={i} part={part} index={i} globalReveal={globalReveal} />
+                      <SubPartBlock
+                        key={i}
+                        part={part}
+                        index={i}
+                        globalReveal={globalReveal}
+                        paperInfo={{
+                          board: paper.board,
+                          className: paper.className,
+                          subject: paper.subject,
+                          year: paper.year,
+                        }}
+                      />
                     ))}
                   </div>
                 </div>

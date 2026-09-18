@@ -21,6 +21,7 @@ export type StudentNavItem = {
 const SIDEBAR_ITEMS: StudentNavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: "space_dashboard" },
   { href: "/courses", label: "My Batches", icon: "school" },
+  { href: "/messages", label: "Messages & Inbox", icon: "forum" },
   { href: "/practice/ncert", label: "NCERT Practice", icon: "menu_book" },
   { href: "/store", label: "Store", icon: "storefront" },
   { href: "/tests", label: "My Test", icon: "assignment_turned_in" },
@@ -102,6 +103,14 @@ function AccountMenu({
           >
             <span className="material-symbols-outlined text-lg text-blue-500">badge</span>
             Profile &amp; ID Card
+          </Link>
+          <Link
+            href="/messages"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-3 px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 transition"
+          >
+            <span className="material-symbols-outlined text-lg text-indigo-500">forum</span>
+            Messages &amp; Inbox
           </Link>
           <Link
             href="/practice/ncert"

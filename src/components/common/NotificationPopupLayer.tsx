@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
@@ -71,7 +71,7 @@ export function NotificationPopupLayer() {
 
   const handleActionClick = useCallback(
     async (item: PopNotification) => {
-      const targetUrl = item.actionUrl || item.deepLink || "/";
+      const rawTarget = item.actionUrl || item.deepLink;
 
       // Track action server-side
       try {
@@ -87,9 +87,24 @@ export function NotificationPopupLayer() {
       } catch {}
 
       removeNotification(item.id);
+
+      if (!rawTarget || rawTarget === "/" || rawTarget === "#") {
+        return;
+      }
+
+      let targetUrl = rawTarget;
+      const userRole = (session?.user as any)?.role;
+      if (userRole && userRole !== "STUDENT" && userRole !== "PARENT") {
+        if (targetUrl.startsWith("/messages?")) {
+          targetUrl = targetUrl.replace("/messages?", "/team/messages?");
+        } else if (targetUrl === "/messages") {
+          targetUrl = targetUrl.replace("/messages", "/team/messages");
+        }
+      }
+
       router.push(targetUrl);
     },
-    [router, removeNotification]
+    [router, removeNotification, session?.user]
   );
 
   const enqueueNotification = useCallback(
@@ -172,8 +187,10 @@ export function NotificationPopupLayer() {
         return (
           <div
             key={item.id}
-            role="status"
-            className={`pointer-events-auto rounded-2xl p-4 shadow-xl border backdrop-blur-md transition-all duration-300 transform translate-y-0 animate-in fade-in slide-in-from-top-4 ${
+            role="button"
+            tabIndex={0}
+            onClick={() => handleActionClick(item)}
+            className={`pointer-events-auto rounded-2xl p-3.5 shadow-xl border backdrop-blur-md transition-all duration-300 transform translate-y-0 animate-in fade-in slide-in-from-top-4 cursor-pointer select-none hover:shadow-2xl ${
               isUrgent
                 ? "bg-red-950/95 border-red-500/50 text-white ring-2 ring-red-500/40"
                 : isHigh
@@ -198,7 +215,10 @@ export function NotificationPopupLayer() {
               </div>
               <button
                 type="button"
-                onClick={() => removeNotification(item.id)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  removeNotification(item.id);
+                }}
                 className="text-white/60 hover:text-white p-1 -mr-1 -mt-1 rounded-md transition-colors"
                 aria-label="Close notification"
               >
@@ -216,7 +236,10 @@ export function NotificationPopupLayer() {
               <div className="mt-3 flex items-center justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => handleActionClick(item)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleActionClick(item);
+                  }}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ${
                     isUrgent
                       ? "bg-red-500 hover:bg-red-600 text-white active:scale-95"
