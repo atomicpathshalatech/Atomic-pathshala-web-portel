@@ -655,6 +655,14 @@ export class CanvasEngine {
    * boundary) — never thrown, so a slow/failed listener can't break
    * drawing. */
   public onNotice?: (message: string) => void;
+  /** Set by the host component. The laser pointer is intentionally
+   * local-only (never enters `objects`/autosave/undo — see the comment on
+   * laserStrokes below), so it never reaches anyone but the person drawing
+   * it unless the host wires these up to a realtime broadcast. Fired on
+   * every point added to an in-progress laser stroke, and once more with
+   * the finished stroke's full point list when the pointer lifts. */
+  public onLaserUpdate?: (activePoints: { x: number; y: number }[]) => void;
+  public onLaserFinished?: (points: { x: number; y: number }[]) => void;
   /** Decoded <img> per RasterObject.id, populated lazily in drawRaster()
    * since canvas drawImage() needs an already-loaded Image, not a raw data
    * URL, and renderBase() itself must stay synchronous. */
@@ -919,6 +927,7 @@ export class CanvasEngine {
     if (this.laserActive) {
       const p = this.getPoint(e);
       this.laserActive.push({ x: p.x, y: p.y });
+      this.onLaserUpdate?.(this.laserActive);
       return;
     }
 
@@ -999,6 +1008,7 @@ export class CanvasEngine {
       if (this.laserActive.length > 1) {
         const now = typeof performance !== "undefined" ? performance.now() : Date.now();
         this.laserStrokes.push({ points: this.laserActive, born: now });
+        this.onLaserFinished?.(this.laserActive);
       }
       this.laserActive = null;
       this.isPointerDown = false;
@@ -1304,6 +1314,28 @@ export class CanvasEngine {
   private laserActive: { x: number; y: number }[] | null = null;
   private laserStrokes: { points: { x: number; y: number }[]; born: number }[] = [];
   private laserRaf = 0;
+
+  /** Renders a laser stroke still in progress, driven by a realtime
+   * broadcast rather than local pointer input — for a read-only mirror
+   * engine (the student board view) fed from onLaserUpdate/onLaserFinished
+   * on the teacher's own engine, since the laser is otherwise local-only. */
+  public setRemoteLaserActive(points: { x: number; y: number }[]): void {
+    this.laserActive = points.length > 0 ? points : null;
+    if (this.laserActive) this.startLaserLoop();
+  }
+
+  /** Renders a laser stroke that just finished, starting its fade from
+   * "now" on THIS engine's own clock — performance.now() origins differ
+   * per page load, so the sender's original timestamp can't cross the
+   * network meaningfully; the network/render latency this loses is well
+   * under a second, imperceptible against the multi-second fade. */
+  public pushRemoteLaserStroke(points: { x: number; y: number }[]): void {
+    if (points.length < 2) return;
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    this.laserStrokes.push({ points, born: now });
+    this.laserActive = null;
+    this.startLaserLoop();
+  }
 
   private startLaserLoop(): void {
     if (this.laserRaf) return;

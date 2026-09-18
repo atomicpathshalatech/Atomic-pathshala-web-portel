@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import Link from "next/link";
 import { getPusherClient } from "@/lib/realtime/pusher-client";
 import { sessionChannel, WB_EVENTS } from "@/lib/realtime/events";
@@ -77,22 +77,31 @@ function formatDurationFriendly(totalSec: number) {
   return `${s}s`;
 }
 
-function StudentWhiteboardMirror({
-  boardBackground,
-  boardEmpty,
-  isLive,
-  objects,
-}: {
+export type WhiteboardMirrorHandle = {
+  // Laser pointer is local-only in the canvas engine (never persisted/
+  // autosaved), so it needs an escape hatch straight to this mirror's own
+  // engine instance rather than flowing through boardObjects/setState like
+  // every other stroke — see the Pusher LASER_POINTER binding below.
+  setRemoteLaserActive: (points: { x: number; y: number }[]) => void;
+  pushRemoteLaserStroke: (points: { x: number; y: number }[]) => void;
+};
+
+const StudentWhiteboardMirror = forwardRef<WhiteboardMirrorHandle, {
   boardBackground: string;
   boardEmpty: boolean;
   isLive: boolean;
   objects: StrokeObject[];
-}) {
+}>(function StudentWhiteboardMirror({ boardBackground, boardEmpty, isLive, objects }, ref) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const baseRef = useRef<HTMLCanvasElement | null>(null);
   const activeRef = useRef<HTMLCanvasElement | null>(null);
   const engineRef = useRef<CanvasEngine | null>(null);
   const [mirrorDim, setMirrorDim] = useState<{ width: number; height: number }>({ width: 960, height: 540 });
+
+  useImperativeHandle(ref, () => ({
+    setRemoteLaserActive: (points) => engineRef.current?.setRemoteLaserActive(points),
+    pushRemoteLaserStroke: (points) => engineRef.current?.pushRemoteLaserStroke(points),
+  }), []);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -184,7 +193,7 @@ function StudentWhiteboardMirror({
       )}
     </div>
   );
-}
+});
 
 async function postJson(url: string, body?: unknown) {
   const res = await fetch(url, {
@@ -362,6 +371,11 @@ export function StudentLiveClassRoom({
   // Time & countdown state (Synchronized with authoritative server clock)
   const [currentTimeMs, setCurrentTimeMs] = useState(Date.now());
   const serverTimeOffsetRef = useRef<number>(0);
+  // Reaches whichever StudentWhiteboardMirror is currently mounted (desktop
+  // or mobile — never both) so the LASER_POINTER Pusher binding below can
+  // feed it directly, bypassing boardObjects/setState the way every other
+  // synced stroke goes through, since the laser is never persisted.
+  const mirrorRef = useRef<WhiteboardMirrorHandle>(null);
   const [scheduleTimes, setScheduleTimes] = useState<{ startTime?: string; endTime?: string } | null>(null);
 
   // Board mirror (read-only)
@@ -551,6 +565,21 @@ export function StudentLiveClassRoom({
       }
     );
     channel.bind(WB_EVENTS.PAGE_CHANGED, () => refreshBoard());
+
+    // Laser pointer — never persisted, so it bypasses boardObjects/setState
+    // entirely and goes straight into whichever mirror is mounted (see
+    // mirrorRef / WhiteboardMirrorHandle).
+    channel.bind(
+      WB_EVENTS.LASER_POINTER,
+      (data: { points?: { x: number; y: number }[]; phase?: "move" | "end" }) => {
+        if (!Array.isArray(data?.points) || data.points.length === 0) return;
+        if (data.phase === "end") {
+          mirrorRef.current?.pushRemoteLaserStroke(data.points);
+        } else {
+          mirrorRef.current?.setRemoteLaserActive(data.points);
+        }
+      }
+    );
 
     channel.bind(WB_EVENTS.QUIZ_LAUNCHED, (data: LiveQuiz) => {
       setQuiz({ ...data, status: "ACTIVE" });
@@ -1149,6 +1178,7 @@ export function StudentLiveClassRoom({
               </div>
             ) : isDesktopViewport ? (
               <StudentWhiteboardMirror
+                ref={mirrorRef}
                 boardBackground={boardBackground}
                 boardEmpty={boardEmpty}
                 isLive={isLive}
@@ -1376,6 +1406,7 @@ export function StudentLiveClassRoom({
           ) : !isDesktopViewport ? (
             <div className="relative aspect-[16/9] w-full h-full max-w-full max-h-full overflow-hidden">
               <StudentWhiteboardMirror
+                ref={mirrorRef}
                 boardBackground={boardBackground}
                 boardEmpty={boardEmpty}
                 isLive={isLive}

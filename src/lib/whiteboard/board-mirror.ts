@@ -38,6 +38,29 @@ export async function pushPageChanged(whiteboardSessionId: string, activePageNum
 }
 
 /**
+ * Broadcasts a laser-pointer update — see WB_EVENTS.LASER_POINTER. `phase`
+ * "move" carries the growing in-progress stroke; "end" carries the finished
+ * stroke's full point list so the receiving engine can start the same fade
+ * animation (see CanvasEngine.pushRemoteLaserStroke). Never touches the DB —
+ * this is the one board-related broadcast that isn't a "go re-fetch" signal
+ * for something durable, because there's nothing durable to fetch.
+ */
+export async function pushLaserPointer(
+  whiteboardSessionId: string,
+  points: { x: number; y: number }[],
+  phase: "move" | "end"
+) {
+  try {
+    await pusherServer.trigger(sessionChannel(whiteboardSessionId), WB_EVENTS.LASER_POINTER, {
+      points,
+      phase,
+    });
+  } catch (err) {
+    console.error("[pusher_trigger_error]", err);
+  }
+}
+
+/**
  * Nudges anyone sitting in the pre-class lobby the instant the teacher hits
  * Start Class, so they don't have to wait out the by-schedule poll interval
  * to see the board/video appear. Same "small signal, DB stays authoritative"

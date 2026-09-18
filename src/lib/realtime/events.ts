@@ -46,6 +46,14 @@ export const WB_EVENTS = {
   // transport. The actual objects come from GET .../board.
   BOARD_UPDATED: "board-updated",
   PAGE_CHANGED: "page-changed",
+  // The laser pointer is intentionally local-only in the canvas engine
+  // (never enters `objects`/autosave — see canvas-engine.ts's laserStrokes
+  // comment), so unlike every stroke tool above, nothing about it ever
+  // reaches a student through the normal board pipeline. This carries the
+  // actual point list (throttled while drawing, once more on pointer-up)
+  // so a student's read-only board mirror can render the same fading
+  // laser trail the teacher sees, without persisting anything.
+  LASER_POINTER: "laser-pointer",
   // Live chat. Unlike board/hand-raise events this one DOES carry the actual
   // payload (the message itself) rather than a "go re-fetch" signal — chat
   // history is small, append-only, and doesn't need a full re-fetch per

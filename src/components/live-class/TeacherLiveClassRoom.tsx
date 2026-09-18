@@ -450,6 +450,10 @@ export function TeacherLiveClassRoom({
   // exactly that - the actual observed "PDF loads page-by-page again"
   // symptom.
   const pdfConversionInFlightRef = useRef(false);
+  // Throttles the laser-pointer broadcast (see engine.onLaserUpdate below) —
+  // pointermove fires far more often than students need to see a smooth
+  // remote laser trail; ~12/sec is plenty and keeps the request volume sane.
+  const laserBroadcastThrottleRef = useRef(0);
 
   // Floating self-camera position — used when the teacher's own Material &
   // Setup camera shape is Circular (see isCameraCircle below). <VideoStrip>
@@ -678,6 +682,28 @@ export function TeacherLiveClassRoom({
         fontSizePx: sizeRef.current * TEXT_FONT_SCALE,
         color: colorRef.current,
       });
+    };
+    // Laser pointer is local-only in the engine (see its own comments) — a
+    // student never sees it unless we broadcast it ourselves. Throttled
+    // while drawing, one final unthrottled send on pointer-up so the
+    // finished stroke (and its fade) always reaches students even if the
+    // last "move" tick was skipped.
+    engine.onLaserUpdate = (points) => {
+      const now = Date.now();
+      if (now - laserBroadcastThrottleRef.current < 80) return;
+      laserBroadcastThrottleRef.current = now;
+      fetch(`/api/whiteboard/sessions/${wbSession.id}/laser`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ points, phase: "move" }),
+      }).catch(() => {});
+    };
+    engine.onLaserFinished = (points) => {
+      fetch(`/api/whiteboard/sessions/${wbSession.id}/laser`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ points, phase: "end" }),
+      }).catch(() => {});
     };
     if (currentPage) engine.loadObjects(currentPage.objects ?? []);
 
