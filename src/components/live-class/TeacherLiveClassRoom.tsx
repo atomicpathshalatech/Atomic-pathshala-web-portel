@@ -34,6 +34,10 @@ import { GRACE_PERIOD_MINUTES, END_WARNING_MINUTES } from "@/lib/whiteboard/cons
 import { playHandRaiseChime, playCallConnectedChime, unlockAudioForNotifications } from "@/lib/live-class/live-sound-effects";
 import { extractYouTubeVideoId } from "@/lib/live-class/youtube";
 
+// Diameter (px) of the floating self-camera bubble shown when the teacher's
+// Material & Setup camera shape is Circular — see floatCamPos below.
+const FLOAT_CAM_SIZE = 104;
+
 type WhiteboardPage = { id: string; pageNumber: number; objects: StrokeObject[]; background: string };
 type LivePhase = "SCHEDULED" | "PREPARING" | "LIVE" | "ENDED" | (string & {});
 type WhiteboardSession = {
@@ -442,6 +446,74 @@ export function TeacherLiveClassRoom({
   // exactly that - the actual observed "PDF loads page-by-page again"
   // symptom.
   const pdfConversionInFlightRef = useRef(false);
+
+  // Floating self-camera position — used when the teacher's own Material &
+  // Setup camera shape is Circular (see isCameraCircle below). <VideoStrip>
+  // stays mounted in exactly one stable wrapper regardless of this setting;
+  // only that wrapper's own CSS switches between docked-in-panel and a
+  // fixed-position draggable circular bubble, so toggling the camera shape
+  // (which can arrive mid-class from the wizard) never remounts the video
+  // and drops the LiveKit connection.
+  const [floatCamPos, setFloatCamPos] = useState<{ x: number; y: number }>({ x: 16, y: 70 });
+  const floatCamDraggingRef = useRef(false);
+  const floatCamDragOffsetRef = useRef({ x: 0, y: 0 });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const saved = localStorage.getItem("atomic_teacher_floating_cam_pos");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.x === "number" && typeof parsed.y === "number") {
+          setFloatCamPos(parsed);
+          return;
+        }
+      }
+    } catch {
+      // fallback below
+    }
+    setFloatCamPos({ x: Math.max(16, window.innerWidth - FLOAT_CAM_SIZE - 16), y: 70 });
+  }, []);
+
+  function handleFloatCamPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest("button")) return;
+    floatCamDraggingRef.current = true;
+    const rect = e.currentTarget.getBoundingClientRect();
+    floatCamDragOffsetRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+
+  function handleFloatCamPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!floatCamDraggingRef.current) return;
+    const maxX = Math.max(10, window.innerWidth - FLOAT_CAM_SIZE - 12);
+    const maxY = Math.max(10, window.innerHeight - FLOAT_CAM_SIZE - 12);
+    let nx = e.clientX - floatCamDragOffsetRef.current.x;
+    let ny = e.clientY - floatCamDragOffsetRef.current.y;
+    nx = Math.max(8, Math.min(nx, maxX));
+    ny = Math.max(56, Math.min(ny, maxY));
+    setFloatCamPos({ x: nx, y: ny });
+  }
+
+  function handleFloatCamPointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    if (!floatCamDraggingRef.current) return;
+    floatCamDraggingRef.current = false;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
+    setFloatCamPos((pos) => {
+      try {
+        localStorage.setItem("atomic_teacher_floating_cam_pos", JSON.stringify(pos));
+      } catch {
+        // ignore
+      }
+      return pos;
+    });
+  }
+
   const [openPopup, setOpenPopup] = useState<PopupId>(null);
   const [themeModalOpen, setThemeModalOpen] = useState(false);
   const [sim3dOpen, setSim3dOpen] = useState(false);
@@ -502,6 +574,7 @@ export function TeacherLiveClassRoom({
   const [launchingQuiz, setLaunchingQuiz] = useState(false);
 
   const currentPage = wbSession?.pages.find((p) => p.pageNumber === wbSession.activePageNumber) ?? null;
+  const isCameraCircle = wbSession?.cameraShape === "CIRCULAR";
 
   // Read inside the Pusher handler below, which is bound once per session
   // (not re-bound on every tab change) — a ref keeps it seeing the latest
@@ -2565,7 +2638,29 @@ export function TeacherLiveClassRoom({
         data-open={panelOpen ? "true" : "false"}
         className="live-panel bg-[#1a1b23] border-l border-[#2d2e3b] flex flex-col min-h-0"
       >
-        <div className="h-56 bg-black relative border-b border-[#2d2e3b] shrink-0">
+        {/* Teacher's own camera — docked at the top of the panel normally.
+            When Material & Setup's camera shape is Circular, this exact
+            same wrapper instead floats as a small draggable circular bubble
+            over the main slide area (fixed positioning escapes the panel
+            visually without moving in the DOM), and takes up no height in
+            the panel's normal flow. <VideoStrip> itself never moves or
+            unmounts here — only this wrapper's own CSS does. */}
+        <div
+          onPointerDown={isCameraCircle ? handleFloatCamPointerDown : undefined}
+          onPointerMove={isCameraCircle ? handleFloatCamPointerMove : undefined}
+          onPointerUp={isCameraCircle ? handleFloatCamPointerUp : undefined}
+          onPointerCancel={isCameraCircle ? handleFloatCamPointerUp : undefined}
+          style={
+            isCameraCircle
+              ? { position: "fixed", top: floatCamPos.y, left: floatCamPos.x, width: FLOAT_CAM_SIZE, height: FLOAT_CAM_SIZE, touchAction: "none" }
+              : undefined
+          }
+          className={
+            isCameraCircle
+              ? "z-40 rounded-full overflow-hidden border-2 border-blue-500 shadow-2xl bg-black cursor-grab active:cursor-grabbing select-none"
+              : "h-56 bg-black relative border-b border-[#2d2e3b] shrink-0"
+          }
+        >
           <VideoStrip
             whiteboardSessionId={wbSession.id}
             variant="panel"
@@ -3398,6 +3493,20 @@ export function TeacherLiveClassRoom({
             cameraPosition: "UPPER_RIGHT",
           }}
           onComplete={(config: PreFlightConfig) => {
+            // Only re-run the PDF-to-canvas conversion when the presentation
+            // itself actually changed (a new file was uploaded). Previously
+            // this fired unconditionally on every Material & Setup save -
+            // saving just to flip the camera shape or theme re-downloaded
+            // and re-converted the WHOLE deck again, and since
+            // handleLoadPresentationPdf only reuses the current page when
+            // exactly one blank page exists, re-running it against an
+            // already-populated board (e.g. 127 pages already loaded) would
+            // have appended a full duplicate copy of every page on top of
+            // the existing ones. This is also what caused the "Failed to
+            // fetch" error just reported - an unnecessary re-download of an
+            // already-loaded 127-page PDF, triggered by an unrelated
+            // camera-shape change.
+            const presentationChanged = config.presentationUrl !== (wbSession?.presentationUrl || "");
             const updated = wbSession
               ? {
                   ...wbSession,
@@ -3412,7 +3521,7 @@ export function TeacherLiveClassRoom({
               setWbSession(updated);
             }
             setShowPreFlightWizard(false);
-            if (config.presentationUrl && updated) {
+            if (config.presentationUrl && updated && presentationChanged) {
               handleLoadPresentationPdf(updated);
             }
           }}
