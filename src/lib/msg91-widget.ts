@@ -32,10 +32,45 @@ declare global {
 
 let scriptPromise: Promise<void> | null = null;
 
+// How long to wait for window.initSendOTP to appear after the script's own
+// `onload` fires. This used to be a single synchronous check right inside
+// onload, which surfaced "MSG91 widget loaded but initSendOTP is missing"
+// on real accounts whenever the provider script finished a moment before it
+// actually finished assigning the global (an ordinary load race, not a
+// permanent failure) — polling for a few seconds absorbs that without
+// changing behaviour for the genuine failure case.
+const INIT_POLL_INTERVAL_MS = 150;
+const INIT_POLL_TIMEOUT_MS = 4000;
+
+/** User-facing errors from this module are always a short, non-technical
+ * sentence — every internal detail (which host failed, what was missing)
+ * goes to console.error instead, so a student never sees raw plumbing like
+ * an env var name or "initSendOTP is missing". */
+export class Msg91WidgetError extends Error {}
+
+function pollForInitSendOTP(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const start = Date.now();
+    const check = () => {
+      if (typeof window.initSendOTP === "function") {
+        resolve();
+        return;
+      }
+      if (Date.now() - start >= INIT_POLL_TIMEOUT_MS) {
+        console.error("[msg91-widget] script loaded but window.initSendOTP never appeared");
+        reject(new Msg91WidgetError("Could not start OTP verification. Please try again in a moment."));
+        return;
+      }
+      setTimeout(check, INIT_POLL_INTERVAL_MS);
+    };
+    check();
+  });
+}
+
 /** Injects the provider script once (with the fallback host). Resolves when
  *  window.initSendOTP is available. */
 export function loadMsg91Widget(): Promise<void> {
-  if (typeof window === "undefined") return Promise.reject(new Error("no window"));
+  if (typeof window === "undefined") return Promise.reject(new Msg91WidgetError("OTP verification isn't available here."));
   if (typeof window.initSendOTP === "function") return Promise.resolve();
   if (scriptPromise) return scriptPromise;
 
@@ -46,17 +81,28 @@ export function loadMsg91Widget(): Promise<void> {
       s.src = SCRIPT_URLS[i]!;
       s.async = true;
       s.onload = () => {
-        if (typeof window.initSendOTP === "function") resolve();
-        else reject(new Error("MSG91 widget loaded but initSendOTP is missing"));
+        pollForInitSendOTP().then(resolve, reject);
       };
       s.onerror = () => {
         i += 1;
-        if (i < SCRIPT_URLS.length) attempt();
-        else reject(new Error("Could not load the OTP widget. Check your connection."));
+        if (i < SCRIPT_URLS.length) {
+          attempt();
+        } else {
+          console.error("[msg91-widget] failed to load script from any host", SCRIPT_URLS);
+          reject(new Msg91WidgetError("Could not load OTP verification. Check your connection and try again."));
+        }
       };
       document.head.appendChild(s);
     };
     attempt();
+  });
+  // A failed attempt (bad network blip, ad-blocker hiccup, etc.) used to
+  // leave the rejected promise cached here forever — every later call
+  // (e.g. the student tapping "Verify with OTP" again) got the same stale
+  // failure back immediately with no real retry. Clearing it on rejection
+  // lets the next call genuinely try loading the script again.
+  scriptPromise.catch(() => {
+    scriptPromise = null;
   });
   return scriptPromise;
 }
@@ -71,7 +117,8 @@ export function verifyWithMsg91Widget(identifier: string): Promise<string> {
     () =>
       new Promise<string>((resolve, reject) => {
         if (!msg91WidgetConfigured()) {
-          reject(new Error("OTP widget is not configured (NEXT_PUBLIC_MSG91_WIDGET_TOKEN)."));
+          console.error("[msg91-widget] NEXT_PUBLIC_MSG91_WIDGET_TOKEN is not set");
+          reject(new Msg91WidgetError("OTP verification isn't available right now. Please try again shortly."));
           return;
         }
         window.initSendOTP!({
@@ -85,10 +132,17 @@ export function verifyWithMsg91Widget(identifier: string): Promise<string> {
               (data as { message?: string; accessToken?: string })?.message ||
               (data as { accessToken?: string })?.accessToken ||
               "";
-            if (token) resolve(token);
-            else reject(new Error("The widget did not return a verification token."));
+            if (token) {
+              resolve(token);
+            } else {
+              console.error("[msg91-widget] success callback fired without a usable token", data);
+              reject(new Msg91WidgetError("Could not complete OTP verification. Please try again."));
+            }
           },
           failure: (err: unknown) => {
+            // This one IS shown to the user as-is (unlike the load/config
+            // errors above) — it's the widget's own OTP-flow message
+            // ("Incorrect OTP", "cancelled", etc.), not an internal detail.
             const msg =
               (err as { message?: string })?.message ||
               (typeof err === "string" ? err : "OTP verification was cancelled or failed.");
