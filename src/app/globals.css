@@ -66,9 +66,8 @@
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
     overflow-x: hidden;
+    overflow-y: auto;
     -webkit-tap-highlight-color: transparent;
-    touch-action: manipulation;
-    overscroll-behavior-y: contain;
   }
 
   body {
@@ -79,8 +78,8 @@
     padding: 0;
     @apply bg-background text-on-background;
     overflow-x: hidden;
-    touch-action: manipulation;
-    overscroll-behavior-y: contain;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   /* Prevent mobile Safari & Chrome from auto-zooming when tapping inputs */

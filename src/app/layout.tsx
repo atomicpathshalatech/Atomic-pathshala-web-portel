@@ -66,7 +66,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html
       lang="en"
-      className={`${inter.variable} scroll-smooth w-full min-h-screen-safe select-none`}
+      className={`${inter.variable} scroll-smooth w-full min-h-screen-safe`}
       suppressHydrationWarning
     >
       <head>
