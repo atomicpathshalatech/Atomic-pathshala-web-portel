@@ -1,173 +1,135 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo } from "react";
 import { CourseCard, CourseData } from "./CourseCard";
 
 export function CourseListingMasterView({ courses = [] }: { courses?: CourseData[] }) {
-  const [searchQuery, setSearchQuery] = useState("");
   const [selectedExam, setSelectedExam] = useState("All");
   const [selectedSubject, setSelectedSubject] = useState("All");
-
-  // CRM signal (see src/lib/crm/lead-category.ts) — debounced so we track
-  // what a student actually searched for, not every keystroke. A logged-out
-  // visitor's search 401s silently; that's fine, this is best-effort.
-  useEffect(() => {
-    const trimmed = searchQuery.trim();
-    if (trimmed.length < 2) return;
-    const timer = setTimeout(() => {
-      fetch("/api/students/activity", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ searchQuery: trimmed }),
-      }).catch(() => {});
-    }, 800);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
 
   const exams = ["All", "NEET", "JEE Mains", "JEE Advanced", "Boards"];
   const subjects = ["All", "Physics", "Chemistry", "Biology", "Mathematics"];
 
   const filteredCourses = useMemo(() => {
     return courses.filter((c) => {
-      const matchesSearch =
-        !searchQuery ||
-        c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.educators.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesExam =
+        selectedExam === "All" ||
+        (c.exam && c.exam.toLowerCase().includes(selectedExam.toLowerCase()));
+      const matchesSubject =
+        selectedSubject === "All" ||
+        (c.subject && c.subject.toLowerCase() === selectedSubject.toLowerCase());
 
-      const matchesExam = selectedExam === "All" || (c.exam && c.exam.includes(selectedExam));
-      const matchesSubject = selectedSubject === "All" || c.subject.toLowerCase() === selectedSubject.toLowerCase();
-
-      return matchesSearch && matchesExam && matchesSubject;
+      return matchesExam && matchesSubject;
     });
-  }, [courses, searchQuery, selectedExam, selectedSubject]);
+  }, [courses, selectedExam, selectedSubject]);
 
   return (
-    <div className="space-y-6">
-      {/* 1. Hero Banner */}
-      <section className="bg-white border border-slate-200/90 rounded-2xl p-5 sm:p-7 relative overflow-hidden shadow-2xs">
-        <div className="relative z-10 max-w-2xl space-y-2">
-          <div className="flex items-center gap-2">
-            <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 font-extrabold text-[10px] px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-              Atomic Pathshala Admissions Open
-            </span>
+    <div className="space-y-4">
+      {/* Sleek Compact Dropdown Filter Bar */}
+      <div className="flex items-center justify-between gap-3 flex-wrap bg-white/70 dark:bg-slate-900/70 backdrop-blur-md p-3 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xs">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {/* Exam Dropdown */}
+          <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/90 border border-slate-200/90 dark:border-slate-700/80 rounded-xl px-3 py-1.5 shadow-2xs">
+            <span className="material-symbols-outlined text-slate-400 text-[16px]">school</span>
+            <label htmlFor="exam-select" className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">
+              Exam:
+            </label>
+            <select
+              id="exam-select"
+              value={selectedExam}
+              onChange={(e) => setSelectedExam(e.target.value)}
+              className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-200 outline-none cursor-pointer pr-1"
+            >
+              {exams.map((ex) => (
+                <option
+                  key={ex}
+                  value={ex}
+                  className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200"
+                >
+                  {ex === "All" ? "All Exams" : ex}
+                </option>
+              ))}
+            </select>
           </div>
-          <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-            Prepare Smarter. Score Higher.
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-600 leading-relaxed max-w-xl">
-            Explore India&apos;s most structured NEET batches with leading medical faculty.
-          </p>
-        </div>
-      </section>
 
-      {/* 2. Global Search Bar */}
-      <div className="relative">
-        <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xl">
-          search
-        </span>
-        <input
-          type="text"
-          placeholder="Search batches, chapters, teachers (e.g. Chemistry, Physics, Biology)..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200/90 rounded-xl text-xs sm:text-sm text-slate-800 font-medium shadow-2xs focus:border-[#6b46c1] focus:ring-2 focus:ring-[#6b46c1]/20 outline-none transition"
-        />
-        {searchQuery && (
-          <button
-            type="button"
-            onClick={() => setSearchQuery("")}
-            className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-          >
-            ✕
-          </button>
-        )}
-      </div>
-
-      {/* 3. Filter Controls */}
-      <div className="space-y-3">
-        {/* Exam Filters */}
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-1 shrink-0">
-            Exam:
-          </span>
-          {exams.map((ex) => (
-            <button
-              key={ex}
-              type="button"
-              onClick={() => setSelectedExam(ex)}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition whitespace-nowrap ${
-                selectedExam === ex
-                  ? "bg-slate-900 text-white shadow-2xs"
-                  : "bg-white border border-slate-200 text-slate-600 hover:border-slate-300"
-              }`}
+          {/* Subject Dropdown */}
+          <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/90 border border-slate-200/90 dark:border-slate-700/80 rounded-xl px-3 py-1.5 shadow-2xs">
+            <span className="material-symbols-outlined text-slate-400 text-[16px]">menu_book</span>
+            <label htmlFor="subject-select" className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">
+              Subject:
+            </label>
+            <select
+              id="subject-select"
+              value={selectedSubject}
+              onChange={(e) => setSelectedSubject(e.target.value)}
+              className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-200 outline-none cursor-pointer pr-1"
             >
-              {ex}
+              {subjects.map((sub) => (
+                <option
+                  key={sub}
+                  value={sub}
+                  className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200"
+                >
+                  {sub === "All" ? "All Subjects" : sub}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {(selectedExam !== "All" || selectedSubject !== "All") && (
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedExam("All");
+                setSelectedSubject("All");
+              }}
+              className="text-xs font-bold text-orange-600 hover:text-orange-700 dark:text-orange-400 hover:underline px-2 py-1 cursor-pointer"
+            >
+              Reset Filters
             </button>
-          ))}
+          )}
         </div>
 
-        {/* Subject Filters */}
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-1 shrink-0">
-            Subject:
-          </span>
-          {subjects.map((sub) => (
-            <button
-              key={sub}
-              type="button"
-              onClick={() => setSelectedSubject(sub)}
-              className={`px-3 py-1 rounded-full text-xs font-semibold transition whitespace-nowrap ${
-                selectedSubject === sub
-                  ? "bg-blue-600 text-white shadow-2xs"
-                  : "bg-white border border-slate-200 text-slate-600 hover:border-slate-300"
-              }`}
-            >
-              {sub}
-            </button>
-          ))}
+        <div className="text-xs font-bold text-slate-500 dark:text-slate-400">
+          Showing <span className="text-slate-900 dark:text-white font-extrabold">{filteredCourses.length}</span>{" "}
+          {filteredCourses.length === 1 ? "Batch" : "Batches"}
         </div>
       </div>
 
-      {/* 4. Course Grid */}
+      {/* Course Cards Grid */}
       <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm sm:text-base font-black text-[#031635]">
-            Available Batches ({filteredCourses.length})
-          </h2>
-        </div>
-
         {filteredCourses.length === 0 ? (
-          <div className="p-10 text-center bg-white rounded-2xl border border-slate-200 space-y-3 shadow-2xs">
-            <span className="material-symbols-outlined text-4xl text-slate-300">school</span>
-            <p className="text-sm font-bold text-[#031635]">
+          <div className="p-10 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-3 shadow-2xs">
+            <span className="material-symbols-outlined text-4xl text-slate-300 dark:text-slate-600">
+              search_off
+            </span>
+            <p className="text-sm font-bold text-slate-900 dark:text-white">
               {courses.length === 0
-                ? "No active batches published yet"
-                : "No batches found matching your criteria"}
+                ? "No batches published yet"
+                : "No batches found matching your selected filters"}
             </p>
-            <p className="text-xs text-slate-500 max-w-md mx-auto">
+            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
               {courses.length === 0
-                ? "New batches will appear here as soon as they are launched by the academic team."
-                : "Try resetting filters or searching with a different term."}
+                ? "New batches will appear here as soon as they are launched."
+                : "Try selecting All Exams or All Subjects."}
             </p>
             {courses.length > 0 && (
               <button
                 type="button"
                 onClick={() => {
-                  setSearchQuery("");
                   setSelectedExam("All");
                   setSelectedSubject("All");
                 }}
-                className="text-xs font-bold text-blue-600 hover:underline cursor-pointer"
+                className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
               >
                 Clear all filters
               </button>
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {filteredCourses.map((c) => (
-              <CourseCard key={c.id} course={c} />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+            {filteredCourses.map((c, idx) => (
+              <CourseCard key={c.id} course={c} index={idx} />
             ))}
           </div>
         )}

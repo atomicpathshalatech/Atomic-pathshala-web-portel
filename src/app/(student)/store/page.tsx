@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getActiveBatchCatalog } from "@/lib/courses/catalog";
 import { CourseListingMasterView } from "@/components/course-platform/CourseListingMasterView";
 import { CourseData } from "@/components/course-platform/CourseCard";
-import { BatchTabSwitcher } from "@/components/course-platform/BatchTabSwitcher";
 
 export const metadata: Metadata = {
   title: "Store — Atomic Pathshala",
@@ -96,25 +96,30 @@ export default async function StorePage() {
     };
   });
 
-  const enrolledCount = allCourses.filter((c) => c.isEnrolled).length;
   // Enrolled batches must NEVER show as purchase items in Store
   const storeCourses = allCourses.filter((c) => !c.isEnrolled);
 
   return (
     <div className="max-w-7xl mx-auto py-4 sm:py-6 space-y-6">
       <div>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-3">
-          <div>
-            <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-              Course Store
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-500 mt-1">
-              Explore and enroll in new batches engineered for your target exam.
-            </p>
-          </div>
+        <div className="flex items-center gap-2.5 mb-2">
+          <Link
+            href="/dashboard"
+            className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 transition"
+          >
+            <span className="material-symbols-outlined text-lg">arrow_back</span>
+          </Link>
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Back</span>
         </div>
 
-        <BatchTabSwitcher myBatchesCount={enrolledCount} storeCount={storeCourses.length} />
+        <div>
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+            Batch Store
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+            Explore and enroll in top-rated batches engineered for your target exam.
+          </p>
+        </div>
       </div>
 
       <CourseListingMasterView courses={storeCourses} />

@@ -6,7 +6,6 @@ import { prisma } from "@/lib/db";
 import { getActiveBatchCatalog } from "@/lib/courses/catalog";
 import { CourseListingMasterView } from "@/components/course-platform/CourseListingMasterView";
 import { CourseData } from "@/components/course-platform/CourseCard";
-import { BatchTabSwitcher } from "@/components/course-platform/BatchTabSwitcher";
 
 export const metadata: Metadata = {
   title: "My Batches — Atomic Pathshala",
@@ -99,28 +98,33 @@ export default async function CoursesPage() {
   });
 
   const enrolledCourses = allCourses.filter((c) => c.isEnrolled);
-  const storeCount = allCourses.filter((c) => !c.isEnrolled).length;
 
   return (
     <div className="max-w-7xl mx-auto py-4 sm:py-6 space-y-6">
       <div>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-3">
-          <div>
-            <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-              My Batches
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-500 mt-1">
-              Your enrolled batches and ongoing coursework.
-            </p>
-          </div>
+        <div className="flex items-center gap-2.5 mb-2">
+          <Link
+            href="/dashboard"
+            className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 transition"
+          >
+            <span className="material-symbols-outlined text-lg">arrow_back</span>
+          </Link>
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Back</span>
         </div>
 
-        <BatchTabSwitcher myBatchesCount={enrolledCourses.length} storeCount={storeCount} />
+        <div>
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+            Your Enrolled Batches
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+            Access your active batches, live lectures, tests, and study materials.
+          </p>
+        </div>
       </div>
 
       {enrolledCourses.length === 0 ? (
-        <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm max-w-lg mx-auto">
-          <div className="w-16 h-16 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-600 flex items-center justify-center mx-auto">
+        <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-4 shadow-xs max-w-lg mx-auto">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500/10 to-teal-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto border border-emerald-500/20">
             <span className="material-symbols-outlined text-3xl">school</span>
           </div>
           <div>
@@ -133,7 +137,7 @@ export default async function CoursesPage() {
           </div>
           <Link
             href="/store"
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-md transition"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-bold text-xs shadow-md transition"
           >
             <span className="material-symbols-outlined text-base">storefront</span>
             <span>Browse Store Catalog</span>
