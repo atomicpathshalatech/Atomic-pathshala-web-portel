@@ -36,7 +36,7 @@ import { extractYouTubeVideoId } from "@/lib/live-class/youtube";
 
 // Diameter (px) of the floating self-camera bubble shown when the teacher's
 // Material & Setup camera shape is Circular — see floatCamPos below.
-const FLOAT_CAM_SIZE = 140;
+const FLOAT_CAM_SIZE = 168;
 
 type WhiteboardPage = { id: string; pageNumber: number; objects: StrokeObject[]; background: string };
 type LivePhase = "SCHEDULED" | "PREPARING" | "LIVE" | "ENDED" | (string & {});

@@ -51,7 +51,7 @@ interface WhiteboardSessionData {
 // Diameter (px) of the floating teacher-camera bubble shown when the
 // teacher's Material & Setup camera shape is Circular — see floatCamPos
 // in StudentLiveClassRoom.
-const FLOAT_CAM_SIZE = 104;
+const FLOAT_CAM_SIZE = 128;
 
 function isBackgroundImageUrl(background: string | undefined): background is string {
   return typeof background === "string" && /^https?:\/\//.test(background);
