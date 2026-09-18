@@ -5,6 +5,7 @@ import "./globals.css";
 import { AuthSessionProvider } from "@/components/providers/AuthSessionProvider";
 import { CapacitorProvider } from "@/components/providers/CapacitorProvider";
 import { PwaProvider } from "@/components/pwa/PwaProvider";
+import { DisableZoomProvider } from "@/components/providers/DisableZoomProvider";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
@@ -29,7 +30,8 @@ const inter = Inter({
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 5,
+  maximumScale: 1,
+  userScalable: false,
   viewportFit: "cover",
   themeColor: "#090D16",
   interactiveWidget: "resizes-content",
@@ -64,10 +66,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html
       lang="en"
-      className={`${inter.variable} scroll-smooth w-full min-h-screen-safe`}
+      className={`${inter.variable} scroll-smooth w-full min-h-screen-safe select-none`}
       suppressHydrationWarning
     >
       <head>
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+        />
+        <meta name="HandheldFriendly" content="true" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         {/* Geist (display font) + Material Symbols (icon font). Inter is
@@ -82,6 +90,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className="w-full min-h-screen-safe bg-background text-on-background font-body-md overflow-x-hidden antialiased">
+        <DisableZoomProvider />
         <AuthSessionProvider>
           <CapacitorProvider>
             {children}

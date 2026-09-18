@@ -67,6 +67,8 @@
     text-size-adjust: 100%;
     overflow-x: hidden;
     -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    overscroll-behavior-y: contain;
   }
 
   body {
@@ -77,6 +79,17 @@
     padding: 0;
     @apply bg-background text-on-background;
     overflow-x: hidden;
+    touch-action: manipulation;
+    overscroll-behavior-y: contain;
+  }
+
+  /* Prevent mobile Safari & Chrome from auto-zooming when tapping inputs */
+  @media screen and (max-width: 768px) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
   }
 }
 
