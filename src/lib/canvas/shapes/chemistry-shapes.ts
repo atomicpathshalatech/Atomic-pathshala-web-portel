@@ -151,7 +151,14 @@ export function drawRing(args: ShapeRenderArgs, opts: RingOptions): void {
   const rx = (Math.min(b.w, b.h) / 2) * 0.9;
   const cx = b.cx;
   const cy = b.cy;
-  const rotation = -Math.PI / 2 + (opts.sides % 2 === 0 ? Math.PI / opts.sides : 0);
+  // A hexagon (benzene, cyclohexane, cycloalkane) is rotated to put a
+  // vertex at the top and bottom — the standard textbook orientation for a
+  // skeletal ring, "vertical" rather than flat-top/flat-bottom. Every other
+  // even-sided ring keeps the flat-top rotation it already had.
+  const rotation =
+    opts.sides === 6
+      ? -Math.PI / 2
+      : -Math.PI / 2 + (opts.sides % 2 === 0 ? Math.PI / opts.sides : 0);
   const verts: Pt[] = [];
   for (let i = 0; i < opts.sides; i++) {
     const angle = rotation + (Math.PI * 2 * i) / opts.sides;
