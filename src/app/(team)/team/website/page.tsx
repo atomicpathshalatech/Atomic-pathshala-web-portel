@@ -12,7 +12,9 @@ export const metadata: Metadata = {
 
 export default async function HomeBuilderPage() {
   const { user } = await requireTeamSession();
-  const canView = await hasPermission(user.id, PERMISSIONS.HOME_VIEW);
+  const canView =
+    (await hasPermission(user.id, PERMISSIONS.HOME_VIEW)) ||
+    (await hasPermission(user.id, PERMISSIONS.TEAM_PORTAL_ACCESS));
   if (!canView) {
     return (
       <div className="glass-card rounded-2xl p-8 text-center text-on-surface-variant font-body-md">

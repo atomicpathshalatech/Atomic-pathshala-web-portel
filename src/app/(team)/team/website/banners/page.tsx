@@ -9,7 +9,9 @@ export const metadata: Metadata = { title: "Banners — Website Builder" };
 
 export default async function BannersPage() {
   const { user } = await requireTeamSession();
-  const canManage = await hasPermission(user.id, PERMISSIONS.BANNER_MANAGE);
+  const canManage =
+    (await hasPermission(user.id, PERMISSIONS.BANNER_MANAGE)) ||
+    (await hasPermission(user.id, PERMISSIONS.TEAM_PORTAL_ACCESS));
   if (!canManage) {
     return <div className="glass-card rounded-2xl p-8 text-center text-on-surface-variant font-body-md">You don&apos;t have access to Banners.</div>;
   }

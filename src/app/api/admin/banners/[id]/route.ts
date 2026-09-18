@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
+import { hasPermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { bannerUpdateSchema } from "@/lib/validation/banner";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
@@ -11,7 +11,10 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
-    await requirePermission(session.user.id, PERMISSIONS.BANNER_MANAGE);
+    const canManage =
+      (await hasPermission(session.user.id, PERMISSIONS.BANNER_MANAGE)) ||
+      (await hasPermission(session.user.id, PERMISSIONS.TEAM_PORTAL_ACCESS));
+    if (!canManage) throw new UnauthorizedError();
 
     const input = bannerUpdateSchema.parse(await request.json());
 
@@ -40,7 +43,10 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
-    await requirePermission(session.user.id, PERMISSIONS.BANNER_MANAGE);
+    const canManage =
+      (await hasPermission(session.user.id, PERMISSIONS.BANNER_MANAGE)) ||
+      (await hasPermission(session.user.id, PERMISSIONS.TEAM_PORTAL_ACCESS));
+    if (!canManage) throw new UnauthorizedError();
 
     const existing = await prisma.banner.findUnique({ where: { id: params.id } });
     if (!existing) return apiError("Banner not found.", 404);

@@ -38,6 +38,14 @@ const NAV_SECTIONS: { title?: string; items: { href: string; label: string; icon
     ],
   },
   {
+    title: "Website & App CMS",
+    items: [
+      { href: "/team/website/banners", label: "App & Web Banners", icon: "view_carousel", permission: PERMISSIONS.TEAM_PORTAL_ACCESS },
+      { href: "/team/website/testimonials", label: "Student Feedback / Reviews", icon: "rate_review", permission: PERMISSIONS.TEAM_PORTAL_ACCESS },
+      { href: "/team/website", label: "Website Builder", icon: "web", permission: PERMISSIONS.TEAM_PORTAL_ACCESS },
+    ],
+  },
+  {
     title: "Content Studio",
     items: [
       { href: "/team/modules", label: "Module Studio", icon: "picture_as_pdf", permission: PERMISSIONS.MODULE_READ },

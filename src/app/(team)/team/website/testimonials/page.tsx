@@ -9,7 +9,9 @@ export const metadata: Metadata = { title: "Testimonials — Website Builder" };
 
 export default async function TestimonialsPage() {
   const { user } = await requireTeamSession();
-  const canManage = await hasPermission(user.id, PERMISSIONS.TESTIMONIAL_MANAGE);
+  const canManage =
+    (await hasPermission(user.id, PERMISSIONS.TESTIMONIAL_MANAGE)) ||
+    (await hasPermission(user.id, PERMISSIONS.TEAM_PORTAL_ACCESS));
   if (!canManage) {
     return <div className="glass-card rounded-2xl p-8 text-center text-on-surface-variant font-body-md">You don&apos;t have access to Testimonials.</div>;
   }
