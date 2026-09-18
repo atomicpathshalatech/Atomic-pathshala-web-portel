@@ -36,7 +36,7 @@ import { extractYouTubeVideoId } from "@/lib/live-class/youtube";
 
 // Diameter (px) of the floating self-camera bubble shown when the teacher's
 // Material & Setup camera shape is Circular — see floatCamPos below.
-const FLOAT_CAM_SIZE = 104;
+const FLOAT_CAM_SIZE = 140;
 
 type WhiteboardPage = { id: string; pageNumber: number; objects: StrokeObject[]; background: string };
 type LivePhase = "SCHEDULED" | "PREPARING" | "LIVE" | "ENDED" | (string & {});
@@ -326,6 +326,7 @@ export function TeacherLiveClassRoom({
   const settingsPortalRef = useRef<HTMLDivElement>(null);
 
   const [wbSession, setWbSession] = useState<WhiteboardSession | null>(null);
+  const isCameraCircle = wbSession?.cameraShape === "CIRCULAR";
   const [loadError, setLoadError] = useState<string | null>(null);
   const [starting, setStarting] = useState(true);
 
@@ -457,6 +458,20 @@ export function TeacherLiveClassRoom({
   const [floatCamPos, setFloatCamPos] = useState<{ x: number; y: number }>({ x: 16, y: 70 });
   const floatCamDraggingRef = useRef(false);
   const floatCamDragOffsetRef = useRef({ x: 0, y: 0 });
+  // The actual PPT/slide stage element (see the div this ref is attached to
+  // below) - the floating bubble's position is clamped to stay within it,
+  // not the whole viewport, so it can't drift over the toolbar/side panel.
+  const stageContainerRef = useRef<HTMLDivElement>(null);
+
+  function clampToStage(x: number, y: number): { x: number; y: number } {
+    const rect = stageContainerRef.current?.getBoundingClientRect();
+    if (!rect) return { x, y };
+    const minX = rect.left + 8;
+    const minY = rect.top + 8;
+    const maxX = Math.max(minX, rect.right - FLOAT_CAM_SIZE - 8);
+    const maxY = Math.max(minY, rect.bottom - FLOAT_CAM_SIZE - 8);
+    return { x: Math.min(Math.max(x, minX), maxX), y: Math.min(Math.max(y, minY), maxY) };
+  }
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -465,15 +480,21 @@ export function TeacherLiveClassRoom({
       if (saved) {
         const parsed = JSON.parse(saved);
         if (typeof parsed.x === "number" && typeof parsed.y === "number") {
-          setFloatCamPos(parsed);
+          setFloatCamPos(clampToStage(parsed.x, parsed.y));
           return;
         }
       }
     } catch {
       // fallback below
     }
-    setFloatCamPos({ x: Math.max(16, window.innerWidth - FLOAT_CAM_SIZE - 16), y: 70 });
-  }, []);
+    const rect = stageContainerRef.current?.getBoundingClientRect();
+    setFloatCamPos(
+      rect
+        ? clampToStage(rect.right - FLOAT_CAM_SIZE - 16, rect.top + 16)
+        : { x: Math.max(16, window.innerWidth - FLOAT_CAM_SIZE - 16), y: 70 }
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCameraCircle]);
 
   function handleFloatCamPointerDown(e: React.PointerEvent<HTMLDivElement>) {
     if (e.button !== 0) return;
@@ -487,13 +508,9 @@ export function TeacherLiveClassRoom({
 
   function handleFloatCamPointerMove(e: React.PointerEvent<HTMLDivElement>) {
     if (!floatCamDraggingRef.current) return;
-    const maxX = Math.max(10, window.innerWidth - FLOAT_CAM_SIZE - 12);
-    const maxY = Math.max(10, window.innerHeight - FLOAT_CAM_SIZE - 12);
-    let nx = e.clientX - floatCamDragOffsetRef.current.x;
-    let ny = e.clientY - floatCamDragOffsetRef.current.y;
-    nx = Math.max(8, Math.min(nx, maxX));
-    ny = Math.max(56, Math.min(ny, maxY));
-    setFloatCamPos({ x: nx, y: ny });
+    const nx = e.clientX - floatCamDragOffsetRef.current.x;
+    const ny = e.clientY - floatCamDragOffsetRef.current.y;
+    setFloatCamPos(clampToStage(nx, ny));
   }
 
   function handleFloatCamPointerUp(e: React.PointerEvent<HTMLDivElement>) {
@@ -574,7 +591,6 @@ export function TeacherLiveClassRoom({
   const [launchingQuiz, setLaunchingQuiz] = useState(false);
 
   const currentPage = wbSession?.pages.find((p) => p.pageNumber === wbSession.activePageNumber) ?? null;
-  const isCameraCircle = wbSession?.cameraShape === "CIRCULAR";
 
   // Read inside the Pusher handler below, which is bound once per session
   // (not re-bound on every tab change) — a ref keeps it seeing the latest
@@ -2454,6 +2470,7 @@ export function TeacherLiveClassRoom({
         </aside>
 
         <div
+          ref={stageContainerRef}
           className={`relative rounded-2xl shadow-2xl overflow-hidden border border-slate-800/80 shrink-0 select-none ${
             panDragRef.current ? "" : "transition-transform duration-75"
           }`}
@@ -2667,6 +2684,7 @@ export function TeacherLiveClassRoom({
             settingsPortalRef={settingsPortalRef}
             connectedStudents={connectedStudents}
             onDisconnectStudent={handleDisconnectStudent}
+            compact={isCameraCircle}
           />
         </div>
 

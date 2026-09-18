@@ -56,6 +56,12 @@ export interface VideoStripProps {
   // video speaker, so the rest of the class can see them too (previously
   // only the teacher could).
   classSpeaker?: { studentUserId: string; studentName: string } | null;
+  // Strips the name/role badge and the mic/camera/settings control bar down
+  // to just the raw video feed — for a small floating bubble (see the
+  // circular-camera-shape wrapper in Teacher/StudentLiveClassRoom) where
+  // those overlays don't fit and aren't reachable anyway. Docked panel
+  // usage (the default) is unaffected.
+  compact?: boolean;
 }
 
 export function VideoStrip({
@@ -74,6 +80,7 @@ export function VideoStrip({
   onDisconnectStudent,
   onEndCall,
   classSpeaker = null,
+  compact = false,
 }: VideoStripProps) {
   const [creds, setCreds] = useState<{ token: string; url: string } | null>(null);
   const [tokenError, setTokenError] = useState<string | null>(null);
@@ -169,6 +176,7 @@ export function VideoStrip({
         onDisconnectStudent={onDisconnectStudent}
         onEndCall={onEndCall}
         classSpeaker={classSpeaker}
+        compact={compact}
       />
     </LiveKitRoom>
   );
@@ -190,6 +198,7 @@ function VideoStripInner({
   onDisconnectStudent,
   onEndCall,
   classSpeaker = null,
+  compact = false,
 }: {
   variant: "header" | "panel";
   role?: "TEACHER" | "STUDENT";
@@ -203,6 +212,7 @@ function VideoStripInner({
   onDisconnectStudent?: (studentId: string) => Promise<void> | void;
   onEndCall?: () => Promise<void> | void;
   classSpeaker?: { studentUserId: string; studentName: string } | null;
+  compact?: boolean;
 }) {
   const connectionState = useConnectionState();
   const tracks = useTracks([Track.Source.Camera, Track.Source.Microphone], { onlySubscribed: false });
@@ -428,55 +438,61 @@ function VideoStripInner({
           </div>
         )}
 
-        {/* Top Badges: Connection Quality & Role */}
-        <div className="absolute top-2 left-2 flex items-center gap-1.5 z-20">
-          <div className="bg-black/75 px-2 py-0.5 rounded-md text-[10px] text-white backdrop-blur-sm border border-white/10 font-bold flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            Educator Live
+        {/* Top Badges: Connection Quality & Role — omitted entirely in
+            compact mode (the floating circular bubble), where there's no
+            room for them and they aren't reachable anyway. */}
+        {!compact && (
+          <div className="absolute top-2 left-2 flex items-center gap-1.5 z-20">
+            <div className="bg-black/75 px-2 py-0.5 rounded-md text-[10px] text-white backdrop-blur-sm border border-white/10 font-bold flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              Educator Live
+            </div>
+            <div className="bg-black/75 px-1.5 py-0.5 rounded-md text-[10px] text-slate-300 backdrop-blur-sm border border-white/10 flex items-center">
+              <ConnectionQualityIndicator participant={localParticipant} />
+            </div>
           </div>
-          <div className="bg-black/75 px-1.5 py-0.5 rounded-md text-[10px] text-slate-300 backdrop-blur-sm border border-white/10 flex items-center">
-            <ConnectionQualityIndicator participant={localParticipant} />
+        )}
+
+        {/* Bottom Controls Bar — same reasoning, hidden in compact mode. */}
+        {!compact && (
+          <div className="absolute bottom-2 inset-x-2 flex items-center justify-between z-20">
+            {/* Status info */}
+            <div className="flex items-center gap-1">
+              {micError && (
+                <span className="bg-rose-900/90 text-rose-200 text-[9px] px-1.5 py-0.5 rounded font-bold border border-rose-500/40">
+                  Mic Blocked
+                </span>
+              )}
+            </div>
+
+            {/* Teacher Action Toggles */}
+            <div className="flex items-center gap-1 bg-black/60 backdrop-blur-md p-1 rounded-lg border border-white/10">
+              <TrackToggle
+                source={Track.Source.Microphone}
+                showIcon={false}
+                className={`w-7 h-7 rounded-md flex items-center justify-center transition ${
+                  isMicrophoneEnabled ? "bg-slate-700/80 text-white hover:bg-slate-600" : "bg-rose-600 text-white shadow-md shadow-rose-600/30"
+                }`}
+                title={isMicrophoneEnabled ? "Mute Microphone" : "Unmute Microphone"}
+              >
+                <span className="material-symbols-outlined text-base">{isMicrophoneEnabled ? "mic" : "mic_off"}</span>
+              </TrackToggle>
+
+              <TrackToggle
+                source={Track.Source.Camera}
+                showIcon={false}
+                className={`w-7 h-7 rounded-md flex items-center justify-center transition ${
+                  isCameraEnabled ? "bg-slate-700/80 text-white hover:bg-slate-600" : "bg-rose-600 text-white shadow-md shadow-rose-600/30"
+                }`}
+                title={isCameraEnabled ? "Turn Off Camera" : "Turn On Camera"}
+              >
+                <span className="material-symbols-outlined text-base">{isCameraEnabled ? "videocam" : "videocam_off"}</span>
+              </TrackToggle>
+
+              <TeacherDeviceSettingsPopover mic={mic} cam={cam} speaker={speaker} onSpeakerChange={handleSpeakerSelect} />
+            </div>
           </div>
-        </div>
-
-        {/* Bottom Controls Bar */}
-        <div className="absolute bottom-2 inset-x-2 flex items-center justify-between z-20">
-          {/* Status info */}
-          <div className="flex items-center gap-1">
-            {micError && (
-              <span className="bg-rose-900/90 text-rose-200 text-[9px] px-1.5 py-0.5 rounded font-bold border border-rose-500/40">
-                Mic Blocked
-              </span>
-            )}
-          </div>
-
-          {/* Teacher Action Toggles */}
-          <div className="flex items-center gap-1 bg-black/60 backdrop-blur-md p-1 rounded-lg border border-white/10">
-            <TrackToggle
-              source={Track.Source.Microphone}
-              showIcon={false}
-              className={`w-7 h-7 rounded-md flex items-center justify-center transition ${
-                isMicrophoneEnabled ? "bg-slate-700/80 text-white hover:bg-slate-600" : "bg-rose-600 text-white shadow-md shadow-rose-600/30"
-              }`}
-              title={isMicrophoneEnabled ? "Mute Microphone" : "Unmute Microphone"}
-            >
-              <span className="material-symbols-outlined text-base">{isMicrophoneEnabled ? "mic" : "mic_off"}</span>
-            </TrackToggle>
-
-            <TrackToggle
-              source={Track.Source.Camera}
-              showIcon={false}
-              className={`w-7 h-7 rounded-md flex items-center justify-center transition ${
-                isCameraEnabled ? "bg-slate-700/80 text-white hover:bg-slate-600" : "bg-rose-600 text-white shadow-md shadow-rose-600/30"
-              }`}
-              title={isCameraEnabled ? "Turn Off Camera" : "Turn On Camera"}
-            >
-              <span className="material-symbols-outlined text-base">{isCameraEnabled ? "videocam" : "videocam_off"}</span>
-            </TrackToggle>
-
-            <TeacherDeviceSettingsPopover mic={mic} cam={cam} speaker={speaker} onSpeakerChange={handleSpeakerSelect} />
-          </div>
-        </div>
+        )}
       </div>
     );
   }
