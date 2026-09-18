@@ -23,13 +23,72 @@ export async function POST(
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
 
-    const question = await prisma.question.findUnique({ where: { id: params.id } });
-    if (!question) return apiError("Question not found", 404);
+    const { testId, reasonTags, comment, screenshotUrl, questionMeta } =
+      questionReportCreateSchema.parse(await request.json());
 
-    const { testId, reasonTags, comment, screenshotUrl } = questionReportCreateSchema.parse(
-      await request.json()
-    );
+    const rawId = decodeURIComponent(params.id);
 
+    // 1. Locate existing canonical Question by id or questionCode
+    let question = await prisma.question.findFirst({
+      where: {
+        OR: [{ id: rawId }, { questionCode: rawId }],
+      },
+    });
+
+    // 2. If not found in Question model and questionMeta is supplied, create canonical Question once
+    if (!question && questionMeta?.statement) {
+      const subject = questionMeta.subject || "General";
+      const language = questionMeta.language?.toLowerCase() || "english";
+      const optionsArray = Array.isArray(questionMeta.options)
+        ? questionMeta.options
+        : typeof questionMeta.options === "object" && questionMeta.options !== null
+          ? Object.entries(questionMeta.options).map(([k, v]) => ({ id: k, text: String(v) }))
+          : [];
+
+      question = await prisma.question.create({
+        data: {
+          id: rawId.startsWith("c") || rawId.length > 20 ? rawId : undefined,
+          questionCode: rawId,
+          subject,
+          chapter: questionMeta.chapter || null,
+          topic: questionMeta.topic || null,
+          category: questionMeta.source || "AI_GENERATED",
+          solution: questionMeta.solution || null,
+          status: "DRAFT",
+          translations: {
+            create: {
+              language,
+              statement: questionMeta.statement,
+              options: optionsArray,
+              correctOptionIds: questionMeta.correctAnswer ? [questionMeta.correctAnswer] : [],
+              solution: questionMeta.solution || null,
+            },
+          },
+        },
+      });
+    }
+
+    if (!question) {
+      return apiError("Question not found", 404);
+    }
+
+    // 3. Duplicate Report Protection: check if this student has already reported this exact question
+    const existingReport = await prisma.questionReport.findFirst({
+      where: {
+        questionId: question.id,
+        reportedById: session.user.id,
+      },
+    });
+
+    if (existingReport) {
+      return apiSuccess({
+        alreadyReported: true,
+        report: existingReport,
+        message: "You've already reported this question. Thank you — it has been sent for faculty review.",
+      });
+    }
+
+    // 4. Create single report attached to the canonical question
     const report = await prisma.questionReport.create({
       data: {
         questionId: question.id,
@@ -38,10 +97,11 @@ export async function POST(
         comment: comment || null,
         screenshotUrl: screenshotUrl || null,
         reportedById: session.user.id,
+        status: "NEW",
       },
     });
 
-    return apiSuccess({ report }, 201);
+    return apiSuccess({ report, alreadyReported: false }, 201);
   } catch (error) {
     return handleApiError(error);
   }

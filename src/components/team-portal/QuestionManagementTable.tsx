@@ -24,6 +24,7 @@ import {
   ShieldCheck,
   UserCheck,
   BookOpen,
+  Flag,
 } from "lucide-react";
 import { FormulaText } from "@/components/test-portal/FormulaText";
 import { SecureDeleteResourceModal } from "@/components/common/SecureDeleteResourceModal";
@@ -77,6 +78,9 @@ export interface QuestionRow {
     correctOptionIds?: any;
   }>;
   isBilingual?: boolean;
+  _count?: {
+    reports?: number;
+  };
 }
 
 interface Props {
@@ -703,6 +707,17 @@ export function QuestionManagementTable({
                         <span className="text-[10px] text-slate-400 block">
                           By: {q.createdBy?.name || q.createdBy?.email || "Team"}
                         </span>
+
+                        {q._count?.reports && q._count.reports > 0 ? (
+                          <Link
+                            href={`/team/questions/reports?search=${encodeURIComponent(q.questionCode || q.id)}`}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200 transition mt-1"
+                            title={`${q._count.reports} student report(s) filed. Click to review.`}
+                          >
+                            <Flag className="w-2.5 h-2.5 text-amber-700" />
+                            <span>⚠️ {q._count.reports} {q._count.reports === 1 ? "Report" : "Reports"}</span>
+                          </Link>
+                        ) : null}
                       </div>
                     </td>
 

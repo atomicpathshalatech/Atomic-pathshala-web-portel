@@ -197,6 +197,7 @@ export default async function QuestionBankPage({
         review1By: { select: { id: true, name: true, email: true } },
         review2By: { select: { id: true, name: true, email: true } },
         publishedBy: { select: { id: true, name: true, email: true } },
+        _count: { select: { reports: true } },
       },
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * pageSize,

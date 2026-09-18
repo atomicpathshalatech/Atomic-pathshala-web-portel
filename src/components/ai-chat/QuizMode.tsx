@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MathText } from "@/components/ai-chat/MathText";
+import { ReportQuestionButton } from "@/components/student/ReportQuestionButton";
 import {
   formatStructuredSolution,
   QUESTION_TYPE_LABELS,
@@ -1986,6 +1987,26 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
                         <MathText text={structured.finalAnswer} />
                       </div>
                     </div>
+
+                    {/* Report Question Button */}
+                    <div className="flex justify-end pt-1">
+                      <ReportQuestionButton
+                        questionId={currentQuestion.id}
+                        variant="text"
+                        questionMeta={{
+                          statement: currentQuestion.text,
+                          options: currentQuestion.options,
+                          correctAnswer:
+                            currentQuestion.options[currentQuestion.correctIndex] ??
+                            String(currentQuestion.correctIndex),
+                          solution: currentQuestion.explanation,
+                          subject: currentQuestion.subject,
+                          chapter: currentQuestion.chapter,
+                          topic: currentQuestion.topic,
+                          source: "ATOMIC_GURU_QUIZ",
+                        }}
+                      />
+                    </div>
                   </div>
                 </div>
               );
@@ -2140,6 +2161,25 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
                         <MathText text={question.explanation} />
                       </p>
                     )}
+
+                    <div className="mt-3 flex justify-end border-t border-slate-100 pt-2 dark:border-slate-800">
+                      <ReportQuestionButton
+                        questionId={question.id}
+                        variant="pill"
+                        questionMeta={{
+                          statement: question.text,
+                          options: question.options,
+                          correctAnswer:
+                            question.options[question.correctIndex] ??
+                            String(question.correctIndex),
+                          solution: question.explanation,
+                          subject: question.subject,
+                          chapter: question.chapter,
+                          topic: question.topic,
+                          source: "ATOMIC_GURU_QUIZ",
+                        }}
+                      />
+                    </div>
                   </div>
                 );
               })}
