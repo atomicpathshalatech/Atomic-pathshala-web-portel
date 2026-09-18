@@ -3,18 +3,18 @@ import Link from "next/link";
 import { requireStudentSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import type { BatchSchedule, Teacher, User } from "@prisma/client";
-import { NextClassCard } from "@/components/student/NextClassCard";
 import { getEffectiveScheduleStatus } from "@/lib/schedule/access-rules";
 import { SectionHeader } from "@/components/student/home/SectionHeader";
-import { ProgressCard } from "@/components/student/home/ProgressCard";
+import { ProgressCard, type NextEventInfo } from "@/components/student/home/ProgressCard";
 import { QuickAccessGrid, type QuickAccessItem } from "@/components/student/home/QuickAccessGrid";
-import { ContinueLearningCard } from "@/components/student/home/ContinueLearningCard";
 import { RecommendedCourses } from "@/components/student/home/RecommendedCourses";
 import { PromoCard } from "@/components/student/home/PromoCard";
-import { NcertPracticeBanner } from "@/components/student/home/NcertPracticeBanner";
+import { StudentBannerCarousel, type StudentBanner } from "@/components/student/home/StudentBannerCarousel";
+import { EducatorsShowcase, type EducatorItem } from "@/components/student/home/EducatorsShowcase";
+import { StudentFeedbackSection, type StudentFeedbackItem } from "@/components/student/home/StudentFeedbackSection";
 
 export const metadata: Metadata = {
-  title: "Home",
+  title: "Home — Atomic Pathshala",
 };
 
 type ScheduleWithTeacher = BatchSchedule & { teacher: (Teacher & { user: User }) | null };
@@ -64,12 +64,6 @@ export default async function StudentDashboardPage() {
           now
         )
       : null;
-  const showNextClass =
-    !!nextClass &&
-    (nextClass.type !== "LIVE_CLASS" ||
-      (nextClassStatus !== "COMPLETED" &&
-        nextClassStatus !== "CANCELLED" &&
-        nextClassStatus !== "NOT_CONDUCTED"));
 
   const [
     dppCount,
@@ -82,6 +76,9 @@ export default async function StudentDashboardPage() {
     attemptsToday,
     recentLecture,
     recommendedRaw,
+    bannersDb,
+    teachersDb,
+    testimonialsDb,
   ] = await Promise.all([
     prisma.batchSchedule.count({
       where: { batchId: { in: enrolledBatchIds }, type: "DPP", endsAt: { gte: now } },
@@ -129,6 +126,29 @@ export default async function StudentDashboardPage() {
       take: 6,
       select: { id: true, name: true, code: true, targetExam: true, course: { select: { title: true } } },
     }),
+    prisma.banner.findMany({
+      where: { status: "ACTIVE" },
+      orderBy: [{ priority: "desc" }, { order: "asc" }],
+      select: {
+        id: true,
+        title: true,
+        subtitle: true,
+        imageUrl: true,
+        ctaUrl: true,
+        ctaText: true,
+        openInNewTab: true,
+      },
+    }).catch(() => []),
+    prisma.teacher.findMany({
+      where: { user: { status: "ACTIVE" } },
+      include: { user: { select: { name: true, photoUrl: true } } },
+      take: 12,
+    }).catch(() => []),
+    prisma.testimonial.findMany({
+      where: { isApproved: true },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+    }).catch(() => []),
   ]);
 
   const firstName = (student.user.name || "Student").split(" ")[0] || "Student";
@@ -138,28 +158,67 @@ export default async function StudentDashboardPage() {
 
   const todayDone = Math.min(attendedToday + attemptsToday, todayScheduleCount);
 
-  // "Continue learning" — real last-completed lecture, else the primary batch.
-  const continueItem = recentLecture?.lecture
-    ? {
-        id: recentLecture.lecture.id,
-        primary: recentLecture.lecture.chapter?.subject?.title || "Lectures",
-        secondary: recentLecture.lecture.chapter?.title || recentLecture.lecture.title,
-        meta: null,
-        href: `/watch/${recentLecture.lecture.id}`,
-        icon: "play_circle",
-      }
+  // Continue learning link
+  const continueHref = recentLecture?.lecture
+    ? `/watch/${recentLecture.lecture.id}`
     : primaryBatch
+    ? `/courses/${primaryBatch.id}`
+    : nextClass
+    ? `/courses/${nextClass.batchId}`
+    : "/courses";
+
+  // Build Next Upcoming Event Info for Today's Plan card
+  const nextEvent: NextEventInfo | null = nextClass
     ? {
-        id: primaryBatch.id,
-        primary: primaryBatch.name,
-        secondary: primaryBatch.course?.title || "Your batch",
-        meta: `${primaryBatch.teachers.length} faculty`,
-        href: `/courses/${primaryBatch.id}`,
-        icon: "school",
+        title: `${nextClass.title}${nextClass.teacher?.user.name ? ` • ${nextClass.teacher.user.name}` : ""}`,
+        type: nextClass.type,
+        startsAtIso: nextClass.startsAt.toISOString(),
+        href: nextClassStatus === "LIVE" ? `/live/${nextClass.id}` : `/schedule`,
+        isLive: nextClassStatus === "LIVE",
       }
     : null;
 
-  const continueHref = continueItem?.href ?? (nextClass ? `/courses/${nextClass.batchId}` : "/courses");
+  // Format Banners
+  const banners: StudentBanner[] = bannersDb.map((b) => ({
+    id: b.id,
+    title: b.title,
+    subtitle: b.subtitle,
+    imageUrl: b.imageUrl,
+    ctaUrl: b.ctaUrl,
+    ctaText: b.ctaText,
+    openInNewTab: b.openInNewTab,
+  }));
+
+  // Format Educators
+  const educators: EducatorItem[] = teachersDb.map((t) => {
+    const rawQual = t.qualifications;
+    let qualArr: string[] = [];
+    if (Array.isArray(rawQual)) {
+      qualArr = rawQual.map((q) => (typeof q === "string" ? q : (q as any)?.degree || String(q)));
+    }
+    return {
+      id: t.id,
+      name: t.displayName || t.user.name || "Atomic Faculty",
+      photoUrl: t.user.photoUrl || null,
+      department: t.department || "Faculty",
+      subjects: t.subjects || [],
+      experienceYears: t.experienceYears || null,
+      qualifications: qualArr,
+      bio: t.bio || null,
+    };
+  });
+
+  // Format Feedback
+  const feedbacks: StudentFeedbackItem[] = testimonialsDb.map((item) => ({
+    id: item.id,
+    studentName: item.studentName,
+    photoUrl: item.photoUrl,
+    studentClass: item.studentClass,
+    targetExam: item.targetExam,
+    quote: item.quote,
+    rating: item.rating,
+    createdAt: item.createdAt.toISOString(),
+  }));
 
   const quickAccess: QuickAccessItem[] = [
     { label: "My Batches", icon: "school", href: "/courses", accent: "blue", badge: enrollments.length ? `${enrollments.length}` : null },
@@ -182,25 +241,11 @@ export default async function StudentDashboardPage() {
   }));
 
   return (
-    <div className="mx-auto max-w-2xl space-y-5 pb-2 lg:max-w-5xl">
-      {/* Goal / batch context — one compact line */}
-      {primaryBatch && (
-        <Link
-          href={`/courses/${primaryBatch.id}`}
-          className="flex items-center gap-2.5 rounded-xl border border-slate-200/80 bg-white px-3.5 py-2.5"
-        >
-          <span className="material-symbols-outlined text-[20px] text-blue-600">workspace_premium</span>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[13px] font-semibold text-slate-900">{primaryBatch.name}</p>
-            <p className="truncate text-[11px] text-slate-500">
-              Current goal · {targetExam}
-              {enrollments.length > 1 ? ` · ${enrollments.length} batches` : ""}
-            </p>
-          </div>
-          <span className="material-symbols-outlined text-slate-300">chevron_right</span>
-        </Link>
-      )}
+    <div className="mx-auto max-w-2xl space-y-6 pb-6 lg:max-w-5xl">
+      {/* 1. Top 16:9 Clickable Banner Carousel */}
+      <StudentBannerCarousel banners={banners} />
 
+      {/* 2. Today's Plan & Live Event Countdown (Warm Earthy Vibrant) */}
       <ProgressCard
         greeting={greeting}
         firstName={firstName}
@@ -209,53 +254,23 @@ export default async function StudentDashboardPage() {
         todayDone={todayDone}
         todayTotal={todayScheduleCount}
         continueHref={continueHref}
-        continueLabel={continueItem ? "Continue learning" : "Explore courses"}
+        continueLabel="Continue Learning"
+        nextEvent={nextEvent}
       />
 
+      {/* 3. Quick Access */}
       <section className="space-y-2.5">
         <SectionHeader title="Quick access" />
         <QuickAccessGrid items={quickAccess} />
       </section>
 
-      {continueItem && (
-        <section className="space-y-2.5">
-          <SectionHeader title="Continue learning" href={continueItem.href} linkLabel="Open" />
-          <ContinueLearningCard item={continueItem} />
-        </section>
-      )}
-
-      <section className="space-y-2.5">
-        <SectionHeader
-          title={nextClassStatus === "LIVE" ? "Live now" : "Next class"}
-          href="/schedule"
-          linkLabel="Schedule"
-        />
-        {showNextClass && nextClass ? (
-          <NextClassCard
-            scheduleId={nextClass.id}
-            type={nextClass.type}
-            title={nextClass.title}
-            teacherName={nextClass.teacher?.user.name ?? null}
-            startsAtIso={nextClass.startsAt.toISOString()}
-            initialStatus={nextClassStatus ?? "SCHEDULED"}
-          />
-        ) : (
-          <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-4 text-center">
-            <p className="text-[13px] font-medium text-slate-500">No upcoming classes</p>
-            <Link href="/schedule" className="mt-1 inline-block text-xs font-semibold text-blue-600">
-              View full schedule
-            </Link>
-          </div>
-        )}
-      </section>
-
+      {/* 4. Practice & Revise (Cleaned up: Topic-wise Question Practice, NCERT, PYQ, DPP, Downloads) */}
       <section className="space-y-3">
         <SectionHeader title="Practice &amp; revise" />
-        <NcertPracticeBanner />
         <QuickAccessGrid
           items={[
             { label: "NCERT Practice", icon: "menu_book", href: "/practice/ncert", accent: "emerald", badge: "NEW" },
-            { label: "Question Practice", icon: "edit_note", href: "/practice", accent: "violet", badge: null },
+            { label: "Topic-wise Question Practice", icon: "edit_note", href: "/practice", accent: "violet", badge: null },
             { label: "PYQ Practice", icon: "history_edu", href: "/tests", accent: "blue", badge: null },
             { label: "Daily DPP", icon: "assignment", href: "/dpp", accent: "rose", badge: dppCount ? `${dppCount}` : null },
             { label: "Downloads", icon: "download", href: "/downloads", accent: "indigo", badge: downloadsCount ? `${downloadsCount}` : null },
@@ -263,6 +278,13 @@ export default async function StudentDashboardPage() {
         />
       </section>
 
+      {/* 5. Educators Profile Showcase */}
+      <EducatorsShowcase educators={educators} />
+
+      {/* 6. Our Student Feedback Carousel */}
+      <StudentFeedbackSection initialFeedbacks={feedbacks} studentName={student.user.name || "Student"} />
+
+      {/* Recommended Courses if any */}
       {recommended.length > 0 && (
         <section className="space-y-2.5">
           <SectionHeader title="Recommended for you" href="/courses" />
