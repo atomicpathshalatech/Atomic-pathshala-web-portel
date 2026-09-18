@@ -20,7 +20,7 @@ import {
 } from "@/lib/canvas/shapes/registry";
 import { getPusherClient } from "@/lib/realtime/pusher-client";
 import { sessionChannel, teacherChannel, WB_EVENTS } from "@/lib/realtime/events";
-import { VideoStrip, type VideoStripHandle } from "@/components/live-class/VideoStrip";
+import { VideoStrip } from "@/components/live-class/VideoStrip";
 import type { TeacherConnectedStudent } from "@/components/live-class/LiveVideoCallModal";
 import { MessagesPanel } from "@/components/live-class/MessagesPanel";
 import { ParticipantsPanel } from "@/components/live-class/ParticipantsPanel";
@@ -380,9 +380,6 @@ export function TeacherLiveClassRoom({
   // a fixed 320px column open on a phone. It is never unmounted - see the
   // .live-panel rules in globals.css and the VideoStrip note below.
   const [panelOpen, setPanelOpen] = useState(false);
-  // Same treatment for the left whiteboard-tools rail below lg — see the
-  // .live-rail rules in globals.css.
-  const [railOpen, setRailOpen] = useState(false);
   const mainCanvasContainerRef = useRef<HTMLElement>(null);
   const [stageDimensions, setStageDimensions] = useState<{ width: number; height: number }>({ width: 960, height: 540 });
 
@@ -486,82 +483,6 @@ export function TeacherLiveClassRoom({
   const [connectedStudents, setConnectedStudents] = useState<TeacherConnectedStudent[]>([]);
   const [rightTab, setRightTab] = useState<"messages" | "questions" | "roster">("messages");
   const [unreadMessages, setUnreadMessages] = useState(0);
-
-  // Floating draggable teacher camera — always a small bubble over the
-  // whiteboard (never docked back into the right panel). <VideoStrip> is
-  // mounted exactly once, as a page-level sibling of `.live-panel` (NOT a
-  // descendant of it), because `.live-panel` gets a CSS `transform` on
-  // mobile/tablet (see globals.css) to slide in as an overlay — and a
-  // `transform` on any ancestor turns it into the containing block for a
-  // `position: fixed` descendant, which would drag this "fixed" bubble
-  // off-screen along with the hidden panel. Rendering it as a sibling
-  // keeps it genuinely viewport-fixed at every breakpoint. Mirrors the
-  // proven single-persistent-wrapper drag pattern from the student side
-  // (StudentLiveClassRoom.tsx) rather than the abandoned
-  // DraggableFloatingCamera.tsx, which would remount VideoStrip and open a
-  // second LiveKit connection.
-  const FLOAT_CAM_SIZE = 128;
-  const [floatCamPos, setFloatCamPos] = useState<{ x: number; y: number } | null>(null);
-  const camDraggingRef = useRef(false);
-  const camDragOffsetRef = useRef({ x: 0, y: 0 });
-  const videoStripRef = useRef<VideoStripHandle>(null);
-  const [avState, setAvState] = useState({ isMicOn: true, isCameraOn: true, isScreenSharing: false });
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      const saved = localStorage.getItem("atomic_teacher_floating_cam_pos");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (typeof parsed.x === "number" && typeof parsed.y === "number") {
-          setFloatCamPos(parsed);
-          return;
-        }
-      }
-    } catch {
-      // fallback below
-    }
-    setFloatCamPos({ x: Math.max(16, window.innerWidth - FLOAT_CAM_SIZE - 16), y: 76 });
-  }, []);
-
-  function handleCamPointerDown(e: React.PointerEvent<HTMLDivElement>) {
-    if (e.button !== 0) return;
-    const target = e.target as HTMLElement;
-    if (target.closest("button")) return;
-    camDraggingRef.current = true;
-    const rect = e.currentTarget.getBoundingClientRect();
-    camDragOffsetRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-    e.currentTarget.setPointerCapture(e.pointerId);
-  }
-  function handleCamPointerMove(e: React.PointerEvent<HTMLDivElement>) {
-    if (!camDraggingRef.current) return;
-    const maxX = Math.max(10, window.innerWidth - FLOAT_CAM_SIZE - 12);
-    const maxY = Math.max(10, window.innerHeight - FLOAT_CAM_SIZE - 12);
-    let nx = e.clientX - camDragOffsetRef.current.x;
-    let ny = e.clientY - camDragOffsetRef.current.y;
-    nx = Math.max(8, Math.min(nx, maxX));
-    ny = Math.max(56, Math.min(ny, maxY));
-    setFloatCamPos({ x: nx, y: ny });
-  }
-  function handleCamPointerUp(e: React.PointerEvent<HTMLDivElement>) {
-    if (!camDraggingRef.current) return;
-    camDraggingRef.current = false;
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    } catch {
-      // ignore
-    }
-    setFloatCamPos((pos) => {
-      if (pos) {
-        try {
-          localStorage.setItem("atomic_teacher_floating_cam_pos", JSON.stringify(pos));
-        } catch {
-          // ignore
-        }
-      }
-      return pos;
-    });
-  }
 
   const [activeQuiz, setActiveQuiz] = useState<ActiveQuiz | null>(null);
   useEffect(() => {
@@ -1929,22 +1850,6 @@ export function TeacherLiveClassRoom({
   const pollActive = !!activeQuiz && activeQuiz.status !== "CLOSED";
   const isClassLive = wbSession.livePhase === "LIVE";
 
-  // One explicit state the whole screen keys off, instead of scattered
-  // boolean checks — derived from the same server-authoritative signals
-  // already used elsewhere in this file (livePhase / presentationUrl), not
-  // a new field. SETUP and READY don't unmount the whiteboard grid behind
-  // them (canvas engine / VideoStrip lifecycle stays untouched); they
-  // render as opaque full-screen overlays on top of it instead, so
-  // switching phases never re-triggers canvas/LiveKit setup.
-  const classPhase: "SETUP" | "READY" | "LIVE" | "ENDED" =
-    wbSession.livePhase === "ENDED" || wbSession.status === "ENDED"
-      ? "ENDED"
-      : wbSession.livePhase === "LIVE" || wbSession.livePhase === "ENDING"
-      ? "LIVE"
-      : wbSession.presentationUrl
-      ? "READY"
-      : "SETUP";
-
   return (
     <div
       ref={containerRef}
@@ -1959,117 +1864,12 @@ export function TeacherLiveClassRoom({
         className="hidden"
       />
 
-      {/* SETUP: opaque cover so the half-built whiteboard never shows
-          through behind PreFlightSetupWizard's own (translucent) backdrop —
-          that modal keeps its unchanged upload/preflight logic, this only
-          makes what's visually behind it solid instead of a blurred canvas. */}
-      {classPhase === "SETUP" && <div className="fixed inset-0 z-30 bg-[#0a0e17]" />}
-
-      {/* READY: class material is set, not live yet. One unmissable Start
-          Class action — answers "where do I start my class" directly,
-          instead of a small pill competing with a dozen other header
-          controls. The floating camera bubble (rendered further down,
-          z-drawer) stays visible above this overlay as the live camera/mic
-          preview — no second VideoStrip/LiveKit connection is created for
-          this screen. */}
-      {classPhase === "READY" && !showPreFlightWizard && (
-        <div className="fixed inset-0 z-30 bg-[#0a0e17] flex items-center justify-center p-4 overflow-y-auto">
-          <div className="w-full max-w-lg space-y-6 py-24">
-            <div className="text-center space-y-1.5">
-              <p className="text-xs font-semibold text-blue-400 uppercase tracking-wider">{batchName}</p>
-              <h1 className="text-2xl font-black text-white">{scheduleTitle}</h1>
-              <p className="text-sm text-gray-400">
-                {secondsUntilStart > 0
-                  ? `Scheduled to start in ${formatDurationFriendly(secondsUntilStart)}`
-                  : "Scheduled time has arrived — ready when you are."}
-              </p>
-            </div>
-
-            <div className="bg-[#161822] border border-[#2d2e3b] rounded-2xl p-5 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="flex items-center gap-2 text-sm text-gray-200">
-                  <span className="material-symbols-outlined text-emerald-400 text-lg">check_circle</span>
-                  Presentation material
-                </span>
-                <span className="text-xs text-gray-400 truncate max-w-[180px]">{wbSession.presentationName || "Ready"}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="flex items-center gap-2 text-sm text-gray-200">
-                  <span
-                    className={`material-symbols-outlined text-lg ${avState.isCameraOn ? "text-emerald-400" : "text-amber-400"}`}
-                  >
-                    {avState.isCameraOn ? "check_circle" : "warning"}
-                  </span>
-                  Camera
-                </span>
-                <span className="text-xs text-gray-400">{avState.isCameraOn ? "On — see preview" : "Off"}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="flex items-center gap-2 text-sm text-gray-200">
-                  <span
-                    className={`material-symbols-outlined text-lg ${avState.isMicOn ? "text-emerald-400" : "text-amber-400"}`}
-                  >
-                    {avState.isMicOn ? "check_circle" : "warning"}
-                  </span>
-                  Microphone
-                </span>
-                <span className="text-xs text-gray-400">{avState.isMicOn ? "On" : "Off"}</span>
-              </div>
-              <p className="text-[11px] text-gray-500 pt-1 border-t border-[#2d2e3b]">
-                Your camera preview is the floating circle on screen — drag it anywhere. Use the controls once you're live to adjust it.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              disabled={!canStartClass}
-              onClick={() => setStartClassModalOpen(true)}
-              className={`w-full flex items-center justify-center gap-2 text-base font-bold px-6 py-4 rounded-2xl shadow-lg transition active:scale-[0.99] ${
-                canStartClass
-                  ? "text-white bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/30 ring-2 ring-emerald-400/40 animate-pulse cursor-pointer"
-                  : "text-gray-400 bg-gray-800 border border-gray-700 cursor-not-allowed opacity-60"
-              }`}
-            >
-              <span className="material-symbols-outlined text-xl">sensors</span>
-              {canStartClass ? "Start Class" : "Scheduled Time Locked"}
-            </button>
-            {startClassError && (
-              <p className="text-xs text-red-400 text-center">{startClassError}</p>
-            )}
-
-            <div className="flex items-center justify-center gap-4 text-xs">
-              <button
-                type="button"
-                onClick={() => setShowPreFlightWizard(true)}
-                className="text-gray-400 hover:text-white underline underline-offset-2"
-              >
-                Change material or camera settings
-              </button>
-              <span className="text-gray-700">•</span>
-              <button
-                type="button"
-                onClick={() => router.push("/team/batches")}
-                className="text-gray-400 hover:text-white underline underline-offset-2"
-              >
-                Back to batches
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Left rail — the whiteboard toolbar. Everything here only affects
-          drawing on the canvas; live A/V and workspace controls live in the
-          bottom bar / canvas-edge strip instead, so this column is never a
-          mixed bag. */}
-      <aside
-        data-open={railOpen ? "true" : "false"}
-        className="live-rail border-r border-[#2d2e3b] bg-[#1a1b23] flex-col items-center py-3 gap-2 overflow-y-auto"
-      >
+      {/* Left rail */}
+      <aside className="live-rail border-r border-[#2d2e3b] bg-[#1a1b23] flex-col items-center py-4">
         <button
           type="button"
           onClick={() => router.push("/team/batches")}
-          className="w-10 h-10 rounded-xl overflow-hidden p-1 hover:opacity-85 transition-opacity shrink-0"
+          className="w-10 h-10 rounded-xl overflow-hidden p-1 hover:opacity-85 transition-opacity"
           title="Atomic Pathshala"
         >
           <img
@@ -2078,463 +1878,10 @@ export function TeacherLiveClassRoom({
             className="w-full h-full object-contain"
           />
         </button>
-
-        <div className="h-px w-6 bg-[#2d2e3b] shrink-0" />
-
-        <div className="relative z-40 flex flex-col items-center gap-1">
-          {/* Pen tool with Screenshot 3 customizer */}
-          <div className="relative">
-            <ToolbarBtn
-              icon={PEN_STYLES.find((s) => s.id === penStyle)?.icon || "edit"}
-              label="Pen"
-              active={tool === "pen"}
-              onClick={() => {
-                setTool("pen");
-                setOpenPopup((p) => (p === "pen" ? null : "pen"));
-              }}
-            />
-            {openPopup === "pen" && (
-              <div className="absolute left-full top-0 ml-3 z-50 bg-[#161722] border border-[#2d2e3b] rounded-2xl p-4 shadow-2xl w-[32rem] flex flex-col gap-4 text-white">
-                {/* Header (Screenshot 3) */}
-                <div className="flex items-center justify-between border-b border-[#2d2e3b] pb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-blue-400 text-xl">
-                      {PEN_STYLES.find((s) => s.id === penStyle)?.icon || "edit"}
-                    </span>
-                    <h3 className="text-sm font-bold text-gray-100">
-                      {PEN_STYLES.find((s) => s.id === penStyle)?.label || "Hard-tipped"} pen
-                    </h3>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setOpenPopup(null)}
-                    className="text-gray-400 hover:text-white transition"
-                  >
-                    <span className="material-symbols-outlined text-lg">close</span>
-                  </button>
-                </div>
-
-                {/* Thickness Slider with Live Dot (Screenshot 3) */}
-                <div className="bg-[#10111a] border border-[#242634] rounded-xl p-3 flex items-center justify-between gap-4">
-                  <span className="text-xs text-gray-300 font-medium">Thickness</span>
-                  <input
-                    type="range"
-                    min={1}
-                    max={30}
-                    value={size}
-                    onChange={(e) => setSize(Number(e.target.value))}
-                    className="flex-1 accent-blue-500 h-1.5 bg-gray-700 rounded-lg cursor-pointer"
-                  />
-                  <span className="text-xs font-mono font-bold text-gray-200 w-8 text-right">{size}px</span>
-                  <div className="w-9 h-9 rounded-full bg-[#1b1c28] border border-[#2d2e3b] flex items-center justify-center shrink-0">
-                    <div
-                      className="rounded-full transition-all"
-                      style={{
-                        width: Math.max(3, Math.min(22, size)),
-                        height: Math.max(3, Math.min(22, size)),
-                        backgroundColor: color,
-                      }}
-                    />
-                  </div>
-                </div>
-
-                {/* Split: Pen Styles (Left) & Color Palette 3x4 Grid (Right) (Screenshot 3) */}
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Left: Pen Styles */}
-                  <div className="bg-[#10111a] border border-[#242634] rounded-xl p-3 flex flex-col gap-2">
-                    <span className="text-xs font-semibold text-gray-400 mb-1">Pen Styles</span>
-                    <div className="grid grid-cols-2 gap-2">
-                      {PEN_STYLES.map((ps) => (
-                        <button
-                          key={ps.id}
-                          type="button"
-                          onClick={() => setPenStyle(ps.id)}
-                          className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs transition gap-1.5 ${
-                            penStyle === ps.id
-                              ? "bg-blue-600/20 border-blue-500 text-white font-semibold"
-                              : "bg-[#161722] border-[#2d2e3b] text-gray-400 hover:text-gray-200 hover:border-gray-600"
-                          }`}
-                        >
-                          <span className="material-symbols-outlined text-lg">{ps.icon}</span>
-                          <span>{ps.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Right: 3x4 Color Grid (Screenshot 3) */}
-                  <div className="bg-[#10111a] border border-[#242634] rounded-xl p-3 flex flex-col justify-between">
-                    <div>
-                      <span className="text-xs font-semibold text-gray-400 block mb-2 text-center">Color</span>
-                      <div className="grid grid-cols-3 gap-2 place-items-center">
-                        {PEN_PALETTE_COLORS.map((c) => (
-                          <button
-                            key={c}
-                            type="button"
-                            onClick={() => setColor(c)}
-                            className={`w-8 h-8 rounded-xl border shadow-md transition transform hover:scale-110 ${
-                              color.toLowerCase() === c.toLowerCase()
-                                ? "ring-2 ring-blue-500 ring-offset-2 ring-offset-[#10111a] border-white"
-                                : "border-transparent"
-                            }`}
-                            style={{ backgroundColor: c }}
-                            title={c}
-                          />
-                        ))}
-                      </div>
-                    </div>
-
-                    <label className="mt-3 flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-[#2d2e3b] bg-[#161722] hover:bg-[#202130] text-xs text-gray-300 font-medium cursor-pointer transition">
-                      <span className="material-symbols-outlined text-sm text-blue-400">colorize</span>
-                      Custom
-                      <input
-                        type="color"
-                        value={color}
-                        onChange={(e) => setColor(e.target.value)}
-                        className="opacity-0 w-0 h-0 absolute"
-                      />
-                    </label>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Highlight tool with floating pill (Screenshot 4) */}
-          <div className="relative">
-            <ToolbarBtn
-              icon="border_color"
-              label="Highlight"
-              active={tool === "highlighter" || tool === "highlighter-fade"}
-              onClick={() => {
-                setTool((prev) => (prev === "highlighter-fade" ? "highlighter-fade" : "highlighter"));
-                setOpenPopup((p) => (p === "highlight" ? null : "highlight"));
-              }}
-            />
-            {openPopup === "highlight" && (
-              <div className="absolute left-full top-0 ml-3 z-40 bg-[#161722] border border-[#2d2e3b] rounded-2xl p-2.5 shadow-2xl flex flex-col gap-2.5 min-w-max">
-                {/* Two highlighter variants: stays until erased, or fades on
-                    its own after a few seconds (like the laser pointer, but
-                    a real synced stroke, not a teacher-local-only effect). */}
-                <div className="flex rounded-lg bg-[#0d0e16] border border-[#2d2e3b] p-0.5 gap-0.5">
-                  <button
-                    type="button"
-                    onClick={() => setTool("highlighter")}
-                    className={`flex-1 px-2.5 py-1 rounded-md text-[10px] font-bold transition ${
-                      tool === "highlighter" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-gray-200"
-                    }`}
-                  >
-                    Permanent
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTool("highlighter-fade")}
-                    className={`flex-1 px-2.5 py-1 rounded-md text-[10px] font-bold transition ${
-                      tool === "highlighter-fade" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-gray-200"
-                    }`}
-                  >
-                    Fades Away
-                  </button>
-                </div>
-                <div className="flex flex-row items-center gap-2.5">
-                  {HIGHLIGHT_COLORS.map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => {
-                        setColor(c);
-                      }}
-                      className={`w-7 h-7 rounded-full border shadow-md transition transform hover:scale-110 ${
-                        color.toLowerCase() === c.toLowerCase()
-                          ? "ring-2 ring-white ring-offset-2 ring-offset-[#161722] border-transparent"
-                          : "border-gray-600/60 opacity-85 hover:opacity-100"
-                      }`}
-                      style={{ backgroundColor: c }}
-                      title={c}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Laser pointer — transient glow, auto-fades, never saved */}
-          <div className="relative">
-            <ToolbarBtn
-              icon="my_location"
-              label="Laser"
-              active={tool === "laser"}
-              onClick={() => {
-                setTool("laser");
-                setOpenPopup(null);
-              }}
-            />
-          </div>
-
-          <div className="relative">
-            <ToolbarBtn
-              icon="ink_eraser"
-              label="Eraser"
-              active={tool === "stroke-eraser" || tool === "object-eraser"}
-              onClick={() => setOpenPopup((p) => (p === "eraser" ? null : "eraser"))}
-            />
-            {openPopup === "eraser" && (
-              <div className="absolute left-full top-0 ml-3 z-50 bg-[#1a1b23] border border-[#2d2e3b] rounded-2xl p-2 shadow-2xl w-56 flex flex-col gap-2 text-white">
-                <div className="flex flex-col gap-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTool("stroke-eraser");
-                      setOpenPopup(null);
-                    }}
-                    className={`flex items-center gap-3 p-2 rounded-xl text-xs font-semibold text-left transition ${
-                      tool === "stroke-eraser" ? "bg-blue-600/20 text-blue-400 font-bold border border-blue-500/40" : "text-gray-300 hover:bg-gray-800"
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-base text-blue-400">ink_eraser</span> Stroke Eraser
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTool("object-eraser");
-                      setOpenPopup(null);
-                    }}
-                    className={`flex items-center gap-3 p-2 rounded-xl text-xs font-semibold text-left transition ${
-                      tool === "object-eraser" ? "bg-blue-600/20 text-blue-400 font-bold border border-blue-500/40" : "text-gray-300 hover:bg-gray-800"
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-base text-blue-400">delete_sweep</span> Object Eraser
-                  </button>
-                </div>
-
-                <div className="border-t border-[#2d2e3b] pt-2">
-                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-1">Eraser Size</span>
-                  <div className="mt-1.5 flex gap-1.5">
-                    {ERASER_SIZES.map((sz) => (
-                      <button
-                        key={sz.id}
-                        type="button"
-                        onClick={() => {
-                          setEraserRadius(sz.radius);
-                          if (tool !== "stroke-eraser" && tool !== "object-eraser") setTool("stroke-eraser");
-                        }}
-                        className={`flex-1 flex flex-col items-center gap-1 py-1.5 rounded-lg text-[10px] font-bold transition ${
-                          eraserRadius === sz.radius
-                            ? "bg-blue-600 text-white ring-1 ring-blue-400"
-                            : "bg-white/5 text-gray-300 hover:bg-white/10"
-                        }`}
-                      >
-                        <span
-                          className="rounded-full bg-current"
-                          style={{ width: Math.min(18, sz.radius / 3), height: Math.min(18, sz.radius / 3) }}
-                        />
-                        {sz.id}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Subject-Wise Smart Shapes (Screenshot 5) */}
-          <div className="relative">
-            <ToolbarBtn
-              icon="category"
-              label="Shapes"
-              active={openPopup === "shapes"}
-              onClick={() => setOpenPopup((p) => (p === "shapes" ? null : "shapes"))}
-            />
-            {openPopup === "shapes" && (
-              <div className="absolute left-full top-0 ml-3 z-50 bg-[#161722] border border-[#2d2e3b] rounded-2xl p-3 shadow-2xl w-72 flex flex-col gap-2 text-white">
-                {/* Category Switcher Tabs: General, Phys, Chem, Bio */}
-                <div className="grid grid-cols-4 gap-1 bg-[#10111a] p-1 rounded-xl border border-[#242634]">
-                  {(
-                    [
-                      { id: "general", label: "General", icon: "square_foot" },
-                      { id: "phys", label: "Phys", icon: "bolt" },
-                      { id: "chem", label: "Chem", icon: "science" },
-                      { id: "bio", label: "Bio", icon: "grain" },
-                    ] as const
-                  ).map((tab) => (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      onClick={() => setShapeSubjectTab(tab.id)}
-                      className={`flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] font-bold transition ${
-                        shapeSubjectTab === tab.id
-                          ? "bg-blue-600 text-white shadow-md"
-                          : "text-gray-400 hover:text-white"
-                      }`}
-                    >
-                      <span className="material-symbols-outlined text-xs">{tab.icon}</span>
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Chemistry gets a second row of subcategory pills — the
-                    library is too large (~48 structures) for one flat grid,
-                    per the categorized-submenu requirement. */}
-                {shapeSubjectTab === "chem" && (
-                  <div className="flex flex-wrap gap-1">
-                    {CHEM_SUBCATEGORY_ORDER.map((sub) => (
-                      <button
-                        key={sub}
-                        type="button"
-                        onClick={() => setChemSubcategory(sub)}
-                        className={`px-2 py-1 rounded-lg text-[10px] font-bold transition ${
-                          chemSubcategory === sub
-                            ? "bg-emerald-600 text-white"
-                            : "bg-[#10111a] text-gray-400 hover:text-white border border-[#242634]"
-                        }`}
-                      >
-                        {CHEM_SUBCATEGORY_LABELS[sub]}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {/* 2-Column Grid of Shapes, sourced from the one authoritative
-                    registry (src/lib/canvas/shapes/registry.ts) — every id
-                    here is unique and maps 1:1 to a real renderer. */}
-                <div className="grid grid-cols-2 gap-1.5 max-h-64 overflow-y-auto pr-1">
-                  {SHAPE_DEFS.filter(
-                    (s) =>
-                      s.category === shapeSubjectTab &&
-                      (shapeSubjectTab !== "chem" || s.subcategory === chemSubcategory)
-                  ).map((s) => (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => {
-                        setTool(s.id);
-                        setOpenPopup(null);
-                      }}
-                      className={`flex items-center gap-2 p-2 rounded-xl border text-xs text-left transition ${
-                        tool === s.id
-                          ? "bg-blue-600/20 border-blue-500 text-white font-bold"
-                          : "bg-[#10111a] border-[#242634] text-gray-300 hover:border-gray-500"
-                      }`}
-                    >
-                      <span className="material-symbols-outlined text-sm text-blue-400 shrink-0">{s.icon}</span>
-                      <span className="truncate">{s.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="h-px w-6 bg-[#2d2e3b] my-1" />
-
-          <button
-            type="button"
-            onClick={() => setTool("fill")}
-            className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${
-              tool === "fill" ? "text-amber-400 bg-amber-900/30 ring-1 ring-amber-500/50" : "text-gray-400 hover:text-white hover:bg-gray-800"
-            }`}
-            title="Paint Bucket (Color Fill Tool)"
-          >
-            <span className="material-symbols-outlined text-lg">format_color_fill</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setTool("text")}
-            className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${
-              tool === "text" ? "text-blue-400 bg-blue-900/30" : "text-gray-400 hover:text-white hover:bg-gray-800"
-            }`}
-            title="Text"
-          >
-            <span className="material-symbols-outlined text-lg">text_fields</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setTool("select")}
-            className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${
-              tool === "select" ? "text-blue-400 bg-blue-900/30" : "text-gray-400 hover:text-white hover:bg-gray-800"
-            }`}
-            title="Select / Move"
-          >
-            <span className="material-symbols-outlined text-lg">arrow_selector_tool</span>
-          </button>
-
-          {/* Selection actions — only while something is selected */}
-          {selectionCount > 0 && (
-            <>
-              <div className="h-px w-6 bg-[#2d2e3b] my-1" />
-              <button
-                type="button"
-                onClick={() => engineRef.current?.copySelected()}
-                className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
-                title={`Copy ${selectionCount} selected`}
-              >
-                <span className="material-symbols-outlined text-lg">content_copy</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  engineRef.current?.duplicateSelected();
-                  setUndoRedoTick((t) => t + 1);
-                }}
-                className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
-                title={`Duplicate ${selectionCount} selected`}
-              >
-                <span className="material-symbols-outlined text-lg">library_add</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  engineRef.current?.deleteSelected();
-                  setUndoRedoTick((t) => t + 1);
-                }}
-                className="w-8 h-8 flex items-center justify-center rounded-lg text-red-400 hover:text-white hover:bg-red-500/30 transition-colors"
-                title={`Delete ${selectionCount} selected`}
-              >
-                <span className="material-symbols-outlined text-lg">delete</span>
-              </button>
-            </>
-          )}
-
-          <div className="h-px w-6 bg-[#2d2e3b] my-1" />
-
-          <button
-            type="button"
-            disabled={!engineRef.current?.canUndo()}
-            onClick={() => {
-              engineRef.current?.undo();
-              setUndoRedoTick((t) => t + 1);
-            }}
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 disabled:opacity-30 transition-colors"
-            title="Undo"
-          >
-            <span className="material-symbols-outlined text-lg">undo</span>
-          </button>
-          <button
-            type="button"
-            disabled={!engineRef.current?.canRedo()}
-            onClick={() => {
-              engineRef.current?.redo();
-              setUndoRedoTick((t) => t + 1);
-            }}
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 disabled:opacity-30 transition-colors"
-            title="Redo"
-          >
-            <span className="material-symbols-outlined text-lg">redo</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => engineRef.current?.clearInk()}
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
-            title="Clear page"
-          >
-            <span className="material-symbols-outlined text-lg">layers_clear</span>
-          </button>
-        </div>
       </aside>
 
       {/* Header */}
-      <header className="live-header relative z-[55] flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 sm:gap-x-4 px-3 sm:px-4 lg:px-6 py-1.5 border-b border-[#2d2e3b] bg-[#1a1b23] min-w-0">
+      <header className="live-header flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 sm:gap-x-4 px-3 sm:px-4 lg:px-6 py-1.5 border-b border-[#2d2e3b] bg-[#1a1b23] min-w-0">
         <div className="min-w-0 flex flex-wrap items-center gap-x-3 gap-y-1">
           <div className="min-w-0">
             <p className="text-[11px] text-gray-500 truncate">{batchName}</p>
@@ -2747,8 +2094,13 @@ export function TeacherLiveClassRoom({
             </div>
           )}
 
-          {/* Settings now lives in the bottom bar's live-controls group,
-              not here — this header stays focused on status + End Class. */}
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            className="text-xs font-semibold text-gray-300 border border-gray-600 px-3 py-1.5 rounded-md hover:bg-gray-700 transition"
+          >
+            SETTINGS
+          </button>
 
           {isClassLive && (!confirmingEnd ? (
             <button
@@ -2860,6 +2212,141 @@ export function TeacherLiveClassRoom({
             )}
           </div>
         )}
+
+        {/* Left Floating Quick Tool Palette Capsule (Screenshot 1) */}
+        <aside className="absolute left-2 sm:left-3.5 top-1/2 -translate-y-1/2 z-30 select-none pointer-events-auto">
+          <div className="flex flex-col items-center py-2 px-1.5 bg-[#141624]/95 backdrop-blur-md rounded-full border border-[#292d42] shadow-2xl gap-2">
+            {/* Active Tool Icon Indicator */}
+            <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-xs text-orange-400">
+              <span className="material-symbols-outlined text-sm">
+                {tool === "pen"
+                  ? (PEN_STYLES.find((s) => s.id === penStyle)?.icon || "edit")
+                  : tool === "highlighter" || tool === "highlighter-fade"
+                  ? "border_color"
+                  : tool === "stroke-eraser" || tool === "object-eraser"
+                  ? "ink_eraser"
+                  : tool === "text"
+                  ? "text_fields"
+                  : tool === "fill"
+                  ? "format_color_fill"
+                  : tool === "laser"
+                  ? "my_location"
+                  : tool === "select"
+                  ? "gesture"
+                  : "category"}
+              </span>
+            </div>
+
+            <div className="w-4 h-[1px] bg-gray-700/60" />
+
+            {/* Color Swatches (Screenshot 1 & 4) */}
+            <div className="flex flex-col gap-1.5">
+              {LEFT_BAR_COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setColor(c)}
+                  className={`w-4 h-4 rounded-full transition transform hover:scale-125 ${
+                    color.toLowerCase() === c.toLowerCase()
+                      ? "ring-2 ring-white ring-offset-1 ring-offset-[#141624]"
+                      : "opacity-85 hover:opacity-100"
+                  }`}
+                  style={{ backgroundColor: c }}
+                  title={c}
+                />
+              ))}
+            </div>
+
+            <div className="w-4 h-[1px] bg-gray-700/60" />
+
+            {/* 3 Size Dots (Screenshot 1 & 4) */}
+            <div className="flex flex-col gap-2 items-center py-1">
+              {[2, 5, 9].map((sz) => (
+                <button
+                  key={sz}
+                  type="button"
+                  onClick={() => setSize(sz)}
+                  className={`rounded-full transition flex items-center justify-center ${
+                    size === sz ? "ring-2 ring-blue-400 ring-offset-1 ring-offset-[#141624]" : ""
+                  }`}
+                  style={{
+                    width: `${Math.max(6, sz * 1.5)}px`,
+                    height: `${Math.max(6, sz * 1.5)}px`,
+                    backgroundColor: color,
+                  }}
+                  title={`${sz}px stroke size`}
+                />
+              ))}
+            </div>
+
+            <div className="w-4 h-[1px] bg-gray-700/60" />
+
+            {/* Paint Bucket (Color Fill) Tool Button */}
+            <button
+              type="button"
+              onClick={() => setTool("fill")}
+              className={`w-7 h-7 rounded-full flex items-center justify-center transition shadow ${
+                tool === "fill"
+                  ? "bg-amber-500 text-white ring-2 ring-amber-300"
+                  : "bg-white/10 text-gray-300 hover:text-white"
+              }`}
+              title="Paint Bucket (Color Fill Tool)"
+            >
+              <span className="material-symbols-outlined text-sm">format_color_fill</span>
+            </button>
+
+            {/* Freehand Lasso Selection Tool Button */}
+            <button
+              type="button"
+              onClick={() => setTool("select")}
+              className={`w-7 h-7 rounded-full flex items-center justify-center transition shadow ${
+                tool === "select"
+                  ? "bg-blue-600 text-white ring-2 ring-blue-400"
+                  : "bg-white/10 text-gray-300 hover:text-white"
+              }`}
+              title="Selection / Lasso Tool"
+            >
+              <span className="material-symbols-outlined text-sm">gesture</span>
+            </button>
+
+            {/* Selection actions — only while something is selected */}
+            {selectionCount > 0 && (
+              <>
+                <div className="w-4 h-[1px] bg-gray-700/60" />
+                <button
+                  type="button"
+                  onClick={() => engineRef.current?.copySelected()}
+                  className="w-7 h-7 rounded-full flex items-center justify-center bg-white/10 text-gray-300 hover:text-white transition shadow"
+                  title={`Copy ${selectionCount} selected`}
+                >
+                  <span className="material-symbols-outlined text-sm">content_copy</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    engineRef.current?.duplicateSelected();
+                    setUndoRedoTick((t) => t + 1);
+                  }}
+                  className="w-7 h-7 rounded-full flex items-center justify-center bg-white/10 text-gray-300 hover:text-white transition shadow"
+                  title={`Duplicate ${selectionCount} selected`}
+                >
+                  <span className="material-symbols-outlined text-sm">library_add</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    engineRef.current?.deleteSelected();
+                    setUndoRedoTick((t) => t + 1);
+                  }}
+                  className="w-7 h-7 rounded-full flex items-center justify-center bg-red-500/20 text-red-300 hover:bg-red-500/30 hover:text-white transition shadow"
+                  title={`Delete ${selectionCount} selected`}
+                >
+                  <span className="material-symbols-outlined text-sm">delete</span>
+                </button>
+              </>
+            )}
+          </div>
+        </aside>
 
         <div
           className={`relative rounded-2xl shadow-2xl overflow-hidden border border-slate-800/80 shrink-0 select-none ${
@@ -3019,64 +2506,10 @@ export function TeacherLiveClassRoom({
         </div>
       </main>
 
-      {/* Floating draggable teacher camera — the room's single VideoStrip/
-          LiveKit connection, mounted exactly once here and never
-          conditionally rendered (see the state comment above for why it
-          must live outside `.live-panel`). Visible across every class
-          phase — this same instance is what a teacher sees as their
-          camera/mic preview on the Ready screen too. */}
-      {floatCamPos && (
-        <div
-          onPointerDown={handleCamPointerDown}
-          onPointerMove={handleCamPointerMove}
-          onPointerUp={handleCamPointerUp}
-          onPointerCancel={handleCamPointerUp}
-          style={{
-            position: "fixed",
-            top: floatCamPos.y,
-            left: floatCamPos.x,
-            width: FLOAT_CAM_SIZE,
-            height: FLOAT_CAM_SIZE,
-            touchAction: "none",
-          }}
-          className="z-drawer rounded-full overflow-hidden border-2 border-blue-500 shadow-2xl bg-black cursor-grab active:cursor-grabbing select-none"
-        >
-          <VideoStrip
-            ref={videoStripRef}
-            whiteboardSessionId={wbSession.id}
-            variant="bubble"
-            role="TEACHER"
-            settingsPortalRef={settingsPortalRef}
-            connectedStudents={connectedStudents}
-            onDisconnectStudent={handleDisconnectStudent}
-            onStateChange={setAvState}
-          />
-        </div>
-      )}
-
-      {/* Rail toggle + scrim, below lg only — same pattern as the panel
-          toggle below. The rail itself is never conditionally rendered. */}
-      <button
-        type="button"
-        onClick={() => setRailOpen((o) => !o)}
-        className="lg:hidden fixed left-0 top-1/2 -translate-y-1/2 z-drawer w-9 h-16 rounded-r-xl bg-[#1a1b23] border border-l-0 border-[#2d2e3b] text-gray-300 hover:text-white flex items-center justify-center shadow-lg"
-        aria-label={railOpen ? "Hide whiteboard tools" : "Show whiteboard tools"}
-        aria-expanded={railOpen}
-      >
-        <span className="material-symbols-outlined text-xl">
-          {railOpen ? "chevron_left" : "chevron_right"}
-        </span>
-      </button>
-      {railOpen && (
-        <div
-          className="lg:hidden fixed inset-0 z-sticky bg-black/40"
-          onClick={() => setRailOpen(false)}
-        />
-      )}
-
       {/* Panel toggle + scrim, below lg only. The panel itself is never
-          conditionally rendered so its own children stay stable across
-          the panel-open toggle. */}
+          conditionally rendered: VideoStrip holds the room's single LiveKit
+          connection, and remounting it opens a second one under the same
+          identity, which puts the two into a reconnect loop. */}
       <button
         type="button"
         onClick={() => setPanelOpen((o) => !o)}
@@ -3095,13 +2528,20 @@ export function TeacherLiveClassRoom({
         />
       )}
 
-      {/* Right panel: Messages/Questions/Students. The teacher's own camera
-          is not docked here — it's a floating bubble over the canvas (see
-          below) — so this panel is dedicated to people/chat only. */}
+      {/* Right panel: video + Messages/Questions */}
       <aside
         data-open={panelOpen ? "true" : "false"}
         className="live-panel bg-[#1a1b23] border-l border-[#2d2e3b] flex flex-col min-h-0"
       >
+        <div className="h-56 bg-black relative border-b border-[#2d2e3b] shrink-0">
+          <VideoStrip
+            whiteboardSessionId={wbSession.id}
+            variant="panel"
+            settingsPortalRef={settingsPortalRef}
+            connectedStudents={connectedStudents}
+            onDisconnectStudent={handleDisconnectStudent}
+          />
+        </div>
 
         <div className="flex border-b border-[#2d2e3b] px-3 pt-3 shrink-0 gap-1 overflow-x-auto">
           <button
@@ -3182,45 +2622,423 @@ export function TeacherLiveClassRoom({
       <footer className="live-toolbar flex items-center justify-between gap-1 px-2 sm:px-4 lg:px-6 border-t border-[#2d2e3b] bg-[#1a1b23] relative min-w-0">
         {openPopup && <div className="fixed inset-0 z-30" onClick={() => setOpenPopup(null)} />}
 
-        {/* Live controls group. relative + z-40: see the backdrop-stacking
-            comment above the backdrop div — without this, every button
-            here (and in the Navigation/Action groups below) needed two
-            clicks whenever a popup was already open. Drawing tools moved
-            to the left rail (see .live-rail above) — this bar is now only
-            the essential live A/V + workspace controls. Mic/Camera/Screen
-            Share drive the same VideoStrip instance as the floating camera
-            bubble via videoStripRef (see the imperative-ref bridge on
-            VideoStrip) — no second LiveKit connection involved. */}
-        <div className="relative z-40 flex items-center gap-1">
-          <ToolbarBtn
-            icon={avState.isMicOn ? "mic" : "mic_off"}
-            label="Mic"
-            active={avState.isMicOn}
-            className={avState.isMicOn ? "" : "!text-rose-400 !bg-rose-950/40"}
-            onClick={() => videoStripRef.current?.toggleMic()}
-          />
-          <ToolbarBtn
-            icon={avState.isCameraOn ? "videocam" : "videocam_off"}
-            label="Camera"
-            active={avState.isCameraOn}
-            className={avState.isCameraOn ? "" : "!text-rose-400 !bg-rose-950/40"}
-            onClick={() => videoStripRef.current?.toggleCamera()}
-          />
-          <ToolbarBtn
-            icon="screen_share"
-            label="Share"
-            active={avState.isScreenSharing}
-            className={avState.isScreenSharing ? "!text-blue-400 !bg-blue-900/40" : ""}
-            onClick={() => videoStripRef.current?.toggleScreenShare()}
-            title={avState.isScreenSharing ? "Stop screen share" : "Share your screen"}
-          />
-          <div className="w-px h-6 bg-[#2d2e3b] mx-1" />
-          <ToolbarBtn
-            icon={pdfLoadState.loading ? "hourglass_empty" : "description"}
-            label="Documents"
-            onClick={() => setShowPreFlightWizard(true)}
-            title="Change or reload the class presentation material"
-          />
+        {/* Tools group. relative + z-40: see the backdrop-stacking comment
+            above the backdrop div — without this, every button here (and
+            in the Navigation/Action groups below) needed two clicks
+            whenever a popup was already open. */}
+        {/* No `overflow-x-auto` here: it makes `overflow-y` compute to auto
+            too, which clipped every tool's `bottom-full` popover (pen /
+            highlighter / eraser / shapes / fill). The row is a fixed set of
+            small buttons that fits any desktop width. */}
+        <div className="relative z-40 flex items-center gap-1 min-w-0 flex-wrap sm:flex-nowrap">
+          {/* Pen tool with Screenshot 3 customizer */}
+          <div className="relative">
+            <ToolbarBtn
+              icon={PEN_STYLES.find((s) => s.id === penStyle)?.icon || "edit"}
+              label="Pen"
+              active={tool === "pen"}
+              onClick={() => {
+                setTool("pen");
+                setOpenPopup((p) => (p === "pen" ? null : "pen"));
+              }}
+            />
+            {openPopup === "pen" && (
+              <div className="absolute bottom-full left-0 mb-3 z-50 bg-[#161722] border border-[#2d2e3b] rounded-2xl p-4 shadow-2xl w-[32rem] flex flex-col gap-4 text-white">
+                {/* Header (Screenshot 3) */}
+                <div className="flex items-center justify-between border-b border-[#2d2e3b] pb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-blue-400 text-xl">
+                      {PEN_STYLES.find((s) => s.id === penStyle)?.icon || "edit"}
+                    </span>
+                    <h3 className="text-sm font-bold text-gray-100">
+                      {PEN_STYLES.find((s) => s.id === penStyle)?.label || "Hard-tipped"} pen
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setOpenPopup(null)}
+                    className="text-gray-400 hover:text-white transition"
+                  >
+                    <span className="material-symbols-outlined text-lg">close</span>
+                  </button>
+                </div>
+
+                {/* Thickness Slider with Live Dot (Screenshot 3) */}
+                <div className="bg-[#10111a] border border-[#242634] rounded-xl p-3 flex items-center justify-between gap-4">
+                  <span className="text-xs text-gray-300 font-medium">Thickness</span>
+                  <input
+                    type="range"
+                    min={1}
+                    max={30}
+                    value={size}
+                    onChange={(e) => setSize(Number(e.target.value))}
+                    className="flex-1 accent-blue-500 h-1.5 bg-gray-700 rounded-lg cursor-pointer"
+                  />
+                  <span className="text-xs font-mono font-bold text-gray-200 w-8 text-right">{size}px</span>
+                  <div className="w-9 h-9 rounded-full bg-[#1b1c28] border border-[#2d2e3b] flex items-center justify-center shrink-0">
+                    <div
+                      className="rounded-full transition-all"
+                      style={{
+                        width: Math.max(3, Math.min(22, size)),
+                        height: Math.max(3, Math.min(22, size)),
+                        backgroundColor: color,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Split: Pen Styles (Left) & Color Palette 3x4 Grid (Right) (Screenshot 3) */}
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Left: Pen Styles */}
+                  <div className="bg-[#10111a] border border-[#242634] rounded-xl p-3 flex flex-col gap-2">
+                    <span className="text-xs font-semibold text-gray-400 mb-1">Pen Styles</span>
+                    <div className="grid grid-cols-2 gap-2">
+                      {PEN_STYLES.map((ps) => (
+                        <button
+                          key={ps.id}
+                          type="button"
+                          onClick={() => setPenStyle(ps.id)}
+                          className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs transition gap-1.5 ${
+                            penStyle === ps.id
+                              ? "bg-blue-600/20 border-blue-500 text-white font-semibold"
+                              : "bg-[#161722] border-[#2d2e3b] text-gray-400 hover:text-gray-200 hover:border-gray-600"
+                          }`}
+                        >
+                          <span className="material-symbols-outlined text-lg">{ps.icon}</span>
+                          <span>{ps.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Right: 3x4 Color Grid (Screenshot 3) */}
+                  <div className="bg-[#10111a] border border-[#242634] rounded-xl p-3 flex flex-col justify-between">
+                    <div>
+                      <span className="text-xs font-semibold text-gray-400 block mb-2 text-center">Color</span>
+                      <div className="grid grid-cols-3 gap-2 place-items-center">
+                        {PEN_PALETTE_COLORS.map((c) => (
+                          <button
+                            key={c}
+                            type="button"
+                            onClick={() => setColor(c)}
+                            className={`w-8 h-8 rounded-xl border shadow-md transition transform hover:scale-110 ${
+                              color.toLowerCase() === c.toLowerCase()
+                                ? "ring-2 ring-blue-500 ring-offset-2 ring-offset-[#10111a] border-white"
+                                : "border-transparent"
+                            }`}
+                            style={{ backgroundColor: c }}
+                            title={c}
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    <label className="mt-3 flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-[#2d2e3b] bg-[#161722] hover:bg-[#202130] text-xs text-gray-300 font-medium cursor-pointer transition">
+                      <span className="material-symbols-outlined text-sm text-blue-400">colorize</span>
+                      Custom
+                      <input
+                        type="color"
+                        value={color}
+                        onChange={(e) => setColor(e.target.value)}
+                        className="opacity-0 w-0 h-0 absolute"
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Highlight tool with floating pill (Screenshot 4) */}
+          <div className="relative">
+            <ToolbarBtn
+              icon="border_color"
+              label="Highlight"
+              active={tool === "highlighter" || tool === "highlighter-fade"}
+              onClick={() => {
+                setTool((prev) => (prev === "highlighter-fade" ? "highlighter-fade" : "highlighter"));
+                setOpenPopup((p) => (p === "highlight" ? null : "highlight"));
+              }}
+            />
+            {openPopup === "highlight" && (
+              <div className="absolute bottom-full left-0 mb-3 z-40 bg-[#161722] border border-[#2d2e3b] rounded-2xl p-2.5 shadow-2xl flex flex-col gap-2.5 min-w-max">
+                {/* Two highlighter variants: stays until erased, or fades on
+                    its own after a few seconds (like the laser pointer, but
+                    a real synced stroke, not a teacher-local-only effect). */}
+                <div className="flex rounded-lg bg-[#0d0e16] border border-[#2d2e3b] p-0.5 gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setTool("highlighter")}
+                    className={`flex-1 px-2.5 py-1 rounded-md text-[10px] font-bold transition ${
+                      tool === "highlighter" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-gray-200"
+                    }`}
+                  >
+                    Permanent
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTool("highlighter-fade")}
+                    className={`flex-1 px-2.5 py-1 rounded-md text-[10px] font-bold transition ${
+                      tool === "highlighter-fade" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-gray-200"
+                    }`}
+                  >
+                    Fades Away
+                  </button>
+                </div>
+                <div className="flex flex-row items-center gap-2.5">
+                  {HIGHLIGHT_COLORS.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => {
+                        setColor(c);
+                      }}
+                      className={`w-7 h-7 rounded-full border shadow-md transition transform hover:scale-110 ${
+                        color.toLowerCase() === c.toLowerCase()
+                          ? "ring-2 ring-white ring-offset-2 ring-offset-[#161722] border-transparent"
+                          : "border-gray-600/60 opacity-85 hover:opacity-100"
+                      }`}
+                      style={{ backgroundColor: c }}
+                      title={c}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Laser pointer — transient glow, auto-fades, never saved */}
+          <div className="relative">
+            <ToolbarBtn
+              icon="my_location"
+              label="Laser"
+              active={tool === "laser"}
+              onClick={() => {
+                setTool("laser");
+                setOpenPopup(null);
+              }}
+            />
+          </div>
+
+          <div className="relative">
+            <ToolbarBtn
+              icon="ink_eraser"
+              label="Eraser"
+              active={tool === "stroke-eraser" || tool === "object-eraser"}
+              onClick={() => setOpenPopup((p) => (p === "eraser" ? null : "eraser"))}
+            />
+            {openPopup === "eraser" && (
+              <div className="absolute bottom-full left-0 mb-2 z-50 bg-[#1a1b23] border border-[#2d2e3b] rounded-2xl p-2 shadow-2xl w-56 flex flex-col gap-2 text-white">
+                <div className="flex flex-col gap-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTool("stroke-eraser");
+                      setOpenPopup(null);
+                    }}
+                    className={`flex items-center gap-3 p-2 rounded-xl text-xs font-semibold text-left transition ${
+                      tool === "stroke-eraser" ? "bg-blue-600/20 text-blue-400 font-bold border border-blue-500/40" : "text-gray-300 hover:bg-gray-800"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-base text-blue-400">ink_eraser</span> Stroke Eraser
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTool("object-eraser");
+                      setOpenPopup(null);
+                    }}
+                    className={`flex items-center gap-3 p-2 rounded-xl text-xs font-semibold text-left transition ${
+                      tool === "object-eraser" ? "bg-blue-600/20 text-blue-400 font-bold border border-blue-500/40" : "text-gray-300 hover:bg-gray-800"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-base text-blue-400">delete_sweep</span> Object Eraser
+                  </button>
+                </div>
+
+                <div className="border-t border-[#2d2e3b] pt-2">
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-1">Eraser Size</span>
+                  <div className="mt-1.5 flex gap-1.5">
+                    {ERASER_SIZES.map((sz) => (
+                      <button
+                        key={sz.id}
+                        type="button"
+                        onClick={() => {
+                          setEraserRadius(sz.radius);
+                          if (tool !== "stroke-eraser" && tool !== "object-eraser") setTool("stroke-eraser");
+                        }}
+                        className={`flex-1 flex flex-col items-center gap-1 py-1.5 rounded-lg text-[10px] font-bold transition ${
+                          eraserRadius === sz.radius
+                            ? "bg-blue-600 text-white ring-1 ring-blue-400"
+                            : "bg-white/5 text-gray-300 hover:bg-white/10"
+                        }`}
+                      >
+                        <span
+                          className="rounded-full bg-current"
+                          style={{ width: Math.min(18, sz.radius / 3), height: Math.min(18, sz.radius / 3) }}
+                        />
+                        {sz.id}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Subject-Wise Smart Shapes (Screenshot 5) */}
+          <div className="relative">
+            <ToolbarBtn
+              icon="category"
+              label="Shapes"
+              active={openPopup === "shapes"}
+              onClick={() => setOpenPopup((p) => (p === "shapes" ? null : "shapes"))}
+            />
+            {openPopup === "shapes" && (
+              <div className="absolute bottom-full left-0 mb-3 z-50 bg-[#161722] border border-[#2d2e3b] rounded-2xl p-3 shadow-2xl w-72 flex flex-col gap-2 text-white">
+                {/* Category Switcher Tabs: General, Phys, Chem, Bio */}
+                <div className="grid grid-cols-4 gap-1 bg-[#10111a] p-1 rounded-xl border border-[#242634]">
+                  {(
+                    [
+                      { id: "general", label: "General", icon: "square_foot" },
+                      { id: "phys", label: "Phys", icon: "bolt" },
+                      { id: "chem", label: "Chem", icon: "science" },
+                      { id: "bio", label: "Bio", icon: "grain" },
+                    ] as const
+                  ).map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setShapeSubjectTab(tab.id)}
+                      className={`flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] font-bold transition ${
+                        shapeSubjectTab === tab.id
+                          ? "bg-blue-600 text-white shadow-md"
+                          : "text-gray-400 hover:text-white"
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-xs">{tab.icon}</span>
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Chemistry gets a second row of subcategory pills — the
+                    library is too large (~48 structures) for one flat grid,
+                    per the categorized-submenu requirement. */}
+                {shapeSubjectTab === "chem" && (
+                  <div className="flex flex-wrap gap-1">
+                    {CHEM_SUBCATEGORY_ORDER.map((sub) => (
+                      <button
+                        key={sub}
+                        type="button"
+                        onClick={() => setChemSubcategory(sub)}
+                        className={`px-2 py-1 rounded-lg text-[10px] font-bold transition ${
+                          chemSubcategory === sub
+                            ? "bg-emerald-600 text-white"
+                            : "bg-[#10111a] text-gray-400 hover:text-white border border-[#242634]"
+                        }`}
+                      >
+                        {CHEM_SUBCATEGORY_LABELS[sub]}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* 2-Column Grid of Shapes, sourced from the one authoritative
+                    registry (src/lib/canvas/shapes/registry.ts) — every id
+                    here is unique and maps 1:1 to a real renderer. */}
+                <div className="grid grid-cols-2 gap-1.5 max-h-64 overflow-y-auto pr-1">
+                  {SHAPE_DEFS.filter(
+                    (s) =>
+                      s.category === shapeSubjectTab &&
+                      (shapeSubjectTab !== "chem" || s.subcategory === chemSubcategory)
+                  ).map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => {
+                        setTool(s.id);
+                        setOpenPopup(null);
+                      }}
+                      className={`flex items-center gap-2 p-2 rounded-xl border text-xs text-left transition ${
+                        tool === s.id
+                          ? "bg-blue-600/20 border-blue-500 text-white font-bold"
+                          : "bg-[#10111a] border-[#242634] text-gray-300 hover:border-gray-500"
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-sm text-blue-400 shrink-0">{s.icon}</span>
+                      <span className="truncate">{s.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="w-px h-6 bg-[#2d2e3b] mx-2" />
+
+          <button
+            type="button"
+            onClick={() => setTool("fill")}
+            className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${
+              tool === "fill" ? "text-amber-400 bg-amber-900/30 ring-1 ring-amber-500/50" : "text-gray-400 hover:text-white hover:bg-gray-800"
+            }`}
+            title="Paint Bucket (Color Fill Tool)"
+          >
+            <span className="material-symbols-outlined text-lg">format_color_fill</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setTool("text")}
+            className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${
+              tool === "text" ? "text-blue-400 bg-blue-900/30" : "text-gray-400 hover:text-white hover:bg-gray-800"
+            }`}
+            title="Text"
+          >
+            <span className="material-symbols-outlined text-lg">text_fields</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setTool("select")}
+            className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${
+              tool === "select" ? "text-blue-400 bg-blue-900/30" : "text-gray-400 hover:text-white hover:bg-gray-800"
+            }`}
+            title="Select / Move"
+          >
+            <span className="material-symbols-outlined text-lg">arrow_selector_tool</span>
+          </button>
+          <button
+            type="button"
+            disabled={!engineRef.current?.canUndo()}
+            onClick={() => {
+              engineRef.current?.undo();
+              setUndoRedoTick((t) => t + 1);
+            }}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 disabled:opacity-30 transition-colors"
+            title="Undo"
+          >
+            <span className="material-symbols-outlined text-lg">undo</span>
+          </button>
+          <button
+            type="button"
+            disabled={!engineRef.current?.canRedo()}
+            onClick={() => {
+              engineRef.current?.redo();
+              setUndoRedoTick((t) => t + 1);
+            }}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 disabled:opacity-30 transition-colors"
+            title="Redo"
+          >
+            <span className="material-symbols-outlined text-lg">redo</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => engineRef.current?.clearInk()}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+            title="Clear page"
+          >
+            <span className="material-symbols-outlined text-lg">layers_clear</span>
+          </button>
         </div>
 
         {/* Navigation group */}
@@ -3475,8 +3293,6 @@ export function TeacherLiveClassRoom({
               </div>
             )}
           </div>
-
-          <ToolbarBtn icon="settings" label="Settings" onClick={() => setSettingsOpen(true)} />
         </div>
       </footer>
 

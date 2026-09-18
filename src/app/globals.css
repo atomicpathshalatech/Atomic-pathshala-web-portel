@@ -217,17 +217,14 @@
   height: 100vh;
   height: 100dvh; /* mobile browser chrome must not hide the toolbar */
   grid-template-columns: minmax(0, 1fr);
-  /* The header row is `minmax(h, auto)`, not a bare `h` - a bare fixed
-     track silently clips anything that doesn't fit. The header holds a
-     flex-wrap row of badges/timers/buttons whose combined width isn't
-     bounded (a long class title, or - as happened with the test-lab's
-     placeholder far-future end date - a "Time Left: 3272166h" string)
-     could wrap onto a second line. With a fixed track, the header's own
-     box stayed at `--live-header-h` while `.live-shell`'s overflow-hidden
-     clipped that wrapped second line entirely - Settings and End Class
-     were still in the DOM, just invisible. `auto` lets the row grow to
-     fit real content instead; the canvas row (`minmax(0, 1fr)`) absorbs
-     whatever's left, so this only costs canvas height on the rare wrap. */
+  /* `minmax(h, auto)`, not a bare `h` - the header holds a flex-wrap row
+     of badges/timers/buttons with no bounded total width (a long class
+     title, or a remaining-time string blown up by an unusually far-future
+     scheduled end date, can wrap onto a second line). A bare fixed track
+     clips that wrapped line entirely, since .live-shell has
+     overflow-hidden - Settings/End Class stayed in the DOM but were
+     invisible. `auto` lets the row grow to fit real content instead; the
+     canvas row (`minmax(0, 1fr)`) absorbs whatever's left. */
   grid-template-rows: minmax(var(--live-header-h), auto) minmax(0, 1fr) var(--live-toolbar-h);
   grid-template-areas:
     "header"
@@ -237,7 +234,6 @@
 
 .live-rail {
   grid-area: rail;
-  display: flex;
 }
 .live-header {
   grid-area: header;
@@ -252,27 +248,12 @@
   grid-area: panel;
 }
 
-/* Below lg neither the rail nor the panel is part of the grid: both slide
-   in over the canvas as fixed overlays instead of permanently eating a
-   chunk of a small screen. Both stay mounted at all times - only
-   `transform` changes (the panel holds VideoStrip's single LiveKit
-   connection; the rail has no such constraint, but the same toggle
-   pattern keeps mobile/tablet behavior consistent between the two). */
+/* Below lg the panel is not part of the grid: it slides in over the
+   canvas instead of permanently eating a third of a small screen. It stays
+   mounted at all times - only `transform` changes. */
 @media (max-width: 1023.98px) {
   .live-rail {
-    position: fixed;
-    top: var(--live-header-h);
-    left: 0;
-    bottom: var(--live-toolbar-h);
-    width: min(4.5rem, 22vw);
-    z-index: 40;
-    transform: translateX(-101%);
-    transition: transform 0.2s ease;
-    will-change: transform;
-    box-shadow: 12px 0 32px rgba(0, 0, 0, 0.45);
-  }
-  .live-rail[data-open="true"] {
-    transform: translateX(0);
+    display: none;
   }
   .live-panel {
     position: fixed;
@@ -291,17 +272,24 @@
   }
 }
 
-/* Tablet: taller chrome, rail/panel remain overlays until lg. */
+/* Tablet: the rail comes back, the panel is still an overlay. */
 @media (min-width: 768px) {
   .live-shell {
     --live-header-h: 3.5rem; /* 56px */
     --live-toolbar-h: 4rem; /* 64px */
+    grid-template-columns: var(--live-rail-w) minmax(0, 1fr);
+    grid-template-areas:
+      "rail header"
+      "rail canvas"
+      "rail toolbar";
+  }
+  .live-rail {
+    display: flex;
   }
 }
 
-/* Laptop: the rail and panel both join the grid — the panel slightly
-   narrower than on desktop so the board keeps a usable share of a 1024px
-   screen. */
+/* Laptop: the panel joins the grid, slightly narrower than on desktop so
+   the board keeps a usable share of a 1024px screen. */
 @media (min-width: 1024px) {
   .live-shell {
     --live-panel-w: 15rem; /* 240px — trimmed so the white board gets more width */
