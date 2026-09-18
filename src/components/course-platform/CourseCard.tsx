@@ -86,7 +86,17 @@ export function CourseCard({
   course: CourseData;
   index?: number;
 }) {
-  const theme = BATCH_GRADIENT_THEMES[index % BATCH_GRADIENT_THEMES.length];
+  const theme =
+    BATCH_GRADIENT_THEMES[index % BATCH_GRADIENT_THEMES.length] ||
+    BATCH_GRADIENT_THEMES[0] || {
+      cardBg: "bg-white",
+      cardBorder: "border-slate-200",
+      headerGrad: "from-emerald-600 to-teal-600",
+      accentText: "text-emerald-700",
+      pillBg: "bg-emerald-50 text-emerald-800 border-emerald-200",
+      btnGrad: "bg-emerald-600 text-white",
+      statBorder: "border-emerald-100",
+    };
 
   const discount =
     course.originalPrice > course.price
