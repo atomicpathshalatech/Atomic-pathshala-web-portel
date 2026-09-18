@@ -16,7 +16,22 @@ export default async function BannersPage() {
     return <div className="glass-card rounded-2xl p-8 text-center text-on-surface-variant font-body-md">You don&apos;t have access to Banners.</div>;
   }
 
-  const banners = await prisma.banner.findMany({ orderBy: [{ priority: "desc" }, { order: "asc" }] });
+  const [banners, batches, testSeries, tests] = await Promise.all([
+    prisma.banner.findMany({ orderBy: [{ priority: "desc" }, { order: "asc" }] }),
+    prisma.batch.findMany({
+      select: { id: true, name: true, targetExam: true },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.testSeries.findMany({
+      select: { id: true, name: true, examType: true },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.test.findMany({
+      select: { id: true, name: true },
+      orderBy: { createdAt: "desc" },
+      take: 60,
+    }),
+  ]);
 
   return (
     <div className="space-y-stack-lg max-w-5xl">
@@ -36,6 +51,16 @@ export default async function BannersPage() {
           ctaUrl: b.ctaUrl,
           status: b.status,
           priority: b.priority,
+        }))}
+        batches={batches}
+        testSeries={testSeries.map((ts) => ({
+          id: ts.id,
+          name: ts.name,
+          targetExam: ts.examType,
+        }))}
+        tests={tests.map((t) => ({
+          id: t.id,
+          name: t.name,
         }))}
       />
     </div>
