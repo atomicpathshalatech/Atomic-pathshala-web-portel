@@ -1329,11 +1329,17 @@ export function TeacherLiveClassRoom({
         (currentPg.objects?.length ?? 0) === 0 &&
         !isBackgroundImageUrl(currentPg.background);
 
+      // Phase 1 — render every page and create (or reuse) its WhiteboardPage
+      // row. Kept sequential: rendering shares one pdf.js worker, and page
+      // numbering is assigned by the server from a running count, which
+      // isn't safe to race across parallel create calls. Nothing here
+      // crosses the network with image bytes yet, so this phase alone is
+      // fast even for a large deck.
+      const prepared: { pageId: string; pageNumber: number; dataUrl: string }[] = [];
       for (let i = 1; i <= doc.numPages; i++) {
-        const pct = Math.round(((i - 1) / doc.numPages) * 100);
         setPdfLoadState({
           loading: true,
-          progress: `Loading presentation… ${pct}% (slide ${i} of ${doc.numPages})`,
+          progress: `Preparing slide ${i} of ${doc.numPages}…`,
           error: null,
         });
 
@@ -1376,21 +1382,53 @@ export function TeacherLiveClassRoom({
           targetPageNumber = newPage.pageNumber;
         }
 
-        const background = await uploadPageBackgroundImage(sessionId, targetPageId, dataUrl);
-        setWbSession((prev) =>
-          prev
-            ? { ...prev, pages: prev.pages.map((p) => (p.id === targetPageId ? { ...p, background } : p)) }
-            : prev
-        );
-
-        if (firstNewPageNumber === null) {
-          firstNewPageNumber = targetPageNumber;
-        }
+        prepared.push({ pageId: targetPageId, pageNumber: targetPageNumber, dataUrl });
       }
 
+      firstNewPageNumber = prepared[0]?.pageNumber ?? null;
+
+      // Jump to the first slide now — the teacher doesn't need to wait for
+      // every background image to finish uploading before the board is
+      // usable; each slide's image just pops in as its own upload lands.
       if (firstNewPageNumber !== null) {
         await switchToPage(firstNewPageNumber);
       }
+
+      // Phase 2 — upload every rendered image in parallel, a handful at a
+      // time, instead of one full network round-trip per page in strict
+      // sequence (the actual reason a large deck crawled visibly page by
+      // page). Each upload targets its own distinct page id, so there's
+      // nothing for concurrent requests to race against.
+      if (prepared.length > 0) {
+        setPdfLoadState({
+          loading: true,
+          progress: `Uploading ${prepared.length} slide${prepared.length === 1 ? "" : "s"}…`,
+          error: null,
+        });
+
+        const UPLOAD_CONCURRENCY = 6;
+        let firstUploadError: string | null = null;
+        for (let start = 0; start < prepared.length; start += UPLOAD_CONCURRENCY) {
+          const batch = prepared.slice(start, start + UPLOAD_CONCURRENCY);
+          await Promise.all(
+            batch.map(async ({ pageId, dataUrl }) => {
+              try {
+                const background = await uploadPageBackgroundImage(sessionId, pageId, dataUrl);
+                setWbSession((prev) =>
+                  prev
+                    ? { ...prev, pages: prev.pages.map((p) => (p.id === pageId ? { ...p, background } : p)) }
+                    : prev
+                );
+              } catch (err) {
+                firstUploadError =
+                  firstUploadError ?? (err instanceof Error ? err.message : "Could not upload a rendered slide image.");
+              }
+            })
+          );
+        }
+        if (firstUploadError) throw new Error(firstUploadError);
+      }
+
       setPdfLoadState({ loading: false, progress: null, error: null });
     } catch (err) {
       if (firstNewPageNumber !== null) switchToPage(firstNewPageNumber).catch(() => undefined);
