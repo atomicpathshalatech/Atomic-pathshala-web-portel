@@ -54,19 +54,28 @@ export async function uploadFileToR2(
 
   // Step 1: Request presigned upload URL from backend
   if (onProgress) onProgress(10);
-  const requestRes = await fetch("/api/files/upload-url", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      filename: file.name,
-      mimeType: file.type || "application/octet-stream",
-      fileType,
-      prefix,
-      subPath,
-      entityId,
-      visibility,
-    }),
-  });
+  let requestRes: Response;
+  try {
+    requestRes = await fetch("/api/files/upload-url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        filename: file.name,
+        mimeType: file.type || "application/octet-stream",
+        fileType,
+        prefix,
+        subPath,
+        entityId,
+        visibility,
+      }),
+    });
+  } catch {
+    // A raw fetch() rejection here (the browser's bare "Failed to fetch",
+    // not an HTTP error status) means the request never got a response at
+    // all - offline, DNS, or the connection was reset. This call is
+    // same-origin, so it is never a CORS failure.
+    throw new Error("Could not reach the server to start the upload. Check your internet connection and try again.");
+  }
 
   if (!requestRes.ok) {
     const errBody = await requestRes.json().catch(() => ({}));
@@ -99,7 +108,17 @@ export async function uploadFileToR2(
       }
     };
 
-    xhr.onerror = () => reject(new Error("Network error occurred during storage upload."));
+    xhr.onerror = () =>
+      // xhr.status stays 0 for both a true network drop and a CORS
+      // rejection (the browser blocks the response before JS can see its
+      // status) - R2's bucket CORS policy must allow this exact origin for
+      // the direct-upload path to work; the caller falls back to the
+      // server-proxy route when this rejects.
+      reject(
+        new Error(
+          `Direct cloud upload was blocked (this may be a storage CORS policy issue for this domain). Falling back to server upload.`
+        )
+      );
     xhr.onabort = () => reject(new Error("Storage upload was aborted."));
 
     xhr.send(file);

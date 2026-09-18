@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireStudentSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
@@ -137,6 +138,36 @@ export default async function WatchLecturePage({ params }: { params?: { lectureI
         }
       }
 
+      // A real class was matched, but there is no playable recording yet -
+      // this used to fall back to a hardcoded placeholder YouTube video
+      // (silently playing unrelated content instead of the lecture, with no
+      // indication anything was wrong). Show the actual state instead: the
+      // recording pipeline is still working, or it genuinely failed, rather
+      // than a fake "broken player" that looks like the wrong video loaded.
+      if (!resolvedRecUrl) {
+        const recStatus = schedule.liveWhiteboardSession?.recordingStatus;
+        const failed = recStatus === "FAILED" || recStatus === "RECORDING_FAILED";
+        return (
+          <div className="min-h-screen-safe w-full bg-[#031635] text-white flex flex-col items-center justify-center gap-4 px-6 text-center">
+            <span className={`material-symbols-outlined text-5xl ${failed ? "text-rose-400" : "text-blue-400"}`}>
+              {failed ? "error" : "hourglass_top"}
+            </span>
+            <h1 className="text-lg font-bold">{schedule.title}</h1>
+            <p className="text-sm text-slate-300 max-w-md">
+              {failed
+                ? "This class's recording could not be generated. Please contact support if you need this lecture."
+                : "Recording is being processed. It will be available shortly — please check back in a few minutes."}
+            </p>
+            <Link
+              href="/schedule"
+              className="mt-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold transition"
+            >
+              Back to Schedule
+            </Link>
+          </div>
+        );
+      }
+
       return (
         <AtomicVideoPlayer
           lectureId={schedule.id}
@@ -144,7 +175,7 @@ export default async function WatchLecturePage({ params }: { params?: { lectureI
           subjectTitle={schedule.subject || schedule.chapter?.subject?.title || "Live Class"}
           chapterTitle={schedule.chapter?.title || "Class Recording"}
           educatorName={schedule.teacher?.user?.name || "Atomic Faculty"}
-          videoUrl={resolvedRecUrl || "https://www.youtube.com/embed/dQw4w9WgXcQ"}
+          videoUrl={resolvedRecUrl}
         />
       );
     }
