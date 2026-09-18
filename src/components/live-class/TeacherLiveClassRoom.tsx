@@ -1317,13 +1317,7 @@ export function TeacherLiveClassRoom({
       const pdfjsLib = await import("pdfjs-dist");
       pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
       const doc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-
       const existingPageCount = activeSess.pages.length;
-      if (existingPageCount + doc.numPages > 50) {
-        throw new Error(
-          `This PDF has ${doc.numPages} pages, which would push the board past its 50-page-per-class limit (currently ${existingPageCount}).`
-        );
-      }
 
       // Reuse the current page as slide 1's canvas only when it's the
       // untouched default first page of a brand-new session — never

@@ -7,8 +7,6 @@ import { resolveWhiteboardAccess } from "@/lib/whiteboard/access";
 import { pushPageChanged } from "@/lib/whiteboard/board-mirror";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 
-const MAX_PAGES_PER_SESSION = 50;
-
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions);
@@ -41,10 +39,6 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
     if (wbSession.status === "ENDED") return apiError("This session has ended.", 409);
 
     const pageCount = await prisma.whiteboardPage.count({ where: { sessionId: params.id } });
-    if (pageCount >= MAX_PAGES_PER_SESSION) {
-      return apiError(`A live board is capped at ${MAX_PAGES_PER_SESSION} pages per class.`, 400);
-    }
-
     const nextPageNumber = pageCount + 1;
 
     const [page] = await prisma.$transaction([

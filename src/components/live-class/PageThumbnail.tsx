@@ -6,9 +6,9 @@ import { renderPageThumbnail } from "@/lib/canvas/thumbnail-renderer";
 
 /** Fixed 16:9 thumbnail size (CSS px) — matches the virtual canvas's own
  * aspect ratio so nothing is stretched. Small enough that rendering every
- * thumbnail in an open preview panel (capped at 50 pages, see
- * MAX_PAGES_PER_SESSION) is cheap; each is a handful of ctx calls on this
- * small a canvas, not a full-resolution re-render. */
+ * thumbnail in an open preview panel is cheap regardless of page count;
+ * each is a handful of ctx calls on this small a canvas, not a
+ * full-resolution re-render. */
 const THUMB_WIDTH = 160;
 const THUMB_HEIGHT = 90;
 
