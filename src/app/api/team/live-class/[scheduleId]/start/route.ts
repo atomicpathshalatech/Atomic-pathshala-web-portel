@@ -150,6 +150,26 @@ export async function POST(
     const scheduledStart = schedule.startsAt ? new Date(schedule.startsAt) : now;
     const scheduledEnd = schedule.endsAt ? new Date(schedule.endsAt) : new Date(now.getTime() + 60 * 60 * 1000);
 
+    // Auto-generated first slide (chapter name, lecture number, the
+    // teacher's own profile photo — no manual upload) — generated BEFORE
+    // the transaction below and baked directly into page 1 at creation, so
+    // there's no window where a client could load a still-blank page 1.
+    // Only needed when page 1 is actually about to be (re)created — the
+    // two branches below ("brand new session" and "isNewOccurrence" reset)
+    // are the only places `pages: { create: ... } }` appears; reconnecting
+    // to an already-live session touches no pages at all.
+    const willCreatePage1 = !existingSession || isNewOccurrence;
+    let startSlideUrl: string | null = null;
+    if (willCreatePage1) {
+      try {
+        const { generateCreative } = await import("@/lib/creative/engine");
+        const result = await generateCreative("LECTURE_START_SLIDE", params.scheduleId);
+        if (result.ok) startSlideUrl = result.assetUrl;
+      } catch (slideErr) {
+        console.error("[live_class_start_slide_error]", slideErr);
+      }
+    }
+
     const transactionOps: any[] = [
       prisma.batchSchedule.update({
         where: { id: params.scheduleId },
@@ -201,7 +221,7 @@ export async function POST(
             youtubeArchiveThumbnailStatus: "NOT_STARTED",
             youtubeArchiveThumbnailError: null,
             youtubeArchiveMetadataSnapshot: Prisma.JsonNull,
-            pages: { create: { pageNumber: 1, objects: [] } },
+            pages: { create: { pageNumber: 1, objects: [], ...(startSlideUrl && { background: startSlideUrl }) } },
           }),
         },
         create: {
@@ -220,6 +240,7 @@ export async function POST(
             create: {
               pageNumber: 1,
               objects: [],
+              ...(startSlideUrl && { background: startSlideUrl }),
             },
           },
         },
@@ -324,21 +345,6 @@ export async function POST(
       });
     } catch (err) {
       console.error("[LIVE_CLASS_STARTED notification error]", err);
-    }
-
-    // 8. Auto-generated first slide (spec section 10) — the educator never
-    // manually creates/uploads this. Resolved straight from this same
-    // BatchSchedule (educator, chapter, lecture, batch — all already known
-    // here), rendered by the one shared creative engine, and cached: a
-    // second "Start Class" call (a refresh, a retry) reuses the same
-    // asset instead of re-rendering.
-    let startSlideUrl: string | null = null;
-    try {
-      const { generateCreative } = await import("@/lib/creative/engine");
-      const result = await generateCreative("LECTURE_START_SLIDE", params.scheduleId);
-      if (result.ok) startSlideUrl = result.assetUrl;
-    } catch (slideErr) {
-      console.error("[live_class_start_slide_error]", slideErr);
     }
 
     return apiSuccess({

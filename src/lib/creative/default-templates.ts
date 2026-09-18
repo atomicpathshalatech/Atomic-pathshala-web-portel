@@ -128,14 +128,17 @@ export const DEFAULT_LECTURE_TEMPLATE: LayoutConfig = {
   ],
 };
 
+// Chapter name at top, lecture number just below it, teacher photo on the
+// side — the exact layout the "auto first slide" feature asked for, rather
+// than the earlier photo-on-top/everything-centered arrangement.
 export const DEFAULT_LECTURE_START_SLIDE_TEMPLATE: LayoutConfig = {
   ...SLIDE,
   educatorArea: {
     shape: "circle",
-    xPct: 38,
-    yPct: 8,
-    widthPct: 24,
-    heightPct: 38,
+    xPct: 68,
+    yPct: 26,
+    widthPct: 26,
+    heightPct: 46,
     itemWidthPct: 100,
     itemHeightPct: 100,
     maxCount: 1,
@@ -145,10 +148,10 @@ export const DEFAULT_LECTURE_START_SLIDE_TEMPLATE: LayoutConfig = {
     borderWidthPx: 6,
   },
   text: [
-    { field: "educatorName", xPct: 10, yPct: 50, maxWidthPct: 80, fontSizePx: 34, fontWeight: 700, color: "#f8fafc", align: "center" },
-    { field: "chapterName", xPct: 10, yPct: 60, maxWidthPct: 80, fontSizePx: 44, fontWeight: 800, color: "#facc15", align: "center", uppercase: true },
-    { field: "lectureLabel", xPct: 10, yPct: 70, maxWidthPct: 80, fontSizePx: 26, fontWeight: 700, color: "#e2e8f0", align: "center", letterSpacingPx: 2 },
-    { field: "batchName", xPct: 10, yPct: 82, maxWidthPct: 80, fontSizePx: 22, fontWeight: 600, color: "#93c5fd", align: "center" },
+    { field: "chapterName", xPct: 6, yPct: 14, maxWidthPct: 56, fontSizePx: 48, fontWeight: 800, color: "#f8fafc", align: "left", uppercase: true },
+    { field: "lectureLabel", xPct: 6, yPct: 30, maxWidthPct: 56, fontSizePx: 30, fontWeight: 700, color: "#facc15", align: "left", letterSpacingPx: 2 },
+    { field: "educatorName", xPct: 60, yPct: 78, maxWidthPct: 36, fontSizePx: 22, fontWeight: 600, color: "#e2e8f0", align: "center" },
+    { field: "batchName", xPct: 6, yPct: 88, maxWidthPct: 56, fontSizePx: 20, fontWeight: 600, color: "#93c5fd", align: "left" },
   ],
 };
 

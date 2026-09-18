@@ -78,6 +78,19 @@ export async function POST(request: NextRequest) {
 
       await prisma.whiteboardPage.deleteMany({ where: { sessionId: existing.id } });
 
+      // Auto-generated first slide (chapter name, lecture number, the
+      // teacher's own profile photo — never manually uploaded) — page 1 is
+      // about to be recreated below for this new occurrence, so bake it in
+      // directly rather than leaving a window where page 1 is blank.
+      let startSlideUrl: string | null = null;
+      try {
+        const { generateCreative } = await import("@/lib/creative/engine");
+        const result = await generateCreative("LECTURE_START_SLIDE", input.batchScheduleId);
+        if (result.ok) startSlideUrl = result.assetUrl;
+      } catch (slideErr) {
+        console.error("[live_class_start_slide_error]", slideErr);
+      }
+
       const resumed = await prisma.whiteboardSession.update({
         where: { id: existing.id },
         data: {
@@ -112,7 +125,7 @@ export async function POST(request: NextRequest) {
           youtubeArchiveThumbnailStatus: "NOT_STARTED",
           youtubeArchiveThumbnailError: null,
           youtubeArchiveMetadataSnapshot: Prisma.JsonNull,
-          pages: { create: { pageNumber: 1, objects: [] } },
+          pages: { create: { pageNumber: 1, objects: [], ...(startSlideUrl && { background: startSlideUrl }) } },
         },
         include: { pages: { orderBy: { pageNumber: "asc" } } },
       });
@@ -235,6 +248,18 @@ export async function POST(request: NextRequest) {
       if (!teacher) return apiError("Assigned teacher record could not be found.", 400);
     }
 
+    // Auto-generated first slide — see the comment on the equivalent block
+    // in the "resumed" branch above; this is the brand-new-session path
+    // (a teacher's very first entry into this scheduled class's room).
+    let startSlideUrl: string | null = null;
+    try {
+      const { generateCreative } = await import("@/lib/creative/engine");
+      const result = await generateCreative("LECTURE_START_SLIDE", schedule.id);
+      if (result.ok) startSlideUrl = result.assetUrl;
+    } catch (slideErr) {
+      console.error("[live_class_start_slide_error]", slideErr);
+    }
+
     const created = await prisma.whiteboardSession.create({
       data: {
         batchScheduleId: schedule.id,
@@ -243,7 +268,7 @@ export async function POST(request: NextRequest) {
         scheduledStart: schedule.startsAt ? new Date(schedule.startsAt) : now,
         scheduledEnd: schedule.endsAt ? new Date(schedule.endsAt) : new Date(now.getTime() + 60 * 60 * 1000),
         livePhase: "PREPARING",
-        pages: { create: { pageNumber: 1, objects: [] } },
+        pages: { create: { pageNumber: 1, objects: [], ...(startSlideUrl && { background: startSlideUrl }) } },
       },
       include: { pages: { orderBy: { pageNumber: "asc" } } },
     });

@@ -64,6 +64,25 @@ export async function POST(
     const sessionStart = schedule.startsAt ? new Date(schedule.startsAt) : new Date();
     const sessionEnd = schedule.endsAt ? new Date(schedule.endsAt) : new Date(Date.now() + 60 * 60 * 1000);
 
+    // Auto-generated first slide (chapter name, lecture number, the
+    // teacher's own profile photo) — only needed the first time this
+    // session's page 1 is ever created; a teacher preparing slides on an
+    // already-existing session (the `update` branch below) never touches
+    // `pages`, so there's nothing to (re)generate for. Baking it in here
+    // (rather than only in the "Start Class" route) means a teacher who
+    // prepares slides in advance sees the same auto slide already sitting
+    // on page 1 well before they ever click Start Class.
+    let startSlideUrl: string | null = null;
+    if (!schedule.liveWhiteboardSession) {
+      try {
+        const { generateCreative } = await import("@/lib/creative/engine");
+        const result = await generateCreative("LECTURE_START_SLIDE", params.scheduleId);
+        if (result.ok) startSlideUrl = result.assetUrl;
+      } catch (slideErr) {
+        console.error("[live_class_start_slide_error]", slideErr);
+      }
+    }
+
     const wbSession = await prisma.whiteboardSession.upsert({
       where: { batchScheduleId: params.scheduleId },
       update: {
@@ -94,6 +113,7 @@ export async function POST(
           create: {
             pageNumber: 1,
             objects: [],
+            ...(startSlideUrl && { background: startSlideUrl }),
           },
         },
       },

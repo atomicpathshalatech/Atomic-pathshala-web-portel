@@ -627,9 +627,15 @@ export function TeacherLiveClassRoom({
           } else if (
             sess?.presentationUrl &&
             sess?.pages.length === 1 &&
-            !isBackgroundImageUrl(sess.pages[0]?.background)
+            (sess.pages[0]?.objects?.length ?? 0) === 0
           ) {
-            // Auto-load PDF onto canvas pages when entering class
+            // Auto-load PDF onto canvas pages when entering class. Checking
+            // for an un-annotated single page (not "no background image")
+            // because page 1 always carries the auto-generated first slide
+            // (chapter/lecture/teacher photo) as its background now -
+            // handleLoadPresentationPdf's own reuseCurrentPage check already
+            // sees that image background and correctly appends the PDF
+            // starting at page 2 instead of overwriting page 1 with it.
             handleLoadPresentationPdf(sess);
           }
         }
