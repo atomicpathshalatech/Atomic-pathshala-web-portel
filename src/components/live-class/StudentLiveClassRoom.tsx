@@ -10,7 +10,6 @@ import { YouTubeLivePlayer } from "@/components/live-class/YouTubeLivePlayer";
 import { VideoStrip } from "@/components/live-class/VideoStrip";
 import { RecordingPlayer } from "@/components/live-class/RecordingPlayer";
 import { StudentPostClassFeedback } from "@/components/live-class/StudentPostClassFeedback";
-import { DraggableFloatingCamera } from "@/components/live-class/DraggableFloatingCamera";
 import {
   playPollAlert,
   playPollRevealChime,
@@ -48,6 +47,11 @@ interface WhiteboardSessionData {
   totalExtendedMinutes?: number;
   chatEnabled?: boolean;
 }
+
+// Diameter (px) of the floating teacher-camera bubble shown when the
+// teacher's Material & Setup camera shape is Circular — see floatCamPos
+// in StudentLiveClassRoom.
+const FLOAT_CAM_SIZE = 104;
 
 function isBackgroundImageUrl(background: string | undefined): background is string {
   return typeof background === "string" && /^https?:\/\//.test(background);
@@ -248,6 +252,73 @@ export function StudentLiveClassRoom({
   const [activeMobileTab, setActiveMobileTab] = useState<"chat" | "quiz" | "info">("chat");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showChat, setShowChat] = useState(true);
+
+  // Floating teacher camera position — used only on desktop when the
+  // teacher's Material & Setup camera shape is Circular (see isCameraCircle
+  // below). <VideoStrip> is mounted exactly once, in a single stable
+  // wrapper div that never moves in the React tree; only that wrapper's
+  // own CSS switches (docked in the sidebar vs. a fixed-position draggable
+  // bubble over the main stage), so the LiveKit connection it holds is
+  // never dropped by a camera-shape change arriving mid-class.
+  const [floatCamPos, setFloatCamPos] = useState<{ x: number; y: number }>({ x: 16, y: 70 });
+  const floatCamDraggingRef = useRef(false);
+  const floatCamDragOffsetRef = useRef({ x: 0, y: 0 });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const saved = localStorage.getItem("atomic_student_floating_cam_pos");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.x === "number" && typeof parsed.y === "number") {
+          setFloatCamPos(parsed);
+          return;
+        }
+      }
+    } catch {
+      // fallback below
+    }
+    setFloatCamPos({ x: Math.max(16, window.innerWidth - FLOAT_CAM_SIZE - 16), y: 70 });
+  }, []);
+
+  function handleFloatCamPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest("button")) return;
+    floatCamDraggingRef.current = true;
+    const rect = e.currentTarget.getBoundingClientRect();
+    floatCamDragOffsetRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+
+  function handleFloatCamPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!floatCamDraggingRef.current) return;
+    const maxX = Math.max(10, window.innerWidth - FLOAT_CAM_SIZE - 12);
+    const maxY = Math.max(10, window.innerHeight - FLOAT_CAM_SIZE - 12);
+    let nx = e.clientX - floatCamDragOffsetRef.current.x;
+    let ny = e.clientY - floatCamDragOffsetRef.current.y;
+    nx = Math.max(8, Math.min(nx, maxX));
+    ny = Math.max(56, Math.min(ny, maxY));
+    setFloatCamPos({ x: nx, y: ny });
+  }
+
+  function handleFloatCamPointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    if (!floatCamDraggingRef.current) return;
+    floatCamDraggingRef.current = false;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
+    setFloatCamPos((pos) => {
+      try {
+        localStorage.setItem("atomic_student_floating_cam_pos", JSON.stringify(pos));
+      } catch {
+        // ignore
+      }
+      return pos;
+    });
+  }
 
   // Manual orientation mode toggle ("auto" | "portrait" | "landscape")
   const [orientationMode, setOrientationMode] = useState<"auto" | "portrait" | "landscape">("auto");
@@ -1146,8 +1217,31 @@ export function StudentLiveClassRoom({
 
         {/* Right Fixed Sidebar (Teacher Video on Top + Live Chat Console on Bottom) */}
         <aside className="w-80 xl:w-88 h-full shrink-0 flex flex-col bg-[#10121d] rounded-2xl border border-slate-800/80 overflow-hidden shadow-2xl">
-          {/* Pinned Teacher Video on Top */}
-          <div className="h-48 sm:h-52 bg-black relative border-b border-slate-800 shrink-0">
+          {/* Teacher Video — docked at the top of the sidebar normally.
+              When the teacher's Material & Setup camera shape is Circular,
+              this exact same wrapper instead floats as a small draggable
+              circular bubble over the main slide area (fixed positioning
+              escapes the sidebar visually without moving in the DOM), and
+              takes up no height in the sidebar's normal flow, so chat fills
+              that space below. The <VideoStrip> mount itself never moves or
+              unmounts — only this wrapper's own CSS does — so a camera-shape
+              change arriving mid-class never drops the call. */}
+          <div
+            onPointerDown={isCameraCircle ? handleFloatCamPointerDown : undefined}
+            onPointerMove={isCameraCircle ? handleFloatCamPointerMove : undefined}
+            onPointerUp={isCameraCircle ? handleFloatCamPointerUp : undefined}
+            onPointerCancel={isCameraCircle ? handleFloatCamPointerUp : undefined}
+            style={
+              isCameraCircle
+                ? { position: "fixed", top: floatCamPos.y, left: floatCamPos.x, width: FLOAT_CAM_SIZE, height: FLOAT_CAM_SIZE, touchAction: "none" }
+                : undefined
+            }
+            className={
+              isCameraCircle
+                ? "z-40 rounded-full overflow-hidden border-2 border-blue-500 shadow-2xl bg-black cursor-grab active:cursor-grabbing select-none"
+                : "h-48 sm:h-52 bg-black relative border-b border-slate-800 shrink-0"
+            }
+          >
             {isDesktopViewport && (
               <VideoStrip
                 whiteboardSessionId={wbSession?.id || batchScheduleId}
