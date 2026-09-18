@@ -9,6 +9,7 @@ import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 
 import { pusherServer, sessionChannel, WB_EVENTS } from "@/lib/realtime/pusher-server";
 import { createApprovedSpeakerToken, videoRoomName } from "@/lib/livekit/server";
+import { setParticipantPublishPermission } from "@/lib/livekit/room-service";
 import { deleteFile, keyFromPublicUrl } from "@/lib/storage";
 
 /** Teacher acts on one raised hand: APPROVE, REJECT, or CLEAR/RESOLVE. */
@@ -54,6 +55,12 @@ export async function PATCH(
         console.warn("LiveKit speaker token generation warning:", err);
       }
 
+      // The student is already connected to the room (subscribe-only) by
+      // the time they raise a hand — swapping the token client-side after
+      // that is a no-op (see the comment on setParticipantPublishPermission
+      // in room-service.ts). This is what actually unlocks their mic/camera.
+      await setParticipantPublishPermission(videoRoomName(params.id), handRaise.student.userId, true);
+
       await prisma.handRaiseEvent.update({
         where: { id: params.handRaiseId },
         data: {
@@ -98,7 +105,12 @@ export async function PATCH(
         console.error("Pusher trigger error:", err);
       }
     } else {
-      // Default: RESOLVE / CLEAR
+      // Default: RESOLVE / CLEAR — ending an already-approved speaking turn
+      // (REJECT above only ever applies to a still-pending, never-approved
+      // request, so there is nothing to revoke there).
+      if (handRaise.liveKitGranted) {
+        await setParticipantPublishPermission(videoRoomName(params.id), handRaise.student.userId, false);
+      }
       await prisma.handRaiseEvent.update({
         where: { id: params.handRaiseId },
         data: {

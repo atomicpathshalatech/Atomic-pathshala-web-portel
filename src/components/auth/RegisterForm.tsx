@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { Eye, EyeOff } from "lucide-react";
-import { verifyWithMsg91Widget } from "@/lib/msg91-widget";
+import { verifyWithMsg91Widget, loadMsg91Widget } from "@/lib/msg91-widget";
 
 type Step = "phone" | "details" | "done";
 
@@ -29,6 +29,13 @@ export function RegisterForm() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Preload MSG91 widget script eagerly so it is ready immediately when student taps verify
+    loadMsg91Widget().catch(() => {
+      // Background preload error can be retried on click
+    });
+  }, []);
 
   const normalisedPhone = phone.replace(/\D/g, "").replace(/^0+/, "").replace(/^91(?=\d{10}$)/, "");
   const phoneValid = /^[6-9]\d{9}$/.test(normalisedPhone);

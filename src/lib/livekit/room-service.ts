@@ -27,6 +27,38 @@ function getRoomServiceClient(): RoomServiceClient {
 }
 
 /**
+ * Pushes a publish-permission change onto an ALREADY-CONNECTED participant's
+ * live connection. This is the actual fix for "approved but mic/camera never
+ * turn on": livekit-client's Room.connect() short-circuits and returns
+ * immediately whenever the room is already connected
+ * (`if (this.state === ConnectionState.Connected) { ...; return
+ * Promise.resolve(); }` — confirmed by reading node_modules/livekit-client's
+ * own source), so simply swapping the `token` prop on <LiveKitRoom> after a
+ * student is already in the room is a no-op and never actually upgrades
+ * their live grant. RoomServiceClient.updateParticipant() instead pushes the
+ * new permission directly over LiveKit's signaling channel to the
+ * already-connected client, which is what actually unlocks
+ * setMicrophoneEnabled(true)/setCameraEnabled(true) on their side. Mirrors
+ * the exact grant shape createApprovedSpeakerToken already issues. Never
+ * throws — callers treat this as best-effort, logging any failure instead
+ * of blocking the approve/connect/disconnect request itself.
+ */
+export async function setParticipantPublishPermission(
+  roomName: string,
+  identity: string,
+  canPublish: boolean
+): Promise<void> {
+  try {
+    const client = getRoomServiceClient();
+    await client.updateParticipant(roomName, identity, {
+      permission: { canPublish, canSubscribe: true, canPublishData: false },
+    });
+  } catch (err) {
+    console.error(`[room-service] setParticipantPublishPermission failed for ${identity} in ${roomName}:`, err);
+  }
+}
+
+/**
  * Force-mutes every track a participant currently has published (audio
  * and/or video). Never throws — callers use this as a best-effort backstop
  * after the DB/Pusher disconnect has already completed, so a LiveKit-side

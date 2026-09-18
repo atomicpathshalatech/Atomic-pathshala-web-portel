@@ -195,6 +195,286 @@ const StudentWhiteboardMirror = forwardRef<WhiteboardMirrorHandle, {
   );
 });
 
+/**
+ * The one shared "people & engagement" panel — same two tabs (Live Chat,
+ * Questions), same content, rendered under the teacher's camera dock on
+ * both the desktop sidebar and the mobile bottom section, mirroring the
+ * teacher room's own camera-on-top-tabs-below pattern. A live poll shows
+ * as an inline card here instead of floating over the whiteboard/canvas —
+ * it used to be a separate overlay drawer positioned outside this panel
+ * entirely, which is what made it feel disconnected from "the class".
+ * Doubt submission (previously a separate modal) is now the Questions
+ * tab's own body, so raising a hand never leaves this screen either.
+ */
+function StudentEngagementPanel({
+  wbSessionId,
+  currentUserId,
+  isThemeDark,
+  activeTab,
+  setActiveTab,
+  quiz,
+  quizError,
+  mySelection,
+  remainingSec,
+  submitAnswer,
+  submittingAnswer,
+  quizDismissed,
+  setQuizDismissed,
+  handRaised,
+  handRaiseBusy,
+  participationType,
+  onToggleHandRaise,
+  onSubmitHandRaise,
+  doubtImageInputRef,
+  onDoubtImageSelected,
+  uploadingDoubtImage,
+  doubtImageError,
+}: {
+  wbSessionId?: string;
+  currentUserId: string;
+  isThemeDark: boolean;
+  activeTab: "chat" | "questions";
+  setActiveTab: (t: "chat" | "questions") => void;
+  quiz: LiveQuiz | null;
+  quizError: string | null;
+  mySelection: string | null;
+  remainingSec: number;
+  submitAnswer: (optionKey: string) => void;
+  submittingAnswer: boolean;
+  quizDismissed: boolean;
+  setQuizDismissed: (v: boolean) => void;
+  handRaised: boolean;
+  handRaiseBusy: boolean;
+  participationType: "CHAT" | "AUDIO" | "VIDEO";
+  onToggleHandRaise: () => void;
+  onSubmitHandRaise: (type: "CHAT" | "AUDIO" | "VIDEO") => void;
+  doubtImageInputRef: React.RefObject<HTMLInputElement>;
+  onDoubtImageSelected: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  uploadingDoubtImage: boolean;
+  doubtImageError: string | null;
+}) {
+  return (
+    <div className="flex-1 min-h-0 flex flex-col">
+      {/* Live poll — inline card, visible regardless of active tab, never a
+          floating overlay over the canvas. */}
+      {quiz && !quizDismissed && (
+        <div className="m-2.5 mb-0 bg-[#13172b] border-2 border-blue-500 rounded-2xl p-3.5 shadow-xl space-y-2.5 shrink-0 animate-in fade-in slide-in-from-top-1 duration-200">
+          <div className="flex items-center justify-between pb-1 border-b border-blue-900/60">
+            <h3 className="text-xs font-black text-white flex items-center gap-1.5 min-w-0">
+              <span className="w-2 h-2 rounded-full bg-blue-400 animate-ping shrink-0" />
+              <span className="truncate">{quiz.questionText || "Live Class Poll"}</span>
+            </h3>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {quiz.status === "ACTIVE" ? (
+                <span className="text-[11px] font-mono font-black text-slate-950 bg-amber-400 border border-amber-300 px-2 py-0.5 rounded-full">
+                  {remainingSec}s
+                </span>
+              ) : (
+                <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-500/50 px-2 py-0.5 rounded-full">
+                  {quiz.status === "REVEALED" ? "Revealed" : "Closed"}
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => setQuizDismissed(true)}
+                className="text-slate-400 hover:text-white p-0.5 rounded hover:bg-slate-800 transition"
+                title="Dismiss"
+              >
+                <span className="material-symbols-outlined text-base">close</span>
+              </button>
+            </div>
+          </div>
+          {quizError && <p className="text-[11px] text-rose-400 font-medium">{quizError}</p>}
+          {quiz.status === "REVEALED" && (
+            <div
+              className={`text-[11px] font-bold px-2.5 py-1.5 rounded-lg animate-in fade-in duration-200 flex items-center gap-1.5 ${
+                mySelection === quiz.correctOption
+                  ? "bg-emerald-500/20 text-emerald-300"
+                  : mySelection
+                  ? "bg-rose-500/20 text-rose-300"
+                  : "bg-blue-500/20 text-blue-300"
+              }`}
+            >
+              {mySelection === quiz.correctOption ? "🎉 Correct!" : mySelection ? "❌ Incorrect." : "Poll ended."} Correct option: {quiz.correctOption}
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            {quiz.options.map((o) => {
+              const selected = mySelection === o.key;
+              const revealed = quiz.status === "REVEALED";
+              const isCorrect = revealed && quiz.correctOption === o.key;
+              const isWrong = revealed && selected && quiz.correctOption !== o.key;
+              return (
+                <button
+                  key={o.key}
+                  type="button"
+                  disabled={Boolean(mySelection) || quiz.status !== "ACTIVE" || submittingAnswer}
+                  onClick={() => submitAnswer(o.key)}
+                  className={`text-left px-2.5 py-2 rounded-lg border-2 text-[11px] font-bold transition active:scale-[0.98] touch-manipulation ${
+                    isCorrect
+                      ? "border-emerald-400 bg-emerald-600 text-white"
+                      : isWrong
+                      ? "border-rose-500 bg-rose-950/80 text-rose-200"
+                      : selected
+                      ? "border-white bg-blue-600 text-white"
+                      : "bg-[#1a2038] hover:bg-[#252d4e] border-[#333d6b] text-white"
+                  } disabled:cursor-default`}
+                >
+                  <span className="font-mono font-black mr-1.5">{o.key}.</span>
+                  <span className="truncate">{o.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Tab bar — exactly two tabs */}
+      <div className="flex border-b border-slate-800 px-2 pt-2 shrink-0 bg-[#0a0b12] gap-1">
+        <button
+          type="button"
+          onClick={() => setActiveTab("chat")}
+          className={`flex-1 px-3 py-2 text-xs font-bold rounded-t-lg flex items-center justify-center gap-1.5 transition-colors border-b-2 ${
+            activeTab === "chat"
+              ? "text-blue-400 border-blue-500 bg-blue-950/20"
+              : "text-slate-400 border-transparent hover:text-slate-200"
+          }`}
+        >
+          <span className="material-symbols-outlined text-sm">chat</span>
+          Live Chat
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("questions")}
+          className={`flex-1 px-3 py-2 text-xs font-bold rounded-t-lg flex items-center justify-center gap-1.5 transition-colors border-b-2 relative ${
+            activeTab === "questions"
+              ? "text-blue-400 border-blue-500 bg-blue-950/20"
+              : "text-slate-400 border-transparent hover:text-slate-200"
+          }`}
+        >
+          <span className="material-symbols-outlined text-sm">help_center</span>
+          Questions
+          {handRaised && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse absolute top-1.5 right-3" />}
+        </button>
+      </div>
+
+      {/* Tab body */}
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+        {activeTab === "chat" ? (
+          <div className="flex-1 min-h-0 p-2 flex flex-col">
+            {wbSessionId ? (
+              <MessagesPanel
+                whiteboardSessionId={wbSessionId}
+                currentUserId={currentUserId}
+                role="STUDENT"
+                theme={isThemeDark ? "dark" : "light"}
+              />
+            ) : (
+              <div className="h-full flex items-center justify-center text-xs text-slate-500">
+                Connecting live chat...
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
+            {handRaised ? (
+              <div className="bg-amber-950/60 border border-amber-500/50 rounded-xl p-3.5 space-y-2.5">
+                <div className="flex items-center gap-2 text-amber-300 text-xs font-bold">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                  {participationType === "AUDIO"
+                    ? "Requested to speak (audio)"
+                    : participationType === "VIDEO"
+                    ? "Requested to speak (video)"
+                    : "Doubt sent to teacher"}
+                  — waiting for teacher
+                </div>
+                <button
+                  type="button"
+                  disabled={handRaiseBusy}
+                  onClick={onToggleHandRaise}
+                  className="w-full py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition disabled:opacity-60"
+                >
+                  Lower Hand / Cancel
+                </button>
+              </div>
+            ) : (
+              <>
+                <p className="text-xs text-slate-400">Choose how you&apos;d like to ask your doubt:</p>
+                <button
+                  type="button"
+                  onClick={() => onSubmitHandRaise("AUDIO")}
+                  disabled={handRaiseBusy}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl border border-slate-700 hover:border-blue-500 bg-slate-800/60 hover:bg-blue-950/30 text-left transition group"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
+                    <span className="material-symbols-outlined text-lg">mic</span>
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="text-xs font-bold text-white">Request to Speak (Audio)</h4>
+                    <p className="text-[10px] text-slate-400">Mic enabled once the teacher approves.</p>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onSubmitHandRaise("VIDEO")}
+                  disabled={handRaiseBusy}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl border border-slate-700 hover:border-blue-500 bg-slate-800/60 hover:bg-blue-950/30 text-left transition group"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
+                    <span className="material-symbols-outlined text-lg">videocam</span>
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="text-xs font-bold text-white">Request Video + Audio</h4>
+                    <p className="text-[10px] text-slate-400">Join as a live video participant.</p>
+                  </div>
+                </button>
+                <div className="w-full flex items-stretch gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => onSubmitHandRaise("CHAT")}
+                    disabled={handRaiseBusy || uploadingDoubtImage}
+                    className="flex-1 flex items-center gap-3 p-3 rounded-xl border border-slate-700 hover:border-slate-500 bg-slate-800/60 hover:bg-slate-800 text-left transition"
+                  >
+                    <div className="w-9 h-9 rounded-xl bg-slate-700/50 text-slate-300 flex items-center justify-center shrink-0">
+                      <span className="material-symbols-outlined text-lg">chat</span>
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="text-xs font-bold text-white">Send Doubt to Teacher</h4>
+                      <p className="text-[10px] text-slate-400">Text alert, or attach a photo below.</p>
+                    </div>
+                  </button>
+                  <input
+                    ref={doubtImageInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={onDoubtImageSelected}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => doubtImageInputRef.current?.click()}
+                    disabled={handRaiseBusy || uploadingDoubtImage}
+                    title="Attach a photo of your doubt (notebook/textbook page)"
+                    className="w-14 shrink-0 flex flex-col items-center justify-center gap-1 rounded-xl border border-slate-700 hover:border-blue-500 bg-slate-800/60 hover:bg-blue-950/30 transition disabled:opacity-60"
+                  >
+                    {uploadingDoubtImage ? (
+                      <span className="material-symbols-outlined text-lg text-blue-400 animate-spin">progress_activity</span>
+                    ) : (
+                      <span className="material-symbols-outlined text-lg text-blue-400">add_a_photo</span>
+                    )}
+                    <span className="text-[9px] font-bold text-slate-400">Photo</span>
+                  </button>
+                </div>
+                {doubtImageError && <p className="text-[11px] text-rose-400">{doubtImageError}</p>}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 async function postJson(url: string, body?: unknown) {
   const res = await fetch(url, {
     method: "POST",
@@ -229,7 +509,6 @@ export function StudentLiveClassRoom({
 
   const [handRaised, setHandRaised] = useState(false);
   const [handRaiseBusy, setHandRaiseBusy] = useState(false);
-  const [handRaiseModalOpen, setHandRaiseModalOpen] = useState(false);
   const [participationType, setParticipationType] = useState<"CHAT" | "AUDIO" | "VIDEO">("AUDIO");
   const [isApprovedSpeaker, setIsApprovedSpeaker] = useState(false);
   const [speakerRequestType, setSpeakerRequestType] = useState<"AUDIO" | "VIDEO" | null>(null);
@@ -258,7 +537,9 @@ export function StudentLiveClassRoom({
     }
   }, [quiz?.status]);
 
-  const [activeMobileTab, setActiveMobileTab] = useState<"chat" | "quiz" | "info">("chat");
+  // Shared between the desktop sidebar and the mobile bottom panel — same
+  // two tabs, same content, in both places (see StudentEngagementPanel).
+  const [activeTab, setActiveTab] = useState<"chat" | "questions">("chat");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showChat, setShowChat] = useState(true);
 
@@ -332,31 +613,15 @@ export function StudentLiveClassRoom({
   // Manual orientation mode toggle ("auto" | "portrait" | "landscape")
   const [orientationMode, setOrientationMode] = useState<"auto" | "portrait" | "landscape">("auto");
 
-  // VisualViewport listener for mobile virtual keyboard and soft-keyboard resize
-  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const update = () => {
-      if (window.visualViewport) {
-        setViewportHeight(window.visualViewport.height);
-      } else {
-        setViewportHeight(window.innerHeight);
-      }
-    };
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener("resize", update);
-      window.visualViewport.addEventListener("scroll", update);
-      update();
-    }
-    window.addEventListener("resize", update);
-    return () => {
-      if (window.visualViewport) {
-        window.visualViewport.removeEventListener("resize", update);
-        window.visualViewport.removeEventListener("scroll", update);
-      }
-      window.removeEventListener("resize", update);
-    };
-  }, []);
+  // The root shell deliberately does NOT track window.visualViewport height
+  // anymore. It used to (a live-resized height so the bottom toolbar
+  // wouldn't hide behind an opening mobile keyboard), but that resize is
+  // exactly what showed up as "the whole screen changes while I'm typing" -
+  // the camera dock, tabs and canvas all visibly compressed/jumped the
+  // moment the keyboard opened. The chat/doubt inputs live inside their own
+  // scrollable tab body (not pinned below unrelated chrome), so a plain
+  // stable 100dvh is enough - the keyboard simply covers what it covers,
+  // same as any normal scrollable page, with nothing else on screen moving.
 
   // Exactly one <VideoStrip> must ever be mounted per student
   const [isDesktopViewport, setIsDesktopViewport] = useState(true);
@@ -707,15 +972,17 @@ export function StudentLiveClassRoom({
         setHandRaiseBusy(false);
       }
     } else {
-      // Show participation choice modal
-      setHandRaiseModalOpen(true);
+      // Doubt submission now lives inline in the Questions tab (previously
+      // a separate modal) — jump the student there instead of popping a
+      // dialog over the class.
+      setActiveTab("questions");
+      setShowChat(true);
     }
   }
 
   async function submitHandRaise(type: "CHAT" | "AUDIO" | "VIDEO", imageUrl?: string) {
     if (!wbSession?.id || handRaiseBusy) return;
     setHandRaiseBusy(true);
-    setHandRaiseModalOpen(false);
     setHandRaised(true);
     setParticipationType(type);
     try {
@@ -765,11 +1032,23 @@ export function StudentLiveClassRoom({
   }
 
   async function handleEndCall() {
-    try {
-      if (wbSession?.id) {
-        await fetch(`/api/whiteboard/sessions/${wbSession.id}/hand-raise`, { method: "DELETE" });
+    if (wbSession?.id) {
+      // Two independent connection types can be active here (hand-raise
+      // approval vs. a teacher-initiated connect) — clear whichever one
+      // actually applies, best-effort. Previously only the hand-raise
+      // DELETE happened; ending a teacher-initiated call only cleared
+      // local state with no server call at all, so the teacher's own view
+      // never learned the call had ended and the student's publish
+      // permission was never revoked server-side ("call doesn't end").
+      await fetch(`/api/whiteboard/sessions/${wbSession.id}/hand-raise`, { method: "DELETE" }).catch(() => {});
+      if (teacherAudioConnected || teacherVideoConnected) {
+        // "self" — the server resolves the caller's own connection for a
+        // student caller regardless of what's in this URL slot.
+        await fetch(`/api/whiteboard/sessions/${wbSession.id}/teacher-connect/self/disconnect`, {
+          method: "POST",
+        }).catch(() => {});
       }
-    } catch {}
+    }
     setIsApprovedSpeaker(false);
     setSpeakerToken(null);
     setSpeakerRequestType(null);
@@ -1011,10 +1290,7 @@ export function StudentLiveClassRoom({
   // ---------------- COMPLETE WHITEBOARD STUDIO (ACTIVE FOR ALL STUDENTS ONCE LIVE) ----------------
   return (
     <div
-      style={{
-        height: viewportHeight ? `${viewportHeight}px` : "100dvh",
-        maxHeight: viewportHeight ? `${viewportHeight}px` : "100dvh",
-      }}
+      style={{ height: "100dvh", maxHeight: "100dvh" }}
       className={`fixed inset-0 w-full flex flex-col overflow-hidden select-none z-50 ${isThemeDark ? "bg-[#0b0d14] text-white" : "bg-slate-900 text-slate-100"}`}
     >
       {/* Top Authoritative Studio Header */}
@@ -1185,96 +1461,6 @@ export function StudentLiveClassRoom({
                 objects={boardObjects}
               />
             ) : null}
-
-            {/* Desktop Quiz / Poll Floating Drawer (High Contrast + Close Button + Auto-Dismiss) */}
-            {quiz && !quizDismissed && (
-              <div className="absolute bottom-4 left-4 right-4 max-w-2xl mx-auto bg-[#13172b]/95 backdrop-blur-md border-2 border-blue-500 shadow-[0_0_35px_rgba(99,102,241,0.35)] rounded-2xl p-4 space-y-3 z-30 animate-in slide-in-from-bottom duration-200">
-                <div className="flex items-center justify-between pb-1 border-b border-blue-900/60">
-                  <h3 className="text-sm font-black text-white flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-ping" />
-                    {quiz.questionText || "Live Class Quiz"}
-                  </h3>
-                  <div className="flex items-center gap-2">
-                    {quiz.status === "ACTIVE" ? (
-                      <span className="text-xs font-mono font-black text-slate-950 bg-amber-400 border border-amber-300 px-2.5 py-0.5 rounded-full shadow">
-                        {remainingSec}s
-                      </span>
-                    ) : (
-                      <span className="text-xs font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-500/50 px-2.5 py-0.5 rounded-full">
-                        {quiz.status === "REVEALED" ? "Results Revealed" : "Quiz Closed"}
-                      </span>
-                    )}
-                    {/* Close (X) button */}
-                    <button
-                      type="button"
-                      onClick={() => setQuizDismissed(true)}
-                      className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
-                      title="Dismiss Quiz"
-                    >
-                      <span className="material-symbols-outlined text-base">close</span>
-                    </button>
-                  </div>
-                </div>
-                {quizError && <p className="text-xs text-rose-400 font-medium">{quizError}</p>}
-                {quiz.status === "REVEALED" && (
-                  <div className="animate-in fade-in slide-in-from-top-1 duration-200">
-                    {mySelection === quiz.correctOption ? (
-                      <div className="p-3 rounded-xl bg-emerald-500/20 border-2 border-emerald-500/60 text-emerald-300 text-xs font-bold flex items-center gap-2.5">
-                        <span className="text-xl">🎉</span>
-                        <div>
-                          <p className="font-extrabold text-white text-sm">Congratulations! Your answer is correct.</p>
-                          <p className="text-[11px] text-emerald-300/90 font-medium">Option {quiz.correctOption} is the correct answer.</p>
-                        </div>
-                      </div>
-                    ) : mySelection ? (
-                      <div className="p-3 rounded-xl bg-rose-500/20 border-2 border-rose-500/60 text-rose-300 text-xs font-bold flex items-center gap-2.5">
-                        <span className="text-xl">❌</span>
-                        <div>
-                          <p className="font-extrabold text-white text-sm">Your answer is incorrect.</p>
-                          <p className="text-[11px] text-rose-300/90 font-medium">The correct answer is Option {quiz.correctOption}.</p>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="p-3 rounded-xl bg-blue-500/20 border-2 border-blue-500/60 text-blue-300 text-xs font-bold flex items-center gap-2.5">
-                        <span className="text-xl">ℹ️</span>
-                        <div>
-                          <p className="font-extrabold text-white text-sm">Poll Ended</p>
-                          <p className="text-[11px] text-blue-300/90 font-medium">The correct answer is Option {quiz.correctOption}.</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                  {quiz.options.map((o) => {
-                    const selected = mySelection === o.key;
-                    const revealed = quiz.status === "REVEALED";
-                    const isCorrect = revealed && quiz.correctOption === o.key;
-                    const isWrong = revealed && selected && quiz.correctOption !== o.key;
-                    return (
-                      <button
-                        key={o.key}
-                        type="button"
-                        disabled={Boolean(mySelection) || quiz.status !== "ACTIVE" || submittingAnswer}
-                        onClick={() => submitAnswer(o.key)}
-                        className={`text-left px-3.5 py-3 rounded-xl border-2 text-xs font-bold transition active:scale-[0.98] touch-manipulation cursor-pointer shadow-md ${
-                          isCorrect
-                            ? "border-emerald-400 bg-emerald-600 text-white shadow-emerald-500/50 ring-2 ring-emerald-300"
-                            : isWrong
-                            ? "border-rose-500 bg-rose-950/80 text-rose-200"
-                            : selected
-                            ? "border-white bg-blue-600 text-white shadow-blue-500/50 ring-2 ring-blue-400 scale-[1.02]"
-                            : "bg-[#1a2038] hover:bg-[#252d4e] border-[#333d6b] hover:border-blue-400 text-white"
-                        } disabled:cursor-default`}
-                      >
-                        <span className={`font-mono font-black mr-2 text-sm pointer-events-none ${selected || isCorrect ? "text-white" : "text-blue-400"}`}>{o.key}.</span>
-                        <span className="truncate pointer-events-none text-white">{o.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
           </div>
         </div>
 
@@ -1348,29 +1534,30 @@ export function StudentLiveClassRoom({
             </div>
           )}
 
-          {/* Sidebar Header Tabs */}
-          <div className="flex border-b border-slate-800 px-3 pt-2 shrink-0 bg-[#0a0b12]">
-            <span className="px-3 py-2 text-xs font-bold text-blue-400 border-b-2 border-blue-500 flex items-center gap-1.5">
-              <span className="material-symbols-outlined text-sm">chat</span>
-              Live Classroom Chat
-            </span>
-          </div>
-
-          {/* Fixed Scrollable Chat Console */}
-          <div className="flex-1 min-h-0 p-2 flex flex-col bg-[#0d0f18]">
-            {wbSession?.id ? (
-              <MessagesPanel
-                whiteboardSessionId={wbSession.id}
-                currentUserId={currentUserId}
-                role="STUDENT"
-                theme="dark"
-              />
-            ) : (
-              <div className="h-full flex items-center justify-center text-xs text-slate-500">
-                Connecting chat...
-              </div>
-            )}
-          </div>
+          <StudentEngagementPanel
+            wbSessionId={wbSession?.id}
+            currentUserId={currentUserId}
+            isThemeDark={isThemeDark}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            quiz={quiz}
+            quizError={quizError}
+            mySelection={mySelection}
+            remainingSec={remainingSec}
+            submitAnswer={submitAnswer}
+            submittingAnswer={submittingAnswer}
+            quizDismissed={quizDismissed}
+            setQuizDismissed={setQuizDismissed}
+            handRaised={handRaised}
+            handRaiseBusy={handRaiseBusy}
+            participationType={participationType}
+            onToggleHandRaise={handleRaiseHandClick}
+            onSubmitHandRaise={submitHandRaise}
+            doubtImageInputRef={doubtImageInputRef}
+            onDoubtImageSelected={handleDoubtImageSelected}
+            uploadingDoubtImage={uploadingDoubtImage}
+            doubtImageError={doubtImageError}
+          />
         </aside>
       </div>
 
@@ -1434,7 +1621,9 @@ export function StudentLiveClassRoom({
           ) : null}
         </div>
 
-        {/* Bottom Interactive Area (Tabs: Chat | Quiz | Details) */}
+        {/* Bottom Interactive Area — same two-tab StudentEngagementPanel as
+            the desktop sidebar (see the "one screen, same layout as the
+            teacher's" comment there). */}
         <div
           className={`flex-1 ${
             orientationMode === "landscape"
@@ -1444,324 +1633,32 @@ export function StudentLiveClassRoom({
               : "landscape:w-2/5"
           } min-h-0 flex flex-col bg-[#10121d] overflow-hidden`}
         >
-          {/* Tab Selection Bar */}
-          <div className="flex items-center justify-around bg-[#0a0b12] border-b border-slate-800 shrink-0 px-2">
-            <button
-              type="button"
-              onClick={() => setActiveMobileTab("chat")}
-              className={`flex-1 py-2.5 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border-b-2 ${
-                activeMobileTab === "chat"
-                  ? "text-blue-400 border-blue-500 bg-blue-950/20"
-                  : "text-slate-400 border-transparent hover:text-slate-200"
-              }`}
-            >
-              <span className="material-symbols-outlined text-base">chat</span>
-              <span>Live Chat</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveMobileTab("quiz")}
-              className={`flex-1 py-2.5 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border-b-2 relative ${
-                activeMobileTab === "quiz"
-                  ? "text-blue-400 border-blue-500 bg-blue-950/20"
-                  : "text-slate-400 border-transparent hover:text-slate-200"
-              }`}
-            >
-              <span className="material-symbols-outlined text-base">quiz</span>
-              <span>Quiz &amp; Polls</span>
-              {quiz && quiz.status === "ACTIVE" && (
-                <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping absolute top-2 right-3" />
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveMobileTab("info")}
-              className={`flex-1 py-2.5 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border-b-2 ${
-                activeMobileTab === "info"
-                  ? "text-blue-400 border-blue-500 bg-blue-950/20"
-                  : "text-slate-400 border-transparent hover:text-slate-200"
-              }`}
-            >
-              <span className="material-symbols-outlined text-base">info</span>
-              <span>Class Info</span>
-            </button>
-          </div>
-
-          {/* Active Tab Body */}
-          <div className="flex-1 min-h-0 overflow-y-auto">
-            {activeMobileTab === "chat" && (
-              <div className="h-full p-2">
-                {wbSession?.id ? (
-                  <MessagesPanel
-                    whiteboardSessionId={wbSession.id}
-                    currentUserId={currentUserId}
-                    role="STUDENT"
-                    theme={isThemeDark ? "dark" : "light"}
-                  />
-                ) : (
-                  <div className="h-full flex items-center justify-center text-xs text-slate-500">
-                    Connecting live chat...
-                  </div>
-                )}
-              </div>
-            )}
-
-            {activeMobileTab === "quiz" && (
-              <div className="p-4 space-y-4">
-                {quiz ? (
-                  <div className="bg-[#13172b] border-2 border-blue-500 rounded-2xl p-4 shadow-2xl space-y-3">
-                    <div className="flex items-center justify-between pb-1 border-b border-blue-900/60">
-                      <h3 className="text-sm font-black text-white flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-ping" />
-                        {quiz.questionText || "Live Class Quiz"}
-                      </h3>
-                      {quiz.status === "ACTIVE" ? (
-                        <span className="text-xs font-mono font-black text-slate-950 bg-amber-400 border border-amber-300 px-2.5 py-0.5 rounded-full shadow">
-                          {remainingSec}s
-                        </span>
-                      ) : (
-                        <span className="text-xs font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-500/50 px-2.5 py-0.5 rounded-full">
-                          {quiz.status === "REVEALED" ? "Results Revealed" : "Closed"}
-                        </span>
-                      )}
-                    </div>
-                    {quizError && <p className="text-xs text-rose-400 font-medium">{quizError}</p>}
-                    {quiz.status === "REVEALED" && (
-                      <div className="animate-in fade-in slide-in-from-top-1 duration-200">
-                        {mySelection === quiz.correctOption ? (
-                          <div className="p-3 rounded-xl bg-emerald-500/20 border-2 border-emerald-500/60 text-emerald-300 text-xs font-bold flex items-center gap-2.5">
-                            <span className="text-xl">🎉</span>
-                            <div>
-                              <p className="font-extrabold text-white text-sm">Congratulations! Your answer is correct.</p>
-                              <p className="text-[11px] text-emerald-300/90 font-medium">Option {quiz.correctOption} is the correct answer.</p>
-                            </div>
-                          </div>
-                        ) : mySelection ? (
-                          <div className="p-3 rounded-xl bg-rose-500/20 border-2 border-rose-500/60 text-rose-300 text-xs font-bold flex items-center gap-2.5">
-                            <span className="text-xl">❌</span>
-                            <div>
-                              <p className="font-extrabold text-white text-sm">Your answer is incorrect.</p>
-                              <p className="text-[11px] text-rose-300/90 font-medium">The correct answer is Option {quiz.correctOption}.</p>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="p-3 rounded-xl bg-blue-500/20 border-2 border-blue-500/60 text-blue-300 text-xs font-bold flex items-center gap-2.5">
-                            <span className="text-xl">ℹ️</span>
-                            <div>
-                              <p className="font-extrabold text-white text-sm">Poll Ended</p>
-                              <p className="text-[11px] text-blue-300/90 font-medium">The correct answer is Option {quiz.correctOption}.</p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    <div className="grid grid-cols-1 gap-2.5">
-                      {quiz.options.map((o) => {
-                        const selected = mySelection === o.key;
-                        const revealed = quiz.status === "REVEALED";
-                        const isCorrect = revealed && quiz.correctOption === o.key;
-                        const isWrong = revealed && selected && quiz.correctOption !== o.key;
-                        return (
-                          <button
-                            key={o.key}
-                            type="button"
-                            disabled={Boolean(mySelection) || quiz.status !== "ACTIVE" || submittingAnswer}
-                            onClick={() => submitAnswer(o.key)}
-                            className={`text-left px-4 py-3 rounded-xl border-2 text-xs font-bold transition active:scale-[0.98] touch-manipulation cursor-pointer shadow-md ${
-                              isCorrect
-                                ? "border-emerald-400 bg-emerald-600 text-white shadow-emerald-500/50 ring-2 ring-emerald-300"
-                                : isWrong
-                                ? "border-rose-500 bg-rose-950/80 text-rose-200"
-                                : selected
-                                ? "border-white bg-blue-600 text-white shadow-blue-500/50 ring-2 ring-blue-400"
-                                : "bg-[#1a2038] hover:bg-[#252d4e] border-[#333d6b] text-white"
-                            } disabled:cursor-default`}
-                          >
-                            <span className={`font-mono font-black mr-2 text-sm pointer-events-none ${selected || isCorrect ? "text-white" : "text-blue-400"}`}>{o.key}.</span>
-                            <span className="pointer-events-none text-white">{o.label}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center py-12 text-slate-500 space-y-2">
-                    <span className="material-symbols-outlined text-3xl">hourglass_empty</span>
-                    <p className="text-xs font-semibold">No active quiz or poll at this moment.</p>
-                    <p className="text-[11px]">When the teacher launches a live poll, it will appear here instantly.</p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {activeMobileTab === "info" && (
-              <div className="p-4 space-y-4 text-xs">
-                {/* Full Teacher Video Preview in Info */}
-                {!isYouTube && (
-                  <div className="space-y-1.5">
-                    <p className="font-bold text-slate-400 text-[11px] uppercase tracking-wider">Teacher Video Stream</p>
-                    <div className="w-full aspect-video rounded-xl overflow-hidden bg-[#0a0b12] border border-slate-800 shadow-md flex flex-col items-center justify-center gap-2">
-                      <div className="w-10 h-10 rounded-2xl bg-blue-500/20 border border-blue-500/40 text-blue-400 flex items-center justify-center">
-                        <span className="material-symbols-outlined text-xl">videocam</span>
-                      </div>
-                      <p className="text-xs font-bold text-white">{teacherName || "Instructor"}</p>
-                      <span className="text-[10px] text-blue-300 flex items-center gap-1.5">
-                        <span className={`w-1.5 h-1.5 rounded-full ${isLive ? "bg-rose-500 animate-ping" : "bg-amber-400 animate-pulse"}`} />
-                        {isLive ? "Live Teaching" : "Awaiting Class"}
-                      </span>
-                    </div>
-                  </div>
-                )}
-
-                <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-3.5 space-y-2">
-                  <div className="flex justify-between items-center py-1 border-b border-slate-800">
-                    <span className="text-slate-400">Batch:</span>
-                    <span className="font-bold text-white truncate max-w-[200px]">{batchName}</span>
-                  </div>
-                  <div className="flex justify-between items-center py-1 border-b border-slate-800">
-                    <span className="text-slate-400">Topic:</span>
-                    <span className="font-bold text-white truncate max-w-[200px]">{scheduleTitle}</span>
-                  </div>
-                  {teacherName && (
-                    <div className="flex justify-between items-center py-1 border-b border-slate-800">
-                      <span className="text-slate-400">Teacher:</span>
-                      <span className="font-bold text-blue-300">{teacherName}</span>
-                    </div>
-                  )}
-                  {wbSession?.presentationName && (
-                    <div className="flex justify-between items-center py-1">
-                      <span className="text-slate-400">Material:</span>
-                      <span className="font-mono text-[11px] text-blue-400">{wbSession.presentationName}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
+          <StudentEngagementPanel
+            wbSessionId={wbSession?.id}
+            currentUserId={currentUserId}
+            isThemeDark={isThemeDark}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            quiz={quiz}
+            quizError={quizError}
+            mySelection={mySelection}
+            remainingSec={remainingSec}
+            submitAnswer={submitAnswer}
+            submittingAnswer={submittingAnswer}
+            quizDismissed={quizDismissed}
+            setQuizDismissed={setQuizDismissed}
+            handRaised={handRaised}
+            handRaiseBusy={handRaiseBusy}
+            participationType={participationType}
+            onToggleHandRaise={handleRaiseHandClick}
+            onSubmitHandRaise={submitHandRaise}
+            doubtImageInputRef={doubtImageInputRef}
+            onDoubtImageSelected={handleDoubtImageSelected}
+            uploadingDoubtImage={uploadingDoubtImage}
+            doubtImageError={doubtImageError}
+          />
         </div>
       </div>
-
-      {/* Student Hand Raise Participation Modal */}
-
-      {handRaiseModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl p-6 shadow-2xl space-y-4 text-white">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-amber-400 text-2xl">back_hand</span>
-                <h3 className="text-base font-bold">Ask Doubt / Participate</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setHandRaiseModalOpen(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
-              >
-                <span className="material-symbols-outlined text-lg">close</span>
-              </button>
-            </div>
-
-            <p className="text-xs text-slate-300">
-              Select how you would like to interact with the teacher once approved:
-            </p>
-
-            <div className="space-y-2.5">
-              <button
-                type="button"
-                onClick={() => submitHandRaise("AUDIO")}
-                disabled={handRaiseBusy}
-                className="w-full flex items-center gap-3 p-3.5 rounded-xl border border-slate-700 hover:border-blue-500 bg-slate-800/60 hover:bg-blue-950/30 text-left transition group"
-              >
-                <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
-                  <span className="material-symbols-outlined text-xl">mic</span>
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-white group-hover:text-blue-300 transition">
-                    Request to Speak (Audio Only)
-                  </h4>
-                  <p className="text-[11px] text-slate-400">
-                    Your microphone will be enabled once teacher approves your request.
-                  </p>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => submitHandRaise("VIDEO")}
-                disabled={handRaiseBusy}
-                className="w-full flex items-center gap-3 p-3.5 rounded-xl border border-slate-700 hover:border-blue-500 bg-slate-800/60 hover:bg-blue-950/30 text-left transition group"
-              >
-                <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
-                  <span className="material-symbols-outlined text-xl">videocam</span>
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-white group-hover:text-blue-300 transition">
-                    Request Video + Audio
-                  </h4>
-                  <p className="text-[11px] text-slate-400">
-                    Join as a live video participant upon teacher approval.
-                  </p>
-                </div>
-              </button>
-
-              <div className="w-full flex items-stretch gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => submitHandRaise("CHAT")}
-                  disabled={handRaiseBusy || uploadingDoubtImage}
-                  className="flex-1 flex items-center gap-3 p-3.5 rounded-xl border border-slate-700 hover:border-slate-500 bg-slate-800/60 hover:bg-slate-800 text-left transition group"
-                >
-                  <div className="w-10 h-10 rounded-xl bg-slate-700/50 text-slate-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
-                    <span className="material-symbols-outlined text-xl">chat</span>
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-white transition">Chat Queue Only</h4>
-                    <p className="text-[11px] text-slate-400">
-                      Alert the teacher, or attach a photo of your doubt.
-                    </p>
-                  </div>
-                </button>
-
-                <input
-                  ref={doubtImageInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  className="hidden"
-                  onChange={handleDoubtImageSelected}
-                />
-                <button
-                  type="button"
-                  onClick={() => doubtImageInputRef.current?.click()}
-                  disabled={handRaiseBusy || uploadingDoubtImage}
-                  title="Attach a photo of your doubt (notebook/textbook page)"
-                  className="w-14 shrink-0 flex flex-col items-center justify-center gap-1 rounded-xl border border-slate-700 hover:border-blue-500 bg-slate-800/60 hover:bg-blue-950/30 transition disabled:opacity-60"
-                >
-                  {uploadingDoubtImage ? (
-                    <span className="material-symbols-outlined text-lg text-blue-400 animate-spin">progress_activity</span>
-                  ) : (
-                    <span className="material-symbols-outlined text-lg text-blue-400">add_a_photo</span>
-                  )}
-                  <span className="text-[9px] font-bold text-slate-400">Photo</span>
-                </button>
-              </div>
-              {doubtImageError && (
-                <p className="text-[11px] text-rose-400 -mt-1">{doubtImageError}</p>
-              )}
-            </div>
-
-            <div className="pt-2 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setHandRaiseModalOpen(false)}
-                className="text-xs text-slate-400 hover:text-white px-3 py-1.5 rounded-lg hover:bg-slate-800 transition"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

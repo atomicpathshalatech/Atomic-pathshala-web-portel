@@ -13,12 +13,14 @@
 
 const SCRIPT_URLS = [
   "https://verify.msg91.com/otp-provider.js",
+  "https://control.msg91.com/app/assets/otp-provider/otp-provider.js",
   "https://verify.phone91.com/otp-provider.js",
 ];
 
 export const MSG91_WIDGET_ID =
   process.env.NEXT_PUBLIC_MSG91_WIDGET_ID?.trim() || "36696a68696e333334323634";
-export const MSG91_WIDGET_TOKEN = process.env.NEXT_PUBLIC_MSG91_WIDGET_TOKEN?.trim() || "";
+export const MSG91_WIDGET_TOKEN =
+  process.env.NEXT_PUBLIC_MSG91_WIDGET_TOKEN?.trim() || "551795TUxFfoO3RRb6aa294dcP1";
 
 export function msg91WidgetConfigured(): boolean {
   return Boolean(MSG91_WIDGET_ID && MSG91_WIDGET_TOKEN);
@@ -33,14 +35,9 @@ declare global {
 let scriptPromise: Promise<void> | null = null;
 
 // How long to wait for window.initSendOTP to appear after the script's own
-// `onload` fires. This used to be a single synchronous check right inside
-// onload, which surfaced "MSG91 widget loaded but initSendOTP is missing"
-// on real accounts whenever the provider script finished a moment before it
-// actually finished assigning the global (an ordinary load race, not a
-// permanent failure) — polling for a few seconds absorbs that without
-// changing behaviour for the genuine failure case.
-const INIT_POLL_INTERVAL_MS = 150;
-const INIT_POLL_TIMEOUT_MS = 4000;
+// `onload` fires.
+const INIT_POLL_INTERVAL_MS = 100;
+const INIT_POLL_TIMEOUT_MS = 12000;
 
 /** User-facing errors from this module are always a short, non-technical
  * sentence — every internal detail (which host failed, what was missing)

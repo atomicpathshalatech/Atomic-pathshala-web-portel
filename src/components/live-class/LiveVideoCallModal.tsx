@@ -64,10 +64,10 @@ export function LiveVideoCallModal({
 
     return (
       <div
-        className={`fixed z-40 transition-all duration-300 ${
+        className={`fixed z-40 transition-all duration-300 left-1/2 -translate-x-1/2 ${
           isMinimized
-            ? "bottom-20 right-4 w-72 bg-slate-900/95 border border-blue-500/60 rounded-2xl p-3 shadow-2xl backdrop-blur-md"
-            : "bottom-20 right-4 sm:right-6 w-80 sm:w-96 bg-[#0f111a]/95 border-2 border-blue-500/80 rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.8)] backdrop-blur-md overflow-hidden"
+            ? "bottom-20 w-72 bg-slate-900/95 border border-blue-500/60 rounded-2xl p-3 shadow-2xl backdrop-blur-md"
+            : "bottom-20 w-80 sm:w-96 bg-[#0f111a]/95 border-2 border-blue-500/80 rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.8)] backdrop-blur-md overflow-hidden"
         }`}
       >
         {/* Header Bar */}

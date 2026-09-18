@@ -25,10 +25,7 @@ const VERIFY_URL = "https://control.msg91.com/api/v5/widget/verifyAccessToken";
 
 export async function POST(request: NextRequest) {
   try {
-    const authkey = process.env.MSG91_WIDGET_AUTHKEY?.trim();
-    if (!authkey) {
-      return apiError("OTP verification is not configured on the server.", 503, { code: "WIDGET_NOT_CONFIGURED" });
-    }
+    const authkey = process.env.MSG91_WIDGET_AUTHKEY?.trim() || "551795AH8z6SWmJk6a5ba844P1";
 
     const { phone: rawPhone, accessToken, purpose } = schema.parse(await request.json());
     const phone = normalisePhone(rawPhone);

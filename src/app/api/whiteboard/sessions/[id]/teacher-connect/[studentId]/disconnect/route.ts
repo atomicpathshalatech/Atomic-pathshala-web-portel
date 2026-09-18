@@ -7,15 +7,27 @@ import { resolveWhiteboardAccess } from "@/lib/whiteboard/access";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { pusherServer, sessionChannel, WB_EVENTS } from "@/lib/realtime/pusher-server";
 import { videoRoomName } from "@/lib/livekit/server";
-import { muteStudentPublishedTracks } from "@/lib/livekit/room-service";
+import { muteStudentPublishedTracks, setParticipantPublishPermission } from "@/lib/livekit/room-service";
 
 /**
- * Teacher disconnects a student's audio/video. Never removes the student
- * from the classroom or the LiveKit room — only clears their publish
- * permission (the client's own setMicrophoneEnabled/setCameraEnabled(false),
- * triggered by the Pusher event below, is the primary mechanism; the
- * server-side mute call is a defense-in-depth backstop for a client that
- * ignores the event).
+ * Disconnects a student's teacher-initiated audio/video connection. Never
+ * removes the student from the classroom or the LiveKit room — only clears
+ * their publish permission (the client's own
+ * setMicrophoneEnabled/setCameraEnabled(false), triggered by the Pusher
+ * event below, is the primary mechanism; the server-side mute call is a
+ * defense-in-depth backstop for a client that ignores the event).
+ *
+ * Either the teacher (any student, via the URL's studentId) or the student
+ * themselves (their own connection only) can call this. Previously only the
+ * teacher could — a student ending the call from their own end-call button
+ * just cleared local UI state with no server call at all, so the
+ * TeacherStudentConnection row stayed CONNECTED forever: the teacher's own
+ * view never learned the call had ended, and the student's publish
+ * permission was never actually revoked server-side ("call cut nahi ho
+ * rahi" — the exact reported symptom). A student caller's own resolved
+ * entityId is used as the target regardless of the URL's studentId, so
+ * there's no way for a student to disconnect someone else's connection by
+ * passing a different id.
  */
 export async function POST(
   _request: NextRequest,
@@ -25,10 +37,13 @@ export async function POST(
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
     const access = await resolveWhiteboardAccess(session.user.id, params.id);
-    if (!access || access.role !== "TEACHER") throw new ForbiddenError();
+    if (!access) throw new ForbiddenError();
+    if (access.role !== "TEACHER" && access.role !== "STUDENT") throw new ForbiddenError();
+
+    const targetStudentId = access.role === "STUDENT" ? access.entityId : params.studentId;
 
     const existing = await prisma.teacherStudentConnection.findUnique({
-      where: { whiteboardSessionId_studentId: { whiteboardSessionId: params.id, studentId: params.studentId } },
+      where: { whiteboardSessionId_studentId: { whiteboardSessionId: params.id, studentId: targetStudentId } },
       include: { student: { include: { user: { select: { id: true } } } } },
     });
     if (!existing) return apiError("No active connection found for this student.", 404);
@@ -41,7 +56,7 @@ export async function POST(
 
     try {
       await pusherServer.trigger(sessionChannel(params.id), WB_EVENTS.TEACHER_CONNECT_UPDATED, {
-        studentId: params.studentId,
+        studentId: targetStudentId,
         studentUserId: existing.student.user.id,
         audioConnected: false,
         videoConnected: false,
@@ -52,6 +67,7 @@ export async function POST(
     }
 
     await muteStudentPublishedTracks(videoRoomName(params.id), existing.student.user.id);
+    await setParticipantPublishPermission(videoRoomName(params.id), existing.student.user.id, false);
 
     return apiSuccess({ disconnected: true });
   } catch (error) {

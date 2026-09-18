@@ -8,6 +8,7 @@ import { resolveWhiteboardAccess } from "@/lib/whiteboard/access";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { pusherServer, sessionChannel, WB_EVENTS } from "@/lib/realtime/pusher-server";
 import { createApprovedSpeakerToken, videoRoomName } from "@/lib/livekit/server";
+import { setParticipantPublishPermission } from "@/lib/livekit/room-service";
 
 const connectSchema = z.object({
   studentId: z.string().min(1),
@@ -71,6 +72,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     } catch (err) {
       console.warn("[teacher-connect] LiveKit token generation warning:", err);
     }
+
+    // Same reasoning as hand-raise approval — the student is already
+    // connected (subscribe-only) by the time the teacher connects them
+    // directly, so the live grant must be pushed onto their existing
+    // connection, not just minted into a token they won't re-fetch.
+    await setParticipantPublishPermission(videoRoomName(params.id), targetStudent.user.id, true);
 
     const now = new Date();
     const connection = await prisma.teacherStudentConnection.upsert({
