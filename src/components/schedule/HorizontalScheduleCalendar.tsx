@@ -587,6 +587,17 @@ function TimelineLectureRow({
     (new Date(item.startsAt).getTime() - clientNow.getTime()) / (1000 * 60)
   );
 
+  // Teacher-only: how many minutes past its scheduled start a Live Class
+  // still hasn't gone live — a visible accountability signal for exactly
+  // what src/lib/batch/late-start-penalty.ts penalizes server-side once it
+  // crosses 5 minutes (this just shows it building up in real time; the
+  // penalty itself is applied when the teacher actually clicks Start
+  // Class, not by this display). Not shown to students - lateness/penalty
+  // tracking is a teacher/admin concern, not something a student acts on.
+  const minutesLate = Math.floor((clientNow.getTime() - new Date(item.startsAt).getTime()) / (1000 * 60));
+  const isLateNotStarted =
+    role === "TEACHER" && item.type === "LIVE_CLASS" && !isLive && !isCompleted && !isCancelled && minutesLate > 0;
+
   return (
     <div className="relative flex gap-3 sm:gap-4 items-start">
       {/* Left Column: Timeline Indicator & Times */}
@@ -599,6 +610,10 @@ function TimelineLectureRow({
               <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-600" />
             </span>
             <span className="text-[10px] font-black uppercase">LIVE</span>
+          </div>
+        ) : isLateNotStarted ? (
+          <div className="flex items-center gap-0.5 text-rose-600 dark:text-rose-400" title={`${minutesLate}m past scheduled start`}>
+            <span className="material-symbols-outlined text-[14px] animate-pulse">error</span>
           </div>
         ) : isStartingSoon ? (
           <div className="flex items-center gap-0.5 text-amber-600 dark:text-amber-400">
@@ -619,9 +634,18 @@ function TimelineLectureRow({
         )}
 
         {/* Start & End Times */}
-        <span className="font-extrabold text-xs sm:text-[13px] text-slate-900 dark:text-white leading-none mt-1">
+        <span
+          className={`font-extrabold text-xs sm:text-[13px] leading-none mt-1 ${
+            isLateNotStarted ? "text-rose-600 dark:text-rose-400" : "text-slate-900 dark:text-white"
+          }`}
+        >
           {startTimeStr}
         </span>
+        {isLateNotStarted && (
+          <span className="text-[9px] font-bold text-rose-600 dark:text-rose-400 leading-tight mt-0.5">
+            {minutesLate}m late
+          </span>
+        )}
         <span className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight mt-0.5">
           {endTimeStr}
         </span>

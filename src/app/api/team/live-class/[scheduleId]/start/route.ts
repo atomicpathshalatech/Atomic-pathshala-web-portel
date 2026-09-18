@@ -257,6 +257,26 @@ export async function POST(
     const updatedSchedule = txResults[0];
     const wbSession = txResults[txResults.length - 1];
 
+    // Late-start compliance penalty — only on the genuine first transition
+    // to LIVE for this occurrence (existingSession.actualStartedAt was
+    // unset going into this request; a reconnect/retry after that point
+    // would already have it set and must never re-penalize the same
+    // start). Compared against the schedule's own startsAt, not `now`
+    // twice, so this reflects server-authoritative clocks only.
+    if (!existingSession?.actualStartedAt && schedule.startsAt) {
+      await import("@/lib/batch/late-start-penalty")
+        .then(({ applyLateStartPenaltyIfDue }) =>
+          applyLateStartPenaltyIfDue({
+            scheduleId: params.scheduleId,
+            teacherId: teacher.id,
+            scheduledStartsAt: new Date(schedule.startsAt!),
+            actualStartedAt: now,
+            startedByUserId: session.user.id,
+          })
+        )
+        .catch((err) => console.error("[late_start_penalty_error]", err));
+    }
+
     // 5. Start Room Recording (Room Composite Egress -> R2) - Idempotent, single identity
     let recordingWarning: string | null = null;
 
