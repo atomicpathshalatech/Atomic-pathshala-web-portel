@@ -52,6 +52,10 @@ export const WB_EVENTS = {
   // message the way a stroke-heavy board does. Sent to sessionChannel (not
   // teacherChannel) since both teacher and students see the same chat.
   MESSAGE_SENT: "message-sent",
+  // Teacher pinned/unpinned a message (WhiteboardMessage.pinnedAt). Carries
+  // the id + new pinnedAt so every client can update that one message
+  // locally without a full history re-fetch.
+  MESSAGE_PINNED: "message-pinned",
   // Pre-class lobby → live transition (WhiteboardSession.livePhase flipping
   // to LIVE when the teacher clicks Start Class). A poller would catch this
   // within 5s anyway (see StudentLiveClassRoom's by-schedule poll), but this
