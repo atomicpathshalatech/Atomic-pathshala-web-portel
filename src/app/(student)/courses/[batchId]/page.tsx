@@ -71,6 +71,7 @@ export default async function BatchCoursePage({
               },
             },
             liveWhiteboardSession: true,
+            classroomSession: { select: { id: true, phase: true } },
           },
         },
         _count: { select: { enrollments: true, schedules: true } },

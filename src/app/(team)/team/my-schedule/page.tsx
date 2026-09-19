@@ -73,6 +73,7 @@ export default async function TeacherMySchedulePage({
             youtubeVideoId: true,
           },
         },
+        classroomSession: { select: { id: true, phase: true } },
       },
     }),
     prisma.doubtBooking.findMany({
@@ -175,6 +176,7 @@ export default async function TeacherMySchedulePage({
           youtubeVideoId: s.liveWhiteboardSession.youtubeVideoId,
         }
       : null,
+    classroomSession: s.classroomSession ? { id: s.classroomSession.id, phase: s.classroomSession.phase } : null,
   }));
 
   const doubtScheduleItems: ScheduleItem[] = doubtBookings.map((b) => ({

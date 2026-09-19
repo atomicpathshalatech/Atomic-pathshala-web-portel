@@ -1,0 +1,57 @@
+# MediaMTX config for the Classroom module's WHIP -> RTMP relay.
+#
+# Role in the system: the teacher's browser publishes camera/mic via WHIP
+# (plain WebRTC, no OBS, no LiveKit) directly to this server. For each live
+# classroom session, the Next.js backend (src/lib/classroom/media-relay.ts)
+# dynamically registers a path here whose "runOnReady" hook pushes that same
+# stream out to YouTube's RTMP ingest via ffmpeg as soon as the teacher's
+# browser starts publishing.
+#
+# Why this exists at all: this app is deployed on Vercel (serverless), which
+# cannot run a persistent FFmpeg/relay process. Cloudflare Stream's WHIP
+# product was evaluated and rejected — its WHIP ingest does not support
+# restreaming/simulcasting to an external RTMP destination (confirmed against
+# Cloudflare's own docs, Sep 2026). MediaMTX is a single static binary that
+# does support WHIP-in + RTMP-out, so it runs as a small, separate, always-on
+# service (NOT on Vercel) — see README.md for deployment.
+#
+# IMPORTANT — verify before deploying: MediaMTX's hook field names have
+# changed across versions. Pin an exact release (README.md) and confirm
+# against that release's own docs that "runOnReady" (fires when a path gets
+# its first publisher) still exists under that name — some versions expose
+# the same behavior as "runOnAvailable". If the field name differs, update
+# src/lib/classroom/media-relay.ts's RUN_ON_READY_FIELD constant to match.
+
+# --- Control API -------------------------------------------------------
+# Bound to localhost only; the nginx.conf reverse proxy in this directory is
+# what actually terminates TLS and enforces a shared-secret bearer token
+# before forwarding to this. Never expose apiAddress directly to the
+# internet.
+api: yes
+apiAddress: 127.0.0.1:9997
+
+# --- WHIP / WebRTC ingest (what the teacher's browser publishes to) ----
+webrtc: yes
+webrtcAddress: :8889
+webrtcEncryption: no
+# Locked down to this app's own origins in production — set via the
+# CLASSROOM_APP_ORIGIN env var at deploy time, do not leave as "*".
+webrtcAllowOrigins: []
+
+# --- Internal RTSP (used only so ffmpeg, running on this same host, can
+# pull the just-ingested stream back out to push it to YouTube) ----------
+rtsp: yes
+rtspAddress: 127.0.0.1:8554
+rtspTransports: [tcp]
+
+# All other protocols this server can speak are left off — this relay has
+# exactly one job (WHIP in, RTMP out to YouTube), it is not a general media
+# server for this app.
+rtmp: no
+hls: no
+srt: no
+
+# Paths are added/removed dynamically per classroom session via the API
+# (POST /v3/config/paths/add/<sessionRelayPath>) from
+# src/lib/classroom/media-relay.ts — nothing is statically declared here.
+paths: {}

@@ -1,0 +1,29 @@
+# Runs the Classroom module's WHIP -> RTMP relay: MediaMTX (media ingest/
+# restream) + nginx (TLS termination, API auth). Deploy this to a small
+# always-on host separate from the main Next.js app (which stays on Vercel
+# and cannot run persistent processes) — e.g. a Fly.io machine or a cheap
+# VPS. See README.md for step-by-step deployment.
+services:
+  mediamtx:
+    # Pin an exact tag before deploying — "latest" is deliberately avoided so
+    # a MediaMTX release doesn't silently change hook field names under you
+    # (see the comment in mediamtx.yml about runOnReady vs runOnAvailable).
+    image: bluenviron/mediamtx:1.9.3
+    restart: unless-stopped
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml:ro
+    # Only exposed to the nginx container, not to the host/internet directly.
+    expose:
+      - "8889" # WHIP/WebRTC
+      - "9997" # control API
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      - mediamtx
+    ports:
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./certs:/etc/letsencrypt:ro

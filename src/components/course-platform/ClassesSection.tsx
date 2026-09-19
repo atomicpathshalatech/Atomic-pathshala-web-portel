@@ -104,6 +104,21 @@ export function ClassesSection({ course }: { course?: any }) {
 
                 {/* Right Action Container */}
                 <div className="flex items-center gap-2 shrink-0 flex-wrap sm:self-center">
+                  {/* Classroom (new, YouTube-Live based module) entry point —
+                      a sibling action alongside Whiteboard's Join Class/Enter
+                      Lobby buttons below, never replacing them. Only shown
+                      once a ClassroomSession has actually been configured for
+                      this schedule; fine-grained waiting/live/ended states
+                      are handled entirely inside the Classroom room itself. */}
+                  {cls.classroomSession && !isCancelled && (
+                    <Link
+                      href={`/classroom/${cls.id}`}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-sm hover:opacity-95 active:scale-95 transition text-center shrink-0"
+                    >
+                      <span className="material-symbols-outlined text-[14px]">smart_display</span>
+                      <span>Classroom</span>
+                    </Link>
+                  )}
                   {isCompleted ? (
                     <>
                       {hasRecording ? (

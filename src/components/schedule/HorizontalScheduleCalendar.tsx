@@ -59,6 +59,12 @@ export interface ScheduleItem {
   } | null;
   bookingId?: string | null;
   studentName?: string | null;
+  // New, independent YouTube-Live Classroom module — present only once a
+  // teacher/admin has configured it for this schedule.
+  classroomSession?: {
+    id: string;
+    phase: string;
+  } | null;
 }
 
 export interface BatchOption {
@@ -778,8 +784,20 @@ function TimelineLectureRow({
             )}
           </div>
 
-          {/* Action Button */}
-          <div className="shrink-0">
+          {/* Action Button(s) */}
+          <div className="shrink-0 flex items-center gap-1.5">
+            {/* Classroom (new, independent YouTube-Live module) entry point
+                — a sibling action next to the existing Whiteboard
+                Enter/Start Classroom button below, never replacing it. */}
+            {item.type === "LIVE_CLASS" && item.classroomSession && !isCancelled && (
+              <Link
+                href={role === "TEACHER" ? `/team/classroom/${item.id}` : `/classroom/${item.id}`}
+                className="inline-flex items-center gap-1 py-1 px-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[11px] font-bold shadow-sm transition active:scale-95"
+              >
+                <span className="material-symbols-outlined text-[14px]">smart_display</span>
+                <span>YouTube Classroom</span>
+              </Link>
+            )}
             {item.type === "DOUBT_SESSION" ? (
               <Link
                 href={
