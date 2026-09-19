@@ -553,6 +553,21 @@ export function StudentLiveClassRoom({
   const [floatCamPos, setFloatCamPos] = useState<{ x: number; y: number }>({ x: 16, y: 70 });
   const floatCamDraggingRef = useRef(false);
   const floatCamDragOffsetRef = useRef({ x: 0, y: 0 });
+  // The actual PPT/slide stage element (see the div this ref is attached to
+  // below) — the floating bubble's position is clamped to stay within it,
+  // not the whole viewport, matching the teacher's own floating camera so
+  // the student can drag it to different spots but only over the board.
+  const stageContainerRef = useRef<HTMLDivElement>(null);
+
+  function clampToStage(x: number, y: number): { x: number; y: number } {
+    const rect = stageContainerRef.current?.getBoundingClientRect();
+    if (!rect) return { x, y };
+    const minX = rect.left + 8;
+    const minY = rect.top + 8;
+    const maxX = Math.max(minX, rect.right - FLOAT_CAM_SIZE - 8);
+    const maxY = Math.max(minY, rect.bottom - FLOAT_CAM_SIZE - 8);
+    return { x: Math.min(Math.max(x, minX), maxX), y: Math.min(Math.max(y, minY), maxY) };
+  }
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -561,15 +576,21 @@ export function StudentLiveClassRoom({
       if (saved) {
         const parsed = JSON.parse(saved);
         if (typeof parsed.x === "number" && typeof parsed.y === "number") {
-          setFloatCamPos(parsed);
+          setFloatCamPos(clampToStage(parsed.x, parsed.y));
           return;
         }
       }
     } catch {
       // fallback below
     }
-    setFloatCamPos({ x: Math.max(16, window.innerWidth - FLOAT_CAM_SIZE - 16), y: 70 });
-  }, []);
+    const rect = stageContainerRef.current?.getBoundingClientRect();
+    setFloatCamPos(
+      rect
+        ? clampToStage(rect.right - FLOAT_CAM_SIZE - 16, rect.top + 16)
+        : { x: Math.max(16, window.innerWidth - FLOAT_CAM_SIZE - 16), y: 70 }
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wbSession?.cameraShape]);
 
   function handleFloatCamPointerDown(e: React.PointerEvent<HTMLDivElement>) {
     if (e.button !== 0) return;
@@ -583,13 +604,9 @@ export function StudentLiveClassRoom({
 
   function handleFloatCamPointerMove(e: React.PointerEvent<HTMLDivElement>) {
     if (!floatCamDraggingRef.current) return;
-    const maxX = Math.max(10, window.innerWidth - FLOAT_CAM_SIZE - 12);
-    const maxY = Math.max(10, window.innerHeight - FLOAT_CAM_SIZE - 12);
-    let nx = e.clientX - floatCamDragOffsetRef.current.x;
-    let ny = e.clientY - floatCamDragOffsetRef.current.y;
-    nx = Math.max(8, Math.min(nx, maxX));
-    ny = Math.max(56, Math.min(ny, maxY));
-    setFloatCamPos({ x: nx, y: ny });
+    const nx = e.clientX - floatCamDragOffsetRef.current.x;
+    const ny = e.clientY - floatCamDragOffsetRef.current.y;
+    setFloatCamPos(clampToStage(nx, ny));
   }
 
   function handleFloatCamPointerUp(e: React.PointerEvent<HTMLDivElement>) {
@@ -1442,7 +1459,10 @@ export function StudentLiveClassRoom({
           </div>
 
           {/* Canvas Center Stage */}
-          <div className="flex-1 min-h-0 w-full relative flex items-center justify-center p-2 bg-[#0d0e16] overflow-hidden">
+          <div
+            ref={stageContainerRef}
+            className="flex-1 min-h-0 w-full relative flex items-center justify-center p-2 bg-[#0d0e16] overflow-hidden"
+          >
             {isYouTube ? (
               <div className="w-full h-full max-w-full max-h-full aspect-video flex items-center justify-center">
                 <YouTubeLivePlayer
