@@ -3,6 +3,21 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { TestPdfDownloadModal } from "@/components/test-portal/TestPdfDownloadModal";
+import { BATCH_GRADIENT_THEMES } from "@/components/course-platform/CourseCard";
+
+const getBatchTheme = (idx: number) => {
+  const t = BATCH_GRADIENT_THEMES[Math.abs(idx) % BATCH_GRADIENT_THEMES.length];
+  if (t) return t;
+  return {
+    cardBg: "bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-emerald-500/15",
+    cardBorder: "border-emerald-200/90",
+    headerGrad: "from-emerald-600 via-teal-600 to-emerald-800",
+    accentText: "text-emerald-700",
+    pillBg: "bg-emerald-500/10 text-emerald-800 border-emerald-200/80",
+    btnGrad: "bg-gradient-to-r from-emerald-600 to-teal-600 text-white",
+    statBorder: "border-emerald-100",
+  };
+};
 
 export interface ChapterwiseTestItem {
   id: string;
@@ -82,7 +97,7 @@ export function AtomicPracticeTestArena({
   testSeriesBoxes: TestSeriesBoxItem[];
   demoTest?: DemoTestProp | null;
 }) {
-  const [activeCategory, setActiveCategory] = useState<"CHAPTERWISE" | "TEST_SERIES">("CHAPTERWISE");
+  const [activeCategory, setActiveCategory] = useState<"TEST_SERIES" | "CHAPTERWISE">("TEST_SERIES");
 
   // Chapterwise category state
   const defaultSubject = subjectTests[0]?.name || "Physics";
@@ -140,46 +155,96 @@ export function AtomicPracticeTestArena({
 
   return (
     <div className="space-y-6">
-      {/* 1. TOP 2-CATEGORY SWITCHER: CHAPTERWISE TESTS vs TEST SERIES BOXES */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl p-1.5 shadow-2xs flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5">
-        <button
-          type="button"
-          onClick={() => setActiveCategory("CHAPTERWISE")}
-          className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer ${
-            activeCategory === "CHAPTERWISE"
-              ? "bg-orange-500 text-white shadow-2xs"
-              : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-          }`}
-        >
-          <span className="material-symbols-outlined text-[18px]">menu_book</span>
-          <span>1. Chapterwise Practice Tests</span>
-          <span
-            className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
-              activeCategory === "CHAPTERWISE" ? "bg-white/25 text-white" : "bg-slate-100 text-slate-700"
-            }`}
-          >
-            {totalChapterwiseTests}
-          </span>
-        </button>
-
+      {/* 1. TOP 2-CATEGORY SWITCHER: TEST SERIES & CHAPTER WISE TEST */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {/* Box 1: Test Series (Batch & Enrolled Test Series) */}
         <button
           type="button"
           onClick={() => setActiveCategory("TEST_SERIES")}
-          className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer ${
+          className={`group relative flex min-h-[88px] flex-col justify-between rounded-2xl p-3.5 text-left transition-all duration-200 cursor-pointer border ${
             activeCategory === "TEST_SERIES"
-              ? "bg-blue-600 text-white shadow-2xs"
-              : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+              ? "ring-2 ring-purple-500 shadow-sm " + getBatchTheme(1).cardBg + " " + getBatchTheme(1).cardBorder
+              : "bg-white/90 hover:bg-white border-slate-200/80 hover:border-purple-300 hover:shadow-2xs"
           }`}
         >
-          <span className="material-symbols-outlined text-[18px]">military_tech</span>
-          <span>2. Enrolled &amp; Batch Test Series</span>
-          <span
-            className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
-              activeCategory === "TEST_SERIES" ? "bg-white/25 text-white" : "bg-slate-100 text-slate-700"
-            }`}
-          >
-            {testSeriesBoxes.length} Box{testSeriesBoxes.length === 1 ? "" : "es"} &middot; {totalSeriesTests} Tests
-          </span>
+          <div className="flex items-start justify-between">
+            <span
+              className={`flex h-9 w-9 items-center justify-center rounded-xl ring-1 transition-transform group-hover:scale-105 ${
+                activeCategory === "TEST_SERIES"
+                  ? "bg-purple-600 text-white ring-purple-400"
+                  : "bg-purple-50 text-purple-600 ring-purple-100"
+              }`}
+            >
+              <span className="material-symbols-outlined text-[20px]">military_tech</span>
+            </span>
+            <span
+              className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                activeCategory === "TEST_SERIES"
+                  ? "bg-purple-600 text-white"
+                  : "bg-slate-100 text-slate-700"
+              }`}
+            >
+              {totalSeriesTests} Tests &middot; {testSeriesBoxes.length} Series
+            </span>
+          </div>
+          <div className="mt-2">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[14px] font-bold leading-tight text-slate-900">
+                Test Series
+              </span>
+              {activeCategory === "TEST_SERIES" && (
+                <span className="h-1.5 w-1.5 rounded-full bg-purple-600 animate-pulse" />
+              )}
+            </div>
+            <p className="text-[11px] font-medium text-slate-500 mt-0.5">
+              Batch &amp; Enrolled Test Series &middot; Mock CBT
+            </p>
+          </div>
+        </button>
+
+        {/* Box 2: Chapter Wise Test */}
+        <button
+          type="button"
+          onClick={() => setActiveCategory("CHAPTERWISE")}
+          className={`group relative flex min-h-[88px] flex-col justify-between rounded-2xl p-3.5 text-left transition-all duration-200 cursor-pointer border ${
+            activeCategory === "CHAPTERWISE"
+              ? "ring-2 ring-emerald-500 shadow-sm " + getBatchTheme(0).cardBg + " " + getBatchTheme(0).cardBorder
+              : "bg-white/90 hover:bg-white border-slate-200/80 hover:border-emerald-300 hover:shadow-2xs"
+          }`}
+        >
+          <div className="flex items-start justify-between">
+            <span
+              className={`flex h-9 w-9 items-center justify-center rounded-xl ring-1 transition-transform group-hover:scale-105 ${
+                activeCategory === "CHAPTERWISE"
+                  ? "bg-emerald-600 text-white ring-emerald-400"
+                  : "bg-emerald-50 text-emerald-600 ring-emerald-100"
+              }`}
+            >
+              <span className="material-symbols-outlined text-[20px]">menu_book</span>
+            </span>
+            <span
+              className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                activeCategory === "CHAPTERWISE"
+                  ? "bg-emerald-600 text-white"
+                  : "bg-slate-100 text-slate-700"
+              }`}
+            >
+              {totalChapterwiseTests} Practice Tests
+            </span>
+          </div>
+          <div className="mt-2">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[14px] font-bold leading-tight text-slate-900">
+                Chapter Wise Test
+              </span>
+              {activeCategory === "CHAPTERWISE" && (
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-pulse" />
+              )}
+            </div>
+            <p className="text-[11px] font-medium text-slate-500 mt-0.5">
+              Physics, Chemistry &amp; Biology Chapters
+            </p>
+          </div>
         </button>
       </div>
 
@@ -188,62 +253,90 @@ export function AtomicPracticeTestArena({
       {/* ========================================================================= */}
       {activeCategory === "CHAPTERWISE" && (
         <div className="space-y-4">
-          {/* Horizontal Subject Bar */}
+          {/* 3 Compact Subject Boxes (Physics, Chemistry, Biology) */}
           {subjectTests.length > 0 && (
-            <div className="bg-white border border-slate-200/80 rounded-2xl p-2 shadow-2xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                {subjectTests.map((subj) => {
-                  const isSelected = (activeSubjectData?.name || selectedSubject) === subj.name;
-                  const totalTests = subj.chapters.reduce((sum, ch) => sum + ch.tests.length, 0);
-                  const completedTests = subj.chapters.reduce(
-                    (sum, ch) => sum + ch.tests.filter((t) => t.status === "COMPLETED").length,
-                    0
-                  );
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              {subjectTests.map((subj) => {
+                const isSelected = (activeSubjectData?.name || selectedSubject) === subj.name;
+                const totalTests = subj.chapters.reduce((sum, ch) => sum + ch.tests.length, 0);
+                const completedTests = subj.chapters.reduce(
+                  (sum, ch) => sum + ch.tests.filter((t) => t.status === "COMPLETED").length,
+                  0
+                );
 
-                    return (
-                    <button
-                      key={subj.id}
-                      type="button"
-                      onClick={() => handleSubjectChange(subj.name)}
-                      className={`relative flex items-center justify-between p-2.5 sm:px-4 sm:py-3 rounded-xl transition-all duration-200 text-left cursor-pointer ${
-                        isSelected
-                          ? "bg-orange-500 text-white shadow-2xs"
-                          : "bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-200/60"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <span
-                          className={`material-symbols-outlined text-2xl ${
-                            isSelected ? "text-white" : subj.color || "text-orange-500"
-                          }`}
-                        >
-                          {subj.icon || "science"}
-                        </span>
-                        <div className="min-w-0">
-                          <h3 className="text-xs sm:text-sm font-bold leading-tight truncate">
-                            {subj.name}
-                          </h3>
-                          <p className={`text-[10px] sm:text-[11px] ${isSelected ? "text-white/80" : "text-slate-500"}`}>
-                            {subj.name === "Chemistry"
-                              ? "Physical · Inorganic · Organic"
-                              : subj.name === "Biology"
-                              ? "Botany · Zoology"
-                              : `${subj.chapters.length} Chapters`} &middot; {totalTests} Tests
-                          </p>
-                        </div>
-                      </div>
+                // Apply batch gradient themes per subject
+                const subjTheme = subj.name.toLowerCase().includes("physics")
+                  ? getBatchTheme(2) // Sky / Cyan
+                  : subj.name.toLowerCase().includes("chem")
+                  ? getBatchTheme(3) // Amber / Sunset
+                  : getBatchTheme(0); // Emerald / Mint
 
+                const iconBgClass = subj.name.toLowerCase().includes("physics")
+                  ? "bg-sky-50 text-sky-600 ring-sky-100"
+                  : subj.name.toLowerCase().includes("chem")
+                  ? "bg-amber-50 text-amber-600 ring-amber-100"
+                  : "bg-emerald-50 text-emerald-600 ring-emerald-100";
+
+                const iconActiveBgClass = subj.name.toLowerCase().includes("physics")
+                  ? "bg-sky-600 text-white ring-sky-400"
+                  : subj.name.toLowerCase().includes("chem")
+                  ? "bg-amber-600 text-white ring-amber-400"
+                  : "bg-emerald-600 text-white ring-emerald-400";
+
+                return (
+                  <button
+                    key={subj.id}
+                    type="button"
+                    onClick={() => handleSubjectChange(subj.name)}
+                    className={`group relative flex min-h-[88px] flex-col justify-between rounded-2xl p-3 text-left transition-all duration-200 cursor-pointer border ${
+                      isSelected
+                        ? `ring-2 ring-offset-1 ring-slate-800 shadow-sm ${subjTheme.cardBg} ${subjTheme.cardBorder}`
+                        : "bg-white hover:bg-slate-50 border-slate-200/80 hover:shadow-2xs"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between">
                       <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
-                          isSelected ? "bg-white/20 text-white" : "bg-white text-slate-600 border border-slate-200"
+                        className={`flex h-8 w-8 items-center justify-center rounded-xl ring-1 transition-transform group-hover:scale-105 ${
+                          isSelected ? iconActiveBgClass : iconBgClass
                         }`}
                       >
-                        {completedTests}/{totalTests} Done
+                        <span className="material-symbols-outlined text-[18px]">
+                          {subj.icon || (subj.name.toLowerCase().includes("physics") ? "bolt" : subj.name.toLowerCase().includes("chem") ? "science" : "biotech")}
+                        </span>
                       </span>
-                    </button>
-                  );
-                })}
-              </div>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                          completedTests > 0
+                            ? "bg-emerald-100 text-emerald-800"
+                            : "bg-slate-100 text-slate-600"
+                        }`}
+                      >
+                        {completedTests > 0 ? `${completedTests}/${totalTests} Done` : `${totalTests} Tests`}
+                      </span>
+                    </div>
+
+                    <div className="mt-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[13px] font-bold leading-tight text-slate-900">
+                          {subj.name}
+                        </span>
+                        {isSelected && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-slate-900 text-white">
+                            Active
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] font-medium text-slate-500 mt-0.5 truncate">
+                        {subj.name === "Chemistry"
+                          ? "Physical · Inorganic · Organic"
+                          : subj.name === "Biology"
+                          ? "Botany · Zoology"
+                          : `${subj.chapters.length} Chapters · ${totalTests} Tests`}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           )}
 
@@ -619,29 +712,30 @@ export function AtomicPracticeTestArena({
             </div>
           ) : (
             <div className="space-y-4">
-              {filteredSeriesBoxes.map((box) => {
+              {filteredSeriesBoxes.map((box, bIdx) => {
                 const isExpanded = expandedSeries[box.id] !== false; // Default expanded
                 const completedCount = box.tests.filter((t) => t.canViewResult || t.statusLabel.includes("Completed")).length;
+                const theme = getBatchTheme(bIdx);
 
                 return (
                   <div
                     key={box.id}
-                    className="bg-white border border-slate-200/90 rounded-2xl overflow-hidden shadow-2xs transition-all"
+                    className={`bg-white border rounded-2xl overflow-hidden shadow-2xs transition-all ${theme.cardBorder}`}
                   >
                     {/* Test Series Box Header */}
-                    <div className="p-3.5 sm:p-4 bg-slate-50/60 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className={`p-3.5 sm:p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${theme.cardBg}`}>
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold uppercase tracking-wider">
-                            Atomic Test Series Box
+                          <span className={`px-2.5 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wider ${theme.pillBg}`}>
+                            Test Series
                           </span>
                           {box.examType && (
-                            <span className="px-2 py-0.5 rounded-md bg-white text-slate-600 border border-slate-200 text-[10px] font-bold">
+                            <span className="px-2 py-0.5 rounded-md bg-white/80 text-slate-700 border border-slate-200 text-[10px] font-bold">
                               {box.examType}
                             </span>
                           )}
                           {box.targetBatch && (
-                            <span className="text-xs font-bold text-blue-600">
+                            <span className={`text-xs font-bold ${theme.accentText}`}>
                               Batch: {box.targetBatch}
                             </span>
                           )}
