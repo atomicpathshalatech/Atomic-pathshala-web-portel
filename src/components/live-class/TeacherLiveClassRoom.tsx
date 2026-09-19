@@ -1895,9 +1895,65 @@ export function TeacherLiveClassRoom({
     }
   }
 
-  /** "Pick" a photographed doubt onto the board: creates a new slide with
-   * the doubt's image as its background and a text label naming who sent
-   * it, switches to it, then removes the entry from the queue (same
+  /** Composites a (possibly portrait, possibly cross-origin) doubt photo
+   * onto a blank 1920x1080 canvas, fit inside the left ~45% with a visible
+   * frame, leaving the right side and margins blank — so the teacher has
+   * room to actually write next to it, instead of the photo covering the
+   * whole slide. The canvas engine has no "image object" type to place
+   * and resize a photo as its own element, so this is done once at pick
+   * time via a real HTML canvas, then uploaded through the same
+   * background-image endpoint handleInsertSimulationImage already uses
+   * (not the doubt's original ephemeral URL directly). Requires the R2
+   * bucket's CORS policy to allow this origin for GET (already configured
+   * for the production domain, *.vercel.app, and localhost) - otherwise
+   * the canvas would be tainted and toBlob() would throw.
+   */
+  async function compositeDoubtImage(imageUrl: string): Promise<Blob> {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error("Could not load the doubt photo."));
+      img.src = imageUrl;
+    });
+
+    const canvas = document.createElement("canvas");
+    canvas.width = VIRTUAL_WIDTH;
+    canvas.height = VIRTUAL_HEIGHT;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas not supported.");
+
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+
+    // Reserve the top strip for the "Doubt from X" label, fit the photo
+    // (preserving its aspect ratio, whatever orientation it was shot in)
+    // into a boxed region on the left — everything right of it, and below
+    // if the photo is short, stays blank canvas.
+    const areaX = 60;
+    const areaY = 130;
+    const areaW = 840;
+    const areaH = 900;
+    const scale = Math.min(areaW / img.naturalWidth, areaH / img.naturalHeight);
+    const drawW = img.naturalWidth * scale;
+    const drawH = img.naturalHeight * scale;
+    const drawX = areaX + (areaW - drawW) / 2;
+    const drawY = areaY + (areaH - drawH) / 2;
+
+    ctx.drawImage(img, drawX, drawY, drawW, drawH);
+    ctx.strokeStyle = "#94a3b8";
+    ctx.lineWidth = 4;
+    ctx.strokeRect(drawX - 2, drawY - 2, drawW + 4, drawH + 4);
+
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (!blob) throw new Error("Could not process the doubt photo.");
+    return blob;
+  }
+
+  /** "Pick" a photographed doubt onto the board: creates a new slide,
+   * composites the doubt's photo into a framed region on the left (see
+   * compositeDoubtImage above) with a text label naming who sent it,
+   * switches to it, then removes the entry from the queue (same
    * create-then-patch two-step handleAddPageWithTemplate already uses,
    * rather than teaching the create route a new body shape). */
   async function handlePickDoubt(item: HandRaiseQueueItem) {
@@ -1910,16 +1966,29 @@ export function TeacherLiveClassRoom({
         type: "text" as const,
         text: `Doubt from ${item.studentName}`,
         color: "#dc2626",
-        size: 46,
-        position: { x: 40, y: 30 },
+        size: 40,
+        position: { x: 60, y: 30 },
         width: Math.max(240, item.studentName.length * 26),
         height: 60,
       };
+
+      const composited = await compositeDoubtImage(item.imageUrl);
+      const formData = new FormData();
+      formData.append("file", new File([composited], `doubt_${Date.now()}.png`, { type: "image/png" }));
+      const uploadRes = await fetch(
+        `/api/whiteboard/sessions/${wbSession.id}/pages/${newPage.id}/background`,
+        { method: "POST", body: formData }
+      );
+      const uploadJson = await uploadRes.json();
+      if (!uploadRes.ok || !uploadJson.success) {
+        throw new Error(uploadJson.error || "Could not upload the composited doubt image.");
+      }
+      const background: string = uploadJson.data.page.background;
+
       await patchJson(`/api/whiteboard/sessions/${wbSession.id}/pages/${newPage.id}`, {
-        background: item.imageUrl,
         objects: [nameLabel],
       });
-      const updatedPage = { ...newPage, background: item.imageUrl, objects: [nameLabel] };
+      const updatedPage = { ...newPage, background, objects: [nameLabel] };
       setWbSession((prev) =>
         prev
           ? {
