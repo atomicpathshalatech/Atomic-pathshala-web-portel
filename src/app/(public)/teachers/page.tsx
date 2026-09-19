@@ -15,7 +15,12 @@ export default async function FacultyDirectoryPage() {
   const teachers = await prisma.teacher.findMany({
     where: {
       onboardingStatus: { not: "REJECTED" },
-      user: { status: "ACTIVE" },
+      user: {
+        status: "ACTIVE",
+        role: {
+          name: { in: ["TEACHER", "ACADEMIC_HEAD", "DEPARTMENT_HEAD", "SUPER_ADMIN", "ADMIN", "FOUNDER"] },
+        },
+      },
     },
     include: {
       user: {

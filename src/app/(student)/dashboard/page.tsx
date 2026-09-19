@@ -140,8 +140,17 @@ export default async function StudentDashboardPage() {
       },
     }).catch(() => []),
     prisma.teacher.findMany({
-      where: { user: { status: "ACTIVE" } },
+      where: {
+        onboardingStatus: { not: "REJECTED" },
+        user: {
+          status: "ACTIVE",
+          role: {
+            name: { in: ["TEACHER", "ACADEMIC_HEAD", "DEPARTMENT_HEAD", "SUPER_ADMIN", "ADMIN", "FOUNDER"] },
+          },
+        },
+      },
       include: { user: { select: { name: true, photoUrl: true } } },
+      orderBy: { createdAt: "asc" },
       take: 12,
     }).catch(() => []),
     prisma.testimonial.findMany({
