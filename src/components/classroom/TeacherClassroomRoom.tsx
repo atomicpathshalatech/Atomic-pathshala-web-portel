@@ -56,11 +56,13 @@ export function TeacherClassroomRoom({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scheduleId]);
 
-  const start = async () => {
+  const start = async (methodOverride?: "BROWSER_RELAY" | "EXTERNAL_ENCODER") => {
     setStarting(true);
     setError(null);
     try {
-      const data = await postJson(`/api/team/classroom/${scheduleId}/start`, { streamMethod });
+      const data = await postJson(`/api/team/classroom/${scheduleId}/start`, {
+        streamMethod: methodOverride ?? streamMethod,
+      });
       setSession((prev) => ({ ...(prev ?? ({} as ClassroomSessionState)), ...data.classroomSession }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start classroom");
@@ -133,6 +135,36 @@ export function TeacherClassroomRoom({
   }
 
   if (session.phase === "PREPARING") {
+    // A previous .../start call can leave the ClassroomSession row created
+    // (phase already PREPARING) but without a completed YouTube broadcast/
+    // relay path if it failed partway through (e.g. a YouTube API error) —
+    // there would otherwise be no way back to a "Configure Classroom" button
+    // to retry, since the phase alone already routes here.
+    const configIncomplete =
+      (session.streamMethod === "BROWSER_RELAY" && !session.relayWhipUrl) ||
+      (session.streamMethod === "EXTERNAL_ENCODER" && !session.youtubeIngestUrl);
+
+    if (configIncomplete) {
+      return (
+        <div className="w-full h-full min-h-[400px] flex flex-col items-center justify-center gap-4 bg-[#0a0b12] p-8 text-center">
+          <span className="material-symbols-outlined text-3xl text-amber-400">warning</span>
+          <p className="text-sm text-gray-300 max-w-sm">
+            The YouTube broadcast couldn't be fully set up last time (often a temporary API/permission issue). Nothing has
+            gone live — it's safe to retry.
+          </p>
+          <button
+            type="button"
+            onClick={() => start(session.streamMethod ?? undefined)}
+            disabled={starting}
+            className="px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold disabled:opacity-40 transition"
+          >
+            {starting ? "Retrying..." : "Retry Configuration"}
+          </button>
+          {error && <p className="text-xs text-rose-400">{error}</p>}
+        </div>
+      );
+    }
+
     return (
       <div className="w-full h-full min-h-[400px] flex flex-col items-center justify-center gap-4 bg-[#0a0b12] p-8">
         {session.streamMethod === "BROWSER_RELAY" && session.relayWhipUrl ? (
