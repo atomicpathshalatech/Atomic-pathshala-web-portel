@@ -107,17 +107,17 @@ export function CourseCard({
     <article
       className={`rounded-2xl border ${theme.cardBorder} ${theme.cardBg} backdrop-blur-md overflow-hidden hover:shadow-lg transition-all duration-300 flex flex-col group hover:-translate-y-1 shadow-xs`}
     >
-      {/* Sleek Compact Header / Thumbnail Banner (Reduced Height ~100px) */}
-      <div className="h-28 relative overflow-hidden bg-slate-900">
+      {/* 16:9 Full Aspect Ratio Thumbnail Banner — Clean without overlays */}
+      <div className="aspect-[16/9] w-full relative overflow-hidden bg-slate-900">
         {course.thumbnailUrl ? (
           <img
             src={course.thumbnailUrl}
             alt={course.title}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
           />
         ) : (
           <div
-            className={`w-full h-full bg-gradient-to-r ${theme.headerGrad} p-3.5 flex flex-col justify-between group-hover:scale-105 transition-transform duration-500`}
+            className={`w-full h-full bg-gradient-to-r ${theme.headerGrad} p-4 flex flex-col justify-between group-hover:scale-105 transition-transform duration-500`}
           >
             <div className="flex items-center justify-between">
               <span className="material-symbols-outlined text-white/70 text-2xl">school</span>
@@ -125,90 +125,94 @@ export function CourseCard({
                 {course.courseType || "Live Batch"}
               </span>
             </div>
-            <span className="font-extrabold text-xs sm:text-sm text-white line-clamp-1 drop-shadow-xs">
+            <span className="font-extrabold text-sm sm:text-base text-white line-clamp-1 drop-shadow-xs">
               {course.title}
             </span>
-          </div>
-        )}
-
-        {/* Floating Badges */}
-        <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 flex-wrap">
-          <span className="bg-slate-900/90 backdrop-blur-xs text-white px-2 py-0.5 rounded-md font-bold text-[10px] uppercase tracking-wider shadow-2xs">
-            {course.exam} {course.examYear || ""}
-          </span>
-          {course.isEnrolled ? (
-            <span className="bg-emerald-600 text-white font-extrabold text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-md shadow-2xs flex items-center gap-1">
-              <span className="material-symbols-outlined text-[11px]">verified</span>
-              Enrolled
-            </span>
-          ) : course.isNewBatch ? (
-            <span className="bg-white/95 dark:bg-slate-900 text-slate-800 dark:text-slate-200 border border-white/20 px-2 py-0.5 rounded-md font-extrabold text-[10px] uppercase tracking-wider shadow-2xs">
-              Admissions Open
-            </span>
-          ) : null}
-        </div>
-
-        {course.studentsCount > 0 && (
-          <div className="absolute bottom-2 right-2.5 bg-black/60 backdrop-blur-xs text-white px-2 py-0.5 rounded-md text-[10px] font-semibold flex items-center gap-1">
-            <span className="material-symbols-outlined text-[12px] text-amber-400">group</span>
-            <span>{course.studentsCount} Students</span>
           </div>
         )}
       </div>
 
       {/* Content Body — Compact, Reduced Thickness */}
-      <div className="p-3.5 sm:p-4 flex flex-col flex-1">
+      <div className="p-3 sm:p-3.5 flex flex-col flex-1">
+        {/* Badges / Meta Strip (Cleanly adjusted below thumbnail) */}
+        <div className="flex items-center justify-between gap-1.5 flex-wrap mb-2">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {course.isEnrolled ? (
+              <span className="inline-flex items-center gap-1 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wide">
+                <span className="material-symbols-outlined text-[12px]">verified</span>
+                Enrolled
+              </span>
+            ) : course.isNewBatch ? (
+              <span className="inline-flex items-center gap-1 bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wide">
+                Admissions Open
+              </span>
+            ) : null}
+
+            <span className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-2 py-0.5 rounded-md font-bold text-[10px] uppercase tracking-wide">
+              {course.exam} {course.examYear || ""}
+            </span>
+          </div>
+
+          {course.studentsCount > 0 && (
+            <span className="inline-flex items-center gap-1 text-slate-500 dark:text-slate-400 text-[11px] font-semibold ml-auto">
+              <span className="material-symbols-outlined text-[13px] text-amber-500">group</span>
+              <span>{course.studentsCount} Students</span>
+            </span>
+          )}
+        </div>
+
+        {/* Title & Educators */}
         <div className="mb-2">
           <h3 className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white line-clamp-1 group-hover:opacity-90 transition-opacity">
             {course.title}
           </h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium truncate mt-0.5">
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate mt-0.5">
             {course.educators}
           </p>
         </div>
 
         {/* Streamlined Feature Badges */}
-        <div className="flex flex-wrap gap-1.5 mb-2.5">
+        <div className="flex flex-wrap items-center gap-1.5 mb-2">
           <span
-            className={`flex items-center gap-1 border px-2 py-0.5 rounded-md text-[10px] font-bold ${theme.pillBg}`}
+            className={`inline-flex items-center gap-1 border px-2 py-0.5 rounded-md text-[10px] font-bold ${theme.pillBg}`}
           >
             <span className="material-symbols-outlined text-[11px]">science</span>
             {course.subject}
           </span>
-          <span className="flex items-center gap-1 bg-white/70 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md text-[10px] font-semibold">
+          <span className="inline-flex items-center gap-1 bg-white/70 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded-md text-[10px] font-medium">
             <span className="material-symbols-outlined text-[11px]">translate</span>
             {course.language}
           </span>
-          <span className="flex items-center gap-1 bg-white/70 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md text-[10px] font-semibold">
+          <span className="inline-flex items-center gap-1 bg-white/70 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded-md text-[10px] font-medium">
             <span className="material-symbols-outlined text-[11px]">schedule</span>
             {course.duration}
           </span>
         </div>
 
-        {/* Compact Stats Row */}
+        {/* Slim Compact Stats Row */}
         <div
-          className={`grid grid-cols-2 py-1.5 px-3 mb-3 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xs rounded-xl border ${theme.statBorder} text-center shadow-2xs`}
+          className={`flex items-center justify-between py-1.5 px-3 mb-2.5 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xs rounded-xl border ${theme.statBorder} text-xs shadow-2xs`}
         >
-          <div className="border-r border-slate-200/60 dark:border-slate-800 pr-2">
-            <span className="font-black text-xs text-slate-900 dark:text-white block">
-              {course.classesCount}
+          <div className="flex items-center gap-1.5">
+            <span className="material-symbols-outlined text-[13px] text-emerald-600 dark:text-emerald-400">
+              videocam
             </span>
-            <span className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-              Live Lectures
+            <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300">
+              <strong className="text-slate-900 dark:text-white font-extrabold">{course.classesCount}</strong> Live Lectures
             </span>
           </div>
-          <div className="pl-2">
-            <span className="font-black text-xs text-slate-900 dark:text-white block truncate">
-              {course.exam}
+          <div className="flex items-center gap-1.5">
+            <span className="material-symbols-outlined text-[13px] text-blue-600 dark:text-blue-400">
+              track_changes
             </span>
-            <span className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-              Target
+            <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300">
+              Target: <strong className="text-slate-900 dark:text-white font-extrabold">{course.exam} {course.examYear || ""}</strong>
             </span>
           </div>
         </div>
 
         {/* Action / Price Bottom Row */}
-        <div className="mt-auto pt-1">
+        <div className="mt-auto pt-0.5">
           {course.isEnrolled ? (
             <Link
               href={`/courses/${course.slug}`}
