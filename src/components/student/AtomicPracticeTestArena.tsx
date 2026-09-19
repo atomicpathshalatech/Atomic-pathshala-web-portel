@@ -97,7 +97,7 @@ export function AtomicPracticeTestArena({
   testSeriesBoxes: TestSeriesBoxItem[];
   demoTest?: DemoTestProp | null;
 }) {
-  const [activeCategory, setActiveCategory] = useState<"TEST_SERIES" | "CHAPTERWISE">("TEST_SERIES");
+  const [currentView, setCurrentView] = useState<"ROOT" | "TEST_SERIES" | "CHAPTERWISE_SUBJECTS" | "CHAPTERWISE_CHAPTERS">("ROOT");
 
   // Chapterwise category state
   const defaultSubject = subjectTests[0]?.name || "Physics";
@@ -155,178 +155,171 @@ export function AtomicPracticeTestArena({
 
   return (
     <div className="space-y-6">
-      {/* 1. TOP 2-CATEGORY SWITCHER: TEST SERIES & CHAPTER WISE TEST */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {/* Box 1: Test Series (Batch & Enrolled Test Series) */}
-        <button
-          type="button"
-          onClick={() => setActiveCategory("TEST_SERIES")}
-          className={`group relative flex min-h-[88px] flex-col justify-between rounded-2xl p-3.5 text-left transition-all duration-200 cursor-pointer border ${
-            activeCategory === "TEST_SERIES"
-              ? "ring-2 ring-purple-500 shadow-sm " + getBatchTheme(1).cardBg + " " + getBatchTheme(1).cardBorder
-              : "bg-white/90 hover:bg-white border-slate-200/80 hover:border-purple-300 hover:shadow-2xs"
-          }`}
-        >
-          <div className="flex items-start justify-between">
-            <span
-              className={`flex h-9 w-9 items-center justify-center rounded-xl ring-1 transition-transform group-hover:scale-105 ${
-                activeCategory === "TEST_SERIES"
-                  ? "bg-purple-600 text-white ring-purple-400"
-                  : "bg-purple-50 text-purple-600 ring-purple-100"
-              }`}
-            >
-              <span className="material-symbols-outlined text-[20px]">military_tech</span>
-            </span>
-            <span
-              className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
-                activeCategory === "TEST_SERIES"
-                  ? "bg-purple-600 text-white"
-                  : "bg-slate-100 text-slate-700"
-              }`}
-            >
-              {totalSeriesTests} Tests &middot; {testSeriesBoxes.length} Series
-            </span>
-          </div>
-          <div className="mt-2">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[14px] font-bold leading-tight text-slate-900">
-                Test Series
-              </span>
-              {activeCategory === "TEST_SERIES" && (
-                <span className="h-1.5 w-1.5 rounded-full bg-purple-600 animate-pulse" />
-              )}
-            </div>
-            <p className="text-[11px] font-medium text-slate-500 mt-0.5">
-              Batch &amp; Enrolled Test Series &middot; Mock CBT
-            </p>
-          </div>
-        </button>
-
-        {/* Box 2: Chapter Wise Test */}
-        <button
-          type="button"
-          onClick={() => setActiveCategory("CHAPTERWISE")}
-          className={`group relative flex min-h-[88px] flex-col justify-between rounded-2xl p-3.5 text-left transition-all duration-200 cursor-pointer border ${
-            activeCategory === "CHAPTERWISE"
-              ? "ring-2 ring-emerald-500 shadow-sm " + getBatchTheme(0).cardBg + " " + getBatchTheme(0).cardBorder
-              : "bg-white/90 hover:bg-white border-slate-200/80 hover:border-emerald-300 hover:shadow-2xs"
-          }`}
-        >
-          <div className="flex items-start justify-between">
-            <span
-              className={`flex h-9 w-9 items-center justify-center rounded-xl ring-1 transition-transform group-hover:scale-105 ${
-                activeCategory === "CHAPTERWISE"
-                  ? "bg-emerald-600 text-white ring-emerald-400"
-                  : "bg-emerald-50 text-emerald-600 ring-emerald-100"
-              }`}
-            >
-              <span className="material-symbols-outlined text-[20px]">menu_book</span>
-            </span>
-            <span
-              className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
-                activeCategory === "CHAPTERWISE"
-                  ? "bg-emerald-600 text-white"
-                  : "bg-slate-100 text-slate-700"
-              }`}
-            >
-              {totalChapterwiseTests} Practice Tests
-            </span>
-          </div>
-          <div className="mt-2">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[14px] font-bold leading-tight text-slate-900">
-                Chapter Wise Test
-              </span>
-              {activeCategory === "CHAPTERWISE" && (
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-pulse" />
-              )}
-            </div>
-            <p className="text-[11px] font-medium text-slate-500 mt-0.5">
-              Physics, Chemistry &amp; Biology Chapters
-            </p>
-          </div>
-        </button>
-      </div>
-
       {/* ========================================================================= */}
-      {/* CATEGORY 1: CHAPTERWISE PRACTICE TESTS                                    */}
+      {/* 1. ROOT VIEW: 2 PRIMARY BOXES (TEST SERIES & CHAPTER WISE TEST)            */}
       {/* ========================================================================= */}
-      {activeCategory === "CHAPTERWISE" && (
+      {currentView === "ROOT" && (
         <div className="space-y-4">
-          {/* 3 Compact Subject Boxes (Physics, Chemistry, Biology) */}
-          {subjectTests.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-              {subjectTests.map((subj) => {
-                const isSelected = (activeSubjectData?.name || selectedSubject) === subj.name;
-                const totalTests = subj.chapters.reduce((sum, ch) => sum + ch.tests.length, 0);
-                const completedTests = subj.chapters.reduce(
-                  (sum, ch) => sum + ch.tests.filter((t) => t.status === "COMPLETED").length,
-                  0
-                );
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            {/* Box 1: Test Series (Batch & Enrolled Test Series) */}
+            <button
+              type="button"
+              onClick={() => setCurrentView("TEST_SERIES")}
+              className={`group relative flex min-h-[96px] flex-col justify-between rounded-2xl p-4 text-left transition-all duration-200 cursor-pointer border hover:shadow-md hover:scale-[1.01] ${getBatchTheme(1).cardBg} ${getBatchTheme(1).cardBorder}`}
+            >
+              <div className="flex items-start justify-between">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl ring-1 transition-transform group-hover:scale-110 bg-purple-600 text-white ring-purple-400">
+                  <span className="material-symbols-outlined text-[22px]">military_tech</span>
+                </span>
+                <span className="rounded-full px-2.5 py-0.5 text-[11px] font-bold bg-purple-600 text-white shadow-2xs">
+                  {totalSeriesTests} Tests &middot; {testSeriesBoxes.length} Series
+                </span>
+              </div>
+              <div className="mt-3 flex items-end justify-between">
+                <div>
+                  <span className="text-[15px] font-extrabold leading-tight text-slate-900 block">
+                    Test Series
+                  </span>
+                  <p className="text-[11px] font-medium text-slate-600 mt-0.5">
+                    Batch &amp; Enrolled Test Series &middot; Mock CBT
+                  </p>
+                </div>
+                <div className="flex items-center gap-1 text-purple-700 font-bold text-xs group-hover:translate-x-1 transition-transform shrink-0">
+                  <span>Enter</span>
+                  <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+                </div>
+              </div>
+            </button>
 
-                // Apply batch gradient themes per subject
-                const subjTheme = subj.name.toLowerCase().includes("physics")
-                  ? getBatchTheme(2) // Sky / Cyan
-                  : subj.name.toLowerCase().includes("chem")
-                  ? getBatchTheme(3) // Amber / Sunset
-                  : getBatchTheme(0); // Emerald / Mint
+            {/* Box 2: Chapter Wise Test */}
+            <button
+              type="button"
+              onClick={() => setCurrentView("CHAPTERWISE_SUBJECTS")}
+              className={`group relative flex min-h-[96px] flex-col justify-between rounded-2xl p-4 text-left transition-all duration-200 cursor-pointer border hover:shadow-md hover:scale-[1.01] ${getBatchTheme(0).cardBg} ${getBatchTheme(0).cardBorder}`}
+            >
+              <div className="flex items-start justify-between">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl ring-1 transition-transform group-hover:scale-110 bg-emerald-600 text-white ring-emerald-400">
+                  <span className="material-symbols-outlined text-[22px]">menu_book</span>
+                </span>
+                <span className="rounded-full px-2.5 py-0.5 text-[11px] font-bold bg-emerald-600 text-white shadow-2xs">
+                  {totalChapterwiseTests} Practice Tests
+                </span>
+              </div>
+              <div className="mt-3 flex items-end justify-between">
+                <div>
+                  <span className="text-[15px] font-extrabold leading-tight text-slate-900 block">
+                    Chapter Wise Test
+                  </span>
+                  <p className="text-[11px] font-medium text-slate-600 mt-0.5">
+                    Physics, Chemistry &amp; Biology Chapters
+                  </p>
+                </div>
+                <div className="flex items-center gap-1 text-emerald-700 font-bold text-xs group-hover:translate-x-1 transition-transform shrink-0">
+                  <span>Enter</span>
+                  <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+                </div>
+              </div>
+            </button>
+          </div>
+        </div>
+      )}
 
-                const iconBgClass = subj.name.toLowerCase().includes("physics")
-                  ? "bg-sky-50 text-sky-600 ring-sky-100"
-                  : subj.name.toLowerCase().includes("chem")
-                  ? "bg-amber-50 text-amber-600 ring-amber-100"
-                  : "bg-emerald-50 text-emerald-600 ring-emerald-100";
-
-                const iconActiveBgClass = subj.name.toLowerCase().includes("physics")
-                  ? "bg-sky-600 text-white ring-sky-400"
-                  : subj.name.toLowerCase().includes("chem")
-                  ? "bg-amber-600 text-white ring-amber-400"
-                  : "bg-emerald-600 text-white ring-emerald-400";
-
-                return (
+      {/* ========================================================================= */}
+      {/* 2. CHAPTERWISE SUBJECTS VIEW: 3 SUBJECT BOXES (PHYSICS, CHEM, BIO)        */}
+      {/* ========================================================================= */}
+      {currentView === "CHAPTERWISE_SUBJECTS" && (
+        <div className="space-y-4">
+          {/* Header with Back Button and Breadcrumb */}
+          <div className="flex items-center justify-between gap-3 bg-white border border-slate-200/80 rounded-2xl p-3 sm:p-4 shadow-2xs">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setCurrentView("ROOT")}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+                <span>Back</span>
+              </button>
+              <div>
+                <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium">
                   <button
-                    key={subj.id}
                     type="button"
-                    onClick={() => handleSubjectChange(subj.name)}
-                    className={`group relative flex min-h-[88px] flex-col justify-between rounded-2xl p-3 text-left transition-all duration-200 cursor-pointer border ${
-                      isSelected
-                        ? `ring-2 ring-offset-1 ring-slate-800 shadow-sm ${subjTheme.cardBg} ${subjTheme.cardBorder}`
-                        : "bg-white hover:bg-slate-50 border-slate-200/80 hover:shadow-2xs"
-                    }`}
+                    onClick={() => setCurrentView("ROOT")}
+                    className="hover:text-emerald-600 transition-colors"
                   >
-                    <div className="flex items-start justify-between">
-                      <span
-                        className={`flex h-8 w-8 items-center justify-center rounded-xl ring-1 transition-transform group-hover:scale-105 ${
-                          isSelected ? iconActiveBgClass : iconBgClass
-                        }`}
-                      >
-                        <span className="material-symbols-outlined text-[18px]">
-                          {subj.icon || (subj.name.toLowerCase().includes("physics") ? "bolt" : subj.name.toLowerCase().includes("chem") ? "science" : "biotech")}
-                        </span>
-                      </span>
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                          completedTests > 0
-                            ? "bg-emerald-100 text-emerald-800"
-                            : "bg-slate-100 text-slate-600"
-                        }`}
-                      >
-                        {completedTests > 0 ? `${completedTests}/${totalTests} Done` : `${totalTests} Tests`}
-                      </span>
-                    </div>
+                    Tests
+                  </button>
+                  <span>/</span>
+                  <span className="text-slate-800 font-bold">Chapter Wise Test</span>
+                </div>
+                <h2 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-1.5 mt-0.5">
+                  <span className="material-symbols-outlined text-emerald-600 text-lg">menu_book</span>
+                  <span>Select Subject</span>
+                </h2>
+              </div>
+            </div>
+            <span className="text-xs text-slate-500 font-medium hidden sm:inline-block">
+              {totalChapterwiseTests} Practice Tests across {subjectTests.length} Subjects
+            </span>
+          </div>
 
-                    <div className="mt-1.5">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[13px] font-bold leading-tight text-slate-900">
-                          {subj.name}
-                        </span>
-                        {isSelected && (
-                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-slate-900 text-white">
-                            Active
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[10px] font-medium text-slate-500 mt-0.5 truncate">
+          {/* 3 Subject Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {subjectTests.map((subj) => {
+              const totalTests = subj.chapters.reduce((sum, ch) => sum + ch.tests.length, 0);
+              const completedTests = subj.chapters.reduce(
+                (sum, ch) => sum + ch.tests.filter((t) => t.status === "COMPLETED").length,
+                0
+              );
+
+              // Apply batch gradient themes per subject
+              const subjTheme = subj.name.toLowerCase().includes("physics")
+                ? getBatchTheme(2) // Sky / Cyan
+                : subj.name.toLowerCase().includes("chem")
+                ? getBatchTheme(3) // Amber / Sunset
+                : getBatchTheme(0); // Emerald / Mint
+
+              const iconBgClass = subj.name.toLowerCase().includes("physics")
+                ? "bg-sky-600 text-white ring-sky-400"
+                : subj.name.toLowerCase().includes("chem")
+                ? "bg-amber-600 text-white ring-amber-400"
+                : "bg-emerald-600 text-white ring-emerald-400";
+
+              return (
+                <button
+                  key={subj.id}
+                  type="button"
+                  onClick={() => {
+                    handleSubjectChange(subj.name);
+                    setCurrentView("CHAPTERWISE_CHAPTERS");
+                  }}
+                  className={`group relative flex min-h-[96px] flex-col justify-between rounded-2xl p-3.5 text-left transition-all duration-200 cursor-pointer border hover:shadow-md hover:scale-[1.01] ${subjTheme.cardBg} ${subjTheme.cardBorder}`}
+                >
+                  <div className="flex items-start justify-between">
+                    <span
+                      className={`flex h-9 w-9 items-center justify-center rounded-xl ring-1 transition-transform group-hover:scale-110 ${iconBgClass}`}
+                    >
+                      <span className="material-symbols-outlined text-[19px]">
+                        {subj.icon || (subj.name.toLowerCase().includes("physics") ? "bolt" : subj.name.toLowerCase().includes("chem") ? "science" : "biotech")}
+                      </span>
+                    </span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        completedTests > 0
+                          ? "bg-emerald-100 text-emerald-800"
+                          : "bg-slate-100 text-slate-700"
+                      }`}
+                    >
+                      {completedTests > 0 ? `${completedTests}/${totalTests} Done` : `${totalTests} Tests`}
+                    </span>
+                  </div>
+
+                  <div className="mt-2.5 flex items-end justify-between">
+                    <div>
+                      <span className="text-[14px] font-extrabold leading-tight text-slate-900 block">
+                        {subj.name}
+                      </span>
+                      <p className="text-[10px] font-medium text-slate-500 mt-0.5">
                         {subj.name === "Chemistry"
                           ? "Physical · Inorganic · Organic"
                           : subj.name === "Biology"
@@ -334,11 +327,80 @@ export function AtomicPracticeTestArena({
                           : `${subj.chapters.length} Chapters · ${totalTests} Tests`}
                       </p>
                     </div>
+                    <div className="flex items-center gap-1 text-slate-700 font-bold text-xs group-hover:translate-x-1 transition-transform shrink-0">
+                      <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 3. CHAPTERWISE CHAPTERS & TESTS VIEW                                      */}
+      {/* ========================================================================= */}
+      {currentView === "CHAPTERWISE_CHAPTERS" && (
+        <div className="space-y-4">
+          {/* Top Navigation Bar with Back button, breadcrumbs, and quick subject switcher */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white border border-slate-200/80 rounded-2xl p-3 sm:p-4 shadow-2xs">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setCurrentView("CHAPTERWISE_SUBJECTS")}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer shrink-0"
+              >
+                <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+                <span>Subjects</span>
+              </button>
+              <div>
+                <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentView("ROOT")}
+                    className="hover:text-emerald-600 transition-colors"
+                  >
+                    Tests
                   </button>
-                );
-              })}
+                  <span>/</span>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentView("CHAPTERWISE_SUBJECTS")}
+                    className="hover:text-emerald-600 transition-colors"
+                  >
+                    Chapter Wise
+                  </button>
+                  <span>/</span>
+                  <span className="text-slate-900 font-bold">{activeSubjectData?.name}</span>
+                </div>
+                <h2 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-2 mt-0.5">
+                  <span className={`material-symbols-outlined text-lg ${activeSubjectData?.color || "text-emerald-600"}`}>
+                    {activeSubjectData?.icon || "science"}
+                  </span>
+                  <span>{activeSubjectData?.name} Chapters &amp; Tests</span>
+                </h2>
+              </div>
             </div>
-          )}
+
+            {/* Quick Switcher Between Subjects */}
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl shrink-0 self-start sm:self-auto">
+              {subjectTests.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => handleSubjectChange(s.name)}
+                  className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                    selectedSubject === s.name
+                      ? "bg-white text-slate-900 shadow-2xs font-extrabold"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  {s.name}
+                </button>
+              ))}
+            </div>
+          </div>
 
           {/* Sub-branch Selector Pills (Only for Chemistry & Biology) */}
           {selectedSubject === "Chemistry" && (
@@ -669,23 +731,44 @@ export function AtomicPracticeTestArena({
       )}
 
       {/* ========================================================================= */}
-      {/* CATEGORY 2: ENROLLED TEST SERIES & BATCH TEST SERIES BOXES                */}
+      {/* 4. ENROLLED TEST SERIES & BATCH TEST SERIES BOXES                         */}
       {/* ========================================================================= */}
-      {activeCategory === "TEST_SERIES" && (
+      {currentView === "TEST_SERIES" && (
         <div className="space-y-4">
-          {/* Search Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white border border-slate-200/80 rounded-2xl p-3.5 shadow-2xs">
-            <div>
-              <h2 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-2">
-                <span className="material-symbols-outlined text-blue-600">inventory_2</span>
-                <span>Enrolled &amp; Batch Test Series Boxes</span>
-              </h2>
-              <p className="text-[11px] text-slate-500">
-                Official test series assigned to your batches with direct PDF downloads and instant analytics.
-              </p>
+          {/* Header with Back Button, Breadcrumb, and Search */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white border border-slate-200/80 rounded-2xl p-3 sm:p-4 shadow-2xs">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setCurrentView("ROOT")}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer shrink-0"
+              >
+                <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+                <span>Back</span>
+              </button>
+              <div>
+                <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentView("ROOT")}
+                    className="hover:text-purple-600 transition-colors"
+                  >
+                    Tests
+                  </button>
+                  <span>/</span>
+                  <span className="text-slate-800 font-bold">Test Series</span>
+                </div>
+                <h2 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-2 mt-0.5">
+                  <span className="material-symbols-outlined text-purple-600 text-lg">military_tech</span>
+                  <span>Enrolled &amp; Batch Test Series</span>
+                </h2>
+                <p className="text-[11px] text-slate-500">
+                  Official test series assigned to your batches with direct PDF downloads and instant analytics.
+                </p>
+              </div>
             </div>
 
-            <div className="relative w-full sm:w-64">
+            <div className="relative w-full sm:w-64 shrink-0">
               <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">
                 search
               </span>
