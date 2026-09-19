@@ -18,7 +18,8 @@ export const DEFAULT_THEMES: Array<{ key: string; name: string; value: Backgroun
 ];
 
 export function backgroundCss(v: BackgroundValue): string {
-  if (v.kind === "SOLID") return v.color;
-  if (v.kind === "GRADIENT") return `linear-gradient(${v.angleDeg}deg, ${v.stops.join(", ")})`;
+  if (!v) return "#0f172a";
+  if (v.kind === "SOLID") return v.color || "#0f172a";
+  if (v.kind === "GRADIENT") return `linear-gradient(${v.angleDeg ?? 135}deg, ${(v.stops && v.stops.length ? v.stops : ["#0f172a", "#1e293b"]).join(", ")})`;
   return "#0f172a"; // IMAGE kind renders as an <img> layer instead; this is only a fallback fill colour
 }

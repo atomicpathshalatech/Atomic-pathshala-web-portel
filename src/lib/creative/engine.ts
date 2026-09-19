@@ -7,7 +7,7 @@ import type { LayoutConfig } from "./layout-types";
 import type { BackgroundValue } from "./background-types";
 import { DEFAULT_THEMES } from "./background-types";
 import { DEFAULT_TEMPLATES_BY_TYPE } from "./default-templates";
-import { buildCreativeElement } from "./render";
+import { buildCreativeElement, cleanElementForSatori } from "./render";
 import { computeSourceVersionHash } from "./hash";
 import { loadDefaultCreativeFont } from "./fonts";
 import { resolveBatchContent } from "./resolvers/batch";
@@ -175,7 +175,7 @@ export async function generateCreative(
     // logs (not local Windows dev), that would point at something else
     // (e.g. a genuinely broken remote image/redirect) and is worth a fresh
     // investigation rather than assuming it's this same issue.
-    const element = buildCreativeElement(layout, content, backgroundValue);
+    const element = cleanElementForSatori(buildCreativeElement(layout, content, backgroundValue));
     let buffer: Buffer;
     try {
       const image = new ImageResponse(element, {

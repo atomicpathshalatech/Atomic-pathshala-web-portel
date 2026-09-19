@@ -42,6 +42,35 @@ function resolveTextValue(field: TextBlock["field"], content: CreativeContentDat
   }
 }
 
+function cleanStyle(style: Record<string, any> | undefined): Record<string, any> | undefined {
+  if (!style || typeof style !== "object") return style;
+  const clean: Record<string, any> = {};
+  for (const [k, v] of Object.entries(style)) {
+    if (v !== undefined && v !== null) {
+      clean[k] = v;
+    }
+  }
+  return clean;
+}
+
+export function cleanElementForSatori(element: any): any {
+  if (!element || typeof element !== "object") return element;
+  if (Array.isArray(element)) return element.map(cleanElementForSatori);
+  if (element.props) {
+    const props = { ...element.props };
+    if (props.style) {
+      props.style = cleanStyle(props.style);
+    }
+    if (props.children) {
+      props.children = Array.isArray(props.children)
+        ? props.children.map(cleanElementForSatori)
+        : cleanElementForSatori(props.children);
+    }
+    return { ...element, props };
+  }
+  return element;
+}
+
 /**
  * The ONE rendering function for every creative type (spec section 13 —
  * "do not duplicate rendering logic across Batch, Chapter, Test Series and
@@ -72,7 +101,7 @@ export function buildCreativeElement(
     badges: null,
   };
 
-  return (
+  return cleanElementForSatori(
     <div
       style={{
         width,
@@ -135,17 +164,19 @@ function renderTextBlock(tb: TextBlock, content: CreativeContentData, width: num
   if (!value) return null;
   const text = tb.uppercase ? value.toUpperCase() : value;
 
+  const spanStyle: React.CSSProperties = {
+    display: "block",
+    fontSize: tb.fontSizePx,
+    fontWeight: tb.fontWeight,
+    color: tb.color,
+    lineHeight: 1.15,
+  };
+  if (tb.letterSpacingPx !== undefined && tb.letterSpacingPx !== null) {
+    spanStyle.letterSpacing = `${tb.letterSpacingPx}px`;
+  }
+
   const inner = (
-    <span
-      style={{
-        display: "block",
-        fontSize: tb.fontSizePx,
-        fontWeight: tb.fontWeight,
-        color: tb.color,
-        letterSpacing: tb.letterSpacingPx,
-        lineHeight: 1.15,
-      }}
-    >
+    <span style={spanStyle}>
       {text}
     </span>
   );
@@ -233,21 +264,23 @@ function renderEducatorArea(
       {educators.map((edu, i) => {
         const cx = startX + i * (cellW + gap);
         const imgSrc = edu.imageUrl || PLACEHOLDER_SILHOUETTE;
+
+        const educatorStyle: React.CSSProperties = {
+          position: "absolute",
+          left: cx,
+          top: startY,
+          width: cellW,
+          height: cellH,
+          display: "flex",
+          borderRadius: radius,
+          overflow: "hidden",
+        };
+        if (area.borderColor) {
+          educatorStyle.border = `${area.borderWidthPx ?? 4}px solid ${area.borderColor}`;
+        }
+
         return (
-          <div
-            key={edu.teacherId}
-            style={{
-              position: "absolute",
-              left: cx,
-              top: startY,
-              width: cellW,
-              height: cellH,
-              display: "flex",
-              borderRadius: radius,
-              overflow: "hidden",
-              border: area.borderColor ? `${area.borderWidthPx ?? 4}px solid ${area.borderColor}` : undefined,
-            }}
-          >
+          <div key={edu.teacherId} style={educatorStyle}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={imgSrc}
