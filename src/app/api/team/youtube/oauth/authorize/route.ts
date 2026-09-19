@@ -62,9 +62,23 @@ export async function GET() {
     // ACCESS_TOKEN_SCOPE_INSUFFICIENT for that call with upload-only scope).
     // youtube.readonly is added solely so that verification can resolve and
     // display the authorized channel's name/id.
+    //
+    // The broad `youtube` scope is required on top of those for the
+    // Classroom module's Live Streaming API calls (liveBroadcasts.insert,
+    // liveStreams.insert, liveBroadcasts.bind/transition) — confirmed live:
+    // Google returns 403 ACCESS_TOKEN_SCOPE_INSUFFICIENT /
+    // insufficientPermissions for liveBroadcasts.insert with only
+    // upload+readonly scopes. A refresh token obtained before this change
+    // must be re-authorized here to pick up Classroom's Live Streaming
+    // access — the archive-upload feature keeps working unchanged either way
+    // since `youtube` is a superset of `youtube.upload`.
     url.searchParams.set(
       "scope",
-      ["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube.readonly"].join(" ")
+      [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.upload",
+        "https://www.googleapis.com/auth/youtube.readonly",
+      ].join(" ")
     );
     url.searchParams.set("state", state);
 
