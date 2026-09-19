@@ -123,7 +123,7 @@ export function TeacherClassroomRoom({
         </div>
         <button
           type="button"
-          onClick={start}
+          onClick={() => start()}
           disabled={starting}
           className="px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold disabled:opacity-40 transition"
         >
