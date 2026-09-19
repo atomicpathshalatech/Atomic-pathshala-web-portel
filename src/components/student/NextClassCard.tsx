@@ -13,6 +13,11 @@ interface NextClassCardProps {
   teacherName: string | null;
   startsAtIso: string;
   initialStatus: LiveCardStatus;
+  // Whether a ClassroomSession (the new, YouTube-Live module) has been
+  // configured for this schedule — shown as a second, independent entry
+  // point alongside the existing Whiteboard Join Class button below, never
+  // replacing it.
+  hasClassroom?: boolean;
 }
 
 function formatAbsoluteTime(iso: string) {
@@ -52,6 +57,7 @@ export function NextClassCard({
   teacherName,
   startsAtIso,
   initialStatus,
+  hasClassroom,
 }: NextClassCardProps) {
   const [status, setStatus] = useState<LiveCardStatus>(initialStatus);
   const [timeLabel, setTimeLabel] = useState<string | null>(null);
@@ -174,25 +180,35 @@ export function NextClassCard({
           {hintLabel && !isLive && <p className="text-[11px] text-slate-400">{hintLabel}</p>}
         </div>
 
-        {buttonDisabled ? (
-          <button
-            type="button"
-            disabled
-            aria-disabled="true"
-            className="shrink-0 cursor-not-allowed rounded-xl bg-slate-100 px-4 py-2 text-xs font-bold text-slate-400"
-          >
-            {buttonLabel}
-          </button>
-        ) : (
-          <Link
-            href={href}
-            className={`shrink-0 rounded-xl px-4 py-2 text-xs font-bold text-white transition-all active:scale-95 ${
-              isLive ? "bg-red-500 hover:bg-red-600" : "bg-orange-500 hover:bg-orange-600"
-            }`}
-          >
-            {buttonLabel}
-          </Link>
-        )}
+        <div className="flex shrink-0 items-center gap-1.5">
+          {isLiveClassType && hasClassroom && (
+            <Link
+              href={`/classroom/${scheduleId}`}
+              className="shrink-0 rounded-xl bg-indigo-600 px-3 py-2 text-xs font-bold text-white transition-all hover:bg-indigo-500 active:scale-95"
+            >
+              Classroom
+            </Link>
+          )}
+          {buttonDisabled ? (
+            <button
+              type="button"
+              disabled
+              aria-disabled="true"
+              className="shrink-0 cursor-not-allowed rounded-xl bg-slate-100 px-4 py-2 text-xs font-bold text-slate-400"
+            >
+              {buttonLabel}
+            </button>
+          ) : (
+            <Link
+              href={href}
+              className={`shrink-0 rounded-xl px-4 py-2 text-xs font-bold text-white transition-all active:scale-95 ${
+                isLive ? "bg-red-500 hover:bg-red-600" : "bg-orange-500 hover:bg-orange-600"
+              }`}
+            >
+              {buttonLabel}
+            </Link>
+          )}
+        </div>
       </div>
     </section>
   );

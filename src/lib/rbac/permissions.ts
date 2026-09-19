@@ -77,6 +77,9 @@ export const PERMISSIONS = {
   // Whiteboard (teacher-side session/practice board)
   WHITEBOARD_ACCESS: "whiteboard.access",
 
+  // Classroom (YouTube-Live based live class module, independent of Whiteboard)
+  CLASSROOM_ACCESS: "classroom.access",
+
   // Batch System
   BATCH_READ: "batch.read",
   BATCH_CREATE: "batch.create",
@@ -273,6 +276,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PermissionCode[]> = {
     PERMISSIONS.PENALTY_READ_SELF,
     PERMISSIONS.LEADERBOARD_READ,
     PERMISSIONS.WHITEBOARD_ACCESS,
+    PERMISSIONS.CLASSROOM_ACCESS,
     PERMISSIONS.BATCH_READ,
     PERMISSIONS.TEST_READ,
     PERMISSIONS.TEST_CREATE,

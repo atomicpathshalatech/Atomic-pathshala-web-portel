@@ -69,6 +69,13 @@ type BatchDetailClientProps = {
       actualStartedAt?: string | null;
       actualEndedAt?: string | null;
     } | null;
+    /** New, independent YouTube-Live Classroom module — present only once configured for this schedule. */
+    classroomSession?: {
+      id: string;
+      phase: string;
+      streamMethod: string | null;
+      recordingStatus: string | null;
+    } | null;
     /** Set when this schedule was created by importing a master chapter. */
     chapter: {
       id: string;

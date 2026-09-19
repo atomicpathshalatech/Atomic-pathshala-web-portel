@@ -22,6 +22,11 @@ export const doubtCreateSchema = z.object({
   // Set by DoubtForm after it uploads the student's photo via
   // /api/doubts/attachment — never a raw file here, just the resulting URL.
   attachmentUrl: z.string().url().optional().or(z.literal("")),
+  // Set only when a doubt is submitted from inside the Classroom module's
+  // Doubt sidebar panel — reuses this exact inbox/queue rather than a
+  // separate Classroom-only doubt system. Validated against real access in
+  // the route (never trusted as-is), same caution as any other client id.
+  classroomSessionId: z.string().cuid().optional(),
 });
 
 export type DoubtCreateInput = z.infer<typeof doubtCreateSchema>;

@@ -95,3 +95,36 @@ export const DIRECT_MESSAGE_EVENTS = {
   MESSAGES_READ: "messages-read",
 } as const;
 
+// ----------------------------------------------------------------------------
+// CLASSROOM — the new, independent YouTube-Live classroom module. Separate
+// channel names and event constants from the WB_EVENTS/sessionChannel above
+// on purpose: Whiteboard's realtime wiring must never be touched for
+// Classroom's sake, even though the shapes are deliberately similar.
+// ----------------------------------------------------------------------------
+
+/** One presence channel per classroom session — teacher + students currently viewing. Presence membership doubles as the live student-count badge. */
+export function classroomChannel(classroomSessionId: string) {
+  return `presence-classroom-${classroomSessionId}`;
+}
+
+/** Teacher-only channel — hand-raise queue, never sent to students. */
+export function classroomTeacherChannel(classroomSessionId: string) {
+  return `private-classroom-teacher-${classroomSessionId}`;
+}
+
+export const CLASSROOM_EVENTS = {
+  // Chat — carries the actual message payload (small, append-only), same
+  // rationale as WB_EVENTS.MESSAGE_SENT.
+  MESSAGE_SENT: "classroom-message-sent",
+  MESSAGE_PINNED: "classroom-message-pinned",
+  // Hand raise — sends a fresh queue snapshot, same pattern as WB_EVENTS.HAND_RAISE_LIST.
+  HAND_RAISE_LIST: "classroom-hand-raise-list",
+  HAND_RAISE_UPDATED: "classroom-hand-raise-updated",
+  // ClassroomSession.phase transitions (SCHEDULED -> PREPARING -> LIVE ->
+  // ENDED -> RECORDED). A poller catches this within its interval regardless
+  // (see the student room's by-schedule poll), but this lets a student
+  // sitting in the waiting state jump straight into the video the instant
+  // the teacher goes live.
+  PHASE_CHANGED: "classroom-phase-changed",
+} as const;
+

@@ -30,6 +30,13 @@ type ScheduleEntry = {
     actualStartedAt?: string | null;
     actualEndedAt?: string | null;
   } | null;
+  /** New, independent YouTube-Live Classroom module — present only once configured for this schedule. */
+  classroomSession?: {
+    id: string;
+    phase: string;
+    streamMethod: string | null;
+    recordingStatus: string | null;
+  } | null;
 };
 
 type TeacherOption = { id: string; user: { name: string } };
@@ -299,6 +306,26 @@ export function BatchScheduleManager({
                     )}
                   </div>
                   <div className="flex items-center gap-3 text-xs">
+                    {/* Classroom (new, independent YouTube-Live module) status
+                        — a sibling of the Whiteboard Start/Resume Class link
+                        below, computed independently and never replacing it. */}
+                    {s.type === "LIVE_CLASS" && (
+                      <Link
+                        href={`/team/classroom/${s.id}`}
+                        className="flex items-center gap-1 text-indigo-600 dark:text-indigo-400 font-bold hover:underline"
+                      >
+                        <span className="material-symbols-outlined text-base">smart_display</span>
+                        {s.classroomSession?.phase === "LIVE"
+                          ? "Classroom: Live"
+                          : s.classroomSession?.phase === "RECORDED" || s.classroomSession?.recordingStatus === "READY"
+                            ? "Classroom: Recording ready"
+                            : s.classroomSession?.phase === "PROCESSING_RECORDING"
+                              ? "Classroom: Processing"
+                              : s.classroomSession
+                                ? "Classroom: Configured"
+                                : "Classroom: Not configured"}
+                      </Link>
+                    )}
                     {s.type === "LIVE_CLASS" && (
                       isCompleted ? null : isLive ? (
                         <Link

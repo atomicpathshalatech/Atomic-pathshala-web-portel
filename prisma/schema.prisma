@@ -256,6 +256,8 @@ model Student {
   batchOrders      BatchOrder[]
   doubtBookings    DoubtBooking[]
   handRaises       HandRaiseEvent[]
+  classroomHandRaises  ClassroomHandRaise[]
+  classroomAttendances ClassroomAttendance[]
   teacherStudentConnections TeacherStudentConnection[]
   quizResponses    QuizResponse[]
   pollResponses    PollResponse[]
@@ -372,6 +374,7 @@ model Teacher {
   testSeriesAssignments TestSeriesTeacher[]
   scheduleSessions BatchSchedule[]
   liveWhiteboardSessions WhiteboardSession[]
+  classroomSessions ClassroomSession[]
   lectures         Lecture[]
   followers        TeacherFollow[]
   badges           TeacherBadge[]
@@ -737,6 +740,7 @@ model BatchSchedule {
   lecture           Lecture?              @relation(fields: [lectureId], references: [id], onDelete: SetNull)
 
   liveWhiteboardSession WhiteboardSession?
+  classroomSession      ClassroomSession?
   test                  Test?
 
   @@index([batchId])
@@ -2167,6 +2171,155 @@ model QuestionAsset {
   @@map("question_assets")
 }
 
+// ----------------------------------------------------------------------------
+// CLASSROOM — the new, independent YouTube-Live classroom module. Deliberately
+// separate from WhiteboardSession/HandRaiseEvent/WhiteboardMessage/
+// LiveClassAttendance: Whiteboard (LiveKit-based) must keep working exactly
+// as-is, so Classroom gets its own tables end-to-end rather than reusing or
+// extending the Whiteboard ones. The only intentional exception is Doubt
+// below, which is extended (not duplicated) per product requirement to reuse
+// the existing doubt inbox for in-classroom doubts too.
+// ----------------------------------------------------------------------------
+enum ClassroomPhase {
+  SCHEDULED
+  PREPARING
+  LIVE
+  ENDED
+  PROCESSING_RECORDING
+  RECORDED
+  CANCELLED
+  FAILED
+}
+
+enum ClassroomHandRaiseStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  RESOLVED
+  CANCELLED
+}
+
+// How the teacher's camera reaches the YouTube Live ingest for this session.
+// Chosen per-session (when scheduling or, at the latest, when starting the
+// classroom) — not a global app setting, since a teacher may prefer OBS for
+// one lecture and in-browser capture for another.
+enum ClassroomStreamMethod {
+  BROWSER_RELAY    // in-browser camera, WHIP-published to our self-hosted relay, relay pushes RTMP to YouTube
+  EXTERNAL_ENCODER // teacher pushes RTMP directly to YouTube from OBS/a phone streaming app
+}
+
+model ClassroomSession {
+  id              String         @id @default(cuid())
+  batchScheduleId String         @unique
+  teacherId       String
+  title           String
+  phase           ClassroomPhase @default(SCHEDULED)
+
+  chatEnabled      Boolean @default(true)
+  handRaiseEnabled Boolean @default(true)
+
+  streamMethod ClassroomStreamMethod?
+
+  // Self-hosted WHIP-to-RTMP relay (used only when streamMethod is
+  // BROWSER_RELAY). This app is deployed on Vercel/serverless, which cannot
+  // run a persistent FFmpeg/relay process itself, so the teacher's browser
+  // publishes camera/mic via WHIP to a small dedicated relay service we
+  // operate separately (see infra/media-relay), which then pushes RTMP to
+  // YouTube's ingest. Cloudflare's WHIP product was evaluated and rejected —
+  // its WHIP ingest does not support restreaming/simulcasting to external
+  // RTMP destinations (confirmed against Cloudflare's own docs).
+  relayPath    String? @unique // per-session path/stream key on the relay, e.g. "classroom-<id>"
+  relayWhipUrl String? @db.Text // full WHIP publish URL handed to the browser
+
+  // YouTube Live — the final, unlisted delivery layer students actually watch.
+  // Populated the same way regardless of streamMethod: only who pushes RTMP
+  // into youtubeStreamId's ingest URL/key differs (the relay, or the
+  // teacher's own encoder).
+  youtubeBroadcastId String?
+  youtubeStreamId    String?
+  youtubeVideoId     String?
+  youtubeLiveChatId  String?
+  youtubeStatus      String?
+  youtubeIngestUrl   String? @db.Text
+  youtubeStreamKey   String? @db.Text
+
+  recordingVideoId String?
+  recordingStatus  String? @default("NOT_AVAILABLE") // NOT_AVAILABLE|PROCESSING|READY|FAILED
+
+  peakViewers Int       @default(0)
+  startedAt   DateTime?
+  endedAt     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  batchSchedule BatchSchedule         @relation(fields: [batchScheduleId], references: [id], onDelete: Cascade)
+  teacher       Teacher               @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  messages      ClassroomMessage[]
+  handRaises    ClassroomHandRaise[]
+  attendances   ClassroomAttendance[]
+  doubts        Doubt[]
+
+  @@index([teacherId])
+  @@map("classroom_sessions")
+}
+
+model ClassroomMessage {
+  id                 String    @id @default(cuid())
+  classroomSessionId String
+  authorRole         String
+  authorUserId       String
+  authorName         String
+  body               String    @db.Text
+  createdAt          DateTime  @default(now())
+  deletedAt          DateTime?
+  pinnedAt           DateTime?
+  flaggedAsQuestion  Boolean   @default(false)
+
+  classroomSession ClassroomSession @relation(fields: [classroomSessionId], references: [id], onDelete: Cascade)
+  doubts           Doubt[]
+
+  @@index([classroomSessionId, createdAt])
+  @@map("classroom_messages")
+}
+
+model ClassroomHandRaise {
+  id                 String                   @id @default(cuid())
+  classroomSessionId String
+  studentId          String
+  status             ClassroomHandRaiseStatus @default(PENDING)
+  requestType        String                   @default("CHAT")
+  raisedAt           DateTime                 @default(now())
+  resolvedAt         DateTime?
+  approvedAt         DateTime?
+  rejectedAt         DateTime?
+  imageUrl           String?                  @db.Text
+
+  classroomSession ClassroomSession @relation(fields: [classroomSessionId], references: [id], onDelete: Cascade)
+  student          Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([classroomSessionId, status])
+  @@map("classroom_hand_raises")
+}
+
+model ClassroomAttendance {
+  id                 String    @id @default(cuid())
+  classroomSessionId String
+  studentId          String
+  joinedAt           DateTime  @default(now())
+  lastSeenAt         DateTime  @default(now())
+  leftAt             DateTime?
+  reconnectCount     Int       @default(0)
+  activeDurationSec  Int       @default(0)
+  interactionCount   Int       @default(0)
+
+  classroomSession ClassroomSession @relation(fields: [classroomSessionId], references: [id], onDelete: Cascade)
+  student          Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([classroomSessionId, studentId])
+  @@index([classroomSessionId])
+  @@map("classroom_attendances")
+}
+
 model Doubt {
   id                String        @id @default(cuid())
   studentId         String
@@ -2194,14 +2347,22 @@ model Doubt {
   // second, parallel doubt system just for the in-class case.
   whiteboardSessionId String?
   sourceMessageId     String?
+  // Populated when a doubt is raised from inside the new YouTube-Live
+  // Classroom module instead — same reuse rationale as whiteboardSessionId
+  // above, just for the separate Classroom session/message tables.
+  classroomSessionId       String?
+  sourceClassroomMessageId String?
   resolvedBy          User?              @relation("DoubtResolvedBy", fields: [resolvedById], references: [id])
   student             Student            @relation(fields: [studentId], references: [id], onDelete: Cascade)
   whiteboardSession   WhiteboardSession? @relation(fields: [whiteboardSessionId], references: [id], onDelete: SetNull)
   sourceMessage       WhiteboardMessage? @relation(fields: [sourceMessageId], references: [id], onDelete: SetNull)
+  classroomSession       ClassroomSession? @relation(fields: [classroomSessionId], references: [id], onDelete: SetNull)
+  sourceClassroomMessage ClassroomMessage? @relation(fields: [sourceClassroomMessageId], references: [id], onDelete: SetNull)
 
   @@index([status])
   @@index([studentId])
   @@index([whiteboardSessionId])
+  @@index([classroomSessionId])
   @@map("doubts")
 }
 
