@@ -101,10 +101,23 @@ async function bindBroadcastToStream(broadcastId: string, streamId: string): Pro
 }
 
 export async function transitionBroadcast(youtubeBroadcastId: string, status: "live" | "complete"): Promise<void> {
-  await youtubeApiFetch(`/liveBroadcasts/transition`, {
-    method: "POST",
-    query: { broadcastStatus: status, id: youtubeBroadcastId, part: "status" },
-  });
+  try {
+    await youtubeApiFetch(`/liveBroadcasts/transition`, {
+      method: "POST",
+      query: { broadcastStatus: status, id: youtubeBroadcastId, part: "status" },
+    });
+  } catch (err) {
+    // The broadcast was created with enableAutoStart/enableAutoStop, so
+    // YouTube itself transitions it the moment it detects (or loses) an
+    // active incoming stream — often before our own explicit transition call
+    // lands. YouTube rejects that as "redundant," which is not a failure
+    // here: the broadcast is already in (or moving to) the requested state
+    // either way, so this is safe to treat as success rather than surface
+    // as an error to the teacher.
+    const message = err instanceof Error ? err.message : String(err);
+    if (/redundantTransition/i.test(message)) return;
+    throw err;
+  }
 }
 
 export interface RecordingStatusResult {
