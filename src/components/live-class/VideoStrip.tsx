@@ -512,20 +512,14 @@ function VideoStripInner({
       {/* Authoritative LiveKit Audio Renderer (controlled by volume & isMuted state) */}
       <RoomAudioRenderer volume={isMuted ? 0 : volume} />
 
-      {/* Main Video Stream */}
+      {/* Main Video Stream — plain black tile when there's no camera track
+          yet, deliberately no icon/name/caption placeholder on top of it.
+          The room's audio (RoomAudioRenderer above) keeps playing either
+          way; this is purely the visual video surface. */}
       {hasTeacherVideo && cameraTrack ? (
         <VideoTrack trackRef={cameraTrack} className="w-full h-full object-cover" />
       ) : (
-        <div className="w-full h-full flex flex-col items-center justify-center bg-[#0d0f18] p-4 text-center">
-          <div className="w-14 h-14 rounded-2xl bg-blue-500/10 border border-blue-500/30 text-blue-400 flex items-center justify-center mb-2 shadow-inner">
-            <span className="material-symbols-outlined text-3xl">account_circle</span>
-          </div>
-          <span className="text-xs font-bold text-white">{teacherName || "Instructor"}</span>
-          <span className="text-[10px] text-blue-300 mt-1 flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Audio Stream Active · Camera Standby
-          </span>
-        </div>
+        <div className="w-full h-full bg-[#0a0b12]" />
       )}
 
       {/* Buffering / Connecting / Reconnecting Overlay */}

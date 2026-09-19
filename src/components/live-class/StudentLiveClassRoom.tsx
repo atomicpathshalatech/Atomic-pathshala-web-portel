@@ -1488,7 +1488,7 @@ export function StudentLiveClassRoom({
             className={
               isCameraCircle
                 ? "z-40 rounded-full overflow-hidden border-2 border-blue-500 shadow-2xl bg-black cursor-grab active:cursor-grabbing select-none"
-                : "h-48 sm:h-52 bg-black relative border-b border-slate-800 shrink-0"
+                : "h-56 bg-black relative border-b border-[#2d2e3b] shrink-0"
             }
           >
             {isDesktopViewport && (
