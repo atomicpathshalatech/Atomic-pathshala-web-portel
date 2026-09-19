@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 import { generateQuestionId } from "@/lib/questions/id-generator";
-import { formatStructuredSolution, type QuizQuestion } from "@/lib/ai-chat/quiz";
+import { formatStructuredSolution, formatFullQuestionStatement, type QuizQuestion } from "@/lib/ai-chat/quiz";
 import { QuestionType, Difficulty } from "@prisma/client";
 import { awardXp, registerDailyActivity } from "@/lib/ai-chat/gamification";
 
@@ -153,11 +153,12 @@ export async function persistPracticeQuiz({
       questions: {
         create: questions.map((q, index) => {
           const structured = formatStructuredSolution(q);
+          const fullText = formatFullQuestionStatement(q);
           return {
             questionId: q.id,
             order: index + 1,
             subject: q.subject,
-            text: q.text,
+            text: fullText || q.text,
             options: q.options,
             correctIndex: q.correctIndex,
             explanation: q.explanation || structured.solution,
@@ -223,6 +224,7 @@ export async function streamToQuestionBankDraft({
       };
 
       const isHindi = language === "hindi";
+      const fullStatement = formatFullQuestionStatement(q) || q.text;
 
       await prisma.question.create({
         data: {
@@ -241,7 +243,7 @@ export async function streamToQuestionBankDraft({
             create: [
               {
                 language: isHindi ? "HINDI" : "ENGLISH",
-                statement: q.text,
+                statement: fullStatement,
                 options: optionsMap,
                 correctOptionIds: [correctLetter],
                 solution: structured.solution,
@@ -254,7 +256,7 @@ export async function streamToQuestionBankDraft({
               editedById: safeUserId,
               changeType: "CREATE",
               snapshot: {
-                statement: q.text,
+                statement: fullStatement,
                 options: optionsMap,
                 correctOption: correctLetter,
                 explainQuestion: structured.explainQuestion,

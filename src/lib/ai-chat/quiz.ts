@@ -344,7 +344,10 @@ function isValidQuestion(q: unknown): q is QuizQuestion {
   if (!q || typeof q !== "object") return false;
   const question = q as Partial<QuizQuestion>;
 
-  if (typeof question.text !== "string" || !question.text.trim()) return false;
+  const hasText = typeof question.text === "string" && Boolean(question.text.trim());
+  const hasAssertion = Boolean(question.assertionText?.trim());
+  const hasStatements = Array.isArray(question.statements) && question.statements.length > 0;
+  if (!hasText && !hasAssertion && !hasStatements) return false;
   if (!Array.isArray(question.options) || question.options.length !== 4) return false;
   if (question.options.some((opt) => typeof opt !== "string" || !opt.trim())) return false;
   if (
@@ -431,4 +434,127 @@ export function formatStructuredSolution(q: QuizQuestion): StructuredSolution {
     solution,
     finalAnswer,
   };
+}
+
+/**
+ * Assembles the complete, self-contained question statement from all components:
+ * passage, base text, assertion & reason, statements (I, II, III...), sequence items,
+ * match columns (Column I & Column II), table headers & rows, flowchart steps, etc.
+ * This guarantees the question is NEVER half or truncated when displayed or saved into Question Bank.
+ */
+export function formatFullQuestionStatement(q: {
+  text?: string | null;
+  questionType?: string | null;
+  passage?: string | null;
+  statements?: string[] | null;
+  assertionText?: string | null;
+  reasonText?: string | null;
+  columnI?: Array<{ label?: string; text?: string }> | null;
+  columnII?: Array<{ label?: string; text?: string }> | null;
+  columnIII?: Array<{ label?: string; text?: string }> | null;
+  sequenceItems?: Array<{ label?: string; text?: string }> | null;
+  tableHeaders?: string[] | null;
+  tableRows?: string[][] | null;
+  flowchartSteps?: string[] | null;
+  imageDescription?: string | null;
+}): string {
+  const parts: string[] = [];
+
+  // 1. Passage (for Case/Passage-based questions)
+  if (q.passage?.trim()) {
+    parts.push(q.passage.trim());
+  }
+
+  // 2. Base text (Stem / Intro)
+  const baseText = q.text?.trim() || "";
+  if (baseText) {
+    parts.push(baseText);
+  }
+
+  // 3. Assertion & Reason
+  if (q.assertionText?.trim() || q.reasonText?.trim()) {
+    const arLines: string[] = [];
+    if (q.assertionText?.trim()) {
+      const aText = q.assertionText.trim().replace(/^Assertion\s*\(?A\)?\s*:\s*/i, "").replace(/^अभिकथन\s*\(?A\)?\s*:\s*/i, "");
+      arLines.push(`Assertion (A): ${aText}`);
+    }
+    if (q.reasonText?.trim()) {
+      const rText = q.reasonText.trim().replace(/^Reason\s*\(?R\)?\s*:\s*/i, "").replace(/^कारण\s*\(?R\)?\s*:\s*/i, "");
+      arLines.push(`Reason (R): ${rText}`);
+    }
+    if (arLines.length > 0) {
+      parts.push(arLines.join("\n"));
+    }
+  }
+
+  // 4. Statements (statement_based, two_statement, multi_statement_combination)
+  if (Array.isArray(q.statements) && q.statements.length > 0) {
+    const missingStatements = q.statements.filter((stmt) => stmt && !baseText.includes(stmt.trim()));
+    if (missingStatements.length > 0) {
+      const formattedStatements = missingStatements
+        .map((s, idx) => {
+          const clean = (s || "").trim();
+          if (/^(statement\s+[iIvVxX0-9]+|कथन\s+[iIvVxX0-9]+|[iIvVxX0-9]+[\.:\)]|\([iIvVxX0-9]+\))/i.test(clean)) {
+            return clean;
+          }
+          const roman = ["I", "II", "III", "IV", "V", "VI", "VII"][idx] || `${idx + 1}`;
+          return `${roman}. ${clean}`;
+        })
+        .join("\n");
+      parts.push(formattedStatements);
+    }
+  }
+
+  // 5. Sequence items
+  if (Array.isArray(q.sequenceItems) && q.sequenceItems.length > 0) {
+    const missingSeq = q.sequenceItems.filter((item) => item?.text && !baseText.includes(item.text.trim()));
+    if (missingSeq.length > 0) {
+      const seqLines = missingSeq
+        .map((item) => `(${item.label || ""}) ${(item.text || "").trim()}`)
+        .join("\n");
+      parts.push(seqLines);
+    }
+  }
+
+  // 6. Match columns (columnI, columnII, columnIII)
+  if (Array.isArray(q.columnI) && q.columnI.length > 0 && Array.isArray(q.columnII) && q.columnII.length > 0) {
+    const hasCol3 = Array.isArray(q.columnIII) && q.columnIII.length > 0;
+    const header = hasCol3
+      ? "Column-I | Column-II | Column-III"
+      : "Column-I | Column-II";
+    const divider = hasCol3
+      ? "---|---|---"
+      : "---|---";
+    const rows = q.columnI.map((col1, idx) => {
+      const col2 = q.columnII?.[idx];
+      const col3 = q.columnIII?.[idx];
+      const c1Text = `(${col1?.label || ""}) ${(col1?.text || "").trim()}`;
+      const c2Text = col2 ? `(${col2?.label || ""}) ${(col2?.text || "").trim()}` : "";
+      const c3Text = col3 ? `(${col3?.label || ""}) ${(col3?.text || "").trim()}` : "";
+      return hasCol3 ? `${c1Text} | ${c2Text} | ${c3Text}` : `${c1Text} | ${c2Text}`;
+    });
+    parts.push([header, divider, ...rows].join("\n"));
+  }
+
+  // 7. Table-based questions (tableHeaders + tableRows)
+  if (Array.isArray(q.tableHeaders) && q.tableHeaders.length > 0 && Array.isArray(q.tableRows) && q.tableRows.length > 0) {
+    const header = q.tableHeaders.join(" | ");
+    const divider = q.tableHeaders.map(() => "---").join(" | ");
+    const rows = q.tableRows.map((row) => (Array.isArray(row) ? row.join(" | ") : ""));
+    parts.push([header, divider, ...rows].join("\n"));
+  }
+
+  // 8. Flowchart steps
+  if (Array.isArray(q.flowchartSteps) && q.flowchartSteps.length > 0) {
+    parts.push(q.flowchartSteps.join(" ➔ "));
+  }
+
+  // 9. Image description if present and not in text
+  if (q.imageDescription?.trim()) {
+    if (!baseText || !baseText.includes(q.imageDescription.trim())) {
+      parts.push(`[Diagram: ${q.imageDescription.trim()}]`);
+    }
+  }
+
+  return parts.filter(Boolean).join("\n\n").trim();
 }

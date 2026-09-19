@@ -99,6 +99,13 @@ DISTRACTOR QUALITY RULES:
 3. NEVER make distractors obviously absurd.
 4. NEVER allow multiple options to be scientifically defendable.
 
+MANDATORY STATEMENT COMPLETENESS RULES:
+- NEVER truncate or output half/incomplete question stems.
+- For STATEMENT_BASED or MULTI-STATEMENT questions (e.g. "Consider the following statements..."): "statementEn" and "statementHi" MUST include the full question text WITH ALL individual numbered statements (I, II, III, IV...) explicitly written out inside the statement field, followed by the question prompt (e.g. "Which of the statements given above is/are correct?"). NEVER write only the introductory line without the statements!
+- For ASSERTION_REASON questions: "statementEn" and "statementHi" MUST include both "Assertion (A): ..." and "Reason (R): ..." completely.
+- For MATCH_COLUMN questions: "statementEn" and "statementHi" MUST include the complete Column-I and Column-II items.
+- A question statement must be 100% self-contained so that a student can read and solve it without missing parts.
+
 ${
   language === "BOTH" || language === "HINDI"
     ? `BILINGUAL QUALITY RULES:

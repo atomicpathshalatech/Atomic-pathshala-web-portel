@@ -1,17 +1,17 @@
 import crypto from "crypto";
 import { getPrisma } from "@/lib/ai-chat/prisma";
-import type { QuizQuestion } from "@/lib/ai-chat/quiz";
+import { formatFullQuestionStatement, type QuizQuestion } from "@/lib/ai-chat/quiz";
 
 function normalize(str: string) {
   return str.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-function computeContentHash(question: QuizQuestion, language: string) {
+function computeContentHash(question: QuizQuestion, language: string, statementText: string) {
   const base = [
     normalize(question.subject),
     normalize(question.chapter ?? ""),
     normalize(question.topic ?? ""),
-    normalize(question.text),
+    normalize(statementText || question.text),
     language,
   ].join("|");
   return crypto.createHash("sha256").update(base).digest("hex");
@@ -29,7 +29,8 @@ export async function saveQuestionsToBank(questions: QuizQuestion[], language: s
 
   const results = await Promise.allSettled(
     questions.map((question) => {
-      const contentHash = computeContentHash(question, language);
+      const fullText = formatFullQuestionStatement(question) || question.text;
+      const contentHash = computeContentHash(question, language, fullText);
       return prisma.questionBank.upsert({
         where: { contentHash },
         update: { timesUsed: { increment: 1 } },
@@ -37,7 +38,7 @@ export async function saveQuestionsToBank(questions: QuizQuestion[], language: s
           subject: question.subject,
           chapter: question.chapter,
           topic: question.topic,
-          text: question.text,
+          text: fullText,
           options: question.options,
           correctIndex: question.correctIndex,
           explanation: question.explanation,
