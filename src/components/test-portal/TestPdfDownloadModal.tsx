@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { usePathname } from "next/navigation";
 import { FileText, CheckCircle, Download, ExternalLink, Sparkles, X, Printer, ShieldAlert } from "lucide-react";
 
 interface TestPdfDownloadModalProps {
@@ -10,6 +11,7 @@ interface TestPdfDownloadModalProps {
   isOpen?: boolean;
   onClose?: () => void;
   triggerButton?: React.ReactNode;
+  showCoverPreview?: boolean;
 }
 
 export function TestPdfDownloadModal({
@@ -19,8 +21,13 @@ export function TestPdfDownloadModal({
   isOpen: controlledIsOpen,
   onClose: controlledOnClose,
   triggerButton,
+  showCoverPreview,
 }: TestPdfDownloadModalProps) {
+  const pathname = usePathname();
   const [internalOpen, setInternalOpen] = useState(false);
+
+  // Cover preview is for Team/Admin portal only - never on student side
+  const canShowCoverPreview = showCoverPreview !== undefined ? showCoverPreview : Boolean(pathname?.startsWith("/team"));
 
   const isModalOpen = controlledIsOpen !== undefined ? controlledIsOpen : internalOpen;
   const closeModal = controlledOnClose || (() => setInternalOpen(false));
@@ -110,7 +117,7 @@ export function TestPdfDownloadModal({
                     </li>
                     <li className="flex items-center gap-1.5">
                       <CheckCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                      <span>1 Intermediate Rough Page + 2 Final Rough Work Pages</span>
+                      <span>3 Dedicated White Rough Work Pages</span>
                     </li>
                     <li className="flex items-center gap-1.5">
                       <CheckCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
@@ -154,7 +161,7 @@ export function TestPdfDownloadModal({
                     </li>
                     <li className="flex items-center gap-1.5">
                       <CheckCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                      <span><strong>180-Question Official Answer Key Grid Table</strong></span>
+                      <span><strong>Official Answer Key Grid Table</strong></span>
                     </li>
                     <li className="flex items-center gap-1.5">
                       <CheckCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
@@ -174,19 +181,21 @@ export function TestPdfDownloadModal({
                 </button>
               </div>
 
-              {/* Cover Page Standalone Preview Quick Action */}
-              <div className="pt-1 flex items-center justify-between px-1">
-                <button
-                  type="button"
-                  onClick={() => window.open(`/api/tests/${testId}/export?type=cover`, "_blank")}
-                  className="inline-flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-semibold hover:underline"
-                >
-                  <FileText className="w-3.5 h-3.5" />
-                  <span>Preview Authentic Front Cover (A4 Sheet AP-26)</span>
-                  <ExternalLink className="w-3 h-3 opacity-70" />
-                </button>
-                <span className="text-[10px] text-slate-400 font-mono">Bilingual (EN + HI)</span>
-              </div>
+              {/* Cover Page Standalone Preview Quick Action - Team/Admin only, hidden on student side */}
+              {canShowCoverPreview && (
+                <div className="pt-1 flex items-center justify-between px-1">
+                  <button
+                    type="button"
+                    onClick={() => window.open(`/api/tests/${testId}/export?type=cover`, "_blank")}
+                    className="inline-flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-semibold hover:underline"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>Preview Authentic Front Cover (A4 Sheet AP-26)</span>
+                    <ExternalLink className="w-3 h-3 opacity-70" />
+                  </button>
+                  <span className="text-[10px] text-slate-400 font-mono">Bilingual (EN + HI)</span>
+                </div>
+              )}
             </div>
 
             {/* Modal Footer */}
