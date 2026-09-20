@@ -50,6 +50,8 @@ type WhiteboardSession = {
   handRaiseEnabled: boolean;
   videoTransport?: "LIVEKIT" | "YOUTUBE" | "BOTH";
   youtubeVideoId?: string | null;
+  youtubeIngestUrl?: string | null;
+  youtubeStreamKey?: string | null;
   presentationUrl?: string | null;
   presentationName?: string | null;
   presentationType?: "PDF" | "PPTX" | string | null;
@@ -560,6 +562,7 @@ export function TeacherLiveClassRoom({
   const [startClassError, setStartClassError] = useState<string | null>(null);
   const [recordingWarning, setRecordingWarning] = useState<string | null>(null);
   const [youtubeSimulcastWarning, setYoutubeSimulcastWarning] = useState<string | null>(null);
+  const [showObsStreamInfo, setShowObsStreamInfo] = useState(false);
   const [slideTemplatesOpen, setSlideTemplatesOpen] = useState(false);
 
   // Start Class Mode Modal State (Application vs YouTube)
@@ -1744,8 +1747,13 @@ export function TeacherLiveClassRoom({
           : extractYouTubeVideoId(youtubeInputUrl)
         : null;
 
-    if (mode === "YOUTUBE" && !ytId) {
-      setYoutubeInputError("Please enter a valid YouTube Live URL or 11-character Video ID.");
+    // A manual URL/Video ID is now optional for YOUTUBE mode (same as BOTH)
+    // — leaving it blank auto-creates a broadcast server-side and hands back
+    // a Server URL/Stream Key to paste into OBS instead. Only block the
+    // submit if the teacher actually typed something that isn't a valid
+    // YouTube URL/ID (a real mistake worth catching), not just an empty field.
+    if (mode === "YOUTUBE" && youtubeInputUrl.trim() && !ytId) {
+      setYoutubeInputError("Please enter a valid YouTube Live URL or 11-character Video ID, or leave it blank to auto-create one.");
       setStartingClass(false);
       return;
     }
@@ -2380,6 +2388,54 @@ export function TeacherLiveClassRoom({
               {youtubeSimulcastWarning}
             </div>
           )}
+          {wbSession?.videoTransport === "YOUTUBE" && wbSession?.youtubeStreamKey && (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowObsStreamInfo((v) => !v)}
+                className="flex items-center gap-1.5 rounded-lg bg-red-500/15 border border-red-500/40 px-3 py-1.5 text-xs font-bold text-red-300 hover:bg-red-500/25 transition"
+              >
+                <span className="material-symbols-outlined text-sm">cast</span>
+                OBS Setup Info
+              </button>
+              {showObsStreamInfo && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowObsStreamInfo(false)} />
+                  <div className="absolute top-full left-0 mt-2 w-80 p-3 rounded-xl border border-[#2d2e3b] bg-[#1a1b23] text-white shadow-2xl z-50 space-y-2">
+                    <p className="text-[11px] text-slate-400">Paste these into OBS Studio (Settings → Stream → Custom), then capture this browser window and start streaming there.</p>
+                    <div className="space-y-1">
+                      <p className="text-[10px] uppercase text-slate-500 font-bold">Server URL</p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="flex-1 text-xs font-mono text-white break-all bg-[#10111a] border border-[#2d2e3b] rounded-lg px-2 py-1.5">{wbSession.youtubeIngestUrl}</p>
+                        <button
+                          type="button"
+                          onClick={() => navigator.clipboard?.writeText(wbSession.youtubeIngestUrl || "")}
+                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white transition shrink-0"
+                          title="Copy"
+                        >
+                          <span className="material-symbols-outlined text-sm">content_copy</span>
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-[10px] uppercase text-slate-500 font-bold">Stream Key</p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="flex-1 text-xs font-mono text-white break-all bg-[#10111a] border border-[#2d2e3b] rounded-lg px-2 py-1.5">{wbSession.youtubeStreamKey}</p>
+                        <button
+                          type="button"
+                          onClick={() => navigator.clipboard?.writeText(wbSession.youtubeStreamKey || "")}
+                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white transition shrink-0"
+                          title="Copy"
+                        >
+                          <span className="material-symbols-outlined text-sm">content_copy</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
           <button
             type="button"
@@ -2851,6 +2907,7 @@ export function TeacherLiveClassRoom({
             connectedStudents={connectedStudents}
             onDisconnectStudent={handleDisconnectStudent}
             compact={isCameraCircle}
+            forceLocalOnly={wbSession.videoTransport === "YOUTUBE"}
           />
         </div>
 
@@ -3811,11 +3868,11 @@ export function TeacherLiveClassRoom({
                   </div>
                   <h4 className="text-sm font-black text-white">YouTube Live Class</h4>
                   <p className="text-[11px] text-slate-400 leading-relaxed">
-                    Stream externally via YouTube Live / OBS / Studio while students watch and participate via Atomic Pathshala chat &amp; polls.
+                    Use your Atomic Whiteboard (board + camera) as usual — capture it with OBS/Studio and stream to YouTube yourself. No LiveKit cost.
                   </p>
                 </div>
                 <span className="text-[11px] font-bold text-red-400 flex items-center gap-1">
-                  <span>For OBS &amp; Studio Broadcasts</span>
+                  <span>Zero LiveKit Cost — You Run OBS</span>
                   <span className="material-symbols-outlined text-xs">arrow_forward</span>
                 </span>
               </button>
@@ -3860,8 +3917,11 @@ export function TeacherLiveClassRoom({
             {selectedStartMode === "YOUTUBE" && (
               <div className="bg-[#181a2c] border border-slate-700/80 rounded-xl p-4 space-y-3 animate-in fade-in slide-in-from-top-2 duration-150">
                 <label className="block text-xs font-bold text-slate-300">
-                  YouTube Live Stream URL or Video ID <span className="text-red-400">*</span>
+                  YouTube Live Stream URL or Video ID <span className="text-slate-500 font-normal">(optional)</span>
                 </label>
+                <p className="text-[10px] text-slate-500 -mt-2">
+                  Leave blank to auto-create a broadcast — you'll get a Server URL/Stream Key to paste into OBS after starting.
+                </p>
                 <div className="relative">
                   <span className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-slate-500">
                     <span className="material-symbols-outlined text-base">link</span>
@@ -3873,7 +3933,7 @@ export function TeacherLiveClassRoom({
                       setYoutubeInputUrl(e.target.value);
                       setYoutubeInputError(null);
                     }}
-                    placeholder="https://www.youtube.com/watch?v=... or Video ID"
+                    placeholder="Leave blank to auto-create, or paste an existing YouTube URL/Video ID"
                     className="w-full pl-9 pr-3 py-2 bg-[#0e101b] border border-slate-700 rounded-lg text-xs text-white placeholder-slate-500 outline-none focus:border-red-500"
                   />
                 </div>

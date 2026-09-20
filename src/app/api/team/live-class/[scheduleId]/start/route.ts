@@ -278,16 +278,24 @@ export async function POST(
         .catch((err) => console.error("[late_start_penalty_error]", err));
     }
 
-    // 4.5. "Application Class + YouTube" (videoTransport BOTH, no manual
-    // youtubeVideoId): auto-create the broadcast that step 5's egress will
-    // push live to. Idempotent — ensureYoutubeBroadcastForWhiteboard reuses
-    // an existing broadcast on this same WhiteboardSession rather than
-    // creating a second one on a re-start/restart. Failure here is
-    // surfaced as a warning, not a hard error — the interactive LiveKit
-    // class still starts normally for the teacher/students either way.
+    // 4.5. Auto-create a YouTube broadcast when no manual youtubeVideoId was
+    // supplied, for both YouTube-involving modes:
+    //  - BOTH ("Application Class + YouTube"): step 5's egress pushes RTMP
+    //    to it directly (LiveKit-driven, costs egress minutes).
+    //  - YOUTUBE ("YouTube Live Class"): step 5's egress is skipped
+    //    entirely for this transport (see the `!== "YOUTUBE"` check below)
+    //    — this just hands the teacher a ready Server URL/Stream Key to
+    //    paste into their own OBS/Studio, so they never touch LiveKit at
+    //    all for this mode (zero connection or egress minutes). The manual
+    //    URL field stays available for a teacher who already has an
+    //    external stream set up some other way.
+    // Idempotent — ensureYoutubeBroadcastForWhiteboard reuses an existing
+    // broadcast on this same WhiteboardSession rather than creating a
+    // second one on a re-start/restart. Failure here is surfaced as a
+    // warning, not a hard error — the class still starts either way.
     let youtubeRtmpUrl: string | undefined;
     let youtubeSimulcastWarning: string | null = null;
-    if (requestedTransport === "BOTH" && !requestedYouTubeId) {
+    if ((requestedTransport === "BOTH" || requestedTransport === "YOUTUBE") && !requestedYouTubeId) {
       try {
         const { youtubeLiveClassConfigured, ensureYoutubeBroadcastForWhiteboard } = await import(
           "@/lib/live-class/youtube-broadcast"
@@ -297,14 +305,17 @@ export async function POST(
         } else {
           const withBroadcast = await ensureYoutubeBroadcastForWhiteboard(wbSession.id, schedule.title, scheduledStart);
           // Merge the newly-created broadcast fields in so the response
-          // (and the teacher UI's "also live on YouTube" indicator) reflects
-          // them immediately, rather than the stale pre-broadcast wbSession.
+          // (and the teacher UI's "also live on YouTube" indicator, plus the
+          // Server URL/Stream Key display for YOUTUBE mode) reflects them
+          // immediately, rather than the stale pre-broadcast wbSession.
           Object.assign(wbSession, {
             youtubeBroadcastId: withBroadcast.youtubeBroadcastId,
             youtubeStreamId: withBroadcast.youtubeStreamId,
             youtubeVideoId: withBroadcast.youtubeVideoId,
             youtubeLiveChatId: withBroadcast.youtubeLiveChatId,
             youtubeStatus: withBroadcast.youtubeStatus,
+            youtubeIngestUrl: withBroadcast.youtubeIngestUrl,
+            youtubeStreamKey: withBroadcast.youtubeStreamKey,
           });
           if (withBroadcast.youtubeIngestUrl && withBroadcast.youtubeStreamKey) {
             youtubeRtmpUrl = `${withBroadcast.youtubeIngestUrl.replace(/\/$/, "")}/${withBroadcast.youtubeStreamKey}`;

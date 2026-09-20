@@ -62,6 +62,15 @@ export interface VideoStripProps {
   // those overlays don't fit and aren't reachable anyway. Docked panel
   // usage (the default) is unaffected.
   compact?: boolean;
+  // TEACHER only — skip the LiveKit video-token fetch and room connection
+  // entirely and go straight to LocalWebcamPreview (plain getUserMedia, no
+  // network video transmission at all). Used for the "YouTube Live Class"
+  // mode, where the teacher captures their own browser window in OBS and
+  // streams that to YouTube themselves — LiveKit is never involved, so this
+  // consumes zero LiveKit connection/egress minutes. Previously
+  // LocalWebcamPreview only ever appeared as an accidental error fallback;
+  // this reaches the same component on purpose.
+  forceLocalOnly?: boolean;
 }
 
 export function VideoStrip({
@@ -81,6 +90,7 @@ export function VideoStrip({
   onEndCall,
   classSpeaker = null,
   compact = false,
+  forceLocalOnly = false,
 }: VideoStripProps) {
   const [creds, setCreds] = useState<{ token: string; url: string } | null>(null);
   const [tokenError, setTokenError] = useState<string | null>(null);
@@ -93,6 +103,7 @@ export function VideoStrip({
   const activeToken = isStudentGrantedPublish ? (speakerToken || teacherConnectionToken || creds?.token) : creds?.token;
 
   useEffect(() => {
+    if (forceLocalOnly) return; // never fetch a LiveKit token for this mode
     let cancelled = false;
     (async () => {
       try {
@@ -119,9 +130,9 @@ export function VideoStrip({
     return () => {
       cancelled = true;
     };
-  }, [whiteboardSessionId, role]);
+  }, [whiteboardSessionId, role, forceLocalOnly]);
 
-  if (useFallbackCamera && role === "TEACHER") {
+  if ((forceLocalOnly || useFallbackCamera) && role === "TEACHER") {
     return <LocalWebcamPreview variant={variant} teacherName={teacherName} />;
   }
 
