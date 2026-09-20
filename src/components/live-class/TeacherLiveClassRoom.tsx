@@ -33,6 +33,7 @@ import { PageThumbnail } from "@/components/live-class/PageThumbnail";
 import { GRACE_PERIOD_MINUTES, END_WARNING_MINUTES } from "@/lib/whiteboard/constants";
 import { playHandRaiseChime, playCallConnectedChime, unlockAudioForNotifications } from "@/lib/live-class/live-sound-effects";
 import { extractYouTubeVideoId } from "@/lib/live-class/youtube";
+import { BroadcastQuizCanvasOverlay } from "@/components/live-class/BroadcastQuizCanvasOverlay";
 
 // Diameter (px) of the floating self-camera bubble shown when the teacher's
 // Material & Setup camera shape is Circular — see floatCamPos below.
@@ -58,6 +59,12 @@ type WhiteboardSession = {
   classroomTheme?: "LIGHT" | "DARK" | string;
   cameraShape?: "SQUARE" | "CIRCULAR" | string;
   cameraPosition?: string;
+  recordingStatus?: "NONE" | "RECORDING" | "SAVED" | "FAILED";
+  recordingStorageKey?: string | null;
+  pdfStatus?: "NONE" | "GENERATING" | "READY" | "FAILED";
+  pptxStatus?: "NONE" | "GENERATING" | "READY" | "FAILED";
+  pdfStorageKey?: string | null;
+  pptxStorageKey?: string | null;
   scheduledStart?: string | null;
   scheduledEnd?: string | null;
   startedAt?: string | null;
@@ -88,6 +95,7 @@ type ActiveQuiz = {
   timeLimitSec: number;
   status: "ACTIVE" | "REVEALED" | "CLOSED";
   correctOption?: string | null;
+  startedAt?: string | null;
 };
 
 // WhiteboardPage.background is untyped at the DB level (a free string), so
@@ -2422,16 +2430,31 @@ export function TeacherLiveClassRoom({
               <button
                 type="button"
                 onClick={() => setShowObsStreamInfo((v) => !v)}
-                className="flex items-center gap-1.5 rounded-lg bg-red-500/15 border border-red-500/40 px-3 py-1.5 text-xs font-bold text-red-300 hover:bg-red-500/25 transition"
+                className="flex items-center gap-1.5 rounded-lg bg-red-600/25 border border-red-500/60 px-3 py-1.5 text-xs font-bold text-red-200 hover:bg-red-600/40 transition shadow-sm"
               >
                 <span className="material-symbols-outlined text-sm">cast</span>
-                OBS Setup Info
+                OBS Stream Key
               </button>
               {showObsStreamInfo && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowObsStreamInfo(false)} />
-                  <div className="absolute top-full left-0 mt-2 w-80 p-3 rounded-xl border border-[#2d2e3b] bg-[#1a1b23] text-white shadow-2xl z-50 space-y-2">
-                    <p className="text-[11px] text-slate-400">Paste these into OBS Studio (Settings → Stream → Custom), then capture this browser window and start streaming there.</p>
+                  <div className="absolute top-full left-0 mt-2 w-88 p-3.5 rounded-xl border border-[#2d2e3b] bg-[#1a1b23] text-white shadow-2xl z-50 space-y-2.5">
+                    <div className="flex items-center justify-between border-b border-[#2d2e3b] pb-1.5">
+                      <span className="text-xs font-bold text-red-400 flex items-center gap-1">
+                        <span className="material-symbols-outlined text-sm">sensors</span>
+                        OBS Studio Live Streaming
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setShowObsStreamInfo(false)}
+                        className="text-slate-400 hover:text-white"
+                      >
+                        <span className="material-symbols-outlined text-sm">close</span>
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Paste these into OBS Studio (<strong>Settings → Stream → Custom</strong>), capture this Atomic Board screen, and click <em>Start Streaming</em>.
+                    </p>
                     <div className="space-y-1">
                       <p className="text-[10px] uppercase text-slate-500 font-bold">Server URL</p>
                       <div className="flex items-center gap-1.5">
@@ -2440,7 +2463,7 @@ export function TeacherLiveClassRoom({
                           type="button"
                           onClick={() => navigator.clipboard?.writeText(wbSession.youtubeIngestUrl || "")}
                           className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white transition shrink-0"
-                          title="Copy"
+                          title="Copy Server URL"
                         >
                           <span className="material-symbols-outlined text-sm">content_copy</span>
                         </button>
@@ -2454,12 +2477,25 @@ export function TeacherLiveClassRoom({
                           type="button"
                           onClick={() => navigator.clipboard?.writeText(wbSession.youtubeStreamKey || "")}
                           className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white transition shrink-0"
-                          title="Copy"
+                          title="Copy Stream Key"
                         >
                           <span className="material-symbols-outlined text-sm">content_copy</span>
                         </button>
                       </div>
                     </div>
+                    {wbSession.youtubeVideoId && (
+                      <div className="pt-2 border-t border-[#2d2e3b] flex items-center justify-between">
+                        <a
+                          href={`https://www.youtube.com/watch?v=${wbSession.youtubeVideoId}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[11px] text-red-400 hover:underline flex items-center gap-1 font-semibold"
+                        >
+                          <span className="material-symbols-outlined text-xs">open_in_new</span>
+                          Open Live Stream on YouTube
+                        </a>
+                      </div>
+                    )}
                   </div>
                 </>
               )}
@@ -2876,6 +2912,18 @@ export function TeacherLiveClassRoom({
               </div>
             )}
           </div>
+
+          {/* Broadcast On-Canvas Poll Overlay for Screen Capture / OBS / YouTube Viewers */}
+          {activeQuiz && activeQuiz.status !== "CLOSED" && (
+            <BroadcastQuizCanvasOverlay
+              activeQuiz={activeQuiz}
+              quizMetrics={quizMetrics}
+              containerWidth={stageDimensions.width}
+              containerHeight={stageDimensions.height}
+              onReveal={(chosen) => revealQuiz(chosen)}
+              onClose={() => closeQuiz()}
+            />
+          )}
         </div>
       </main>
 
