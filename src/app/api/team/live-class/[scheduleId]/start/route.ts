@@ -18,7 +18,8 @@ export async function POST(
 ) {
   try {
     const body = await request.json().catch(() => ({}));
-    const requestedTransport = body?.videoTransport === "YOUTUBE" ? "YOUTUBE" : "LIVEKIT";
+    const requestedTransport =
+      body?.videoTransport === "YOUTUBE" ? "YOUTUBE" : body?.videoTransport === "BOTH" ? "BOTH" : "LIVEKIT";
     const requestedYouTubeId = body?.youtubeVideoId ? extractYouTubeVideoId(String(body.youtubeVideoId)) : null;
 
     const session = await getServerSession(authOptions);
@@ -277,7 +278,46 @@ export async function POST(
         .catch((err) => console.error("[late_start_penalty_error]", err));
     }
 
-    // 5. Start Room Recording (Room Composite Egress -> R2) - Idempotent, single identity
+    // 4.5. "Application Class + YouTube" (videoTransport BOTH, no manual
+    // youtubeVideoId): auto-create the broadcast that step 5's egress will
+    // push live to. Idempotent — ensureYoutubeBroadcastForWhiteboard reuses
+    // an existing broadcast on this same WhiteboardSession rather than
+    // creating a second one on a re-start/restart. Failure here is
+    // surfaced as a warning, not a hard error — the interactive LiveKit
+    // class still starts normally for the teacher/students either way.
+    let youtubeRtmpUrl: string | undefined;
+    let youtubeSimulcastWarning: string | null = null;
+    if (requestedTransport === "BOTH" && !requestedYouTubeId) {
+      try {
+        const { youtubeLiveClassConfigured, ensureYoutubeBroadcastForWhiteboard } = await import(
+          "@/lib/live-class/youtube-broadcast"
+        );
+        if (!youtubeLiveClassConfigured()) {
+          youtubeSimulcastWarning = "YouTube isn't configured on this environment — class started on the interactive room only.";
+        } else {
+          const withBroadcast = await ensureYoutubeBroadcastForWhiteboard(wbSession.id, schedule.title, scheduledStart);
+          // Merge the newly-created broadcast fields in so the response
+          // (and the teacher UI's "also live on YouTube" indicator) reflects
+          // them immediately, rather than the stale pre-broadcast wbSession.
+          Object.assign(wbSession, {
+            youtubeBroadcastId: withBroadcast.youtubeBroadcastId,
+            youtubeStreamId: withBroadcast.youtubeStreamId,
+            youtubeVideoId: withBroadcast.youtubeVideoId,
+            youtubeLiveChatId: withBroadcast.youtubeLiveChatId,
+            youtubeStatus: withBroadcast.youtubeStatus,
+          });
+          if (withBroadcast.youtubeIngestUrl && withBroadcast.youtubeStreamKey) {
+            youtubeRtmpUrl = `${withBroadcast.youtubeIngestUrl.replace(/\/$/, "")}/${withBroadcast.youtubeStreamKey}`;
+          }
+        }
+      } catch (youtubeError) {
+        console.error("[live_class_youtube_broadcast_error]", youtubeError);
+        youtubeSimulcastWarning = "Could not set up the YouTube simulcast for this class — it's live on the interactive room only.";
+      }
+    }
+
+    // 5. Start Room Recording (Room Composite Egress -> R2, plus a live RTMP
+    // push to YouTube when youtubeRtmpUrl is set) - Idempotent, single identity
     let recordingWarning: string | null = null;
 
     if (requestedTransport !== "YOUTUBE") {
@@ -294,7 +334,7 @@ export async function POST(
             .catch(() => null);
 
           const storageKey = recordingStorageKey(wbSession.id);
-          const egress = await startRoomRecording(videoRoomName(wbSession.id), storageKey);
+          const egress = await startRoomRecording(videoRoomName(wbSession.id), storageKey, youtubeRtmpUrl);
           if (egress?.egressId) {
             await prisma.whiteboardSession
               .update({
@@ -374,6 +414,7 @@ export async function POST(
       serverTime: now.toISOString(),
       startSlideUrl,
       recordingWarning,
+      youtubeSimulcastWarning,
     });
   } catch (error) {
     return handleApiError(error);

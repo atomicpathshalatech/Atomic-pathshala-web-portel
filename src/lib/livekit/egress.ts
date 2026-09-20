@@ -1,5 +1,5 @@
 import "server-only";
-import { EgressClient, EgressStatus, EncodedFileOutput, EncodedFileType, S3Upload } from "livekit-server-sdk";
+import { EgressClient, EgressStatus, EncodedFileOutput, EncodedFileType, S3Upload, StreamOutput, StreamProtocol } from "livekit-server-sdk";
 import { waitUntil } from "@vercel/functions";
 import { prisma } from "@/lib/db";
 
@@ -85,10 +85,22 @@ export function recordingStorageKey(whiteboardSessionId: string): string {
  * `storageKey`. Returns LiveKit's egressId, which the caller must persist
  * (WhiteboardSession.recordingEgressId) - it's the only way to stop the
  * recording later or match the eventual webhook back to this session.
+ *
+ * `youtubeRtmpUrl` (ingest URL + stream key, already joined) is optional and
+ * additive: when passed, the SAME egress call also pushes the room's live
+ * composite out via RTMP (LiveKit's own `stream` output alongside `file`,
+ * confirmed supported by `EncodedOutputs` in livekit-server-sdk's types) -
+ * this is what makes "Application Class + YouTube" actually go live on
+ * YouTube, with no separate relay/capture infrastructure needed. Every
+ * existing LIVEKIT-only caller omits this argument and gets byte-for-byte
+ * the same file-only egress as before.
  */
-export async function startRoomRecording(roomName: string, storageKey: string) {
+export async function startRoomRecording(roomName: string, storageKey: string, youtubeRtmpUrl?: string) {
   const client = getEgressClient();
-  const output = getR2FileOutput(storageKey);
+  const file = getR2FileOutput(storageKey);
+  const output = youtubeRtmpUrl
+    ? { file, stream: new StreamOutput({ protocol: StreamProtocol.RTMP, urls: [youtubeRtmpUrl] }) }
+    : file;
   return client.startRoomCompositeEgress(roomName, output, { layout: "grid" });
 }
 
@@ -210,8 +222,10 @@ export async function reconcileRecordingStatus(
       // Same YouTube-archive trigger as the webhook path (route.ts) — this
       // reconcile function is the fallback for when that webhook never
       // arrives, so it needs to fire the same fire-and-forget archive kick
-      // itself rather than relying on the webhook to have done it.
-      if (wbSession && !wbSession.isTest) {
+      // itself rather than relying on the webhook to have done it. Skipped
+      // for classes already live-streamed to YouTube directly (videoTransport
+      // YOUTUBE/BOTH) — see the matching comment in the webhook handler.
+      if (wbSession && !wbSession.isTest && wbSession.videoTransport === "LIVEKIT") {
         waitUntil(
           import("@/lib/youtube/archive-service")
             .then(({ startArchiveJob }) => startArchiveJob(session.id))

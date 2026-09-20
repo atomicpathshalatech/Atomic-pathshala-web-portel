@@ -1360,6 +1360,11 @@ model WhiteboardSession {
   // kept verbatim for debugging/audit — livePhase is the value everything
   // else in this app should actually branch on.
   youtubeStatus       String?
+  // Phase 2 (YouTubeLiveService) fields: populated only when videoTransport
+  // is BOTH and the broadcast was auto-created (not the manual URL-paste
+  // path) — this is what LiveKit Egress's StreamOutput pushes RTMP to.
+  youtubeIngestUrl    String?  @db.Text
+  youtubeStreamKey    String?  @db.Text
   recordingVideoId    String?
   peakViewers         Int      @default(0)
 

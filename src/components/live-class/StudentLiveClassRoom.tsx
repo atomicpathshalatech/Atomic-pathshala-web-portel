@@ -1118,7 +1118,14 @@ export function StudentLiveClassRoom({
 
   const isThemeDark = wbSession?.classroomTheme !== "LIGHT";
   const isCameraCircle = wbSession?.cameraShape === "CIRCULAR";
-  const isYouTube = wbSession?.videoTransport === "YOUTUBE";
+  // In BOTH mode the teacher keeps the full interactive LiveKit room, but
+  // students watch the YouTube simulcast instead of connecting to LiveKit
+  // directly (removes per-student LiveKit viewer cost/capacity limits,
+  // which is the actual point of adding YouTube here) — falls back to the
+  // LiveKit view only if the broadcast hasn't been created yet.
+  const isYouTube =
+    wbSession?.videoTransport === "YOUTUBE" ||
+    (wbSession?.videoTransport === "BOTH" && Boolean(wbSession?.youtubeVideoId));
 
   // ---------------- CLASS ENDED ----------------
   // Students see ONLY "Class Ended" + Student Learning Feedback.

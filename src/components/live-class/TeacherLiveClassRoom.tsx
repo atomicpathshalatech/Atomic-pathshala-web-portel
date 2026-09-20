@@ -559,11 +559,12 @@ export function TeacherLiveClassRoom({
   const [startingClass, setStartingClass] = useState(false);
   const [startClassError, setStartClassError] = useState<string | null>(null);
   const [recordingWarning, setRecordingWarning] = useState<string | null>(null);
+  const [youtubeSimulcastWarning, setYoutubeSimulcastWarning] = useState<string | null>(null);
   const [slideTemplatesOpen, setSlideTemplatesOpen] = useState(false);
 
   // Start Class Mode Modal State (Application vs YouTube)
   const [startClassModalOpen, setStartClassModalOpen] = useState(false);
-  const [selectedStartMode, setSelectedStartMode] = useState<"LIVEKIT" | "YOUTUBE">("LIVEKIT");
+  const [selectedStartMode, setSelectedStartMode] = useState<"LIVEKIT" | "YOUTUBE" | "BOTH">("LIVEKIT");
   const [youtubeInputUrl, setYoutubeInputUrl] = useState("");
   const [youtubeInputError, setYoutubeInputError] = useState<string | null>(null);
 
@@ -1727,11 +1728,12 @@ export function TeacherLiveClassRoom({
   }, [wbSession?.livePhase]);
 
   // ---- Start class (authoritative server validation) -------------------
-  async function startClass(modeOverride?: "LIVEKIT" | "YOUTUBE", ytVideoIdOverride?: string | null) {
+  async function startClass(modeOverride?: "LIVEKIT" | "YOUTUBE" | "BOTH", ytVideoIdOverride?: string | null) {
     if (!wbSession || startingClass) return;
     setStartingClass(true);
     setStartClassError(null);
     setRecordingWarning(null);
+    setYoutubeSimulcastWarning(null);
     setYoutubeInputError(null);
 
     const mode = modeOverride || selectedStartMode;
@@ -1759,6 +1761,7 @@ export function TeacherLiveClassRoom({
         );
       }
       if (data.recordingWarning) setRecordingWarning(data.recordingWarning);
+      if (data.youtubeSimulcastWarning) setYoutubeSimulcastWarning(data.youtubeSimulcastWarning);
       setStartClassModalOpen(false);
     } catch (err) {
       setStartClassError(err instanceof Error ? err.message : "Could not start the class.");
@@ -2303,8 +2306,8 @@ export function TeacherLiveClassRoom({
                 </div>
               ) : null}
 
-              {/* YouTube Live Stream Indicator when running on YouTube */}
-              {wbSession?.videoTransport === "YOUTUBE" && wbSession?.youtubeVideoId && (
+              {/* YouTube Live Stream Indicator when running on YouTube (or simulcasting alongside the interactive room) */}
+              {(wbSession?.videoTransport === "YOUTUBE" || wbSession?.videoTransport === "BOTH") && wbSession?.youtubeVideoId && (
                 <a
                   href={`https://www.youtube.com/watch?v=${wbSession.youtubeVideoId}`}
                   target="_blank"
@@ -2369,6 +2372,12 @@ export function TeacherLiveClassRoom({
             <div className="flex items-center gap-1.5 rounded-lg bg-amber-500/15 border border-amber-500/40 px-3 py-1.5 text-xs font-semibold text-amber-300">
               <span className="material-symbols-outlined text-sm">warning</span>
               {recordingWarning}
+            </div>
+          )}
+          {youtubeSimulcastWarning && (
+            <div className="flex items-center gap-1.5 rounded-lg bg-amber-500/15 border border-amber-500/40 px-3 py-1.5 text-xs font-semibold text-amber-300">
+              <span className="material-symbols-outlined text-sm">warning</span>
+              {youtubeSimulcastWarning}
             </div>
           )}
 
@@ -3740,7 +3749,7 @@ export function TeacherLiveClassRoom({
             </div>
 
             {/* Mode Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {/* Option 1: Application Class */}
               <button
                 type="button"
@@ -3807,6 +3816,41 @@ export function TeacherLiveClassRoom({
                 </div>
                 <span className="text-[11px] font-bold text-red-400 flex items-center gap-1">
                   <span>For OBS &amp; Studio Broadcasts</span>
+                  <span className="material-symbols-outlined text-xs">arrow_forward</span>
+                </span>
+              </button>
+
+              {/* Option 3: Application Class + YouTube — the interactive room, auto-simulcast live to YouTube (no manual URL needed) */}
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedStartMode("BOTH");
+                  setYoutubeInputError(null);
+                }}
+                className={`text-left p-4 rounded-xl border-2 transition-all flex flex-col justify-between space-y-3 cursor-pointer ${
+                  selectedStartMode === "BOTH"
+                    ? "bg-purple-950/40 border-purple-500 shadow-lg shadow-purple-500/20 ring-1 ring-purple-400"
+                    : "bg-[#181a2c] border-slate-800 hover:border-slate-700 text-slate-300"
+                }`}
+              >
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="w-10 h-10 rounded-xl bg-purple-600/20 text-purple-400 flex items-center justify-center">
+                      <span className="material-symbols-outlined text-2xl">cast</span>
+                    </div>
+                    {selectedStartMode === "BOTH" && (
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-purple-500 text-white shadow-xs">
+                        Selected
+                      </span>
+                    )}
+                  </div>
+                  <h4 className="text-sm font-black text-white">Application Class + YouTube</h4>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    Same interactive Whiteboard + camera as Application Class, automatically simulcast live to YouTube — no manual setup needed.
+                  </p>
+                </div>
+                <span className="text-[11px] font-bold text-purple-400 flex items-center gap-1">
+                  <span>Auto-Streamed, No URL Needed</span>
                   <span className="material-symbols-outlined text-xs">arrow_forward</span>
                 </span>
               </button>
@@ -3880,6 +3924,8 @@ export function TeacherLiveClassRoom({
                 className={`px-5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-lg ${
                   selectedStartMode === "YOUTUBE"
                     ? "bg-red-600 hover:bg-red-500 text-white shadow-red-600/30"
+                    : selectedStartMode === "BOTH"
+                    ? "bg-purple-600 hover:bg-purple-500 text-white shadow-purple-600/30"
                     : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/30"
                 } disabled:opacity-50 cursor-pointer`}
               >
@@ -3891,6 +3937,8 @@ export function TeacherLiveClassRoom({
                     ? "Starting Broadcast…"
                     : selectedStartMode === "YOUTUBE"
                     ? "Start YouTube Class"
+                    : selectedStartMode === "BOTH"
+                    ? "Start Class + YouTube"
                     : "Start Application Class"}
                 </span>
               </button>
