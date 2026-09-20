@@ -565,8 +565,7 @@ export function TeacherLiveClassRoom({
   const [showObsStreamInfo, setShowObsStreamInfo] = useState(false);
   const [slideTemplatesOpen, setSlideTemplatesOpen] = useState(false);
 
-  // Start Class Mode Modal State (Application vs YouTube)
-  const [startClassModalOpen, setStartClassModalOpen] = useState(false);
+  // Start Class Mode (defaults to scheduled mode)
   const [selectedStartMode, setSelectedStartMode] = useState<"LIVEKIT" | "YOUTUBE" | "BOTH">("LIVEKIT");
   const [youtubeInputUrl, setYoutubeInputUrl] = useState("");
   const [youtubeInputError, setYoutubeInputError] = useState<string | null>(null);
@@ -1739,12 +1738,12 @@ export function TeacherLiveClassRoom({
     setYoutubeSimulcastWarning(null);
     setYoutubeInputError(null);
 
-    const mode = modeOverride || selectedStartMode;
+    const mode = modeOverride || wbSession?.videoTransport || selectedStartMode || "LIVEKIT";
     const ytId =
-      mode === "YOUTUBE"
+      mode === "YOUTUBE" || mode === "BOTH"
         ? ytVideoIdOverride !== undefined
           ? ytVideoIdOverride
-          : extractYouTubeVideoId(youtubeInputUrl)
+          : wbSession?.youtubeVideoId || extractYouTubeVideoId(youtubeInputUrl)
         : null;
 
     // A manual URL/Video ID is now optional for YOUTUBE mode (same as BOTH)
@@ -1770,7 +1769,6 @@ export function TeacherLiveClassRoom({
       }
       if (data.recordingWarning) setRecordingWarning(data.recordingWarning);
       if (data.youtubeSimulcastWarning) setYoutubeSimulcastWarning(data.youtubeSimulcastWarning);
-      setStartClassModalOpen(false);
     } catch (err) {
       setStartClassError(err instanceof Error ? err.message : "Could not start the class.");
     } finally {
@@ -2355,19 +2353,50 @@ export function TeacherLiveClassRoom({
           {/* Authoritative Start Class Button */}
           {!isClassLive && (
             <div className="flex items-center gap-2">
+              {/* Teaching mode badge */}
+              <span
+                className={`flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-md border ${
+                  wbSession?.videoTransport === "YOUTUBE" || wbSession?.videoTransport === "BOTH"
+                    ? "text-red-300 bg-red-950/60 border-red-500/50"
+                    : "text-blue-300 bg-blue-950/60 border-blue-500/50"
+                }`}
+                title={
+                  wbSession?.videoTransport === "YOUTUBE" || wbSession?.videoTransport === "BOTH"
+                    ? "Class mode: YouTube Live Class (synced with App)"
+                    : "Class mode: App Class (Interactive whiteboard)"
+                }
+              >
+                <span className="material-symbols-outlined text-xs">
+                  {wbSession?.videoTransport === "YOUTUBE" || wbSession?.videoTransport === "BOTH" ? "smart_display" : "draw"}
+                </span>
+                <span>
+                  {wbSession?.videoTransport === "YOUTUBE" || wbSession?.videoTransport === "BOTH"
+                    ? "YouTube Live"
+                    : "App Class"}
+                </span>
+              </span>
+
               <button
                 type="button"
                 disabled={startingClass || !canStartClass}
-                onClick={() => setStartClassModalOpen(true)}
+                onClick={() => startClass()}
                 className={`flex items-center gap-1.5 text-xs font-bold px-4 py-1.5 rounded-lg shadow-md transition active:scale-95 ${
                   canStartClass
-                    ? "text-white bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/30 ring-2 ring-emerald-400/40 animate-pulse cursor-pointer"
+                    ? wbSession?.videoTransport === "YOUTUBE" || wbSession?.videoTransport === "BOTH"
+                      ? "text-white bg-red-600 hover:bg-red-500 shadow-red-600/30 ring-2 ring-red-400/40 animate-pulse cursor-pointer"
+                      : "text-white bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/30 ring-2 ring-emerald-400/40 animate-pulse cursor-pointer"
                     : "text-gray-400 bg-gray-800 border border-gray-700 cursor-not-allowed opacity-60"
                 }`}
                 title={canStartClass ? "Start Live Teaching for all students" : "Class start unlocks 5 minutes before scheduled start time"}
               >
                 <span className="material-symbols-outlined text-base">sensors</span>
-                {startingClass ? "Starting Live…" : canStartClass ? "Start Class" : "Scheduled Time Locked"}
+                {startingClass
+                  ? "Starting Live…"
+                  : canStartClass
+                  ? wbSession?.videoTransport === "YOUTUBE" || wbSession?.videoTransport === "BOTH"
+                    ? "Start YouTube Class"
+                    : "Start App Class"
+                  : "Scheduled Time Locked"}
               </button>
               {startClassError && (
                 <span className="text-xs text-red-400 max-w-xs truncate" title={startClassError}>
@@ -3782,230 +3811,7 @@ export function TeacherLiveClassRoom({
         />
       )}
 
-      {/* Start Class Mode Selection Modal (Application Class vs YouTube Live Class) */}
-      {startClassModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="relative w-full max-w-xl bg-[#121422] border border-slate-700/80 rounded-2xl shadow-2xl p-6 text-white space-y-6">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <div>
-                <h3 className="text-lg font-black text-white flex items-center gap-2">
-                  <span className="material-symbols-outlined text-rose-500">sensors</span>
-                  Start Live Class — Select Teaching Mode
-                </h3>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Choose how you want to broadcast this live lecture to enrolled students.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setStartClassModalOpen(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-xl">close</span>
-              </button>
-            </div>
 
-            {/* Mode Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {/* Option 1: Application Class */}
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedStartMode("LIVEKIT");
-                  setYoutubeInputError(null);
-                }}
-                className={`text-left p-4 rounded-xl border-2 transition-all flex flex-col justify-between space-y-3 cursor-pointer ${
-                  selectedStartMode === "LIVEKIT"
-                    ? "bg-blue-950/40 border-blue-500 shadow-lg shadow-blue-500/20 ring-1 ring-blue-400"
-                    : "bg-[#181a2c] border-slate-800 hover:border-slate-700 text-slate-300"
-                }`}
-              >
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="w-10 h-10 rounded-xl bg-blue-600/20 text-blue-400 flex items-center justify-center">
-                      <span className="material-symbols-outlined text-2xl">draw</span>
-                    </div>
-                    {selectedStartMode === "LIVEKIT" && (
-                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-500 text-white shadow-xs">
-                        Selected
-                      </span>
-                    )}
-                  </div>
-                  <h4 className="text-sm font-black text-white">Application Class</h4>
-                  <p className="text-[11px] text-slate-400 leading-relaxed">
-                    Interactive HD Whiteboard + LiveKit camera/audio + 2-way student video/audio calls + synchronized chat &amp; polls.
-                  </p>
-                </div>
-                <span className="text-[11px] font-bold text-blue-400 flex items-center gap-1">
-                  <span>Recommended for Interactive Teaching</span>
-                  <span className="material-symbols-outlined text-xs">arrow_forward</span>
-                </span>
-              </button>
-
-              {/* Option 2: YouTube Live Class */}
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedStartMode("YOUTUBE");
-                  setYoutubeInputError(null);
-                }}
-                className={`text-left p-4 rounded-xl border-2 transition-all flex flex-col justify-between space-y-3 cursor-pointer ${
-                  selectedStartMode === "YOUTUBE"
-                    ? "bg-red-950/40 border-red-500 shadow-lg shadow-red-500/20 ring-1 ring-red-400"
-                    : "bg-[#181a2c] border-slate-800 hover:border-slate-700 text-slate-300"
-                }`}
-              >
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="w-10 h-10 rounded-xl bg-red-600/20 text-red-400 flex items-center justify-center">
-                      <span className="material-symbols-outlined text-2xl">smart_display</span>
-                    </div>
-                    {selectedStartMode === "YOUTUBE" && (
-                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-red-500 text-white shadow-xs">
-                        Selected
-                      </span>
-                    )}
-                  </div>
-                  <h4 className="text-sm font-black text-white">YouTube Live Class</h4>
-                  <p className="text-[11px] text-slate-400 leading-relaxed">
-                    Use your Atomic Whiteboard (board + camera) as usual — capture it with OBS/Studio and stream to YouTube yourself. No LiveKit cost.
-                  </p>
-                </div>
-                <span className="text-[11px] font-bold text-red-400 flex items-center gap-1">
-                  <span>Zero LiveKit Cost — You Run OBS</span>
-                  <span className="material-symbols-outlined text-xs">arrow_forward</span>
-                </span>
-              </button>
-
-              {/* Option 3: Application Class + YouTube — the interactive room, auto-simulcast live to YouTube (no manual URL needed) */}
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedStartMode("BOTH");
-                  setYoutubeInputError(null);
-                }}
-                className={`text-left p-4 rounded-xl border-2 transition-all flex flex-col justify-between space-y-3 cursor-pointer ${
-                  selectedStartMode === "BOTH"
-                    ? "bg-purple-950/40 border-purple-500 shadow-lg shadow-purple-500/20 ring-1 ring-purple-400"
-                    : "bg-[#181a2c] border-slate-800 hover:border-slate-700 text-slate-300"
-                }`}
-              >
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="w-10 h-10 rounded-xl bg-purple-600/20 text-purple-400 flex items-center justify-center">
-                      <span className="material-symbols-outlined text-2xl">cast</span>
-                    </div>
-                    {selectedStartMode === "BOTH" && (
-                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-purple-500 text-white shadow-xs">
-                        Selected
-                      </span>
-                    )}
-                  </div>
-                  <h4 className="text-sm font-black text-white">Application Class + YouTube</h4>
-                  <p className="text-[11px] text-slate-400 leading-relaxed">
-                    Same interactive Whiteboard + camera as Application Class, automatically simulcast live to YouTube — no manual setup needed.
-                  </p>
-                </div>
-                <span className="text-[11px] font-bold text-purple-400 flex items-center gap-1">
-                  <span>Auto-Streamed, No URL Needed</span>
-                  <span className="material-symbols-outlined text-xs">arrow_forward</span>
-                </span>
-              </button>
-            </div>
-
-            {/* YouTube URL input (Shown when YouTube is selected) */}
-            {selectedStartMode === "YOUTUBE" && (
-              <div className="bg-[#181a2c] border border-slate-700/80 rounded-xl p-4 space-y-3 animate-in fade-in slide-in-from-top-2 duration-150">
-                <label className="block text-xs font-bold text-slate-300">
-                  YouTube Live Stream URL or Video ID <span className="text-slate-500 font-normal">(optional)</span>
-                </label>
-                <p className="text-[10px] text-slate-500 -mt-2">
-                  Leave blank to auto-create a broadcast — you'll get a Server URL/Stream Key to paste into OBS after starting.
-                </p>
-                <div className="relative">
-                  <span className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-slate-500">
-                    <span className="material-symbols-outlined text-base">link</span>
-                  </span>
-                  <input
-                    type="text"
-                    value={youtubeInputUrl}
-                    onChange={(e) => {
-                      setYoutubeInputUrl(e.target.value);
-                      setYoutubeInputError(null);
-                    }}
-                    placeholder="Leave blank to auto-create, or paste an existing YouTube URL/Video ID"
-                    className="w-full pl-9 pr-3 py-2 bg-[#0e101b] border border-slate-700 rounded-lg text-xs text-white placeholder-slate-500 outline-none focus:border-red-500"
-                  />
-                </div>
-
-                {/* Auto-extracted ID verification */}
-                {(() => {
-                  const extractedId = extractYouTubeVideoId(youtubeInputUrl);
-                  if (extractedId) {
-                    return (
-                      <div className="flex items-center gap-3 p-2.5 bg-emerald-950/30 border border-emerald-500/40 rounded-lg text-emerald-300 text-xs">
-                        <img
-                          src={`https://img.youtube.com/vi/${extractedId}/default.jpg`}
-                          alt="Thumbnail preview"
-                          className="w-16 aspect-video rounded object-cover border border-emerald-600/40 shrink-0"
-                        />
-                        <div className="min-w-0">
-                          <p className="font-bold">Valid Video ID: <span className="font-mono text-white">{extractedId}</span></p>
-                          <p className="text-[10px] text-emerald-400/80">Students will connect automatically to this stream when class starts.</p>
-                        </div>
-                      </div>
-                    );
-                  }
-                  return null;
-                })()}
-
-                {youtubeInputError && (
-                  <p className="text-xs text-red-400 font-semibold flex items-center gap-1">
-                    <span className="material-symbols-outlined text-sm">error</span>
-                    {youtubeInputError}
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* Modal Actions */}
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
-              <button
-                type="button"
-                onClick={() => setStartClassModalOpen(false)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={startingClass}
-                onClick={() => startClass()}
-                className={`px-5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-lg ${
-                  selectedStartMode === "YOUTUBE"
-                    ? "bg-red-600 hover:bg-red-500 text-white shadow-red-600/30"
-                    : selectedStartMode === "BOTH"
-                    ? "bg-purple-600 hover:bg-purple-500 text-white shadow-purple-600/30"
-                    : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/30"
-                } disabled:opacity-50 cursor-pointer`}
-              >
-                <span className="material-symbols-outlined text-base">
-                  {startingClass ? "progress_activity" : "sensors"}
-                </span>
-                <span>
-                  {startingClass
-                    ? "Starting Broadcast…"
-                    : selectedStartMode === "YOUTUBE"
-                    ? "Start YouTube Class"
-                    : selectedStartMode === "BOTH"
-                    ? "Start Class + YouTube"
-                    : "Start Application Class"}
-                </span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

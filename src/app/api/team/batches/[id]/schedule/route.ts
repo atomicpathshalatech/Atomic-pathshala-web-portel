@@ -15,7 +15,20 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
 
     const schedules = await prisma.batchSchedule.findMany({
       where: { batchId: params.id },
-      include: { teacher: { include: { user: true } } },
+      include: {
+        teacher: { include: { user: true } },
+        liveWhiteboardSession: {
+          select: {
+            id: true,
+            status: true,
+            livePhase: true,
+            videoTransport: true,
+            youtubeVideoId: true,
+            actualStartedAt: true,
+            actualEndedAt: true,
+          },
+        },
+      },
       orderBy: { startsAt: "asc" },
     });
 
@@ -72,22 +85,29 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       },
     });
 
-    // If LIVE_CLASS with YouTube transport specified, initialize WhiteboardSession
-    if (input.type === "LIVE_CLASS" && input.teacherId && (input.videoTransport === "YOUTUBE" || input.videoTransport === "BOTH")) {
-      await prisma.whiteboardSession.upsert({
-        where: { batchScheduleId: schedule.id },
-        update: {
-          videoTransport: input.videoTransport,
-          youtubeVideoId: input.youtubeVideoId || null,
-        },
-        create: {
-          batchScheduleId: schedule.id,
-          teacherId: input.teacherId,
-          title: schedule.title,
-          videoTransport: input.videoTransport,
-          youtubeVideoId: input.youtubeVideoId || null,
-        },
-      });
+    // Initialize WhiteboardSession for LIVE_CLASS with selected transport
+    if (input.type === "LIVE_CLASS") {
+      let tid = input.teacherId;
+      if (!tid) {
+        const t = await prisma.teacher.findFirst({ where: { userId: session.user.id } });
+        tid = t?.id;
+      }
+      if (tid) {
+        await prisma.whiteboardSession.upsert({
+          where: { batchScheduleId: schedule.id },
+          update: {
+            videoTransport: input.videoTransport || "LIVEKIT",
+            youtubeVideoId: input.youtubeVideoId || null,
+          },
+          create: {
+            batchScheduleId: schedule.id,
+            teacherId: tid,
+            title: schedule.title,
+            videoTransport: input.videoTransport || "LIVEKIT",
+            youtubeVideoId: input.youtubeVideoId || null,
+          },
+        });
+      }
     }
 
     await prisma.auditLog.create({

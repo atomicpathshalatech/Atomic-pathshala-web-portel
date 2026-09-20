@@ -27,15 +27,10 @@ type ScheduleEntry = {
     id?: string;
     status?: string;
     livePhase?: string;
+    videoTransport?: string | null;
+    youtubeVideoId?: string | null;
     actualStartedAt?: string | null;
     actualEndedAt?: string | null;
-  } | null;
-  /** New, independent YouTube-Live Classroom module — present only once configured for this schedule. */
-  classroomSession?: {
-    id: string;
-    phase: string;
-    streamMethod: string | null;
-    recordingStatus: string | null;
   } | null;
 };
 
@@ -102,6 +97,8 @@ export function BatchScheduleManager({
     type: "LIVE_CLASS" as ScheduleEntry["type"],
     status: "SCHEDULED" as ScheduleEntry["status"],
     teacherId: "",
+    videoTransport: "LIVEKIT" as "LIVEKIT" | "YOUTUBE",
+    youtubeVideoId: "",
     startsAt: "",
     durationMinutes: 60,
     isCustomDuration: false,
@@ -129,6 +126,8 @@ export function BatchScheduleManager({
       type: "LIVE_CLASS",
       status: "SCHEDULED",
       teacherId: "",
+      videoTransport: "LIVEKIT",
+      youtubeVideoId: "",
       startsAt: "",
       durationMinutes: 60,
       isCustomDuration: false,
@@ -145,6 +144,7 @@ export function BatchScheduleManager({
     const end = new Date(entry.endsAt);
     const diffMins = Math.max(15, Math.round((end.getTime() - start.getTime()) / (1000 * 60)));
     const isCommon = COMMON_DURATIONS.some((d) => d.minutes === diffMins);
+    const isYt = entry.liveWhiteboardSession?.videoTransport === "YOUTUBE" || entry.liveWhiteboardSession?.videoTransport === "BOTH";
 
     setForm({
       title: entry.title,
@@ -152,6 +152,8 @@ export function BatchScheduleManager({
       type: entry.type,
       status: entry.status,
       teacherId: entry.teacherId ?? "",
+      videoTransport: isYt ? "YOUTUBE" : "LIVEKIT",
+      youtubeVideoId: entry.liveWhiteboardSession?.youtubeVideoId ?? "",
       startsAt: toISTDateTimeLocal(entry.startsAt),
       durationMinutes: isCommon ? diffMins : 60,
       isCustomDuration: !isCommon,
@@ -197,6 +199,11 @@ export function BatchScheduleManager({
         type: form.type,
         ...(editingId ? { status: form.status } : {}),
         teacherId: form.teacherId || undefined,
+        videoTransport: form.type === "LIVE_CLASS" ? form.videoTransport : "LIVEKIT",
+        youtubeVideoId:
+          form.type === "LIVE_CLASS" && form.videoTransport === "YOUTUBE"
+            ? form.youtubeVideoId.trim() || undefined
+            : undefined,
         startsAt: startsAtDate.toISOString(),
         endsAt: endsAtDate.toISOString(),
         notes: form.notes.trim() || undefined,
@@ -306,51 +313,52 @@ export function BatchScheduleManager({
                     )}
                   </div>
                   <div className="flex items-center gap-3 text-xs">
-                    {/* Application Class (private unlisted stream) status */}
+                    {/* Live Class Teaching Mode Badge & Single Direct Action Button */}
                     {s.type === "LIVE_CLASS" && (
-                      <Link
-                        href={`/team/classroom/${s.id}`}
-                        className="flex items-center gap-1 text-indigo-600 dark:text-indigo-400 font-bold hover:underline"
-                        title="Application Class (Private Unlisted Stream for Enrolled Students)"
-                      >
-                        <span className="material-symbols-outlined text-base">smart_display</span>
-                        {s.classroomSession?.phase === "LIVE"
-                          ? "Application Class: Live"
-                          : s.classroomSession?.phase === "RECORDED" || s.classroomSession?.recordingStatus === "READY"
-                            ? "Application Class: Recording ready"
-                            : s.classroomSession?.phase === "PROCESSING_RECORDING"
-                              ? "Application Class: Processing"
-                              : s.classroomSession
-                                ? "Application Class: Configured"
-                                : "Application Class: Setup"}
-                      </Link>
-                    )}
-                    {/* Application plus YouTube class (public stream + interactive studio) */}
-                    {s.type === "LIVE_CLASS" && (
-                      isCompleted ? null : isLive ? (
-                        <Link
-                          href={`/team/live-class/${s.id}`}
-                          className="flex items-center gap-1 text-emerald-600 font-bold hover:underline"
-                          title="Application plus YouTube class (Whiteboard Studio with Main Channel Stream)"
-                        >
-                          <span className="material-symbols-outlined text-base">cast</span>
-                          Resume App+YouTube Class
-                        </Link>
-                      ) : teacherStartEval.allowed ? (
-                        <Link
-                          href={`/team/live-class/${s.id}`}
-                          className="flex items-center gap-1 text-primary font-bold hover:underline"
-                          title="Application plus YouTube class (Whiteboard Studio with Main Channel Stream)"
-                        >
-                          <span className="material-symbols-outlined text-base">cast</span>
-                          Start App+YouTube Class
-                        </Link>
-                      ) : (
-                        <span className="flex items-center gap-1 text-on-surface-variant/50 font-medium text-[11px] select-none">
-                          <span className="material-symbols-outlined text-xs">lock</span>
-                          App+YouTube opens {formatISTTime(teacherStartEval.startOpensAt)}
+                      <div className="flex items-center gap-2">
+                        {/* Teaching mode badge */}
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                          s.liveWhiteboardSession?.videoTransport === "YOUTUBE" || s.liveWhiteboardSession?.videoTransport === "BOTH"
+                            ? "bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/30"
+                            : "bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30"
+                        }`}>
+                          <span className="material-symbols-outlined text-xs">
+                            {s.liveWhiteboardSession?.videoTransport === "YOUTUBE" || s.liveWhiteboardSession?.videoTransport === "BOTH" ? "smart_display" : "draw"}
+                          </span>
+                          {s.liveWhiteboardSession?.videoTransport === "YOUTUBE" || s.liveWhiteboardSession?.videoTransport === "BOTH" ? "YouTube Live" : "App Class"}
                         </span>
-                      )
+
+                        {isCompleted ? (
+                          <span className="text-on-surface-variant/60 text-[11px] font-medium">Completed</span>
+                        ) : isLive ? (
+                          <Link
+                            href={`/team/live-class/${s.id}`}
+                            className="flex items-center gap-1 text-emerald-600 font-bold hover:underline"
+                          >
+                            <span className="material-symbols-outlined text-base">sensors</span>
+                            Resume Class
+                          </Link>
+                        ) : teacherStartEval.allowed ? (
+                          <Link
+                            href={`/team/live-class/${s.id}`}
+                            className={`flex items-center gap-1 font-bold hover:underline ${
+                              s.liveWhiteboardSession?.videoTransport === "YOUTUBE" || s.liveWhiteboardSession?.videoTransport === "BOTH"
+                                ? "text-red-600 dark:text-red-400"
+                                : "text-primary"
+                            }`}
+                          >
+                            <span className="material-symbols-outlined text-base">sensors</span>
+                            {s.liveWhiteboardSession?.videoTransport === "YOUTUBE" || s.liveWhiteboardSession?.videoTransport === "BOTH"
+                              ? "Start YouTube Class"
+                              : "Start App Class"}
+                          </Link>
+                        ) : (
+                          <span className="flex items-center gap-1 text-on-surface-variant/50 font-medium text-[11px] select-none">
+                            <span className="material-symbols-outlined text-xs">lock</span>
+                            Opens {formatISTTime(teacherStartEval.startOpensAt)}
+                          </span>
+                        )}
+                      </div>
                     )}
                     {canManageSchedule && (
                       <>
@@ -458,6 +466,101 @@ export function BatchScheduleManager({
                 ))}
               </select>
             </div>
+
+            {/* Teaching Mode Selector for LIVE_CLASS */}
+            {form.type === "LIVE_CLASS" && (
+              <div className="md:col-span-2 space-y-3 p-4 rounded-2xl bg-surface-container border border-outline-variant/30">
+                <div>
+                  <label className="text-xs font-bold text-on-surface flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-primary text-base">sensors</span>
+                    Live Class Teaching Mode *
+                  </label>
+                  <p className="text-[11px] text-on-surface-variant mt-0.5">
+                    Choose how this lecture will be conducted. Teacher will start directly in this mode without any popup questions.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Mode 1: App Class */}
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, videoTransport: "LIVEKIT" })}
+                    className={`text-left p-3.5 rounded-xl border-2 transition-all flex items-start gap-3 cursor-pointer ${
+                      form.videoTransport === "LIVEKIT"
+                        ? "bg-primary/10 border-primary text-on-surface shadow-xs"
+                        : "bg-surface-container-lowest border-outline-variant/30 hover:border-outline-variant text-on-surface-variant"
+                    }`}
+                  >
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                      form.videoTransport === "LIVEKIT" ? "bg-primary text-on-primary" : "bg-surface-container text-on-surface-variant"
+                    }`}>
+                      <span className="material-symbols-outlined text-lg">draw</span>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-bold text-xs text-on-surface flex items-center gap-1.5">
+                        App Class
+                        {form.videoTransport === "LIVEKIT" && (
+                          <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-primary text-on-primary">
+                            Selected
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-[11px] text-on-surface-variant leading-relaxed mt-0.5">
+                        Private interactive whiteboard + 2-way audio/video calls + chat &amp; polls for enrolled students in App &amp; Web.
+                      </p>
+                    </div>
+                  </button>
+
+                  {/* Mode 2: YouTube Live Class */}
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, videoTransport: "YOUTUBE" })}
+                    className={`text-left p-3.5 rounded-xl border-2 transition-all flex items-start gap-3 cursor-pointer ${
+                      form.videoTransport === "YOUTUBE"
+                        ? "bg-red-500/10 border-red-500 text-on-surface shadow-xs"
+                        : "bg-surface-container-lowest border-outline-variant/30 hover:border-outline-variant text-on-surface-variant"
+                    }`}
+                  >
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                      form.videoTransport === "YOUTUBE" ? "bg-red-600 text-white" : "bg-surface-container text-on-surface-variant"
+                    }`}>
+                      <span className="material-symbols-outlined text-lg">smart_display</span>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-bold text-xs text-on-surface flex items-center gap-1.5">
+                        YouTube Live Class
+                        {form.videoTransport === "YOUTUBE" && (
+                          <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-red-600 text-white">
+                            Selected
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-[11px] text-on-surface-variant leading-relaxed mt-0.5">
+                        Public main channel live stream synchronized with App. Broadcast stream key ready for OBS or studio.
+                      </p>
+                    </div>
+                  </button>
+                </div>
+
+                {/* If YouTube Live Class, optional YouTube Video URL or ID */}
+                {form.videoTransport === "YOUTUBE" && (
+                  <div className="space-y-1.5 pt-1">
+                    <label className="text-xs font-bold text-on-surface">
+                      YouTube Live Video Link or ID <span className="text-on-surface-variant font-normal">(Optional)</span>
+                    </label>
+                    <input
+                      className={inputClass}
+                      placeholder="Leave blank to auto-create YouTube broadcast, or paste YouTube link"
+                      value={form.youtubeVideoId}
+                      onChange={(e) => setForm({ ...form, youtubeVideoId: e.target.value })}
+                    />
+                    <p className="text-[10px] text-on-surface-variant">
+                      Khaali chhodne par class start hote hi automatic YouTube broadcast create ho jayega.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Start Date & Time */}
             <div className="space-y-1.5">

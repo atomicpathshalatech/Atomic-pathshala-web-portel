@@ -18,9 +18,6 @@ export async function POST(
 ) {
   try {
     const body = await request.json().catch(() => ({}));
-    const requestedTransport =
-      body?.videoTransport === "YOUTUBE" ? "YOUTUBE" : body?.videoTransport === "BOTH" ? "BOTH" : "LIVEKIT";
-    const requestedYouTubeId = body?.youtubeVideoId ? extractYouTubeVideoId(String(body.youtubeVideoId)) : null;
 
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
@@ -35,6 +32,23 @@ export async function POST(
     if (schedule.type !== "LIVE_CLASS") {
       return apiError("Only Live Class sessions can be transitioned to LIVE.", 400);
     }
+
+    const requestedTransport =
+      body?.videoTransport === "YOUTUBE"
+        ? "YOUTUBE"
+        : body?.videoTransport === "BOTH"
+        ? "BOTH"
+        : body?.videoTransport === "LIVEKIT"
+        ? "LIVEKIT"
+        : schedule.liveWhiteboardSession?.videoTransport === "YOUTUBE" || schedule.liveWhiteboardSession?.videoTransport === "BOTH"
+        ? schedule.liveWhiteboardSession.videoTransport
+        : "LIVEKIT";
+
+    const requestedYouTubeId = body?.youtubeVideoId
+      ? extractYouTubeVideoId(String(body.youtubeVideoId))
+      : schedule.liveWhiteboardSession?.youtubeVideoId
+      ? schedule.liveWhiteboardSession.youtubeVideoId
+      : null;
 
     const now = new Date();
 

@@ -87,6 +87,31 @@ export async function PATCH(
       });
     }
 
+    // Update WhiteboardSession videoTransport and youtubeVideoId when edited
+    if (input.videoTransport || schedule.type === "LIVE_CLASS") {
+      let resolvedTeacherId: string | null = input.teacherId || schedule.teacherId;
+      if (!resolvedTeacherId) {
+        const t = await prisma.teacher.findFirst({ where: { userId: session.user.id } });
+        resolvedTeacherId = t?.id ?? null;
+      }
+      if (resolvedTeacherId) {
+        await prisma.whiteboardSession.upsert({
+          where: { batchScheduleId: schedule.id },
+          update: {
+            ...(input.videoTransport && { videoTransport: input.videoTransport }),
+            ...(input.youtubeVideoId !== undefined && { youtubeVideoId: input.youtubeVideoId || null }),
+          },
+          create: {
+            batchScheduleId: schedule.id,
+            teacherId: resolvedTeacherId,
+            title: schedule.title,
+            videoTransport: input.videoTransport || "LIVEKIT",
+            youtubeVideoId: input.youtubeVideoId || null,
+          },
+        });
+      }
+    }
+
     await prisma.auditLog.create({
       data: {
         userId: session.user.id,
