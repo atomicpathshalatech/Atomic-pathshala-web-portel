@@ -7,6 +7,7 @@ export type ClassroomYouTubePlayerProps = {
   title: string;
   onError?: () => void;
   className?: string;
+  children?: React.ReactNode;
 };
 
 /**
@@ -15,7 +16,7 @@ export type ClassroomYouTubePlayerProps = {
  * no seek/speed scrubbing, just a clean embed, fullscreen, and error
  * detection. Deliberately does not import from the Whiteboard component.
  */
-export function ClassroomYouTubePlayer({ youtubeVideoId, title, onError, className = "" }: ClassroomYouTubePlayerProps) {
+export function ClassroomYouTubePlayer({ youtubeVideoId, title, onError, className = "", children }: ClassroomYouTubePlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -80,11 +81,12 @@ export function ClassroomYouTubePlayer({ youtubeVideoId, title, onError, classNa
       <button
         type="button"
         onClick={toggleFullscreen}
-        className="absolute bottom-3 right-3 p-2 rounded-lg bg-black/60 hover:bg-black/80 text-white transition"
+        className="absolute bottom-3 right-3 p-2 rounded-lg bg-black/60 hover:bg-black/80 text-white transition z-20"
         title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
       >
         <span className="material-symbols-outlined text-base">{isFullscreen ? "fullscreen_exit" : "fullscreen"}</span>
       </button>
+      {children}
     </div>
   );
 }

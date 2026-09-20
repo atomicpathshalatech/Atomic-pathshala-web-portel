@@ -9,6 +9,7 @@ import { ChatPanel } from "./ChatPanel";
 import { DoubtPanel } from "./DoubtPanel";
 import { HandRaisePanel } from "./HandRaisePanel";
 import { StudentCountBadge } from "./StudentCountBadge";
+import { VideoPollOverlay, type VideoPollData } from "./VideoPollOverlay";
 import { getJson, postJson } from "./lib";
 
 const POLL_MS = 10_000;
@@ -45,6 +46,8 @@ export function StudentClassroomRoom({
 }) {
   const [data, setData] = useState<ByScheduleData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [poll, setPoll] = useState<VideoPollData | null>(null);
+  const [voting, setVoting] = useState(false);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const refresh = () => {
@@ -62,18 +65,66 @@ export function StudentClassroomRoom({
 
   const classroomSessionId = data?.classroomSession?.id;
 
+  // Poll fetch on session discovery
+  useEffect(() => {
+    if (!classroomSessionId) return;
+    getJson(`/api/classroom/sessions/${classroomSessionId}/poll`)
+      .then((res) => {
+        if (res?.poll) {
+          setPoll(res.poll);
+        }
+      })
+      .catch(() => {});
+  }, [classroomSessionId]);
+
   useEffect(() => {
     if (!classroomSessionId) return;
     const client = getPusherClient();
     const channel = client.subscribe(classroomChannel(classroomSessionId));
     const onPhaseChanged = () => refresh();
     channel.bind(CLASSROOM_EVENTS.PHASE_CHANGED, onPhaseChanged);
+
+    const onPollLaunched = (newPoll: VideoPollData) => {
+      setPoll(newPoll);
+    };
+
+    const onPollRevealed = (revealed: VideoPollData) => {
+      setPoll((prev) => (prev ? { ...prev, ...revealed, status: "REVEALED" } : revealed));
+    };
+
+    const onPollEnded = () => {
+      setPoll(null);
+    };
+
+    channel.bind(CLASSROOM_EVENTS.POLL_LAUNCHED, onPollLaunched);
+    channel.bind(CLASSROOM_EVENTS.POLL_REVEALED, onPollRevealed);
+    channel.bind(CLASSROOM_EVENTS.POLL_ENDED, onPollEnded);
+
     return () => {
       channel.unbind(CLASSROOM_EVENTS.PHASE_CHANGED, onPhaseChanged);
+      channel.unbind(CLASSROOM_EVENTS.POLL_LAUNCHED, onPollLaunched);
+      channel.unbind(CLASSROOM_EVENTS.POLL_REVEALED, onPollRevealed);
+      channel.unbind(CLASSROOM_EVENTS.POLL_ENDED, onPollEnded);
       client.unsubscribe(classroomChannel(classroomSessionId));
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [classroomSessionId]);
+
+  const handleVote = async (optionKey: string) => {
+    if (!classroomSessionId || !poll || voting) return;
+    setVoting(true);
+    try {
+      setPoll((prev) => (prev ? { ...prev, mySelection: optionKey } : null));
+      await postJson(`/api/classroom/sessions/${classroomSessionId}/poll/vote`, {
+        pollId: poll.id,
+        selectedOption: optionKey,
+      });
+    } catch {
+      // keep local selection
+    } finally {
+      setVoting(false);
+    }
+  };
 
   useEffect(() => {
     if (!classroomSessionId || data?.classroomSession?.phase !== "LIVE") {
@@ -124,7 +175,14 @@ export function StudentClassroomRoom({
     return (
       <ClassroomLayout
         video={
-          <ClassroomYouTubePlayer youtubeVideoId={data.classroomSession.youtubeVideoId} title={data.classroomSession.title} />
+          <ClassroomYouTubePlayer youtubeVideoId={data.classroomSession.youtubeVideoId} title={data.classroomSession.title}>
+            <VideoPollOverlay
+              poll={poll}
+              onVote={handleVote}
+              onDismiss={() => setPoll(null)}
+              voting={voting}
+            />
+          </ClassroomYouTubePlayer>
         }
         extraHeader={
           <div className="flex items-center justify-between px-1">

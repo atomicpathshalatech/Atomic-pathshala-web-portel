@@ -126,5 +126,10 @@ export const CLASSROOM_EVENTS = {
   // sitting in the waiting state jump straight into the video the instant
   // the teacher goes live.
   PHASE_CHANGED: "classroom-phase-changed",
+  // Interactive Video Poll Overlay events
+  POLL_LAUNCHED: "classroom-poll-launched",
+  POLL_VOTED: "classroom-poll-voted",
+  POLL_REVEALED: "classroom-poll-revealed",
+  POLL_ENDED: "classroom-poll-ended",
 } as const;
 

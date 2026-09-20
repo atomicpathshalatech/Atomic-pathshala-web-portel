@@ -114,9 +114,10 @@ export function ClassesSection({ course }: { course?: any }) {
                     <Link
                       href={`/classroom/${cls.id}`}
                       className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-sm hover:opacity-95 active:scale-95 transition text-center shrink-0"
+                      title="Application Class (Private Unlisted Stream)"
                     >
                       <span className="material-symbols-outlined text-[14px]">smart_display</span>
-                      <span>Classroom</span>
+                      <span>Application Class</span>
                     </Link>
                   )}
                   {isCompleted ? (

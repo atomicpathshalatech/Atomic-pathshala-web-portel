@@ -306,47 +306,49 @@ export function BatchScheduleManager({
                     )}
                   </div>
                   <div className="flex items-center gap-3 text-xs">
-                    {/* Classroom (new, independent YouTube-Live module) status
-                        — a sibling of the Whiteboard Start/Resume Class link
-                        below, computed independently and never replacing it. */}
+                    {/* Application Class (private unlisted stream) status */}
                     {s.type === "LIVE_CLASS" && (
                       <Link
                         href={`/team/classroom/${s.id}`}
                         className="flex items-center gap-1 text-indigo-600 dark:text-indigo-400 font-bold hover:underline"
+                        title="Application Class (Private Unlisted Stream for Enrolled Students)"
                       >
                         <span className="material-symbols-outlined text-base">smart_display</span>
                         {s.classroomSession?.phase === "LIVE"
-                          ? "Classroom: Live"
+                          ? "Application Class: Live"
                           : s.classroomSession?.phase === "RECORDED" || s.classroomSession?.recordingStatus === "READY"
-                            ? "Classroom: Recording ready"
+                            ? "Application Class: Recording ready"
                             : s.classroomSession?.phase === "PROCESSING_RECORDING"
-                              ? "Classroom: Processing"
+                              ? "Application Class: Processing"
                               : s.classroomSession
-                                ? "Classroom: Configured"
-                                : "Classroom: Not configured"}
+                                ? "Application Class: Configured"
+                                : "Application Class: Setup"}
                       </Link>
                     )}
+                    {/* Application plus YouTube class (public stream + interactive studio) */}
                     {s.type === "LIVE_CLASS" && (
                       isCompleted ? null : isLive ? (
                         <Link
                           href={`/team/live-class/${s.id}`}
                           className="flex items-center gap-1 text-emerald-600 font-bold hover:underline"
+                          title="Application plus YouTube class (Whiteboard Studio with Main Channel Stream)"
                         >
                           <span className="material-symbols-outlined text-base">cast</span>
-                          Resume Class
+                          Resume App+YouTube Class
                         </Link>
                       ) : teacherStartEval.allowed ? (
                         <Link
                           href={`/team/live-class/${s.id}`}
                           className="flex items-center gap-1 text-primary font-bold hover:underline"
+                          title="Application plus YouTube class (Whiteboard Studio with Main Channel Stream)"
                         >
                           <span className="material-symbols-outlined text-base">cast</span>
-                          Start Class
+                          Start App+YouTube Class
                         </Link>
                       ) : (
                         <span className="flex items-center gap-1 text-on-surface-variant/50 font-medium text-[11px] select-none">
                           <span className="material-symbols-outlined text-xs">lock</span>
-                          Opens {formatISTTime(teacherStartEval.startOpensAt)}
+                          App+YouTube opens {formatISTTime(teacherStartEval.startOpensAt)}
                         </span>
                       )
                     )}

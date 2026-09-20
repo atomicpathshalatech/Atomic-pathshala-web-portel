@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import { StudentClassroomRoom } from "@/components/classroom/StudentClassroomRoom";
 
 export const metadata: Metadata = {
-  title: "Classroom",
+  title: "Application Class",
 };
 
 /**

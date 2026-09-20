@@ -6,6 +6,7 @@ import { ClassroomLayout } from "./ClassroomLayout";
 import { ChatPanel } from "./ChatPanel";
 import { HandRaisePanel } from "./HandRaisePanel";
 import { StudentCountBadge } from "./StudentCountBadge";
+import { TeacherPollModal } from "./TeacherPollModal";
 import { getJson, postJson } from "./lib";
 
 type ClassroomSessionState = {
@@ -38,6 +39,7 @@ export function TeacherClassroomRoom({
   const [ending, setEnding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [publisherState, setPublisherState] = useState<PublisherState>("idle");
+  const [pollModalOpen, setPollModalOpen] = useState(false);
 
   // If a ClassroomSession already exists for this schedule (e.g. page reload mid-class), pick it up.
   useEffect(() => {
@@ -212,7 +214,8 @@ export function TeacherClassroomRoom({
 
   if (session.phase === "LIVE") {
     return (
-      <ClassroomLayout
+      <>
+        <ClassroomLayout
         video={
           session.streamMethod === "BROWSER_RELAY" && session.relayWhipUrl ? (
             <CameraPublisher whipUrl={session.relayWhipUrl} onStateChange={setPublisherState} />
@@ -226,6 +229,15 @@ export function TeacherClassroomRoom({
           <div className="flex items-center justify-between px-1">
             <p className="text-sm font-semibold text-white truncate">{title}</p>
             <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPollModalOpen(true)}
+                className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black transition flex items-center gap-1 shadow-sm active:scale-95 cursor-pointer"
+                title="Push Interactive Poll directly over students' video screen"
+              >
+                <span className="material-symbols-outlined text-sm">poll</span>
+                <span>Launch Poll</span>
+              </button>
               <StudentCountBadge classroomSessionId={session.id} />
               <button
                 type="button"
@@ -254,6 +266,12 @@ export function TeacherClassroomRoom({
           ),
         }}
       />
+      <TeacherPollModal
+        classroomSessionId={session.id}
+        isOpen={pollModalOpen}
+        onClose={() => setPollModalOpen(false)}
+      />
+      </>
     );
   }
 

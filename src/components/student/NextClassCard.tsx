@@ -185,8 +185,9 @@ export function NextClassCard({
             <Link
               href={`/classroom/${scheduleId}`}
               className="shrink-0 rounded-xl bg-indigo-600 px-3 py-2 text-xs font-bold text-white transition-all hover:bg-indigo-500 active:scale-95"
+              title="Application Class (Private Unlisted Stream)"
             >
-              Classroom
+              Application Class
             </Link>
           )}
           {buttonDisabled ? (

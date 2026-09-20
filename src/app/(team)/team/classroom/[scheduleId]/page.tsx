@@ -8,7 +8,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { TeacherClassroomRoom } from "@/components/classroom/TeacherClassroomRoom";
 
 export const metadata: Metadata = {
-  title: "Classroom — Atomic Pathshala",
+  title: "Application Class — Atomic Pathshala",
 };
 
 /**

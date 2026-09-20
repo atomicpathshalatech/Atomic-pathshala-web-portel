@@ -1,12 +1,13 @@
 "use client";
 
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { getPusherClient } from "@/lib/realtime/pusher-client";
 import { sessionChannel, WB_EVENTS } from "@/lib/realtime/events";
 import { CanvasEngine, type StrokeObject } from "@/lib/canvas/canvas-engine";
 import { MessagesPanel } from "@/components/live-class/MessagesPanel";
 import { YouTubeLivePlayer } from "@/components/live-class/YouTubeLivePlayer";
+import { VideoPollOverlay, type VideoPollData } from "@/components/classroom/VideoPollOverlay";
 import { VideoStrip } from "@/components/live-class/VideoStrip";
 import { RecordingPlayer } from "@/components/live-class/RecordingPlayer";
 import { StudentPostClassFeedback } from "@/components/live-class/StudentPostClassFeedback";
@@ -536,6 +537,20 @@ export function StudentLiveClassRoom({
       return () => clearTimeout(timer);
     }
   }, [quiz?.status]);
+
+  const videoPollData: VideoPollData | null = useMemo(() => {
+    if (!quiz || quizDismissed || quiz.status === "CLOSED") return null;
+    return {
+      id: quiz.id,
+      questionText: quiz.questionText || (quiz.isQuickQuiz ? "Quick Quiz: Select your answer" : "Live Class Poll"),
+      options: quiz.options,
+      correctOption: quiz.correctOption || undefined,
+      timeLimitSec: quiz.timeLimitSec,
+      startedAt: quiz.startedAt,
+      status: quiz.status === "REVEALED" ? "REVEALED" : "ACTIVE",
+      mySelection,
+    };
+  }, [quiz, quizDismissed, mySelection]);
 
   // Shared between the desktop sidebar and the mobile bottom panel — same
   // two tabs, same content, in both places (see StudentEngagementPanel).
@@ -1477,7 +1492,14 @@ export function StudentLiveClassRoom({
                   title={scheduleTitle}
                   subject={batchName}
                   livePhase={isLive ? "LIVE" : "PREPARING"}
-                />
+                >
+                  <VideoPollOverlay
+                    poll={videoPollData}
+                    onVote={submitAnswer}
+                    onDismiss={() => setQuizDismissed(true)}
+                    voting={submittingAnswer}
+                  />
+                </YouTubeLivePlayer>
               </div>
             ) : isDesktopViewport ? (
               <StudentWhiteboardMirror
@@ -1616,7 +1638,14 @@ export function StudentLiveClassRoom({
               title={scheduleTitle}
               subject={batchName}
               livePhase={isLive ? "LIVE" : "PREPARING"}
-            />
+            >
+              <VideoPollOverlay
+                poll={videoPollData}
+                onVote={submitAnswer}
+                onDismiss={() => setQuizDismissed(true)}
+                voting={submittingAnswer}
+              />
+            </YouTubeLivePlayer>
           ) : !isDesktopViewport ? (
             <div className="relative aspect-[16/9] w-full h-full max-w-full max-h-full overflow-hidden">
               <StudentWhiteboardMirror

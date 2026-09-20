@@ -793,9 +793,10 @@ function TimelineLectureRow({
               <Link
                 href={role === "TEACHER" ? `/team/classroom/${item.id}` : `/classroom/${item.id}`}
                 className="inline-flex items-center gap-1 py-1 px-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[11px] font-bold shadow-sm transition active:scale-95"
+                title="Application Class (Private Unlisted Stream for Enrolled Students)"
               >
                 <span className="material-symbols-outlined text-[14px]">smart_display</span>
-                <span>YouTube Classroom</span>
+                <span>Application Class</span>
               </Link>
             )}
             {item.type === "DOUBT_SESSION" ? (
@@ -879,9 +880,10 @@ function TimelineLectureRow({
                     ? "bg-[#a33900] hover:bg-orange-800 animate-pulse shadow-orange-600/30"
                     : "bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20"
                 }`}
+                title="Application plus YouTube class"
               >
                 <span className="material-symbols-outlined text-[14px]">videocam</span>
-                <span>{isLive ? "Resume Live Class" : "Start Live Class"}</span>
+                <span>{isLive ? "Resume App+YT Class" : "Start App+YT Class"}</span>
               </Link>
             ) : (
               <div className="flex items-center gap-1.5 shrink-0">

@@ -10,6 +10,7 @@ export type YouTubeLivePlayerProps = {
   isTeacher?: boolean;
   onRefresh?: () => void;
   className?: string;
+  children?: React.ReactNode;
 };
 
 const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2];
@@ -22,6 +23,7 @@ export function YouTubeLivePlayer({
   isTeacher,
   onRefresh,
   className = "",
+  children,
 }: YouTubeLivePlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -309,6 +311,7 @@ export function YouTubeLivePlayer({
           </button>
         </div>
       </div>
+      {children}
     </div>
   );
 }
