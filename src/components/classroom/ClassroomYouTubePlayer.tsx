@@ -40,22 +40,31 @@ export function ClassroomYouTubePlayer({ youtubeVideoId, title, onError, classNa
     setLoadError(false);
   }, [youtubeVideoId]);
 
-  const embedUrl = `https://www.youtube-nocookie.com/embed/${youtubeVideoId}?autoplay=1&rel=0&modestbranding=1&playsinline=1&controls=1&origin=${
-    typeof window !== "undefined" ? window.location.origin : ""
-  }`;
+  const embedUrl = `https://www.youtube.com/embed/${youtubeVideoId}?autoplay=1&rel=0&modestbranding=1&playsinline=1&controls=1`;
 
   if (loadError) {
     return (
       <div className={`w-full aspect-video bg-[#0d0e16] rounded-2xl border border-slate-800 flex flex-col items-center justify-center gap-3 p-8 text-center ${className}`}>
-        <span className="material-symbols-outlined text-3xl text-rose-400">error</span>
-        <p className="text-sm text-slate-300">Live class is currently unavailable. Please try again shortly.</p>
-        <button
-          type="button"
-          onClick={() => setLoadError(false)}
-          className="px-4 py-2 rounded-xl bg-slate-800 text-white text-xs font-semibold hover:bg-slate-700 transition-colors"
-        >
-          Retry
-        </button>
+        <span className="material-symbols-outlined text-3xl text-amber-400">smart_display</span>
+        <p className="text-sm text-slate-300">Live stream video player</p>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setLoadError(false)}
+            className="px-4 py-2 rounded-xl bg-slate-800 text-white text-xs font-semibold hover:bg-slate-700 transition-colors"
+          >
+            Retry Player
+          </button>
+          <a
+            href={`https://www.youtube.com/watch?v=${youtubeVideoId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-4 py-2 rounded-xl bg-red-600 text-white text-xs font-semibold hover:bg-red-500 transition-colors flex items-center gap-1"
+          >
+            <span>Open in YouTube</span>
+            <span className="material-symbols-outlined text-xs">open_in_new</span>
+          </a>
+        </div>
       </div>
     );
   }
@@ -68,6 +77,7 @@ export function ClassroomYouTubePlayer({ youtubeVideoId, title, onError, classNa
         title={title}
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
         allowFullScreen
+        referrerPolicy="origin-when-cross-origin"
         className="w-full h-full border-0"
         onError={() => {
           setLoadError(true);

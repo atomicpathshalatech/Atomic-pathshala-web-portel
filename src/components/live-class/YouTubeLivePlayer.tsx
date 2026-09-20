@@ -157,7 +157,7 @@ export function YouTubeLivePlayer({
     );
   }
 
-  const embedUrl = `https://www.youtube-nocookie.com/embed/${youtubeVideoId}?autoplay=1&enablejsapi=1&rel=0&modestbranding=1&playsinline=1&controls=1&origin=${typeof window !== "undefined" ? window.location.origin : ""}`;
+  const embedUrl = `https://www.youtube.com/embed/${youtubeVideoId}?autoplay=1&enablejsapi=1&rel=0&modestbranding=1&playsinline=1&controls=1`;
 
   return (
     <div
@@ -173,21 +173,22 @@ export function YouTubeLivePlayer({
         title={title}
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
         allowFullScreen
+        referrerPolicy="origin-when-cross-origin"
         className="w-full h-full border-0"
       />
 
       {/* Top Floating Info Banner (Fades on inactivity) */}
       <div
-        className={`absolute top-0 left-0 right-0 p-3 bg-gradient-to-b from-black/80 via-black/40 to-transparent flex items-center justify-between pointer-events-none transition-opacity duration-300 z-10 ${
+        className={`absolute top-0 left-0 right-0 p-2.5 sm:p-3 bg-gradient-to-b from-black/85 via-black/40 to-transparent flex items-center justify-between pointer-events-none transition-opacity duration-300 z-10 ${
           showControls ? "opacity-100" : "opacity-0"
         }`}
       >
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           {/* Go Live / Live Edge Indicator */}
           <button
             type="button"
             onClick={handleGoLive}
-            className={`pointer-events-auto flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-black transition-all shadow-md ${
+            className={`pointer-events-auto flex items-center gap-1 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-[11px] font-black transition-all shadow-md ${
               isLiveEdge
                 ? "bg-rose-600 text-white shadow-rose-600/50 ring-1 ring-rose-400"
                 : "bg-slate-800/90 hover:bg-rose-700 text-slate-300 hover:text-white border border-slate-700"
@@ -195,7 +196,7 @@ export function YouTubeLivePlayer({
             title="Click to sync directly to live edge"
           >
             <span
-              className={`w-2 h-2 rounded-full ${
+              className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${
                 isLiveEdge ? "bg-white animate-pulse" : "bg-slate-500"
               }`}
             />
@@ -207,33 +208,45 @@ export function YouTubeLivePlayer({
               {subject}
             </span>
           )}
+
+          <a
+            href={`https://www.youtube.com/watch?v=${youtubeVideoId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="pointer-events-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-red-600/80 hover:bg-red-600 text-white text-[10px] font-bold transition active:scale-95"
+            title="Watch on YouTube App if in-app playback is restricted"
+          >
+            <span className="material-symbols-outlined text-xs">smart_display</span>
+            <span className="hidden xs:inline">YouTube</span>
+          </a>
         </div>
 
         {/* Title */}
-        <p className="text-xs font-semibold text-white/90 truncate max-w-xs sm:max-w-md drop-shadow">
+        <p className="text-[11px] sm:text-xs font-semibold text-white/90 truncate max-w-[140px] xs:max-w-xs sm:max-w-md drop-shadow">
           {title}
         </p>
       </div>
 
       {/* Bottom Floating Control Bar (Overlay) */}
       <div
-        className={`absolute bottom-2 left-2 right-2 px-3 py-1.5 bg-[#0e111d]/90 backdrop-blur-md rounded-xl border border-slate-700/80 flex items-center justify-between gap-2 shadow-2xl transition-opacity duration-300 z-10 ${
+        className={`absolute bottom-2 left-2 right-2 px-2.5 sm:px-3 py-1 sm:py-1.5 bg-[#0e111d]/90 backdrop-blur-md rounded-xl border border-slate-700/80 flex items-center justify-between gap-1 sm:gap-2 shadow-2xl transition-opacity duration-300 z-10 ${
           showControls ? "opacity-100" : "opacity-0 pointer-events-none"
         }`}
       >
-        <div className="flex items-center gap-1.5 sm:gap-2">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           {/* Go Live Button */}
           <button
             type="button"
             onClick={handleGoLive}
-            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition ${
+            className={`flex items-center gap-1 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg text-[10px] sm:text-xs font-bold transition ${
               isLiveEdge
                 ? "bg-rose-600/20 text-rose-400 border border-rose-500/40"
                 : "bg-rose-600 hover:bg-rose-500 text-white shadow-sm"
             }`}
           >
             <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
-            <span>Sync Live</span>
+            <span className="hidden xs:inline">Sync Live</span>
+            <span className="xs:hidden">Live</span>
           </button>
 
           {/* Seek -10s */}

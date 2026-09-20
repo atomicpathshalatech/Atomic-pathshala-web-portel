@@ -82,9 +82,34 @@ export async function createLiveBroadcast(title: string, scheduledStartTime: str
     body: JSON.stringify({
       snippet: { title, scheduledStartTime },
       status: { privacyStatus: "unlisted", selfDeclaredMadeForKids: false },
-      contentDetails: { enableAutoStart: true, enableAutoStop: true, enableDvr: true },
+      contentDetails: {
+        enableAutoStart: true,
+        enableAutoStop: true,
+        enableDvr: true,
+        enableEmbed: true,
+        recordFromStart: true,
+      },
     }),
   });
+
+  // Explicitly ensure the created broadcast's video status has embeddable: true
+  // so external websites/webviews can embed the video without "playback disabled by video owner"
+  try {
+    await youtubeApiFetch("/videos", {
+      method: "PUT",
+      query: { part: "status" },
+      body: JSON.stringify({
+        id: json.id,
+        status: {
+          embeddable: true,
+          privacyStatus: "unlisted",
+          selfDeclaredMadeForKids: false,
+        },
+      }),
+    });
+  } catch (err) {
+    console.warn("[youtube_video_embeddable_update_warning]", err);
+  }
 
   return { id: json.id, liveChatId: json.snippet.liveChatId ?? null };
 }

@@ -642,8 +642,6 @@ export function StudentLiveClassRoom({
     });
   }
 
-  // Manual orientation mode toggle ("auto" | "portrait" | "landscape")
-  const [orientationMode, setOrientationMode] = useState<"auto" | "portrait" | "landscape">("auto");
 
   // The root shell deliberately does NOT track window.visualViewport height
   // anymore. It used to (a live-resized height so the bottom toolbar
@@ -692,6 +690,27 @@ export function StudentLiveClassRoom({
       document.documentElement.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
     } else {
       document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
+    }
+  };
+
+  const toggleMobileOrientation = async () => {
+    if (typeof document === "undefined") return;
+    try {
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen();
+        setIsFullscreen(true);
+        if (screen.orientation && "lock" in screen.orientation) {
+          await (screen.orientation as any).lock("landscape").catch(() => {});
+        }
+      } else {
+        await document.exitFullscreen();
+        setIsFullscreen(false);
+        if (screen.orientation && "unlock" in screen.orientation) {
+          (screen.orientation as any).unlock();
+        }
+      }
+    } catch {
+      toggleFullscreen();
     }
   };
 
@@ -1404,25 +1423,15 @@ export function StudentLiveClassRoom({
             <span className="hidden xs:inline">{handRaised ? "Raised" : "Raise"}</span>
           </button>
 
-          {/* Mobile Orientation Toggle Button */}
+          {/* Mobile Fullscreen Rotate Button */}
           <button
             type="button"
-            onClick={() => {
-              setOrientationMode((prev) =>
-                prev === "auto" ? "landscape" : prev === "landscape" ? "portrait" : "auto"
-              );
-            }}
-            className="lg:hidden flex items-center gap-1 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] sm:text-xs font-semibold border border-slate-700 transition"
-            title={`Orientation: ${orientationMode.toUpperCase()} (Click to toggle)`}
+            onClick={toggleMobileOrientation}
+            className="lg:hidden flex items-center gap-1 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] sm:text-xs font-semibold border border-slate-700 transition active:scale-95"
+            title="Rotate to Landscape Fullscreen"
           >
-            <span className="material-symbols-outlined text-sm">
-              {orientationMode === "landscape"
-                ? "stay_current_landscape"
-                : orientationMode === "portrait"
-                ? "stay_current_portrait"
-                : "screen_rotation"}
-            </span>
-            <span className="text-[10px] uppercase font-bold hidden xs:inline">{orientationMode}</span>
+            <span className="material-symbols-outlined text-sm">screen_rotation</span>
+            <span className="text-[10px] uppercase font-bold hidden xs:inline">Rotate</span>
           </button>
 
           {/* Local Hide/Show Teacher-Video-&-Chat Popup (Student Preference). */}
@@ -1613,25 +1622,9 @@ export function StudentLiveClassRoom({
       {/* ========================================================================= */}
       {/* MOBILE & TABLET VIEW (< lg): Top Video/Canvas Stage + Bottom Tabbed Console */}
       {/* ========================================================================= */}
-      <div
-        className={`lg:hidden flex-1 min-h-0 flex ${
-          orientationMode === "landscape"
-            ? "flex-row"
-            : orientationMode === "portrait"
-            ? "flex-col"
-            : "flex-col landscape:flex-row"
-        } overflow-hidden bg-[#0b0d14]`}
-      >
+      <div className="lg:hidden flex-1 min-h-0 flex flex-col landscape:flex-row overflow-hidden bg-[#0b0d14]">
         {/* Top Media Area: 16:9 Canvas or YouTube Player */}
-        <div
-          className={`${
-            orientationMode === "landscape"
-              ? "w-3/5 h-full border-b-0 border-r"
-              : orientationMode === "portrait"
-              ? "w-full aspect-video max-h-[38dvh] sm:max-h-[45dvh] border-b"
-              : "w-full landscape:w-3/5 landscape:h-full aspect-video landscape:aspect-auto max-h-[38dvh] sm:max-h-[45dvh] landscape:max-h-full border-b landscape:border-b-0 landscape:border-r"
-          } shrink-0 bg-black relative flex items-center justify-center overflow-hidden border-slate-800/80`}
-        >
+        <div className="w-full aspect-video max-h-[40dvh] sm:max-h-[45dvh] landscape:w-3/5 landscape:h-full landscape:max-h-full landscape:aspect-auto shrink-0 bg-black relative flex items-center justify-center overflow-hidden border-b landscape:border-b-0 landscape:border-r border-slate-800/80">
           {isYouTube ? (
             <YouTubeLivePlayer
               youtubeVideoId={wbSession?.youtubeVideoId ?? null}
@@ -1679,16 +1672,8 @@ export function StudentLiveClassRoom({
 
         {/* Bottom Interactive Area — same two-tab StudentEngagementPanel as
             the desktop sidebar (see the "one screen, same layout as the
-            teacher's" comment there). */}
-        <div
-          className={`flex-1 ${
-            orientationMode === "landscape"
-              ? "w-2/5"
-              : orientationMode === "portrait"
-              ? "w-full"
-              : "landscape:w-2/5"
-          } min-h-0 flex flex-col bg-[#10121d] overflow-hidden`}
-        >
+        {/* Bottom Interactive Area */}
+        <div className="flex-1 landscape:w-2/5 min-h-0 flex flex-col bg-[#10121d] overflow-hidden">
           <StudentEngagementPanel
             wbSessionId={wbSession?.id}
             currentUserId={currentUserId}

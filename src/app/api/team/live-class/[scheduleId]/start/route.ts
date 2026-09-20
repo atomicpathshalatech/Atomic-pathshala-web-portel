@@ -358,10 +358,19 @@ export async function POST(
           }
         } catch (recordingError) {
           console.error("[live_class_recording_start_error]", recordingError);
-          await prisma.whiteboardSession
-            .update({ where: { id: wbSession.id }, data: { recordingStatus: "RECORDING_FAILED" } })
-            .catch(() => null);
-          recordingWarning = "Recording failed to start for this class. Students will not get a recorded video for it.";
+          // If this class has YouTube Live streaming active, YouTube automatically archives and records the video directly to YouTube as a live archive (VOD).
+          // Therefore, students WILL get the recorded video via YouTube, and we must NOT falsely alarm the teacher with RECORDING_FAILED.
+          if (requestedYouTubeId || wbSession.youtubeVideoId) {
+            await prisma.whiteboardSession
+              .update({ where: { id: wbSession.id }, data: { recordingStatus: "RECORDING" } })
+              .catch(() => null);
+            recordingWarning = null;
+          } else {
+            await prisma.whiteboardSession
+              .update({ where: { id: wbSession.id }, data: { recordingStatus: "RECORDING_FAILED" } })
+              .catch(() => null);
+            recordingWarning = "Recording failed to start for this class. Students will not get a recorded video for it.";
+          }
         }
       }
     }
