@@ -353,8 +353,8 @@ export function generateTestPaperHtml(
     totalQuestionPagesCount += chunkQuestionsIntoPages(sec.questions, 4).length;
   });
 
-  const intermediateRoughCount = test.sections.length >= 3 ? 1 : 0;
-  const finalRoughCount = 2;
+  const intermediateRoughCount = 0;
+  const finalRoughCount = 3;
   const backCoverCount = 1;
   const solutionsPagesCount = withSolution ? 1 + Math.ceil(test.totalQuestions / 6) : 0;
   const actualTotalPages = 1 + totalQuestionPagesCount + intermediateRoughCount + finalRoughCount + backCoverCount + solutionsPagesCount;
@@ -713,51 +713,20 @@ export function generateTestPaperHtml(
 
       pageCounter++;
     });
-
-    // Add intermediate rough page after middle section if >= 3 sections
-    if (sIdx === 1 && test.sections.length >= 3) {
-      questionPagesHtml += `
-        <div class="page rough-page">
-          <div class="test-page-header">
-            <div class="test-header-row-1">
-              <div class="test-header-brand">${brandName}</div>
-              <div class="test-header-page-no">${pageCounter}</div>
-              <div class="test-header-lang-badge">Hindi + English</div>
-            </div>
-            <div class="test-header-subject-row">
-              SPACE FOR ROUGH WORK / रफ कार्य के लिए जगह
-            </div>
-            <div class="test-header-divider"></div>
-          </div>
-          <div class="rough-page-content">
-            <div class="rough-watermark">SPACE FOR ROUGH WORK / रफ कार्य के लिए जगह</div>
-            <div class="rough-grid-canvas"></div>
-          </div>
-          <div class="page-running-footer">
-            <div class="footer-phase-box">PHASE - ALL</div>
-            <div class="footer-meta-row">
-              <span class="footer-barcode">${test.code}</span>
-              <span class="footer-rough-note">SPACE FOR ROUGH WORK</span>
-              <span class="footer-date">${currentDateStr}</span>
-            </div>
-          </div>
-        </div>
-      `;
-      pageCounter++;
-    }
   });
 
-  // Dedicated End-of-Paper Rough Pages (2 Pages)
+  // Dedicated End-of-Subject Rough Pages (3 Pages before Answer Key)
   const roughPage1No = pageCounter++;
   const roughPage2No = pageCounter++;
+  const roughPage3No = pageCounter++;
   const backCoverPageNo = pageCounter++;
 
-  const finalRoughPagesHtml = `
+  const renderSingleRoughPageHtml = (pNo: number) => `
     <div class="page rough-page">
       <div class="test-page-header">
         <div class="test-header-row-1">
           <div class="test-header-brand">${brandName}</div>
-          <div class="test-header-page-no">${roughPage1No}</div>
+          <div class="test-header-page-no">${pNo}</div>
           <div class="test-header-lang-badge">Hindi + English</div>
         </div>
         <div class="test-header-subject-row">
@@ -778,32 +747,12 @@ export function generateTestPaperHtml(
         </div>
       </div>
     </div>
+  `;
 
-    <div class="page rough-page">
-      <div class="test-page-header">
-        <div class="test-header-row-1">
-          <div class="test-header-brand">${brandName}</div>
-          <div class="test-header-page-no">${roughPage2No}</div>
-          <div class="test-header-lang-badge">Hindi + English</div>
-        </div>
-        <div class="test-header-subject-row">
-          SPACE FOR ROUGH WORK / रफ कार्य के लिए जगह
-        </div>
-        <div class="test-header-divider"></div>
-      </div>
-      <div class="rough-page-content">
-        <div class="rough-watermark">SPACE FOR ROUGH WORK / रफ कार्य के लिए जगह</div>
-        <div class="rough-grid-canvas"></div>
-      </div>
-      <div class="page-running-footer">
-        <div class="footer-phase-box">PHASE - ALL</div>
-        <div class="footer-meta-row">
-          <span class="footer-barcode">${test.code}</span>
-          <span class="footer-rough-note">SPACE FOR ROUGH WORK</span>
-          <span class="footer-date">${currentDateStr}</span>
-        </div>
-      </div>
-    </div>
+  const finalRoughPagesHtml = `
+    ${renderSingleRoughPageHtml(roughPage1No)}
+    ${renderSingleRoughPageHtml(roughPage2No)}
+    ${renderSingleRoughPageHtml(roughPage3No)}
   `;
 
   // Back Cover Page
@@ -838,12 +787,14 @@ export function generateTestPaperHtml(
         </div>
 
         <div class="back-corporate-footer">
-          <div class="corp-brand-title">⚡ ATOMIC PATHSHALA PRIVATE LIMITED</div>
-          <div class="corp-address">Registered Office & Online Learning Portal | Kota / New Delhi, India</div>
+          <div class="corp-brand-title">⚡ ATOMIC PATHSHALA</div>
+          <div class="corp-address">Registered Office &amp; Online Learning Portal | Rampur / Uttar Pradesh, India</div>
           <div class="corp-contacts">
-            <span>Website: <strong>www.atomicpathshala.com</strong></span>
+            <span>Website: <strong>ap.atomicpathshala.com</strong></span>
             <span>·</span>
-            <span>Support: <strong>support@atomicpathshala.com</strong></span>
+            <span>Support: <strong>atomic.pathshala.info@gmail.com</strong></span>
+            <span>·</span>
+            <span>Mobile : <strong>+917668543654</strong></span>
           </div>
         </div>
       </div>
@@ -930,25 +881,44 @@ export function generateTestPaperHtml(
 
     const solutionsListHtml = test.sections.map((section) => {
       const solQuestionsHtml = section.questions.map((q) => {
-        const solEnHtml = renderFormulaContent(q.solutionEn || "Detailed explanation provided as per standard textbook principles.");
-        const solHiHtml = renderFormulaContent(q.solutionHi || q.solutionEn || "");
+        const stmtEnHtml = renderFormulaContent(q.statementEn || q.statementHi || "");
+        const stmtHiHtml = renderFormulaContent(q.statementHi || q.statementEn || "");
+        const solEnHtml = renderFormulaContent(q.solutionEn || q.solutionHi || "Detailed explanation provided as per standard textbook principles.");
+        const solHiHtml = renderFormulaContent(q.solutionHi || q.solutionEn || "विस्तृत व्याख्या मानक पाठ्यपुस्तक सिद्धांतों के अनुसार प्रदान की गई है।");
+
+        const diagramHi = q.imageUrl ? `
+          <div class="sol-diagram-wrap">
+            <img src="${q.imageUrl}" alt="Diagram for Q${q.number}" class="sol-diagram-img" />
+          </div>
+        ` : "";
+        const diagramEn = q.imageUrl ? `
+          <div class="sol-diagram-wrap">
+            <img src="${q.imageUrl}" alt="Diagram for Q${q.number}" class="sol-diagram-img" />
+          </div>
+        ` : "";
 
         return `
-          <div class="sol-item-block">
+          <div class="sol-row-item" id="sol-q-${q.number}">
             <div class="sol-item-header">
               <span class="sol-q-badge">Q.${q.number}</span>
               <span class="sol-correct-badge">Correct Answer: <strong>Option (${q.correctOptionKey})</strong></span>
-              <span class="sol-subject-tag">${q.subject}</span>
+              <span class="sol-subject-tag">${q.subject || section.subject}</span>
             </div>
-            <div class="sol-statement-brief">
-              <div class="sol-stmt-hi">${renderFormulaContent(q.statementHi)}</div>
-              <div class="sol-stmt-en">${renderFormulaContent(q.statementEn)}</div>
-            </div>
-            <div class="sol-explanation-box">
-              <div class="sol-heading">💡 Hint & Step-by-Step Solution :</div>
-              <div class="sol-body-content">
-                <div class="sol-en">${solEnHtml}</div>
-                ${q.solutionHi && q.solutionHi !== q.solutionEn ? `<div class="sol-hi">${solHiHtml}</div>` : ""}
+            <div class="sol-grid-two-col">
+              <!-- Left Column: Hindi -->
+              <div class="sol-col-side sol-side-hi">
+                ${stmtHiHtml ? `<div class="sol-stmt-text font-devanagari">${stmtHiHtml}</div>` : ""}
+                ${diagramHi}
+                <div class="sol-expl-heading font-devanagari">💡 हल एवं व्याख्या (Solution) :</div>
+                <div class="sol-body-text font-devanagari">${solHiHtml}</div>
+              </div>
+
+              <!-- Right Column: English -->
+              <div class="sol-col-side sol-side-en">
+                ${stmtEnHtml ? `<div class="sol-stmt-text">${stmtEnHtml}</div>` : ""}
+                ${diagramEn}
+                <div class="sol-expl-heading">💡 Hint &amp; Step-by-Step Solution :</div>
+                <div class="sol-body-text">${solEnHtml}</div>
               </div>
             </div>
           </div>
@@ -957,7 +927,7 @@ export function generateTestPaperHtml(
 
       return `
         <div class="sol-section-group">
-          <div class="sol-section-title">HINTS & SOLUTIONS : ${section.subject.toUpperCase()} (${section.name.toUpperCase()})</div>
+          <div class="sol-section-title">HINTS &amp; SOLUTIONS : ${section.subject.toUpperCase()} (${section.name.toUpperCase()})</div>
           ${solQuestionsHtml}
         </div>
       `;
@@ -1617,24 +1587,28 @@ export function generateTestPaperHtml(
       font-weight: 700;
     }
 
+    .rough-page {
+      background: #ffffff !important;
+    }
     .rough-page-content {
       flex: 1;
-      border: 1.5px dashed #94a3b8;
+      border: 1.5px dashed #cbd5e1;
       margin: 10px 0;
       position: relative;
       display: flex;
       align-items: center;
       justify-content: center;
-      background: #fafafa;
+      background: #ffffff !important;
     }
     .rough-watermark {
       font-size: 16pt;
       font-weight: 800;
-      color: #cbd5e1;
+      color: #e2e8f0;
       text-transform: uppercase;
       letter-spacing: 2px;
       text-align: center;
       pointer-events: none;
+      user-select: none;
     }
 
     .back-cover-page {
@@ -1775,31 +1749,37 @@ export function generateTestPaperHtml(
       border-radius: 4px;
       margin: 12px 0 6px 0;
     }
-    .sol-item-block {
-      border: 1px solid #e2e8f0;
-      border-radius: 6px;
-      padding: 8px 10px;
-      margin-bottom: 8px;
+    .page.solutions-page {
+      display: block !important;
+      height: auto !important;
+      min-height: 1123px;
+    }
+    .sol-row-item {
+      border-bottom: 1.5px solid #000000;
+      padding: 8px 0 10px 0;
+      margin-bottom: 0;
       page-break-inside: avoid;
       break-inside: avoid;
-      background: #fff;
+      background: transparent;
     }
     .sol-item-header {
       display: flex;
       align-items: center;
-      gap: 8px;
-      margin-bottom: 4px;
+      gap: 10px;
+      margin-bottom: 6px;
     }
     .sol-q-badge {
-      font-size: 9pt;
+      font-family: 'Times New Roman', 'PT Serif', serif;
+      font-size: 9.5pt;
       font-weight: 800;
       background: #0f172a;
-      color: #fff;
-      padding: 1px 6px;
-      border-radius: 4px;
+      color: #ffffff;
+      padding: 1px 7px;
+      border-radius: 3px;
     }
     .sol-correct-badge {
-      font-size: 8.5pt;
+      font-family: 'Times New Roman', 'PT Serif', serif;
+      font-size: 9.5pt;
       color: #047857;
       font-weight: 700;
     }
@@ -1808,39 +1788,60 @@ export function generateTestPaperHtml(
       color: #64748b;
       margin-left: auto;
       font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
-    .sol-statement-brief {
-      font-size: 8.2pt;
+    .sol-grid-two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      width: 100%;
+    }
+    .sol-col-side {
+      display: flex;
+      flex-direction: column;
+    }
+    .sol-side-hi {
+      padding-right: 14px;
+      border-right: 1.5px solid #000000;
+    }
+    .sol-side-en {
+      padding-left: 14px;
+    }
+    .sol-stmt-text {
+      font-family: 'Times New Roman', 'PT Serif', 'Noto Serif Devanagari', 'Cambria', Georgia, serif;
+      font-size: 9pt;
+      line-height: 1.35;
       color: #334155;
-      border-left: 2px solid #cbd5e1;
-      padding-left: 6px;
-      margin-bottom: 6px;
+      margin-bottom: 5px;
+      text-align: justify;
     }
-    .sol-explanation-box {
-      background: #f8fafc;
-      border-radius: 4px;
-      padding: 6px 8px;
-      border: 1px solid #e2e8f0;
-    }
-    .sol-heading {
-      font-size: 8pt;
+    .sol-expl-heading {
+      font-family: 'Times New Roman', 'PT Serif', 'Noto Serif Devanagari', 'Cambria', Georgia, serif;
+      font-size: 8.5pt;
       font-weight: 700;
-      color: #4f46e5;
+      color: #1e40af;
+      margin-top: 2px;
       margin-bottom: 3px;
     }
-    .sol-body-content {
-      font-size: 8.5pt;
-      line-height: 1.4;
-      color: #0f172a;
+    .sol-body-text {
+      font-family: 'Times New Roman', 'PT Serif', 'Noto Serif Devanagari', 'Cambria', Georgia, serif;
+      font-size: 9.5pt;
+      line-height: 1.45;
+      color: #000000;
+      text-align: justify;
     }
-    .sol-en {
-      margin-bottom: 4px;
+    .sol-diagram-wrap {
+      margin: 4px 0;
+      text-align: center;
     }
-    .sol-hi {
-      font-family: 'Noto Sans Devanagari', sans-serif;
-      color: #1e293b;
-      border-top: 1px dashed #e2e8f0;
-      padding-top: 3px;
+    .sol-diagram-img {
+      max-height: 120px;
+      max-width: 100%;
+      object-fit: contain;
+      display: inline-block;
+    }
+    .font-devanagari {
+      font-family: 'Times New Roman', 'PT Serif', 'Noto Serif Devanagari', 'Cambria', Georgia, serif !important;
     }
   </style>
 </head>
