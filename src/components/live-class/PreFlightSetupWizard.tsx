@@ -63,6 +63,12 @@ export function PreFlightSetupWizard({
   );
   const [uploadingFile, setUploadingFile] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  // Explicit "no slides for this class" choice — distinct from simply not
+  // having uploaded yet, so Continue/Enter Classroom can allow proceeding
+  // without blocking on presentationUrl while still showing the upload
+  // dropzone by default (a teacher who changes their mind can still upload).
+  const [materialSkipped, setMaterialSkipped] = useState(false);
+  const hasMaterialOrSkipped = Boolean(presentationUrl) || materialSkipped;
 
   // Step 2: Theme state
   const [classroomTheme, setClassroomTheme] = useState<"LIGHT" | "DARK">(
@@ -274,8 +280,8 @@ export function PreFlightSetupWizard({
 
   // Submit and enter classroom
   const handleProceed = async () => {
-    if (!presentationUrl) {
-      setError("Please select or upload a presentation material before entering the classroom.");
+    if (!hasMaterialOrSkipped) {
+      setError("Please select or upload a presentation material before entering the classroom, or choose to skip.");
       setStep(1);
       return;
     }
@@ -340,7 +346,7 @@ export function PreFlightSetupWizard({
               <button
                 key={s}
                 onClick={() => {
-                  if (s === 1 || presentationUrl) setStep(s as any);
+                  if (s === 1 || hasMaterialOrSkipped) setStep(s as any);
                 }}
                 className={`flex items-center justify-center w-8 h-8 rounded-full text-xs font-semibold transition-all ${
                   step === s
@@ -379,42 +385,78 @@ export function PreFlightSetupWizard({
               </div>
 
               {!presentationUrl ? (
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  className="border-2 border-dashed border-slate-700 hover:border-blue-500/70 bg-slate-950/40 hover:bg-slate-800/30 rounded-2xl p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-all group"
-                >
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".pdf,.ppt,.pptx,application/pdf,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleFileUpload(file);
-                    }}
-                  />
-                  <div className="w-16 h-16 rounded-2xl bg-blue-500/10 group-hover:bg-blue-500/20 text-blue-400 flex items-center justify-center mb-4 transition-all">
-                    {uploadingFile ? (
-                      <RefreshCw className="w-8 h-8 animate-spin" />
-                    ) : (
-                      <UploadCloud className="w-8 h-8" />
+                <>
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className="border-2 border-dashed border-slate-700 hover:border-blue-500/70 bg-slate-950/40 hover:bg-slate-800/30 rounded-2xl p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-all group"
+                  >
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".pdf,.ppt,.pptx,application/pdf,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setMaterialSkipped(false);
+                          handleFileUpload(file);
+                        }
+                      }}
+                    />
+                    <div className="w-16 h-16 rounded-2xl bg-blue-500/10 group-hover:bg-blue-500/20 text-blue-400 flex items-center justify-center mb-4 transition-all">
+                      {uploadingFile ? (
+                        <RefreshCw className="w-8 h-8 animate-spin" />
+                      ) : (
+                        <UploadCloud className="w-8 h-8" />
+                      )}
+                    </div>
+                    <p className="text-sm font-semibold text-white">
+                      {uploadingFile ? "Uploading presentation..." : "Click or Drag & Drop to Upload"}
+                    </p>
+                    <p className="text-xs text-slate-400 mt-1 max-w-sm">
+                      Supports PDF, PPT, and PPTX presentation slides up to 50MB.
+                    </p>
+                    {uploadingFile && (
+                      <div className="w-64 mt-4 bg-slate-800 rounded-full h-2 overflow-hidden">
+                        <div
+                          className="bg-blue-500 h-full transition-all duration-300"
+                          style={{ width: `${uploadProgress}%` }}
+                        />
+                      </div>
                     )}
                   </div>
-                  <p className="text-sm font-semibold text-white">
-                    {uploadingFile ? "Uploading presentation..." : "Click or Drag & Drop to Upload"}
-                  </p>
-                  <p className="text-xs text-slate-400 mt-1 max-w-sm">
-                    Supports PDF, PPT, and PPTX presentation slides up to 50MB.
-                  </p>
-                  {uploadingFile && (
-                    <div className="w-64 mt-4 bg-slate-800 rounded-full h-2 overflow-hidden">
-                      <div
-                        className="bg-blue-500 h-full transition-all duration-300"
-                        style={{ width: `${uploadProgress}%` }}
-                      />
+
+                  {!uploadingFile && (
+                    <div className="flex items-center justify-center gap-3">
+                      <div className="h-px flex-1 bg-slate-800" />
+                      <span className="text-[11px] text-slate-500 uppercase tracking-wider">or</span>
+                      <div className="h-px flex-1 bg-slate-800" />
                     </div>
                   )}
-                </div>
+
+                  {!uploadingFile && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMaterialSkipped(true);
+                        setError(null);
+                      }}
+                      className={`w-full py-3 rounded-xl border text-sm font-semibold transition ${
+                        materialSkipped
+                          ? "border-emerald-500/60 bg-emerald-950/30 text-emerald-300"
+                          : "border-slate-700 text-slate-300 hover:border-slate-600 hover:bg-slate-800/40"
+                      }`}
+                    >
+                      {materialSkipped ? (
+                        <span className="flex items-center justify-center gap-2">
+                          <CheckCircle2 className="w-4 h-4" /> No slides for this class — Skipped
+                        </span>
+                      ) : (
+                        "Skip — I don't have slides for this class"
+                      )}
+                    </button>
+                  )}
+                </>
               ) : (
                 <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-5 space-y-4">
                   <div className="flex items-center justify-between">
@@ -773,17 +815,17 @@ export function PreFlightSetupWizard({
             {step < 4 ? (
               <button
                 type="button"
-                disabled={step === 1 && !presentationUrl}
+                disabled={step === 1 && !hasMaterialOrSkipped}
                 onClick={() => {
-                  if (step === 1 && !presentationUrl) {
-                    setError("Please upload or select presentation material to continue.");
+                  if (step === 1 && !hasMaterialOrSkipped) {
+                    setError("Please upload presentation material or choose to skip.");
                     return;
                   }
                   setError(null);
                   setStep((step + 1) as any);
                 }}
                 className={`px-5 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2 transition ${
-                  step === 1 && !presentationUrl
+                  step === 1 && !hasMaterialOrSkipped
                     ? "bg-slate-800 text-slate-500 cursor-not-allowed"
                     : "bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/30"
                 }`}
@@ -793,7 +835,7 @@ export function PreFlightSetupWizard({
             ) : (
               <button
                 type="button"
-                disabled={saving || !presentationUrl}
+                disabled={saving || !hasMaterialOrSkipped}
                 onClick={handleProceed}
                 className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/30 flex items-center gap-2 transition disabled:opacity-50"
               >
