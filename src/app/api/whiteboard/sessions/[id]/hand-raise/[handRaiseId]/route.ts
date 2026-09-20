@@ -31,42 +31,55 @@ export async function PATCH(
       // default to resolve
     }
 
-    const handRaise = await prisma.handRaiseEvent.findUnique({
-      where: { id: params.handRaiseId },
-      include: { student: { include: { user: true } } },
-    });
+    const [handRaise, wbSession] = await Promise.all([
+      prisma.handRaiseEvent.findUnique({
+        where: { id: params.handRaiseId },
+        include: { student: { include: { user: true } } },
+      }),
+      prisma.whiteboardSession.findUnique({ where: { id: params.id }, select: { videoTransport: true } }),
+    ]);
 
     if (!handRaise || handRaise.whiteboardSessionId !== params.id) {
       return apiError("Hand raise not found.", 404);
     }
 
+    // Students only become actual LiveKit participants when the class is
+    // running on LIVEKIT. In BOTH mode they watch the YouTube simulcast
+    // instead (see StudentLiveClassRoom's isYouTube), so there's no LiveKit
+    // room membership to grant/revoke a publish permission on — approving a
+    // hand raise there is purely informational (same UX the standalone
+    // Classroom module already uses for this exact situation).
+    const isLiveKitRoom = wbSession?.videoTransport !== "YOUTUBE" && wbSession?.videoTransport !== "BOTH";
+
     const now = new Date();
 
     if (action === "APPROVE") {
       let speakerToken: string | null = null;
-      try {
-        speakerToken = await createApprovedSpeakerToken({
-          identity: handRaise.student.userId,
-          name: handRaise.student.user.name,
-          roomName: videoRoomName(params.id),
-          audioOnly: handRaise.requestType === "AUDIO",
-        });
-      } catch (err) {
-        console.warn("LiveKit speaker token generation warning:", err);
-      }
+      if (isLiveKitRoom) {
+        try {
+          speakerToken = await createApprovedSpeakerToken({
+            identity: handRaise.student.userId,
+            name: handRaise.student.user.name,
+            roomName: videoRoomName(params.id),
+            audioOnly: handRaise.requestType === "AUDIO",
+          });
+        } catch (err) {
+          console.warn("LiveKit speaker token generation warning:", err);
+        }
 
-      // The student is already connected to the room (subscribe-only) by
-      // the time they raise a hand — swapping the token client-side after
-      // that is a no-op (see the comment on setParticipantPublishPermission
-      // in room-service.ts). This is what actually unlocks their mic/camera.
-      await setParticipantPublishPermission(videoRoomName(params.id), handRaise.student.userId, true);
+        // The student is already connected to the room (subscribe-only) by
+        // the time they raise a hand — swapping the token client-side after
+        // that is a no-op (see the comment on setParticipantPublishPermission
+        // in room-service.ts). This is what actually unlocks their mic/camera.
+        await setParticipantPublishPermission(videoRoomName(params.id), handRaise.student.userId, true);
+      }
 
       await prisma.handRaiseEvent.update({
         where: { id: params.handRaiseId },
         data: {
           status: "APPROVED",
           approvedAt: now,
-          liveKitGranted: true,
+          liveKitGranted: isLiveKitRoom,
         },
       });
 

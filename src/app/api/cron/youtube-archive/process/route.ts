@@ -45,7 +45,11 @@ export async function GET(req: NextRequest) {
     const { startArchiveJob, runArchiveUpload } = await import("@/lib/youtube/archive-service");
 
     const notStarted = await prisma.whiteboardSession.findMany({
-      where: { recordingStatus: "READY", youtubeArchiveStatus: "NOT_ENABLED", isTest: false },
+      // videoTransport: LIVEKIT excludes classes already live-streamed to
+      // YouTube directly (Application Class + YouTube) — those get their
+      // VOD from YouTube itself, so archiving the separately-recorded R2
+      // file here would create a duplicate video.
+      where: { recordingStatus: "READY", youtubeArchiveStatus: "NOT_ENABLED", isTest: false, videoTransport: "LIVEKIT" },
       select: { id: true },
       take: 20,
     });

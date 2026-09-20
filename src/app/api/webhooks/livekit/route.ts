@@ -116,10 +116,14 @@ export async function POST(request: NextRequest) {
 
           // 4. Kick off the YouTube recording-archive pipeline (fire-and-
           // forget, same pattern as finalizeWhiteboardSlides elsewhere in
-          // this app). Skipped for Whiteboard Test Lab rooms. If this
+          // this app). Skipped for Whiteboard Test Lab rooms, and for
+          // classes that were already live-streamed to YouTube directly
+          // (videoTransport YOUTUBE/BOTH) — YouTube already produces its own
+          // VOD from the live stream, so re-uploading this separately
+          // recorded R2 file here would create a duplicate video. If this
           // invocation is killed before the import resolves, the once-daily
           // cron safety net (/api/cron/youtube-archive/process) picks it up.
-          if (!session.isTest) {
+          if (!session.isTest && session.videoTransport === "LIVEKIT") {
             waitUntil(
               import("@/lib/youtube/archive-service")
                 .then(({ startArchiveJob }) => startArchiveJob(session.id))
