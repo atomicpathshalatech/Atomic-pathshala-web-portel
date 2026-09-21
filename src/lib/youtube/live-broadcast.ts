@@ -86,6 +86,7 @@ export async function createLiveBroadcast(title: string, scheduledStartTime: str
         enableAutoStart: true,
         enableAutoStop: true,
         enableDvr: true,
+        latencyPreference: "ultraLow",
       },
     }),
   });

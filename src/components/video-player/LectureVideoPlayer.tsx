@@ -748,13 +748,13 @@ export function LectureVideoPlayer({
     >
       {/* ----------------- 1. VIDEO LAYER (HEADLESS YOUTUBE OR HTML5 VIDEO) ----------------- */}
       {isYouTube ? (
-        <div className="w-full h-full relative overflow-hidden flex items-center justify-center">
+        <div className="w-full h-full relative overflow-hidden flex items-center justify-center bg-black">
           <iframe
             ref={iframeRef}
             src={youtubeHeadlessEmbedUrl}
             title={title}
-            className={`w-full h-full border-0 pointer-events-none transition-transform duration-300 ${
-              isAspectFill ? "scale-115 object-cover" : "object-contain"
+            className={`w-[102%] h-[124%] max-w-none border-0 pointer-events-none transition-transform duration-300 ${
+              isAspectFill ? "scale-[1.25]" : "scale-[1.12]"
             }`}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           />

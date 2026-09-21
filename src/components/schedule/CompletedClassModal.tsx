@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useRef } from "react";
 import { formatISTDate, formatISTTime } from "@/lib/date-utils";
+import { LectureVideoPlayer } from "@/components/video-player/LectureVideoPlayer";
 
 export interface CompletedClassAssets {
   scheduleId: string;
@@ -31,7 +32,6 @@ export interface CompletedClassAssets {
   };
 }
 
-const SPEEDS = [0.5, 1, 1.25, 1.5, 2] as const;
 
 export function CompletedClassModal({
   scheduleId,
@@ -56,9 +56,7 @@ export function CompletedClassModal({
   const [assets, setAssets] = useState<CompletedClassAssets | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [speed, setSpeed] = useState<number>(1);
   const [notesType, setNotesType] = useState<"annotated" | "original">("annotated");
-  const videoRef = useRef<HTMLVideoElement>(null);
 
   // Close on Escape key
   useEffect(() => {
@@ -102,12 +100,6 @@ export function CompletedClassModal({
     };
   }, [scheduleId]);
 
-  // Apply playback speed
-  useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.playbackRate = speed;
-    }
-  }, [speed, isPlaying]);
 
   const durationMin = assets?.recording.durationSeconds
     ? Math.round(assets.recording.durationSeconds / 60)
@@ -221,62 +213,16 @@ export function CompletedClassModal({
                   isPlaying ? (
                     <div className="mt-3 space-y-2">
                       <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-black shadow-inner">
-                        {assets.recording.type === "YOUTUBE" ? (
-                          <iframe
-                            src={
-                              assets.recording.url.includes("embed")
-                                ? assets.recording.url
-                                : `https://www.youtube.com/embed/${
-                                    assets.recording.url.match(/(?:v=|\/embed\/|\.be\/)([^&?]+)/)?.[1] || ""
-                                  }?autoplay=1`
-                            }
-                            className="w-full h-full border-0"
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                            allowFullScreen
-                            title="Class Recording"
-                          />
-                        ) : (
-                          <video
-                            ref={videoRef}
-                            src={assets.recording.url}
-                            controls
-                            autoPlay
-                            className="w-full h-full object-contain"
-                          />
-                        )}
+                        <LectureVideoPlayer
+                          mode="recorded"
+                          lectureId={scheduleId}
+                          title={classTitle}
+                          subjectTitle={subject || undefined}
+                          educatorName={teacherName || undefined}
+                          videoUrl={assets.recording.url}
+                          onClose={() => setIsPlaying(false)}
+                        />
                       </div>
-
-                      {assets.recording.type === "VIDEO" && (
-                        <div className="flex items-center justify-between gap-2 px-1 pt-1 text-xs">
-                          <div className="flex items-center gap-1">
-                            <span className="text-[10px] font-bold uppercase text-slate-500 mr-1">
-                              Speed:
-                            </span>
-                            {SPEEDS.map((s) => (
-                              <button
-                                key={s}
-                                type="button"
-                                onClick={() => setSpeed(s)}
-                                className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition cursor-pointer ${
-                                  speed === s
-                                    ? "bg-orange-600 text-white"
-                                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200"
-                                }`}
-                              >
-                                {s}x
-                              </button>
-                            ))}
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => setIsPlaying(false)}
-                            className="text-[11px] font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition cursor-pointer"
-                          >
-                            Hide Player
-                          </button>
-                        </div>
-                      )}
                     </div>
                   ) : (
                     <button
