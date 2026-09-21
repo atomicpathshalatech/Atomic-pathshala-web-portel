@@ -380,8 +380,9 @@ export function LectureVideoPlayer({
     };
   }, [isYouTube, isScrubbing, onEnded]);
 
-  // Robust YouTube progress ticker: combines API calls with smooth time advancement
+  // Robust YouTube progress ticker: combines API calls with continuous smooth time advancement
   const lastTickTimeRef = useRef<number>(Date.now());
+  const lastReportedTimeRef = useRef<number>(-1);
 
   useEffect(() => {
     if (!isYouTube) return;
@@ -427,34 +428,46 @@ export function LectureVideoPlayer({
       if (reportedDur && reportedDur > 0) {
         setDuration(reportedDur);
       }
-      if (loadedFraction !== null && (reportedDur || duration > 0)) {
-        setBufferedEnd(loadedFraction * (reportedDur || duration));
+      const activeDur = reportedDur || duration;
+      if (loadedFraction !== null && activeDur > 0) {
+        setBufferedEnd(loadedFraction * activeDur);
       }
 
       // 3. Update current time & scrub progress bar
       if (!isScrubbing) {
-        if (reportedTime !== null && reportedTime > 0) {
-          setCurrentTime(reportedTime);
-          const activeDur = reportedDur || duration;
-          if (onTimeUpdate) onTimeUpdate(reportedTime, activeDur);
-          if (activeDur > 0 && onProgressPercentage) {
-            onProgressPercentage(Math.floor((reportedTime / activeDur) * 100));
-          }
-        } else if (isPlaying) {
-          // Smooth local increment while video is actively playing
-          setCurrentTime((prev) => {
-            const next = prev + elapsed * playbackSpeed;
-            const activeDur = reportedDur || duration;
-            const clamped = activeDur > 0 ? Math.min(next, activeDur) : next;
-            if (onTimeUpdate) onTimeUpdate(clamped, activeDur);
+        if (isPlaying) {
+          // If reported time has changed noticeably from last time (user sought or fresh frame from YT)
+          if (
+            reportedTime !== null &&
+            reportedTime > 0 &&
+            Math.abs(reportedTime - lastReportedTimeRef.current) > 1.2
+          ) {
+            lastReportedTimeRef.current = reportedTime;
+            setCurrentTime(reportedTime);
+            if (onTimeUpdate) onTimeUpdate(reportedTime, activeDur);
             if (activeDur > 0 && onProgressPercentage) {
-              onProgressPercentage(Math.floor((clamped / activeDur) * 100));
+              onProgressPercentage(Math.floor((reportedTime / activeDur) * 100));
             }
-            return clamped;
-          });
+          } else {
+            // Smoothly advance time locally at high resolution
+            setCurrentTime((prev) => {
+              const base = (reportedTime !== null && reportedTime > prev) ? reportedTime : prev;
+              const next = base + elapsed * playbackSpeed;
+              const clamped = activeDur > 0 ? Math.min(next, activeDur) : next;
+              if (onTimeUpdate) onTimeUpdate(clamped, activeDur);
+              if (activeDur > 0 && onProgressPercentage) {
+                onProgressPercentage(Math.floor((clamped / activeDur) * 100));
+              }
+              return clamped;
+            });
+          }
+        } else if (reportedTime !== null && reportedTime > 0) {
+          // When paused, strictly sync to the reported frame
+          lastReportedTimeRef.current = reportedTime;
+          setCurrentTime(reportedTime);
         }
       }
-    }, 250);
+    }, 100);
 
     return () => clearInterval(pollInterval);
   }, [isYouTube, isPlaying, isScrubbing, duration, playbackSpeed, onTimeUpdate, onProgressPercentage]);
@@ -465,12 +478,10 @@ export function LectureVideoPlayer({
       if (isPlaying) {
         sendYouTubeCommand("pauseVideo");
         setIsPlaying(false);
-        triggerFeedback("pause", "Pause");
       } else {
         sendYouTubeCommand("playVideo");
         setIsPlaying(true);
         setHasEnded(false);
-        triggerFeedback("play_arrow", "Play");
       }
     } else if (videoRef.current) {
       if (videoRef.current.paused || videoRef.current.ended) {
@@ -479,17 +490,15 @@ export function LectureVideoPlayer({
           .then(() => {
             setIsPlaying(true);
             setHasEnded(false);
-            triggerFeedback("play_arrow", "Play");
           })
           .catch(() => {});
       } else {
         videoRef.current.pause();
         setIsPlaying(false);
-        triggerFeedback("pause", "Pause");
       }
     }
     resetControlsTimer();
-  }, [isYouTube, isPlaying, sendYouTubeCommand, triggerFeedback, resetControlsTimer]);
+  }, [isYouTube, isPlaying, sendYouTubeCommand, resetControlsTimer]);
 
   // Seek Skip (+10s or -10s)
   const skip = useCallback(
@@ -1003,41 +1012,37 @@ export function LectureVideoPlayer({
         </div>
       )}
 
-      {/* ----------------- 6. TOP HEADER BAR (Atomic Pathshala Logo Badge + Close X) ----------------- */}
+      {/* ----------------- 6. PERMANENT BRANDING (Logo + Atomic Pathshala - Always Visible) ----------------- */}
+      <div className="absolute top-3 sm:top-4 left-3 sm:left-4 z-30 pointer-events-none select-none flex items-center gap-2.5">
+        <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-white/10 backdrop-blur-md p-1 border border-white/20 flex items-center justify-center shrink-0 shadow-md">
+          <img
+            src="/brand/logo.png"
+            alt="Atomic Pathshala"
+            className="w-full h-full object-contain"
+          />
+        </div>
+        <div className="min-w-0">
+          <span className="text-xs sm:text-sm font-bold text-white tracking-wide drop-shadow leading-tight block">
+            Atomic Pathshala
+          </span>
+          {subjectTitle ? (
+            <p className="text-[10px] sm:text-[11px] text-slate-300 font-medium truncate leading-tight">
+              {subjectTitle} {educatorName ? `• ${educatorName}` : ""}
+            </p>
+          ) : educatorName ? (
+            <p className="text-[10px] sm:text-[11px] text-slate-300 font-medium truncate leading-tight">
+              {educatorName}
+            </p>
+          ) : null}
+        </div>
+      </div>
+
+      {/* Top Header Bar Gradient & Close Button (Fades with controls) */}
       <div
-        className={`absolute top-0 left-0 right-0 p-3 sm:p-4 bg-gradient-to-b from-black/85 via-black/40 to-transparent transition-opacity duration-300 z-30 flex items-center justify-between pointer-events-none ${
+        className={`absolute top-0 left-0 right-0 p-3 sm:p-4 bg-gradient-to-b from-black/85 via-black/40 to-transparent transition-opacity duration-300 z-29 flex items-center justify-end pointer-events-none ${
           showControls || !isPlaying ? "opacity-100" : "opacity-0"
         }`}
       >
-        <div className="min-w-0 flex items-center gap-2.5">
-          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-white/10 backdrop-blur-md p-1 border border-white/20 flex items-center justify-center shrink-0 shadow-md">
-            <img
-              src="/brand/logo.png"
-              alt="Atomic Pathshala"
-              className="w-full h-full object-contain"
-            />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs sm:text-sm font-bold text-white tracking-wide drop-shadow leading-tight">
-                Atomic Pathshala
-              </span>
-              <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-semibold bg-blue-500/30 text-blue-300 border border-blue-400/30 uppercase tracking-wider">
-                Class
-              </span>
-            </div>
-            {subjectTitle ? (
-              <p className="text-[10px] sm:text-[11px] text-slate-300 font-medium truncate leading-tight">
-                {subjectTitle} {educatorName ? `• ${educatorName}` : ""}
-              </p>
-            ) : educatorName ? (
-              <p className="text-[10px] sm:text-[11px] text-slate-300 font-medium truncate leading-tight">
-                {educatorName}
-              </p>
-            ) : null}
-          </div>
-        </div>
-
         {/* Close Button matching Screenshot 1 Top Right */}
         <button
           type="button"
@@ -1130,14 +1135,18 @@ export function LectureVideoPlayer({
               />
               {/* Played Bar */}
               <div
-                className="absolute top-0 left-0 bottom-0 bg-white rounded-full"
+                className={`absolute top-0 left-0 bottom-0 bg-white rounded-full ${
+                  isScrubbing ? "transition-none" : "transition-[width] duration-150 ease-linear"
+                }`}
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
 
             {/* Blue Circular Thumb Knob matching Screenshot 1 */}
             <div
-              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-blue-500 rounded-full shadow-lg border-2 border-white scale-100 transition-transform pointer-events-none"
+              className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-blue-500 rounded-full shadow-lg border-2 border-white pointer-events-none ${
+                isScrubbing ? "transition-none" : "transition-[left] duration-150 ease-linear"
+              }`}
               style={{ left: `${progressPercent}%` }}
             />
 
