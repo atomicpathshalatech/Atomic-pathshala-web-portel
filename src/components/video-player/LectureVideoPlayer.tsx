@@ -144,6 +144,7 @@ export function LectureVideoPlayer({
   const [isAspectFill, setIsAspectFill] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
   const [hasEnded, setHasEnded] = useState(false);
+  const [hasStartedPlaying, setHasStartedPlaying] = useState(false);
 
   // Popups State (matching Screenshots 2 & 3)
   const [showControls, setShowControls] = useState(true);
@@ -347,6 +348,7 @@ export function LectureVideoPlayer({
             onStateChange: (e: any) => {
               // 1: PLAYING, 2: PAUSED, 3: BUFFERING, 0: ENDED
               if (e.data === 1) {
+                setHasStartedPlaying(true);
                 setIsPlaying(true);
                 setIsBuffering(false);
                 setHasEnded(false);
@@ -421,6 +423,7 @@ export function LectureVideoPlayer({
           }
           if (typeof info.playerState === "number") {
             if (info.playerState === 1) {
+              setHasStartedPlaying(true);
               setIsPlaying(true);
               setIsBuffering(false);
               setHasEnded(false);
@@ -437,6 +440,7 @@ export function LectureVideoPlayer({
           }
         } else if (msg.event === "onStateChange") {
           if (msg.info === 1) {
+            setHasStartedPlaying(true);
             setIsPlaying(true);
             setIsBuffering(false);
             setHasEnded(false);
@@ -559,12 +563,14 @@ export function LectureVideoPlayer({
         sendYouTubeCommand("pauseVideo");
         setIsPlaying(false);
       } else {
+        setHasStartedPlaying(true);
         sendYouTubeCommand("playVideo");
         setIsPlaying(true);
         setHasEnded(false);
       }
     } else if (videoRef.current) {
       if (videoRef.current.paused || videoRef.current.ended) {
+        setHasStartedPlaying(true);
         videoRef.current
           .play()
           .then(() => {
@@ -1002,6 +1008,7 @@ export function LectureVideoPlayer({
           onEnded={handleVideoEnded}
           onWaiting={() => setIsBuffering(true)}
           onPlaying={() => {
+            setHasStartedPlaying(true);
             setIsBuffering(false);
             setIsPlaying(true);
           }}
@@ -1017,6 +1024,85 @@ export function LectureVideoPlayer({
             }
           }}
         />
+      )}
+
+      {/* ----------------- 1.5 PRE-PLAY BRANDED POSTER / COVER LAYER ----------------- */}
+      {/* Completely covers YouTube's raw preview, red play button, channel name & "Watch on YouTube" */}
+      {!hasStartedPlaying && (
+        <div
+          onClick={(e) => {
+            e.stopPropagation();
+            togglePlay();
+          }}
+          className="absolute inset-0 z-20 bg-slate-950 flex flex-col items-center justify-center cursor-pointer select-none overflow-hidden group/poster"
+        >
+          {posterUrl ? (
+            <img
+              src={posterUrl}
+              alt={title || "Lecture Thumbnail"}
+              className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover/poster:scale-105"
+            />
+          ) : (
+            <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950/70 flex flex-col justify-between p-4 sm:p-7">
+              {/* Subtle ambient glows */}
+              <div className="absolute -top-12 -right-12 w-64 h-64 rounded-full bg-blue-600/15 blur-3xl pointer-events-none" />
+              <div className="absolute -bottom-12 -left-12 w-64 h-64 rounded-full bg-indigo-600/15 blur-3xl pointer-events-none" />
+
+              {/* Top Row: Brand & Subject Pill */}
+              <div className="relative z-10 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-white/10 backdrop-blur-md p-1 border border-white/20 flex items-center justify-center shadow">
+                    <img
+                      src="/brand/logo.png"
+                      alt="Atomic Pathshala"
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                  <span className="text-xs sm:text-sm font-bold text-white tracking-wide">
+                    Atomic Pathshala
+                  </span>
+                </div>
+                {subjectTitle && (
+                  <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-blue-600/30 text-blue-300 border border-blue-500/30">
+                    {subjectTitle}
+                  </span>
+                )}
+              </div>
+
+              {/* Center Lecture Title & Educator */}
+              <div className="relative z-10 my-auto text-center max-w-lg mx-auto px-4">
+                {title && (
+                  <h3 className="text-base sm:text-2xl font-black text-white tracking-tight drop-shadow-md line-clamp-2 mb-2">
+                    {title}
+                  </h3>
+                )}
+                {educatorName && (
+                  <p className="text-xs sm:text-sm text-slate-300 font-medium flex items-center justify-center gap-1.5 drop-shadow">
+                    <span className="material-symbols-outlined text-base text-blue-400">school</span>
+                    <span>{educatorName}</span>
+                  </p>
+                )}
+              </div>
+
+              {/* Bottom Prompt */}
+              <div className="relative z-10 flex items-center justify-center">
+                <span className="text-[11px] font-semibold text-blue-300/90 bg-blue-500/15 px-3.5 py-1 rounded-full border border-blue-400/25 flex items-center gap-2 shadow-sm">
+                  <span className="w-2 h-2 rounded-full bg-blue-400 animate-ping" />
+                  Tap to Start Class
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Center Branded Play Button */}
+          <div className="relative z-20 flex items-center justify-center pointer-events-none">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-blue-600 group-hover/poster:bg-blue-500 active:scale-90 text-white flex items-center justify-center shadow-2xl shadow-blue-500/50 ring-4 ring-white/30 transition-all duration-200">
+              <span className="material-symbols-outlined text-4xl sm:text-5xl ml-1">
+                play_arrow
+              </span>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ----------------- 2. FLOATING STUDENT ANTI-PIRACY WATERMARK ----------------- */}
@@ -1091,36 +1177,36 @@ export function LectureVideoPlayer({
         </div>
       )}
 
-      {/* ----------------- 6. PERMANENT BRANDING (Logo + Atomic Pathshala - Always Visible) ----------------- */}
-      <div className="absolute top-3 sm:top-4 left-3 sm:left-4 z-30 pointer-events-none select-none flex items-center gap-2.5">
-        <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-white/10 backdrop-blur-md p-1 border border-white/20 flex items-center justify-center shrink-0 shadow-md">
-          <img
-            src="/brand/logo.png"
-            alt="Atomic Pathshala"
-            className="w-full h-full object-contain"
-          />
+      {/* ----------------- 6. PERMANENT BRANDING (Logo + Atomic Pathshala - Visible during playback) ----------------- */}
+      {hasStartedPlaying && (
+        <div className="absolute top-3 sm:top-4 left-3 sm:left-4 z-30 pointer-events-none select-none flex items-center gap-2.5 animate-in fade-in duration-200">
+          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-white/10 backdrop-blur-md p-1 border border-white/20 flex items-center justify-center shrink-0 shadow-md">
+            <img
+              src="/brand/logo.png"
+              alt="Atomic Pathshala"
+              className="w-full h-full object-contain"
+            />
+          </div>
+          <div className="min-w-0">
+            <span className="text-xs sm:text-sm font-bold text-white tracking-wide drop-shadow leading-tight block">
+              Atomic Pathshala
+            </span>
+            {subjectTitle ? (
+              <p className="text-[10px] sm:text-[11px] text-slate-300 font-medium truncate leading-tight">
+                {subjectTitle} {educatorName ? `• ${educatorName}` : ""}
+              </p>
+            ) : educatorName ? (
+              <p className="text-[10px] sm:text-[11px] text-slate-300 font-medium truncate leading-tight">
+                {educatorName}
+              </p>
+            ) : null}
+          </div>
         </div>
-        <div className="min-w-0">
-          <span className="text-xs sm:text-sm font-bold text-white tracking-wide drop-shadow leading-tight block">
-            Atomic Pathshala
-          </span>
-          {subjectTitle ? (
-            <p className="text-[10px] sm:text-[11px] text-slate-300 font-medium truncate leading-tight">
-              {subjectTitle} {educatorName ? `• ${educatorName}` : ""}
-            </p>
-          ) : educatorName ? (
-            <p className="text-[10px] sm:text-[11px] text-slate-300 font-medium truncate leading-tight">
-              {educatorName}
-            </p>
-          ) : null}
-        </div>
-      </div>
+      )}
 
-      {/* Top Header Bar Gradient & Close Button (Fades with controls) */}
+      {/* Top Header Bar Gradient & Close Button (Always accessible at top right) */}
       <div
-        className={`absolute top-0 left-0 right-0 h-20 bg-gradient-to-b from-black/70 via-black/20 to-transparent transition-opacity duration-300 z-29 flex items-start justify-end p-3 sm:p-4 pointer-events-none border-0 ${
-          showControls || !isPlaying ? "opacity-100" : "opacity-0"
-        }`}
+        className="absolute top-0 left-0 right-0 h-20 bg-gradient-to-b from-black/70 via-black/20 to-transparent z-35 flex items-start justify-end p-3 sm:p-4 pointer-events-none border-0"
       >
         {/* Close Button matching Screenshot 1 Top Right */}
         <button
@@ -1132,7 +1218,7 @@ export function LectureVideoPlayer({
               window.history.back();
             }
           }}
-          className="pointer-events-auto w-8 h-8 rounded-full bg-black/40 hover:bg-black/70 active:scale-95 text-white/90 hover:text-white flex items-center justify-center transition border border-white/10 cursor-pointer shadow-md"
+          className="pointer-events-auto w-8 h-8 rounded-full bg-black/60 hover:bg-black/85 active:scale-95 text-white/90 hover:text-white flex items-center justify-center transition border border-white/20 cursor-pointer shadow-lg"
           title="Close Player"
         >
           <span className="material-symbols-outlined text-lg">close</span>
@@ -1142,7 +1228,9 @@ export function LectureVideoPlayer({
       {/* ----------------- 7. CENTER CONTROLS (Screenshot 1: Rewind 10, Play/Pause, Forward 10) ----------------- */}
       <div
         className={`absolute inset-0 flex items-center justify-center gap-10 sm:gap-20 pointer-events-none z-25 border-0 bg-transparent transition-opacity duration-300 ${
-          showControls || !isPlaying ? "opacity-100" : "opacity-0 pointer-events-none"
+          hasStartedPlaying && (showControls || !isPlaying)
+            ? "opacity-100"
+            : "opacity-0 pointer-events-none"
         }`}
       >
         {/* Rewind 10s Circular Button */}
@@ -1190,7 +1278,7 @@ export function LectureVideoPlayer({
       {/* ----------------- 8. BOTTOM CONTROL BAR (Screenshots 1, 2, 3) ----------------- */}
       <div
         className={`absolute bottom-0 left-0 right-0 p-3 sm:p-4 bg-gradient-to-t from-black/95 via-black/70 to-transparent transition-opacity duration-300 z-30 pointer-events-auto flex flex-col gap-2.5 ${
-          showControls || !isPlaying || showSpeedMenu || showQualityMenu
+          hasStartedPlaying && (showControls || !isPlaying || showSpeedMenu || showQualityMenu)
             ? "opacity-100"
             : "opacity-0 pointer-events-none"
         }`}

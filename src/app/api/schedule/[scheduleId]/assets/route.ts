@@ -95,7 +95,7 @@ export async function GET(
       where: { id: scheduleId },
       include: {
         batch: {
-          select: { id: true, name: true, code: true },
+          select: { id: true, name: true, code: true, thumbnailUrl: true },
         },
         teacher: {
           include: {
@@ -293,6 +293,7 @@ export async function GET(
       subject: schedule.subject,
       batchId: schedule.batchId,
       batchName: schedule.batch.name,
+      thumbnailUrl: schedule.batch.thumbnailUrl || null,
       teacherName: schedule.teacher?.user?.name || "Atomic Faculty",
       teacherImage: schedule.teacher?.user?.photoUrl || null,
       startsAt: schedule.startsAt.toISOString(),

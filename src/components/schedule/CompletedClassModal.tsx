@@ -10,6 +10,7 @@ export interface CompletedClassAssets {
   subject: string | null;
   batchId: string;
   batchName: string;
+  thumbnailUrl?: string | null;
   teacherName: string;
   teacherImage?: string | null;
   startsAt: string;
@@ -101,10 +102,7 @@ export function CompletedClassModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150 select-none"
       aria-modal="true"
       role="dialog"
     >
@@ -138,6 +136,7 @@ export function CompletedClassModal({
               title={classTitle}
               subjectTitle={subject || undefined}
               educatorName={teacherName || undefined}
+              posterUrl={assets.thumbnailUrl || undefined}
               videoUrl={assets.recording.url}
               onClose={onClose}
             />
