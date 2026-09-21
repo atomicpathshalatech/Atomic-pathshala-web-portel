@@ -1039,7 +1039,7 @@ export function LectureVideoPlayer({
 
       {/* Top Header Bar Gradient & Close Button (Fades with controls) */}
       <div
-        className={`absolute top-0 left-0 right-0 p-3 sm:p-4 bg-gradient-to-b from-black/85 via-black/40 to-transparent transition-opacity duration-300 z-29 flex items-center justify-end pointer-events-none ${
+        className={`absolute top-0 left-0 right-0 h-20 bg-gradient-to-b from-black/70 via-black/20 to-transparent transition-opacity duration-300 z-29 flex items-start justify-end p-3 sm:p-4 pointer-events-none border-0 ${
           showControls || !isPlaying ? "opacity-100" : "opacity-0"
         }`}
       >
@@ -1062,7 +1062,7 @@ export function LectureVideoPlayer({
 
       {/* ----------------- 7. CENTER CONTROLS (Screenshot 1: Rewind 10, Play/Pause, Forward 10) ----------------- */}
       <div
-        className={`absolute inset-0 flex items-center justify-center gap-10 sm:gap-20 pointer-events-none z-25 transition-opacity duration-300 ${
+        className={`absolute inset-0 flex items-center justify-center gap-10 sm:gap-20 pointer-events-none z-25 border-0 bg-transparent transition-opacity duration-300 ${
           showControls || !isPlaying ? "opacity-100" : "opacity-0 pointer-events-none"
         }`}
       >
