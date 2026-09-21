@@ -134,12 +134,16 @@ export function HorizontalScheduleCalendar({
   blockedReason?: string | null;
 }) {
   const [selectedBatchId, setSelectedBatchId] = useState<string>("ALL");
-  const [currentWeekStart, setCurrentWeekStart] = useState<Date>(() => getMonday(new Date()));
+  const [currentMonthDate, setCurrentMonthDate] = useState<Date>(() => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  });
   const [selectedDateKey, setSelectedDateKey] = useState<string>(() => getISTDayKey(new Date()));
   const [clientTimeMs, setClientTimeMs] = useState<number>(Date.now());
   const [batchDropdownOpen, setBatchDropdownOpen] = useState(false);
   const [blockedBannerDismissed, setBlockedBannerDismissed] = useState(false);
   const [autoCompletedScheduleId, setAutoCompletedScheduleId] = useState<string | null>(null);
+  const scrollContainerRef = React.useRef<HTMLDivElement>(null);
 
   // Auto-open modal if directed with ?completedClass=<id>
   useEffect(() => {
@@ -158,6 +162,37 @@ export function HorizontalScheduleCalendar({
     return () => clearInterval(timer);
   }, []);
 
+  // Auto-scroll active day pill into center of screen
+  useEffect(() => {
+    if (scrollContainerRef.current) {
+      const activeEl = scrollContainerRef.current.querySelector(
+        `[data-day-key="${selectedDateKey}"]`
+      ) as HTMLElement;
+      if (activeEl) {
+        activeEl.scrollIntoView({
+          behavior: "smooth",
+          inline: "center",
+          block: "nearest",
+        });
+      }
+    }
+  }, [selectedDateKey, currentMonthDate]);
+
+  // Sync month if selectedDateKey crosses month boundaries
+  useEffect(() => {
+    const parts = selectedDateKey.split("-").map(Number);
+    if (parts.length >= 2 && parts[0] && parts[1]) {
+      const y = parts[0];
+      const m = parts[1] - 1;
+      if (
+        currentMonthDate.getFullYear() !== y ||
+        currentMonthDate.getMonth() !== m
+      ) {
+        setCurrentMonthDate(new Date(y, m, 1));
+      }
+    }
+  }, [selectedDateKey]);
+
   // Filter schedules by batch
   const filteredSchedules = useMemo(() => {
     return initialSchedules.filter((s) => {
@@ -166,19 +201,25 @@ export function HorizontalScheduleCalendar({
     });
   }, [initialSchedules, selectedBatchId]);
 
-  // Generate 7 days of the current selected week (Mon - Sun)
-  const weekDays = useMemo(() => {
+  // Generate all days of the current selected month (1 to 28/29/30/31)
+  const monthDays = useMemo(() => {
+    const y = currentMonthDate.getFullYear();
+    const m = currentMonthDate.getMonth();
+    const totalDays = new Date(y, m + 1, 0).getDate();
     const days: { date: Date; key: string; dayName: string; dayNum: string; isToday: boolean }[] = [];
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(currentWeekStart.getTime() + i * 24 * 60 * 60 * 1000);
+
+    for (let day = 1; day <= totalDays; day++) {
+      const d = new Date(y, m, day);
       const key = getISTDayKey(d);
-      const dayName = DAY_NAMES[i] ?? "";
-      const dayNum = d.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit" });
+      const dayName = d
+        .toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", weekday: "short" })
+        .toUpperCase();
+      const dayNum = String(day).padStart(2, "0");
       const isToday = isTodayInIST(d);
       days.push({ date: d, key, dayName, dayNum, isToday });
     }
     return days;
-  }, [currentWeekStart]);
+  }, [currentMonthDate]);
 
   // Group filtered schedules by IST Date Key
   const groupedByDate = useMemo(() => {
@@ -195,46 +236,51 @@ export function HorizontalScheduleCalendar({
   }, [filteredSchedules]);
 
   // Navigation handlers
-  const handlePrevWeek = () => {
-    const newStart = new Date(currentWeekStart.getTime() - 7 * 24 * 60 * 60 * 1000);
-    setCurrentWeekStart(newStart);
-    setSelectedDateKey(getISTDayKey(newStart));
+  const handlePrevMonth = () => {
+    const y = currentMonthDate.getFullYear();
+    const m = currentMonthDate.getMonth();
+    const newMonth = new Date(y, m - 1, 1);
+    setCurrentMonthDate(newMonth);
+    setSelectedDateKey(getISTDayKey(newMonth));
   };
 
-  const handleNextWeek = () => {
-    const newStart = new Date(currentWeekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
-    setCurrentWeekStart(newStart);
-    setSelectedDateKey(getISTDayKey(newStart));
+  const handleNextMonth = () => {
+    const y = currentMonthDate.getFullYear();
+    const m = currentMonthDate.getMonth();
+    const newMonth = new Date(y, m + 1, 1);
+    setCurrentMonthDate(newMonth);
+    setSelectedDateKey(getISTDayKey(newMonth));
   };
 
   const handleToday = () => {
     const today = new Date();
-    setCurrentWeekStart(getMonday(today));
+    setCurrentMonthDate(new Date(today.getFullYear(), today.getMonth(), 1));
     setSelectedDateKey(getISTDayKey(today));
   };
 
   // Month & Year header label
   const monthYearLabel = useMemo(() => {
-    const midWeek = new Date(currentWeekStart.getTime() + 3 * 24 * 60 * 60 * 1000);
-    return midWeek.toLocaleDateString("en-IN", {
-      timeZone: "Asia/Kolkata",
-      month: "long",
-      year: "numeric",
-    }).toUpperCase();
-  }, [currentWeekStart]);
+    return currentMonthDate
+      .toLocaleDateString("en-IN", {
+        timeZone: "Asia/Kolkata",
+        month: "long",
+        year: "numeric",
+      })
+      .toUpperCase();
+  }, [currentMonthDate]);
 
   const clientNow = useMemo(() => new Date(clientTimeMs), [clientTimeMs]);
 
   // Selected date object & items
   const selectedDateObj = useMemo(() => {
-    const found = weekDays.find((d) => d.key === selectedDateKey);
+    const found = monthDays.find((d) => d.key === selectedDateKey);
     if (found) return found.date;
     const parts = selectedDateKey.split("-").map(Number);
     const y = parts[0] ?? 2026;
     const m = parts[1] ?? 1;
     const d = parts[2] ?? 1;
     return new Date(y, m - 1, d);
-  }, [weekDays, selectedDateKey]);
+  }, [monthDays, selectedDateKey]);
 
   const selectedDateFormattedTitle = useMemo(() => {
     return selectedDateObj.toLocaleDateString("en-IN", {
@@ -311,9 +357,9 @@ export function HorizontalScheduleCalendar({
           {/* Month Navigator */}
           <div className="flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm rounded-xl px-2 py-1">
             <button
-              aria-label="Previous Week"
-              onClick={handlePrevWeek}
-              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors"
+              aria-label="Previous Month"
+              onClick={handlePrevMonth}
+              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
               type="button"
             >
               <span className="material-symbols-outlined text-[18px]">chevron_left</span>
@@ -322,9 +368,9 @@ export function HorizontalScheduleCalendar({
               {monthYearLabel}
             </span>
             <button
-              aria-label="Next Week"
-              onClick={handleNextWeek}
-              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors"
+              aria-label="Next Month"
+              onClick={handleNextMonth}
+              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
               type="button"
             >
               <span className="material-symbols-outlined text-[18px]">chevron_right</span>
@@ -400,10 +446,13 @@ export function HorizontalScheduleCalendar({
         </div>
       </section>
 
-      {/* Horizontal Scrollable Date Strip */}
-      <section className="w-full overflow-x-auto no-scrollbar py-1">
-        <div className="flex items-center gap-2.5 min-w-max">
-          {weekDays.map((day) => {
+      {/* Horizontal Scrollable Date Strip for the Entire Month */}
+      <section className="relative w-full">
+        <div
+          ref={scrollContainerRef}
+          className="w-full overflow-x-auto no-scrollbar py-2 px-1 scroll-smooth snap-x touch-pan-x flex items-center gap-2.5 min-w-full"
+        >
+          {monthDays.map((day) => {
             const isSelected = selectedDateKey === day.key;
             const dayLectures = groupedByDate[day.key] ?? [];
             const hasClasses = dayLectures.length > 0;
@@ -414,8 +463,9 @@ export function HorizontalScheduleCalendar({
             return (
               <button
                 key={day.key}
+                data-day-key={day.key}
                 onClick={() => setSelectedDateKey(day.key)}
-                className={`flex flex-col items-center justify-center w-14 py-2.5 rounded-2xl transition-all active:scale-95 border ${
+                className={`flex flex-col items-center justify-center min-w-[56px] w-14 py-2.5 rounded-2xl transition-all active:scale-95 border snap-center shrink-0 cursor-pointer ${
                   isSelected
                     ? "bg-[#a33900] text-white border-[#a33900] shadow-md scale-105"
                     : day.isToday
