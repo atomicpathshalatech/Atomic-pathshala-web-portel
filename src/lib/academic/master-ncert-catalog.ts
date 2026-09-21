@@ -48,15 +48,26 @@ const ncertDatasets = [
   { classNum: 12, data: c12Math },
 ];
 
+export function normalizeSubjectName(sub: string): string {
+  const norm = (sub || "").trim().toLowerCase();
+  if (norm.includes("phys")) return "Physics";
+  if (norm.includes("chem")) return "Chemistry";
+  if (norm.includes("botan") || norm.includes("zool") || norm.includes("bio")) return "Biology";
+  if (norm.includes("math")) return "Mathematics";
+  return sub;
+}
+
 /**
  * Returns all distinct subjects across NCERT Class 11 & 12
  */
 export function getMasterNcertSubjects(): MasterNcertSubject[] {
   return [
-    { id: "Biology", name: "Biology", nameHindi: "जीव विज्ञान" },
     { id: "Physics", name: "Physics", nameHindi: "भौतिक विज्ञान" },
     { id: "Chemistry", name: "Chemistry", nameHindi: "रसायन विज्ञान" },
+    { id: "Biology", name: "Biology", nameHindi: "जीव विज्ञान" },
     { id: "Mathematics", name: "Mathematics", nameHindi: "गणित" },
+    { id: "Botany", name: "Botany", nameHindi: "वनस्पति विज्ञान" },
+    { id: "Zoology", name: "Zoology", nameHindi: "प्राणी विज्ञान" },
   ];
 }
 
@@ -64,7 +75,8 @@ export function getMasterNcertSubjects(): MasterNcertSubject[] {
  * Returns all chapters for a given subject across Class 11 and Class 12
  */
 export function getMasterNcertChapters(subjectName: string): MasterNcertChapter[] {
-  const norm = subjectName.trim().toLowerCase();
+  const targetSub = normalizeSubjectName(subjectName);
+  const norm = targetSub.trim().toLowerCase();
   const matchedDatasets = ncertDatasets.filter(
     (ds) => ds.data.name.toLowerCase() === norm || norm.includes(ds.data.name.toLowerCase())
   );
@@ -105,7 +117,8 @@ export function getMasterNcertTopics(
   subjectName: string,
   chapterName: string
 ): MasterNcertTopic[] {
-  const normSub = subjectName.trim().toLowerCase();
+  const targetSub = normalizeSubjectName(subjectName);
+  const normSub = targetSub.trim().toLowerCase();
   const normChap = chapterName.trim().toLowerCase();
 
   // Strip prefix like "[Class 11] Ch 1: " or "Ch 1: " if passed from displayTitle
