@@ -128,11 +128,17 @@ export function LectureVideoPlayer({
   // Check if YouTube
   const youtubeVideoId = useMemo(() => extractYouTubeVideoId(videoUrl), [videoUrl]);
   const isYouTube = Boolean(youtubeVideoId);
+  const ytPlayerElementId = useMemo(
+    () => "atomic-yt-" + Math.random().toString(36).substring(2, 9),
+    []
+  );
 
   // Headless YouTube embed url (controls=0 completely removes YouTube player UI)
   const youtubeHeadlessEmbedUrl = useMemo(() => {
     if (!youtubeVideoId) return "";
-    return `https://www.youtube-nocookie.com/embed/${youtubeVideoId}?enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&disablekb=1&fs=0&iv_load_policy=3&showinfo=0&autoplay=0`;
+    const origin = typeof window !== "undefined" && window.location.origin ? window.location.origin : "";
+    const originParam = origin ? `&origin=${encodeURIComponent(origin)}` : "";
+    return `https://www.youtube.com/embed/${youtubeVideoId}?enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&disablekb=1&fs=0&iv_load_policy=3&showinfo=0&autoplay=0${originParam}`;
   }, [youtubeVideoId]);
 
   // Student Watermark text (Screenshot 1: e.g. firozali78644@gmail.com 8958900405)
@@ -213,13 +219,12 @@ export function LectureVideoPlayer({
     resetControlsTimer();
   };
 
-  // Helper to dispatch command to YouTube (via YT.Player instance or postMessage fallback)
+  // Helper to dispatch command to YouTube (via YT.Player instance and postMessage fallback)
   const sendYouTubeCommand = useCallback(
     (func: string, args: any[] = []) => {
       if (ytPlayerRef.current && typeof ytPlayerRef.current[func] === "function") {
         try {
           ytPlayerRef.current[func](...args);
-          return;
         } catch {}
       }
       if (iframeRef.current?.contentWindow) {
@@ -245,7 +250,10 @@ export function LectureVideoPlayer({
         return;
       }
       try {
-        const player = new (window as any).YT.Player(iframeRef.current, {
+        const targetEl = document.getElementById(ytPlayerElementId) || iframeRef.current;
+        if (!targetEl) return;
+
+        const player = new (window as any).YT.Player(targetEl, {
           events: {
             onReady: (e: any) => {
               ytPlayerRef.current = e.target;
@@ -302,35 +310,154 @@ export function LectureVideoPlayer({
     return () => {
       cancelled = true;
     };
-  }, [isYouTube, youtubeVideoId, initialTime, isMuted, volume, playbackSpeed, onEnded]);
+  }, [isYouTube, youtubeVideoId, ytPlayerElementId, initialTime, isMuted, volume, playbackSpeed, onEnded]);
 
-  // Periodic polling for YouTube player state updates
+  // Direct window postMessage listener for YouTube events (infoDelivery & onStateChange)
   useEffect(() => {
     if (!isYouTube) return;
-    const pollInterval = setInterval(() => {
-      if (ytPlayerRef.current) {
-        try {
-          const cur = ytPlayerRef.current.getCurrentTime?.() || 0;
-          const dur = ytPlayerRef.current.getDuration?.() || 0;
-          const loadedFraction = ytPlayerRef.current.getVideoLoadedFraction?.() || 0;
 
-          if (!isScrubbing) {
-            setCurrentTime(cur);
+    const handleWindowMessage = (e: MessageEvent) => {
+      try {
+        let msg = e.data;
+        if (typeof msg === "string") {
+          try {
+            msg = JSON.parse(msg);
+          } catch {
+            return;
           }
-          if (dur > 0) {
-            setDuration(dur);
-            setBufferedEnd(loadedFraction * dur);
-            if (onTimeUpdate) onTimeUpdate(cur, dur);
-            if (onProgressPercentage) {
-              onProgressPercentage(Math.floor((cur / dur) * 100));
+        }
+        if (!msg || typeof msg !== "object") return;
+
+        if (msg.event === "infoDelivery" && msg.info) {
+          const info = msg.info;
+          if (typeof info.currentTime === "number" && !isScrubbing) {
+            setCurrentTime(info.currentTime);
+          }
+          if (typeof info.duration === "number" && info.duration > 0) {
+            setDuration(info.duration);
+          }
+          if (typeof info.videoLoadedFraction === "number") {
+            setBufferedEnd((prev) => info.videoLoadedFraction * (info.duration || prev || 0));
+          }
+          if (typeof info.playerState === "number") {
+            if (info.playerState === 1) {
+              setIsPlaying(true);
+              setIsBuffering(false);
+              setHasEnded(false);
+            } else if (info.playerState === 2) {
+              setIsPlaying(false);
+              setIsBuffering(false);
+            } else if (info.playerState === 3) {
+              setIsBuffering(true);
+            } else if (info.playerState === 0) {
+              setIsPlaying(false);
+              setHasEnded(true);
+              if (onEnded) onEnded();
             }
           }
+        } else if (msg.event === "onStateChange") {
+          if (msg.info === 1) {
+            setIsPlaying(true);
+            setIsBuffering(false);
+            setHasEnded(false);
+          } else if (msg.info === 2) {
+            setIsPlaying(false);
+            setIsBuffering(false);
+          } else if (msg.info === 3) {
+            setIsBuffering(true);
+          } else if (msg.info === 0) {
+            setIsPlaying(false);
+            setHasEnded(true);
+            if (onEnded) onEnded();
+          }
+        }
+      } catch {}
+    };
+
+    window.addEventListener("message", handleWindowMessage);
+    return () => {
+      window.removeEventListener("message", handleWindowMessage);
+    };
+  }, [isYouTube, isScrubbing, onEnded]);
+
+  // Robust YouTube progress ticker: combines API calls with smooth time advancement
+  const lastTickTimeRef = useRef<number>(Date.now());
+
+  useEffect(() => {
+    if (!isYouTube) return;
+    lastTickTimeRef.current = Date.now();
+
+    const pollInterval = setInterval(() => {
+      const now = Date.now();
+      const elapsed = (now - lastTickTimeRef.current) / 1000;
+      lastTickTimeRef.current = now;
+
+      // 1. Keep-alive ping to YouTube iframe
+      if (iframeRef.current?.contentWindow) {
+        try {
+          iframeRef.current.contentWindow.postMessage(
+            JSON.stringify({ event: "command", func: "getCurrentTime", args: [] }),
+            "*"
+          );
         } catch {}
+      }
+
+      // 2. Read state from YT.Player instance if available
+      let reportedTime: number | null = null;
+      let reportedDur: number | null = null;
+      let loadedFraction: number | null = null;
+
+      if (ytPlayerRef.current) {
+        try {
+          const cur = ytPlayerRef.current.getCurrentTime?.();
+          if (typeof cur === "number" && !isNaN(cur) && cur >= 0) {
+            reportedTime = cur;
+          }
+          const dur = ytPlayerRef.current.getDuration?.();
+          if (typeof dur === "number" && !isNaN(dur) && dur > 0) {
+            reportedDur = dur;
+          }
+          const frac = ytPlayerRef.current.getVideoLoadedFraction?.();
+          if (typeof frac === "number" && !isNaN(frac)) {
+            loadedFraction = frac;
+          }
+        } catch {}
+      }
+
+      if (reportedDur && reportedDur > 0) {
+        setDuration(reportedDur);
+      }
+      if (loadedFraction !== null && (reportedDur || duration > 0)) {
+        setBufferedEnd(loadedFraction * (reportedDur || duration));
+      }
+
+      // 3. Update current time & scrub progress bar
+      if (!isScrubbing) {
+        if (reportedTime !== null && reportedTime > 0) {
+          setCurrentTime(reportedTime);
+          const activeDur = reportedDur || duration;
+          if (onTimeUpdate) onTimeUpdate(reportedTime, activeDur);
+          if (activeDur > 0 && onProgressPercentage) {
+            onProgressPercentage(Math.floor((reportedTime / activeDur) * 100));
+          }
+        } else if (isPlaying) {
+          // Smooth local increment while video is actively playing
+          setCurrentTime((prev) => {
+            const next = prev + elapsed * playbackSpeed;
+            const activeDur = reportedDur || duration;
+            const clamped = activeDur > 0 ? Math.min(next, activeDur) : next;
+            if (onTimeUpdate) onTimeUpdate(clamped, activeDur);
+            if (activeDur > 0 && onProgressPercentage) {
+              onProgressPercentage(Math.floor((clamped / activeDur) * 100));
+            }
+            return clamped;
+          });
+        }
       }
     }, 250);
 
     return () => clearInterval(pollInterval);
-  }, [isYouTube, isScrubbing, onTimeUpdate, onProgressPercentage]);
+  }, [isYouTube, isPlaying, isScrubbing, duration, playbackSpeed, onTimeUpdate, onProgressPercentage]);
 
   // Play / Pause Toggle
   const togglePlay = useCallback(() => {
@@ -750,9 +877,18 @@ export function LectureVideoPlayer({
       {isYouTube ? (
         <div className="w-full h-full relative overflow-hidden flex items-center justify-center bg-black">
           <iframe
+            id={ytPlayerElementId}
             ref={iframeRef}
             src={youtubeHeadlessEmbedUrl}
-            title={title}
+            title="Atomic Pathshala Player"
+            onLoad={() => {
+              try {
+                iframeRef.current?.contentWindow?.postMessage(
+                  JSON.stringify({ event: "listening", id: ytPlayerElementId }),
+                  "*"
+                );
+              } catch {}
+            }}
             className={`w-[102%] h-[124%] max-w-none border-0 pointer-events-none transition-transform duration-300 ${
               isAspectFill ? "scale-[1.25]" : "scale-[1.12]"
             }`}
@@ -867,21 +1003,39 @@ export function LectureVideoPlayer({
         </div>
       )}
 
-      {/* ----------------- 6. TOP HEADER BAR (Screenshot 1: Title + Close X) ----------------- */}
+      {/* ----------------- 6. TOP HEADER BAR (Atomic Pathshala Logo Badge + Close X) ----------------- */}
       <div
         className={`absolute top-0 left-0 right-0 p-3 sm:p-4 bg-gradient-to-b from-black/85 via-black/40 to-transparent transition-opacity duration-300 z-30 flex items-center justify-between pointer-events-none ${
           showControls || !isPlaying ? "opacity-100" : "opacity-0"
         }`}
       >
-        <div className="min-w-0 max-w-xl">
-          <h2 className="text-xs sm:text-sm font-bold text-white truncate drop-shadow">
-            {title}
-          </h2>
-          {educatorName && (
-            <p className="text-[11px] text-slate-300 font-medium truncate">
-              {educatorName} {subjectTitle ? `• ${subjectTitle}` : ""}
-            </p>
-          )}
+        <div className="min-w-0 flex items-center gap-2.5">
+          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-white/10 backdrop-blur-md p-1 border border-white/20 flex items-center justify-center shrink-0 shadow-md">
+            <img
+              src="/brand/logo.png"
+              alt="Atomic Pathshala"
+              className="w-full h-full object-contain"
+            />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs sm:text-sm font-bold text-white tracking-wide drop-shadow leading-tight">
+                Atomic Pathshala
+              </span>
+              <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-semibold bg-blue-500/30 text-blue-300 border border-blue-400/30 uppercase tracking-wider">
+                Class
+              </span>
+            </div>
+            {subjectTitle ? (
+              <p className="text-[10px] sm:text-[11px] text-slate-300 font-medium truncate leading-tight">
+                {subjectTitle} {educatorName ? `• ${educatorName}` : ""}
+              </p>
+            ) : educatorName ? (
+              <p className="text-[10px] sm:text-[11px] text-slate-300 font-medium truncate leading-tight">
+                {educatorName}
+              </p>
+            ) : null}
+          </div>
         </div>
 
         {/* Close Button matching Screenshot 1 Top Right */}
