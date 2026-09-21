@@ -33,8 +33,41 @@ export interface LectureVideoPlayerProps {
 // Exactly matching user Screenshot 2
 const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0] as const;
 
-// Exactly matching user Screenshot 3
-const QUALITY_OPTIONS = ["720p", "480p", "360p", "240p", "144p"] as const;
+export const DEFAULT_QUALITY_OPTIONS = [
+  "1080p",
+  "720p",
+  "480p",
+  "360p",
+  "240p",
+  "144p",
+  "Auto",
+] as const;
+
+export const YT_QUALITY_MAP: Record<string, string> = {
+  "4K (2160p)": "hd2160",
+  "1440p": "hd1440",
+  "1080p": "hd1080",
+  "720p": "hd720",
+  "480p": "large",
+  "360p": "medium",
+  "240p": "small",
+  "144p": "tiny",
+  "Auto": "default",
+};
+
+export const YT_LEVEL_TO_LABEL: Record<string, string> = {
+  highres: "4K (2160p)",
+  hd2160: "4K (2160p)",
+  hd1440: "1440p",
+  hd1080: "1080p",
+  hd720: "720p",
+  large: "480p",
+  medium: "360p",
+  small: "240p",
+  tiny: "144p",
+  auto: "Auto",
+  default: "Auto",
+};
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return "00:00";
@@ -97,7 +130,16 @@ export function LectureVideoPlayer({
   const [isMuted, setIsMuted] = useState(false);
   const [previousVolume, setPreviousVolume] = useState(1);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
-  const [selectedQuality, setSelectedQuality] = useState<string>("720p");
+  const [selectedQuality, setSelectedQuality] = useState<string>("1080p");
+  const [qualityOptions, setQualityOptions] = useState<string[]>([
+    "1080p",
+    "720p",
+    "480p",
+    "360p",
+    "240p",
+    "144p",
+    "Auto",
+  ]);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isAspectFill, setIsAspectFill] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
@@ -138,7 +180,7 @@ export function LectureVideoPlayer({
     if (!youtubeVideoId) return "";
     const origin = typeof window !== "undefined" && window.location.origin ? window.location.origin : "";
     const originParam = origin ? `&origin=${encodeURIComponent(origin)}` : "";
-    return `https://www.youtube.com/embed/${youtubeVideoId}?enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&disablekb=1&fs=0&iv_load_policy=3&showinfo=0&autoplay=0${originParam}`;
+    return `https://www.youtube.com/embed/${youtubeVideoId}?enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&disablekb=1&fs=0&iv_load_policy=3&showinfo=0&autoplay=0&vq=hd1080${originParam}`;
   }, [youtubeVideoId]);
 
   // Student Watermark text (Screenshot 1: e.g. firozali78644@gmail.com 8958900405)
@@ -152,12 +194,13 @@ export function LectureVideoPlayer({
     return "Atomic Pathshala Verified Student";
   }, [watermarkText, session]);
 
-  // Load stored preferences (volume, muted, speed)
+  // Load stored preferences (volume, muted, speed, quality)
   useEffect(() => {
     try {
       const storedVol = localStorage.getItem("atomic_player_volume");
       const storedMute = localStorage.getItem("atomic_player_muted");
       const storedSpeed = localStorage.getItem("atomic_playback_rate");
+      const storedQuality = localStorage.getItem("atomic_player_quality");
 
       if (storedVol !== null) {
         const v = parseFloat(storedVol);
@@ -174,6 +217,9 @@ export function LectureVideoPlayer({
         if ((SPEED_OPTIONS as readonly number[]).includes(s)) {
           setPlaybackSpeed(s);
         }
+      }
+      if (storedQuality) {
+        setSelectedQuality(storedQuality);
       }
     } catch {}
   }, []);
@@ -239,6 +285,26 @@ export function LectureVideoPlayer({
     []
   );
 
+  // Helper to dynamically update available qualities from YouTube
+  const updateAvailableQualities = useCallback((levels: string[]) => {
+    if (!Array.isArray(levels) || levels.length === 0) return;
+    const order = ["4K (2160p)", "1440p", "1080p", "720p", "480p", "360p", "240p", "144p"];
+    const detected = new Set<string>();
+    for (const lvl of levels) {
+      const mapped = YT_LEVEL_TO_LABEL[lvl];
+      if (mapped && mapped !== "Auto") detected.add(mapped);
+    }
+    const filtered = order.filter((label) => detected.has(label));
+    // If YouTube hasn't finished HD processing yet, keep 1080p selectable so user can request HD
+    if (!filtered.includes("1080p") && !filtered.includes("1440p") && !filtered.includes("4K (2160p)")) {
+      filtered.unshift("1080p");
+    }
+    filtered.push("Auto");
+    if (filtered.length > 0) {
+      setQualityOptions(filtered);
+    }
+  }, []);
+
   // Initialize YouTube Iframe API if YouTube URL
   useEffect(() => {
     if (!isYouTube || !youtubeVideoId) return;
@@ -264,6 +330,17 @@ export function LectureVideoPlayer({
                 e.target.setVolume(isMuted ? 0 : volume * 100);
                 if (initialTime > 0) {
                   e.target.seekTo(initialTime, true);
+                }
+                const targetYtQ = YT_QUALITY_MAP[selectedQuality] || "hd1080";
+                e.target.setPlaybackQuality(targetYtQ);
+                if (typeof e.target.setPlaybackQualityRange === "function") {
+                  e.target.setPlaybackQualityRange(targetYtQ, targetYtQ);
+                }
+                if (typeof e.target.getAvailableQualityLevels === "function") {
+                  const levels = e.target.getAvailableQualityLevels();
+                  if (Array.isArray(levels) && levels.length > 0) {
+                    updateAvailableQualities(levels);
+                  }
                 }
               } catch {}
             },
@@ -338,6 +415,9 @@ export function LectureVideoPlayer({
           }
           if (typeof info.videoLoadedFraction === "number") {
             setBufferedEnd((prev) => info.videoLoadedFraction * (info.duration || prev || 0));
+          }
+          if (Array.isArray(info.availableQualityLevels) && info.availableQualityLevels.length > 0) {
+            updateAvailableQualities(info.availableQualityLevels);
           }
           if (typeof info.playerState === "number") {
             if (info.playerState === 1) {
@@ -589,19 +669,18 @@ export function LectureVideoPlayer({
     [isYouTube, sendYouTubeCommand, triggerFeedback, resetControlsTimer]
   );
 
-  // Quality Change Handler (matching Screenshot 3: 720p, 480p, 360p, 240p, 144p)
+  // Quality Change Handler (supporting 4K, 1440p, 1080p, 720p, 480p, 360p, 240p, 144p, Auto)
   const handleQualityChange = useCallback(
     (q: string) => {
       setSelectedQuality(q);
-      const ytQualityMap: Record<string, string> = {
-        "720p": "hd720",
-        "480p": "large",
-        "360p": "medium",
-        "240p": "small",
-        "144p": "tiny",
-      };
+      try {
+        localStorage.setItem("atomic_player_quality", q);
+      } catch {}
+
       if (isYouTube) {
-        sendYouTubeCommand("setPlaybackQuality", [ytQualityMap[q] || "default"]);
+        const ytQ = YT_QUALITY_MAP[q] || "default";
+        sendYouTubeCommand("setPlaybackQuality", [ytQ]);
+        sendYouTubeCommand("setPlaybackQualityRange", [ytQ, ytQ]);
       }
       triggerFeedback("high_quality", `${q}`);
       setShowQualityMenu(false);
@@ -1303,22 +1382,32 @@ export function LectureVideoPlayer({
                 <span className="material-symbols-outlined text-xl">settings</span>
               </button>
 
-              {/* Exact Quality Popup Menu from Screenshot 3 */}
+              {/* Quality Popup Menu (Supporting 1080p HD, 720p, 480p, 360p, 240p, 144p, Auto) */}
               {showQualityMenu && (
-                <div className="absolute bottom-11 right-0 w-24 bg-black/90 backdrop-blur-md border border-white/10 rounded-2xl shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-150">
+                <div className="absolute bottom-11 right-0 w-28 bg-black/90 backdrop-blur-md border border-white/10 rounded-2xl shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-150 max-h-64 overflow-y-auto scrollbar-none">
                   <div className="flex flex-col space-y-0.5">
-                    {QUALITY_OPTIONS.map((q) => (
+                    {qualityOptions.map((q) => (
                       <button
                         key={q}
                         type="button"
                         onClick={() => handleQualityChange(q)}
-                        className={`w-full text-left px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
+                        className={`w-full text-left px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer flex items-center justify-between ${
                           selectedQuality === q
                             ? "bg-white/20 text-white font-bold"
                             : "text-white/80 hover:bg-white/10 hover:text-white"
                         }`}
                       >
-                        {q}
+                        <span>{q}</span>
+                        {q === "1080p" && (
+                          <span className="text-[9px] px-1 py-0.2 rounded bg-blue-500/30 text-blue-300 font-semibold uppercase tracking-wider">
+                            HD
+                          </span>
+                        )}
+                        {q === "4K (2160p)" && (
+                          <span className="text-[9px] px-1 py-0.2 rounded bg-amber-500/30 text-amber-300 font-semibold uppercase tracking-wider">
+                            4K
+                          </span>
+                        )}
                       </button>
                     ))}
                   </div>
