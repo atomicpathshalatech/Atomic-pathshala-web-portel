@@ -2060,9 +2060,6 @@ export function TeacherLiveClassRoom({
         questionText: quizForm.questionText.trim() || undefined,
         isQuickQuiz: quizForm.isQuickQuiz,
         options: filledOptions,
-        correctOption: filledOptions.some((o) => o.key === quizForm.correctOption)
-          ? quizForm.correctOption
-          : undefined,
         timeLimitSec: quizForm.timeLimitSec,
       });
       setActiveQuiz(data.quiz);
@@ -2984,7 +2981,6 @@ export function TeacherLiveClassRoom({
             connectedStudents={connectedStudents}
             onDisconnectStudent={handleDisconnectStudent}
             compact={isCameraCircle}
-            forceLocalOnly={wbSession.videoTransport === "YOUTUBE"}
           />
         </div>
 
@@ -4874,28 +4870,21 @@ function QuizPanel({
             const count = quizMetrics?.counts[o.key] ?? 0;
             const total = quizMetrics?.totalResponses ?? 0;
             const pct = total > 0 ? Math.round((count / total) * 100) : 0;
-            const isCorrect =
-              activeQuiz.status === "REVEALED"
-                ? activeQuiz.correctOption === o.key
-                : selectedRevealOption === o.key;
+            const isRevealed = activeQuiz.status === "REVEALED";
+            const isCorrect = isRevealed && activeQuiz.correctOption === o.key;
 
             return (
               <li
                 key={o.key}
-                onClick={() => {
-                  if (activeQuiz.status === "ACTIVE") {
-                    setSelectedRevealOption(o.key);
-                  }
-                }}
-                className={`relative overflow-hidden rounded-xl border transition cursor-pointer ${
-                  isCorrect && activeQuiz.status === "ACTIVE"
+                className={`relative overflow-hidden rounded-xl border transition ${
+                  isCorrect
                     ? "border-emerald-500/80 bg-[#10111a] ring-1 ring-emerald-500/50"
                     : "border-[#2d2e3b] bg-[#10111a]"
                 }`}
               >
                 <div
                   className={`absolute inset-y-0 left-0 transition-all duration-300 ${
-                    activeQuiz.status === "REVEALED" && activeQuiz.correctOption === o.key
+                    isCorrect
                       ? "bg-emerald-500/25"
                       : "bg-blue-500/15"
                   }`}
@@ -4911,8 +4900,8 @@ function QuizPanel({
                       {o.key}
                     </span>
                     <span>{o.label}</span>
-                    {activeQuiz.status === "ACTIVE" && selectedRevealOption === o.key && (
-                      <span className="text-[10px] text-emerald-400 font-bold ml-1">(Correct)</span>
+                    {isCorrect && (
+                      <span className="text-[10px] text-emerald-400 font-bold ml-1">✓ Correct</span>
                     )}
                   </span>
                   <span className="font-mono text-gray-400">
@@ -5033,37 +5022,23 @@ function QuizPanel({
           then always revealed "A" no matter what the teacher intended. */}
       <div className="space-y-2">
         <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block">
-          OPTIONS — TAP THE CORRECT ANSWER:
+          Options:
         </span>
         <div className="space-y-1.5">
           {form.options.map((val, i) => {
             const key = String.fromCharCode(65 + i);
-            const isCorrect = form.correctOption === key;
             return (
-              <button
+              <div
                 key={key}
-                type="button"
-                onClick={() => setForm((f) => ({ ...f, correctOption: key }))}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl border text-left transition ${
-                  isCorrect
-                    ? "bg-emerald-600/20 border-emerald-500 ring-1 ring-emerald-500/50"
-                    : "bg-[#10111a] border-[#242634] hover:border-[#3a3d52]"
-                }`}
+                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl border border-[#242634] bg-[#10111a] text-left"
               >
-                <span
-                  className={`w-6 h-6 rounded-lg text-xs font-bold flex items-center justify-center font-mono border ${
-                    isCorrect
-                      ? "bg-emerald-600 text-white border-emerald-400"
-                      : "bg-blue-600/30 text-blue-400 border-blue-500/40"
-                  }`}
-                >
+                <span className="w-6 h-6 rounded-lg text-xs font-bold flex items-center justify-center font-mono border bg-blue-600/30 text-blue-400 border-blue-500/40">
                   {key}
                 </span>
-                <span className="text-xs font-semibold text-gray-200 flex-1">{val || `Option ${key}`}</span>
-                {isCorrect && (
-                  <span className="material-symbols-outlined text-emerald-400 text-base">check_circle</span>
-                )}
-              </button>
+                <span className="text-xs font-semibold text-gray-200 flex-1">
+                  {val || `Option ${key}`}
+                </span>
+              </div>
             );
           })}
         </div>

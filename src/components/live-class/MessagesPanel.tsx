@@ -18,6 +18,7 @@ export type ChatMessage = {
   // Teacher-pinned to the top of the chat for the whole class. Null/absent
   // means not pinned.
   pinnedAt?: string | null;
+  source?: "APP" | "YOUTUBE";
 };
 
 async function getJson(url: string) {
@@ -182,6 +183,45 @@ export function MessagesPanel({
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [messages]);
+
+  // Periodic YouTube Live Chat polling & merger (every 4s)
+  useEffect(() => {
+    let cancelled = false;
+    let pageToken: string | undefined = undefined;
+
+    async function pollYouTube() {
+      try {
+        const url = pageToken
+          ? `/api/whiteboard/sessions/${whiteboardSessionId}/youtube-chat?pageToken=${encodeURIComponent(pageToken)}`
+          : `/api/whiteboard/sessions/${whiteboardSessionId}/youtube-chat`;
+        const res = await fetch(url);
+        const json = await res.json();
+        if (cancelled) return;
+        if (json.success && json.data?.messages?.length > 0) {
+          pageToken = json.data.nextPageToken;
+          const newYtMsgs: ChatMessage[] = json.data.messages;
+          setMessages((prev) => {
+            const existingIds = new Set(prev.map((m) => m.id));
+            const fresh = newYtMsgs.filter((m) => !existingIds.has(m.id));
+            if (fresh.length === 0) return prev;
+            return [...prev, ...fresh].sort(
+              (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+            );
+          });
+        }
+      } catch {
+        // silent fallback
+      }
+    }
+
+    const interval = setInterval(pollYouTube, 4000);
+    pollYouTube();
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [whiteboardSessionId]);
 
   async function handleSend() {
     const body = draft.trim();
@@ -398,6 +438,13 @@ export function MessagesPanel({
                     {isTeacher && (
                       <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-950/70 text-[#a33900] dark:text-orange-300 border border-orange-200 dark:border-orange-800/60 uppercase tracking-wider">
                         Educator
+                      </span>
+                    )}
+
+                    {m.source === "YOUTUBE" && (
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-600/15 text-red-500 border border-red-500/30 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                        YouTube
                       </span>
                     )}
 

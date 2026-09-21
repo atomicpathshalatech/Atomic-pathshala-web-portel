@@ -167,11 +167,6 @@ export async function fetchRecordingStatus(youtubeVideoId: string): Promise<Reco
   return { recordingVideoId: null, recordingStatus: "PROCESSING" };
 }
 
-/**
- * Creates and binds a broadcast+stream in one call — the part identical
- * between Classroom and Whiteboard callers (only the DB row they persist
- * the result onto differs).
- */
 export async function createAndBindBroadcast(title: string, scheduledStartTime: Date) {
   const [stream, broadcast] = await Promise.all([
     createLiveStream(title),
@@ -180,3 +175,71 @@ export async function createAndBindBroadcast(title: string, scheduledStartTime: 
   await bindBroadcastToStream(broadcast.id, stream.id);
   return { stream, broadcast };
 }
+
+export interface YouTubeLiveChatMessage {
+  id: string;
+  authorName: string;
+  authorPhotoUrl?: string | null;
+  messageText: string;
+  publishedAt: string;
+}
+
+export async function fetchLiveChatMessages(
+  liveChatId: string,
+  pageToken?: string
+): Promise<{
+  messages: YouTubeLiveChatMessage[];
+  nextPageToken?: string;
+  pollingIntervalMillis?: number;
+}> {
+  const json = await youtubeApiFetch<{
+    items?: Array<{
+      id: string;
+      snippet: {
+        displayMessage: string;
+        publishedAt: string;
+      };
+      authorDetails: {
+        displayName: string;
+        profileImageUrl: string;
+      };
+    }>;
+    nextPageToken?: string;
+    pollingIntervalMillis?: number;
+  }>("/liveChat/messages", {
+    method: "GET",
+    query: {
+      liveChatId,
+      part: "snippet,authorDetails",
+      maxResults: "200",
+      ...(pageToken ? { pageToken } : {}),
+    },
+  });
+
+  return {
+    messages: (json.items || []).map((item) => ({
+      id: item.id,
+      authorName: item.authorDetails?.displayName || "YouTube Viewer",
+      authorPhotoUrl: item.authorDetails?.profileImageUrl || null,
+      messageText: item.snippet?.displayMessage || "",
+      publishedAt: item.snippet?.publishedAt || new Date().toISOString(),
+    })),
+    nextPageToken: json.nextPageToken,
+    pollingIntervalMillis: json.pollingIntervalMillis || 4000,
+  };
+}
+
+export async function getLiveChatIdForVideo(videoId: string): Promise<string | null> {
+  try {
+    const json = await youtubeApiFetch<{
+      items?: Array<{ liveStreamingDetails?: { activeLiveChatId?: string } }>;
+    }>("/videos", {
+      method: "GET",
+      query: { part: "liveStreamingDetails", id: videoId },
+    });
+    return json.items?.[0]?.liveStreamingDetails?.activeLiveChatId ?? null;
+  } catch {
+    return null;
+  }
+}
+

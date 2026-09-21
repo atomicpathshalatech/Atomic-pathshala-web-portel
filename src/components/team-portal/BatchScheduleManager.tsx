@@ -508,140 +508,89 @@ export function BatchScheduleManager({
                     Live Class Delivery Model *
                   </label>
                   <p className="text-[11px] text-on-surface-variant mt-0.5">
-                    Select how this class will be broadcasted. The teacher can start directly in 1-click with the selected setup.
+                    Select how this class will be broadcasted.
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                  {/* Model 1: Application Class (Private / App + OBS) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Option 1: App Class */}
                   <button
                     type="button"
                     onClick={() => {
                       setTeachingModel("MODEL_1_APP");
                       setForm({ ...form, videoTransport: "YOUTUBE", youtubeVideoId: "" });
                     }}
-                    className={`text-left p-4 rounded-2xl border-2 transition-all flex flex-col gap-2.5 cursor-pointer relative ${
+                    className={`text-left p-3 rounded-xl border-2 transition-all flex flex-col gap-1.5 cursor-pointer relative ${
                       teachingModel === "MODEL_1_APP"
-                        ? "bg-primary/10 border-primary text-on-surface shadow-md"
+                        ? "bg-primary/10 border-primary text-on-surface shadow-sm"
                         : "bg-surface-container-lowest border-outline-variant/30 hover:border-outline-variant text-on-surface-variant"
                     }`}
                   >
                     <div className="flex items-center justify-between w-full">
                       <div className="flex items-center gap-2">
-                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
                           teachingModel === "MODEL_1_APP" ? "bg-primary text-on-primary" : "bg-surface-container text-on-surface-variant"
                         }`}>
-                          <span className="material-symbols-outlined text-lg">app_registration</span>
+                          <span className="material-symbols-outlined text-base">app_registration</span>
                         </div>
-                        <span className="font-bold text-xs text-on-surface">Model 1: Application Class (App Class)</span>
+                        <span className="font-bold text-xs text-on-surface">App Class</span>
                       </div>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                        teachingModel === "MODEL_1_APP" ? "bg-primary text-on-primary" : "bg-surface-container-high text-on-surface-variant"
-                      }`}>
-                        Recommended
-                      </span>
+                      {teachingModel === "MODEL_1_APP" && (
+                        <span className="text-[10px] font-bold text-primary">✓ Selected</span>
+                      )}
                     </div>
-
-                    <div className="space-y-1.5 text-[11px] text-on-surface-variant leading-relaxed">
-                      <p className="font-medium text-on-surface">
-                        Auto-Unlisted Stream via API &middot; OBS Stream Key &middot; Full In-App Tools
-                      </p>
-                      <ul className="list-disc pl-4 space-y-0.5 text-[10px] opacity-90">
-                        <li>Start Class par automatic <strong>Unlisted YouTube Broadcast</strong> create hoga.</li>
-                        <li>Teacher ko <strong>OBS Server URL &amp; Stream Key</strong> milegi live stream start karne ke liye.</li>
-                        <li>App ke students ko <strong>Hand Raise, Live Chat, Quiz/Polls aur Doubts</strong> milenge.</li>
-                        <li>Class ki recording YouTube VOD par <strong>zero hosting cost</strong> me automatically save hogi.</li>
-                      </ul>
-                    </div>
+                    <p className="text-[10px] text-on-surface-variant line-clamp-2">
+                      Private unlisted class for app students with live chat, quiz and doubts.
+                    </p>
                   </button>
 
-                  {/* Model 2: Public YouTube + App Class (Dual Stream / Main Channel) */}
+                  {/* Option 2: YouTube + App Class */}
                   <button
                     type="button"
                     onClick={() => {
                       setTeachingModel("MODEL_2_DUAL");
                       setForm({ ...form, videoTransport: "YOUTUBE" });
                     }}
-                    className={`text-left p-4 rounded-2xl border-2 transition-all flex flex-col gap-2.5 cursor-pointer relative ${
+                    className={`text-left p-3 rounded-xl border-2 transition-all flex flex-col gap-1.5 cursor-pointer relative ${
                       teachingModel === "MODEL_2_DUAL"
-                        ? "bg-red-500/10 border-red-500 text-on-surface shadow-md"
+                        ? "bg-red-500/10 border-red-500 text-on-surface shadow-sm"
                         : "bg-surface-container-lowest border-outline-variant/30 hover:border-outline-variant text-on-surface-variant"
                     }`}
                   >
                     <div className="flex items-center justify-between w-full">
                       <div className="flex items-center gap-2">
-                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
                           teachingModel === "MODEL_2_DUAL" ? "bg-red-600 text-white" : "bg-surface-container text-on-surface-variant"
                         }`}>
-                          <span className="material-symbols-outlined text-lg">smart_display</span>
+                          <span className="material-symbols-outlined text-base">smart_display</span>
                         </div>
-                        <span className="font-bold text-xs text-on-surface">Model 2: Public YouTube + App Class</span>
+                        <span className="font-bold text-xs text-on-surface">YouTube + App Class</span>
                       </div>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                        teachingModel === "MODEL_2_DUAL" ? "bg-red-600 text-white" : "bg-surface-container-high text-on-surface-variant"
-                      }`}>
-                        Dual Stream
-                      </span>
+                      {teachingModel === "MODEL_2_DUAL" && (
+                        <span className="text-[10px] font-bold text-red-500">✓ Selected</span>
+                      )}
                     </div>
-
-                    <div className="space-y-1.5 text-[11px] text-on-surface-variant leading-relaxed">
-                      <p className="font-medium text-on-surface">
-                        Main Channel Stream &middot; Atomic Board Live &middot; On-Screen Quiz Overlay
-                      </p>
-                      <ul className="list-disc pl-4 space-y-0.5 text-[10px] opacity-90">
-                        <li>Class public YouTube channel par schedule hogi (paste link below).</li>
-                        <li>Teacher Atomic Board (Web Studio / Windows App) se class conduct karega.</li>
-                        <li>App students ko in-app interactive chat aur quiz voting milegi.</li>
-                        <li>YouTube viewers ke liye <strong>Board Screen par Quiz/Poll popup overlay</strong> aayega with live votes &amp; timer!</li>
-                      </ul>
-                    </div>
+                    <p className="text-[10px] text-on-surface-variant line-clamp-2">
+                      Stream on main YouTube channel + live interactive sync in Atomic Pathshala.
+                    </p>
                   </button>
                 </div>
 
-                {/* If Model 2: YouTube URL / Video ID input */}
+                {/* If Model 2: Compact YouTube URL input */}
                 {teachingModel === "MODEL_2_DUAL" && (
-                  <div className="space-y-1.5 pt-2 border-t border-outline-variant/20">
+                  <div className="space-y-1 pt-1">
                     <label className="text-xs font-bold text-on-surface flex items-center gap-1.5">
                       <span className="material-symbols-outlined text-red-500 text-sm">link</span>
-                      Scheduled Public YouTube Stream Link or Video ID
+                      Scheduled YouTube Stream Link or Video ID
                     </label>
                     <input
                       className={inputClass}
-                      placeholder="e.g. https://www.youtube.com/watch?v=XXXXX or YouTube Live Video ID"
+                      placeholder="Paste YouTube Live Link (e.g. https://youtu.be/... or Video ID)"
                       value={form.youtubeVideoId}
                       onChange={(e) => setForm({ ...form, youtubeVideoId: e.target.value })}
                     />
-                    <p className="text-[10px] text-on-surface-variant">
-                      Apne public YouTube channel par scheduled live stream ka link yaha paste karein taaki App ke sath sync ho sake.
-                    </p>
                   </div>
                 )}
-
-                {/* Option 3 (Collapsed / Subtle toggle for Pure WebRTC) */}
-                <div className="pt-2 border-t border-outline-variant/20 flex items-center justify-between text-[11px]">
-                  <span className="text-on-surface-variant">
-                    Small doubt batch needing 2-way real-time video/audio call?
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (teachingModel === "PURE_LIVEKIT") {
-                        setTeachingModel("MODEL_1_APP");
-                        setForm({ ...form, videoTransport: "YOUTUBE", youtubeVideoId: "" });
-                      } else {
-                        setTeachingModel("PURE_LIVEKIT");
-                        setForm({ ...form, videoTransport: "LIVEKIT", youtubeVideoId: "" });
-                      }
-                    }}
-                    className={`font-bold hover:underline ${
-                      teachingModel === "PURE_LIVEKIT" ? "text-primary" : "text-on-surface-variant"
-                    }`}
-                  >
-                    {teachingModel === "PURE_LIVEKIT"
-                      ? "✓ Using Interactive Video Call (LiveKit)"
-                      : "Switch to Interactive Video Call"}
-                  </button>
-                </div>
               </div>
             )}
 

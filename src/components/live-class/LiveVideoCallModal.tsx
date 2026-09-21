@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   VideoTrack,
   useLocalParticipant,
@@ -48,151 +48,160 @@ export function LiveVideoCallModal({
 }: LiveVideoCallModalProps) {
   const { isCameraEnabled, isMicrophoneEnabled, localParticipant } = useLocalParticipant();
   const tracks = useTracks([Track.Source.Camera, Track.Source.Microphone], { onlySubscribed: false });
-  const [isMinimized, setIsMinimized] = useState(false);
   const [isEnding, setIsEnding] = useState(false);
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
+  const [dismissedIdentities, setDismissedIdentities] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (!pos && typeof window !== "undefined") {
+      setPos({
+        x: Math.max(20, Math.floor(window.innerWidth / 2 - 160)),
+        y: Math.max(40, Math.floor(window.innerHeight - 250)),
+      });
+    }
+  }, [pos]);
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if ((e.target as HTMLElement).closest("button")) return;
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      origX: pos?.x ?? 20,
+      origY: pos?.y ?? 20,
+    };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!dragRef.current) return;
+    const dx = e.clientX - dragRef.current.startX;
+    const dy = e.clientY - dragRef.current.startY;
+    setPos({
+      x: Math.max(10, Math.min(window.innerWidth - 320, dragRef.current.origX + dx)),
+      y: Math.max(10, Math.min(window.innerHeight - 180, dragRef.current.origY + dy)),
+    });
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    dragRef.current = null;
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {}
+  };
+
+  const handleCutCall = (studentId?: string, identity?: string) => {
+    const idToDismiss = studentId || identity;
+    if (idToDismiss) {
+      setDismissedIdentities((prev) => ({ ...prev, [idToDismiss]: true }));
+      if (studentId && onDisconnectStudent) {
+        onDisconnectStudent(studentId);
+      } else if (identity && onDisconnectStudent) {
+        onDisconnectStudent(identity);
+      }
+    }
+  };
 
   // ---------------------------------------------------------------------------
-  // TEACHER VIEW: Shows active student(s) in a persistent floating panel
+  // TEACHER VIEW: Shows active student in a clean, draggable floating tile
   // ---------------------------------------------------------------------------
   if (role === "TEACHER") {
-    const remoteVideoTracks = tracks.filter((t) => t.source === Track.Source.Camera && !t.participant.isLocal);
-    const remoteAudioTracks = tracks.filter((t) => t.source === Track.Source.Microphone && !t.participant.isLocal);
+    const remoteVideoTracks = tracks.filter(
+      (t) =>
+        t.source === Track.Source.Camera &&
+        !t.participant.isLocal &&
+        !dismissedIdentities[t.participant.identity]
+    );
+    const remoteAudioTracks = tracks.filter(
+      (t) =>
+        t.source === Track.Source.Microphone &&
+        !t.participant.isLocal &&
+        !dismissedIdentities[t.participant.identity]
+    );
 
-    // If no students connected via props and no remote tracks, don't display
-    const hasActiveStudent = connectedStudents.length > 0 || remoteVideoTracks.length > 0 || remoteAudioTracks.length > 0;
+    const activeStudents = connectedStudents.filter(
+      (s) => !dismissedIdentities[s.studentId] && !dismissedIdentities[s.studentUserId]
+    );
+
+    const hasActiveStudent =
+      activeStudents.length > 0 || remoteVideoTracks.length > 0 || remoteAudioTracks.length > 0;
     if (!hasActiveStudent) return null;
 
     return (
       <div
-        className={`fixed z-40 transition-all duration-300 left-1/2 -translate-x-1/2 ${
-          isMinimized
-            ? "bottom-20 w-72 bg-slate-900/95 border border-blue-500/60 rounded-2xl p-3 shadow-2xl backdrop-blur-md"
-            : "bottom-20 w-80 sm:w-96 bg-[#0f111a]/95 border-2 border-blue-500/80 rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.8)] backdrop-blur-md overflow-hidden"
-        }`}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        style={pos ? { left: pos.x, top: pos.y } : undefined}
+        className="fixed z-50 w-72 sm:w-80 select-none cursor-grab active:cursor-grabbing rounded-2xl overflow-hidden border-2 border-blue-500/80 shadow-[0_12px_45px_rgba(0,0,0,0.85)] bg-slate-950 backdrop-blur-md"
       >
-        {/* Header Bar */}
-        <div className="flex items-center justify-between px-3.5 py-2.5 bg-gradient-to-r from-blue-950/80 to-slate-900/80 border-b border-blue-500/30 text-white">
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
-            <span className="text-xs font-black tracking-wide text-blue-100 flex items-center gap-1">
-              <span className="material-symbols-outlined text-sm text-blue-400">duo</span>
-              Live Student Interaction
-            </span>
+        {remoteVideoTracks.length > 0 ? (
+          <div className="space-y-1.5">
+            {remoteVideoTracks.map((trk) => {
+              const studentInfo = connectedStudents.find(
+                (s) => s.studentUserId === trk.participant.identity
+              );
+              const displayName = trk.participant.name || studentInfo?.studentName || "Student";
+              const studentId = studentInfo?.studentId;
+
+              return (
+                <div
+                  key={trk.participant.identity}
+                  className="relative aspect-video w-full bg-black overflow-hidden flex items-center justify-center"
+                >
+                  <VideoTrack trackRef={trk} className="w-full h-full object-cover" />
+
+                  {/* Clean Student Name Tag Top-Left */}
+                  <div className="absolute top-2 left-2 flex items-center gap-1.5 bg-black/75 backdrop-blur-xs px-2.5 py-1 rounded-full border border-white/10 text-white shadow">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="text-xs font-bold truncate max-w-[140px]">{displayName}</span>
+                  </div>
+
+                  {/* Single Red Call End Button Floating Bottom-Center */}
+                  <div className="absolute bottom-2 inset-x-0 flex justify-center z-10">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCutCall(studentId, trk.participant.identity);
+                      }}
+                      className="w-10 h-10 rounded-full bg-rose-600 hover:bg-rose-500 text-white flex items-center justify-center shadow-2xl transition hover:scale-110 active:scale-95 cursor-pointer border border-white/20"
+                      title="Disconnect Student Call"
+                    >
+                      <span className="material-symbols-outlined text-xl">call_end</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-          <div className="flex items-center gap-1">
+        ) : (
+          /* Clean Audio-Only Voice Call Tile */
+          <div className="p-4 flex flex-col items-center justify-center gap-2.5 bg-slate-950 text-white">
+            <div className="w-12 h-12 rounded-full bg-blue-500/20 border-2 border-blue-500/50 flex items-center justify-center text-blue-400 animate-pulse">
+              <span className="material-symbols-outlined text-2xl">mic</span>
+            </div>
+            <div className="text-center">
+              <p className="text-xs font-bold text-white truncate max-w-[180px]">
+                {connectedStudents[0]?.studentName || "Connected Student"}
+              </p>
+              <span className="text-[10px] text-emerald-400 font-semibold flex items-center justify-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                Voice Call Connected
+              </span>
+            </div>
             <button
               type="button"
-              onClick={() => setIsMinimized(!isMinimized)}
-              className="w-6 h-6 rounded-md hover:bg-white/10 text-slate-300 hover:text-white flex items-center justify-center transition"
-              title={isMinimized ? "Expand video call" : "Minimize video call"}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleCutCall(connectedStudents[0]?.studentId, undefined);
+              }}
+              className="w-10 h-10 rounded-full bg-rose-600 hover:bg-rose-500 text-white flex items-center justify-center shadow-xl transition hover:scale-110 active:scale-95 cursor-pointer border border-white/20"
+              title="End Voice Call"
             >
-              <span className="material-symbols-outlined text-sm">
-                {isMinimized ? "open_in_full" : "close_fullscreen"}
-              </span>
+              <span className="material-symbols-outlined text-xl">call_end</span>
             </button>
-          </div>
-        </div>
-
-        {/* Content Body */}
-        {!isMinimized && (
-          <div className="p-3 space-y-3">
-            {/* If video tracks exist, render video stream */}
-            {remoteVideoTracks.length > 0 ? (
-              <div className="space-y-2">
-                {remoteVideoTracks.map((trk) => {
-                  const studentInfo = connectedStudents.find(
-                    (s) => s.studentUserId === trk.participant.identity
-                  );
-                  const displayName = trk.participant.name || studentInfo?.studentName || "Student";
-                  const studentId = studentInfo?.studentId;
-
-                  return (
-                    <div
-                      key={trk.participant.identity}
-                      className="relative aspect-video rounded-xl overflow-hidden bg-slate-950 border border-slate-700 shadow-inner group"
-                    >
-                      <VideoTrack trackRef={trk} className="w-full h-full object-cover" />
-
-                      {/* Top Overlay: Name & Live Badge */}
-                      <div className="absolute top-2 left-2 flex items-center gap-1.5 bg-black/80 backdrop-blur-xs px-2 py-0.5 rounded-md border border-white/10">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                        <span className="text-[11px] font-bold text-white truncate max-w-[130px]">
-                          {displayName}
-                        </span>
-                      </div>
-
-                      {/* Bottom Overlay: Action Controls */}
-                      <div className="absolute bottom-2 inset-x-2 flex items-center justify-between z-10">
-                        <span className="text-[10px] text-blue-300 font-semibold bg-black/70 px-2 py-0.5 rounded backdrop-blur-xs">
-                          Camera Connected
-                        </span>
-                        {studentId && onDisconnectStudent && (
-                          <button
-                            type="button"
-                            onClick={() => onDisconnectStudent(studentId)}
-                            className="flex items-center gap-1 text-[11px] font-bold bg-rose-600 hover:bg-rose-500 text-white px-2.5 py-1 rounded-lg shadow-md transition active:scale-95"
-                          >
-                            <span className="material-symbols-outlined text-xs">call_end</span>
-                            End Call
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              /* Audio Only Interaction Tile */
-              <div className="bg-slate-950/80 rounded-xl p-4 border border-slate-800 text-center flex flex-col items-center justify-center space-y-2">
-                <div className="w-14 h-14 rounded-full bg-blue-500/20 border-2 border-blue-500/40 text-blue-400 flex items-center justify-center animate-pulse">
-                  <span className="material-symbols-outlined text-2xl">mic</span>
-                </div>
-                <div className="space-y-0.5">
-                  <p className="text-xs font-bold text-white">
-                    {connectedStudents[0]?.studentName || "Connected Student"}
-                  </p>
-                  <p className="text-[10px] text-emerald-400 font-semibold flex items-center justify-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                    Audio Voice Call Active
-                  </p>
-                </div>
-                {connectedStudents[0]?.studentId && onDisconnectStudent && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const sId = connectedStudents[0]?.studentId;
-                      if (sId) onDisconnectStudent(sId);
-                    }}
-                    className="mt-2 flex items-center gap-1 text-[11px] font-bold bg-rose-600 hover:bg-rose-500 text-white px-3 py-1.5 rounded-lg shadow-md transition active:scale-95"
-                  >
-                    <span className="material-symbols-outlined text-xs">call_end</span>
-                    End Voice Call
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Minimized Pill View */}
-        {isMinimized && (
-          <div className="flex items-center justify-between text-xs font-bold text-white pt-1">
-            <span className="truncate max-w-[150px] text-slate-300">
-              {connectedStudents[0]?.studentName || "1 Student Connected"}
-            </span>
-            {connectedStudents[0]?.studentId && onDisconnectStudent && (
-              <button
-                type="button"
-                onClick={() => {
-                  const sId = connectedStudents[0]?.studentId;
-                  if (sId) onDisconnectStudent(sId);
-                }}
-                className="text-rose-400 hover:text-rose-300 flex items-center gap-0.5 text-[11px]"
-              >
-                <span className="material-symbols-outlined text-xs">call_end</span>
-                End
-              </button>
-            )}
           </div>
         )}
       </div>

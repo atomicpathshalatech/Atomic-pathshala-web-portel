@@ -258,10 +258,19 @@ export function BroadcastQuizCanvasOverlay({
       </div>
 
       {/* Question Text */}
-      <div className="px-0.5">
+      <div className="px-0.5 space-y-1.5">
         <h4 className="text-sm font-bold text-slate-100 leading-snug line-clamp-2">
           {activeQuiz.questionText || "Live Quick Quiz (Select Option)"}
         </h4>
+        {activeQuiz.status === "ACTIVE" && (
+          <div className="bg-red-950/40 border border-red-500/30 rounded-lg px-2.5 py-1 flex items-center justify-between text-[11px] text-red-200">
+            <span className="flex items-center gap-1.5 font-medium">
+              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+              YouTube: Comment <strong>A, B, C, or D</strong> to vote
+            </span>
+            <span className="text-[10px] text-red-400 font-mono">Live</span>
+          </div>
+        )}
       </div>
 
       {/* Options List with Dynamic Vote Percentage Bars */}
@@ -269,10 +278,7 @@ export function BroadcastQuizCanvasOverlay({
         {activeQuiz.options.map((opt) => {
           const count = quizMetrics?.counts[opt.key] ?? 0;
           const pct = optionPercentages[opt.key] || 0;
-          const isCorrect =
-            isRevealed
-              ? activeQuiz.correctOption === opt.key
-              : selectedReveal === opt.key;
+          const isCorrect = isRevealed && activeQuiz.correctOption === opt.key;
 
           return (
             <div
@@ -284,17 +290,15 @@ export function BroadcastQuizCanvasOverlay({
                 }
               }}
               className={`relative overflow-hidden rounded-xl border p-2.5 transition-all ${
-                isRevealed && activeQuiz.correctOption === opt.key
+                isCorrect
                   ? "border-emerald-400 bg-emerald-950/40 ring-2 ring-emerald-500/50 shadow-lg shadow-emerald-900/20"
-                  : isCorrect && activeQuiz.status === "ACTIVE"
-                  ? "border-emerald-500/60 bg-[#121626]"
                   : "border-slate-800/80 bg-[#101322]/80 hover:border-slate-700"
               }`}
             >
               {/* Dynamic Fill Bar */}
               <div
                 className={`absolute inset-y-0 left-0 transition-all duration-500 ease-out ${
-                  isRevealed && activeQuiz.correctOption === opt.key
+                  isCorrect
                     ? "bg-emerald-500/30"
                     : "bg-indigo-600/25"
                 }`}
