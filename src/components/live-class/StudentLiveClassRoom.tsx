@@ -1516,7 +1516,9 @@ export function StudentLiveClassRoom({
                 <YouTubeLivePlayer
                   youtubeVideoId={wbSession?.youtubeVideoId ?? null}
                   title={scheduleTitle}
-                  subject={batchName}
+                  subject={subject || batchName}
+                  educatorName={teacherName}
+                  scheduledStart={wbSession?.scheduledStart || scheduleTimes?.startTime}
                   livePhase={isLive ? "LIVE" : "PREPARING"}
                 >
                   <VideoPollOverlay
@@ -1662,7 +1664,9 @@ export function StudentLiveClassRoom({
             <YouTubeLivePlayer
               youtubeVideoId={wbSession?.youtubeVideoId ?? null}
               title={scheduleTitle}
-              subject={batchName}
+              subject={subject || batchName}
+              educatorName={teacherName}
+              scheduledStart={wbSession?.scheduledStart || scheduleTimes?.startTime}
               livePhase={isLive ? "LIVE" : "PREPARING"}
             >
               <VideoPollOverlay
