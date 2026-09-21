@@ -1,7 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useRef } from "react";
-import { formatISTDate, formatISTTime } from "@/lib/date-utils";
+import React, { useEffect, useState } from "react";
 import { LectureVideoPlayer } from "@/components/video-player/LectureVideoPlayer";
 
 export interface CompletedClassAssets {
@@ -55,7 +54,6 @@ export function CompletedClassModal({
   const [loading, setLoading] = useState(true);
   const [assets, setAssets] = useState<CompletedClassAssets | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [notesType, setNotesType] = useState<"annotated" | "original">("annotated");
 
   // Close on Escape key
@@ -101,264 +99,145 @@ export function CompletedClassModal({
   }, [scheduleId]);
 
 
-  const durationMin = assets?.recording.durationSeconds
-    ? Math.round(assets.recording.durationSeconds / 60)
-    : null;
-
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/65 backdrop-blur-xs animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
       aria-modal="true"
       role="dialog"
     >
-      <div className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
-        {/* Modal Header */}
-        <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-start justify-between gap-3 bg-slate-50/50 dark:bg-slate-800/30">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap mb-1.5">
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 text-[10px] font-extrabold uppercase tracking-wide">
-                <span className="material-symbols-outlined text-[13px]">done_all</span>
-                Class Completed
-              </span>
-              {subject && (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:text-orange-300">
-                  {subject}
-                </span>
-              )}
-              {batchName && (
-                <span className="text-[10px] font-semibold text-slate-500 bg-white dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
-                  {batchName}
-                </span>
-              )}
-            </div>
+      <div className="relative bg-slate-950 rounded-2xl sm:rounded-3xl border border-white/10 shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-150">
+        {/* Floating Close Button Top-Right */}
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute top-2.5 right-2.5 z-40 w-8 h-8 rounded-full bg-black/60 hover:bg-black/85 active:scale-95 text-white/90 hover:text-white flex items-center justify-center transition border border-white/20 cursor-pointer shadow-lg"
+          aria-label="Close dialog"
+        >
+          <span className="material-symbols-outlined text-lg">close</span>
+        </button>
 
-            <h2 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white leading-snug line-clamp-2">
-              {classTitle}
-            </h2>
-
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-2 flex-wrap">
-              <span>{formatISTDate(startsAt)}</span>
-              <span>•</span>
-              <span>
-                {formatISTTime(startsAt)} – {formatISTTime(endsAt)}
-              </span>
-              {teacherName && (
-                <>
-                  <span>•</span>
-                  <span className="font-medium text-slate-700 dark:text-slate-300">
-                    {teacherName}
-                  </span>
-                </>
-              )}
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800 transition cursor-pointer shrink-0"
-            aria-label="Close dialog"
-          >
-            <span className="material-symbols-outlined text-lg">close</span>
-          </button>
-        </div>
-
-        {/* Modal Body */}
-        <div className="p-4 sm:p-5 overflow-y-auto space-y-4 flex-1">
+        {/* 1. CLASS VIDEO PLAYER (Directly rendered, no extra cards or clutter) */}
+        <div className="w-full aspect-video bg-black relative flex items-center justify-center overflow-hidden">
           {loading ? (
-            <div className="flex flex-col items-center justify-center py-12 text-slate-400 text-xs">
-              <span className="w-5 h-5 border-2 border-orange-500 border-t-transparent rounded-full animate-spin mb-3" />
-              <span>Checking class recording &amp; notes...</span>
+            <div className="flex flex-col items-center justify-center gap-3 text-slate-400 text-xs">
+              <span className="w-8 h-8 border-3 border-blue-500/20 border-t-blue-500 rounded-full animate-spin" />
+              <span>Loading class...</span>
             </div>
           ) : error ? (
-            <div className="p-4 rounded-xl border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-200 text-xs flex items-center gap-2">
-              <span className="material-symbols-outlined text-base shrink-0">error</span>
+            <div className="p-4 text-center text-rose-400 text-xs flex flex-col items-center gap-2">
+              <span className="material-symbols-outlined text-3xl">error</span>
               <p>{error}</p>
             </div>
+          ) : assets?.recording.status === "READY" && assets.recording.url ? (
+            <LectureVideoPlayer
+              mode="recorded"
+              lectureId={scheduleId}
+              title={classTitle}
+              subjectTitle={subject || undefined}
+              educatorName={teacherName || undefined}
+              videoUrl={assets.recording.url}
+              onClose={onClose}
+            />
+          ) : assets?.recording.status === "PROCESSING" ? (
+            <div className="flex flex-col items-center justify-center text-center p-6 text-amber-400 gap-2">
+              <span className="w-8 h-8 border-3 border-amber-500/20 border-t-amber-400 rounded-full animate-spin mb-1" />
+              <p className="text-sm font-bold text-white">Recording is processing</p>
+              <p className="text-xs text-slate-400 max-w-sm">
+                The recording is being processed and will be ready shortly.
+              </p>
+            </div>
           ) : (
-            <>
-              {/* SECTION 1: PLAY CLASS RECORDING */}
-              <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-3.5 sm:p-4 shadow-xs">
-                <div className="flex items-center justify-between gap-2 mb-2.5">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-xl bg-orange-100 dark:bg-orange-950/60 text-[#a33900] dark:text-orange-400 flex items-center justify-center">
-                      <span className="material-symbols-outlined text-[20px]">play_circle</span>
-                    </div>
-                    <div>
-                      <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
-                        Class Recording
-                      </h3>
-                      <p className="text-[11px] text-slate-500">
-                        {durationMin ? `Duration: ~${durationMin} mins` : "Full classroom recording"}
-                      </p>
-                    </div>
-                  </div>
+            <div className="flex flex-col items-center justify-center text-center p-6 text-slate-400 gap-2">
+              <span className="material-symbols-outlined text-4xl text-slate-600">videocam_off</span>
+              <p className="text-sm font-bold text-slate-300">Recording is currently unavailable</p>
+            </div>
+          )}
+        </div>
 
-                  {assets?.recording.status === "READY" && (
-                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 dark:bg-emerald-950/50 dark:text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
-                      Ready
-                    </span>
-                  )}
-                  {assets?.recording.status === "PROCESSING" && (
-                    <span className="text-[10px] font-bold text-amber-700 bg-amber-50 dark:bg-amber-950/50 dark:text-amber-300 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800 animate-pulse">
-                      Processing
-                    </span>
-                  )}
-                </div>
-
-                {assets?.recording.status === "READY" && assets.recording.url ? (
-                  isPlaying ? (
-                    <div className="mt-3 space-y-2">
-                      <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-black shadow-inner">
-                        <LectureVideoPlayer
-                          mode="recorded"
-                          lectureId={scheduleId}
-                          title={classTitle}
-                          subjectTitle={subject || undefined}
-                          educatorName={teacherName || undefined}
-                          videoUrl={assets.recording.url}
-                          onClose={() => setIsPlaying(false)}
-                        />
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setIsPlaying(true)}
-                      className="w-full mt-2 py-2.5 px-4 bg-[#a33900] hover:bg-orange-800 text-white rounded-xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 shadow-sm hover:shadow transition active:scale-[0.99] cursor-pointer"
-                    >
-                      <span className="material-symbols-outlined text-[18px]">play_arrow</span>
-                      <span>Play Class</span>
-                    </button>
-                  )
-                ) : assets?.recording.status === "PROCESSING" ? (
-                  <div className="mt-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 text-xs flex items-center gap-2.5">
-                    <span className="w-4 h-4 border-2 border-amber-600 border-t-transparent rounded-full animate-spin shrink-0" />
-                    <div>
-                      <p className="font-bold">Recording is being processed.</p>
-                      <p className="text-[11px] text-amber-700/80 dark:text-amber-300/80 mt-0.5">
-                        Please check again shortly. It usually becomes ready a few minutes after class ends.
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="mt-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-xs flex items-center gap-2">
-                    <span className="material-symbols-outlined text-base text-slate-400">videocam_off</span>
-                    <span>Recording is currently unavailable.</span>
-                  </div>
-                )}
+        {/* 2. CLASS NOTES / PDF SECTION (DIRECTLY UNDER CLASS VIDEO) */}
+        {!loading && !error && assets?.notes && (
+          <div className="p-3 sm:p-4 bg-slate-900 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0 w-full sm:w-auto">
+              <div className="w-9 h-9 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-xl">description</span>
               </div>
-
-              {/* SECTION 2: DOWNLOAD NOTES */}
-              <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-3.5 sm:p-4 shadow-xs">
-                <div className="flex items-center justify-between gap-2 mb-2.5">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center">
-                      <span className="material-symbols-outlined text-[20px]">description</span>
-                    </div>
-                    <div>
-                      <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
-                        Class Notes &amp; Slides
-                      </h3>
-                      <p className="text-[11px] text-slate-500">
-                        Official board notes &amp; lecture materials
-                      </p>
-                    </div>
-                  </div>
-
-                  {assets?.notes.status === "READY" && (
-                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 dark:bg-emerald-950/50 dark:text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
-                      Available
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h4 className="text-xs sm:text-sm font-bold text-white truncate">
+                    Class Notes &amp; Slides
+                  </h4>
+                  {assets.notes.status === "READY" && (
+                    <span className="text-[9px] font-bold text-emerald-400 bg-emerald-500/20 px-1.5 py-0.2 rounded border border-emerald-500/30 uppercase tracking-wide">
+                      PDF
                     </span>
                   )}
-                  {assets?.notes.status === "PROCESSING" && (
-                    <span className="text-[10px] font-bold text-amber-700 bg-amber-50 dark:bg-amber-950/50 dark:text-amber-300 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800 animate-pulse">
+                  {assets.notes.status === "PROCESSING" && (
+                    <span className="text-[9px] font-bold text-amber-400 bg-amber-500/20 px-1.5 py-0.2 rounded border border-amber-500/30 animate-pulse">
                       Generating
                     </span>
                   )}
                 </div>
-
-                {assets?.notes.status === "READY" ? (
-                  <div className="mt-2 space-y-2">
-                    {assets.notes.hasOriginalSlides && assets.notes.originalDownloadUrl && (
-                      <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs">
-                        <button
-                          type="button"
-                          onClick={() => setNotesType("annotated")}
-                          className={`flex-1 py-1 px-2.5 rounded-lg font-bold text-[11px] transition cursor-pointer ${
-                            notesType === "annotated"
-                              ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs"
-                              : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
-                          }`}
-                        >
-                          Annotated Notes
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setNotesType("original")}
-                          className={`flex-1 py-1 px-2.5 rounded-lg font-bold text-[11px] transition cursor-pointer ${
-                            notesType === "original"
-                              ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs"
-                              : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
-                          }`}
-                        >
-                          Original Slides
-                        </button>
-                      </div>
-                    )}
-
-                    <a
-                      href={
-                        notesType === "original" && assets.notes.originalDownloadUrl
-                          ? assets.notes.originalDownloadUrl
-                          : assets.notes.downloadUrl || "#"
-                      }
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 rounded-xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 shadow-sm hover:shadow transition active:scale-[0.99]"
-                    >
-                      <span className="material-symbols-outlined text-[18px]">download</span>
-                      <span>
-                        {notesType === "original" && assets.notes.hasOriginalSlides
-                          ? "Download Original Slides"
-                          : "Download Notes (PDF)"}
-                      </span>
-                    </a>
-                  </div>
-                ) : assets?.notes.status === "PROCESSING" ? (
-                  <div className="mt-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 text-xs flex items-center gap-2.5">
-                    <span className="w-4 h-4 border-2 border-amber-600 border-t-transparent rounded-full animate-spin shrink-0" />
-                    <div>
-                      <p className="font-bold">Notes are being finalized.</p>
-                      <p className="text-[11px] text-amber-700/80 dark:text-amber-300/80 mt-0.5">
-                        Slide exports are rendering. Please check back in a moment.
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="mt-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-xs flex items-center gap-2">
-                    <span className="material-symbols-outlined text-base text-slate-400">file_present</span>
-                    <span>Notes are not available yet.</span>
-                  </div>
-                )}
+                <p className="text-[11px] text-slate-400 truncate">
+                  Official board notes &amp; lecture materials
+                </p>
               </div>
-            </>
-          )}
-        </div>
+            </div>
 
-        {/* Modal Footer */}
-        <div className="p-3 sm:p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/20 flex items-center justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            className="py-1.5 px-4 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition cursor-pointer"
-          >
-            Close
-          </button>
-        </div>
+            <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
+              {assets.notes.status === "READY" ? (
+                <>
+                  {assets.notes.hasOriginalSlides && assets.notes.originalDownloadUrl && (
+                    <div className="flex items-center gap-1 p-0.5 rounded-lg bg-slate-800 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setNotesType("annotated")}
+                        className={`py-1 px-2.5 rounded-md font-bold text-[10px] transition cursor-pointer ${
+                          notesType === "annotated"
+                            ? "bg-blue-600 text-white shadow-xs"
+                            : "text-slate-400 hover:text-white"
+                        }`}
+                      >
+                        Annotated
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNotesType("original")}
+                        className={`py-1 px-2.5 rounded-md font-bold text-[10px] transition cursor-pointer ${
+                          notesType === "original"
+                            ? "bg-blue-600 text-white shadow-xs"
+                            : "text-slate-400 hover:text-white"
+                        }`}
+                      >
+                        Original
+                      </button>
+                    </div>
+                  )}
+
+                  <a
+                    href={
+                      notesType === "original" && assets.notes.originalDownloadUrl
+                        ? assets.notes.originalDownloadUrl
+                        : assets.notes.downloadUrl || "#"
+                    }
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 sm:flex-initial py-2 px-4 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-sm cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-base">download</span>
+                    <span>Download Notes (PDF)</span>
+                  </a>
+                </>
+              ) : (
+                <span className="text-xs text-slate-500 italic">
+                  {assets.notes.status === "PROCESSING" ? "Rendering PDF..." : "Notes unavailable"}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
