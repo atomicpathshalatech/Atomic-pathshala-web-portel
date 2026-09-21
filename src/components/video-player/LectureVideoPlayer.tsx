@@ -7,6 +7,7 @@ import React, {
   useCallback,
   useMemo,
 } from "react";
+import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 
 export interface LectureVideoPlayerProps {
@@ -19,6 +20,8 @@ export interface LectureVideoPlayerProps {
   videoUrl: string;
   posterUrl?: string | null;
   initialTime?: number;
+  watermarkText?: string;
+  onClose?: () => void;
   onTimeUpdate?: (currentTime: number, duration: number) => void;
   onEnded?: () => void;
   onProgressPercentage?: (percent: number) => void;
@@ -27,15 +30,11 @@ export interface LectureVideoPlayerProps {
   className?: string;
 }
 
-const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3];
-const QUALITY_OPTIONS = [
-  { label: "Auto", value: "auto" },
-  { label: "1080p (FHD)", value: "1080p" },
-  { label: "720p (HD)", value: "720p" },
-  { label: "480p (SD)", value: "480p" },
-  { label: "360p", value: "360p" },
-  { label: "240p", value: "240p" },
-];
+// Exactly matching user Screenshot 2
+const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0] as const;
+
+// Exactly matching user Screenshot 3
+const QUALITY_OPTIONS = ["720p", "480p", "360p", "240p", "144p"] as const;
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return "00:00";
@@ -44,6 +43,20 @@ function formatTime(seconds: number): string {
   const s = Math.floor(seconds % 60);
   const pad = (n: number) => String(n).padStart(2, "0");
   return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+}
+
+function extractYouTubeVideoId(url: string): string | null {
+  if (!url) return null;
+  if (url.includes("embed/")) {
+    return url.split("embed/")[1]?.split("?")[0] || null;
+  }
+  if (url.includes("watch?v=")) {
+    return url.split("watch?v=")[1]?.split("&")[0] || null;
+  }
+  if (url.includes("youtu.be/")) {
+    return url.split("youtu.be/")[1]?.split("?")[0] || null;
+  }
+  return null;
 }
 
 export function LectureVideoPlayer({
@@ -56,6 +69,8 @@ export function LectureVideoPlayer({
   videoUrl,
   posterUrl,
   initialTime = 0,
+  watermarkText,
+  onClose,
   onTimeUpdate,
   onEnded,
   onProgressPercentage,
@@ -63,8 +78,12 @@ export function LectureVideoPlayer({
   isCompleted = false,
   className = "",
 }: LectureVideoPlayerProps) {
+  const { data: session } = useSession();
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const ytPlayerRef = useRef<any>(null);
+
   const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const progressSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const progressBarRef = useRef<HTMLDivElement>(null);
@@ -77,17 +96,17 @@ export function LectureVideoPlayer({
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
   const [previousVolume, setPreviousVolume] = useState(1);
-  const [playbackSpeed, setPlaybackSpeed] = useState(1);
-  const [selectedQuality, setSelectedQuality] = useState("auto");
+  const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
+  const [selectedQuality, setSelectedQuality] = useState<string>("720p");
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isPipActive, setIsPipActive] = useState(false);
+  const [isAspectFill, setIsAspectFill] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
   const [hasEnded, setHasEnded] = useState(false);
 
-  // UI / Controls State
+  // Popups State (matching Screenshots 2 & 3)
   const [showControls, setShowControls] = useState(true);
-  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
-  const [settingsView, setSettingsView] = useState<"main" | "speed" | "quality">("main");
+  const [showSpeedMenu, setShowSpeedMenu] = useState(false);
+  const [showQualityMenu, setShowQualityMenu] = useState(false);
   const [hoverTime, setHoverTime] = useState<number | null>(null);
   const [hoverPosition, setHoverPosition] = useState<number>(0);
   const [isScrubbing, setIsScrubbing] = useState(false);
@@ -100,35 +119,32 @@ export function LectureVideoPlayer({
   const [feedbackIcon, setFeedbackIcon] = useState<{
     icon: string;
     text?: string;
-    side?: "center" | "left" | "right";
     key: number;
   } | null>(null);
 
   // Live state
   const isLive = mode === "live";
-  const [isLiveEdge, setIsLiveEdge] = useState(true);
 
-  // YouTube check
-  const isYouTube = useMemo(() => {
-    return (
-      videoUrl.includes("youtube.com") ||
-      videoUrl.includes("youtu.be") ||
-      videoUrl.includes("youtube-nocookie.com")
-    );
-  }, [videoUrl]);
+  // Check if YouTube
+  const youtubeVideoId = useMemo(() => extractYouTubeVideoId(videoUrl), [videoUrl]);
+  const isYouTube = Boolean(youtubeVideoId);
 
-  const youtubeEmbedUrl = useMemo(() => {
-    if (!isYouTube) return "";
-    let vid = "";
-    if (videoUrl.includes("embed/")) {
-      vid = videoUrl.split("embed/")[1]?.split("?")[0] || "";
-    } else if (videoUrl.includes("watch?v=")) {
-      vid = videoUrl.split("watch?v=")[1]?.split("&")[0] || "";
-    } else if (videoUrl.includes("youtu.be/")) {
-      vid = videoUrl.split("youtu.be/")[1]?.split("?")[0] || "";
-    }
-    return `https://www.youtube-nocookie.com/embed/${vid}?autoplay=1&enablejsapi=1&rel=0&modestbranding=1&playsinline=1`;
-  }, [isYouTube, videoUrl]);
+  // Headless YouTube embed url (controls=0 completely removes YouTube player UI)
+  const youtubeHeadlessEmbedUrl = useMemo(() => {
+    if (!youtubeVideoId) return "";
+    return `https://www.youtube-nocookie.com/embed/${youtubeVideoId}?enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&disablekb=1&fs=0&iv_load_policy=3&showinfo=0&autoplay=0`;
+  }, [youtubeVideoId]);
+
+  // Student Watermark text (Screenshot 1: e.g. firozali78644@gmail.com 8958900405)
+  const activeWatermark = useMemo(() => {
+    if (watermarkText) return watermarkText;
+    const email = session?.user?.email || "";
+    const phone = (session?.user as any)?.phone || (session?.user as any)?.mobile || "";
+    if (email && phone) return `${email} ${phone}`;
+    if (email) return email;
+    if (session?.user?.name) return `${session.user.name} (Atomic Pathshala)`;
+    return "Atomic Pathshala Verified Student";
+  }, [watermarkText, session]);
 
   // Load stored preferences (volume, muted, speed)
   useEffect(() => {
@@ -149,7 +165,7 @@ export function LectureVideoPlayer({
       }
       if (storedSpeed !== null) {
         const s = parseFloat(storedSpeed);
-        if (SPEED_OPTIONS.includes(s)) {
+        if ((SPEED_OPTIONS as readonly number[]).includes(s)) {
           setPlaybackSpeed(s);
         }
       }
@@ -164,7 +180,7 @@ export function LectureVideoPlayer({
       const saved = localStorage.getItem(savedKey);
       if (saved) {
         const t = parseFloat(saved);
-        if (t > 10 && (!initialTime || initialTime === 0)) {
+        if (t > 15 && (!initialTime || initialTime === 0)) {
           setSavedResumeTime(t);
           setShowResumeBanner(true);
         }
@@ -172,16 +188,13 @@ export function LectureVideoPlayer({
     } catch {}
   }, [lectureId, isLive, initialTime]);
 
-  // Show micro-feedback overlay animation
-  const triggerFeedback = useCallback(
-    (icon: string, text?: string, side: "center" | "left" | "right" = "center") => {
-      setFeedbackIcon({ icon, text, side, key: Date.now() });
-      setTimeout(() => {
-        setFeedbackIcon((prev) => (prev?.text === text ? null : prev));
-      }, 700);
-    },
-    []
-  );
+  // Trigger brief micro-feedback icon in center
+  const triggerFeedback = useCallback((icon: string, text?: string) => {
+    setFeedbackIcon({ icon, text, key: Date.now() });
+    setTimeout(() => {
+      setFeedbackIcon((prev) => (prev?.text === text ? null : prev));
+    }, 600);
+  }, []);
 
   // Auto-hide controls logic
   const resetControlsTimer = useCallback(() => {
@@ -189,134 +202,320 @@ export function LectureVideoPlayer({
     if (controlsTimeoutRef.current) {
       clearTimeout(controlsTimeoutRef.current);
     }
-    if (isPlaying && !showSettingsMenu && !isScrubbing) {
+    if (isPlaying && !showSpeedMenu && !showQualityMenu && !isScrubbing) {
       controlsTimeoutRef.current = setTimeout(() => {
         setShowControls(false);
-      }, 3000);
+      }, 3500);
     }
-  }, [isPlaying, showSettingsMenu, isScrubbing]);
+  }, [isPlaying, showSpeedMenu, showQualityMenu, isScrubbing]);
 
   const handleMouseMove = () => {
     resetControlsTimer();
   };
 
+  // Helper to dispatch command to YouTube (via YT.Player instance or postMessage fallback)
+  const sendYouTubeCommand = useCallback(
+    (func: string, args: any[] = []) => {
+      if (ytPlayerRef.current && typeof ytPlayerRef.current[func] === "function") {
+        try {
+          ytPlayerRef.current[func](...args);
+          return;
+        } catch {}
+      }
+      if (iframeRef.current?.contentWindow) {
+        try {
+          iframeRef.current.contentWindow.postMessage(
+            JSON.stringify({ event: "command", func, args }),
+            "*"
+          );
+        } catch {}
+      }
+    },
+    []
+  );
+
+  // Initialize YouTube Iframe API if YouTube URL
+  useEffect(() => {
+    if (!isYouTube || !youtubeVideoId) return;
+    let cancelled = false;
+
+    function initYt() {
+      if (cancelled) return;
+      if (!(window as any).YT || !(window as any).YT.Player) {
+        return;
+      }
+      try {
+        const player = new (window as any).YT.Player(iframeRef.current, {
+          events: {
+            onReady: (e: any) => {
+              ytPlayerRef.current = e.target;
+              try {
+                const dur = e.target.getDuration() || 0;
+                if (dur > 0) setDuration(dur);
+                e.target.setPlaybackRate(playbackSpeed);
+                e.target.setVolume(isMuted ? 0 : volume * 100);
+                if (initialTime > 0) {
+                  e.target.seekTo(initialTime, true);
+                }
+              } catch {}
+            },
+            onStateChange: (e: any) => {
+              // 1: PLAYING, 2: PAUSED, 3: BUFFERING, 0: ENDED
+              if (e.data === 1) {
+                setIsPlaying(true);
+                setIsBuffering(false);
+                setHasEnded(false);
+              } else if (e.data === 2) {
+                setIsPlaying(false);
+                setIsBuffering(false);
+              } else if (e.data === 3) {
+                setIsBuffering(true);
+              } else if (e.data === 0) {
+                setIsPlaying(false);
+                setHasEnded(true);
+                if (onEnded) onEnded();
+              }
+            },
+          },
+        });
+        ytPlayerRef.current = player;
+      } catch (err) {
+        console.debug("[LectureVideoPlayer] YT.Player init:", err);
+      }
+    }
+
+    if (!(window as any).YT) {
+      const tag = document.createElement("script");
+      tag.src = "https://www.youtube.com/iframe_api";
+      const firstScriptTag = document.getElementsByTagName("script")[0];
+      firstScriptTag?.parentNode?.insertBefore(tag, firstScriptTag);
+
+      const prevReady = (window as any).onYouTubeIframeAPIReady;
+      (window as any).onYouTubeIframeAPIReady = () => {
+        if (typeof prevReady === "function") prevReady();
+        initYt();
+      };
+    } else {
+      initYt();
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isYouTube, youtubeVideoId, initialTime, isMuted, volume, playbackSpeed, onEnded]);
+
+  // Periodic polling for YouTube player state updates
+  useEffect(() => {
+    if (!isYouTube) return;
+    const pollInterval = setInterval(() => {
+      if (ytPlayerRef.current) {
+        try {
+          const cur = ytPlayerRef.current.getCurrentTime?.() || 0;
+          const dur = ytPlayerRef.current.getDuration?.() || 0;
+          const loadedFraction = ytPlayerRef.current.getVideoLoadedFraction?.() || 0;
+
+          if (!isScrubbing) {
+            setCurrentTime(cur);
+          }
+          if (dur > 0) {
+            setDuration(dur);
+            setBufferedEnd(loadedFraction * dur);
+            if (onTimeUpdate) onTimeUpdate(cur, dur);
+            if (onProgressPercentage) {
+              onProgressPercentage(Math.floor((cur / dur) * 100));
+            }
+          }
+        } catch {}
+      }
+    }, 250);
+
+    return () => clearInterval(pollInterval);
+  }, [isYouTube, isScrubbing, onTimeUpdate, onProgressPercentage]);
+
   // Play / Pause Toggle
   const togglePlay = useCallback(() => {
-    if (!videoRef.current) return;
-    if (videoRef.current.paused || videoRef.current.ended) {
-      videoRef.current.play().then(() => {
+    if (isYouTube) {
+      if (isPlaying) {
+        sendYouTubeCommand("pauseVideo");
+        setIsPlaying(false);
+        triggerFeedback("pause", "Pause");
+      } else {
+        sendYouTubeCommand("playVideo");
         setIsPlaying(true);
         setHasEnded(false);
         triggerFeedback("play_arrow", "Play");
-      }).catch(() => {});
-    } else {
-      videoRef.current.pause();
-      setIsPlaying(false);
-      triggerFeedback("pause", "Pause");
+      }
+    } else if (videoRef.current) {
+      if (videoRef.current.paused || videoRef.current.ended) {
+        videoRef.current
+          .play()
+          .then(() => {
+            setIsPlaying(true);
+            setHasEnded(false);
+            triggerFeedback("play_arrow", "Play");
+          })
+          .catch(() => {});
+      } else {
+        videoRef.current.pause();
+        setIsPlaying(false);
+        triggerFeedback("pause", "Pause");
+      }
     }
     resetControlsTimer();
-  }, [triggerFeedback, resetControlsTimer]);
+  }, [isYouTube, isPlaying, sendYouTubeCommand, triggerFeedback, resetControlsTimer]);
 
-  // Seek Skip (10s)
+  // Seek Skip (+10s or -10s)
   const skip = useCallback(
     (seconds: number) => {
-      if (!videoRef.current) return;
-      const targetTime = Math.min(
-        Math.max(0, videoRef.current.currentTime + seconds),
-        duration || 999999
-      );
-      videoRef.current.currentTime = targetTime;
-      setCurrentTime(targetTime);
+      const targetTime = Math.min(Math.max(0, currentTime + seconds), duration || 999999);
+      if (isYouTube) {
+        sendYouTubeCommand("seekTo", [targetTime, true]);
+        setCurrentTime(targetTime);
+      } else if (videoRef.current) {
+        videoRef.current.currentTime = targetTime;
+        setCurrentTime(targetTime);
+      }
       triggerFeedback(
         seconds > 0 ? "forward_10" : "replay_10",
-        seconds > 0 ? "+10s" : "-10s",
-        seconds > 0 ? "right" : "left"
+        seconds > 0 ? "+10s" : "-10s"
       );
       resetControlsTimer();
     },
-    [duration, triggerFeedback, resetControlsTimer]
+    [currentTime, duration, isYouTube, sendYouTubeCommand, triggerFeedback, resetControlsTimer]
   );
 
   // Volume & Mute Handlers
-  const handleVolumeChange = useCallback((newVol: number) => {
-    const clamped = Math.max(0, Math.min(1, newVol));
-    setVolume(clamped);
-    setIsMuted(clamped === 0);
-    if (clamped > 0) setPreviousVolume(clamped);
+  const handleVolumeChange = useCallback(
+    (newVol: number) => {
+      const clamped = Math.max(0, Math.min(1, newVol));
+      setVolume(clamped);
+      setIsMuted(clamped === 0);
+      if (clamped > 0) setPreviousVolume(clamped);
 
-    if (videoRef.current) {
-      videoRef.current.volume = clamped;
-      videoRef.current.muted = clamped === 0;
-    }
-    try {
-      localStorage.setItem("atomic_player_volume", String(clamped));
-      localStorage.setItem("atomic_player_muted", clamped === 0 ? "true" : "false");
-    } catch {}
-  }, []);
+      if (isYouTube) {
+        sendYouTubeCommand("setVolume", [clamped * 100]);
+        if (clamped === 0) sendYouTubeCommand("mute");
+        else sendYouTubeCommand("unMute");
+      } else if (videoRef.current) {
+        videoRef.current.volume = clamped;
+        videoRef.current.muted = clamped === 0;
+      }
+
+      try {
+        localStorage.setItem("atomic_player_volume", String(clamped));
+        localStorage.setItem("atomic_player_muted", clamped === 0 ? "true" : "false");
+      } catch {}
+    },
+    [isYouTube, sendYouTubeCommand]
+  );
 
   const toggleMute = useCallback(() => {
-    if (!videoRef.current) return;
     if (isMuted || volume === 0) {
       const restored = previousVolume > 0 ? previousVolume : 1;
       setVolume(restored);
       setIsMuted(false);
-      videoRef.current.muted = false;
-      videoRef.current.volume = restored;
+      if (isYouTube) {
+        sendYouTubeCommand("unMute");
+        sendYouTubeCommand("setVolume", [restored * 100]);
+      } else if (videoRef.current) {
+        videoRef.current.muted = false;
+        videoRef.current.volume = restored;
+      }
       triggerFeedback("volume_up", `${Math.round(restored * 100)}%`);
-      try {
-        localStorage.setItem("atomic_player_volume", String(restored));
-        localStorage.setItem("atomic_player_muted", "false");
-      } catch {}
     } else {
       setIsMuted(true);
-      videoRef.current.muted = true;
+      if (isYouTube) {
+        sendYouTubeCommand("mute");
+      } else if (videoRef.current) {
+        videoRef.current.muted = true;
+      }
       triggerFeedback("volume_off", "Muted");
-      try {
-        localStorage.setItem("atomic_player_muted", "true");
-      } catch {}
     }
     resetControlsTimer();
-  }, [isMuted, volume, previousVolume, triggerFeedback, resetControlsTimer]);
+  }, [isMuted, volume, previousVolume, isYouTube, sendYouTubeCommand, triggerFeedback, resetControlsTimer]);
 
-  // Speed Change Handler
+  // Speed Change Handler (matching Screenshot 2: 0.5x to 4.0x)
   const handleSpeedChange = useCallback(
     (speed: number) => {
       setPlaybackSpeed(speed);
-      if (videoRef.current) {
+      if (isYouTube) {
+        sendYouTubeCommand("setPlaybackRate", [speed]);
+      } else if (videoRef.current) {
         videoRef.current.playbackRate = speed;
       }
       try {
         localStorage.setItem("atomic_playback_rate", String(speed));
       } catch {}
       triggerFeedback("speed", `${speed}x`);
-      setShowSettingsMenu(false);
-      setSettingsView("main");
+      setShowSpeedMenu(false);
       resetControlsTimer();
     },
-    [triggerFeedback, resetControlsTimer]
+    [isYouTube, sendYouTubeCommand, triggerFeedback, resetControlsTimer]
   );
 
-  // Quality Change Handler
+  // Quality Change Handler (matching Screenshot 3: 720p, 480p, 360p, 240p, 144p)
   const handleQualityChange = useCallback(
     (q: string) => {
       setSelectedQuality(q);
-      triggerFeedback("high_quality", q === "auto" ? "Quality: Auto" : `Quality: ${q}`);
-      setShowSettingsMenu(false);
-      setSettingsView("main");
+      const ytQualityMap: Record<string, string> = {
+        "720p": "hd720",
+        "480p": "large",
+        "360p": "medium",
+        "240p": "small",
+        "144p": "tiny",
+      };
+      if (isYouTube) {
+        sendYouTubeCommand("setPlaybackQuality", [ytQualityMap[q] || "default"]);
+      }
+      triggerFeedback("high_quality", `${q}`);
+      setShowQualityMenu(false);
       resetControlsTimer();
     },
-    [triggerFeedback, resetControlsTimer]
+    [isYouTube, sendYouTubeCommand, triggerFeedback, resetControlsTimer]
   );
 
-  // Fullscreen Handler
-  const toggleFullscreen = useCallback(() => {
-    if (!containerRef.current) return;
-    if (!document.fullscreenElement) {
-      containerRef.current.requestFullscreen().catch(() => {});
-    } else {
-      document.exitFullscreen().catch(() => {});
+  // Screen Rotation / Aspect Ratio Handler
+  const handleRotateOrAspect = useCallback(async () => {
+    // 1. Attempt mobile screen orientation lock
+    if (typeof window !== "undefined" && "screen" in window && "orientation" in window.screen) {
+      try {
+        const orientation = window.screen.orientation;
+        if (orientation && "lock" in orientation) {
+          if (!document.fullscreenElement && containerRef.current) {
+            await containerRef.current.requestFullscreen().catch(() => {});
+          }
+          await (orientation.lock as any)("landscape").catch(() => {});
+        }
+      } catch {}
     }
-  }, []);
+    // 2. Toggle aspect fill/contain
+    setIsAspectFill((prev) => !prev);
+    triggerFeedback("aspect_ratio", isAspectFill ? "Aspect: Fit" : "Aspect: Fill");
+    resetControlsTimer();
+  }, [isAspectFill, triggerFeedback, resetControlsTimer]);
+
+  // Fullscreen Handler
+  const toggleFullscreen = useCallback(async () => {
+    if (!containerRef.current) return;
+    try {
+      if (!document.fullscreenElement) {
+        await containerRef.current.requestFullscreen();
+        setIsFullscreen(true);
+        // Lock landscape on mobile when entering fullscreen
+        if (screen.orientation && "lock" in screen.orientation) {
+          await (screen.orientation as any).lock("landscape").catch(() => {});
+        }
+      } else {
+        await document.exitFullscreen();
+        setIsFullscreen(false);
+        if (screen.orientation && "unlock" in screen.orientation) {
+          (screen.orientation as any).unlock();
+        }
+      }
+    } catch {
+      setIsFullscreen(!isFullscreen);
+    }
+  }, [isFullscreen]);
 
   useEffect(() => {
     const handleFsChange = () => {
@@ -324,22 +523,6 @@ export function LectureVideoPlayer({
     };
     document.addEventListener("fullscreenchange", handleFsChange);
     return () => document.removeEventListener("fullscreenchange", handleFsChange);
-  }, []);
-
-  // Picture in Picture Handler
-  const togglePip = useCallback(async () => {
-    if (!videoRef.current) return;
-    try {
-      if (document.pictureInPictureElement) {
-        await document.exitPictureInPicture();
-        setIsPipActive(false);
-      } else if (document.pictureInPictureEnabled) {
-        await videoRef.current.requestPictureInPicture();
-        setIsPipActive(true);
-      }
-    } catch {
-      toast.error("Picture-in-Picture is not supported or was blocked.");
-    }
   }, []);
 
   // Keyboard Shortcuts Handler
@@ -367,17 +550,15 @@ export function LectureVideoPlayer({
           e.preventDefault();
           toggleFullscreen();
           break;
-        case "p":
-          e.preventDefault();
-          togglePip();
-          break;
         case "arrowleft":
+        case "j":
           e.preventDefault();
-          skip(e.shiftKey ? -10 : -5);
+          skip(-10);
           break;
         case "arrowright":
+        case "l":
           e.preventDefault();
-          skip(e.shiftKey ? 10 : 5);
+          skip(10);
           break;
         case "arrowup":
           e.preventDefault();
@@ -387,91 +568,38 @@ export function LectureVideoPlayer({
           e.preventDefault();
           handleVolumeChange(Math.max(0, volume - 0.05));
           break;
-        case ">":
-          if (e.shiftKey) {
-            e.preventDefault();
-            const currIdx = SPEED_OPTIONS.indexOf(playbackSpeed);
-            if (currIdx < SPEED_OPTIONS.length - 1) {
-              const nextSpeed = SPEED_OPTIONS[currIdx + 1];
-              if (nextSpeed !== undefined) handleSpeedChange(nextSpeed);
-            }
-          }
-          break;
-        case "<":
-          if (e.shiftKey) {
-            e.preventDefault();
-            const currIdx = SPEED_OPTIONS.indexOf(playbackSpeed);
-            if (currIdx > 0) {
-              const prevSpeed = SPEED_OPTIONS[currIdx - 1];
-              if (prevSpeed !== undefined) handleSpeedChange(prevSpeed);
-            }
-          }
-          break;
-        case "1":
-          if (!e.shiftKey && !e.ctrlKey) {
-            handleSpeedChange(1);
-          }
-          break;
-        default:
-          if (!isLive && /^[0-9]$/.test(e.key) && duration > 0) {
-            e.preventDefault();
-            const fraction = parseInt(e.key, 10) / 10;
-            const target = fraction * duration;
-            if (videoRef.current) {
-              videoRef.current.currentTime = target;
-              setCurrentTime(target);
-            }
-          }
-          break;
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [
-    togglePlay,
-    toggleMute,
-    toggleFullscreen,
-    togglePip,
-    skip,
-    handleVolumeChange,
-    handleSpeedChange,
-    volume,
-    playbackSpeed,
-    duration,
-    isLive,
-  ]);
+  }, [togglePlay, toggleMute, toggleFullscreen, skip, handleVolumeChange, volume]);
 
-  // Video Events
+  // Video Events (HTML5 video fallback)
   const handleTimeUpdate = () => {
-    if (!videoRef.current) return;
+    if (!videoRef.current || isYouTube) return;
     const cur = videoRef.current.currentTime;
     const dur = videoRef.current.duration || 0;
-    setCurrentTime(cur);
+    if (!isScrubbing) {
+      setCurrentTime(cur);
+    }
     if (dur > 0) setDuration(dur);
 
-    // Track buffer ranges
     if (videoRef.current.buffered.length > 0) {
       try {
-        const bufferedTime = videoRef.current.buffered.end(
-          videoRef.current.buffered.length - 1
-        );
+        const bufferedTime = videoRef.current.buffered.end(videoRef.current.buffered.length - 1);
         setBufferedEnd(bufferedTime);
       } catch {}
     }
 
     if (onTimeUpdate) onTimeUpdate(cur, dur);
 
-    // Progress percentage & complete trigger
     if (dur > 0) {
       const pct = Math.floor((cur / dur) * 100);
       if (onProgressPercentage) onProgressPercentage(pct);
 
-      // Debounced progress saving to localStorage
       if (!isLive && lectureId) {
-        if (progressSaveTimeoutRef.current) {
-          clearTimeout(progressSaveTimeoutRef.current);
-        }
+        if (progressSaveTimeoutRef.current) clearTimeout(progressSaveTimeoutRef.current);
         progressSaveTimeoutRef.current = setTimeout(() => {
           try {
             localStorage.setItem(`atomic_progress_${lectureId}`, String(cur));
@@ -489,10 +617,15 @@ export function LectureVideoPlayer({
   };
 
   // Progress Bar Scrubbing
-  const calculateScrubPosition = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
+  const calculateScrubPosition = (
+    e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>
+  ) => {
     if (!progressBarRef.current || duration <= 0) return 0;
     const rect = progressBarRef.current.getBoundingClientRect();
-    const clientX = "touches" in e && e.touches[0] ? e.touches[0].clientX : (e as React.MouseEvent<HTMLDivElement>).clientX;
+    const clientX =
+      "touches" in e && e.touches[0]
+        ? e.touches[0].clientX
+        : (e as React.MouseEvent<HTMLDivElement>).clientX;
     const pos = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     return pos * duration;
   };
@@ -510,19 +643,28 @@ export function LectureVideoPlayer({
   };
 
   const handleProgressMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!videoRef.current || duration <= 0) return;
+    if (duration <= 0) return;
     setIsScrubbing(true);
     const target = calculateScrubPosition(e);
-    videoRef.current.currentTime = target;
     setCurrentTime(target);
 
+    if (isYouTube) {
+      sendYouTubeCommand("seekTo", [target, true]);
+    } else if (videoRef.current) {
+      videoRef.current.currentTime = target;
+    }
+
     const onMouseMove = (moveEvent: MouseEvent) => {
-      if (!progressBarRef.current || !videoRef.current) return;
+      if (!progressBarRef.current) return;
       const rect = progressBarRef.current.getBoundingClientRect();
       const pos = Math.max(0, Math.min(1, (moveEvent.clientX - rect.left) / rect.width));
       const t = pos * duration;
-      videoRef.current.currentTime = t;
       setCurrentTime(t);
+      if (isYouTube) {
+        sendYouTubeCommand("seekTo", [t, true]);
+      } else if (videoRef.current) {
+        videoRef.current.currentTime = t;
+      }
     };
 
     const onMouseUp = () => {
@@ -537,19 +679,29 @@ export function LectureVideoPlayer({
 
   // Resume Video Action
   const applyResumeTime = () => {
-    if (!videoRef.current || savedResumeTime <= 0) return;
-    videoRef.current.currentTime = savedResumeTime;
+    if (savedResumeTime <= 0) return;
     setCurrentTime(savedResumeTime);
+    if (isYouTube) {
+      sendYouTubeCommand("seekTo", [savedResumeTime, true]);
+      sendYouTubeCommand("playVideo");
+      setIsPlaying(true);
+    } else if (videoRef.current) {
+      videoRef.current.currentTime = savedResumeTime;
+      videoRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+    }
     setShowResumeBanner(false);
-    videoRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
     toast.success(`Resumed from ${formatTime(savedResumeTime)}`);
   };
 
   const dismissResumeBanner = () => {
     setShowResumeBanner(false);
-    if (videoRef.current) {
+    setCurrentTime(0);
+    if (isYouTube) {
+      sendYouTubeCommand("seekTo", [0, true]);
+      sendYouTubeCommand("playVideo");
+      setIsPlaying(true);
+    } else if (videoRef.current) {
       videoRef.current.currentTime = 0;
-      setCurrentTime(0);
       videoRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
     }
   };
@@ -567,9 +719,9 @@ export function LectureVideoPlayer({
     const isDoubleTap = now - lastTapRef.current.time < 300;
 
     if (isDoubleTap) {
-      if (tapX < rect.width * 0.4) {
+      if (tapX < rect.width * 0.35) {
         skip(-10);
-      } else if (tapX > rect.width * 0.6) {
+      } else if (tapX > rect.width * 0.65) {
         skip(10);
       } else {
         togglePlay();
@@ -590,17 +742,26 @@ export function LectureVideoPlayer({
       onMouseMove={handleMouseMove}
       onMouseLeave={() => isPlaying && setShowControls(false)}
       onTouchEnd={handleTouchEnd}
-      className={`relative w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl group select-none flex items-center justify-center font-sans ${className}`}
+      className={`relative w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl group select-none flex items-center justify-center font-sans ${
+        isFullscreen ? "!rounded-none !aspect-auto !w-screen !h-screen" : ""
+      } ${className}`}
     >
-      {/* ----------------- VIDEO ELEMENT OR YOUTUBE EMBED ----------------- */}
+      {/* ----------------- 1. VIDEO LAYER (HEADLESS YOUTUBE OR HTML5 VIDEO) ----------------- */}
       {isYouTube ? (
-        <div className="w-full h-full relative">
+        <div className="w-full h-full relative overflow-hidden flex items-center justify-center">
           <iframe
-            src={youtubeEmbedUrl}
+            ref={iframeRef}
+            src={youtubeHeadlessEmbedUrl}
             title={title}
-            className="w-full h-full border-0 pointer-events-auto"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            allowFullScreen
+            className={`w-full h-full border-0 pointer-events-none transition-transform duration-300 ${
+              isAspectFill ? "scale-115 object-cover" : "object-contain"
+            }`}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          />
+          {/* Interaction transparent shield: intercepts user clicks/taps directly to our custom handler */}
+          <div
+            onClick={togglePlay}
+            className="absolute inset-0 z-10 cursor-pointer bg-transparent"
           />
         </div>
       ) : (
@@ -609,7 +770,9 @@ export function LectureVideoPlayer({
           src={videoUrl}
           poster={posterUrl || undefined}
           playsInline
-          className="w-full h-full object-contain cursor-pointer"
+          className={`w-full h-full cursor-pointer transition-transform duration-300 ${
+            isAspectFill ? "object-cover" : "object-contain"
+          }`}
           onClick={togglePlay}
           onTimeUpdate={handleTimeUpdate}
           onEnded={handleVideoEnded}
@@ -632,30 +795,32 @@ export function LectureVideoPlayer({
         />
       )}
 
-      {/* ----------------- BUFFERING SPINNER ----------------- */}
-      {isBuffering && !isYouTube && (
+      {/* ----------------- 2. FLOATING STUDENT ANTI-PIRACY WATERMARK ----------------- */}
+      {/* Drifting subtly across center matching user screenshot */}
+      <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-15 overflow-hidden select-none">
+        <div className="text-white/20 text-xs sm:text-sm font-mono tracking-wider font-semibold pointer-events-none transform -rotate-12 transition-transform duration-1000">
+          {activeWatermark}
+        </div>
+      </div>
+
+      {/* ----------------- 3. BUFFERING SPINNER ----------------- */}
+      {isBuffering && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 backdrop-blur-xs pointer-events-none z-20">
-          <div className="w-14 h-14 rounded-full border-4 border-orange-500/20 border-t-orange-500 animate-spin" />
-          <span className="text-xs font-semibold text-white/90 mt-3 tracking-wide drop-shadow">
-            Buffering Lecture...
+          <div className="w-12 h-12 rounded-full border-4 border-blue-500/20 border-t-blue-500 animate-spin" />
+          <span className="text-xs font-semibold text-white/90 mt-2 tracking-wide drop-shadow">
+            Buffering...
           </span>
         </div>
       )}
 
-      {/* ----------------- MICRO-FEEDBACK ANIMATION ----------------- */}
+      {/* ----------------- 4. MICRO-FEEDBACK ANIMATION ----------------- */}
       {feedbackIcon && (
         <div
           key={feedbackIcon.key}
-          className={`absolute z-30 pointer-events-none flex flex-col items-center justify-center animate-in zoom-in-75 fade-in duration-200 ${
-            feedbackIcon.side === "left"
-              ? "left-12 top-1/2 -translate-y-1/2"
-              : feedbackIcon.side === "right"
-              ? "right-12 top-1/2 -translate-y-1/2"
-              : "inset-0 m-auto"
-          }`}
+          className="absolute z-30 pointer-events-none flex flex-col items-center justify-center inset-0 m-auto animate-in zoom-in-75 fade-in duration-200"
         >
           <div className="w-16 h-16 rounded-full bg-black/75 backdrop-blur-md border border-white/20 text-white flex items-center justify-center shadow-2xl">
-            <span className="material-symbols-outlined text-3xl text-orange-400">
+            <span className="material-symbols-outlined text-3xl text-blue-400">
               {feedbackIcon.icon}
             </span>
           </div>
@@ -667,11 +832,11 @@ export function LectureVideoPlayer({
         </div>
       )}
 
-      {/* ----------------- RESUME PROMPT BANNER ----------------- */}
+      {/* ----------------- 5. RESUME PROMPT BANNER ----------------- */}
       {showResumeBanner && !isLive && (
-        <div className="absolute top-4 left-4 right-4 z-40 bg-slate-900/95 backdrop-blur-md border border-orange-500/50 p-3.5 rounded-2xl shadow-2xl flex items-center justify-between gap-3 animate-in slide-in-from-top duration-300">
+        <div className="absolute top-16 left-4 right-4 z-40 bg-slate-900/95 backdrop-blur-md border border-blue-500/50 p-3 rounded-2xl shadow-2xl flex items-center justify-between gap-3 animate-in slide-in-from-top duration-300">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-orange-500/20 text-orange-400 flex items-center justify-center shrink-0">
+            <div className="w-9 h-9 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
               <span className="material-symbols-outlined text-xl">history</span>
             </div>
             <div className="min-w-0">
@@ -687,7 +852,7 @@ export function LectureVideoPlayer({
             <button
               type="button"
               onClick={applyResumeTime}
-              className="px-3 py-1.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold transition shadow-sm cursor-pointer"
+              className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-sm cursor-pointer"
             >
               Resume
             </button>
@@ -702,366 +867,316 @@ export function LectureVideoPlayer({
         </div>
       )}
 
-      {/* ----------------- TOP INFO BAR OVERLAY ----------------- */}
-      {!isYouTube && (
-        <div
-          className={`absolute top-0 left-0 right-0 p-4 bg-gradient-to-b from-black/85 via-black/40 to-transparent transition-opacity duration-300 pointer-events-none z-20 flex items-center justify-between ${
-            showControls || !isPlaying ? "opacity-100" : "opacity-0"
-          }`}
-        >
-          <div className="min-w-0 max-w-xl">
-            {subjectTitle && (
-              <span className="text-[10px] font-bold uppercase tracking-wider text-orange-400">
-                {subjectTitle}
-              </span>
-            )}
-            <h2 className="text-xs sm:text-sm font-bold text-white truncate drop-shadow">
-              {title}
-            </h2>
-            {educatorName && (
-              <p className="text-[11px] text-slate-300 font-medium truncate">
-                By {educatorName}
-              </p>
-            )}
-          </div>
-
-          {isLive && (
-            <div className="flex items-center gap-2 pointer-events-auto">
-              <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-600/90 text-white text-xs font-extrabold uppercase tracking-wider shadow-lg animate-pulse">
-                <span className="w-2 h-2 rounded-full bg-white" />
-                LIVE
-              </span>
-            </div>
+      {/* ----------------- 6. TOP HEADER BAR (Screenshot 1: Title + Close X) ----------------- */}
+      <div
+        className={`absolute top-0 left-0 right-0 p-3 sm:p-4 bg-gradient-to-b from-black/85 via-black/40 to-transparent transition-opacity duration-300 z-30 flex items-center justify-between pointer-events-none ${
+          showControls || !isPlaying ? "opacity-100" : "opacity-0"
+        }`}
+      >
+        <div className="min-w-0 max-w-xl">
+          <h2 className="text-xs sm:text-sm font-bold text-white truncate drop-shadow">
+            {title}
+          </h2>
+          {educatorName && (
+            <p className="text-[11px] text-slate-300 font-medium truncate">
+              {educatorName} {subjectTitle ? `• ${subjectTitle}` : ""}
+            </p>
           )}
         </div>
-      )}
 
-      {/* ----------------- CUSTOM BOTTOM CONTROL BAR ----------------- */}
-      {!isYouTube && (
-        <div
-          className={`absolute bottom-0 left-0 right-0 p-3 sm:p-4 bg-gradient-to-t from-black/95 via-black/70 to-transparent transition-opacity duration-300 z-30 pointer-events-auto flex flex-col gap-2 ${
-            showControls || !isPlaying || showSettingsMenu ? "opacity-100" : "opacity-0 pointer-events-none"
-          }`}
-          onClick={(e) => e.stopPropagation()}
+        {/* Close Button matching Screenshot 1 Top Right */}
+        <button
+          type="button"
+          onClick={() => {
+            if (onClose) {
+              onClose();
+            } else if (typeof window !== "undefined" && window.history.length > 1) {
+              window.history.back();
+            }
+          }}
+          className="pointer-events-auto w-8 h-8 rounded-full bg-black/40 hover:bg-black/70 active:scale-95 text-white/90 hover:text-white flex items-center justify-center transition border border-white/10 cursor-pointer shadow-md"
+          title="Close Player"
         >
-          {/* Progress / Seek Timeline Bar */}
-          {!isLive && (
-            <div
-              ref={progressBarRef}
-              onMouseMove={handleProgressMouseMove}
-              onMouseLeave={handleProgressMouseLeave}
-              onMouseDown={handleProgressMouseDown}
-              className="relative w-full h-3 group/progress cursor-pointer flex items-center"
-            >
-              {/* Background Track */}
-              <div className="w-full h-1.5 group-hover/progress:h-2.5 bg-white/20 rounded-full overflow-hidden relative transition-all duration-150">
-                {/* Buffer Loaded Bar */}
-                <div
-                  className="absolute top-0 left-0 bottom-0 bg-white/30 rounded-full transition-all duration-200"
-                  style={{ width: `${bufferPercent}%` }}
-                />
-                {/* Played Progress Bar */}
-                <div
-                  className="absolute top-0 left-0 bottom-0 bg-gradient-to-r from-orange-600 to-amber-500 rounded-full"
-                  style={{ width: `${progressPercent}%` }}
-                />
-              </div>
+          <span className="material-symbols-outlined text-lg">close</span>
+        </button>
+      </div>
 
-              {/* Progress Thumb Knob */}
+      {/* ----------------- 7. CENTER CONTROLS (Screenshot 1: Rewind 10, Play/Pause, Forward 10) ----------------- */}
+      <div
+        className={`absolute inset-0 flex items-center justify-center gap-10 sm:gap-20 pointer-events-none z-25 transition-opacity duration-300 ${
+          showControls || !isPlaying ? "opacity-100" : "opacity-0 pointer-events-none"
+        }`}
+      >
+        {/* Rewind 10s Circular Button */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            skip(-10);
+          }}
+          className="pointer-events-auto w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-black/50 hover:bg-black/75 active:scale-90 text-white/90 hover:text-white border border-white/20 flex items-center justify-center shadow-2xl backdrop-blur-xs transition cursor-pointer"
+          title="Rewind 10 seconds"
+        >
+          <span className="material-symbols-outlined text-2xl sm:text-3xl">replay_10</span>
+        </button>
+
+        {/* Big Center Play / Pause Button */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            togglePlay();
+          }}
+          className="pointer-events-auto w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-black/60 hover:bg-black/85 active:scale-95 text-white border-2 border-white/30 flex items-center justify-center shadow-2xl backdrop-blur-sm transition cursor-pointer"
+          title={isPlaying ? "Pause (Space/K)" : "Play (Space/K)"}
+        >
+          <span className="material-symbols-outlined text-3xl sm:text-5xl">
+            {isPlaying ? "pause" : "play_arrow"}
+          </span>
+        </button>
+
+        {/* Forward 10s Circular Button */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            skip(10);
+          }}
+          className="pointer-events-auto w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-black/50 hover:bg-black/75 active:scale-90 text-white/90 hover:text-white border border-white/20 flex items-center justify-center shadow-2xl backdrop-blur-xs transition cursor-pointer"
+          title="Forward 10 seconds"
+        >
+          <span className="material-symbols-outlined text-2xl sm:text-3xl">forward_10</span>
+        </button>
+      </div>
+
+      {/* ----------------- 8. BOTTOM CONTROL BAR (Screenshots 1, 2, 3) ----------------- */}
+      <div
+        className={`absolute bottom-0 left-0 right-0 p-3 sm:p-4 bg-gradient-to-t from-black/95 via-black/70 to-transparent transition-opacity duration-300 z-30 pointer-events-auto flex flex-col gap-2.5 ${
+          showControls || !isPlaying || showSpeedMenu || showQualityMenu
+            ? "opacity-100"
+            : "opacity-0 pointer-events-none"
+        }`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Full-width Timeline Scrub Bar with BLUE THUMB (Screenshot 1) */}
+        {!isLive && (
+          <div
+            ref={progressBarRef}
+            onMouseMove={handleProgressMouseMove}
+            onMouseLeave={handleProgressMouseLeave}
+            onMouseDown={handleProgressMouseDown}
+            className="relative w-full h-3 group/progress cursor-pointer flex items-center"
+          >
+            {/* Background Track */}
+            <div className="w-full h-1 group-hover/progress:h-2 bg-white/25 rounded-full overflow-hidden relative transition-all duration-150">
+              {/* Buffer Bar */}
               <div
-                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3.5 h-3.5 group-hover/progress:w-4 group-hover/progress:h-4 bg-white rounded-full shadow-lg border-2 border-orange-500 scale-0 group-hover/progress:scale-100 transition-transform duration-150 pointer-events-none"
-                style={{ left: `${progressPercent}%` }}
+                className="absolute top-0 left-0 bottom-0 bg-white/35 rounded-full transition-all duration-200"
+                style={{ width: `${bufferPercent}%` }}
               />
+              {/* Played Bar */}
+              <div
+                className="absolute top-0 left-0 bottom-0 bg-white rounded-full"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
 
-              {/* Hover Timestamp Preview Tooltip */}
-              {hoverTime !== null && (
-                <div
-                  className="absolute -top-8 -translate-x-1/2 px-2 py-0.5 rounded-md bg-black/90 text-white text-[10px] font-mono font-bold border border-white/20 shadow-xl pointer-events-none"
-                  style={{ left: `${hoverPosition}%` }}
-                >
-                  {formatTime(hoverTime)}
+            {/* Blue Circular Thumb Knob matching Screenshot 1 */}
+            <div
+              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-blue-500 rounded-full shadow-lg border-2 border-white scale-100 transition-transform pointer-events-none"
+              style={{ left: `${progressPercent}%` }}
+            />
+
+            {/* Hover Tooltip */}
+            {hoverTime !== null && (
+              <div
+                className="absolute -top-7 -translate-x-1/2 px-2 py-0.5 rounded bg-black/90 text-white text-[10px] font-mono font-bold border border-white/20 shadow-xl pointer-events-none"
+                style={{ left: `${hoverPosition}%` }}
+              >
+                {formatTime(hoverTime)}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Bottom Controls Row */}
+        <div className="flex items-center justify-between gap-2 text-white">
+          {/* Left Controls: Play/Pause, -10s, +10s, Volume with Blue Thumb, Time Display */}
+          <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
+            {/* Play / Pause Button */}
+            <button
+              type="button"
+              onClick={togglePlay}
+              className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-white/15 active:scale-95 transition text-white cursor-pointer"
+              title={isPlaying ? "Pause" : "Play"}
+            >
+              <span className="material-symbols-outlined text-2xl">
+                {isPlaying ? "pause" : "play_arrow"}
+              </span>
+            </button>
+
+            {/* Replay 10s */}
+            <button
+              type="button"
+              onClick={() => skip(-10)}
+              className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-white/15 active:scale-90 transition text-white/90 hover:text-white cursor-pointer"
+              title="Rewind 10 seconds"
+            >
+              <span className="material-symbols-outlined text-xl">replay_10</span>
+            </button>
+
+            {/* Forward 10s */}
+            <button
+              type="button"
+              onClick={() => skip(10)}
+              className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-white/15 active:scale-90 transition text-white/90 hover:text-white cursor-pointer"
+              title="Forward 10 seconds"
+            >
+              <span className="material-symbols-outlined text-xl">forward_10</span>
+            </button>
+
+            {/* Volume Icon + Horizontal Slider (with blue dot thumb) */}
+            <div className="flex items-center gap-1 group/volume">
+              <button
+                type="button"
+                onClick={toggleMute}
+                className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-white/15 transition text-white/90 hover:text-white cursor-pointer"
+                title={isMuted ? "Unmute" : "Mute"}
+              >
+                <span className="material-symbols-outlined text-xl">
+                  {isMuted || volume === 0
+                    ? "volume_off"
+                    : volume < 0.5
+                    ? "volume_down"
+                    : "volume_up"}
+                </span>
+              </button>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={isMuted ? 0 : volume}
+                onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
+                className="w-14 sm:w-20 h-1 bg-white/30 rounded-full appearance-none accent-blue-500 cursor-pointer hidden sm:block opacity-85 group-hover/volume:opacity-100 transition"
+                title="Volume"
+              />
+            </div>
+
+            {/* Exact Time indicator format from Screenshot 1: 27:14/01:47:41 */}
+            <div className="text-[11px] sm:text-xs font-mono font-medium text-white/90 select-none ml-1">
+              <span>{formatTime(currentTime)}</span>
+              <span>/</span>
+              <span>{formatTime(duration)}</span>
+            </div>
+          </div>
+
+          {/* Right Controls: Speedometer, Rotate/Aspect, Settings Gear, Fullscreen */}
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0 relative">
+            {/* Speedometer Button (Screenshot 1 & 2) */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSpeedMenu((prev) => !prev);
+                  setShowQualityMenu(false);
+                }}
+                className={`w-8 h-8 rounded-lg flex items-center justify-center hover:bg-white/15 transition cursor-pointer ${
+                  showSpeedMenu ? "bg-white/20 text-blue-400" : "text-white/90 hover:text-white"
+                }`}
+                title="Playback Speed"
+              >
+                <span className="material-symbols-outlined text-xl">speed</span>
+              </button>
+
+              {/* Exact Speed Popup Menu from Screenshot 2 */}
+              {showSpeedMenu && (
+                <div className="absolute bottom-11 right-0 w-24 bg-black/90 backdrop-blur-md border border-white/10 rounded-2xl shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="flex flex-col space-y-0.5">
+                    {SPEED_OPTIONS.map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => handleSpeedChange(s)}
+                        className={`w-full text-left px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
+                          playbackSpeed === s
+                            ? "bg-white/20 text-white font-bold"
+                            : "text-white/80 hover:bg-white/10 hover:text-white"
+                        }`}
+                      >
+                        {s}x
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
-          )}
 
-          {/* Bottom Controls Row */}
-          <div className="flex items-center justify-between gap-2 text-white">
-            {/* Left Controls: Play/Pause, 10s skips, Timers */}
-            <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
-              {/* Play / Pause */}
+            {/* Screen Rotation / Aspect Ratio Button (Screenshot 1) */}
+            <button
+              type="button"
+              onClick={handleRotateOrAspect}
+              className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-white/15 text-white/90 hover:text-white transition cursor-pointer"
+              title="Screen Rotation / Aspect Ratio"
+            >
+              <span className="material-symbols-outlined text-xl">
+                {isAspectFill ? "crop_free" : "aspect_ratio"}
+              </span>
+            </button>
+
+            {/* Settings Gear Button (Screenshot 1 & 3) */}
+            <div className="relative">
               <button
                 type="button"
-                onClick={togglePlay}
-                className="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-white/15 active:scale-95 transition-all text-white focus:outline-none cursor-pointer"
-                title={isPlaying ? "Pause (Space/K)" : "Play (Space/K)"}
+                onClick={() => {
+                  setShowQualityMenu((prev) => !prev);
+                  setShowSpeedMenu(false);
+                }}
+                className={`w-8 h-8 rounded-lg flex items-center justify-center hover:bg-white/15 transition cursor-pointer ${
+                  showQualityMenu ? "bg-white/20 text-blue-400" : "text-white/90 hover:text-white"
+                }`}
+                title="Video Quality"
               >
-                <span className="material-symbols-outlined text-2xl">
-                  {isPlaying ? "pause" : "play_arrow"}
-                </span>
+                <span className="material-symbols-outlined text-xl">settings</span>
               </button>
 
-              {/* 10s Replay / Forward Buttons */}
-              {!isLive && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => skip(-10)}
-                    className="w-8 h-8 rounded-xl flex items-center justify-center hover:bg-white/15 active:scale-90 transition-all text-slate-200 hover:text-white cursor-pointer"
-                    title="Rewind 10 seconds (←)"
-                  >
-                    <span className="material-symbols-outlined text-xl">replay_10</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => skip(10)}
-                    className="w-8 h-8 rounded-xl flex items-center justify-center hover:bg-white/15 active:scale-90 transition-all text-slate-200 hover:text-white cursor-pointer"
-                    title="Forward 10 seconds (→)"
-                  >
-                    <span className="material-symbols-outlined text-xl">forward_10</span>
-                  </button>
-                </>
-              )}
-
-              {/* Volume & Slider */}
-              <div className="flex items-center gap-1 group/volume">
-                <button
-                  type="button"
-                  onClick={toggleMute}
-                  className="w-8 h-8 rounded-xl flex items-center justify-center hover:bg-white/15 transition-all text-slate-200 hover:text-white cursor-pointer"
-                  title={isMuted ? "Unmute (M)" : "Mute (M)"}
-                >
-                  <span className="material-symbols-outlined text-xl">
-                    {isMuted || volume === 0
-                      ? "volume_off"
-                      : volume < 0.5
-                      ? "volume_down"
-                      : "volume_up"}
-                  </span>
-                </button>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.05"
-                  value={isMuted ? 0 : volume}
-                  onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
-                  className="w-14 sm:w-20 h-1.5 bg-white/30 rounded-full appearance-none accent-orange-500 cursor-pointer hidden sm:block opacity-80 group-hover/volume:opacity-100 transition"
-                  title="Volume (↑ / ↓)"
-                />
-              </div>
-
-              {/* Time Indicators */}
-              <div className="flex items-center gap-1 text-[11px] sm:text-xs font-mono font-semibold text-slate-300 select-none">
-                {isLive ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (videoRef.current) {
-                        videoRef.current.currentTime = videoRef.current.duration;
-                        setIsLiveEdge(true);
-                      }
-                    }}
-                    className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer ${
-                      isLiveEdge
-                        ? "bg-rose-600/30 text-rose-400 border border-rose-500/40"
-                        : "bg-slate-800 text-slate-300 hover:bg-slate-700"
-                    }`}
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
-                    <span>{isLiveEdge ? "LIVE" : "GO LIVE"}</span>
-                  </button>
-                ) : (
-                  <>
-                    <span>{formatTime(currentTime)}</span>
-                    <span className="text-slate-500">/</span>
-                    <span>{formatTime(duration)}</span>
-                  </>
-                )}
-              </div>
-            </div>
-
-            {/* Right Controls: Bookmark, Speed, Quality/Settings, PiP, Fullscreen */}
-            <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-              {/* Add Bookmark button if callback provided */}
-              {onBookmarkAdd && !isLive && (
-                <button
-                  type="button"
-                  onClick={() => onBookmarkAdd(currentTime)}
-                  className="w-8 h-8 rounded-xl flex items-center justify-center hover:bg-white/15 text-slate-200 hover:text-white transition cursor-pointer"
-                  title="Add Bookmark at current timestamp"
-                >
-                  <span className="material-symbols-outlined text-lg">bookmark_add</span>
-                </button>
-              )}
-
-              {/* Playback Speed Pill Button */}
-              {!isLive && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSettingsView("speed");
-                    setShowSettingsMenu((prev) => !prev);
-                  }}
-                  className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-bold font-mono transition text-slate-200 hover:text-white cursor-pointer"
-                  title="Playback Speed"
-                >
-                  {playbackSpeed}x
-                </button>
-              )}
-
-              {/* Settings Menu Button */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSettingsView("main");
-                    setShowSettingsMenu((prev) => !prev);
-                  }}
-                  className={`w-8 h-8 rounded-xl flex items-center justify-center hover:bg-white/15 transition cursor-pointer ${
-                    showSettingsMenu ? "bg-white/20 text-orange-400" : "text-slate-200 hover:text-white"
-                  }`}
-                  title="Settings (Speed & Quality)"
-                >
-                  <span className="material-symbols-outlined text-xl">settings</span>
-                </button>
-
-                {/* Popover Settings Menu */}
-                {showSettingsMenu && (
-                  <div className="absolute bottom-11 right-0 w-56 bg-slate-900/95 backdrop-blur-md border border-slate-700/80 rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
-                    {/* Main Settings Menu View */}
-                    {settingsView === "main" && (
-                      <div className="space-y-1">
-                        <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-800">
-                          Player Settings
-                        </div>
-                        {!isLive && (
-                          <button
-                            type="button"
-                            onClick={() => setSettingsView("speed")}
-                            className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-200 hover:bg-white/10 transition cursor-pointer"
-                          >
-                            <span className="flex items-center gap-2">
-                              <span className="material-symbols-outlined text-base text-orange-400">speed</span>
-                              Playback Speed
-                            </span>
-                            <span className="text-slate-400 font-mono text-[11px]">{playbackSpeed}x &rsaquo;</span>
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => setSettingsView("quality")}
-                          className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-200 hover:bg-white/10 transition cursor-pointer"
-                        >
-                          <span className="flex items-center gap-2">
-                            <span className="material-symbols-outlined text-base text-blue-400">high_quality</span>
-                            Quality
-                          </span>
-                          <span className="text-slate-400 text-[11px]">
-                            {selectedQuality === "auto" ? "Auto" : selectedQuality} &rsaquo;
-                          </span>
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Speed Submenu View */}
-                    {settingsView === "speed" && (
-                      <div className="space-y-1">
-                        <button
-                          type="button"
-                          onClick={() => setSettingsView("main")}
-                          className="w-full flex items-center gap-1 px-2 py-1.5 text-xs font-bold text-slate-400 hover:text-white border-b border-slate-800 cursor-pointer"
-                        >
-                          <span className="material-symbols-outlined text-sm">arrow_back</span>
-                          <span>Playback Speed</span>
-                        </button>
-                        <div className="max-h-48 overflow-y-auto py-1 space-y-0.5">
-                          {SPEED_OPTIONS.map((s) => (
-                            <button
-                              key={s}
-                              type="button"
-                              onClick={() => handleSpeedChange(s)}
-                              className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs font-mono transition cursor-pointer ${
-                                playbackSpeed === s
-                                  ? "bg-orange-500/20 text-orange-400 font-bold"
-                                  : "text-slate-300 hover:bg-white/10"
-                              }`}
-                            >
-                              <span>{s === 1 ? "1x (Normal)" : `${s}x`}</span>
-                              {playbackSpeed === s && (
-                                <span className="material-symbols-outlined text-sm">check</span>
-                              )}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Quality Submenu View */}
-                    {settingsView === "quality" && (
-                      <div className="space-y-1">
-                        <button
-                          type="button"
-                          onClick={() => setSettingsView("main")}
-                          className="w-full flex items-center gap-1 px-2 py-1.5 text-xs font-bold text-slate-400 hover:text-white border-b border-slate-800 cursor-pointer"
-                        >
-                          <span className="material-symbols-outlined text-sm">arrow_back</span>
-                          <span>Quality</span>
-                        </button>
-                        <div className="max-h-48 overflow-y-auto py-1 space-y-0.5">
-                          {QUALITY_OPTIONS.map((q) => (
-                            <button
-                              key={q.value}
-                              type="button"
-                              onClick={() => handleQualityChange(q.value)}
-                              className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs transition cursor-pointer ${
-                                selectedQuality === q.value
-                                  ? "bg-blue-500/20 text-blue-400 font-bold"
-                                  : "text-slate-300 hover:bg-white/10"
-                              }`}
-                            >
-                              <span>{q.label}</span>
-                              {selectedQuality === q.value && (
-                                <span className="material-symbols-outlined text-sm">check</span>
-                              )}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+              {/* Exact Quality Popup Menu from Screenshot 3 */}
+              {showQualityMenu && (
+                <div className="absolute bottom-11 right-0 w-24 bg-black/90 backdrop-blur-md border border-white/10 rounded-2xl shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="flex flex-col space-y-0.5">
+                    {QUALITY_OPTIONS.map((q) => (
+                      <button
+                        key={q}
+                        type="button"
+                        onClick={() => handleQualityChange(q)}
+                        className={`w-full text-left px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
+                          selectedQuality === q
+                            ? "bg-white/20 text-white font-bold"
+                            : "text-white/80 hover:bg-white/10 hover:text-white"
+                        }`}
+                      >
+                        {q}
+                      </button>
+                    ))}
                   </div>
-                )}
-              </div>
-
-              {/* Picture in Picture */}
-              {typeof document !== "undefined" && "pictureInPictureEnabled" in document && (
-                <button
-                  type="button"
-                  onClick={togglePip}
-                  className="w-8 h-8 rounded-xl flex items-center justify-center hover:bg-white/15 text-slate-200 hover:text-white transition cursor-pointer"
-                  title="Picture in Picture (P)"
-                >
-                  <span className="material-symbols-outlined text-xl">
-                    {isPipActive ? "pip_exit" : "picture_in_picture_alt"}
-                  </span>
-                </button>
+                </div>
               )}
-
-              {/* Fullscreen */}
-              <button
-                type="button"
-                onClick={toggleFullscreen}
-                className="w-8 h-8 rounded-xl flex items-center justify-center hover:bg-white/15 text-slate-200 hover:text-white transition cursor-pointer"
-                title={isFullscreen ? "Exit Fullscreen (F / Esc)" : "Fullscreen (F)"}
-              >
-                <span className="material-symbols-outlined text-xl">
-                  {isFullscreen ? "fullscreen_exit" : "fullscreen"}
-                </span>
-              </button>
             </div>
+
+            {/* Fullscreen Button */}
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-white/15 text-white/90 hover:text-white transition cursor-pointer"
+              title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+            >
+              <span className="material-symbols-outlined text-xl">
+                {isFullscreen ? "fullscreen_exit" : "fullscreen"}
+              </span>
+            </button>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

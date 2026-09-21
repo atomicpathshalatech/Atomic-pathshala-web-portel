@@ -73,12 +73,24 @@ export function YouTubeLivePlayer({
     setIsLiveEdge(true);
   };
 
-  const toggleFullscreen = () => {
+  const toggleFullscreen = async () => {
     if (!containerRef.current) return;
-    if (!document.fullscreenElement) {
-      containerRef.current.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
-    } else {
-      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
+    try {
+      if (!document.fullscreenElement) {
+        await containerRef.current.requestFullscreen();
+        setIsFullscreen(true);
+        if (screen.orientation && "lock" in screen.orientation) {
+          await (screen.orientation as any).lock("landscape").catch(() => {});
+        }
+      } else {
+        await document.exitFullscreen();
+        setIsFullscreen(false);
+        if (screen.orientation && "unlock" in screen.orientation) {
+          (screen.orientation as any).unlock();
+        }
+      }
+    } catch {
+      setIsFullscreen((prev) => !prev);
     }
   };
 

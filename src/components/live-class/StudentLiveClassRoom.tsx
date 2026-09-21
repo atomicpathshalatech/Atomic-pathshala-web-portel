@@ -557,6 +557,7 @@ export function StudentLiveClassRoom({
   const [activeTab, setActiveTab] = useState<"chat" | "questions">("chat");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showChat, setShowChat] = useState(true);
+  const [mobileLandscapeShowChat, setMobileLandscapeShowChat] = useState(false);
 
   // Floating teacher camera position — used only on desktop when the
   // teacher's Material & Setup camera shape is Circular (see isCameraCircle
@@ -1486,6 +1487,22 @@ export function StudentLiveClassRoom({
               <span className="text-[10px] font-bold text-slate-500 bg-slate-800/60 px-2 py-0.5 rounded">
                 16:9 HD Mirror
               </span>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!stageContainerRef.current) return;
+                  if (document.fullscreenElement) {
+                    document.exitFullscreen().catch(() => {});
+                  } else {
+                    stageContainerRef.current.requestFullscreen().catch(() => {});
+                  }
+                }}
+                className="flex items-center gap-1 px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[10px] sm:text-[11px] font-semibold border border-slate-700 transition cursor-pointer"
+                title="Full Screen Presentation Stage"
+              >
+                <span className="material-symbols-outlined text-xs">fullscreen</span>
+                <span className="hidden sm:inline">Stage Fullscreen</span>
+              </button>
             </div>
           </div>
 
@@ -1622,9 +1639,25 @@ export function StudentLiveClassRoom({
       {/* ========================================================================= */}
       {/* MOBILE & TABLET VIEW (< lg): Top Video/Canvas Stage + Bottom Tabbed Console */}
       {/* ========================================================================= */}
-      <div className="lg:hidden flex-1 min-h-0 flex flex-col landscape:flex-row overflow-hidden bg-[#0b0d14]">
-        {/* Top Media Area: 16:9 Canvas or YouTube Player */}
-        <div className="w-full aspect-video max-h-[40dvh] sm:max-h-[45dvh] landscape:w-3/5 landscape:h-full landscape:max-h-full landscape:aspect-auto shrink-0 bg-black relative flex items-center justify-center overflow-hidden border-b landscape:border-b-0 landscape:border-r border-slate-800/80">
+      {/* ========================================================================= */}
+      {/* MOBILE & TABLET VIEW (< lg): Fullscreen Landscape / Tabbed Portrait View */}
+      {/* ========================================================================= */}
+      <div className="lg:hidden flex-1 min-h-0 flex flex-col landscape:flex-row overflow-hidden bg-[#0b0d14] relative">
+        {/* Mobile Media Area: In portrait takes top 40-45dvh; in LANDSCAPE takes 100% FULL SCREEN */}
+        <div className="w-full aspect-video max-h-[40dvh] sm:max-h-[45dvh] landscape:w-full landscape:h-full landscape:max-h-full landscape:aspect-auto shrink-0 bg-black relative flex items-center justify-center overflow-hidden border-b landscape:border-0 border-slate-800/80">
+          {/* Quick Fullscreen Rotate overlay button on top right of video in mobile */}
+          <button
+            type="button"
+            onClick={toggleMobileOrientation}
+            className="absolute top-2 right-2 z-20 px-2 py-1 rounded-lg bg-black/60 hover:bg-black/80 active:scale-95 text-white/90 hover:text-white border border-white/20 flex items-center gap-1 text-[11px] font-bold shadow-lg backdrop-blur-xs transition cursor-pointer"
+            title="Toggle Landscape Fullscreen"
+          >
+            <span className="material-symbols-outlined text-sm">
+              {isFullscreen ? "fullscreen_exit" : "screen_rotation"}
+            </span>
+            <span className="hidden xs:inline">{isFullscreen ? "Exit" : "Full Screen"}</span>
+          </button>
+
           {isYouTube ? (
             <YouTubeLivePlayer
               youtubeVideoId={wbSession?.youtubeVideoId ?? null}
@@ -1640,7 +1673,7 @@ export function StudentLiveClassRoom({
               />
             </YouTubeLivePlayer>
           ) : !isDesktopViewport ? (
-            <div className="relative aspect-[16/9] w-full h-full max-w-full max-h-full overflow-hidden">
+            <div className="relative aspect-[16/9] w-full h-full max-w-full max-h-full overflow-hidden flex items-center justify-center">
               <StudentWhiteboardMirror
                 ref={mirrorRef}
                 boardBackground={boardBackground}
@@ -1650,7 +1683,7 @@ export function StudentLiveClassRoom({
               />
               {/* Mobile PiP Teacher Video (Corner Preview) */}
               {!isYouTube && (
-                <div className="absolute top-2 right-2 w-28 xs:w-32 aspect-video rounded-lg overflow-hidden border border-blue-500/60 shadow-xl bg-[#10121d] z-20">
+                <div className="absolute top-2 left-2 w-28 xs:w-32 aspect-video rounded-lg overflow-hidden border border-blue-500/60 shadow-xl bg-[#10121d] z-20">
                   <VideoStrip
                     whiteboardSessionId={wbSession?.id || batchScheduleId}
                     variant="panel"
@@ -1668,12 +1701,45 @@ export function StudentLiveClassRoom({
               )}
             </div>
           ) : null}
+
+          {/* Floating pill in Landscape mode to open Chat/Polls without resizing the 100% video */}
+          <button
+            type="button"
+            onClick={() => setMobileLandscapeShowChat(true)}
+            className="hidden landscape:flex items-center gap-1.5 absolute bottom-3 right-3 z-30 px-3 py-1.5 rounded-full bg-slate-900/90 hover:bg-slate-800 text-white border border-slate-700/80 shadow-2xl backdrop-blur-md text-xs font-bold transition active:scale-95 cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-sm text-blue-400">chat</span>
+            <span>Chat & Polls</span>
+            {quiz && quiz.status === "ACTIVE" && !quizDismissed && (
+              <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
+            )}
+          </button>
         </div>
 
-        {/* Bottom Interactive Area — same two-tab StudentEngagementPanel as
-            the desktop sidebar (see the "one screen, same layout as the
-        {/* Bottom Interactive Area */}
-        <div className="flex-1 landscape:w-2/5 min-h-0 flex flex-col bg-[#10121d] overflow-hidden">
+        {/* In portrait: normal bottom half console. In landscape: floating slide-in drawer when requested */}
+        <div
+          className={`flex-1 min-h-0 bg-[#10121d] overflow-hidden ${
+            mobileLandscapeShowChat
+              ? "landscape:absolute landscape:right-0 landscape:top-0 landscape:bottom-0 landscape:w-80 landscape:max-w-[85vw] landscape:z-40 landscape:shadow-2xl landscape:border-l landscape:border-slate-700 flex flex-col"
+              : "portrait:flex landscape:hidden"
+          }`}
+        >
+          {/* Header in landscape drawer to allow closing */}
+          <div className="hidden landscape:flex items-center justify-between px-3 py-2 bg-[#0a0b12] border-b border-slate-800 shrink-0">
+            <span className="text-xs font-bold text-white flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-sm text-blue-400">forum</span>
+              Live Interaction
+            </span>
+            <button
+              type="button"
+              onClick={() => setMobileLandscapeShowChat(false)}
+              className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition cursor-pointer"
+              title="Close chat drawer"
+            >
+              <span className="material-symbols-outlined text-sm">close</span>
+            </button>
+          </div>
+
           <StudentEngagementPanel
             wbSessionId={wbSession?.id}
             currentUserId={currentUserId}
