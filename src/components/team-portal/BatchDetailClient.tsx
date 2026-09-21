@@ -15,6 +15,7 @@ import {
   type TestEntry,
 } from "./BatchPdfLibrary";
 import { BatchNotificationManager } from "./BatchNotificationManager";
+import { BatchTestSeriesManager } from "./BatchTestSeriesManager";
 
 type BatchDetailClientProps = {
   batch: {
@@ -121,14 +122,14 @@ export function BatchDetailClient({
   canManageSchedule,
 }: BatchDetailClientProps) {
   const searchParams = useSearchParams();
-  const VALID_TABS = ["flow", "pdfs", "materials", "timetable", "teachers", "students", "notifications"] as const;
+  const VALID_TABS = ["flow", "pdfs", "materials", "timetable", "test-series", "teachers", "students", "notifications"] as const;
   const requestedTab = searchParams.get("tab");
   const initialTab = (VALID_TABS as readonly string[]).includes(requestedTab || "")
     ? (requestedTab as (typeof VALID_TABS)[number])
     : "flow";
 
   const [showImportModal, setShowImportModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<"flow" | "pdfs" | "materials" | "timetable" | "teachers" | "students" | "notifications">(initialTab);
+  const [activeTab, setActiveTab] = useState<"flow" | "pdfs" | "materials" | "timetable" | "test-series" | "teachers" | "students" | "notifications">(initialTab);
   const [blockedBannerDismissed, setBlockedBannerDismissed] = useState(false);
   const blockedReason =
     searchParams.get("blocked") === "1"
@@ -321,6 +322,18 @@ export function BatchDetailClient({
         </button>
         <button
           type="button"
+          onClick={() => setActiveTab("test-series")}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+            activeTab === "test-series"
+              ? "bg-primary text-on-primary shadow-sm"
+              : "text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high"
+          }`}
+        >
+          <span className="material-symbols-outlined text-base">quiz</span>
+          Test Series
+        </button>
+        <button
+          type="button"
           onClick={() => setActiveTab("teachers")}
           className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
             activeTab === "teachers"
@@ -489,6 +502,15 @@ export function BatchDetailClient({
             canManageSchedule={canManageSchedule}
           />
         </section>
+      )}
+
+      {/* Tab: Test Series Management */}
+      {activeTab === "test-series" && (
+        <BatchTestSeriesManager
+          batchId={batch.id}
+          batchName={batch.name}
+          canManage={canUpdate}
+        />
       )}
 
       {/* Tab 3: Faculty Management */}

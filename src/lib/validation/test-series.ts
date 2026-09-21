@@ -34,6 +34,10 @@ export const seriesTestCreateSchema = z.object({
   instructions: z.string().trim().max(4000).optional().or(z.literal("")),
   templateId: z.string().optional().nullable().or(z.literal("")),
   templatePreset: z.enum(["NEET", "JEE", "CHAPTER_TEST", "CUSTOM"]).optional().nullable(),
+  startDate: z.string().optional().nullable().or(z.literal("")),
+  testType: z.string().optional().nullable(),
+  examType: z.string().optional().nullable(),
+  syllabus: z.any().optional().nullable(),
 });
 
 export type SeriesTestCreateInput = z.infer<typeof seriesTestCreateSchema>;

@@ -43,7 +43,13 @@ export default async function TestSeriesDetailPage({ params }: { params: { id: s
       {/* Header Info */}
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-mono font-bold text-outline-variant">{series.code}</p>
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="text-[11px] font-bold text-slate-500">Unique Test Series ID:</span>
+            <span className="text-xs font-mono font-bold bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 px-2.5 py-0.5 rounded-lg border border-blue-200 dark:border-blue-800">
+              {series.code}
+            </span>
+            <span className="text-[11px] text-slate-400">· Use this code to import into any batch</span>
+          </div>
           <h1 className="font-headline-lg text-headline-lg text-primary tracking-tight font-extrabold">{series.name}</h1>
           {series.description && (
             <p className="text-on-surface-variant font-body-md mt-1 max-w-2xl">{series.description}</p>

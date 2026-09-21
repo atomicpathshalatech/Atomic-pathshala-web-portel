@@ -158,27 +158,6 @@ export function TestSeriesForm() {
           />
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className={labelClass}>Start Date</label>
-            <input
-              type="datetime-local"
-              className={inputClass}
-              onChange={(e) =>
-                setValue("startDate", e.target.value ? new Date(e.target.value).toISOString() : "")
-              }
-            />
-          </div>
-          <div>
-            <label className={labelClass}>End Date</label>
-            <input
-              type="datetime-local"
-              className={inputClass}
-              onChange={(e) => setValue("endDate", e.target.value ? new Date(e.target.value).toISOString() : "")}
-            />
-          </div>
-        </div>
-
         <div>
           <label className={labelClass}>Visibility</label>
           <select className={inputClass} {...register("visibility")}>

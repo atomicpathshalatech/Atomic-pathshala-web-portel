@@ -23,6 +23,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     const data = seriesTestCreateSchema.parse(await request.json());
 
+    const openTime = data.startDate ? new Date(data.startDate) : null;
+
     const test = await prisma.test.create({
       data: {
         testSeriesId: series.id,
@@ -30,6 +32,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         instructions: data.instructions || null,
         durationMin: data.durationMin,
         templateId: data.templateId || null,
+        testType: data.testType || null,
+        examType: data.examType || null,
+        openTime: openTime,
+        syllabus: data.syllabus ? data.syllabus : undefined,
         createdById: session.user.id,
       },
     });
@@ -41,6 +47,17 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       await createSectionsFromPreset(test.id, data.templatePreset as "NEET" | "JEE" | "CHAPTER_TEST");
     } else {
       await getOrCreateDefaultSection(test.id);
+    }
+
+    // Automatically sync test syllabus to all batches where this test series was imported
+    try {
+      const { syncTestSyllabusToBatches } = await import("@/lib/batch/test-syllabus-sync");
+      await syncTestSyllabusToBatches({
+        testId: test.id,
+        testSeriesId: series.id,
+      });
+    } catch (syncErr) {
+      console.error("[SeriesTestCreate] Syllabus sync error:", syncErr);
     }
 
     await prisma.auditLog.create({

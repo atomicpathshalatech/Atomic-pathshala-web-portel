@@ -541,6 +541,7 @@ model Batch {
   activityEvents StudentActivityEvent[]
   orders      BatchOrder[]
   chapterAssignments BatchChapter[]
+  testSeries  BatchTestSeries[]
 
   @@index([status])
   @@index([targetExam])
@@ -794,8 +795,9 @@ model TestSeries {
   endDate      DateTime?
   createdAt    DateTime  @default(now())
 
-  tests    Test[]
-  teachers TestSeriesTeacher[]
+  tests        Test[]
+  teachers     TestSeriesTeacher[]
+  batchImports BatchTestSeries[]
 
   @@index([status])
   @@map("test_series")
@@ -820,6 +822,21 @@ model TestSeriesTeacher {
   @@map("test_series_teachers")
 }
 
+model BatchTestSeries {
+  id           String     @id @default(cuid())
+  batchId      String
+  testSeriesId String
+  importedAt   DateTime   @default(now())
+
+  batch      Batch      @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  testSeries TestSeries @relation(fields: [testSeriesId], references: [id], onDelete: Cascade)
+
+  @@unique([batchId, testSeriesId])
+  @@index([batchId])
+  @@index([testSeriesId])
+  @@map("batch_test_series")
+}
+
 model Test {
   id                     String       @id @default(cuid())
   testSeriesId           String?
@@ -828,6 +845,7 @@ model Test {
   templateId             String?
   name                   String
   code                   String?      @unique
+  syllabus               Json?
   languageMode           LanguageMode @default(BOTH)
   durationMin            Int
   openTime               DateTime?

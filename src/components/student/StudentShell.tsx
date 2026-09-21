@@ -10,6 +10,7 @@ import { NotificationPopupLayer } from "@/components/common/NotificationPopupLay
 import { GlobalSearchBar } from "@/components/search/GlobalSearchBar";
 import { BackButton } from "@/components/layout/BackButton";
 import { isRootRoute } from "@/lib/navigation/hierarchy";
+import { StudentUpcomingTestBanner } from "@/components/student/StudentUpcomingTestBanner";
 
 export type StudentNavItem = {
   href: string;
@@ -504,6 +505,7 @@ export function StudentShell({
                 <BackButton />
               </div>
             )}
+            <StudentUpcomingTestBanner />
             {children}
           </div>
         </main>

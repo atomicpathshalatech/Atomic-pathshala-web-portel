@@ -51,6 +51,17 @@ export function TestsSection({ course }: { course?: any }) {
               </div>
 
               <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                <a
+                  href={`/api/tests/${test.id}/syllabus-pdf?download=true`}
+                  target="_blank"
+                  rel="noreferrer"
+                  title="Download Syllabus PDF"
+                  className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition shadow-2xs cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[16px] text-emerald-600">description</span>
+                  <span>Syllabus PDF</span>
+                </a>
+
                 <TestPdfDownloadModal
                   testId={test.id}
                   testName={test.title || test.name}

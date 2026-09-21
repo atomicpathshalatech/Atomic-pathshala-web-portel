@@ -3,7 +3,29 @@
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, Trash2, Save, Sparkles, Layers, ArrowRight, Clock, Calendar, HelpCircle } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  Save,
+  Sparkles,
+  Layers,
+  ArrowRight,
+  Clock,
+  Calendar,
+  HelpCircle,
+  BookOpen,
+  CheckSquare,
+  Square,
+  Tag,
+  Check,
+  X,
+} from "lucide-react";
+import {
+  getMasterNcertSubjects,
+  getMasterNcertChapters,
+  getMasterNcertTopics,
+  type MasterNcertChapter,
+} from "@/lib/academic/master-ncert-catalog";
 
 export interface CustomSectionItem {
   id: string;
@@ -11,6 +33,16 @@ export interface CustomSectionItem {
   subject: string;
   targetCount: number;
   marksPerQuestion?: number | null;
+}
+
+export interface SyllabusChapterSelection {
+  id: string;
+  subject: string;
+  chapterTitle: string;
+  isComplete: boolean;
+  topics: string[];
+  allChapterTopics: string[];
+  customTopics: string[];
 }
 
 const DEFAULT_NEET_SECTIONS: CustomSectionItem[] = [
@@ -44,6 +76,106 @@ export function SeriesTestCreateForm({ testSeriesId }: { testSeriesId: string })
     now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
     return now.toISOString().slice(0, 16);
   });
+
+  // Syllabus State
+  const [selectedChapters, setSelectedChapters] = useState<SyllabusChapterSelection[]>([]);
+  const [syllabusSubject, setSyllabusSubject] = useState<string>("Physics");
+  const [availableChapters, setAvailableChapters] = useState<MasterNcertChapter[]>([]);
+  const [selectedChapterId, setSelectedChapterId] = useState<string>("");
+  const [customTopicInput, setCustomTopicInput] = useState<Record<string, string>>({});
+
+  // Sync available chapters when syllabusSubject changes
+  useEffect(() => {
+    const chs = getMasterNcertChapters(syllabusSubject);
+    setAvailableChapters(chs);
+    if (chs.length > 0 && chs[0]?.id) {
+      setSelectedChapterId(chs[0].id);
+    } else {
+      setSelectedChapterId("");
+    }
+  }, [syllabusSubject]);
+
+  function handleAddChapterToSyllabus() {
+    const ch = availableChapters.find((c) => c.id === selectedChapterId);
+    if (!ch) return;
+
+    const displayTitle = ch.displayTitle || ch.title;
+    if (selectedChapters.some((sc) => sc.chapterTitle === displayTitle)) {
+      toast.error("This chapter is already added to the syllabus.");
+      return;
+    }
+
+    const officialTopics = getMasterNcertTopics(syllabusSubject, ch.title).map((t) => t.title);
+
+    setSelectedChapters((prev) => [
+      ...prev,
+      {
+        id: `ch-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        subject: syllabusSubject,
+        chapterTitle: displayTitle,
+        isComplete: true, // Default: Complete Chapter selected at top
+        topics: officialTopics,
+        allChapterTopics: officialTopics,
+        customTopics: [],
+      },
+    ]);
+  }
+
+  function handleToggleCompleteChapter(id: string) {
+    setSelectedChapters((prev) =>
+      prev.map((c) =>
+        c.id === id
+          ? {
+              ...c,
+              isComplete: !c.isComplete,
+              topics: !c.isComplete ? c.allChapterTopics : c.topics,
+            }
+          : c
+      )
+    );
+  }
+
+  function handleToggleTopic(chapterId: string, topic: string) {
+    setSelectedChapters((prev) =>
+      prev.map((c) => {
+        if (c.id !== chapterId) return c;
+        const exists = c.topics.includes(topic);
+        const nextTopics = exists
+          ? c.topics.filter((t) => t !== topic)
+          : [...c.topics, topic];
+        return {
+          ...c,
+          topics: nextTopics,
+          isComplete: nextTopics.length === c.allChapterTopics.length,
+        };
+      })
+    );
+  }
+
+  function handleAddCustomTopic(chapterId: string) {
+    const text = (customTopicInput[chapterId] || "").trim();
+    if (!text) return;
+    setSelectedChapters((prev) =>
+      prev.map((c) =>
+        c.id === chapterId ? { ...c, customTopics: [...c.customTopics, text] } : c
+      )
+    );
+    setCustomTopicInput((prev) => ({ ...prev, [chapterId]: "" }));
+  }
+
+  function handleRemoveCustomTopic(chapterId: string, idx: number) {
+    setSelectedChapters((prev) =>
+      prev.map((c) =>
+        c.id === chapterId
+          ? { ...c, customTopics: c.customTopics.filter((_, i) => i !== idx) }
+          : c
+      )
+    );
+  }
+
+  function handleRemoveChapter(id: string) {
+    setSelectedChapters((prev) => prev.filter((c) => c.id !== id));
+  }
 
   // Sections State
   const [sections, setSections] = useState<CustomSectionItem[]>(DEFAULT_NEET_SECTIONS);
@@ -193,7 +325,7 @@ export function SeriesTestCreateForm({ testSeriesId }: { testSeriesId: string })
 
     setSubmitting(true);
     try {
-      // 1. Create Test
+      // 1. Create Test with Syllabus & Schedule
       const res = await fetch(`/api/team/test-series/${testSeriesId}/tests`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -203,6 +335,16 @@ export function SeriesTestCreateForm({ testSeriesId }: { testSeriesId: string })
           testType,
           examType,
           startDate: startDate ? new Date(startDate).toISOString() : undefined,
+          syllabus: {
+            chapters: selectedChapters.map((ch) => ({
+              id: ch.id,
+              subject: ch.subject,
+              chapterTitle: ch.chapterTitle,
+              isComplete: ch.isComplete,
+              topics: ch.isComplete ? [] : ch.topics,
+              customTopics: ch.customTopics,
+            })),
+          },
         }),
       });
       const json = await res.json();
@@ -231,7 +373,7 @@ export function SeriesTestCreateForm({ testSeriesId }: { testSeriesId: string })
         }),
       });
 
-      toast.success("Test created! Opening Question Entry workspace...");
+      toast.success("Test created! Syllabus synced and batch folders updated.");
       setOpen(false);
       router.push(`/team/tests/${testId}/author`);
     } catch {
@@ -259,7 +401,7 @@ export function SeriesTestCreateForm({ testSeriesId }: { testSeriesId: string })
       <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
         <div>
           <h3 className="font-extrabold text-lg text-slate-900 dark:text-white">Create Test in Series</h3>
-          <p className="text-xs text-slate-500">Configure exam blueprints, scheduling, and section targets.</p>
+          <p className="text-xs text-slate-500">Configure exam blueprints, syllabus scope, scheduling, and section targets.</p>
         </div>
         <button
           type="button"
@@ -271,7 +413,7 @@ export function SeriesTestCreateForm({ testSeriesId }: { testSeriesId: string })
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Test Type & Exam Type Dropdowns (Matching Images 4 & 5) */}
+        {/* Test Type & Exam Type Dropdowns */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1.5">
@@ -368,12 +510,251 @@ export function SeriesTestCreateForm({ testSeriesId }: { testSeriesId: string })
           </div>
         </div>
 
-        {/* SECTIONS BUILDER BLOCK (Matching Images 2 & 3) */}
+        {/* TEST SYLLABUS SELECTION BLOCK */}
         <div className="bg-slate-50/70 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 sm:p-6 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
             <div>
               <div className="flex items-center gap-2">
-                <h4 className="font-extrabold text-base text-slate-900 dark:text-white">Sections</h4>
+                <BookOpen className="w-4 h-4 text-blue-600" />
+                <h4 className="font-extrabold text-base text-slate-900 dark:text-white">Test Syllabus Scope</h4>
+                <span className="text-xs font-semibold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 px-2.5 py-0.5 rounded-full">
+                  {selectedChapters.length} Chapter{selectedChapters.length === 1 ? "" : "s"} Selected
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Select chapters &amp; topics for this test. An official Syllabus PDF and batch announcement will be created automatically.
+              </p>
+            </div>
+          </div>
+
+          {/* Chapter Selector Dropdown Row */}
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-3">
+            <div className="w-full sm:w-44">
+              <label className="block text-[11px] font-bold text-slate-500 mb-1">Subject</label>
+              <select
+                value={syllabusSubject}
+                onChange={(e) => setSyllabusSubject(e.target.value)}
+                className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 py-2 px-3 text-xs text-slate-900 dark:text-white outline-none"
+              >
+                <option value="Physics">Physics</option>
+                <option value="Chemistry">Chemistry</option>
+                <option value="Biology">Biology</option>
+                <option value="Mathematics">Mathematics</option>
+              </select>
+            </div>
+
+            <div className="flex-1 min-w-[220px]">
+              <label className="block text-[11px] font-bold text-slate-500 mb-1">Select Chapter</label>
+              <select
+                value={selectedChapterId}
+                onChange={(e) => setSelectedChapterId(e.target.value)}
+                className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 py-2 px-3 text-xs text-slate-900 dark:text-white outline-none"
+              >
+                {availableChapters.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.displayTitle || c.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleAddChapterToSyllabus}
+              className="mt-5 sm:mt-5 flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition shadow-sm shrink-0"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add Chapter</span>
+            </button>
+          </div>
+
+          {/* Selected Chapters List & Topic Selection */}
+          {selectedChapters.length === 0 ? (
+            <div className="text-center py-6 border border-dashed border-slate-300 dark:border-slate-800 rounded-2xl p-4 text-xs text-slate-400">
+              No chapters added yet. Use the selector above to add chapters to this test&apos;s syllabus.
+            </div>
+          ) : (
+            <div className="space-y-4 pt-1">
+              {selectedChapters.map((ch, idx) => (
+                <div
+                  key={ch.id}
+                  className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs space-y-3"
+                >
+                  {/* Chapter Header */}
+                  <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-extrabold text-[10px] flex items-center justify-center">
+                        {idx + 1}
+                      </span>
+                      <h5 className="font-extrabold text-xs sm:text-sm text-slate-900 dark:text-white">
+                        {ch.chapterTitle}
+                      </h5>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                        {ch.subject}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveChapter(ch.id)}
+                      className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition"
+                      title="Remove Chapter"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Complete Chapter Option at Top */}
+                  <div
+                    onClick={() => handleToggleCompleteChapter(ch.id)}
+                    className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer select-none transition ${
+                      ch.isComplete
+                        ? "bg-blue-50/80 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800 text-blue-900 dark:text-blue-200"
+                        : "bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div
+                        className={`w-5 h-5 rounded flex items-center justify-center border transition ${
+                          ch.isComplete
+                            ? "bg-blue-600 border-blue-600 text-white"
+                            : "border-slate-400 bg-white dark:bg-slate-900"
+                        }`}
+                      >
+                        {ch.isComplete && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                      </div>
+                      <div>
+                        <p className="font-extrabold text-xs">Complete Chapter</p>
+                        <p className="text-[11px] opacity-75">
+                          Includes the entire chapter syllabus and all subtopics
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-blue-200/60 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300">
+                      {ch.isComplete ? "All Topics Active" : "Custom Topic Selection"}
+                    </span>
+                  </div>
+
+                  {/* Subtopics List (Shown if not complete chapter or for inspection) */}
+                  {!ch.isComplete && ch.allChapterTopics.length > 0 && (
+                    <div className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl space-y-2 border border-slate-200/70 dark:border-slate-800">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-slate-500">
+                        <span>Select Individual Topics:</span>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSelectedChapters((prev) =>
+                                prev.map((c) =>
+                                  c.id === ch.id
+                                    ? { ...c, topics: c.allChapterTopics, isComplete: true }
+                                    : c
+                                )
+                              )
+                            }
+                            className="text-blue-600 hover:underline"
+                          >
+                            Select All
+                          </button>
+                          <span>·</span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSelectedChapters((prev) =>
+                                prev.map((c) =>
+                                  c.id === ch.id ? { ...c, topics: [], isComplete: false } : c
+                                )
+                              )
+                            }
+                            className="text-slate-500 hover:underline"
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                        {ch.allChapterTopics.map((topic) => {
+                          const isChecked = ch.topics.includes(topic);
+                          return (
+                            <label
+                              key={topic}
+                              className="flex items-center gap-2 p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 cursor-pointer hover:border-blue-400 text-xs text-slate-800 dark:text-slate-200 transition"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => handleToggleTopic(ch.id, topic)}
+                                className="rounded text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                              />
+                              <span className="truncate">{topic}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Custom Topics Area */}
+                  <div className="space-y-2 pt-1">
+                    {ch.customTopics.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {ch.customTopics.map((ct, ctIdx) => (
+                          <span
+                            key={ctIdx}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs font-semibold"
+                          >
+                            <span>{ct}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveCustomTopic(ch.id, ctIdx)}
+                              className="text-amber-500 hover:text-amber-800 ml-0.5"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Add Custom Topic Input */}
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder="Add custom topic (e.g. Special Numerical Set, Lab Practical)..."
+                        value={customTopicInput[ch.id] || ""}
+                        onChange={(e) =>
+                          setCustomTopicInput((prev) => ({ ...prev, [ch.id]: e.target.value }))
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleAddCustomTopic(ch.id);
+                          }
+                        }}
+                        className="flex-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 py-1.5 px-3 text-xs text-slate-900 dark:text-white outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleAddCustomTopic(ch.id)}
+                        className="px-3 py-1.5 rounded-xl bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs transition"
+                      >
+                        + Add Topic
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* SECTIONS BUILDER BLOCK */}
+        <div className="bg-slate-50/70 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 sm:p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="font-extrabold text-base text-slate-900 dark:text-white">Sections &amp; Blueprints</h4>
                 <span className="text-xs font-medium text-slate-500">
                   {totalQuestions} questions total (defined now, added later)
                 </span>
@@ -414,7 +795,7 @@ export function SeriesTestCreateForm({ testSeriesId }: { testSeriesId: string })
 
           {/* Sections List */}
           <div className="space-y-3 pt-1">
-            {sections.map((s, idx) => (
+            {sections.map((s) => (
               <div
                 key={s.id}
                 className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 flex flex-wrap sm:flex-nowrap items-center gap-3 shadow-sm"
