@@ -174,9 +174,9 @@ export function BatchForm(props: Props) {
         <div className="space-y-1.5">
           <label className="font-label-md text-label-md text-on-surface">Description (optional)</label>
           <textarea
-            rows={3}
-            className={inputClass}
-            placeholder="What this batch covers, timing, who it's for..."
+            rows={6}
+            className={`${inputClass} min-h-[140px]`}
+            placeholder="What this batch covers, timing, curriculum details, who it's for..."
             {...register("description")}
           />
         </div>

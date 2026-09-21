@@ -88,8 +88,9 @@ export function TestSeriesForm() {
         <div>
           <label className={labelClass}>Description</label>
           <textarea
-            className={`${inputClass} min-h-[90px]`}
-            placeholder="What this series covers..."
+            rows={6}
+            className={`${inputClass} min-h-[140px]`}
+            placeholder="What this series covers, syllabus scope, pattern, target examination..."
             {...register("description")}
           />
         </div>

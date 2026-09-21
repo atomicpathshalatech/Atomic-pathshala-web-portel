@@ -23,7 +23,7 @@ export const SCHEDULE_SESSION_STATUS_OPTIONS = [
 export const batchCreateSchema = z.object({
   name: z.string().min(2, "Name is required"),
   code: z.string().min(2, "Batch code is required").max(40, "Keep the code under 40 characters"),
-  description: z.string().max(1000, "Keep it under 1000 characters").optional(),
+  description: z.string().max(10000, "Keep it under 10000 characters").optional().or(z.literal("")),
   targetExam: z.string().optional(),
   courseId: z.string().optional().or(z.literal("")),
   status: z.enum(BATCH_STATUS_OPTIONS).default("UPCOMING"),

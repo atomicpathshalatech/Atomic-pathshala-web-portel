@@ -4,7 +4,7 @@ export const testSeriesStatusEnum = z.enum(["DRAFT", "ACTIVE", "ARCHIVED"]);
 
 export const testSeriesSchema = z.object({
   name: z.string().trim().min(3, "Name is required").max(200),
-  description: z.string().trim().max(2000).optional().or(z.literal("")),
+  description: z.string().trim().max(10000, "Keep description under 10000 characters").optional().or(z.literal("")),
   targetBatch: z.string().trim().max(120).optional().or(z.literal("")),
   className: z.string().trim().max(60).optional().or(z.literal("")),
   course: z.string().trim().max(60).optional().or(z.literal("")),

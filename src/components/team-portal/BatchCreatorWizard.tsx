@@ -239,10 +239,10 @@ export function BatchCreatorWizard({
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-on-surface">Batch Description</label>
             <textarea
-              rows={3}
+              rows={6}
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
-              className="w-full rounded-xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-2.5 text-xs text-on-surface outline-none focus:ring-2 focus:ring-primary"
+              className="w-full min-h-[140px] rounded-xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-2.5 text-xs text-on-surface outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
         </div>
