@@ -106,7 +106,12 @@ export default async function StudentTestsPage() {
                   select: { id: true, status: true, score: true },
                 },
                 sections: {
-                  select: { _count: { select: { questions: true } } },
+                  select: {
+                    id: true,
+                    targetCount: true,
+                    marksPerQuestion: true,
+                    _count: { select: { questions: true } },
+                  },
                 },
               },
             },
@@ -223,15 +228,25 @@ export default async function StudentTestsPage() {
             ? "IN_PROGRESS"
             : "COMPLETED"
           : "PENDING";
-        const qCount =
-          t.sections?.reduce((sum: number, s: any) => sum + (s._count?.questions || 0), 0) || 15;
+        const assignedCount =
+          t.sections?.reduce((sum: number, s: any) => sum + (s._count?.questions || 0), 0) || 0;
+        const targetCount =
+          t.sections?.reduce((sum: number, s: any) => sum + (s.targetCount || 0), 0) || 0;
+        const qCount = targetCount > 0 ? targetCount : assignedCount > 0 ? assignedCount : 15;
+        const computedMarks =
+          t.sections?.reduce((sum: number, s: any) => {
+            const c = s.targetCount > 0 ? s.targetCount : s._count?.questions || 0;
+            const m = s.marksPerQuestion ?? t.correctMarks ?? 4;
+            return sum + c * m;
+          }, 0) || 0;
+        const totalMarks = computedMarks > 0 ? computedMarks : qCount * (t.correctMarks || 4);
 
         return {
           id: t.id,
           name: t.name,
           durationMin: t.durationMin || 45,
           questionCount: qCount,
-          totalMarks: qCount * (t.correctMarks || 4),
+          totalMarks,
           status,
           score: attempt?.score ?? null,
         };
@@ -289,7 +304,12 @@ export default async function StudentTestsPage() {
               select: { id: true, status: true, score: true },
             },
             sections: {
-              select: { _count: { select: { questions: true } } },
+              select: {
+                id: true,
+                targetCount: true,
+                marksPerQuestion: true,
+                _count: { select: { questions: true } },
+              },
             },
           },
           orderBy: { createdAt: "asc" },
@@ -319,7 +339,12 @@ export default async function StudentTestsPage() {
                 select: { id: true, status: true, score: true },
               },
               sections: {
-                select: { _count: { select: { questions: true } } },
+                select: {
+                  id: true,
+                  targetCount: true,
+                  marksPerQuestion: true,
+                  _count: { select: { questions: true } },
+                },
               },
             },
           },
@@ -337,7 +362,22 @@ export default async function StudentTestsPage() {
   for (const ts of dbTestSeries) {
     const testsList = (ts.tests || []).map((t: any) => {
       const attempt = t.attempts?.[0];
-      const qCount = t.sections?.reduce((sum: number, s: any) => sum + (s._count?.questions || 0), 0) || 15;
+      const assignedCount =
+        t.sections?.reduce((sum: number, s: any) => sum + (s._count?.questions || 0), 0) || 0;
+      const targetCount =
+        t.sections?.reduce((sum: number, s: any) => sum + (s.targetCount || 0), 0) || 0;
+      const isJEE = (t.examType || ts.examType || "").toUpperCase().includes("JEE");
+      const defaultExamCount = isJEE ? 75 : t.durationMin >= 180 ? 180 : 45;
+      const qCount = targetCount > 0 ? targetCount : assignedCount > 0 ? assignedCount : defaultExamCount;
+
+      const computedMarks =
+        t.sections?.reduce((sum: number, s: any) => {
+          const c = s.targetCount > 0 ? s.targetCount : s._count?.questions || 0;
+          const m = s.marksPerQuestion ?? t.correctMarks ?? 4;
+          return sum + c * m;
+        }, 0) || 0;
+      const totalMarks = computedMarks > 0 ? computedMarks : qCount * (t.correctMarks || 4);
+
       const isCompleted = attempt && attempt.status !== "IN_PROGRESS";
       const inProg = attempt?.status === "IN_PROGRESS";
       const openTime = t.openTime ? new Date(t.openTime) : null;
@@ -369,7 +409,7 @@ export default async function StudentTestsPage() {
         name: t.name,
         durationMin: t.durationMin || 180,
         questionCount: qCount,
-        totalMarks: qCount * (t.correctMarks || 4),
+        totalMarks,
         statusLabel,
         tone,
         canAttempt,
@@ -410,7 +450,22 @@ export default async function StudentTestsPage() {
 
     const t = bs.test;
     const attempt = t.attempts?.[0];
-    const qCount = t.sections?.reduce((sum: number, s: any) => sum + (s._count?.questions || 0), 0) || 15;
+    const assignedCount =
+      t.sections?.reduce((sum: number, s: any) => sum + (s._count?.questions || 0), 0) || 0;
+    const targetCount =
+      t.sections?.reduce((sum: number, s: any) => sum + (s.targetCount || 0), 0) || 0;
+    const isJEE = (t.examType || bs.batch?.targetExam || "").toUpperCase().includes("JEE");
+    const defaultExamCount = isJEE ? 75 : t.durationMin >= 180 ? 180 : 45;
+    const qCount = targetCount > 0 ? targetCount : assignedCount > 0 ? assignedCount : defaultExamCount;
+
+    const computedMarks =
+      t.sections?.reduce((sum: number, s: any) => {
+        const c = s.targetCount > 0 ? s.targetCount : s._count?.questions || 0;
+        const m = s.marksPerQuestion ?? t.correctMarks ?? 4;
+        return sum + c * m;
+      }, 0) || 0;
+    const totalMarks = computedMarks > 0 ? computedMarks : qCount * (t.correctMarks || 4);
+
     const isCompleted = attempt && attempt.status !== "IN_PROGRESS";
     const inProg = attempt?.status === "IN_PROGRESS";
     const isUpcoming = !isCompleted && !inProg && now < bs.startsAt;
@@ -440,7 +495,7 @@ export default async function StudentTestsPage() {
       name: t.name || bs.title,
       durationMin: t.durationMin || 180,
       questionCount: qCount,
-      totalMarks: qCount * (t.correctMarks || 4),
+      totalMarks,
       statusLabel,
       tone,
       canAttempt,
