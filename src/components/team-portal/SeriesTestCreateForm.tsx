@@ -33,6 +33,7 @@ export interface CustomSectionItem {
   subject: string;
   targetCount: number;
   marksPerQuestion?: number | null;
+  negativeMarks?: number | null;
 }
 
 export interface SyllabusChapterSelection {
@@ -46,19 +47,19 @@ export interface SyllabusChapterSelection {
 }
 
 const DEFAULT_NEET_SECTIONS: CustomSectionItem[] = [
-  { id: "sec-1", name: "Physics", subject: "Physics", targetCount: 45, marksPerQuestion: 4 },
-  { id: "sec-2", name: "Chemistry", subject: "Chemistry", targetCount: 45, marksPerQuestion: 4 },
-  { id: "sec-3", name: "Biology", subject: "Biology", targetCount: 90, marksPerQuestion: 4 },
+  { id: "sec-1", name: "Physics", subject: "Physics", targetCount: 45, marksPerQuestion: 4, negativeMarks: -1 },
+  { id: "sec-2", name: "Chemistry", subject: "Chemistry", targetCount: 45, marksPerQuestion: 4, negativeMarks: -1 },
+  { id: "sec-3", name: "Biology", subject: "Biology", targetCount: 90, marksPerQuestion: 4, negativeMarks: -1 },
 ];
 
 const DEFAULT_JEE_SECTIONS: CustomSectionItem[] = [
-  { id: "sec-1", name: "Physics", subject: "Physics", targetCount: 30, marksPerQuestion: 4 },
-  { id: "sec-2", name: "Chemistry", subject: "Chemistry", targetCount: 30, marksPerQuestion: 4 },
-  { id: "sec-3", name: "Mathematics", subject: "Mathematics", targetCount: 30, marksPerQuestion: 4 },
+  { id: "sec-1", name: "Physics", subject: "Physics", targetCount: 30, marksPerQuestion: 4, negativeMarks: -1 },
+  { id: "sec-2", name: "Chemistry", subject: "Chemistry", targetCount: 30, marksPerQuestion: 4, negativeMarks: -1 },
+  { id: "sec-3", name: "Mathematics", subject: "Mathematics", targetCount: 30, marksPerQuestion: 4, negativeMarks: -1 },
 ];
 
 const DEFAULT_CHAPTER_SECTIONS: CustomSectionItem[] = [
-  { id: "sec-1", name: "Physics", subject: "Physics", targetCount: 30, marksPerQuestion: 4 },
+  { id: "sec-1", name: "Physics", subject: "Physics", targetCount: 30, marksPerQuestion: 4, negativeMarks: -1 },
 ];
 
 export const ALL_SYLLABUS_SUBJECTS = [
@@ -325,6 +326,7 @@ export function SeriesTestCreateForm({ testSeriesId }: { testSeriesId: string })
             subject: sec.subject,
             targetCount: sec.targetCount,
             marksPerQuestion: sec.marksPerQuestion,
+            negativeMarks: sec.negativeMarks ?? -1,
           }))
         );
       }
@@ -341,6 +343,7 @@ export function SeriesTestCreateForm({ testSeriesId }: { testSeriesId: string })
         subject: "Physics",
         targetCount: 30,
         marksPerQuestion: 4,
+        negativeMarks: -1,
       },
     ]);
   }
@@ -376,8 +379,8 @@ export function SeriesTestCreateForm({ testSeriesId }: { testSeriesId: string })
             name: s.name,
             subject: s.subject,
             targetCount: Number(s.targetCount) || 30,
-            marksPerQuestion: Number(s.marksPerQuestion) || 4,
-            negativeMarks: -1,
+            marksPerQuestion: s.marksPerQuestion !== undefined && s.marksPerQuestion !== null ? Number(s.marksPerQuestion) : 4,
+            negativeMarks: s.negativeMarks !== undefined && s.negativeMarks !== null ? Number(s.negativeMarks) : -1,
             order: idx,
           })),
         }),
@@ -445,8 +448,8 @@ export function SeriesTestCreateForm({ testSeriesId }: { testSeriesId: string })
             name: s.name,
             subject: s.subject,
             targetCount: Number(s.targetCount) || 30,
-            marksPerQuestion: Number(s.marksPerQuestion) || 4,
-            negativeMarks: -1,
+            marksPerQuestion: s.marksPerQuestion !== undefined && s.marksPerQuestion !== null ? Number(s.marksPerQuestion) : 4,
+            negativeMarks: s.negativeMarks !== undefined && s.negativeMarks !== null ? Number(s.negativeMarks) : -1,
             order: idx,
           })),
         }),
@@ -1003,7 +1006,7 @@ export function SeriesTestCreateForm({ testSeriesId }: { testSeriesId: string })
                 key={s.id}
                 className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 flex flex-wrap sm:flex-nowrap items-center gap-3 shadow-sm"
               >
-                <div className="w-full sm:w-1/3">
+                <div className="flex-1 min-w-[130px]">
                   <label className="block text-[11px] font-bold text-slate-500 mb-1">Section Name</label>
                   <input
                     type="text"
@@ -1014,7 +1017,7 @@ export function SeriesTestCreateForm({ testSeriesId }: { testSeriesId: string })
                   />
                 </div>
 
-                <div className="w-full sm:w-1/4">
+                <div className="w-full sm:w-32">
                   <label className="block text-[11px] font-bold text-slate-500 mb-1">Subject</label>
                   <select
                     value={s.subject}
@@ -1029,7 +1032,7 @@ export function SeriesTestCreateForm({ testSeriesId }: { testSeriesId: string })
                   </select>
                 </div>
 
-                <div className="w-1/2 sm:w-28">
+                <div className="w-1/3 sm:w-20">
                   <label className="block text-[11px] font-bold text-slate-500 mb-1">Questions</label>
                   <input
                     type="number"
@@ -1037,17 +1040,43 @@ export function SeriesTestCreateForm({ testSeriesId }: { testSeriesId: string })
                     max={200}
                     value={s.targetCount}
                     onChange={(e) => handleUpdateSection(s.id, "targetCount", Number(e.target.value))}
-                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 py-1.5 px-3 text-xs text-slate-900 dark:text-white outline-none font-bold"
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 py-1.5 px-2 text-xs text-slate-900 dark:text-white outline-none font-bold text-center"
                   />
                 </div>
 
-                <div className="w-1/2 sm:w-28">
-                  <label className="block text-[11px] font-bold text-slate-500 mb-1">Marks/Q (opt)</label>
+                <div className="w-1/3 sm:w-24">
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">Marks/Q</label>
                   <input
-                    type="text"
-                    value={s.marksPerQuestion || "uses test"}
-                    onChange={(e) => handleUpdateSection(s.id, "marksPerQuestion", Number(e.target.value) || 4)}
-                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 py-1.5 px-3 text-xs text-slate-700 dark:text-slate-300 outline-none"
+                    type="number"
+                    step="0.5"
+                    value={s.marksPerQuestion !== undefined && s.marksPerQuestion !== null ? s.marksPerQuestion : 4}
+                    onChange={(e) =>
+                      handleUpdateSection(
+                        s.id,
+                        "marksPerQuestion",
+                        e.target.value === "" ? 4 : Number(e.target.value)
+                      )
+                    }
+                    placeholder="4"
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 py-1.5 px-2 text-xs text-slate-700 dark:text-slate-300 outline-none text-center"
+                  />
+                </div>
+
+                <div className="w-1/3 sm:w-24">
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">Negative (opt)</label>
+                  <input
+                    type="number"
+                    step="0.25"
+                    value={s.negativeMarks !== undefined && s.negativeMarks !== null ? s.negativeMarks : -1}
+                    onChange={(e) =>
+                      handleUpdateSection(
+                        s.id,
+                        "negativeMarks",
+                        e.target.value === "" ? -1 : Number(e.target.value)
+                      )
+                    }
+                    placeholder="-1"
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 py-1.5 px-2 text-xs text-rose-600 dark:text-rose-400 font-semibold outline-none text-center"
                   />
                 </div>
 

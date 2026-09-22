@@ -70,8 +70,14 @@ export async function POST(
             name: s.name || `Section ${idx + 1}`,
             subject: s.subject || "General",
             targetCount: Number(s.targetCount) || 30,
-            marksPerQuestion: Number(s.marksPerQuestion) || 4,
-            negativeMarks: Number(s.negativeMarks) || -1,
+            marksPerQuestion:
+              s.marksPerQuestion !== undefined && s.marksPerQuestion !== null && !isNaN(Number(s.marksPerQuestion))
+                ? Number(s.marksPerQuestion)
+                : 4,
+            negativeMarks:
+              s.negativeMarks !== undefined && s.negativeMarks !== null && !isNaN(Number(s.negativeMarks))
+                ? Number(s.negativeMarks)
+                : -1,
             order: s.order ?? idx,
           },
         })

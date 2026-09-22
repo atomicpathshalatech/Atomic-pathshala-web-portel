@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { TestSeriesDeleteButton } from "@/components/team-portal/TestSeriesDeleteButton";
+import { TestSeriesEditModal } from "@/components/team-portal/TestSeriesEditModal";
 import { cleanBatchName } from "@/lib/academic/canonical-courses";
 
 export const metadata: Metadata = {
@@ -25,6 +26,10 @@ export default async function TestSeriesListPage({
   if (!canRead) redirect("/team");
 
   const canCreate = await hasPermission(session.user.id, PERMISSIONS.TEST_PUBLISH);
+  const canEdit =
+    (await hasPermission(session.user.id, PERMISSIONS.TEST_PUBLISH)) ||
+    (await hasPermission(session.user.id, PERMISSIONS.TEST_UPDATE)) ||
+    (await hasPermission(session.user.id, PERMISSIONS.TEST_CREATE));
 
   const activeStatus = searchParams.status || "ALL";
 
@@ -193,6 +198,25 @@ export default async function TestSeriesListPage({
                         >
                           Manage <span className="material-symbols-outlined text-sm">chevron_right</span>
                         </Link>
+                        {canEdit && (
+                          <TestSeriesEditModal
+                            series={{
+                              id: s.id,
+                              code: s.code,
+                              name: s.name,
+                              description: s.description,
+                              targetBatch: s.targetBatch,
+                              className: s.className,
+                              course: s.course,
+                              examType: s.examType,
+                              tags: s.tags,
+                              thumbnailUrl: s.thumbnailUrl,
+                              visibility: s.visibility,
+                              status: s.status,
+                            }}
+                            triggerVariant="table-action"
+                          />
+                        )}
                         {canCreate && (
                           <TestSeriesDeleteButton seriesId={s.id} seriesCode={s.code} seriesName={s.name} />
                         )}

@@ -367,7 +367,7 @@ export function NotificationFeed({
           </div>
         ) : (
           visible.map((n) => {
-            const visual = getNotificationVisual(n.type ?? "SYSTEM_ANNOUNCEMENT");
+            const visual = getNotificationVisual(n.type, n.title, n.body, n.category);
             const actionLabel = n.actionType
               ? ACTION_LABELS[n.actionType] || n.actionType.replace(/_/g, " ")
               : n.actionUrl || n.deepLink
@@ -382,6 +382,9 @@ export function NotificationFeed({
               n.category ||
               "Notice";
 
+            // Clean decorative emojis from start of title if live badge or type icon already indicates it
+            const displayTitle = n.title.replace(/^[🔴🟢🟠🟡🔵🟣\s]+/, "").trim();
+
             return (
               <div
                 key={n.id}
@@ -394,91 +397,120 @@ export function NotificationFeed({
                     handleActionClick(n);
                   }
                 }}
-                className={`w-full p-2.5 sm:p-3 rounded-xl border transition-all duration-150 cursor-pointer text-left group select-none ${
+                className={`relative w-full rounded-2xl border transition-all duration-150 cursor-pointer text-left group select-none overflow-hidden ${
                   !n.isRead
-                    ? "bg-white dark:bg-slate-900 border-blue-300 dark:border-blue-900/80 shadow-xs ring-1 ring-blue-500/10 hover:border-blue-500"
-                    : "bg-white/80 dark:bg-slate-900/80 border-slate-200/90 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-white dark:hover:bg-slate-900 shadow-2xs"
-                } active:scale-[0.99]`}
+                    ? `${visual.cardBorder} ${visual.cardBg} shadow-xs ring-1 ring-black/5 dark:ring-white/5`
+                    : "bg-white/90 dark:bg-slate-900/90 border-slate-200/80 dark:border-slate-800/80 hover:bg-white dark:hover:bg-slate-900 shadow-2xs"
+                } ${visual.cardHoverBorder} hover:shadow-md active:scale-[0.995]`}
               >
-                <div className="flex items-start gap-2.5 sm:gap-3">
-                  {/* Compact Visual Icon */}
+                {/* Left accent gradient bar */}
+                <div
+                  className={`absolute left-0 top-0 bottom-0 w-1 sm:w-1.5 bg-gradient-to-b ${visual.accentBar}`}
+                />
+
+                <div className="py-2.5 px-3 sm:py-2.5 sm:px-3.5 pl-3.5 sm:pl-4 flex items-center gap-2.5 sm:gap-3">
+                  {/* Vibrant Gradient Icon */}
                   <div
-                    className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
-                      isUrgent
-                        ? "bg-red-50 text-red-600 dark:bg-red-950/50 dark:text-red-400 border border-red-200 dark:border-red-900/50"
-                        : isHigh
-                        ? "bg-amber-50 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400 border border-amber-200 dark:border-amber-900/50"
-                        : "bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400 border border-blue-200/80 dark:border-blue-900/40"
-                    }`}
+                    className={`w-8 h-8 sm:w-8 sm:h-8 rounded-xl bg-gradient-to-br ${visual.iconGradient} text-white shadow-sm ${visual.iconShadow} flex items-center justify-center shrink-0 transition-transform group-hover:scale-105`}
                   >
-                    <span className="material-symbols-outlined text-sm sm:text-base">
+                    <span className="material-symbols-outlined text-base sm:text-lg">
                       {visual.icon}
                     </span>
                   </div>
 
                   {/* Notification Content */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-1.5">
-                      <div className="flex items-center gap-1.5 min-w-0">
+                    {/* Top Row: Badges, Title, Relative Time */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0 flex-wrap sm:flex-nowrap">
                         {!n.isRead && (
                           <span
-                            className="w-2 h-2 rounded-full bg-blue-600 shrink-0"
+                            className="w-2 h-2 rounded-full bg-blue-600 shrink-0 shadow-xs"
                             title="Unread"
                           />
                         )}
-                        <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-slate-100 truncate">
-                          {n.title}
+
+                        {/* Specific Live / Rescheduled / Category Badges */}
+                        {visual.isLive ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full text-[8.5px] font-black uppercase tracking-wider bg-rose-600 text-white shadow-xs shrink-0 animate-pulse">
+                            <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                            LIVE NOW
+                          </span>
+                        ) : visual.isRescheduled ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-md text-[8.5px] font-black uppercase tracking-wider bg-amber-500 text-white shadow-xs shrink-0">
+                            <span className="material-symbols-outlined text-[10px]">update</span>
+                            RESCHEDULED
+                          </span>
+                        ) : (
+                          <span
+                            className={`text-[8.5px] px-1.5 py-0.2 rounded-md font-bold uppercase tracking-wider shrink-0 ${
+                              visual.variant === "test"
+                                ? "bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
+                                : visual.variant === "material"
+                                ? "bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                                : visual.variant === "offer"
+                                ? "bg-pink-100 dark:bg-pink-950 text-pink-700 dark:text-pink-300 border border-pink-200 dark:border-pink-800"
+                                : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
+                            }`}
+                          >
+                            {visual.badgeLabel || categoryName}
+                          </span>
+                        )}
+
+                        <h4 className="text-xs sm:text-[13px] font-extrabold text-slate-900 dark:text-slate-100 truncate">
+                          {displayTitle}
                         </h4>
+
                         {isUrgent && (
-                          <span className="px-1 py-0.2 text-[8px] font-black bg-red-600 text-white rounded shrink-0 uppercase tracking-wider">
+                          <span className="px-1.5 py-0.2 text-[8px] font-black bg-red-600 text-white rounded shrink-0 uppercase tracking-wider">
                             URGENT
                           </span>
                         )}
                         {isHigh && (
-                          <span className="px-1 py-0.2 text-[8px] font-black bg-amber-500 text-black rounded shrink-0 uppercase tracking-wider">
+                          <span className="px-1.5 py-0.2 text-[8px] font-black bg-amber-500 text-black rounded shrink-0 uppercase tracking-wider">
                             HIGH
                           </span>
                         )}
                       </div>
 
-                      <span className="text-[10px] text-slate-400 whitespace-nowrap shrink-0">
+                      <span className="text-[10px] text-slate-400 whitespace-nowrap shrink-0 ml-auto font-medium">
                         {formatDistanceToNow(new Date(n.createdAt), { addSuffix: true })}
                       </span>
                     </div>
 
-                    <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5 line-clamp-2 leading-relaxed">
-                      {n.body}
-                    </p>
+                    {/* Bottom Row: Message body + Inline Action Link */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 mt-0.5">
+                      <p className="text-[11px] sm:text-xs text-slate-600 dark:text-slate-300 line-clamp-1 sm:line-clamp-2 leading-snug flex-1">
+                        {n.body}
+                      </p>
 
-                    {/* Compact Footer Line */}
-                    <div className="mt-1.5 flex items-center justify-between gap-2 pt-1 border-t border-slate-100/80 dark:border-slate-800/60">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[9px] px-1.5 py-0.2 rounded font-semibold bg-slate-100 dark:bg-slate-800 text-slate-500 uppercase">
-                          {categoryName}
-                        </span>
-
+                      <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
                         {actionLabel && (
-                          <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 group-hover:underline flex items-center gap-0.5">
+                          <span
+                            className={`inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-bold px-2.5 py-0.5 rounded-lg transition-all ${visual.actionBgClass}`}
+                          >
                             <span>{actionLabel}</span>
-                            <span className="material-symbols-outlined text-xs">arrow_forward</span>
+                            <span className="material-symbols-outlined text-[12px] transition-transform group-hover:translate-x-0.5">
+                              arrow_forward
+                            </span>
                           </span>
                         )}
-                      </div>
 
-                      {!n.isRead && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            markOneRead(n.id);
-                          }}
-                          className="text-[10px] text-slate-400 hover:text-blue-600 flex items-center gap-0.5 px-1 py-0.5 rounded transition"
-                          title="Mark as read"
-                        >
-                          <span className="material-symbols-outlined text-xs">done</span>
-                          <span className="hidden sm:inline">Mark read</span>
-                        </button>
-                      )}
+                        {!n.isRead && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              markOneRead(n.id);
+                            }}
+                            className="text-[10px] text-slate-400 hover:text-blue-600 flex items-center gap-0.5 px-1 py-0.5 rounded transition"
+                            title="Mark as read"
+                          >
+                            <span className="material-symbols-outlined text-xs">done</span>
+                            <span className="hidden sm:inline">Mark read</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>

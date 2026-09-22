@@ -7,6 +7,7 @@ import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { SeriesTestCreateForm } from "@/components/team-portal/SeriesTestCreateForm";
 import { SeriesTestsList } from "@/components/team-portal/SeriesTestsList";
+import { TestSeriesEditModal } from "@/components/team-portal/TestSeriesEditModal";
 import { cleanBatchName, formatDescriptionText } from "@/lib/academic/canonical-courses";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +25,10 @@ export default async function TestSeriesDetailPage({ params }: { params: { id: s
   if (!canRead) redirect("/team");
 
   const canCreateTest = await hasPermission(session.user.id, PERMISSIONS.TEST_CREATE);
+  const canEditSeries =
+    (await hasPermission(session.user.id, PERMISSIONS.TEST_PUBLISH)) ||
+    (await hasPermission(session.user.id, PERMISSIONS.TEST_UPDATE)) ||
+    (await hasPermission(session.user.id, PERMISSIONS.TEST_CREATE));
 
   const series = await prisma.testSeries.findUnique({
     where: { id: params.id },
@@ -67,15 +72,36 @@ export default async function TestSeriesDetailPage({ params }: { params: { id: s
             </div>
           )}
         </div>
-        <span
-          className={`px-3.5 py-1 rounded-full text-xs font-extrabold uppercase tracking-wider ${
-            series.visibility === "PUBLIC"
-              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-              : "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
-          }`}
-        >
-          {series.visibility}
-        </span>
+        <div className="flex items-center gap-2.5 self-start">
+          <span
+            className={`px-3.5 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-wider ${
+              series.visibility === "PUBLIC"
+                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                : "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
+            }`}
+          >
+            {series.visibility}
+          </span>
+          {canEditSeries && (
+            <TestSeriesEditModal
+              series={{
+                id: series.id,
+                code: series.code,
+                name: series.name,
+                description: series.description,
+                targetBatch: series.targetBatch,
+                className: series.className,
+                course: series.course,
+                examType: series.examType,
+                tags: series.tags,
+                thumbnailUrl: series.thumbnailUrl,
+                visibility: series.visibility,
+                status: series.status,
+              }}
+              triggerVariant="button"
+            />
+          )}
+        </div>
       </div>
 
       {/* Overview Stat Cards */}

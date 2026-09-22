@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
+import { requirePermission, hasPermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { testSeriesSchema } from "@/lib/validation/test-series";
@@ -28,7 +28,11 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
-    await requirePermission(session.user.id, PERMISSIONS.TEST_PUBLISH);
+    const canEdit =
+      (await hasPermission(session.user.id, PERMISSIONS.TEST_PUBLISH)) ||
+      (await hasPermission(session.user.id, PERMISSIONS.TEST_UPDATE)) ||
+      (await hasPermission(session.user.id, PERMISSIONS.TEST_CREATE));
+    if (!canEdit) throw new UnauthorizedError();
 
     const existing = await prisma.testSeries.findUnique({ where: { id: params.id } });
     if (!existing) return apiError("Test series not found", 404);
@@ -45,7 +49,9 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         ...(data.course !== undefined ? { course: data.course || null } : {}),
         ...(data.examType !== undefined ? { examType: data.examType || null } : {}),
         ...(data.tags !== undefined ? { tags: data.tags.length > 0 ? data.tags.join(",") : null } : {}),
+        ...(data.thumbnailUrl !== undefined ? { thumbnailUrl: data.thumbnailUrl || null } : {}),
         ...(data.visibility !== undefined ? { visibility: data.visibility } : {}),
+        ...(data.status !== undefined ? { status: data.status } : {}),
         ...(data.startDate !== undefined ? { startDate: data.startDate ? new Date(data.startDate) : null } : {}),
         ...(data.endDate !== undefined ? { endDate: data.endDate ? new Date(data.endDate) : null } : {}),
       },
