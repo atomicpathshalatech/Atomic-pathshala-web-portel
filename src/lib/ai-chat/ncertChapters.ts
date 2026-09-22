@@ -2,6 +2,7 @@
 export const NCERT_CHAPTERS: Record<"Physics" | "Chemistry" | "Biology", string[]> = {
   Physics: [
     // Class 11
+    "Basic Mathematics",
     "Physical World",
     "Units and Measurements",
     "Motion in a Straight Line",

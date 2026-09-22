@@ -16,6 +16,74 @@
   ],
   "chapters": [
     {
+      "chapterNumber": 0,
+      "title": "Basic Mathematics",
+      "titleHindi": "मूल गणित (Basic Maths & Vectors)",
+      "bookPart": 1,
+      "topics": [
+        {
+          "topicNumber": "0.1",
+          "title": "Trigonometry & Small Angle Approximation",
+          "titleHindi": "त्रिकोणमिति एवं अल्प कोण सन्निकटन"
+        },
+        {
+          "topicNumber": "0.2",
+          "title": "Differentiation (Derivatives & Product/Chain Rules)",
+          "titleHindi": "अवकलन (नियम एवं सूत्र)"
+        },
+        {
+          "topicNumber": "0.3",
+          "title": "Applications of Derivatives (Maxima & Minima, Rate of Change)",
+          "titleHindi": "अवकलन के अनुप्रयोग (उच्चिष्ठ, निम्निष्ठ एवं परिवर्तन दर)"
+        },
+        {
+          "topicNumber": "0.4",
+          "title": "Integration (Indefinite & Definite Integrals, Area under Curve)",
+          "titleHindi": "समाकलन (निश्चित एवं अनिश्चित समाकलन, वक्र का क्षेत्रफल)"
+        },
+        {
+          "topicNumber": "0.5",
+          "title": "Vectors (Scalars, Unit Vector, Resolution of Vectors)",
+          "titleHindi": "सदिश (अदिश, एकांक सदिश, सदिशों का घटक वियोजन)"
+        },
+        {
+          "topicNumber": "0.6",
+          "title": "Vector Addition, Subtraction & Laws",
+          "titleHindi": "सदिश योग, व्यवकलन एवं समांतर चतुर्भुज नियम"
+        },
+        {
+          "topicNumber": "0.7",
+          "title": "Vector Products (Dot Product & Cross Product)",
+          "titleHindi": "सदिश गुणनफल (अदिश गुणन एवं सदिश गुणन)"
+        },
+        {
+          "topicNumber": "0.8",
+          "title": "Coordinate Geometry, Straight Lines & Slope",
+          "titleHindi": "निर्देशांक ज्यामिति, सरल रेखा एवं ढाल (y = mx + c)"
+        },
+        {
+          "topicNumber": "0.9",
+          "title": "Graphs in Physics (Linear, Parabola, Hyperbola, Sinusoidal)",
+          "titleHindi": "भौतिकी में ग्राफ (सरल रेखा, परवलय, अतिपरवलय, ज्यावक्रीय ग्राफ)"
+        },
+        {
+          "topicNumber": "0.10",
+          "title": "Binomial Theorem & Approximation for Physics",
+          "titleHindi": "द्विपद प्रमेय एवं भौतिकी में सन्निकटन"
+        },
+        {
+          "topicNumber": "0.11",
+          "title": "Logarithms & Exponential Functions in Physics",
+          "titleHindi": "लघुगणक एवं चरघातांकी फलन"
+        },
+        {
+          "topicNumber": "0.12",
+          "title": "Quadratic Equations & Proportionality",
+          "titleHindi": "द्विघात समीकरण एवं समानुपात"
+        }
+      ]
+    },
+    {
       "chapterNumber": 1,
       "title": "Units and Measurements",
       "titleHindi": "मात्रक और मापन",

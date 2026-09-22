@@ -327,76 +327,7 @@ export default async function StudentTestsPage() {
     }
   }
 
-  // 4. Fetch All Published Standalone Tests (Ensure no tests are orphaned)
-  let allStandaloneTests: any[] = [];
-  try {
-    allStandaloneTests = await prisma.test.findMany({
-      where: {
-        status: "PUBLISHED",
-        testSeriesId: null,
-        batchScheduleId: null,
-        chapterId: null,
-      },
-      include: {
-        attempts: {
-          where: { studentId: student.id },
-          select: { id: true, status: true, score: true },
-        },
-        sections: {
-          select: { _count: { select: { questions: true } } },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-    });
-  } catch (err) {
-    console.error("Error fetching standalone tests:", err);
-  }
-
   const testSeriesBoxes: TestSeriesBoxItem[] = [];
-
-  // Standalone Full Syllabus Mock Tests Box
-  if (allStandaloneTests.length > 0) {
-    const standaloneTestsList = allStandaloneTests.map((t) => {
-      const attempt = t.attempts?.[0];
-      const qCount = t.sections?.reduce((sum: number, s: any) => sum + (s._count?.questions || 0), 0) || 15;
-      const isCompleted = attempt && attempt.status !== "IN_PROGRESS";
-      const inProg = attempt?.status === "IN_PROGRESS";
-
-      return {
-        id: t.id,
-        name: t.name,
-        durationMin: t.durationMin || 180,
-        questionCount: qCount,
-        totalMarks: qCount * (t.correctMarks || 4),
-        statusLabel: isCompleted
-          ? `Completed · ${attempt.score ?? 0} Marks`
-          : inProg
-          ? "In Progress"
-          : "Available Now",
-        tone: isCompleted
-          ? "bg-primary/15 text-primary border border-primary/30"
-          : inProg
-          ? "bg-secondary/15 text-secondary border border-secondary/30"
-          : "bg-emerald-500/15 text-emerald-600 border border-emerald-500/30",
-        canAttempt: !isCompleted && !inProg,
-        canResume: inProg,
-        canViewResult: isCompleted,
-        isClosed: false,
-        score: attempt?.score ?? null,
-      };
-    });
-
-    testSeriesBoxes.push({
-      id: "all-india-mock-series",
-      code: "MOCK-NEET-CBT",
-      name: "All-India Grand Mock Test Series",
-      examType: "NEET Full Syllabus",
-      description: "Official full syllabus mock tests and CBT assessments simulating real exam environment.",
-      targetBatch: "All Enrolled Students",
-      isEnrolled: true,
-      tests: standaloneTestsList,
-    });
-  }
 
   // Map standalone & enrolled TestSeries into boxes
   for (const ts of dbTestSeries) {

@@ -97,7 +97,12 @@ export function AtomicPracticeTestArena({
   testSeriesBoxes: TestSeriesBoxItem[];
   demoTest?: DemoTestProp | null;
 }) {
-  const [currentView, setCurrentView] = useState<"ROOT" | "TEST_SERIES" | "CHAPTERWISE_SUBJECTS" | "CHAPTERWISE_CHAPTERS">("ROOT");
+  const [currentView, setCurrentView] = useState<
+    "ROOT" | "TEST_SERIES" | "TEST_SERIES_DETAIL" | "CHAPTERWISE_SUBJECTS" | "CHAPTERWISE_CHAPTERS"
+  >("ROOT");
+  const [selectedSeriesId, setSelectedSeriesId] = useState<string | null>(null);
+  const [seriesTestSearch, setSeriesTestSearch] = useState<string>("");
+  const [seriesStatusFilter, setSeriesStatusFilter] = useState<"ALL" | "AVAILABLE" | "COMPLETED">("ALL");
 
   // Chapterwise category state
   const defaultSubject = subjectTests[0]?.name || "Physics";
@@ -107,7 +112,6 @@ export function AtomicPracticeTestArena({
   const [chapterSearch, setChapterSearch] = useState("");
 
   // Test series category state
-  const [expandedSeries, setExpandedSeries] = useState<Record<string, boolean>>({});
   const [seriesSearch, setSeriesSearch] = useState("");
 
   const activeSubjectData = subjectTests.find((s) => s.name === selectedSubject) || subjectTests[0];
@@ -119,10 +123,6 @@ export function AtomicPracticeTestArena({
 
   const toggleChapter = (chapterId: string) => {
     setExpandedChapters((prev) => ({ ...prev, [chapterId]: !prev[chapterId] }));
-  };
-
-  const toggleSeries = (seriesId: string) => {
-    setExpandedSeries((prev) => ({ ...prev, [seriesId]: !prev[seriesId] }));
   };
 
   // Stats calculation
@@ -152,6 +152,19 @@ export function AtomicPracticeTestArena({
       (b.targetBatch && b.targetBatch.toLowerCase().includes(seriesSearch.toLowerCase())) ||
       b.tests.some((t) => t.name.toLowerCase().includes(seriesSearch.toLowerCase()))
   );
+
+  const activeSeries = testSeriesBoxes.find((b) => b.id === selectedSeriesId) || null;
+  const activeSeriesIndex = testSeriesBoxes.findIndex((b) => b.id === selectedSeriesId);
+
+  const filteredActiveSeriesTests = (activeSeries?.tests || []).filter((t) => {
+    const matchesSearch = t.name.toLowerCase().includes(seriesTestSearch.toLowerCase());
+    if (!matchesSearch) return false;
+
+    const isCompleted = t.canViewResult || t.statusLabel.toLowerCase().includes("completed");
+    if (seriesStatusFilter === "COMPLETED") return isCompleted;
+    if (seriesStatusFilter === "AVAILABLE") return !isCompleted;
+    return true;
+  });
 
   return (
     <div className="space-y-6">
@@ -731,7 +744,7 @@ export function AtomicPracticeTestArena({
       )}
 
       {/* ========================================================================= */}
-      {/* 4. ENROLLED TEST SERIES & BATCH TEST SERIES BOXES                         */}
+      {/* 4. ENROLLED TEST SERIES & BATCH TEST SERIES (CARD GRID VIEW)             */}
       {/* ========================================================================= */}
       {currentView === "TEST_SERIES" && (
         <div className="space-y-4">
@@ -763,7 +776,7 @@ export function AtomicPracticeTestArena({
                   <span>Enrolled &amp; Batch Test Series</span>
                 </h2>
                 <p className="text-[11px] text-slate-500">
-                  Official test series assigned to your batches with direct PDF downloads and instant analytics.
+                  Select a test series box to view all tests and assessments.
                 </p>
               </div>
             </div>
@@ -776,17 +789,17 @@ export function AtomicPracticeTestArena({
                 type="text"
                 value={seriesSearch}
                 onChange={(e) => setSeriesSearch(e.target.value)}
-                placeholder="Search test series or test..."
-                className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                placeholder="Search test series..."
+                className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/40"
               />
             </div>
           </div>
 
-          {/* Test Series Boxes List */}
+          {/* Test Series Boxes Grid (Premium Batch Box Style) */}
           {filteredSeriesBoxes.length === 0 ? (
             <div className="bg-white rounded-2xl p-10 text-center text-slate-500 space-y-1.5 border border-slate-200/80">
-              <span className="material-symbols-outlined text-4xl text-blue-400">inventory_2</span>
-              <h3 className="font-bold text-sm text-slate-800">No Test Series Boxes Found</h3>
+              <span className="material-symbols-outlined text-4xl text-purple-400">inventory_2</span>
+              <h3 className="font-bold text-sm text-slate-800">No Test Series Found</h3>
               <p className="text-xs text-slate-400 max-w-md mx-auto">
                 {seriesSearch
                   ? "No test series box matches your search query."
@@ -794,163 +807,359 @@ export function AtomicPracticeTestArena({
               </p>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4.5">
               {filteredSeriesBoxes.map((box, bIdx) => {
-                const isExpanded = expandedSeries[box.id] !== false; // Default expanded
-                const completedCount = box.tests.filter((t) => t.canViewResult || t.statusLabel.includes("Completed")).length;
+                const completedCount = box.tests.filter(
+                  (t) => t.canViewResult || t.statusLabel.toLowerCase().includes("completed")
+                ).length;
                 const theme = getBatchTheme(bIdx);
 
                 return (
                   <div
                     key={box.id}
-                    className={`bg-white border rounded-2xl overflow-hidden shadow-2xs transition-all ${theme.cardBorder}`}
+                    onClick={() => {
+                      setSelectedSeriesId(box.id);
+                      setSeriesTestSearch("");
+                      setSeriesStatusFilter("ALL");
+                      setCurrentView("TEST_SERIES_DETAIL");
+                    }}
+                    className={`group relative flex flex-col justify-between rounded-2xl p-4 sm:p-5 text-left transition-all duration-300 cursor-pointer border hover:shadow-xl hover:-translate-y-1 ${theme.cardBg} ${theme.cardBorder}`}
                   >
-                    {/* Test Series Box Header */}
-                    <div className={`p-3.5 sm:p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${theme.cardBg}`}>
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`px-2.5 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wider ${theme.pillBg}`}>
-                            Test Series
+                    {/* Top Badges */}
+                    <div>
+                      <div className="flex items-center justify-between gap-2 flex-wrap mb-2.5">
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full border text-[10px] font-extrabold uppercase tracking-wider ${theme.pillBg}`}
+                        >
+                          Test Series
+                        </span>
+                        {box.examType && (
+                          <span className="px-2 py-0.5 rounded-md bg-white/90 text-slate-700 border border-slate-200/80 text-[10px] font-bold">
+                            {box.examType}
                           </span>
-                          {box.examType && (
-                            <span className="px-2 py-0.5 rounded-md bg-white/80 text-slate-700 border border-slate-200 text-[10px] font-bold">
-                              {box.examType}
-                            </span>
-                          )}
-                          {box.targetBatch && (
-                            <span className={`text-xs font-bold ${theme.accentText}`}>
-                              Batch: {box.targetBatch}
-                            </span>
-                          )}
-                        </div>
-
-                        <h3 className="text-sm sm:text-base font-bold text-slate-900">
-                          {box.name}
-                        </h3>
-                        {box.description && (
-                          <p className="text-[11px] text-slate-500 max-w-2xl">{box.description}</p>
                         )}
                       </div>
 
-                      <div className="flex items-center gap-3 shrink-0 self-start sm:self-auto">
-                        <div className="text-right">
-                          <span className="text-xs font-bold text-slate-800 block">
-                            {completedCount}/{box.tests.length} Tests Completed
-                          </span>
-                          <span className="text-[10px] text-slate-400 font-mono">Code: {box.code}</span>
-                        </div>
+                      {/* Series Title */}
+                      <h3 className="text-base sm:text-lg font-black text-slate-900 group-hover:text-purple-700 transition-colors leading-snug line-clamp-2">
+                        {box.name}
+                      </h3>
 
-                        <button
-                          type="button"
-                          onClick={() => toggleSeries(box.id)}
-                          className="p-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 transition cursor-pointer"
-                          title="Toggle Tests inside Box"
-                        >
-                          <span
-                            className={`material-symbols-outlined text-lg text-slate-500 transition-transform duration-200 ${
-                              isExpanded ? "rotate-180" : ""
-                            }`}
-                          >
-                            keyboard_arrow_down
-                          </span>
-                        </button>
-                      </div>
+                      {/* Batch Target Info */}
+                      {box.targetBatch && (
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 mt-2">
+                          <span className="material-symbols-outlined text-[16px] text-purple-600">school</span>
+                          <span className="truncate">Batch: {box.targetBatch}</span>
+                        </div>
+                      )}
+
+                      {/* Description */}
+                      {box.description && (
+                        <p className="text-xs text-slate-500 mt-2 line-clamp-2 leading-relaxed">
+                          {box.description}
+                        </p>
+                      )}
                     </div>
 
-                    {/* Tests inside Test Series Box */}
-                    {isExpanded && (
-                      <div className="p-3 sm:p-4 space-y-2">
-                        <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
-                          Tests in this Series ({box.tests.length})
-                        </h4>
-
-                        {box.tests.length === 0 ? (
-                          <div className="p-5 rounded-xl bg-slate-50 text-center text-xs text-slate-400">
-                            No tests have been published in this test series yet.
-                          </div>
-                        ) : (
-                          <div className="space-y-2">
-                            {box.tests.map((t) => (
-                              <div
-                                key={t.id}
-                                className="p-3 sm:px-4 sm:py-2.5 rounded-xl bg-white border border-slate-200/90 hover:border-blue-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all shadow-2xs"
-                              >
-                                <div className="space-y-0.5 flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <span
-                                      className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${t.tone}`}
-                                    >
-                                      {t.statusLabel}
-                                    </span>
-                                    {t.startsAt && (
-                                      <span className="text-[10px] text-slate-400">
-                                        {new Date(t.startsAt).toLocaleDateString(undefined, {
-                                          month: "short",
-                                          day: "numeric",
-                                        })}
-                                      </span>
-                                    )}
-                                  </div>
-
-                                  <h4 className="font-bold text-xs sm:text-sm text-slate-900 truncate">{t.name}</h4>
-
-                                  <div className="flex items-center gap-3 text-[11px] text-slate-500">
-                                    <span>{t.questionCount} Questions</span>
-                                    <span>&middot;</span>
-                                    <span>{t.durationMin} Mins</span>
-                                    <span>&middot;</span>
-                                    <span>{t.totalMarks} Marks</span>
-                                  </div>
-                                </div>
-
-                                <div className="shrink-0 flex items-center gap-2 self-end sm:self-auto">
-                                  <TestPdfDownloadModal
-                                    testId={t.id}
-                                    testName={t.name}
-                                    triggerButton={
-                                      <button
-                                        type="button"
-                                        title="Download Test PDF"
-                                        className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition shadow-2xs cursor-pointer"
-                                      >
-                                        <span className="material-symbols-outlined text-[16px] text-blue-600">picture_as_pdf</span>
-                                        <span>Download PDF</span>
-                                      </button>
-                                    }
-                                  />
-
-                                  {t.canAttempt || t.canResume ? (
-                                    <Link
-                                      href={`/tests/${t.id}/attempt`}
-                                      className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-2xs transition text-center active:scale-95"
-                                    >
-                                      {t.canResume ? "Resume Test" : "Start Test"}
-                                    </Link>
-                                  ) : t.canViewResult ? (
-                                    <Link
-                                      href={`/tests/${t.id}/result`}
-                                      className="px-3.5 py-1.5 rounded-lg border border-blue-500 text-blue-600 hover:bg-blue-50 font-bold text-xs transition text-center"
-                                    >
-                                      Review Analysis
-                                    </Link>
-                                  ) : (
-                                    <button
-                                      disabled
-                                      className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-400 text-xs font-bold cursor-not-allowed"
-                                    >
-                                      {t.statusLabel}
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                    {/* Footer Stats & Open Button */}
+                    <div className="mt-4 pt-3.5 border-t border-slate-200/60 space-y-3">
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-1.5 font-bold text-slate-700">
+                          <span className="material-symbols-outlined text-[16px] text-purple-600">quiz</span>
+                          <span>{box.tests.length} Test{box.tests.length === 1 ? "" : "s"}</span>
+                        </div>
+                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-white/80 text-slate-600 border border-slate-200/60">
+                          {completedCount}/{box.tests.length} Completed
+                        </span>
                       </div>
-                    )}
+
+                      <button
+                        type="button"
+                        className={`w-full py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all group-hover:shadow-md cursor-pointer ${theme.btnGrad}`}
+                      >
+                        <span>Open Test Series</span>
+                        <span className="material-symbols-outlined text-[16px] group-hover:translate-x-1 transition-transform">
+                          arrow_forward
+                        </span>
+                      </button>
+                    </div>
                   </div>
                 );
               })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 5. TEST SERIES DETAIL VIEW: DEDICATED FULL PAGE VIEW FOR A TEST SERIES   */}
+      {/* ========================================================================= */}
+      {currentView === "TEST_SERIES_DETAIL" && activeSeries && (
+        <div className="space-y-4">
+          {/* Top Bar with Back Button & Breadcrumbs */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white border border-slate-200/80 rounded-2xl p-3 sm:p-4 shadow-2xs">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setCurrentView("TEST_SERIES")}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer shrink-0"
+              >
+                <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+                <span>Back to Test Series</span>
+              </button>
+              <div>
+                <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentView("ROOT")}
+                    className="hover:text-purple-600 transition-colors"
+                  >
+                    Tests
+                  </button>
+                  <span>/</span>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentView("TEST_SERIES")}
+                    className="hover:text-purple-600 transition-colors"
+                  >
+                    Test Series
+                  </button>
+                  <span>/</span>
+                  <span className="text-slate-800 font-bold truncate max-w-[180px] sm:max-w-xs inline-block align-bottom">
+                    {activeSeries.name}
+                  </span>
+                </div>
+                <h2 className="text-sm sm:text-base font-extrabold text-slate-900 truncate mt-0.5">
+                  {activeSeries.name}
+                </h2>
+              </div>
+            </div>
+
+            {/* Test Search within Series */}
+            <div className="relative w-full sm:w-64 shrink-0">
+              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">
+                search
+              </span>
+              <input
+                type="text"
+                value={seriesTestSearch}
+                onChange={(e) => setSeriesTestSearch(e.target.value)}
+                placeholder="Search test in this series..."
+                className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/40"
+              />
+            </div>
+          </div>
+
+          {/* Hero Banner Card for the Test Series */}
+          {(() => {
+            const theme = getBatchTheme(Math.max(0, activeSeriesIndex));
+            const completedCount = activeSeries.tests.filter(
+              (t) => t.canViewResult || t.statusLabel.toLowerCase().includes("completed")
+            ).length;
+            const totalCount = activeSeries.tests.length;
+            const percent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+            return (
+              <div
+                className={`rounded-2xl border p-4 sm:p-5 ${theme.cardBg} ${theme.cardBorder} shadow-2xs space-y-3.5`}
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full border text-[10px] font-extrabold uppercase tracking-wider ${theme.pillBg}`}
+                      >
+                        Test Series
+                      </span>
+                      {activeSeries.examType && (
+                        <span className="px-2 py-0.5 rounded-md bg-white/90 text-slate-700 border border-slate-200 text-[10px] font-bold">
+                          {activeSeries.examType}
+                        </span>
+                      )}
+                      {activeSeries.targetBatch && (
+                        <span className={`text-xs font-bold ${theme.accentText}`}>
+                          Batch: {activeSeries.targetBatch}
+                        </span>
+                      )}
+                      {activeSeries.code && (
+                        <span className="text-[10px] text-slate-400 font-mono bg-white/70 px-2 py-0.5 rounded border border-slate-200/70">
+                          Code: {activeSeries.code}
+                        </span>
+                      )}
+                    </div>
+                    <h1 className="text-base sm:text-xl font-black text-slate-900">
+                      {activeSeries.name}
+                    </h1>
+                    {activeSeries.description && (
+                      <p className="text-xs text-slate-600 max-w-3xl leading-relaxed">
+                        {activeSeries.description}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Progress Stats Box */}
+                  <div className="bg-white/90 rounded-xl p-3 border border-slate-200/80 shrink-0 min-w-[200px] space-y-1.5 shadow-2xs">
+                    <div className="flex items-center justify-between text-xs font-bold">
+                      <span className="text-slate-600">Series Progress</span>
+                      <span className="text-purple-600 font-extrabold">{percent}%</span>
+                    </div>
+                    <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="h-2 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 transition-all duration-500"
+                        style={{ width: `${percent}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 pt-0.5">
+                      <span>{completedCount} Completed</span>
+                      <span>{totalCount} Total Tests</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Filter Pills */}
+                <div className="flex items-center gap-2 pt-1 border-t border-slate-200/60 flex-wrap">
+                  <span className="text-[11px] font-bold text-slate-500 mr-1">Filter:</span>
+                  <button
+                    type="button"
+                    onClick={() => setSeriesStatusFilter("ALL")}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      seriesStatusFilter === "ALL"
+                        ? "bg-purple-600 text-white shadow-2xs"
+                        : "bg-white/80 hover:bg-white text-slate-700 border border-slate-200"
+                    }`}
+                  >
+                    All Tests ({totalCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSeriesStatusFilter("AVAILABLE")}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      seriesStatusFilter === "AVAILABLE"
+                        ? "bg-emerald-600 text-white shadow-2xs"
+                        : "bg-white/80 hover:bg-white text-slate-700 border border-slate-200"
+                    }`}
+                  >
+                    Available Now ({totalCount - completedCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSeriesStatusFilter("COMPLETED")}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      seriesStatusFilter === "COMPLETED"
+                        ? "bg-blue-600 text-white shadow-2xs"
+                        : "bg-white/80 hover:bg-white text-slate-700 border border-slate-200"
+                    }`}
+                  >
+                    Completed ({completedCount})
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* List of Tests in this Series */}
+          {filteredActiveSeriesTests.length === 0 ? (
+            <div className="bg-white rounded-2xl p-10 text-center text-slate-500 space-y-2 border border-slate-200/80">
+              <span className="material-symbols-outlined text-4xl text-slate-300">quiz</span>
+              <h3 className="font-bold text-sm text-slate-800">No Tests Found</h3>
+              <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                {seriesTestSearch
+                  ? `No test matching "${seriesTestSearch}" in this test series.`
+                  : seriesStatusFilter !== "ALL"
+                  ? "No tests found for the selected filter."
+                  : "No tests have been published in this test series yet."}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filteredActiveSeriesTests.map((t, tIdx) => (
+                <div
+                  key={t.id}
+                  className="p-4 rounded-2xl bg-white border border-slate-200 hover:border-purple-300 hover:shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 transition-all"
+                >
+                  <div className="flex items-start gap-3 min-w-0">
+                    <span className="w-8 h-8 rounded-xl bg-purple-50 text-purple-700 font-extrabold text-xs flex items-center justify-center shrink-0 border border-purple-100 mt-0.5">
+                      {tIdx + 1}
+                    </span>
+
+                    <div className="space-y-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span
+                          className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${t.tone}`}
+                        >
+                          {t.statusLabel}
+                        </span>
+                        {t.startsAt && (
+                          <span className="text-[10px] text-slate-400 font-medium">
+                            {new Date(t.startsAt).toLocaleDateString(undefined, {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            })}
+                          </span>
+                        )}
+                      </div>
+
+                      <h4 className="font-extrabold text-sm sm:text-base text-slate-900 truncate">
+                        {t.name}
+                      </h4>
+
+                      <div className="flex items-center gap-3 text-xs text-slate-500 font-medium">
+                        <span>{t.questionCount} Questions</span>
+                        <span>&middot;</span>
+                        <span>{t.durationMin} Mins</span>
+                        <span>&middot;</span>
+                        <span>{t.totalMarks} Marks</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions: Download PDF & Start/Resume/Result */}
+                  <div className="shrink-0 flex items-center gap-2 self-end sm:self-auto">
+                    <TestPdfDownloadModal
+                      testId={t.id}
+                      testName={t.name}
+                      triggerButton={
+                        <button
+                          type="button"
+                          title="Download Test PDF"
+                          className="px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition shadow-2xs cursor-pointer"
+                        >
+                          <span className="material-symbols-outlined text-[17px] text-blue-600">
+                            picture_as_pdf
+                          </span>
+                          <span className="hidden sm:inline">Download PDF</span>
+                          <span className="sm:hidden">PDF</span>
+                        </button>
+                      }
+                    />
+
+                    {t.canAttempt || t.canResume ? (
+                      <Link
+                        href={`/tests/${t.id}/attempt`}
+                        className="px-4.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-sm transition text-center active:scale-95 flex items-center gap-1"
+                      >
+                        <span>{t.canResume ? "Resume Test" : "Start Test"}</span>
+                        <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+                      </Link>
+                    ) : t.canViewResult ? (
+                      <Link
+                        href={`/tests/${t.id}/result`}
+                        className="px-4 py-2 rounded-xl border border-blue-500 text-blue-600 hover:bg-blue-50 font-bold text-xs transition text-center"
+                      >
+                        Review Analysis
+                      </Link>
+                    ) : (
+                      <button
+                        disabled
+                        className="px-4 py-2 rounded-xl bg-slate-100 text-slate-400 text-xs font-bold cursor-not-allowed"
+                      >
+                        {t.statusLabel}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>

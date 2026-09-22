@@ -93,6 +93,9 @@ export function SeriesTestCreateForm({ testSeriesId }: { testSeriesId: string })
   const [selectedClassFilter, setSelectedClassFilter] = useState<number | null>(null); // null = All Classes, 11, 12
   const [selectedChapterId, setSelectedChapterId] = useState<string>("");
   const [customTopicInput, setCustomTopicInput] = useState<Record<string, string>>({});
+  const [showCustomChapterInput, setShowCustomChapterInput] = useState(false);
+  const [customChapterName, setCustomChapterName] = useState("");
+  const [customChapterTopics, setCustomChapterTopics] = useState("");
 
   // Computed chapters for current subject
   const subjectChapters = useMemo(() => {
@@ -194,6 +197,48 @@ export function SeriesTestCreateForm({ testSeriesId }: { testSeriesId: string })
     }
     setSelectedChapters((prev) => [...prev, ...toAdd]);
     toast.success(`Added ${toAdd.length} chapters to ${syllabusSubject} syllabus!`);
+  }
+
+  function handleAddCustomChapter() {
+    const trimmedTitle = customChapterName.trim();
+    if (!trimmedTitle) {
+      toast.error("Please enter a chapter name.");
+      return;
+    }
+
+    if (
+      selectedChapters.some(
+        (sc) =>
+          sc.chapterTitle.toLowerCase() === trimmedTitle.toLowerCase() &&
+          sc.subject.toLowerCase() === syllabusSubject.toLowerCase()
+      )
+    ) {
+      toast.error(`"${trimmedTitle}" is already added to ${syllabusSubject} syllabus.`);
+      return;
+    }
+
+    const initialTopics = customChapterTopics
+      .split(/[\n,]+/)
+      .map((t) => t.trim())
+      .filter(Boolean);
+
+    setSelectedChapters((prev) => [
+      ...prev,
+      {
+        id: `ch-custom-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        subject: syllabusSubject,
+        chapterTitle: trimmedTitle,
+        isComplete: true,
+        topics: initialTopics,
+        allChapterTopics: initialTopics,
+        customTopics: initialTopics,
+      },
+    ]);
+
+    setCustomChapterName("");
+    setCustomChapterTopics("");
+    setShowCustomChapterInput(false);
+    toast.success(`Added custom chapter "${trimmedTitle}" to ${syllabusSubject}!`);
   }
 
   function handleToggleCompleteChapter(id: string) {
@@ -739,7 +784,100 @@ export function SeriesTestCreateForm({ testSeriesId }: { testSeriesId: string })
               >
                 <span>+ Add All ({filteredChapters.length})</span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => setShowCustomChapterInput((prev) => !prev)}
+                className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border font-bold text-xs transition shrink-0 ${
+                  showCustomChapterInput
+                    ? "bg-amber-50 border-amber-300 text-amber-800 dark:bg-amber-950/40 dark:border-amber-700 dark:text-amber-200"
+                    : "bg-white dark:bg-slate-800/80 border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
+                }`}
+                title="Add a custom chapter with custom topics"
+              >
+                <Plus className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                <span>+ Custom Chapter</span>
+              </button>
             </div>
+
+            {/* Custom Chapter Inline Creation Form */}
+            {showCustomChapterInput && (
+              <div className="p-3.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 space-y-3 animate-in fade-in duration-150 mt-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-amber-950 dark:text-amber-200">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                    <span>Add Custom Chapter ({syllabusSubject})</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowCustomChapterInput(false)}
+                    className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Chapter Title *
+                    </label>
+                    <input
+                      type="text"
+                      value={customChapterName}
+                      onChange={(e) => setCustomChapterName(e.target.value)}
+                      placeholder="e.g. Basic Mathematics & Vectors, or Experimental Skills"
+                      className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white outline-none focus:border-amber-500 font-medium placeholder:text-slate-400"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleAddCustomChapter();
+                        }
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Topics (Optional, separated by comma or newlines)
+                    </label>
+                    <input
+                      type="text"
+                      value={customChapterTopics}
+                      onChange={(e) => setCustomChapterTopics(e.target.value)}
+                      placeholder="e.g. Differentiation, Integration, Vectors"
+                      className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white outline-none focus:border-amber-500 font-medium placeholder:text-slate-400"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleAddCustomChapter();
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCustomChapterInput(false);
+                      setCustomChapterName("");
+                      setCustomChapterTopics("");
+                    }}
+                    className="px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800 rounded-lg transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAddCustomChapter}
+                    disabled={!customChapterName.trim()}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-lg shadow-sm transition disabled:opacity-50"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add to Syllabus</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Selected Chapters List Grouped by Subject */}

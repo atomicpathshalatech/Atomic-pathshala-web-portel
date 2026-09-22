@@ -88,7 +88,10 @@ export function getMasterNcertChapters(subjectName: string): MasterNcertChapter[
     const className = `Class ${classNum}`;
 
     for (const ch of ds.data.chapters) {
-      const displayTitle = `[${className}] Ch ${ch.chapterNumber}: ${ch.title}`;
+      const displayTitle =
+        ch.chapterNumber === 0
+          ? `[${className}] Basic Mathematics`
+          : `[${className}] Ch ${ch.chapterNumber}: ${ch.title}`;
       chapters.push({
         id: `ncert-c${classNum}-${ds.data.name.toLowerCase()}-ch${ch.chapterNumber}`,
         title: ch.title,
