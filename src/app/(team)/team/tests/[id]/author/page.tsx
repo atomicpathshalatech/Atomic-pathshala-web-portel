@@ -39,12 +39,20 @@ export default async function TestAuthorPage({ params }: { params: { id: string 
 
   if (!test) notFound();
 
-  const subjects = test.sections.map((sec) => ({
-    name: sec.name || "Section",
-    count: sec.questions.length,
-    total: 45,
-    sectionId: sec.id,
-  }));
+  const subjects = test.sections.map((sec) => {
+    const isBio = sec.name?.toLowerCase().includes("bio") || sec.subject?.toLowerCase().includes("bio");
+    const totalCount = sec.targetCount && sec.targetCount > 0
+      ? sec.targetCount
+      : isBio
+      ? 90
+      : 45;
+    return {
+      name: sec.name || "Section",
+      count: sec.questions.length,
+      total: totalCount,
+      sectionId: sec.id,
+    };
+  });
 
   const initialQuestions: import("@/components/questions/DualColumnQuestionStudio").QuestionEntry[] = [];
   let slotIdx = 1;
@@ -89,8 +97,8 @@ export default async function TestAuthorPage({ params }: { params: { id: string 
     }
   }
 
-  const totalQuestions = test.sections.reduce(
-    (acc) => acc + 45,
+  const totalQuestions = subjects.reduce(
+    (acc, s) => acc + s.total,
     0
   );
 

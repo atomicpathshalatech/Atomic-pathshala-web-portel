@@ -61,6 +61,7 @@ export interface TestSeriesTestItem {
   canResume: boolean;
   canViewResult: boolean;
   isClosed: boolean;
+  isUpcoming?: boolean;
   score?: number | null;
   startsAt?: string | null;
   endsAt?: string | null;
@@ -688,20 +689,22 @@ export function AtomicPracticeTestArena({
                                   </div>
 
                                   <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
-                                    <TestPdfDownloadModal
-                                      testId={test.id}
-                                      testName={test.name}
-                                      triggerButton={
-                                        <button
-                                          type="button"
-                                          title="Download Test PDF"
-                                          className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition shadow-2xs cursor-pointer"
-                                        >
-                                          <span className="material-symbols-outlined text-[16px] text-blue-600">picture_as_pdf</span>
-                                          <span>Download PDF</span>
-                                        </button>
-                                      }
-                                    />
+                                    {test.status === "COMPLETED" && (
+                                      <TestPdfDownloadModal
+                                        testId={test.id}
+                                        testName={test.name}
+                                        triggerButton={
+                                          <button
+                                            type="button"
+                                            title="Download Test PDF"
+                                            className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition shadow-2xs cursor-pointer"
+                                          >
+                                            <span className="material-symbols-outlined text-[16px] text-blue-600">picture_as_pdf</span>
+                                            <span>Download PDF</span>
+                                          </button>
+                                        }
+                                      />
+                                    )}
 
                                     {test.status === "COMPLETED" ? (
                                       <Link
@@ -1116,23 +1119,25 @@ export function AtomicPracticeTestArena({
 
                   {/* Actions: Download PDF & Start/Resume/Result */}
                   <div className="shrink-0 flex items-center gap-2 self-end sm:self-auto">
-                    <TestPdfDownloadModal
-                      testId={t.id}
-                      testName={t.name}
-                      triggerButton={
-                        <button
-                          type="button"
-                          title="Download Test PDF"
-                          className="px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition shadow-2xs cursor-pointer"
-                        >
-                          <span className="material-symbols-outlined text-[17px] text-blue-600">
-                            picture_as_pdf
-                          </span>
-                          <span className="hidden sm:inline">Download PDF</span>
-                          <span className="sm:hidden">PDF</span>
-                        </button>
-                      }
-                    />
+                    {(t.canViewResult || t.isClosed) && (
+                      <TestPdfDownloadModal
+                        testId={t.id}
+                        testName={t.name}
+                        triggerButton={
+                          <button
+                            type="button"
+                            title="Download Test PDF"
+                            className="px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition shadow-2xs cursor-pointer"
+                          >
+                            <span className="material-symbols-outlined text-[17px] text-blue-600">
+                              picture_as_pdf
+                            </span>
+                            <span className="hidden sm:inline">Download PDF</span>
+                            <span className="sm:hidden">PDF</span>
+                          </button>
+                        }
+                      />
+                    )}
 
                     {t.canAttempt || t.canResume ? (
                       <Link
@@ -1151,10 +1156,11 @@ export function AtomicPracticeTestArena({
                       </Link>
                     ) : (
                       <button
+                        type="button"
                         disabled
-                        className="px-4 py-2 rounded-xl bg-slate-100 text-slate-400 text-xs font-bold cursor-not-allowed"
+                        className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 text-xs font-bold cursor-not-allowed"
                       >
-                        {t.statusLabel}
+                        {t.isUpcoming ? "Upcoming" : t.isClosed ? "Closed" : t.statusLabel}
                       </button>
                     )}
                   </div>

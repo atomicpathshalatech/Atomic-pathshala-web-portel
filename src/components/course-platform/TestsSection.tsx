@@ -62,20 +62,22 @@ export function TestsSection({ course }: { course?: any }) {
                   <span>Syllabus PDF</span>
                 </a>
 
-                <TestPdfDownloadModal
-                  testId={test.id}
-                  testName={test.title || test.name}
-                  triggerButton={
-                    <button
-                      type="button"
-                      title="Download Test PDF"
-                      className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition shadow-2xs cursor-pointer"
-                    >
-                      <span className="material-symbols-outlined text-[16px] text-blue-600">picture_as_pdf</span>
-                      <span>Download PDF</span>
-                    </button>
-                  }
-                />
+                {(test.isCompleted || test.isClosed || test.status === "COMPLETED") && (
+                  <TestPdfDownloadModal
+                    testId={test.id}
+                    testName={test.title || test.name}
+                    triggerButton={
+                      <button
+                        type="button"
+                        title="Download Test PDF"
+                        className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition shadow-2xs cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-[16px] text-blue-600">picture_as_pdf</span>
+                        <span>Download PDF</span>
+                      </button>
+                    }
+                  />
+                )}
 
                 <Link
                   href={`/tests/${test.id}/attempt`}

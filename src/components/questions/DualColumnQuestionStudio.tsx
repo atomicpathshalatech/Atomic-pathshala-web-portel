@@ -150,6 +150,17 @@ export function DualColumnQuestionStudio({
     (q) => q.subject === activeSubject && q.isSaved
   ).length;
 
+  // Compute start/end question numbers for each section
+  const sectionOffsets = React.useMemo(() => {
+    let offset = 1;
+    const map: Record<string, { start: number; end: number }> = {};
+    for (const sub of subjects) {
+      map[sub.name] = { start: offset, end: offset + sub.total - 1 };
+      offset += sub.total;
+    }
+    return map;
+  }, [subjects]);
+
 
 
   const handleNextQuestion = () => {
@@ -299,13 +310,21 @@ export function DualColumnQuestionStudio({
             const subSaved = Object.values(questionsMap).filter(
               (q) => q.subject === sub.name && q.isSaved
             ).length;
+            const startQ = sectionOffsets[sub.name]?.start || 1;
 
             return (
               <div key={sub.name} className="space-y-1">
                 {/* Section Accordion Header */}
                 <button
                   type="button"
-                  onClick={() => setActiveSubject(sub.name)}
+                  onClick={() => {
+                    setActiveSubject(sub.name);
+                    const range = sectionOffsets[sub.name];
+                    if (range && (currentQuestionNumber < range.start || currentQuestionNumber > range.end)) {
+                      setCurrentQuestionNumber(range.start);
+                      setJumpInput(String(range.start));
+                    }
+                  }}
                   className={`w-full flex items-center justify-between p-2 rounded-xl text-xs font-extrabold transition ${
                     isSubActive
                       ? "bg-white text-[#0c3ea4] shadow-md"
@@ -334,7 +353,7 @@ export function DualColumnQuestionStudio({
                 {isSubActive && !sidebarCollapsed && (
                   <div className="grid grid-cols-5 gap-1.5 p-2 bg-[#092e7a]/50 rounded-2xl border border-white/5 animate-in fade-in">
                     {Array.from({ length: sub.total }, (_, i) => {
-                      const qNum = i + 1;
+                      const qNum = startQ + i;
                       const q = questionsMap[qNum];
                       const isCurrent = currentQuestionNumber === qNum;
                       const isSaved = q?.isSaved;

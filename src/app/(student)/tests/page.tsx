@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { format } from "date-fns";
 import { requireStudentSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { NCERT_CHAPTERS } from "@/lib/ai-chat/ncertChapters";
@@ -278,7 +279,10 @@ export default async function StudentTestsPage() {
     dbTestSeries = await prisma.testSeries.findMany({
       include: {
         tests: {
-          where: { status: "PUBLISHED" },
+          where: {
+            status: { in: ["PUBLISHED", "DRAFT", "APPROVED"] },
+            archived: false,
+          },
           include: {
             attempts: {
               where: { studentId: student.id },
@@ -336,6 +340,29 @@ export default async function StudentTestsPage() {
       const qCount = t.sections?.reduce((sum: number, s: any) => sum + (s._count?.questions || 0), 0) || 15;
       const isCompleted = attempt && attempt.status !== "IN_PROGRESS";
       const inProg = attempt?.status === "IN_PROGRESS";
+      const openTime = t.openTime ? new Date(t.openTime) : null;
+      const closeTime = t.closeTime ? new Date(t.closeTime) : null;
+      const isUpcoming = Boolean((openTime && now < openTime) || (t.status === "DRAFT" && (!openTime || now < openTime)));
+      const isClosed = Boolean(closeTime && now > closeTime);
+      const canAttempt = !isCompleted && !inProg && !isUpcoming && !isClosed && t.status !== "DRAFT";
+      const canResume = inProg && !isClosed;
+
+      let statusLabel = "Available Now";
+      let tone = "bg-emerald-500/15 text-emerald-600 border border-emerald-500/30";
+
+      if (isCompleted) {
+        statusLabel = `Completed · ${attempt.score ?? 0} Marks`;
+        tone = "bg-primary/15 text-primary border border-primary/30";
+      } else if (inProg) {
+        statusLabel = "In Progress";
+        tone = "bg-secondary/15 text-secondary border border-secondary/30";
+      } else if (isUpcoming) {
+        statusLabel = openTime ? `Upcoming · ${format(openTime, "d MMM, h:mm a")}` : "Upcoming";
+        tone = "bg-amber-500/15 text-amber-700 border border-amber-500/30";
+      } else if (isClosed) {
+        statusLabel = "Closed";
+        tone = "bg-slate-500/15 text-slate-600 border border-slate-500/30";
+      }
 
       return {
         id: t.id,
@@ -343,21 +370,16 @@ export default async function StudentTestsPage() {
         durationMin: t.durationMin || 180,
         questionCount: qCount,
         totalMarks: qCount * (t.correctMarks || 4),
-        statusLabel: isCompleted
-          ? `Completed · ${attempt.score ?? 0} Marks`
-          : inProg
-          ? "In Progress"
-          : "Available Now",
-        tone: isCompleted
-          ? "bg-primary/15 text-primary border border-primary/30"
-          : inProg
-          ? "bg-secondary/15 text-secondary border border-secondary/30"
-          : "bg-emerald-500/15 text-emerald-600 border border-emerald-500/30",
-        canAttempt: !isCompleted && !inProg,
-        canResume: inProg,
-        canViewResult: isCompleted,
-        isClosed: false,
+        statusLabel,
+        tone,
+        canAttempt,
+        canResume,
+        canViewResult: Boolean(isCompleted),
+        isClosed,
+        isUpcoming,
         score: attempt?.score ?? null,
+        startsAt: openTime ? openTime.toISOString() : null,
+        endsAt: closeTime ? closeTime.toISOString() : null,
       };
     });
 
@@ -391,6 +413,27 @@ export default async function StudentTestsPage() {
     const qCount = t.sections?.reduce((sum: number, s: any) => sum + (s._count?.questions || 0), 0) || 15;
     const isCompleted = attempt && attempt.status !== "IN_PROGRESS";
     const inProg = attempt?.status === "IN_PROGRESS";
+    const isUpcoming = !isCompleted && !inProg && now < bs.startsAt;
+    const isClosed = now > bs.endsAt;
+    const canAttempt = !isCompleted && !inProg && now >= bs.startsAt && now <= bs.endsAt;
+    const canResume = inProg && now <= bs.endsAt;
+
+    let statusLabel = "Live Now";
+    let tone = "bg-emerald-500/15 text-emerald-600 border border-emerald-500/30";
+
+    if (isCompleted) {
+      statusLabel = `Completed · ${attempt.score ?? 0} Marks`;
+      tone = "bg-primary/15 text-primary border border-primary/30";
+    } else if (inProg) {
+      statusLabel = "In Progress";
+      tone = "bg-secondary/15 text-secondary border border-secondary/30";
+    } else if (isUpcoming) {
+      statusLabel = `Upcoming · ${format(new Date(bs.startsAt), "d MMM, h:mm a")}`;
+      tone = "bg-amber-500/15 text-amber-700 border border-amber-500/30";
+    } else if (isClosed) {
+      statusLabel = "Closed";
+      tone = "bg-slate-500/15 text-slate-600 border border-slate-500/30";
+    }
 
     batchScheduleGroups[bId].tests.push({
       id: t.id,
@@ -398,24 +441,13 @@ export default async function StudentTestsPage() {
       durationMin: t.durationMin || 180,
       questionCount: qCount,
       totalMarks: qCount * (t.correctMarks || 4),
-      statusLabel: isCompleted
-        ? `Completed · ${attempt.score ?? 0} Marks`
-        : inProg
-        ? "In Progress"
-        : now < bs.startsAt
-        ? "Opens Soon"
-        : now > bs.endsAt
-        ? "Closed"
-        : "Live Now",
-      tone: isCompleted
-        ? "bg-primary/15 text-primary border border-primary/30"
-        : inProg
-        ? "bg-secondary/15 text-secondary border border-secondary/30"
-        : "bg-emerald-500/15 text-emerald-600 border border-emerald-500/30",
-      canAttempt: !isCompleted && !inProg && now >= bs.startsAt && now <= bs.endsAt,
-      canResume: inProg && now <= bs.endsAt,
-      canViewResult: isCompleted,
-      isClosed: now > bs.endsAt,
+      statusLabel,
+      tone,
+      canAttempt,
+      canResume,
+      canViewResult: Boolean(isCompleted),
+      isClosed,
+      isUpcoming,
       score: attempt?.score ?? null,
       startsAt: bs.startsAt?.toISOString(),
       endsAt: bs.endsAt?.toISOString(),

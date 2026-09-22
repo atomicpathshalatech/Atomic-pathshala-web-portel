@@ -38,9 +38,9 @@ export default async function TestAttemptPage({ params }: { params: { id: string
   if (!student) redirect("/tests");
 
   const now = new Date();
-  // Standalone tests have no schedule window — open anytime once
-  // PUBLISHED. Batch-scheduled tests still respect the class's window.
+  // Batch-scheduled tests respect class window; test series tests respect openTime/closeTime
   if (test.batchSchedule && now < test.batchSchedule.startsAt) redirect("/tests");
+  if (test.openTime && now < test.openTime) redirect("/tests");
 
   let attempt = await prisma.attempt.findUnique({
     where: { testId_studentId: { testId: test.id, studentId: student.id } },
@@ -49,6 +49,7 @@ export default async function TestAttemptPage({ params }: { params: { id: string
 
   if (!attempt) {
     if (test.batchSchedule && now > test.batchSchedule.endsAt) redirect("/tests");
+    if (test.closeTime && now > test.closeTime) redirect("/tests");
     attempt = await prisma.attempt.create({
       data: { testId: test.id, studentId: student.id },
       include: { answers: true },

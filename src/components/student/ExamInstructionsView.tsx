@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState } from "react";
-import { TestPdfDownloadModal } from "@/components/test-portal/TestPdfDownloadModal";
 
 interface ExamInstructionsViewProps {
   testId?: string;
@@ -29,7 +28,7 @@ export function ExamInstructionsView({
 
   return (
     <div className="max-w-4xl mx-auto p-4 sm:p-8 space-y-8 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm my-6 animate-in fade-in duration-300">
-      {/* Title Header with PDF Download Button */}
+      {/* Title Header */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
         <div className="text-center sm:text-left space-y-1">
           <h1 className="text-lg sm:text-2xl font-black text-slate-900 dark:text-white">
@@ -39,22 +38,6 @@ export function ExamInstructionsView({
             {testTitle} • {targetExam}
           </p>
         </div>
-
-        {testId && (
-          <TestPdfDownloadModal
-            testId={testId}
-            testName={testTitle}
-            triggerButton={
-              <button
-                type="button"
-                className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition flex items-center gap-2 shrink-0"
-              >
-                <span className="material-symbols-outlined text-base">picture_as_pdf</span>
-                <span>Download Test Paper PDF</span>
-              </button>
-            }
-          />
-        )}
       </div>
 
       {/* Section 1: Hindi Instructions */}

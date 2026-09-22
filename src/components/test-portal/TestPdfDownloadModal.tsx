@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
-import { FileText, CheckCircle, Download, ExternalLink, Sparkles, X, Printer, ShieldAlert } from "lucide-react";
+import { FileText, CheckCircle, Download, ExternalLink, Sparkles, X, Printer } from "lucide-react";
 
 interface TestPdfDownloadModalProps {
   testId: string;
@@ -25,6 +26,11 @@ export function TestPdfDownloadModal({
 }: TestPdfDownloadModalProps) {
   const pathname = usePathname();
   const [internalOpen, setInternalOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Cover preview is for Team/Admin portal only - never on student side
   const canShowCoverPreview = showCoverPreview !== undefined ? showCoverPreview : Boolean(pathname?.startsWith("/team"));
@@ -56,15 +62,15 @@ export function TestPdfDownloadModal({
         </button>
       )}
 
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+      {isModalOpen && mounted && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-md animate-in fade-in duration-150">
+          <div className="relative w-full max-w-lg max-h-[90vh] flex flex-col bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
             {/* Modal Header */}
-            <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white p-6 relative">
+            <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white p-5 sm:p-6 relative shrink-0">
               <button
                 type="button"
                 onClick={closeModal}
-                className="absolute top-5 right-5 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition"
+                className="absolute top-4 right-4 sm:top-5 sm:right-5 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -73,7 +79,7 @@ export function TestPdfDownloadModal({
                 <Sparkles className="w-3.5 h-3.5" />
                 <span>Bilingual Test Booklet Export</span>
               </div>
-              <h2 className="text-lg font-extrabold text-white leading-tight">
+              <h2 className="text-base sm:text-lg font-extrabold text-white leading-tight pr-8">
                 {testName}
               </h2>
               {testCode && (
@@ -84,7 +90,7 @@ export function TestPdfDownloadModal({
             </div>
 
             {/* Modal Body: Two Primary Download Options */}
-            <div className="p-6 space-y-4">
+            <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1 min-h-0">
               <p className="text-xs text-slate-600 dark:text-slate-400">
                 Choose the export format you require. Both options are generated with full Atomic Pathshala branding, bilingual typesetting (Hindi + English), and mathematical formulas.
               </p>
@@ -109,7 +115,7 @@ export function TestPdfDownloadModal({
                   <ul className="mt-2.5 space-y-1 text-[11px] text-slate-500 dark:text-slate-400">
                     <li className="flex items-center gap-1.5">
                       <CheckCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                      <span>Atomic Pathshala Front Cover & Official Instructions</span>
+                      <span>Atomic Pathshala Front Cover &amp; Official Instructions</span>
                     </li>
                     <li className="flex items-center gap-1.5">
                       <CheckCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
@@ -129,7 +135,7 @@ export function TestPdfDownloadModal({
                 <button
                   type="button"
                   onClick={() => handleDownload(false)}
-                  className="w-full py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-black dark:bg-blue-600 dark:hover:bg-blue-700 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition"
+                  className="w-full py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-black dark:bg-blue-600 dark:hover:bg-blue-700 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition cursor-pointer"
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>Open &amp; Save Question Paper as PDF</span>
@@ -146,7 +152,7 @@ export function TestPdfDownloadModal({
                         2
                       </div>
                       <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
-                        Full Paper + Solutions & Answer Key
+                        Full Paper + Solutions &amp; Answer Key
                       </h3>
                     </div>
                     <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 text-[10px] font-bold">
@@ -157,7 +163,7 @@ export function TestPdfDownloadModal({
                   <ul className="mt-2.5 space-y-1 text-[11px] text-slate-500 dark:text-slate-400">
                     <li className="flex items-center gap-1.5">
                       <CheckCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                      <span>Includes all questions + front & back cover instructions</span>
+                      <span>Includes all questions + front &amp; back cover instructions</span>
                     </li>
                     <li className="flex items-center gap-1.5">
                       <CheckCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
@@ -173,7 +179,7 @@ export function TestPdfDownloadModal({
                 <button
                   type="button"
                   onClick={() => handleDownload(true)}
-                  className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition"
+                  className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition cursor-pointer"
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>Open &amp; Save with Solutions as PDF</span>
@@ -187,7 +193,7 @@ export function TestPdfDownloadModal({
                   <button
                     type="button"
                     onClick={() => window.open(`/api/tests/${testId}/export?type=cover`, "_blank")}
-                    className="inline-flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-semibold hover:underline"
+                    className="inline-flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-semibold hover:underline cursor-pointer"
                   >
                     <FileText className="w-3.5 h-3.5" />
                     <span>Preview Authentic Front Cover (A4 Sheet AP-26)</span>
@@ -199,7 +205,7 @@ export function TestPdfDownloadModal({
             </div>
 
             {/* Modal Footer */}
-            <div className="bg-slate-50 dark:bg-slate-800/80 px-6 py-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+            <div className="bg-slate-50 dark:bg-slate-800/80 px-6 py-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 shrink-0">
               <div className="flex items-center gap-1">
                 <Printer className="w-3.5 h-3.5 text-blue-500" />
                 <span>Print Dialog / PDF Save ready</span>
@@ -207,13 +213,14 @@ export function TestPdfDownloadModal({
               <button
                 type="button"
                 onClick={closeModal}
-                className="font-bold text-slate-600 dark:text-slate-300 hover:underline"
+                className="font-bold text-slate-600 dark:text-slate-300 hover:underline cursor-pointer"
               >
                 Close
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
