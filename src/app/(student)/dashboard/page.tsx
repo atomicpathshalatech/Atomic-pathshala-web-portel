@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { format } from "date-fns";
 import { requireStudentSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import type { BatchSchedule, Teacher, User } from "@prisma/client";
@@ -12,6 +13,7 @@ import { PromoCard } from "@/components/student/home/PromoCard";
 import { StudentBannerCarousel, type StudentBanner } from "@/components/student/home/StudentBannerCarousel";
 import { EducatorsShowcase, type EducatorItem } from "@/components/student/home/EducatorsShowcase";
 import { StudentFeedbackSection, type StudentFeedbackItem } from "@/components/student/home/StudentFeedbackSection";
+import { UpcomingTestCard, type UpcomingTestItem } from "@/components/student/home/UpcomingTestCard";
 
 export const metadata: Metadata = {
   title: "Home — Atomic Pathshala",
@@ -79,11 +81,21 @@ export default async function StudentDashboardPage() {
     bannersDb,
     teachersDb,
     testimonialsDb,
+    upcomingTestsDb,
   ] = await Promise.all([
     prisma.batchSchedule.count({
       where: { batchId: { in: enrolledBatchIds }, type: "DPP", endsAt: { gte: now } },
     }),
-    prisma.test.count({ where: { batchSchedule: { batchId: { in: enrolledBatchIds } } } }),
+    prisma.test.count({
+      where: {
+        archived: false,
+        status: { in: ["PUBLISHED", "DRAFT", "APPROVED"] },
+        OR: [
+          { batchSchedule: { batchId: { in: enrolledBatchIds } } },
+          { testSeries: { isNot: null } },
+        ],
+      },
+    }),
     prisma.attemptAnswer.count({
       where: {
         attempt: { studentId: student.id, status: { in: ["SUBMITTED", "AUTO_SUBMITTED"] } },
@@ -158,6 +170,41 @@ export default async function StudentDashboardPage() {
       orderBy: { createdAt: "desc" },
       take: 10,
     }).catch(() => []),
+    prisma.test.findMany({
+      where: {
+        archived: false,
+        status: { in: ["PUBLISHED", "DRAFT", "APPROVED"] },
+        OR: [
+          { batchSchedule: { batchId: { in: enrolledBatchIds } } },
+          { testSeries: { isNot: null } },
+        ],
+        AND: [
+          {
+            OR: [
+              { openTime: { gte: now } },
+              { closeTime: { gte: now } },
+              { batchSchedule: { endsAt: { gte: now } } },
+              { status: "DRAFT" },
+            ],
+          },
+        ],
+      },
+      include: {
+        batchSchedule: { select: { startsAt: true, endsAt: true, title: true } },
+        testSeries: { select: { id: true, name: true, examType: true } },
+        sections: {
+          select: {
+            id: true,
+            targetCount: true,
+            marksPerQuestion: true,
+            _count: { select: { questions: true } },
+          },
+        },
+        attempts: { where: { studentId: student.id }, select: { id: true, status: true } },
+      },
+      orderBy: [{ openTime: "asc" }, { createdAt: "desc" }],
+      take: 6,
+    }).catch(() => []),
   ]);
 
   const firstName = (student.user.name || "Student").split(" ")[0] || "Student";
@@ -176,16 +223,75 @@ export default async function StudentDashboardPage() {
     ? `/courses/${nextClass.batchId}`
     : "/courses";
 
-  // Build Next Upcoming Event Info for Today's Plan card
-  const nextEvent: NextEventInfo | null = nextClass
-    ? {
-        title: `${nextClass.title}${nextClass.teacher?.user.name ? ` • ${nextClass.teacher.user.name}` : ""}`,
-        type: nextClass.type,
-        startsAtIso: nextClass.startsAt.toISOString(),
-        href: nextClassStatus === "LIVE" ? `/live/${nextClass.id}` : `/schedule`,
-        isLive: nextClassStatus === "LIVE",
-      }
-    : null;
+  // Process Upcoming Tests for student
+  const pendingUpcomingTests = upcomingTestsDb.filter(
+    (t: any) => !t.attempts?.some((a: any) => a.status === "SUBMITTED" || a.status === "AUTO_SUBMITTED")
+  );
+  const primaryUpcomingTest = pendingUpcomingTests[0] ?? null;
+
+  let upcomingTestCard: UpcomingTestItem | null = null;
+  if (primaryUpcomingTest) {
+    const t: any = primaryUpcomingTest;
+    const assignedCount =
+      t.sections?.reduce((sum: number, s: any) => sum + (s._count?.questions || 0), 0) || 0;
+    const targetCount =
+      t.sections?.reduce((sum: number, s: any) => sum + (s.targetCount || 0), 0) || 0;
+    const defaultCount = (t.examType || t.testSeries?.examType || "").toUpperCase().includes("JEE") ? 75 : 180;
+    const qCount = targetCount > 0 ? targetCount : assignedCount > 0 ? assignedCount : defaultCount;
+
+    const computedMarks =
+      t.sections?.reduce((sum: number, s: any) => {
+        const c = s.targetCount > 0 ? s.targetCount : s._count?.questions || 0;
+        const m = s.marksPerQuestion ?? t.correctMarks ?? 4;
+        return sum + c * m;
+      }, 0) || 0;
+    const totalMarks = computedMarks > 0 ? computedMarks : qCount * (t.correctMarks || 4);
+
+    const openDate = t.openTime
+      ? new Date(t.openTime)
+      : t.batchSchedule?.startsAt
+      ? new Date(t.batchSchedule.startsAt)
+      : now;
+    const isLive = now >= openDate && (!t.closeTime || now <= new Date(t.closeTime));
+
+    upcomingTestCard = {
+      id: t.id,
+      name: t.name,
+      openTimeIso: openDate.toISOString(),
+      closeTimeIso: t.closeTime ? new Date(t.closeTime).toISOString() : null,
+      durationMin: t.durationMin || 180,
+      questionCount: qCount,
+      totalMarks,
+      isLive,
+      statusLabel: isLive ? "Live Now" : format(openDate, "EEEE, d MMM • h:mm a"),
+    };
+  }
+
+  // Build Next Upcoming Event Info for Today's Plan card (class or test)
+  let nextEvent: NextEventInfo | null = null;
+  const testStart = upcomingTestCard ? new Date(upcomingTestCard.openTimeIso) : null;
+  const classStart = nextClass ? nextClass.startsAt : null;
+  const isClassNext =
+    classStart &&
+    (!testStart || classStart.getTime() <= testStart.getTime() || nextClassStatus === "LIVE");
+
+  if (isClassNext && nextClass) {
+    nextEvent = {
+      title: `${nextClass.title}${nextClass.teacher?.user.name ? ` • ${nextClass.teacher.user.name}` : ""}`,
+      type: nextClass.type,
+      startsAtIso: nextClass.startsAt.toISOString(),
+      href: nextClassStatus === "LIVE" ? `/live/${nextClass.id}` : `/schedule`,
+      isLive: nextClassStatus === "LIVE",
+    };
+  } else if (upcomingTestCard) {
+    nextEvent = {
+      title: `${upcomingTestCard.name} • ${upcomingTestCard.isLive ? "Live Test" : "Upcoming Test"}`,
+      type: "TEST",
+      startsAtIso: upcomingTestCard.openTimeIso,
+      href: "/tests",
+      isLive: upcomingTestCard.isLive,
+    };
+  }
 
   // Format Banners
   const banners: StudentBanner[] = bannersDb.map((b) => ({
@@ -266,6 +372,11 @@ export default async function StudentDashboardPage() {
         continueLabel="Continue Learning"
         nextEvent={nextEvent}
       />
+
+      {/* 2.5 Prominent Upcoming / Live Test Card */}
+      {upcomingTestCard && (
+        <UpcomingTestCard test={upcomingTestCard} />
+      )}
 
       {/* 3. Quick Access */}
       <section className="space-y-2.5">
