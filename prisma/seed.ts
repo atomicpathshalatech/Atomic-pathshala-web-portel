@@ -372,7 +372,7 @@ async function main() {
 
   const SEED_COURSES = [
     {
-      title: "NEET UG 2026 (Medical Target Program)",
+      title: "NEET UG (Medical Target Program)",
       slug: "neet-ug-2026",
       description: "Comprehensive NEET coaching for Physics, Chemistry, Botany and Zoology.",
       subjects: [
@@ -386,7 +386,7 @@ async function main() {
       ],
     },
     {
-      title: "IIT-JEE (Main + Advanced) 2026",
+      title: "IIT-JEE (Main + Advanced)",
       slug: "jee-main-advanced-2026",
       description: "IIT-JEE exam preparation with advanced problem solving and mock tests.",
       subjects: ["Physics", "Chemistry", "Mathematics"],

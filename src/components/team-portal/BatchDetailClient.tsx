@@ -16,6 +16,7 @@ import {
 } from "./BatchPdfLibrary";
 import { BatchNotificationManager } from "./BatchNotificationManager";
 import { BatchTestSeriesManager } from "./BatchTestSeriesManager";
+import { cleanBatchName, formatDescriptionText } from "@/lib/academic/canonical-courses";
 
 type BatchDetailClientProps = {
   batch: {
@@ -216,7 +217,7 @@ export function BatchDetailClient({
             <span className="font-mono font-bold text-primary">{batch.code}</span>
           </p>
           <h1 className="font-headline-lg text-headline-lg md:text-3xl font-bold text-on-surface">
-            {batch.name}
+            {cleanBatchName(batch.name)}
           </h1>
 
           <div className="flex flex-wrap items-center gap-2 mt-3">
@@ -229,11 +230,11 @@ export function BatchDetailClient({
             </span>
             {batch.targetExam && (
               <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-surface-container-high text-on-surface">
-                {batch.targetExam}
+                {cleanBatchName(batch.targetExam)}
               </span>
             )}
             {batch.course && (
-              <span className="text-xs text-on-surface-variant">· {batch.course.title}</span>
+              <span className="text-xs text-on-surface-variant">· {cleanBatchName(batch.course.title)}</span>
             )}
             <span className="text-xs text-on-surface-variant font-mono">
               · {activeEnrollmentsCount} / {batch.capacity ?? "Unlimited"} Students
@@ -241,8 +242,8 @@ export function BatchDetailClient({
           </div>
 
           {batch.description && (
-            <p className="text-xs text-on-surface-variant mt-3 max-w-2xl leading-relaxed">
-              {batch.description}
+            <p className="text-xs text-on-surface-variant mt-3 max-w-3xl leading-relaxed whitespace-pre-line break-words">
+              {formatDescriptionText(batch.description)}
             </p>
           )}
         </div>

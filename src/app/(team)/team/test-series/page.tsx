@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { TestSeriesDeleteButton } from "@/components/team-portal/TestSeriesDeleteButton";
+import { cleanBatchName } from "@/lib/academic/canonical-courses";
 
 export const metadata: Metadata = {
   title: "Test Series",
@@ -145,13 +146,13 @@ export default async function TestSeriesListPage({
                 return (
                   <tr key={s.id} className="hover:bg-slate-50/70 transition-colors group">
                     <td className="px-6 py-4 max-w-xs">
-                      <p className="font-semibold text-slate-900">{s.name}</p>
+                      <p className="font-semibold text-slate-900">{cleanBatchName(s.name)}</p>
                       <span className="text-[11px] font-mono text-slate-400">{s.code}</span>
                     </td>
                     <td className="px-6 py-4 text-slate-600">
-                      <div>{s.targetBatch ?? "—"}</div>
+                      <div>{cleanBatchName(s.targetBatch) || "—"}</div>
                       <div className="text-[11px] text-slate-400">
-                        {s.className ?? "—"} · {s.course ?? "—"}
+                        {s.className ?? "—"} · {cleanBatchName(s.course) || "—"}
                       </div>
                     </td>
                     <td className="px-6 py-4">

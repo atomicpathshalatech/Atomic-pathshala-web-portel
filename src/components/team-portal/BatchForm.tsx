@@ -10,6 +10,7 @@ import {
   type BatchCreateInput,
 } from "@/lib/validation/batch";
 import { ThumbnailUploader } from "./ThumbnailUploader";
+import { cleanBatchName } from "@/lib/academic/canonical-courses";
 
 type CourseOption = { id: string; title: string };
 
@@ -116,10 +117,10 @@ export function BatchForm(props: Props) {
         <legend className="font-headline-md text-headline-md text-primary mb-2">Batch Details</legend>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Field label="Batch Name" error={errors.name?.message}>
-            <input className={inputClass} placeholder="e.g. NEET 2027 — Dropper Batch A" {...register("name")} />
+            <input className={inputClass} placeholder="e.g. NEET — Dropper Batch A" {...register("name")} />
           </Field>
           <Field label="Batch Code" error={errors.code?.message}>
-            <input className={inputClass} placeholder="e.g. NEET27-A1" {...register("code")} />
+            <input className={inputClass} placeholder="e.g. NEET-A1" {...register("code")} />
           </Field>
           <Field label="Target Exam" error={errors.targetExam?.message}>
             <input className={inputClass} placeholder="e.g. NEET" {...register("targetExam")} />
@@ -129,7 +130,7 @@ export function BatchForm(props: Props) {
               <option value="">No course linked yet</option>
               {props.courses.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.title}
+                  {cleanBatchName(c.title)}
                 </option>
               ))}
             </select>

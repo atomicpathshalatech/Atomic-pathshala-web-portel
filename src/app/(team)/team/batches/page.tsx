@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { BatchDeleteButton } from "@/components/team-portal/BatchDeleteButton";
+import { cleanBatchName } from "@/lib/academic/canonical-courses";
 
 export const metadata: Metadata = {
   title: "Batches",
@@ -72,7 +73,7 @@ export default async function BatchListPage() {
             >
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <h3 className="font-headline-md text-headline-md text-on-surface">{b.name}</h3>
+                  <h3 className="font-headline-md text-headline-md text-on-surface">{cleanBatchName(b.name)}</h3>
                   <p className="text-label-sm font-label-sm text-primary">{b.code}</p>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
@@ -83,12 +84,12 @@ export default async function BatchListPage() {
                   >
                     {b.status}
                   </span>
-                  {canDelete && <BatchDeleteButton batchId={b.id} batchCode={b.code} batchName={b.name} />}
+                  {canDelete && <BatchDeleteButton batchId={b.id} batchCode={b.code} batchName={cleanBatchName(b.name)} />}
                 </div>
               </div>
               {(b.targetExam || b.course) && (
                 <p className="text-label-sm text-on-surface-variant">
-                  {[b.targetExam, b.course?.title].filter(Boolean).join(" · ")}
+                  {[cleanBatchName(b.targetExam), cleanBatchName(b.course?.title)].filter(Boolean).join(" · ")}
                 </p>
               )}
               <div className="flex gap-4 text-label-sm text-on-surface-variant">

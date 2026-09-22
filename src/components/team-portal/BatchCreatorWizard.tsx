@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { cleanBatchName } from "@/lib/academic/canonical-courses";
 
 type CourseOption = { id: string; title: string; slug: string };
 type TeacherOption = { id: string; employeeCode: string; department: string; user: { name: string } };
@@ -19,8 +20,8 @@ export function BatchCreatorWizard({
   const [submitting, setSubmitting] = useState(false);
 
   const [form, setForm] = useState({
-    name: "NEET 2027 Phoenix Target Batch",
-    code: `NEET27-PHOENIX-${Math.floor(100 + Math.random() * 900)}`,
+    name: "NEET Phoenix Target Batch",
+    code: `NEET-PHOENIX-${Math.floor(100 + Math.random() * 900)}`,
     targetExam: "NEET UG",
     classGrade: "Class 11 & 12",
     medium: "Hinglish (Hindi + English)",
@@ -267,7 +268,7 @@ export function BatchCreatorWizard({
             >
               {courses.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.title}
+                  {cleanBatchName(c.title)}
                 </option>
               ))}
             </select>

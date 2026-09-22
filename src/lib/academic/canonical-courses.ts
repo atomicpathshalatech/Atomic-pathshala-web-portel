@@ -22,3 +22,53 @@ export type CanonicalCourseSlug = (typeof CANONICAL_COURSE_SLUGS)[number];
 export function isCanonicalCourseSlug(slug: string): slug is CanonicalCourseSlug {
   return (CANONICAL_COURSE_SLUGS as readonly string[]).includes(slug);
 }
+
+/**
+ * Strips 4-digit years (e.g. 2024, 2025, 2026, 2027, 2028, 2029) from batch & course titles,
+ * and cleans up dangling brackets, double spaces, and hyphens.
+ */
+export function cleanBatchName(name?: string | null): string {
+  if (!name) return "";
+  return name
+    .replace(/\b20\d{2}\b/g, "") // Remove 2024, 2025, 2026, 2027, 2028 etc.
+    .replace(/\(\s*\)/g, "")     // Remove empty parentheses
+    .replace(/\s{2,}/g, " ")     // Collapse multiple spaces
+    .replace(/\s+-\s*$/, "")     // Remove trailing hyphen
+    .replace(/-\s+-/g, "-")      // Clean double hyphens
+    .trim();
+}
+
+/**
+ * Formats multi-line descriptions so that:
+ * - Existing newlines and paragraph breaks are preserved.
+ * - Point-wise bullet points (•, -, *) start on new lines.
+ * - Section headers like "Highlights:", "Target Batch:" get appropriate spacing.
+ */
+export function formatDescriptionText(text?: string | null): string {
+  if (!text) return "";
+  let formatted = text.trim();
+
+  // If inline bullets exist (e.g. "foo • bar • baz"), ensure they get a newline
+  formatted = formatted.replace(/([^\n])\s+([•\u2022\*\-])\s+/g, "$1\n$2 ");
+
+  // Ensure major section headings get a newline before them if not already on one
+  const sectionHeadings = [
+    "Test Series Highlights:",
+    "Batch Highlights:",
+    "Target Batch:",
+    "Target Students:",
+    "Target Examination:",
+    "Medium:",
+    "Goal:",
+    "Key Features:",
+    "Course Includes:",
+  ];
+
+  for (const heading of sectionHeadings) {
+    const reg = new RegExp(`([^\\n])\\s*(${heading})`, "gi");
+    formatted = formatted.replace(reg, "$1\n\n$2");
+  }
+
+  return formatted;
+}
+

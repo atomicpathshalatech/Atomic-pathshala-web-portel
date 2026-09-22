@@ -7,9 +7,13 @@ import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { SeriesTestCreateForm } from "@/components/team-portal/SeriesTestCreateForm";
 import { SeriesTestsList } from "@/components/team-portal/SeriesTestsList";
+import { cleanBatchName, formatDescriptionText } from "@/lib/academic/canonical-courses";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export const metadata: Metadata = {
-  title: "Test Series Detail",
+  title: "Test Series Management",
 };
 
 export default async function TestSeriesDetailPage({ params }: { params: { id: string } }) {
@@ -19,12 +23,13 @@ export default async function TestSeriesDetailPage({ params }: { params: { id: s
   const canRead = await hasPermission(session.user.id, PERMISSIONS.TEST_READ);
   if (!canRead) redirect("/team");
 
-  const canCreateTest = await hasPermission(session.user.id, PERMISSIONS.TEST_PUBLISH || PERMISSIONS.TEST_CREATE);
+  const canCreateTest = await hasPermission(session.user.id, PERMISSIONS.TEST_CREATE);
 
   const series = await prisma.testSeries.findUnique({
     where: { id: params.id },
     include: {
       tests: {
+        where: { archived: false },
         include: {
           sections: {
             include: {
@@ -38,6 +43,11 @@ export default async function TestSeriesDetailPage({ params }: { params: { id: s
   });
   if (!series) notFound();
 
+  const cleanedName = cleanBatchName(series.name);
+  const cleanedTargetBatch = cleanBatchName(series.targetBatch);
+  const cleanedCourse = cleanBatchName(series.course);
+  const formattedDescription = formatDescriptionText(series.description);
+
   return (
     <div className="space-y-stack-lg max-w-5xl mx-auto">
       {/* Header Info */}
@@ -50,9 +60,11 @@ export default async function TestSeriesDetailPage({ params }: { params: { id: s
             </span>
             <span className="text-[11px] text-slate-400">· Use this code to import into any batch</span>
           </div>
-          <h1 className="font-headline-lg text-headline-lg text-primary tracking-tight font-extrabold">{series.name}</h1>
+          <h1 className="font-headline-lg text-headline-lg text-primary tracking-tight font-extrabold">{cleanedName}</h1>
           {series.description && (
-            <p className="text-on-surface-variant font-body-md mt-1 max-w-2xl">{series.description}</p>
+            <div className="text-on-surface-variant font-body-md mt-2 max-w-3xl whitespace-pre-line leading-relaxed text-sm">
+              {formattedDescription}
+            </div>
           )}
         </div>
         <span
@@ -70,7 +82,7 @@ export default async function TestSeriesDetailPage({ params }: { params: { id: s
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-gutter">
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-sm">
           <p className="text-label-sm text-on-surface-variant">Batch</p>
-          <p className="text-body-md font-bold text-primary truncate">{series.targetBatch ?? "All Batches"}</p>
+          <p className="text-body-md font-bold text-primary truncate">{cleanedTargetBatch || "All Batches"}</p>
         </div>
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-sm">
           <p className="text-label-sm text-on-surface-variant">Class</p>
@@ -78,7 +90,7 @@ export default async function TestSeriesDetailPage({ params }: { params: { id: s
         </div>
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-sm">
           <p className="text-label-sm text-on-surface-variant">Course</p>
-          <p className="text-body-md font-bold text-primary truncate">{series.course ?? "—"}</p>
+          <p className="text-body-md font-bold text-primary truncate">{cleanedCourse || "—"}</p>
         </div>
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-sm">
           <p className="text-label-sm text-on-surface-variant">Tests</p>

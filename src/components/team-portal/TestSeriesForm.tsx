@@ -81,7 +81,7 @@ export function TestSeriesForm() {
       <div className="glass-card p-stack-lg rounded-xl space-y-stack-md">
         <div>
           <label className={labelClass}>Series Name</label>
-          <input className={inputClass} placeholder="NEET 2027 Full Syllabus Test Series" {...register("name")} />
+          <input className={inputClass} placeholder="NEET Full Syllabus Test Series" {...register("name")} />
           {errors.name && <p className={errorClass}>{errors.name.message}</p>}
         </div>
 
@@ -108,7 +108,7 @@ export function TestSeriesForm() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className={labelClass}>Target Batch</label>
-            <input className={inputClass} placeholder="NEET Dropper 2027" {...register("targetBatch")} />
+            <input className={inputClass} placeholder="NEET Dropper Batch" {...register("targetBatch")} />
           </div>
           <div>
             <label className={labelClass}>Class</label>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { ScrollReveal } from "./ScrollReveal";
+import { cleanBatchName } from "@/lib/academic/canonical-courses";
 
 export async function BatchesSection() {
   // Fetch real batches from database
@@ -28,9 +29,9 @@ export async function BatchesSection() {
     dbBatches.length > 0
       ? dbBatches.map((b, idx) => ({
           id: b.id,
-          title: b.name,
+          title: cleanBatchName(b.name),
           code: b.code,
-          targetExam: b.targetExam || "NEET / JEE",
+          targetExam: cleanBatchName(b.targetExam) || "NEET / JEE",
           badge: idx === 0 ? "Featured" : b.status === "ACTIVE" ? "Live" : "Upcoming",
           faculty:
             b.teachers.map((t) => t.teacher.user.name).join(", ") ||
@@ -54,14 +55,14 @@ export async function BatchesSection() {
       : [
           {
             id: "fallback_1",
-            title: "NEET 2027 (Phoenix Target Batch)",
-            code: "NEET27-PHOENIX",
+            title: "NEET (Phoenix Target Batch)",
+            code: "NEET-PHOENIX",
             targetExam: "NEET UG",
             badge: "Popular",
             faculty: "Firoz Sir, Sanu Yadav Sir, Yaman Khan Sir",
             description:
               "Comprehensive 2-year concept-first program for medical aspirants focusing on NCERT line-by-line mastery and high-yield problem solving.",
-            startDate: "Starts 10 Sep 2026",
+            startDate: "Starts 10 Sep",
             enrollmentsCount: 184,
             schedulesCount: 48,
             capacity: 250,
@@ -70,14 +71,14 @@ export async function BatchesSection() {
           },
           {
             id: "fallback_2",
-            title: "JEE 2028 (Apex Comprehensive Batch)",
-            code: "JEE28-APEX",
+            title: "JEE (Apex Comprehensive Batch)",
+            code: "JEE-APEX",
             targetExam: "JEE Main & Advanced",
             badge: "New",
             faculty: "Firoz Sir, Sanu Yadav Sir, Mohsin Ali Sir",
             description:
               "Intensive coaching for JEE Mains & Advanced with heavy emphasis on mathematical derivations and multi-concept mechanics problem solving.",
-            startDate: "Starts 15 Sep 2026",
+            startDate: "Starts 15 Sep",
             enrollmentsCount: 142,
             schedulesCount: 42,
             capacity: 200,
@@ -87,13 +88,13 @@ export async function BatchesSection() {
           {
             id: "fallback_3",
             title: "NEET Droppers / Repeaters Foundation",
-            code: "NEET27-DROPPER",
+            code: "NEET-DROPPER",
             targetExam: "NEET UG",
             badge: "Fast Track",
             faculty: "Firoz Sir, Dr. Ilmas Amer, Yaman Khan Sir",
             description:
               "Targeted 1-year rank-booster program for dropper students to reinforce weak fundamentals, speed techniques, and daily mock tests.",
-            startDate: "Starts 20 Sep 2026",
+            startDate: "Starts 20 Sep",
             enrollmentsCount: 96,
             schedulesCount: 36,
             capacity: 150,
