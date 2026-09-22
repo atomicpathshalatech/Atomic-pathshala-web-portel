@@ -142,6 +142,8 @@ export default async function TestSeriesDetailPage({ params }: { params: { id: s
             code: t.code,
             durationMin: t.durationMin,
             status: t.status,
+            openTime: t.openTime ? t.openTime.toISOString() : null,
+            closeTime: t.closeTime ? t.closeTime.toISOString() : null,
             sections: t.sections.map((s) => ({
               id: s.id,
               name: s.name,
