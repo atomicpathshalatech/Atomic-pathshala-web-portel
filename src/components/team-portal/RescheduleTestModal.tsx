@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Calendar, Clock, X, Loader2 } from "lucide-react";
 
+import { toISTDateTimeLocal, parseISTDateTimeInput } from "@/lib/date-utils";
+
 interface RescheduleTestModalProps {
   testId: string;
   testName: string;
@@ -28,21 +30,8 @@ export function RescheduleTestModal({
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
-  // Format to YYYY-MM-DDTHH:mm for datetime-local input
-  const formatForInput = (isoString?: string | null) => {
-    if (!isoString) return "";
-    try {
-      const d = new Date(isoString);
-      if (isNaN(d.getTime())) return "";
-      const pad = (n: number) => String(n).padStart(2, "0");
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-    } catch {
-      return "";
-    }
-  };
-
-  const [openTimeInput, setOpenTimeInput] = useState(() => formatForInput(initialOpenTime));
-  const [closeTimeInput, setCloseTimeInput] = useState(() => formatForInput(initialCloseTime));
+  const [openTimeInput, setOpenTimeInput] = useState(() => toISTDateTimeLocal(initialOpenTime));
+  const [closeTimeInput, setCloseTimeInput] = useState(() => toISTDateTimeLocal(initialCloseTime));
   const [durationMin, setDurationMin] = useState(initialDurationMin);
 
   if (!isOpen) return null;
@@ -54,8 +43,8 @@ export function RescheduleTestModal({
       return;
     }
 
-    const openDate = new Date(openTimeInput);
-    const closeDate = closeTimeInput ? new Date(closeTimeInput) : null;
+    const openDate = parseISTDateTimeInput(openTimeInput);
+    const closeDate = closeTimeInput ? parseISTDateTimeInput(closeTimeInput) : null;
 
     if (closeDate && closeDate <= openDate) {
       toast.error("Close time must be strictly after start time.");

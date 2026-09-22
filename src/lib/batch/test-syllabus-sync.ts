@@ -5,6 +5,7 @@ import {
   NotificationCategory,
   NotificationPriority,
 } from "@/lib/notifications/types";
+import { formatISTDateTime } from "@/lib/date-utils";
 
 /**
  * Synchronizes test syllabus to batch folders and posts announcement notice.
@@ -121,14 +122,7 @@ export async function syncTestSyllabusToBatches({
 
         // Post announcement notice to batch students
         const testDateStr = test.openTime
-          ? new Date(test.openTime).toLocaleString("en-IN", {
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-              hour: "numeric",
-              minute: "numeric",
-              hour12: true,
-            })
+          ? formatISTDateTime(test.openTime)
           : "Schedule pending";
 
         const idempotencyKey = `test-syllabus-notice:${bId}:${test.id}`;

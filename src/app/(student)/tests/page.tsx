@@ -397,7 +397,17 @@ export default async function StudentTestsPage() {
         statusLabel = "In Progress";
         tone = "bg-secondary/15 text-secondary border border-secondary/30";
       } else if (isUpcoming) {
-        statusLabel = openTime ? `Upcoming · ${format(openTime, "d MMM, h:mm a")}` : "Upcoming";
+        const istFormatted = openTime
+          ? openTime.toLocaleString("en-IN", {
+              timeZone: "Asia/Kolkata",
+              day: "numeric",
+              month: "short",
+              hour: "numeric",
+              minute: "2-digit",
+              hour12: true,
+            })
+          : null;
+        statusLabel = istFormatted ? `Upcoming · ${istFormatted}` : "Upcoming";
         tone = "bg-amber-500/15 text-amber-700 border border-amber-500/30";
       } else if (isClosed) {
         statusLabel = "Closed";

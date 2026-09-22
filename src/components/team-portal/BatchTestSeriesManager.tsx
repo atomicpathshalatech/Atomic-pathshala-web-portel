@@ -17,6 +17,7 @@ import {
   Check,
   RefreshCw,
 } from "lucide-react";
+import { formatISTDateTime } from "@/lib/date-utils";
 
 interface BatchTestSeriesManagerProps {
   batchId: string;
@@ -302,14 +303,7 @@ export function BatchTestSeriesManager({
                   <div className="divide-y divide-slate-100 dark:divide-slate-800">
                     {tests.map((test: any) => {
                       const testScheduleStr = test.openTime
-                        ? new Date(test.openTime).toLocaleString("en-IN", {
-                            day: "numeric",
-                            month: "short",
-                            year: "numeric",
-                            hour: "numeric",
-                            minute: "numeric",
-                            hour12: true,
-                          })
+                        ? formatISTDateTime(test.openTime)
                         : "Schedule pending";
 
                       // Check syllabus chapters

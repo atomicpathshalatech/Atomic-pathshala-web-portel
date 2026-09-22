@@ -29,24 +29,20 @@ export interface TestSyllabusData {
   generatedAt?: Date | string;
 }
 
+import { formatISTDateTime } from "@/lib/date-utils";
+
 export function generateTestSyllabusHtml(data: TestSyllabusData): string {
   const logoDataUri = data.logoUri || getLogoDataUri();
 
   const generatedDate = new Date(data.generatedAt || Date.now()).toLocaleDateString("en-IN", {
+    timeZone: "Asia/Kolkata",
     day: "numeric",
     month: "long",
     year: "numeric",
   });
 
   const testScheduleStr = data.openTime
-    ? new Date(data.openTime).toLocaleString("en-IN", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-        hour: "numeric",
-        minute: "numeric",
-        hour12: true,
-      })
+    ? formatISTDateTime(data.openTime)
     : "To be announced";
 
   // Group chapters by Subject

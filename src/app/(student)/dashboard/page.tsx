@@ -263,7 +263,17 @@ export default async function StudentDashboardPage() {
       questionCount: qCount,
       totalMarks,
       isLive,
-      statusLabel: isLive ? "Live Now" : format(openDate, "EEEE, d MMM • h:mm a"),
+      statusLabel: isLive
+        ? "Live Now"
+        : openDate.toLocaleString("en-IN", {
+            timeZone: "Asia/Kolkata",
+            weekday: "short",
+            day: "numeric",
+            month: "short",
+            hour: "numeric",
+            minute: "2-digit",
+            hour12: true,
+          }),
     };
   }
 

@@ -26,6 +26,7 @@ import {
   getMasterNcertTopics,
   type MasterNcertChapter,
 } from "@/lib/academic/master-ncert-catalog";
+import { toISTDateTimeLocal, parseISTDateTimeInput, formatISTDateTime } from "@/lib/date-utils";
 
 export interface CustomSectionItem {
   id: string;
@@ -81,11 +82,7 @@ export function SeriesTestCreateForm({ testSeriesId }: { testSeriesId: string })
   const [examType, setExamType] = useState("NEET");
   const [title, setTitle] = useState("Minor Test : 01");
   const [durationMin, setDurationMin] = useState<number>(180);
-  const [startDate, setStartDate] = useState<string>(() => {
-    const now = new Date();
-    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-    return now.toISOString().slice(0, 16);
-  });
+  const [startDate, setStartDate] = useState<string>(() => toISTDateTimeLocal(new Date()));
 
   // Syllabus State (Supports Multi-Subject selection across Physics, Chem, Bio, Math)
   const [selectedChapters, setSelectedChapters] = useState<SyllabusChapterSelection[]>([]);
@@ -311,17 +308,10 @@ export function SeriesTestCreateForm({ testSeriesId }: { testSeriesId: string })
   const calculatedEndTime = useMemo(() => {
     if (!startDate) return "";
     try {
-      const start = new Date(startDate);
+      const start = parseISTDateTimeInput(startDate);
       if (isNaN(start.getTime())) return "";
       const end = new Date(start.getTime() + (durationMin || 0) * 60000);
-      return end.toLocaleString("en-IN", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-        hour: "numeric",
-        minute: "numeric",
-        hour12: true,
-      });
+      return formatISTDateTime(end);
     } catch {
       return "";
     }
@@ -461,7 +451,7 @@ export function SeriesTestCreateForm({ testSeriesId }: { testSeriesId: string })
           durationMin: Number(durationMin) || 180,
           testType,
           examType,
-          startDate: startDate ? new Date(startDate).toISOString() : undefined,
+          startDate: startDate ? parseISTDateTimeInput(startDate).toISOString() : undefined,
           syllabus: {
             chapters: selectedChapters.map((ch) => ({
               id: ch.id,

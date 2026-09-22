@@ -75,6 +75,19 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       });
     }
 
+    // Automatically sync updated test schedule & syllabus to all batches where this test series was imported
+    if (updatedTest.testSeriesId) {
+      try {
+        const { syncTestSyllabusToBatches } = await import("@/lib/batch/test-syllabus-sync");
+        await syncTestSyllabusToBatches({
+          testId: updatedTest.id,
+          testSeriesId: updatedTest.testSeriesId,
+        });
+      } catch (syncErr) {
+        console.error("[RescheduleTest] Syllabus sync error:", syncErr);
+      }
+    }
+
     await prisma.auditLog.create({
       data: {
         userId: session.user.id,
