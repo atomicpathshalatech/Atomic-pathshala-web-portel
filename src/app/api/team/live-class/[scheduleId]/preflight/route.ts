@@ -16,10 +16,57 @@ export async function POST(
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.WHITEBOARD_ACCESS);
 
-    const schedule = await prisma.batchSchedule.findUnique({
+    let schedule = await prisma.batchSchedule.findUnique({
       where: { id: params.scheduleId },
       include: { liveWhiteboardSession: true },
     });
+
+    if (!schedule) {
+      const lecture = await prisma.lecture.findUnique({
+        where: { id: params.scheduleId },
+        include: { chapter: true, teacher: true },
+      });
+
+      if (lecture) {
+        const defaultBatch =
+          (await prisma.batch.findFirst({ where: { status: "ACTIVE" } })) ||
+          (await prisma.batch.findFirst());
+
+        if (defaultBatch) {
+          const { computeISTScheduleDates } = await import("@/lib/date-utils");
+          const { startsAt, endsAt } = computeISTScheduleDates(
+            lecture.scheduledDate,
+            lecture.startTime,
+            lecture.durationMin || 60
+          );
+
+          schedule = await prisma.batchSchedule.upsert({
+            where: { id: lecture.id },
+            update: {
+              title: lecture.title,
+              chapterId: lecture.chapterId,
+              teacherId: lecture.teacherId,
+              lectureId: lecture.id,
+              startsAt,
+              endsAt,
+            },
+            create: {
+              id: lecture.id,
+              title: lecture.title,
+              type: "LIVE_CLASS",
+              batchId: defaultBatch.id,
+              teacherId: lecture.teacherId,
+              chapterId: lecture.chapterId,
+              lectureId: lecture.id,
+              startsAt,
+              endsAt,
+              createdById: session.user.id,
+            },
+            include: { liveWhiteboardSession: true },
+          });
+        }
+      }
+    }
 
     if (!schedule) return apiError("Scheduled class not found", 404);
 
@@ -59,6 +106,8 @@ export async function POST(
       classroomTheme = "LIGHT",
       cameraShape = "SQUARE",
       cameraPosition = "UPPER_RIGHT",
+      videoTransport,
+      youtubeVideoId,
     } = body;
 
     const sessionStart = schedule.startsAt ? new Date(schedule.startsAt) : new Date();
@@ -68,15 +117,12 @@ export async function POST(
     // teacher's own profile photo) — only needed the first time this
     // session's page 1 is ever created; a teacher preparing slides on an
     // already-existing session (the `update` branch below) never touches
-    // `pages`, so there's nothing to (re)generate for. Baking it in here
-    // (rather than only in the "Start Class" route) means a teacher who
-    // prepares slides in advance sees the same auto slide already sitting
-    // on page 1 well before they ever click Start Class.
+    // `pages`, so there's nothing to (re)generate for.
     let startSlideUrl: string | null = null;
     if (!schedule.liveWhiteboardSession) {
       try {
         const { generateCreative } = await import("@/lib/creative/engine");
-        const result = await generateCreative("LECTURE_START_SLIDE", params.scheduleId);
+        const result = await generateCreative("LECTURE_START_SLIDE", schedule.id);
         if (result.ok) startSlideUrl = result.assetUrl;
       } catch (slideErr) {
         console.error("[live_class_start_slide_error]", slideErr);
@@ -84,16 +130,18 @@ export async function POST(
     }
 
     const wbSession = await prisma.whiteboardSession.upsert({
-      where: { batchScheduleId: params.scheduleId },
+      where: { batchScheduleId: schedule.id },
       update: {
-        presentationUrl: presentationUrl || null,
-        presentationName: presentationName || null,
-        presentationType: presentationType || null,
+        presentationUrl: presentationUrl !== undefined ? presentationUrl || null : undefined,
+        presentationName: presentationName !== undefined ? presentationName || null : undefined,
+        presentationType: presentationType !== undefined ? presentationType || null : undefined,
         classroomTheme: classroomTheme === "DARK" ? "DARK" : "LIGHT",
         cameraShape: cameraShape === "CIRCULAR" ? "CIRCULAR" : "SQUARE",
         cameraPosition: cameraPosition || "UPPER_RIGHT",
         scheduledStart: sessionStart,
         scheduledEnd: sessionEnd,
+        ...(videoTransport ? { videoTransport } : {}),
+        ...(youtubeVideoId !== undefined ? { youtubeVideoId: youtubeVideoId || null } : {}),
       },
       create: {
         batchScheduleId: schedule.id,
@@ -101,6 +149,8 @@ export async function POST(
         title: schedule.title,
         status: "ACTIVE",
         livePhase: "PREPARING",
+        videoTransport: videoTransport === "YOUTUBE" ? "YOUTUBE" : "LIVEKIT",
+        youtubeVideoId: youtubeVideoId || null,
         presentationUrl: presentationUrl || null,
         presentationName: presentationName || null,
         presentationType: presentationType || null,

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { MoreVertical, Edit2, FileText, Trash2, Video, Calendar, Clock, Timer, Check, Sparkles } from "lucide-react";
 import { formatISTDate, formatISTTime, computeISTScheduleDates } from "@/lib/date-utils";
+import { UnifiedStartClassModal } from "./UnifiedStartClassModal";
 
 export interface LectureItem {
   id: string;
@@ -35,12 +36,14 @@ export function ChapterLecturesTab({
   chapterMedium,
   lectures: initialLectures,
   canEdit,
+  assignedBatches = [],
 }: {
   chapterId: string;
   chapterTitle: string;
   chapterMedium: string;
   lectures: LectureItem[];
   canEdit: boolean;
+  assignedBatches?: { id: string; name: string }[];
 }) {
   const router = useRouter();
   const [lectures, setLectures] = useState<LectureItem[]>(initialLectures);
@@ -50,6 +53,7 @@ export function ChapterLecturesTab({
   }, [initialLectures]);
 
   // Modals
+  const [startClassTarget, setStartClassTarget] = useState<LectureItem | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingLecture, setEditingLecture] = useState<LectureItem | null>(null);
   const [notesModalLecture, setNotesModalLecture] = useState<LectureItem | null>(null);
@@ -368,14 +372,15 @@ export function ChapterLecturesTab({
                 {/* Right: Single "Start Class" Button + 3-Dot Options Menu */}
                 <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
                   {/* Single Primary Action: Start Class */}
-                  <Link
-                    href={`/team/live-class/${l.id}`}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition text-xs font-bold shadow-md shadow-blue-500/20"
+                  <button
+                    type="button"
+                    onClick={() => setStartClassTarget(l)}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition text-xs font-bold shadow-md shadow-blue-500/20 cursor-pointer"
                     title="Enter live classroom"
                   >
                     <Video className="w-3.5 h-3.5" />
                     <span>Start Class</span>
-                  </Link>
+                  </button>
 
                   {/* 3-Dot Menu Dropdown */}
                   {canEdit && (
@@ -704,6 +709,24 @@ export function ChapterLecturesTab({
             </form>
           </div>
         </div>
+      )}
+
+      {startClassTarget && (
+        <UnifiedStartClassModal
+          isOpen={!!startClassTarget}
+          onClose={() => setStartClassTarget(null)}
+          scheduleId={startClassTarget.id}
+          title={startClassTarget.title}
+          subjectName={chapterTitle}
+          assignedBatches={assignedBatches}
+          dateStr={
+            startClassTarget.scheduledDate
+              ? formatISTDate(startClassTarget.scheduledDate)
+              : null
+          }
+          timeStr={startClassTarget.startTime || null}
+          isLive={startClassTarget.status === "LIVE"}
+        />
       )}
     </div>
   );

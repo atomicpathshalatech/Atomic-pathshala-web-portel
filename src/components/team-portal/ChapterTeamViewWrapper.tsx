@@ -41,6 +41,7 @@ interface ChapterTeamViewWrapperProps {
   canReview: boolean;
   reviews?: ReviewHistoryItem[];
   studentPreviewData: ChapterDetailData;
+  assignedBatches?: { id: string; name: string }[];
 }
 
 const WEEK_DAYS = [
@@ -70,6 +71,7 @@ export function ChapterTeamViewWrapper({
   canReview,
   reviews = [],
   studentPreviewData,
+  assignedBatches = [],
 }: ChapterTeamViewWrapperProps) {
   const router = useRouter();
   const [viewMode, setViewMode] = useState<"manager" | "preview">("manager");
@@ -326,6 +328,7 @@ export function ChapterTeamViewWrapper({
             initialTests={initialTests}
             canEdit={canEdit || canReview}
             reviews={reviews}
+            assignedBatches={assignedBatches}
           />
 
           {/* Secure Delete Resource Modal */}

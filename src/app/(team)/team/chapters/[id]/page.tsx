@@ -33,7 +33,7 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
   });
   if (!chapter) notFound();
 
-  const [user, lectures, dpps, tests, reviews] = await Promise.all([
+  const [user, lectures, dpps, tests, reviews, batchChapters] = await Promise.all([
     prisma.user.findUnique({
       where: { id: session.user.id },
       include: { role: true },
@@ -59,6 +59,13 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
         actor: { select: { name: true, email: true, photoUrl: true, role: { select: { name: true } } } },
       },
       orderBy: { createdAt: "desc" },
+    }),
+    prisma.batchChapter.findMany({
+      where: { chapterId: chapter.id },
+      include: {
+        batch: { select: { id: true, name: true, code: true } },
+      },
+      orderBy: { assignedAt: "asc" },
     }),
   ]);
 
@@ -239,6 +246,7 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
           },
         }))}
         studentPreviewData={studentPreviewData}
+        assignedBatches={batchChapters.map((bc) => ({ id: bc.batch.id, name: bc.batch.name }))}
       />
     </div>
   );

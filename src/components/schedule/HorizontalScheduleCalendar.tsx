@@ -5,6 +5,7 @@ import Link from "next/link";
 import { WhiteboardPdfDownloadButton } from "@/components/whiteboard/WhiteboardPdfDownloadButton";
 import { PrepareSlidesModal } from "@/components/live-class/PrepareSlidesModal";
 import { CompletedClassModal } from "./CompletedClassModal";
+import { UnifiedStartClassModal } from "@/components/team-portal/UnifiedStartClassModal";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -54,6 +55,7 @@ export interface ScheduleItem {
     pdfStatus?: string | null;
     pdfStorageKey?: string | null;
     presentationUrl?: string | null;
+    videoTransport?: "LIVEKIT" | "YOUTUBE" | "BOTH" | string | null;
     youtubeArchiveVideoUrl?: string | null;
     youtubeVideoId?: string | null;
   } | null;
@@ -628,6 +630,7 @@ function TimelineLectureRow({
   const effectiveStatus = getEffectiveScheduleStatus(scheduleTarget, clientNow);
   const [prepareSlidesOpen, setPrepareSlidesOpen] = useState(false);
   const [completedModalOpen, setCompletedModalOpen] = useState(false);
+  const [startClassModalOpen, setStartClassModalOpen] = useState(false);
 
   const isLive = effectiveStatus === "LIVE";
   const isCompleted = effectiveStatus === "COMPLETED";
@@ -836,19 +839,6 @@ function TimelineLectureRow({
 
           {/* Action Button(s) */}
           <div className="shrink-0 flex items-center gap-1.5">
-            {/* Classroom (new, independent YouTube-Live module) entry point
-                — a sibling action next to the existing Whiteboard
-                Enter/Start Classroom button below, never replacing it. */}
-            {item.type === "LIVE_CLASS" && item.classroomSession && !isCancelled && (
-              <Link
-                href={role === "TEACHER" ? `/team/classroom/${item.id}` : `/classroom/${item.id}`}
-                className="inline-flex items-center gap-1 py-1 px-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[11px] font-bold shadow-sm transition active:scale-95"
-                title="Application Class (Private Unlisted Stream for Enrolled Students)"
-              >
-                <span className="material-symbols-outlined text-[14px]">smart_display</span>
-                <span>Application Class</span>
-              </Link>
-            )}
             {item.type === "DOUBT_SESSION" ? (
               <Link
                 href={
@@ -923,18 +913,26 @@ function TimelineLectureRow({
                 </button>
               )
             ) : teacherEval.allowed ? (
-              <Link
-                href={`/team/live-class/${item.id}`}
-                className={`inline-flex items-center justify-center gap-1 py-1 px-3 rounded-lg text-[11px] font-bold shadow-sm active:scale-95 transition-all text-white ${
-                  isLive
-                    ? "bg-[#a33900] hover:bg-orange-800 animate-pulse shadow-orange-600/30"
-                    : "bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20"
-                }`}
-                title="Application plus YouTube class"
-              >
-                <span className="material-symbols-outlined text-[14px]">videocam</span>
-                <span>{isLive ? "Resume App+YT Class" : "Start App+YT Class"}</span>
-              </Link>
+              isLive ? (
+                <Link
+                  href={`/team/live-class/${item.id}`}
+                  className="inline-flex items-center justify-center gap-1 py-1 px-3 rounded-lg text-[11px] font-bold shadow-sm active:scale-95 transition-all text-white bg-[#a33900] hover:bg-orange-800 animate-pulse shadow-orange-600/30"
+                  title="Resume live class session"
+                >
+                  <span className="material-symbols-outlined text-[14px]">videocam</span>
+                  <span>Resume Class</span>
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setStartClassModalOpen(true)}
+                  className="inline-flex items-center justify-center gap-1 py-1 px-3 rounded-lg text-[11px] font-bold shadow-sm active:scale-95 transition-all text-white bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20 cursor-pointer"
+                  title="Choose delivery mode and start live class"
+                >
+                  <span className="material-symbols-outlined text-[14px]">videocam</span>
+                  <span>Start Class</span>
+                </button>
+              )
             ) : (
               <div className="flex items-center gap-1.5 shrink-0">
                 <button
@@ -962,6 +960,21 @@ function TimelineLectureRow({
           </div>
         </div>
       </div>
+      {startClassModalOpen && (
+        <UnifiedStartClassModal
+          isOpen={startClassModalOpen}
+          onClose={() => setStartClassModalOpen(false)}
+          scheduleId={item.id}
+          title={item.title}
+          subjectName={item.subject}
+          assignedBatches={[{ id: item.batch.id, name: item.batch.name }]}
+          dateStr={formatISTDate(item.startsAt)}
+          timeStr={`${startTimeStr} - ${endTimeStr}`}
+          isLive={isLive}
+          initialTransport={item.liveWhiteboardSession?.videoTransport === "YOUTUBE" ? "YOUTUBE" : "LIVEKIT"}
+          initialYoutubeId={item.liveWhiteboardSession?.youtubeVideoId}
+        />
+      )}
       {prepareSlidesOpen && (
         <PrepareSlidesModal
           scheduleId={item.id}

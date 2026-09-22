@@ -33,6 +33,7 @@ import { DppItem } from "./ChapterDppsTab";
 import { TestItem } from "./ChapterTestsTab";
 import { ChapterReviewHistoryTimeline, ReviewHistoryItem } from "./ChapterReviewHistoryTimeline";
 import { formatISTDate, formatISTTime, computeISTScheduleDates } from "@/lib/date-utils";
+import { UnifiedStartClassModal } from "./UnifiedStartClassModal";
 
 export interface UnifiedChapterScheduleTimelineProps {
   chapterId: string;
@@ -44,6 +45,7 @@ export interface UnifiedChapterScheduleTimelineProps {
   initialTests: TestItem[];
   canEdit: boolean;
   reviews?: ReviewHistoryItem[];
+  assignedBatches?: { id: string; name: string }[];
 }
 
 export type TimelineFilter = "ALL" | "LECTURES" | "DPPS" | "TESTS";
@@ -74,6 +76,7 @@ export function UnifiedChapterScheduleTimeline({
   initialTests,
   canEdit,
   reviews = [],
+  assignedBatches = [],
 }: UnifiedChapterScheduleTimelineProps) {
   const router = useRouter();
 
@@ -84,6 +87,7 @@ export function UnifiedChapterScheduleTimeline({
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
 
   // Modals state
+  const [startClassTarget, setStartClassTarget] = useState<LectureItem | null>(null);
   const [showAddLectureModal, setShowAddLectureModal] = useState(false);
   const [editingLecture, setEditingLecture] = useState<LectureItem | null>(null);
   const [notesModalLecture, setNotesModalLecture] = useState<LectureItem | null>(null);
@@ -593,6 +597,29 @@ export function UnifiedChapterScheduleTimeline({
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
               Unified chronological learning path: Lectures, Practice DPPs, and Assessments in continuous sequence.
             </p>
+
+            {/* Scheduled In Batches Indicator */}
+            <div className="flex items-center gap-2 flex-wrap pt-2">
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                <Layers className="w-3.5 h-3.5 text-blue-600" />
+                Scheduled in:
+              </span>
+              {assignedBatches && assignedBatches.length > 0 ? (
+                assignedBatches.map((b) => (
+                  <span
+                    key={b.id}
+                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-bold bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300"
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    {b.name}
+                  </span>
+                ))
+              ) : (
+                <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">
+                  Not assigned to specific batch (syncs across default batch)
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Quick Add Action Buttons */}
@@ -837,13 +864,14 @@ export function UnifiedChapterScheduleTimeline({
                   {item.type === "LECTURE" && item.lectureData && (
                     <>
                       {item.lectureData.status !== "COMPLETED" && item.lectureData.status !== "RECORDED" && (
-                        <Link
-                          href={`/team/live-class/${item.lectureData?.id || item.id}`}
-                          className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm shadow-blue-500/20 transition"
+                        <button
+                          type="button"
+                          onClick={() => setStartClassTarget(item.lectureData!)}
+                          className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm shadow-blue-500/20 transition cursor-pointer"
                         >
                           <Play className="w-3.5 h-3.5 fill-white" />
                           <span>Start Class</span>
-                        </Link>
+                        </button>
                       )}
 
                       {item.lectureData.slidesUrl ? (
@@ -956,13 +984,17 @@ export function UnifiedChapterScheduleTimeline({
                                 </button>
 
                                 {item.lectureData.status !== "COMPLETED" && item.lectureData.status !== "RECORDED" && (
-                                  <Link
-                                    href={`/team/live-class/${item.lectureData?.id || item.id}`}
-                                    className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition text-left"
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveMenuId(null);
+                                      setStartClassTarget(item.lectureData!);
+                                    }}
+                                    className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition text-left cursor-pointer"
                                   >
                                     <Play className="w-3.5 h-3.5 text-blue-600" />
-                                    <span>Open Live Studio</span>
-                                  </Link>
+                                    <span>Start Live Class</span>
+                                  </button>
                                 )}
                               </>
                             )}
@@ -1642,6 +1674,24 @@ export function UnifiedChapterScheduleTimeline({
             </div>
           </div>
         </div>
+      )}
+
+      {startClassTarget && (
+        <UnifiedStartClassModal
+          isOpen={!!startClassTarget}
+          onClose={() => setStartClassTarget(null)}
+          scheduleId={startClassTarget.id}
+          title={startClassTarget.title}
+          subjectName={chapterTitle}
+          assignedBatches={assignedBatches}
+          dateStr={
+            startClassTarget.scheduledDate
+              ? formatISTDate(startClassTarget.scheduledDate)
+              : null
+          }
+          timeStr={startClassTarget.startTime || null}
+          isLive={startClassTarget.status === "LIVE"}
+        />
       )}
     </div>
   );

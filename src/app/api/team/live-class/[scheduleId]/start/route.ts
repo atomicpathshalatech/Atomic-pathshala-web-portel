@@ -23,10 +23,23 @@ export async function POST(
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.WHITEBOARD_ACCESS);
 
-    const schedule = await prisma.batchSchedule.findUnique({
+    let schedule = await prisma.batchSchedule.findUnique({
       where: { id: params.scheduleId },
       include: { liveWhiteboardSession: true },
     });
+
+    if (!schedule) {
+      const lecture = await prisma.lecture.findUnique({
+        where: { id: params.scheduleId },
+        include: { chapter: true, teacher: true },
+      });
+      if (lecture) {
+        schedule = await prisma.batchSchedule.findFirst({
+          where: { OR: [{ id: lecture.id }, { lectureId: lecture.id }] },
+          include: { liveWhiteboardSession: true },
+        });
+      }
+    }
 
     if (!schedule) return apiError("Scheduled class not found", 404);
     if (schedule.type !== "LIVE_CLASS") {
@@ -198,7 +211,7 @@ export async function POST(
     }
     transactionOps.push(
       prisma.whiteboardSession.upsert({
-        where: { batchScheduleId: params.scheduleId },
+        where: { batchScheduleId: schedule.id },
         update: {
           livePhase: "LIVE",
           status: "ACTIVE",
@@ -271,6 +284,19 @@ export async function POST(
     const txResults = await prisma.$transaction(transactionOps);
     const updatedSchedule = txResults[0];
     const wbSession = txResults[txResults.length - 1];
+
+    // Synchronize all sibling BatchSchedules for this same lecture (across other batches) to LIVE
+    if (schedule.lectureId) {
+      await prisma.batchSchedule
+        .updateMany({
+          where: {
+            lectureId: schedule.lectureId,
+            id: { not: schedule.id },
+          },
+          data: { status: "LIVE" },
+        })
+        .catch((err) => console.error("[multi_batch_sync_live_error]", err));
+    }
 
     // Late-start compliance penalty — only on the genuine first transition
     // to LIVE for this occurrence (existingSession.actualStartedAt was

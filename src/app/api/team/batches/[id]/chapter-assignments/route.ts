@@ -80,6 +80,61 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       create: { batchId: params.id, chapterId, assignedById: session.user.id },
     });
 
+    // Auto-sync existing scheduled lectures in this chapter into this batch's schedule
+    try {
+      const { computeISTScheduleDates } = await import("@/lib/date-utils");
+      const lectures = await prisma.lecture.findMany({
+        where: { chapterId },
+        select: {
+          id: true,
+          title: true,
+          scheduledDate: true,
+          startTime: true,
+          durationMin: true,
+          teacherId: true,
+          chapter: { select: { subject: { select: { title: true } } } },
+        },
+      });
+
+      for (const lec of lectures) {
+        if (lec.scheduledDate && lec.startTime) {
+          const { startsAt, endsAt } = computeISTScheduleDates(
+            lec.scheduledDate,
+            lec.startTime,
+            lec.durationMin || 60
+          );
+          const scheduleKey = `${lec.id}-${params.id}`;
+          await prisma.batchSchedule.upsert({
+            where: { id: scheduleKey },
+            update: {
+              title: lec.title,
+              subject: lec.chapter?.subject?.title || null,
+              teacherId: lec.teacherId,
+              chapterId,
+              lectureId: lec.id,
+              startsAt,
+              endsAt,
+            },
+            create: {
+              id: scheduleKey,
+              title: lec.title,
+              subject: lec.chapter?.subject?.title || null,
+              type: "LIVE_CLASS",
+              batchId: params.id,
+              teacherId: lec.teacherId,
+              chapterId,
+              lectureId: lec.id,
+              startsAt,
+              endsAt,
+              createdById: session.user.id,
+            },
+          });
+        }
+      }
+    } catch (syncErr) {
+      console.error("[batch_chapter_assign_schedule_sync_error]", syncErr);
+    }
+
     await prisma.auditLog
       .create({
         data: {

@@ -48,7 +48,9 @@ export async function PATCH(
         updated.durationMin || 60
       );
       await prisma.batchSchedule.updateMany({
-        where: { id: updated.id },
+        where: {
+          OR: [{ id: updated.id }, { lectureId: updated.id }],
+        },
         data: {
           title: updated.title,
           startsAt,

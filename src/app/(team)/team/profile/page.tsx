@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { UserProfileHeaderCard } from "@/components/team-portal/UserProfileHeaderCard";
 import { SelfProfileForm } from "@/components/team-portal/SelfProfileForm";
 import { ProfileImagesSection } from "@/components/team-portal/ProfileImagesSection";
+import { TeacherProfileChaptersSection } from "@/components/team-portal/TeacherProfileChaptersSection";
 
 export const metadata: Metadata = {
   title: "My Profile",
@@ -26,6 +27,55 @@ export default async function MyProfilePage() {
   if (!user) redirect("/login");
 
   const roleName = user.role?.name || (session.user as any)?.role || "TEAM_MEMBER";
+
+  let teacherChaptersData: any[] = [];
+  if (user.teacher) {
+    const chapters = await prisma.chapter.findMany({
+      where: {
+        OR: [
+          { lectures: { some: { teacherId: user.teacher.id } } },
+          { createdById: user.id },
+        ],
+      },
+      include: {
+        subject: { select: { title: true, course: { select: { title: true } } } },
+        _count: { select: { lectures: true } },
+        batchAssignments: {
+          include: { batch: { select: { id: true, name: true } } },
+        },
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 8,
+    });
+
+    const displayChapters =
+      chapters.length > 0
+        ? chapters
+        : await prisma.chapter.findMany({
+            where: { status: { in: ["PUBLISHED", "APPROVED", "READY_TO_PUBLISH", "LECTURES_IN_PROGRESS"] } },
+            include: {
+              subject: { select: { title: true, course: { select: { title: true } } } },
+              _count: { select: { lectures: true } },
+              batchAssignments: {
+                include: { batch: { select: { id: true, name: true } } },
+              },
+            },
+            orderBy: { updatedAt: "desc" },
+            take: 6,
+          });
+
+    teacherChaptersData = displayChapters.map((ch) => ({
+      id: ch.id,
+      chapterId: ch.chapterId,
+      title: ch.title,
+      medium: ch.medium,
+      status: ch.status,
+      subjectTitle: ch.subject?.title,
+      courseTitle: ch.subject?.course?.title,
+      lectureCount: ch._count.lectures,
+      assignedBatches: ch.batchAssignments.map((bc) => ({ id: bc.batch.id, name: bc.batch.name })),
+    }));
+  }
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -49,7 +99,11 @@ export default async function MyProfilePage() {
 
       {user.teacher ? (
         <div className="space-y-6 pt-4 border-t border-slate-200 dark:border-slate-800">
-          <h2 className="font-headline-md text-headline-md text-[#031635] dark:text-white font-bold">Faculty Credentials & Scope</h2>
+          <TeacherProfileChaptersSection chapters={teacherChaptersData} />
+
+          <h2 className="font-headline-md text-headline-md text-[#031635] dark:text-white font-bold pt-4 border-t border-slate-200 dark:border-slate-800">
+            Faculty Credentials & Scope
+          </h2>
           <div className="glass-card rounded-xl p-6 grid grid-cols-2 gap-4">
             <div>
               <p className="text-label-sm text-on-surface-variant">Employee Code</p>

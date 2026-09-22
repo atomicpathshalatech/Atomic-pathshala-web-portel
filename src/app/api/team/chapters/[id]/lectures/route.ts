@@ -141,39 +141,79 @@ export async function POST(
       },
     });
 
-    // Auto-sync BatchSchedule with accurate IST dates
+    // Auto-sync BatchSchedule with accurate IST dates across all assigned batches
     try {
       const { startsAt, endsAt } = computeISTScheduleDates(parsedDate, startTime, parsedDuration);
-      const defaultBatch =
-        (await prisma.batch.findFirst({ where: { status: "ACTIVE" } })) ||
-        (await prisma.batch.findFirst());
-      if (defaultBatch) {
-        await prisma.batchSchedule.upsert({
-          where: { id: lecture.id },
-          update: {
-            title: lecture.title,
-            subject: chapter.subject?.title || null,
-            teacherId: lecture.teacherId,
-            chapterId: chapter.id,
-            startsAt,
-            endsAt,
-          },
-          create: {
-            id: lecture.id,
-            title: lecture.title,
-            subject: chapter.subject?.title || null,
-            type: "LIVE_CLASS",
-            batchId: defaultBatch.id,
-            teacherId: lecture.teacherId,
-            chapterId: chapter.id,
-            startsAt,
-            endsAt,
-            createdById: session.user.id,
-          },
-        });
+      const batchChapters = await prisma.batchChapter.findMany({
+        where: { chapterId: chapter.id },
+        include: { batch: true },
+      });
+
+      if (batchChapters.length > 0) {
+        for (let i = 0; i < batchChapters.length; i++) {
+          const bc = batchChapters[i];
+          if (!bc) continue;
+          const scheduleKey = i === 0 ? lecture.id : `${lecture.id}-${bc.batchId}`;
+          await prisma.batchSchedule.upsert({
+            where: { id: scheduleKey },
+            update: {
+              title: lecture.title,
+              subject: chapter.subject?.title || null,
+              teacherId: lecture.teacherId,
+              chapterId: chapter.id,
+              lectureId: lecture.id,
+              startsAt,
+              endsAt,
+            },
+            create: {
+              id: scheduleKey,
+              title: lecture.title,
+              subject: chapter.subject?.title || null,
+              type: "LIVE_CLASS",
+              batchId: bc.batchId,
+              teacherId: lecture.teacherId,
+              chapterId: chapter.id,
+              lectureId: lecture.id,
+              startsAt,
+              endsAt,
+              createdById: session.user.id,
+            },
+          });
+        }
+      } else {
+        const defaultBatch =
+          (await prisma.batch.findFirst({ where: { status: "ACTIVE" } })) ||
+          (await prisma.batch.findFirst());
+        if (defaultBatch) {
+          await prisma.batchSchedule.upsert({
+            where: { id: lecture.id },
+            update: {
+              title: lecture.title,
+              subject: chapter.subject?.title || null,
+              teacherId: lecture.teacherId,
+              chapterId: chapter.id,
+              lectureId: lecture.id,
+              startsAt,
+              endsAt,
+            },
+            create: {
+              id: lecture.id,
+              title: lecture.title,
+              subject: chapter.subject?.title || null,
+              type: "LIVE_CLASS",
+              batchId: defaultBatch.id,
+              teacherId: lecture.teacherId,
+              chapterId: chapter.id,
+              lectureId: lecture.id,
+              startsAt,
+              endsAt,
+              createdById: session.user.id,
+            },
+          });
+        }
       }
-    } catch {
-      // Non-blocking sync
+    } catch (syncErr) {
+      console.error("[multi_batch_schedule_sync_error]", syncErr);
     }
 
     await prisma.auditLog.create({

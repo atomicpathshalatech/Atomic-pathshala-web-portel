@@ -59,6 +59,19 @@ export async function GET(
       },
     });
 
+    if (!wbSession && schedule.lectureId) {
+      const siblingSchedule = await prisma.batchSchedule.findFirst({
+        where: {
+          lectureId: schedule.lectureId,
+          liveWhiteboardSession: { isNot: null },
+        },
+        include: { liveWhiteboardSession: true },
+      });
+      if (siblingSchedule?.liveWhiteboardSession) {
+        wbSession = siblingSchedule.liveWhiteboardSession as any;
+      }
+    }
+
 
 
     const {
