@@ -4,6 +4,8 @@
  * containing institute header, batch details, test schedule, chapters and topic breakdown.
  */
 
+import { getLogoDataUri } from "@/lib/logo";
+
 export interface TestSyllabusChapterItem {
   id: string;
   subject: string;
@@ -22,11 +24,14 @@ export interface TestSyllabusData {
   examType?: string | null;
   testType?: string | null;
   batchName?: string | null;
+  logoUri?: string | null;
   chapters: TestSyllabusChapterItem[];
   generatedAt?: Date | string;
 }
 
 export function generateTestSyllabusHtml(data: TestSyllabusData): string {
+  const logoDataUri = data.logoUri || getLogoDataUri();
+
   const generatedDate = new Date(data.generatedAt || Date.now()).toLocaleDateString("en-IN", {
     day: "numeric",
     month: "long",
@@ -57,32 +62,33 @@ export function generateTestSyllabusHtml(data: TestSyllabusData): string {
       const chaptersList = chapters
         .map((ch, idx) => {
           const isCompleteBadge = ch.isComplete
-            ? `<div style="display:inline-block; background-color:#e0f2fe; color:#0369a1; padding:3px 8px; border-radius:4px; font-size:11px; font-weight:700; margin-bottom:6px;">✓ COMPLETE CHAPTER INCLUDED</div>`
+            ? `<span style="display:inline-block; background-color:#e0f2fe; color:#0369a1; padding:3px 8px; border-radius:6px; font-size:11px; font-weight:700; white-space:nowrap; flex-shrink:0;">✓ COMPLETE CHAPTER INCLUDED</span>`
             : "";
 
           const topicsList =
             ch.topics && ch.topics.length > 0 && !ch.isComplete
-              ? `<ul style="margin:4px 0 8px 18px; padding:0; list-style-type:disc; font-size:12px; color:#334155;">
+              ? `<ul style="margin:6px 0 4px 22px; padding:0; list-style-type:disc; font-size:12px; color:#334155; line-height:1.5;">
                   ${ch.topics.map((t) => `<li style="margin-bottom:2px;">${t}</li>`).join("")}
                  </ul>`
               : "";
 
           const customTopicsList =
             ch.customTopics && ch.customTopics.length > 0
-              ? `<div style="margin-top:6px;">
+              ? `<div style="margin:6px 0 4px 22px;">
                   <span style="font-size:11px; font-weight:700; color:#475569; text-transform:uppercase;">Special / Custom Topics:</span>
-                  <ul style="margin:2px 0 6px 18px; padding:0; list-style-type:circle; font-size:12px; color:#1e293b;">
+                  <ul style="margin:2px 0 4px 18px; padding:0; list-style-type:circle; font-size:12px; color:#1e293b;">
                     ${ch.customTopics.map((ct) => `<li style="margin-bottom:2px; font-weight:600;">${ct}</li>`).join("")}
                   </ul>
                  </div>`
               : "";
 
           return `
-            <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:12px 16px; margin-bottom:12px;">
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                <h4 style="margin:0; font-size:14px; font-weight:800; color:#0f172a;">
-                  ${idx + 1}. ${ch.chapterTitle}
-                </h4>
+            <div style="padding:12px 18px; ${idx > 0 ? "border-top:1px solid #e2e8f0;" : ""}">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
+                <div style="font-size:14px; font-weight:700; color:#0f172a; line-height:1.4;">
+                  <span style="color:#0c3ea4; font-weight:800; margin-right:4px;">${idx + 1}.</span>
+                  ${ch.chapterTitle}
+                </div>
                 ${isCompleteBadge}
               </div>
               ${topicsList}
@@ -93,17 +99,23 @@ export function generateTestSyllabusHtml(data: TestSyllabusData): string {
         .join("");
 
       return `
-        <div style="margin-bottom:24px;">
-          <div style="display:flex; align-items:center; gap:8px; border-bottom:2px solid #0c3ea4; padding-bottom:6px; margin-bottom:12px;">
-            <div style="width:8px; height:18px; background:#0c3ea4; border-radius:2px;"></div>
-            <h3 style="margin:0; font-size:16px; font-weight:800; color:#0c3ea4; text-transform:uppercase; letter-spacing:0.5px;">
-              ${subject}
-            </h3>
-            <span style="margin-left:auto; font-size:11px; font-weight:700; color:#64748b;">
+        <div class="subject-box" style="background:#ffffff; border:1.5px solid #cbd5e1; border-radius:12px; margin-bottom:20px; overflow:hidden; page-break-inside:avoid; break-inside:avoid; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+          <!-- Subject Header inside the Subject Box -->
+          <div style="background:#f8fafc; border-bottom:1.5px solid #e2e8f0; padding:12px 18px; display:flex; justify-content:space-between; align-items:center;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <div style="width:6px; height:18px; background:#0c3ea4; border-radius:3px;"></div>
+              <h3 style="margin:0; font-size:15px; font-weight:800; color:#0c3ea4; text-transform:uppercase; letter-spacing:0.5px;">
+                ${subject}
+              </h3>
+            </div>
+            <span style="font-size:11px; font-weight:700; color:#0369a1; background:#e0f2fe; padding:3px 10px; border-radius:999px;">
               ${chapters.length} Chapter${chapters.length > 1 ? "s" : ""}
             </span>
           </div>
-          ${chaptersList}
+          <!-- All Chapters for this Subject inside this single Box -->
+          <div>
+            ${chaptersList}
+          </div>
         </div>
       `;
     })
@@ -181,18 +193,19 @@ export function generateTestSyllabusHtml(data: TestSyllabusData): string {
 
   <div class="sheet">
     <!-- Header with Branding -->
-    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #e2e8f0; padding-bottom:16px; margin-bottom:20px;">
-      <div>
-        <div style="display:flex; align-items:center; gap:8px;">
-          <h1 style="margin:0; font-size:24px; font-weight:900; color:#0c3ea4; letter-spacing:-0.5px;">ATOMIC PATHSHALA</h1>
+    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #e2e8f0; padding-bottom:18px; margin-bottom:22px;">
+      <div style="display:flex; align-items:center; gap:14px;">
+        <img src="${logoDataUri}" alt="Atomic Pathshala" onerror="this.onerror=null;this.src='/brand/logo.png';" style="height:54px; width:54px; object-fit:contain; border-radius:10px; background:#ffffff; padding:2px; border:1px solid #e2e8f0; flex-shrink:0;" />
+        <div>
+          <h1 style="margin:0; font-size:22px; font-weight:900; color:#0c3ea4; letter-spacing:-0.5px; line-height:1.2;">ATOMIC PATHSHALA</h1>
+          <p style="margin:3px 0 0 0; font-size:12px; font-weight:600; color:#64748b;">Premier Medical & Engineering Assessment Portal</p>
         </div>
-        <p style="margin:3px 0 0 0; font-size:12px; font-weight:600; color:#64748b;">Premier Medical & Engineering Assessment Portal</p>
       </div>
       <div style="text-align:right;">
-        <span style="display:inline-block; background:#0c3ea4; color:#fff; font-size:11px; font-weight:800; padding:4px 10px; border-radius:6px; letter-spacing:0.5px;">
+        <span style="display:inline-block; background:#0c3ea4; color:#fff; font-size:11px; font-weight:800; padding:5px 12px; border-radius:6px; letter-spacing:0.5px; text-transform:uppercase;">
           OFFICIAL TEST SYLLABUS
         </span>
-        <p style="margin:4px 0 0 0; font-size:11px; color:#94a3b8; font-family:monospace;">Published: ${generatedDate}</p>
+        <p style="margin:5px 0 0 0; font-size:11px; color:#94a3b8; font-family:monospace;">Published: ${generatedDate}</p>
       </div>
     </div>
 
