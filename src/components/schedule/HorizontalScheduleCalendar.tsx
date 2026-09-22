@@ -452,7 +452,7 @@ export function HorizontalScheduleCalendar({
       <section className="relative w-full">
         <div
           ref={scrollContainerRef}
-          className="w-full overflow-x-auto no-scrollbar py-2 px-1 scroll-smooth snap-x touch-pan-x flex items-center gap-2.5 min-w-full"
+          className="w-full overflow-x-auto no-scrollbar py-1.5 px-0.5 scroll-smooth snap-x touch-pan-x flex items-center gap-2 min-w-full"
         >
           {monthDays.map((day) => {
             const isSelected = selectedDateKey === day.key;
@@ -467,9 +467,9 @@ export function HorizontalScheduleCalendar({
                 key={day.key}
                 data-day-key={day.key}
                 onClick={() => setSelectedDateKey(day.key)}
-                className={`flex flex-col items-center justify-center min-w-[56px] w-14 py-2.5 rounded-2xl transition-all active:scale-95 border snap-center shrink-0 cursor-pointer ${
+                className={`flex flex-col items-center justify-center min-w-[46px] w-[46px] sm:min-w-[50px] sm:w-[50px] py-1.5 sm:py-2 rounded-xl transition-all active:scale-95 border snap-center shrink-0 cursor-pointer ${
                   isSelected
-                    ? "bg-[#a33900] text-white border-[#a33900] shadow-md scale-105"
+                    ? "bg-[#a33900] text-white border-[#a33900] shadow-sm scale-105"
                     : day.isToday
                     ? "bg-orange-50 dark:bg-orange-950/30 border-orange-300 dark:border-orange-800 text-orange-900 dark:text-orange-200"
                     : "bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
@@ -477,21 +477,21 @@ export function HorizontalScheduleCalendar({
                 type="button"
               >
                 <span
-                  className={`text-[10px] font-bold uppercase tracking-wider ${
+                  className={`text-[9px] font-bold uppercase tracking-wide leading-none ${
                     isSelected ? "text-orange-100" : "text-slate-500 dark:text-slate-400"
                   }`}
                 >
                   {day.dayName}
                 </span>
                 <span
-                  className={`text-base sm:text-lg font-black leading-tight mt-0.5 ${
+                  className={`text-sm sm:text-[15px] font-black leading-none mt-1 ${
                     isSelected ? "text-white" : "text-slate-900 dark:text-white"
                   }`}
                 >
                   {day.dayNum}
                 </span>
                 <span
-                  className={`w-1.5 h-1.5 rounded-full mt-1 ${
+                  className={`w-1 h-1 rounded-full mt-1 ${
                     hasLive
                       ? "bg-rose-500 animate-ping"
                       : hasClasses
