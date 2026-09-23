@@ -558,6 +558,17 @@ export function StudentLiveClassRoom({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showChat, setShowChat] = useState(true);
   const [mobileLandscapeShowChat, setMobileLandscapeShowChat] = useState(false);
+  const [mobileCamCorner, setMobileCamCorner] = useState<"top-left" | "top-right" | "bottom-right" | "bottom-left">("top-right");
+
+  const toggleMobileCamCorner = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setMobileCamCorner((prev) => {
+      if (prev === "top-right") return "top-left";
+      if (prev === "top-left") return "bottom-left";
+      if (prev === "bottom-left") return "bottom-right";
+      return "top-right";
+    });
+  };
 
   // Floating teacher camera position — used only on desktop when the
   // teacher's Material & Setup camera shape is Circular (see isCameraCircle
@@ -1682,7 +1693,25 @@ export function StudentLiveClassRoom({
                   appears for the on-demand LiveKit audio connection while a
                   hand raise (or teacher-connect) is actively granted. */}
               {(isApprovedSpeaker || teacherAudioConnected || teacherVideoConnected) && (
-                <div className="absolute top-2 left-2 w-28 xs:w-32 aspect-video rounded-lg overflow-hidden border border-emerald-500/60 shadow-xl bg-[#10121d] z-20">
+                <div
+                  className={`absolute ${
+                    mobileCamCorner === "top-right"
+                      ? "top-2 right-2"
+                      : mobileCamCorner === "bottom-right"
+                      ? "bottom-2 right-2"
+                      : mobileCamCorner === "bottom-left"
+                      ? "bottom-2 left-2"
+                      : "top-2 left-2"
+                  } w-28 xs:w-32 aspect-video rounded-lg overflow-hidden border border-emerald-500/60 shadow-xl bg-[#10121d] z-20 transition-all duration-200`}
+                >
+                  <button
+                    type="button"
+                    onClick={toggleMobileCamCorner}
+                    className="absolute top-1 right-1 z-30 w-5 h-5 rounded bg-black/60 hover:bg-black/80 text-white/90 flex items-center justify-center text-[10px]"
+                    title="Reposition camera to next corner"
+                  >
+                    <span className="material-symbols-outlined text-xs">sync_alt</span>
+                  </button>
                   <VideoStrip
                     whiteboardSessionId={wbSession?.id || batchScheduleId}
                     variant="panel"
@@ -1709,9 +1738,27 @@ export function StudentLiveClassRoom({
                 isLive={isLive}
                 objects={boardObjects}
               />
-              {/* Mobile PiP Teacher Video (Corner Preview) */}
+              {/* Mobile PiP Teacher Video (Corner Preview with switchable position) */}
               {!isYouTube && (
-                <div className="absolute top-2 left-2 w-28 xs:w-32 aspect-video rounded-lg overflow-hidden border border-blue-500/60 shadow-xl bg-[#10121d] z-20">
+                <div
+                  className={`absolute ${
+                    mobileCamCorner === "top-right"
+                      ? "top-2 right-2"
+                      : mobileCamCorner === "bottom-right"
+                      ? "bottom-2 right-2"
+                      : mobileCamCorner === "bottom-left"
+                      ? "bottom-2 left-2"
+                      : "top-2 left-2"
+                  } w-28 xs:w-32 aspect-video rounded-lg overflow-hidden border border-blue-500/60 shadow-xl bg-[#10121d] z-20 transition-all duration-200`}
+                >
+                  <button
+                    type="button"
+                    onClick={toggleMobileCamCorner}
+                    className="absolute top-1 right-1 z-30 w-5 h-5 rounded bg-black/60 hover:bg-black/80 text-white/90 flex items-center justify-center text-[10px]"
+                    title="Reposition camera to next corner"
+                  >
+                    <span className="material-symbols-outlined text-xs">sync_alt</span>
+                  </button>
                   <VideoStrip
                     whiteboardSessionId={wbSession?.id || batchScheduleId}
                     variant="panel"

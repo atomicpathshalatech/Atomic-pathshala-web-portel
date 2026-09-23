@@ -77,6 +77,7 @@ export function CompletedClassModal({
   const [error, setError] = useState<string | null>(null);
   const [notesType, setNotesType] = useState<"annotated" | "original">("annotated");
   const [activeTab, setActiveTab] = useState<"notes" | "overview">("notes");
+  const [isNotesFullscreen, setIsNotesFullscreen] = useState(false);
 
   // Close on Escape key
   useEffect(() => {
@@ -311,16 +312,15 @@ export function CompletedClassModal({
 
                 {assets?.notes?.status === "READY" && activeNotesUrl && (
                   <div className="flex items-center gap-2 ml-auto">
-                    <a
-                      href={activeNotesUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold border border-white/10 transition shadow-xs"
-                      title="Open in new window"
+                    <button
+                      type="button"
+                      onClick={() => setIsNotesFullscreen(true)}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold border border-white/10 transition shadow-xs cursor-pointer"
+                      title="Open full screen in app"
                     >
-                      <span className="material-symbols-outlined text-sm">open_in_new</span>
+                      <span className="material-symbols-outlined text-sm">fullscreen</span>
                       <span>Open Full</span>
-                    </a>
+                    </button>
 
                     <a
                       href={activeNotesUrl}
@@ -397,6 +397,47 @@ export function CompletedClassModal({
           )}
         </div>
       </div>
+
+      {/* In-App Fullscreen PDF Notes Viewer */}
+      {isNotesFullscreen && activeNotesUrl && (
+        <div className="fixed inset-0 z-60 bg-slate-950/95 flex flex-col p-2 sm:p-4 animate-in fade-in duration-200">
+          <div className="flex items-center justify-between p-3 bg-slate-900 border border-white/10 rounded-2xl mb-2 text-white">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-blue-400">description</span>
+              <span className="text-sm font-bold truncate max-w-xs sm:max-w-md">
+                {classTitle} — Class Notes PDF
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <a
+                href={activeNotesUrl}
+                download
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-1 transition"
+              >
+                <span className="material-symbols-outlined text-sm">download</span>
+                <span>Download</span>
+              </a>
+              <button
+                type="button"
+                onClick={() => setIsNotesFullscreen(false)}
+                className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition cursor-pointer"
+                title="Exit Fullscreen Notes"
+              >
+                <span className="material-symbols-outlined text-lg">close</span>
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 w-full rounded-2xl overflow-hidden border border-white/10 bg-slate-900">
+            <iframe
+              src={`${activeNotesUrl}#toolbar=1&navpanes=0`}
+              title="Full Screen Class Notes PDF"
+              className="w-full h-full border-0 bg-slate-800"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

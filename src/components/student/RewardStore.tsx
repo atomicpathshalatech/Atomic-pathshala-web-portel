@@ -33,7 +33,66 @@ export function RewardStore({
 }) {
   const [xp, setXp] = useState(initialXp);
   const [redeemingId, setRedeemingId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"store" | "badges">("store");
+  const [activeTab, setActiveTab] = useState<"store" | "badges" | "rules">("store");
+
+  const xpRules = [
+    {
+      emoji: "📅",
+      icon: "calendar_today",
+      activity: "Daily App Login / Active Day",
+      hindiDesc: "प्रतिदिन ऐप में लॉगिन या एक्टिव रहकर पढ़ाई करने पर",
+      reward: "+10 XP",
+      badgeColor: "bg-blue-500/10 text-blue-400 border-blue-500/30",
+    },
+    {
+      emoji: "📝",
+      icon: "quiz",
+      activity: "Question Practice / Quiz",
+      hindiDesc: "प्रति सही उत्तर (+100% एक्यूरेसी पर एक्स्ट्रा बोनस XP)",
+      reward: "+5 XP",
+      badgeColor: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30",
+    },
+    {
+      emoji: "📑",
+      icon: "assignment",
+      activity: "Daily Practice Paper (DPP)",
+      hindiDesc: "प्रति सबमिट और कम्प्लीट की गई DPP शीट",
+      reward: "+25 XP",
+      badgeColor: "bg-amber-500/10 text-amber-400 border-amber-500/30",
+    },
+    {
+      emoji: "🏆",
+      icon: "emoji_events",
+      activity: "Full Mock Test / Chapter Test",
+      hindiDesc: "टेस्ट की अवधि, कठिनाई और स्कोर के अनुसार",
+      reward: "+50 से +100 XP",
+      badgeColor: "bg-purple-500/10 text-purple-400 border-purple-500/30",
+    },
+    {
+      emoji: "🔴",
+      icon: "videocam",
+      activity: "Live Class Attendance",
+      hindiDesc: "पूरी लाइव क्लास समय पर अटेंड करने पर",
+      reward: "+20 XP",
+      badgeColor: "bg-rose-500/10 text-rose-400 border-rose-500/30",
+    },
+    {
+      emoji: "🎥",
+      icon: "smart_display",
+      activity: "Recorded Lecture Video",
+      hindiDesc: "रिकॉर्डेड वीडियो लेक्चर पूरा देखने पर",
+      reward: "+15 XP",
+      badgeColor: "bg-cyan-500/10 text-cyan-400 border-cyan-500/30",
+    },
+    {
+      emoji: "🛡️",
+      icon: "shield",
+      activity: "Streak Repair & Freeze",
+      hindiDesc: "Reward Store से छूटी हुई स्ट्रीक रीस्टोर करने हेतु",
+      reward: "150 XP Cost",
+      badgeColor: "bg-orange-500/10 text-orange-400 border-orange-500/30",
+    },
+  ];
 
   const badges: Badge[] = [
     {
@@ -113,11 +172,11 @@ export function RewardStore({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 bg-surface-container-lowest p-1.5 rounded-2xl border border-outline-variant/20 self-start sm:self-auto">
+        <div className="flex flex-wrap items-center gap-2 bg-surface-container-lowest p-1.5 rounded-2xl border border-outline-variant/20 self-start sm:self-auto">
           <button
             type="button"
             onClick={() => setActiveTab("store")}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 ${
               activeTab === "store"
                 ? "bg-primary text-on-primary shadow-sm"
                 : "text-on-surface-variant hover:text-on-surface"
@@ -129,7 +188,7 @@ export function RewardStore({
           <button
             type="button"
             onClick={() => setActiveTab("badges")}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 ${
               activeTab === "badges"
                 ? "bg-primary text-on-primary shadow-sm"
                 : "text-on-surface-variant hover:text-on-surface"
@@ -138,55 +197,87 @@ export function RewardStore({
             <span className="material-symbols-outlined text-sm">military_tech</span>
             My Badges
           </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("rules")}
+            className={`px-3.5 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 ${
+              activeTab === "rules"
+                ? "bg-amber-400 text-amber-950 shadow-sm font-bold"
+                : "text-amber-400/90 hover:text-amber-300"
+            }`}
+          >
+            <span className="material-symbols-outlined text-sm">bolt</span>
+            XP Guide
+          </button>
         </div>
       </section>
 
       {/* Tab 1: Reward Store */}
       {activeTab === "store" && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {items.map((item) => {
-            const canAfford = xp >= item.costXp;
-            const isPending = redeemingId === item.id;
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {items.map((item) => {
+              const canAfford = xp >= item.costXp;
+              const isPending = redeemingId === item.id;
 
-            return (
-              <div
-                key={item.id}
-                className="glass-card rounded-2xl p-6 flex flex-col justify-between hover:shadow-lg transition-all border border-outline-variant/30 relative group"
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center">
-                      <span className="material-symbols-outlined text-2xl">{item.icon}</span>
+              return (
+                <div
+                  key={item.id}
+                  className="glass-card rounded-2xl p-6 flex flex-col justify-between hover:shadow-lg transition-all border border-outline-variant/30 relative group"
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center">
+                        <span className="material-symbols-outlined text-2xl">{item.icon}</span>
+                      </div>
+                      <span className="font-mono text-sm font-bold px-3 py-1 rounded-full bg-amber-400/10 text-amber-500 border border-amber-400/30">
+                        {item.costXp} XP
+                      </span>
                     </div>
-                    <span className="font-mono text-sm font-bold px-3 py-1 rounded-full bg-amber-400/10 text-amber-500 border border-amber-400/30">
-                      {item.costXp} XP
-                    </span>
+
+                    <h3 className="font-bold text-sm text-on-surface mb-1">{item.title}</h3>
+                    <p className="text-xs text-on-surface-variant leading-relaxed">{item.description}</p>
                   </div>
 
-                  <h3 className="font-bold text-sm text-on-surface mb-1">{item.title}</h3>
-                  <p className="text-xs text-on-surface-variant leading-relaxed">{item.description}</p>
+                  <div className="pt-6">
+                    <button
+                      type="button"
+                      disabled={!canAfford || isPending}
+                      onClick={() => handleRedeem(item)}
+                      className={`w-full py-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                        canAfford
+                          ? "bg-primary text-on-primary hover:opacity-90 active:scale-95 shadow-md"
+                          : "bg-surface-container-high text-on-surface-variant opacity-60 cursor-not-allowed"
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-sm">
+                        {isPending ? "progress_activity" : canAfford ? "lock_open" : "lock"}
+                      </span>
+                      {isPending ? "Redeeming..." : canAfford ? "Redeem Reward" : `Need ${item.costXp - xp} more XP`}
+                    </button>
+                  </div>
                 </div>
+              );
+            })}
+          </div>
 
-                <div className="pt-6">
-                  <button
-                    type="button"
-                    disabled={!canAfford || isPending}
-                    onClick={() => handleRedeem(item)}
-                    className={`w-full py-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
-                      canAfford
-                        ? "bg-primary text-on-primary hover:opacity-90 active:scale-95 shadow-md"
-                        : "bg-surface-container-high text-on-surface-variant opacity-60 cursor-not-allowed"
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-sm">
-                      {isPending ? "progress_activity" : canAfford ? "lock_open" : "lock"}
-                    </span>
-                    {isPending ? "Redeeming..." : canAfford ? "Redeem Reward" : `Need ${item.costXp - xp} more XP`}
-                  </button>
-                </div>
+          {/* Quick inline trigger to view how XP is earned */}
+          <div className="p-4 rounded-2xl border border-amber-400/20 bg-amber-400/5 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="material-symbols-outlined text-amber-400 text-2xl">info</span>
+              <div>
+                <p className="text-xs font-bold text-on-surface">XP Points Kaise Milte Hain?</p>
+                <p className="text-[11px] text-on-surface-variant">Daily login, tests, DPP, aur question practice se XP earn karein.</p>
               </div>
-            );
-          })}
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveTab("rules")}
+              className="text-xs font-semibold text-amber-400 hover:text-amber-300 underline flex items-center gap-1 shrink-0"
+            >
+              View XP Distribution Breakdown &rarr;
+            </button>
+          </div>
         </div>
       )}
 
@@ -225,6 +316,85 @@ export function RewardStore({
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Tab 3: XP Distribution Breakdown Guide (प्लेटफ़ॉर्म पर XP Points कैसे मिलते हैं) */}
+      {activeTab === "rules" && (
+        <div className="glass-card rounded-2xl p-5 md:p-7 border border-outline-variant/30 space-y-5 bg-surface-container-lowest/70 backdrop-blur-md shadow-lg">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-outline-variant/20">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xl">📊</span>
+                <h2 className="font-headline-md text-base md:text-lg font-bold text-on-surface">
+                  प्लेटफ़ॉर्म पर XP Points कैसे मिलते हैं (XP Distribution Breakdown)
+                </h2>
+              </div>
+              <p className="text-xs text-on-surface-variant mt-1">
+                नीचे दी गई एक्टिविटीज़ को पूरा करके आप रोज़ाना अधिक से अधिक XP कमा सकते हैं और रिवॉर्ड्स अनलॉक कर सकते हैं:
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveTab("store")}
+              className="px-3 py-1.5 rounded-lg bg-surface-container-high text-xs font-semibold text-on-surface hover:bg-surface-container-highest transition-all self-start sm:self-auto"
+            >
+              Back to Store
+            </button>
+          </div>
+
+          <div className="overflow-x-auto rounded-xl border border-outline-variant/20">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-surface-container-high/80 text-on-surface font-semibold uppercase tracking-wider text-[11px] border-b border-outline-variant/20">
+                <tr>
+                  <th className="py-3 px-4">Activity</th>
+                  <th className="py-3 px-4">विवरण / Details</th>
+                  <th className="py-3 px-4 text-right">XP Points Earned</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-outline-variant/15">
+                {xpRules.map((rule, idx) => (
+                  <tr key={idx} className="hover:bg-surface-container-high/30 transition-colors">
+                    <td className="py-3.5 px-4">
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-base">{rule.emoji}</span>
+                        <span className="font-semibold text-on-surface">{rule.activity}</span>
+                      </div>
+                    </td>
+                    <td className="py-3.5 px-4 text-on-surface-variant">
+                      {rule.hindiDesc}
+                    </td>
+                    <td className="py-3.5 px-4 text-right">
+                      <span className={`inline-block font-mono font-bold px-2.5 py-1 rounded-full text-xs border ${rule.badgeColor}`}>
+                        {rule.reward}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+            <div className="p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5">
+              <h4 className="text-xs font-bold text-emerald-400 flex items-center gap-1.5 mb-1">
+                <span className="material-symbols-outlined text-sm">trending_up</span>
+                Level Up System
+              </h4>
+              <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                जैसे-जैसे आप XP कमाते हैं, आपका लेवल (Level 1 से Level 10+) बढ़ता जाता है और लीडरबोर्ड पर आपकी रैंक ऊपर होती है।
+              </p>
+            </div>
+            <div className="p-4 rounded-xl border border-amber-500/20 bg-amber-500/5">
+              <h4 className="text-xs font-bold text-amber-400 flex items-center gap-1.5 mb-1">
+                <span className="material-symbols-outlined text-sm">local_fire_department</span>
+                Streak Freeze & Repair
+              </h4>
+              <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                अगर किसी दिन पढ़ाई छूट जाए, तो 150 XP खर्च करके आप अपनी पुरानी स्ट्रीक वापस रीस्टोर कर सकते हैं।
+              </p>
+            </div>
+          </div>
         </div>
       )}
     </div>

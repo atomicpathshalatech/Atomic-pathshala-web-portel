@@ -878,17 +878,48 @@ export function LectureVideoPlayer({
   // Progress Bar Scrubbing with Pointer Capture & Touch Support
   const calculateScrubPositionFromClientX = useCallback(
     (clientX: number) => {
-      if (!progressBarRef.current || duration <= 0) return 0;
+      if (!progressBarRef.current) return 0;
+      let effectiveDur = duration;
+      if (effectiveDur <= 0) {
+        if (isYouTube && ytPlayerRef.current?.getDuration) {
+          try {
+            const d = ytPlayerRef.current.getDuration();
+            if (typeof d === "number" && d > 0) {
+              effectiveDur = d;
+              setDuration(d);
+            }
+          } catch {}
+        } else if (videoRef.current?.duration && videoRef.current.duration > 0) {
+          effectiveDur = videoRef.current.duration;
+          setDuration(effectiveDur);
+        }
+      }
+      if (effectiveDur <= 0) return 0;
       const rect = progressBarRef.current.getBoundingClientRect();
       if (rect.width <= 0) return 0;
       const pos = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-      return pos * duration;
+      return pos * effectiveDur;
     },
-    [duration]
+    [duration, isYouTube]
   );
 
   const handleProgressPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (duration <= 0) return;
+    let effectiveDur = duration;
+    if (effectiveDur <= 0) {
+      if (isYouTube && ytPlayerRef.current?.getDuration) {
+        try {
+          const d = ytPlayerRef.current.getDuration();
+          if (typeof d === "number" && d > 0) {
+            effectiveDur = d;
+            setDuration(d);
+          }
+        } catch {}
+      } else if (videoRef.current?.duration && videoRef.current.duration > 0) {
+        effectiveDur = videoRef.current.duration;
+        setDuration(effectiveDur);
+      }
+    }
+    if (effectiveDur <= 0) return;
     e.preventDefault();
     e.stopPropagation();
 
@@ -900,15 +931,15 @@ export function LectureVideoPlayer({
     const target = calculateScrubPositionFromClientX(e.clientX);
     scrubTargetTimeRef.current = target;
     setCurrentTime(target);
-    setHoverPosition((target / duration) * 100);
+    setHoverPosition((target / effectiveDur) * 100);
     setHoverTime(target);
     resetControlsTimer();
   };
 
   const handleProgressPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (duration <= 0) return;
+    const effectiveDur = duration > 0 ? duration : (scrubTargetTimeRef.current || 1);
     const target = calculateScrubPositionFromClientX(e.clientX);
-    const pct = (target / duration) * 100;
+    const pct = effectiveDur > 0 ? (target / effectiveDur) * 100 : 0;
     setHoverPosition(pct);
     setHoverTime(target);
 
@@ -920,7 +951,6 @@ export function LectureVideoPlayer({
   };
 
   const handleProgressPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (duration <= 0) return;
     e.preventDefault();
     e.stopPropagation();
 

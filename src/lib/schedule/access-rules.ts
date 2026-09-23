@@ -104,10 +104,9 @@ export function isScheduleGenuinelyLive(schedule: ScheduleAccessTarget): boolean
     return false;
   }
   return (
-    schedule.liveWhiteboardSession?.livePhase === "LIVE" ||
-    (schedule.status === "LIVE" &&
-      schedule.liveWhiteboardSession?.livePhase !== "PREPARING" &&
-      schedule.liveWhiteboardSession?.livePhase !== "SCHEDULED")
+    schedule.status === "LIVE" ||
+    schedule.liveWhiteboardSession?.status === "ACTIVE" ||
+    schedule.liveWhiteboardSession?.livePhase === "LIVE"
   );
 }
 

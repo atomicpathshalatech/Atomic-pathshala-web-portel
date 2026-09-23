@@ -119,14 +119,6 @@ export function StickyPurchaseBar({ course }: { course: CourseData }) {
               arrow_forward
             </span>
           </Link>
-
-          <a
-            href="#trial"
-            className="w-full bg-slate-100 hover:bg-slate-200 text-[#031635] font-bold text-xs py-3 rounded-2xl transition-all text-center flex items-center justify-center gap-1.5"
-          >
-            <span className="material-symbols-outlined text-base text-amber-500">play_circle</span>
-            <span>Start Free Trial (3 Classes)</span>
-          </a>
         </div>
 
         {/* Benefits Checklist */}
@@ -172,15 +164,9 @@ export function StickyPurchaseBar({ course }: { course: CourseData }) {
         </div>
 
         <div className="flex items-center gap-2">
-          <a
-            href="#trial"
-            className="bg-slate-100 text-[#031635] text-[11px] font-bold px-3 py-2.5 rounded-xl whitespace-nowrap"
-          >
-            Free Trial
-          </a>
           <Link
             href={`/checkout/${course.slug}`}
-            className="bg-[#6b46c1] hover:bg-[#5b3da5] text-white font-black text-xs px-5 py-2.5 rounded-xl shadow-md shadow-blue-500/20 whitespace-nowrap"
+            className="bg-[#6b46c1] hover:bg-[#5b3da5] text-white font-black text-xs px-6 py-2.5 rounded-xl shadow-md shadow-blue-500/20 whitespace-nowrap"
           >
             BUY NOW
           </Link>

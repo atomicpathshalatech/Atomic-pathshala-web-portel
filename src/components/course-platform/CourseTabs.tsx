@@ -11,7 +11,6 @@ export const COURSE_TABS = [
   { id: "tests", label: "Tests", icon: "quiz", accent: "orange" },
   { id: "schedule", label: "Schedule", icon: "calendar_month", accent: "teal" },
   { id: "material", label: "Study Material", icon: "folder_open", accent: "amber" },
-  { id: "trial", label: "Free Trial", icon: "play_lesson", accent: "cyan" },
   { id: "faq", label: "FAQs", icon: "help", accent: "fuchsia" },
 ] as const;
 
@@ -28,7 +27,6 @@ const ACCENT: Record<Accent, string> = {
   orange: "bg-orange-50 text-orange-600 ring-orange-100",
   teal: "bg-teal-50 text-teal-600 ring-teal-100",
   amber: "bg-amber-50 text-amber-600 ring-amber-100",
-  cyan: "bg-cyan-50 text-cyan-600 ring-cyan-100",
   fuchsia: "bg-fuchsia-50 text-fuchsia-600 ring-fuchsia-100",
 };
 

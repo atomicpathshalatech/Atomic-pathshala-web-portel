@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Suspense } from "react";
 import { Inter } from "next/font/google";
 import { Toaster } from "sonner";
 import "./globals.css";
@@ -6,6 +7,7 @@ import { AuthSessionProvider } from "@/components/providers/AuthSessionProvider"
 import { CapacitorProvider } from "@/components/providers/CapacitorProvider";
 import { PwaProvider } from "@/components/pwa/PwaProvider";
 import { DisableZoomProvider } from "@/components/providers/DisableZoomProvider";
+import { ActivityTelemetryProvider } from "@/components/providers/ActivityTelemetryProvider";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
@@ -93,7 +95,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <DisableZoomProvider />
         <AuthSessionProvider>
           <CapacitorProvider>
-            {children}
+            <Suspense fallback={null}>
+              <ActivityTelemetryProvider>
+                {children}
+              </ActivityTelemetryProvider>
+            </Suspense>
           </CapacitorProvider>
         </AuthSessionProvider>
         <PwaProvider />

@@ -42,6 +42,7 @@ const NAV_SECTIONS: { title?: string; items: { href: string; label: string; icon
     items: [
       { href: "/team/website/banners", label: "App & Web Banners", icon: "view_carousel", permission: PERMISSIONS.TEAM_PORTAL_ACCESS },
       { href: "/team/website/testimonials", label: "Student Feedback / Reviews", icon: "rate_review", permission: PERMISSIONS.TEAM_PORTAL_ACCESS },
+      { href: "/team/website/faqs", label: "FAQs (फेक प्रश्न/उत्तर)", icon: "help_center", permission: PERMISSIONS.TEAM_PORTAL_ACCESS },
       { href: "/team/website", label: "Website Builder", icon: "web", permission: PERMISSIONS.TEAM_PORTAL_ACCESS },
     ],
   },

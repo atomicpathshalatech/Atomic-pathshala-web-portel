@@ -132,6 +132,7 @@ model User {
   emailTemplatesCreated  EmailTemplate[]   @relation("EmailTemplateCreatedBy")
   emailCampaignsCreated  EmailCampaign[]   @relation("EmailCampaignCreatedBy")
   adminDirectConversations TeacherDirectConversation[] @relation("AdminDirectConversations")
+  pageActivityLogs       PageActivityLog[]
 
   // --- AI Chat / Atomic Guru integration (imported from _import_atomic-ai-chat) ---
   // Reuses this existing User for login — the imported app's own User/Account/
@@ -5902,5 +5903,39 @@ model NcertStudentAttempt {
   @@index([pageProgressId])
   @@index([studentId, pageId])
   @@map("ncert_student_attempts")
+}
+
+model PageActivityLog {
+  id              String   @id @default(cuid())
+  visitorId       String?
+  userId          String?
+  role            String?  @default("GUEST")
+  userName        String?
+  userEmail       String?
+  path            String
+  title           String?
+  action          String   @default("PAGE_VIEW")
+  entityType      String?
+  entityId        String?
+  ipAddress       String?
+  city            String?
+  region          String?
+  country         String?
+  deviceType      String?  @default("DESKTOP")
+  browser         String?
+  os              String?
+  durationSeconds Int      @default(0)
+  metadata        Json?
+  createdAt       DateTime @default(now())
+
+  user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([role, createdAt])
+  @@index([visitorId, createdAt])
+  @@index([path, createdAt])
+  @@index([action, createdAt])
+  @@index([createdAt])
+  @@map("page_activity_logs")
 }
 
