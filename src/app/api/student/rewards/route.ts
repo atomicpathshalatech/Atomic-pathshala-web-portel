@@ -71,10 +71,31 @@ export async function POST(req: NextRequest) {
 
     // Deduct XP and log redemption
     const newXp = student.xp - item.costXp;
+    
+    // If student redeemed Streak Freeze / Repair, restore their active streak to their longest streak
+    let streakUpdateData: { currentStreakDays?: number; lastActivityDate?: Date } = {};
+    let customMessage = `Successfully unlocked "${item.title}"!`;
+
+    if (item.id === "item_streak_freeze") {
+      const studentData = await prisma.student.findUnique({
+        where: { id: student.id },
+        select: { currentStreakDays: true, longestStreakDays: true },
+      });
+      const restoredStreak = Math.max(studentData?.currentStreakDays || 0, studentData?.longestStreakDays || 1);
+      streakUpdateData = {
+        currentStreakDays: restoredStreak,
+        lastActivityDate: new Date(),
+      };
+      customMessage = `🔥 Streak Freeze Shield Activated! Your study streak has been restored to ${restoredStreak} Days.`;
+    }
+
     await prisma.$transaction([
       prisma.student.update({
         where: { id: student.id },
-        data: { xp: newXp },
+        data: {
+          xp: newXp,
+          ...streakUpdateData,
+        },
       }),
       prisma.auditLog.create({
         data: {
@@ -86,6 +107,7 @@ export async function POST(req: NextRequest) {
             itemTitle: item.title,
             costXp: item.costXp,
             remainingXp: newXp,
+            streakRestored: streakUpdateData.currentStreakDays ?? null,
           },
         },
       }),
@@ -93,8 +115,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `Successfully unlocked "${item.title}"!`,
-      data: { remainingXp: newXp, item },
+      message: customMessage,
+      data: { remainingXp: newXp, item, restoredStreak: streakUpdateData.currentStreakDays },
     });
   } catch {
     return NextResponse.json({ success: false, error: "Redemption failed. Please try again." }, { status: 500 });

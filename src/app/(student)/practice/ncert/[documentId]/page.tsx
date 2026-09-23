@@ -267,9 +267,28 @@ export default function NcertChapterReaderPage() {
           setQuestions(data.questions);
           setViewState("PRACTICE");
         } else {
+          // Auto-prepare NEET questions for this page so student sees them on laptop immediately
           setLastResult(null);
           setQuestions([]);
-          setViewState("READING");
+          setViewState("PRACTICE");
+          setGeneratingQuestions(true);
+          fetch(`/api/ncert/chapter/${documentId}/page/${pageNo}/start`, { method: "POST" })
+            .then((r) => r.json())
+            .then((startData) => {
+              if (!isCurrent) return;
+              if (startData.questions && startData.questions.length > 0) {
+                setQuestions(startData.questions);
+                setViewState("PRACTICE");
+              } else {
+                setViewState("READING");
+              }
+            })
+            .catch(() => {
+              if (isCurrent) setViewState("READING");
+            })
+            .finally(() => {
+              if (isCurrent) setGeneratingQuestions(false);
+            });
         }
       } catch (err: any) {
         if (isCurrent) {
@@ -655,17 +674,31 @@ export default function NcertChapterReaderPage() {
             {/* ---------------- STATE 2: PRACTICE / SOLVING MODE ---------------- */}
             {viewState === "PRACTICE" && (
               <div className="space-y-5 pb-6">
-                <div className="flex items-center justify-between rounded-xl bg-white border border-slate-200 p-3 shadow-sm">
-                  <span className="text-xs font-semibold text-slate-700">
-                    Answer all questions based strictly on Page {currentPageNum}:
-                  </span>
-                  <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                    {Object.keys(selectedAnswers).length} / {questions.length} Answered
-                  </span>
-                </div>
+                {generatingQuestions && questions.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center text-center p-8 space-y-4 py-16">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-200">
+                      <span className="material-symbols-outlined text-3xl animate-spin">progress_activity</span>
+                    </div>
+                    <div className="space-y-1 max-w-sm">
+                      <h4 className="text-sm font-bold text-slate-900">Preparing High-Yield NEET Questions...</h4>
+                      <p className="text-xs text-slate-500">
+                        Analyzing Page {currentPageNum} content and generating conceptual questions with zero trivial definitions.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between rounded-xl bg-white border border-slate-200 p-3 shadow-sm">
+                      <span className="text-xs font-semibold text-slate-700">
+                        Answer all questions based strictly on Page {currentPageNum}:
+                      </span>
+                      <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                        {Object.keys(selectedAnswers).length} / {questions.length} Answered
+                      </span>
+                    </div>
 
-                {/* Questions List */}
-                <div className="space-y-4">
+                    {/* Questions List */}
+                    <div className="space-y-4">
                   {questions.map((q, qIndex) => {
                     const selected = selectedAnswers[q.id];
                     return (
@@ -750,10 +783,12 @@ export default function NcertChapterReaderPage() {
                     )}
                   </button>
                 </div>
-              </div>
-            )}
+                </>
+              )}
+            </div>
+          )}
 
-            {/* ---------------- STATE 3: RESULT / SCORECARD MODE ---------------- */}
+          {/* ---------------- STATE 3: RESULT / SCORECARD MODE ---------------- */}
             {viewState === "RESULT" && lastResult && (
               <div className="space-y-5 pb-6">
                 {/* Scorecard Hero */}

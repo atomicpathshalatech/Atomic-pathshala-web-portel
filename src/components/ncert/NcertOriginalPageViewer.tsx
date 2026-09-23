@@ -113,6 +113,19 @@ export function NcertOriginalPageViewer({
     }
   }, []);
 
+  // Calculate optimal fit-to-screen scale so the whole A4 page is visible cleanly
+  const calculateFitScale = useCallback((page: any) => {
+    if (!containerRef.current || !page) return 1.0;
+    const container = containerRef.current;
+    const availWidth = Math.max(280, container.clientWidth - 28);
+    const availHeight = Math.max(380, container.clientHeight - 72);
+    const unscaled = page.getViewport({ scale: 1.0 });
+    const scaleX = availWidth / unscaled.width;
+    const scaleY = availHeight / unscaled.height;
+    const fit = Math.min(scaleX, scaleY);
+    return Math.max(0.6, Math.min(2.0, Number(fit.toFixed(2))));
+  }, []);
+
   // 1. Initial Load of PDF Document
   useEffect(() => {
     let isCancelled = false;
@@ -133,13 +146,17 @@ export function NcertOriginalPageViewer({
         const doc = await loadingTask.promise;
         if (!isCancelled) {
           pdfDocRef.current = doc;
-          await renderDirect(doc, pageNumber, scale, activeCanvasRef.current);
+          const page = await doc.getPage(pageNumber);
+          const autoScale = calculateFitScale(page);
+          setScale(autoScale);
+
+          await renderDirect(doc, pageNumber, autoScale, activeCanvasRef.current);
           setDisplayedPage(pageNumber);
           setInitialLoading(false);
 
           // Preload next page in background
           if (pageNumber < (totalPages || doc.numPages)) {
-            preloadPage(doc, pageNumber + 1, scale);
+            preloadPage(doc, pageNumber + 1, autoScale);
           }
         }
       } catch (err: any) {
@@ -159,7 +176,7 @@ export function NcertOriginalPageViewer({
         renderTaskRef.current.cancel();
       }
     };
-  }, [pdfUrl, documentId]);
+  }, [pdfUrl, documentId, calculateFitScale]);
 
   // 2. Handle Smooth Page Transitions when pageNumber changes
   useEffect(() => {
@@ -317,9 +334,19 @@ export function NcertOriginalPageViewer({
 
           <button
             type="button"
-            onClick={() => setScale(1.25)}
+            onClick={async () => {
+              if (pdfDocRef.current) {
+                try {
+                  const page = await pdfDocRef.current.getPage(displayedPage);
+                  const fit = calculateFitScale(page);
+                  setScale(fit);
+                } catch {
+                  setScale(1.0);
+                }
+              }
+            }}
             className="px-2 py-1 text-[11px] font-medium text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors"
-            title="Fit to page width"
+            title="Fit to page"
           >
             Fit
           </button>

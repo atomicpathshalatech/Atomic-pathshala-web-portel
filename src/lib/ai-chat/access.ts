@@ -2,33 +2,30 @@ import { getPrisma } from "@/lib/ai-chat/prisma";
 
 const prisma = getPrisma();
 
-const DAILY_FREE_LIMIT = 5;
+const DAILY_FREE_LIMIT = 500;
 
 // Uses the AI Chat UserAccess model — the "effective access" record.
-// Active + non-FREE plan + not expired = unlimited questions.
+// Active students and users have full access to question practice and quizzes.
 export async function hasActiveSubscription(userId: string): Promise<boolean> {
-  // 1. Uses the AI Chat UserAccess model — the "effective access" record.
+  // 1. Registered active students have full practice access
+  try {
+    const student = await prisma.student.findUnique({
+      where: { userId },
+      select: { id: true, user: { select: { status: true } } },
+    });
+    if (student && student.user.status === "ACTIVE") {
+      return true;
+    }
+  } catch (err) {
+    console.warn("[Access] Student active check warning:", err);
+  }
+
+  // 2. Uses the AI Chat UserAccess model — the "effective access" record.
   const access = await prisma.userAccess.findUnique({ where: { userId } });
   if (access && access.plan !== "FREE" && access.status === "ACTIVE") {
     if (!access.expiresAt || access.expiresAt >= new Date()) {
       return true;
     }
-  }
-
-  // 2. Check main platform Student Subscription
-  try {
-    const student = await prisma.student.findUnique({
-      where: { userId },
-      include: { subscription: true },
-    });
-    if (student?.subscription) {
-      const sub = student.subscription;
-      if (sub.status === "ACTIVE" || sub.status === "TRIAL") {
-        if (sub.currentPeriodEnd > new Date()) return true;
-      }
-    }
-  } catch (err) {
-    console.warn("[Access] Student subscription check warning:", err);
   }
 
   // 3. Staff and Admins always have unlimited access
@@ -47,7 +44,7 @@ export async function hasActiveSubscription(userId: string): Promise<boolean> {
     console.warn("[Access] User role check warning:", err);
   }
 
-  return false;
+  return true;
 }
 
 // Counts today's events for a user using the AI Chat UsageEvent model.
