@@ -18,10 +18,38 @@ export default async function NewDppPage() {
   const canCreate = await hasPermission(session.user.id, PERMISSIONS.DPP_CREATE);
   if (!canCreate) redirect("/team/dpp");
 
-  const subjects = await prisma.subject.findMany({
+  const rawSubjects = await prisma.subject.findMany({
     include: { chapters: { select: { id: true, title: true } } },
     orderBy: { title: "asc" },
   });
+
+  // Filter and deduplicate strictly for NEET core subjects
+  const NEET_SUBJECT_NAMES = ["Physics", "Chemistry", "Botany", "Zoology", "Biology"];
+  const subjectMap = new Map<string, { id: string; title: string; chapters: { id: string; title: string }[] }>();
+
+  for (const name of NEET_SUBJECT_NAMES) {
+    const matching = rawSubjects.filter((s) => s.title.trim().toLowerCase() === name.toLowerCase());
+    const firstMatch = matching[0];
+    if (firstMatch) {
+      const primaryId = firstMatch.id;
+      const chapterMap = new Map<string, { id: string; title: string }>();
+      for (const m of matching) {
+        for (const ch of m.chapters) {
+          const key = ch.title.trim().toLowerCase();
+          if (!chapterMap.has(key)) {
+            chapterMap.set(key, { id: ch.id, title: ch.title });
+          }
+        }
+      }
+      subjectMap.set(name, {
+        id: primaryId,
+        title: name,
+        chapters: Array.from(chapterMap.values()),
+      });
+    }
+  }
+
+  const subjects = Array.from(subjectMap.values());
 
   return (
     <div className="max-w-3xl space-y-6">
