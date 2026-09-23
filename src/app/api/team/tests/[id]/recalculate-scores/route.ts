@@ -40,31 +40,15 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
         correctOptionIds: string[];
         correctMarks: number;
         negativeMarks: number;
+        type?: string;
       }
     >();
 
+    const { extractCorrectOptionKeys, isAnswerCorrect } = await import("@/lib/test-engine/answer-evaluator");
+
     for (const section of test.sections) {
       for (const sq of section.questions) {
-        const en =
-          sq.question.translations.find((t) => t.language === "ENGLISH") ??
-          sq.question.translations[0];
-
-        let correctIds: string[] = [];
-        if (Array.isArray(en?.correctOptionIds)) {
-          correctIds = (en.correctOptionIds as string[]).map((k) => String(k).trim().toUpperCase());
-        } else if (typeof en?.correctOptionIds === "string") {
-          try {
-            const parsed = JSON.parse(en.correctOptionIds);
-            if (Array.isArray(parsed)) {
-              correctIds = parsed.map((k) => String(k).trim().toUpperCase());
-            } else {
-              correctIds = [String(en.correctOptionIds).trim().toUpperCase()];
-            }
-          } catch {
-            correctIds = [String(en.correctOptionIds).trim().toUpperCase()];
-          }
-        }
-
+        const correctIds = extractCorrectOptionKeys(sq.question);
         const correctMarks = sq.marksOverride ?? section.marksPerQuestion ?? test.correctMarks ?? 4;
         const negativeMarks =
           sq.negativeMarksOverride ?? section.negativeMarks ?? test.incorrectMarks ?? -1;
@@ -73,6 +57,7 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
           correctOptionIds: correctIds,
           correctMarks,
           negativeMarks,
+          type: sq.question.type,
         });
       }
     }
@@ -96,20 +81,15 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
         const config = questionConfigMap.get(ans.questionId);
         if (!config) continue;
 
-        const selected = Array.isArray(ans.selectedOptionIds)
-          ? (ans.selectedOptionIds as string[]).map((s) => String(s).trim().toUpperCase())
-          : [];
+        const selected = Array.isArray(ans.selectedOptionIds) ? (ans.selectedOptionIds as string[]) : [];
 
         if (selected.length === 0) {
           answerUpdates.push({ id: ans.id, isCorrect: null });
           continue;
         }
 
-        const { correctOptionIds, correctMarks, negativeMarks } = config;
-        const isCorrect =
-          correctOptionIds.length > 0 &&
-          correctOptionIds.length === selected.length &&
-          correctOptionIds.every((id) => selected.includes(id));
+        const { correctOptionIds, correctMarks, negativeMarks, type } = config as any;
+        const isCorrect = isAnswerCorrect(correctOptionIds, selected, type);
 
         totalScore += isCorrect ? correctMarks : negativeMarks;
         answerUpdates.push({ id: ans.id, isCorrect });

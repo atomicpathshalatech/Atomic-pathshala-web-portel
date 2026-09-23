@@ -29,6 +29,16 @@ export function SelfProfileForm({ initialData }: { initialData: TeacherSelfUpdat
   const [submitting, setSubmitting] = useState(false);
   const [subjectInput, setSubjectInput] = useState("");
 
+  const normalizedExperience = (initialData.experienceList || []).map((exp: any) => ({
+    organization: exp.organization || "",
+    designation: exp.designation || "",
+    totalMonths:
+      Number(exp.totalMonths) ||
+      (exp.startYear && exp.endYear && !isNaN(Number(exp.endYear)) && !isNaN(Number(exp.startYear))
+        ? Math.max(1, (Number(exp.endYear) - Number(exp.startYear)) * 12)
+        : 0),
+  }));
+
   const {
     handleSubmit,
     watch,
@@ -45,7 +55,7 @@ export function SelfProfileForm({ initialData }: { initialData: TeacherSelfUpdat
       languages: initialData.languages ?? ["Hindi", "English"],
       experienceYears: initialData.experienceYears ?? "",
       qualifications: initialData.qualifications ?? [],
-      experienceList: initialData.experienceList ?? [],
+      experienceList: normalizedExperience,
       bio: initialData.bio ?? "",
       photoUrl: initialData.photoUrl ?? "",
     },
@@ -73,6 +83,14 @@ export function SelfProfileForm({ initialData }: { initialData: TeacherSelfUpdat
   const targetExams = watch("targetExams") ?? [];
   const classes = watch("classes") ?? [];
   const languages = watch("languages") ?? [];
+  const expWatch = watch("experienceList") ?? [];
+
+  const totalExperienceMonths = expWatch.reduce(
+    (sum, curr) => sum + (Number(curr?.totalMonths) || 0),
+    0
+  );
+  const totalYears = Math.floor(totalExperienceMonths / 12);
+  const remainingMonths = totalExperienceMonths % 12;
 
   function toggleItem(
     list: string[],
@@ -103,6 +121,12 @@ export function SelfProfileForm({ initialData }: { initialData: TeacherSelfUpdat
       // Clean empty qualifications & experience items
       const cleanedData: TeacherSelfUpdateInput = {
         ...values,
+        experienceYears:
+          totalYears > 0
+            ? `${totalYears}+ Years`
+            : totalExperienceMonths > 0
+            ? `${totalExperienceMonths} Months`
+            : values.experienceYears || "",
         qualifications: (values.qualifications || []).filter(
           (q) => q.degree?.trim() && q.institution?.trim()
         ),
@@ -228,117 +252,87 @@ export function SelfProfileForm({ initialData }: { initialData: TeacherSelfUpdat
       <div className="glass-card p-6 rounded-2xl space-y-3">
         <label className="font-label-md text-label-md text-on-surface font-semibold flex items-center gap-2">
           <span className="material-symbols-outlined text-primary text-lg">flag</span>
-          <span>Target Exams / Educator Level (Click to select)</span>
+          <span>Target Exams / Specialization</span>
         </label>
         <p className="text-xs text-on-surface-variant">
-          Select which exams or levels you specialize in. Only selected tags will appear on your profile.
+          Select target exams you mentor students for. Only selected exams will appear on your profile.
+        </p>
+
+        {/* Exam Dropdown Picker */}
+        <div className="space-y-2">
+          <select
+            className={inputClass}
+            value=""
+            onChange={(e) => {
+              const val = e.target.value;
+              if (val && !targetExams.includes(val)) {
+                setValue("targetExams", [...targetExams, val]);
+              }
+            }}
+          >
+            <option value="">-- Choose Target Exam from Dropdown --</option>
+            {EXAM_OPTIONS.map((exam) => (
+              <option key={exam} value={exam} disabled={targetExams.includes(exam)}>
+                {exam} {targetExams.includes(exam) ? "✓ (Added)" : ""}
+              </option>
+            ))}
+          </select>
+
+          {/* Active exam chips */}
+          {targetExams.length > 0 && (
+            <div className="flex flex-wrap gap-2 pt-1">
+              {targetExams.map((exam) => (
+                <span
+                  key={exam}
+                  className="bg-primary/10 text-primary border border-primary/20 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs"
+                >
+                  <span>{exam}</span>
+                  <button
+                    type="button"
+                    onClick={() => setValue("targetExams", targetExams.filter((x) => x !== exam))}
+                    className="hover:text-error transition-colors"
+                    title={`Remove ${exam}`}
+                  >
+                    <span className="material-symbols-outlined text-xs">close</span>
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 4. Teaching Languages */}
+      <div className="glass-card p-6 rounded-2xl space-y-3">
+        <label className="font-label-md text-label-md text-on-surface font-semibold flex items-center gap-2">
+          <span className="material-symbols-outlined text-primary text-lg">translate</span>
+          <span>Teaching Languages / Medium</span>
+        </label>
+        <p className="text-xs text-on-surface-variant">
+          Select languages you are comfortable conducting lectures and solving student doubts in.
         </p>
         <div className="flex flex-wrap gap-2 pt-1">
-          {EXAM_OPTIONS.map((exam) => {
-            const active = targetExams.includes(exam);
+          {LANGUAGE_OPTIONS.map((lang) => {
+            const active = languages.includes(lang);
             return (
               <button
-                key={exam}
+                key={lang}
                 type="button"
-                onClick={() => toggleItem(targetExams, exam, "targetExams")}
+                onClick={() => toggleItem(languages, lang, "languages")}
                 className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-all ${
                   active
                     ? "bg-primary text-white border-primary shadow-sm ring-2 ring-primary/20"
                     : "bg-surface-container text-on-surface border-outline-variant/30 hover:border-primary/40"
                 }`}
               >
-                {active ? `✓ ${exam}` : `+ ${exam}`}
+                {active ? `✓ ${lang}` : `+ ${lang}`}
               </button>
             );
           })}
         </div>
       </div>
 
-      {/* 4. Target Classes / Grades */}
-      <div className="glass-card p-6 rounded-2xl space-y-3">
-        <label className="font-label-md text-label-md text-on-surface font-semibold flex items-center gap-2">
-          <span className="material-symbols-outlined text-primary text-lg">school</span>
-          <span>Classes / Grade Levels (Click to select)</span>
-        </label>
-        <p className="text-xs text-on-surface-variant">
-          Select classes you actively take lectures or batches for.
-        </p>
-        <div className="flex flex-wrap gap-2 pt-1">
-          {CLASS_OPTIONS.map((cls) => {
-            const active = classes.includes(cls);
-            return (
-              <button
-                key={cls}
-                type="button"
-                onClick={() => toggleItem(classes, cls, "classes")}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-all ${
-                  active
-                    ? "bg-secondary text-white border-secondary shadow-sm ring-2 ring-secondary/20"
-                    : "bg-surface-container text-on-surface border-outline-variant/30 hover:border-secondary/40"
-                }`}
-              >
-                {active ? `✓ ${cls}` : `+ ${cls}`}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* 5. Teaching Languages & Experience */}
-      <div className="glass-card p-6 rounded-2xl space-y-4">
-        <label className="font-label-md text-label-md text-on-surface font-semibold flex items-center gap-2">
-          <span className="material-symbols-outlined text-primary text-lg">translate</span>
-          <span>Teaching Languages &amp; Experience</span>
-        </label>
-
-        {/* Languages */}
-        <div className="space-y-2">
-          <span className="text-xs font-medium text-on-surface-variant">Teaching Medium / Language</span>
-          <div className="flex flex-wrap gap-2">
-            {LANGUAGE_OPTIONS.map((lang) => {
-              const active = languages.includes(lang);
-              return (
-                <button
-                  key={lang}
-                  type="button"
-                  onClick={() => toggleItem(languages, lang, "languages")}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-all ${
-                    active
-                      ? "bg-tertiary text-white border-tertiary shadow-sm ring-2 ring-tertiary/20"
-                      : "bg-surface-container text-on-surface border-outline-variant/30 hover:border-tertiary/40"
-                  }`}
-                >
-                  {active ? `✓ ${lang}` : `+ ${lang}`}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Total Experience */}
-        <div className="space-y-2 pt-2">
-          <span className="text-xs font-medium text-on-surface-variant">Total Teaching Experience</span>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <select className={inputClass} {...register("experienceYears")}>
-              <option value="">Select experience level</option>
-              {EXPERIENCE_OPTIONS.map((exp) => (
-                <option key={exp} value={exp}>
-                  {exp}
-                </option>
-              ))}
-            </select>
-            <input
-              className={inputClass}
-              placeholder="Or custom, e.g. 5+ Years"
-              onChange={(e) => {
-                if (e.target.value) setValue("experienceYears", e.target.value);
-              }}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* 6. Educational Qualifications */}
+      {/* 5. Educational Qualifications */}
       <div className="glass-card p-6 rounded-2xl space-y-4">
         <div className="flex items-center justify-between">
           <div>
@@ -353,7 +347,7 @@ export function SelfProfileForm({ initialData }: { initialData: TeacherSelfUpdat
           <button
             type="button"
             onClick={() => appendQual({ degree: "", institution: "", year: "" })}
-            className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl bg-primary/10 text-primary border border-primary/20 hover:bg-primary hover:text-white transition-all"
+            className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl bg-primary/10 text-primary border border-primary/20 hover:bg-primary hover:text-white transition-all shadow-xs"
           >
             <span className="material-symbols-outlined text-sm">add</span>
             Add Degree
@@ -417,16 +411,16 @@ export function SelfProfileForm({ initialData }: { initialData: TeacherSelfUpdat
         )}
       </div>
 
-      {/* 7. Work / Teaching Experience */}
+      {/* 6. Professional Work Experience */}
       <div className="glass-card p-6 rounded-2xl space-y-4">
         <div className="flex items-center justify-between">
           <div>
             <label className="font-label-md text-label-md text-on-surface font-semibold flex items-center gap-2">
               <span className="material-symbols-outlined text-primary text-lg">work_history</span>
-              <span>Past Work / Teaching Experience</span>
+              <span>Professional Work Experience</span>
             </label>
             <p className="text-xs text-on-surface-variant mt-0.5">
-              Institutes or coaching academies where you taught.
+              Add organizations/institutes where you worked, your designation, and total experience in months.
             </p>
           </div>
           <button
@@ -435,83 +429,96 @@ export function SelfProfileForm({ initialData }: { initialData: TeacherSelfUpdat
               appendExp({
                 organization: "",
                 designation: "",
-                startYear: "",
-                endYear: "",
-                description: "",
+                totalMonths: 12,
               })
             }
-            className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl bg-secondary/10 text-secondary border border-secondary/20 hover:bg-secondary hover:text-white transition-all"
+            className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl bg-primary/10 text-primary border border-primary/20 hover:bg-primary hover:text-white transition-all shadow-xs"
           >
             <span className="material-symbols-outlined text-sm">add</span>
             Add Experience
           </button>
         </div>
 
+        {/* Total Cumulative Experience Banner */}
+        <div className="p-3.5 rounded-xl bg-primary/5 dark:bg-primary/10 border border-primary/20 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+              <span className="material-symbols-outlined text-lg">timeline</span>
+            </div>
+            <div>
+              <span className="text-xs font-bold text-on-surface block">Cumulative Total Experience</span>
+              <span className="text-[11px] text-on-surface-variant">
+                Auto-calculated sum of all institute records
+              </span>
+            </div>
+          </div>
+          <div className="text-left sm:text-right">
+            <span className="text-base font-black text-primary block">
+              {totalExperienceMonths} Months
+            </span>
+            {totalExperienceMonths > 0 && (
+              <span className="text-xs font-semibold text-on-surface-variant">
+                {totalYears > 0 ? `${totalYears} ${totalYears === 1 ? "Year" : "Years"}` : ""}
+                {remainingMonths > 0 ? ` ${remainingMonths} ${remainingMonths === 1 ? "Month" : "Months"}` : ""}
+              </span>
+            )}
+          </div>
+        </div>
+
         {expFields.length === 0 ? (
           <p className="text-xs text-on-surface-variant italic py-1">
-            No past experience records added yet. Click &quot;Add Experience&quot; above.
+            No work experience records added yet. Click &quot;Add Experience&quot; above.
           </p>
         ) : (
           <div className="space-y-3">
             {expFields.map((field, index) => (
               <div
                 key={field.id}
-                className="p-3.5 rounded-xl bg-surface-container-lowest border border-outline-variant/30 space-y-2.5"
+                className="p-3.5 rounded-xl bg-surface-container-lowest border border-outline-variant/30 grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end"
               >
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  <div>
-                    <label className="text-[11px] font-semibold text-on-surface-variant block mb-1">
-                      Organization / Institute *
-                    </label>
-                    <input
-                      className={inputClass}
-                      placeholder="e.g. Allen Career Institute"
-                      {...register(`experienceList.${index}.organization` as const)}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-semibold text-on-surface-variant block mb-1">
-                      Designation / Role *
-                    </label>
-                    <input
-                      className={inputClass}
-                      placeholder="e.g. Senior Faculty"
-                      {...register(`experienceList.${index}.designation` as const)}
-                    />
-                  </div>
+                <div className="sm:col-span-5">
+                  <label className="text-[11px] font-semibold text-on-surface-variant block mb-1">
+                    Company / Institute Name *
+                  </label>
+                  <input
+                    className={inputClass}
+                    placeholder="e.g. Allen Career Institute / Atomic Pathshala"
+                    {...register(`experienceList.${index}.organization` as const)}
+                  />
                 </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center">
-                  <div className="sm:col-span-5">
-                    <label className="text-[11px] font-semibold text-on-surface-variant block mb-1">
-                      Start Year *
-                    </label>
-                    <input
-                      className={inputClass}
-                      placeholder="e.g. 2018"
-                      {...register(`experienceList.${index}.startYear` as const)}
-                    />
-                  </div>
-                  <div className="sm:col-span-5">
-                    <label className="text-[11px] font-semibold text-on-surface-variant block mb-1">
-                      End Year (or Present) *
-                    </label>
-                    <input
-                      className={inputClass}
-                      placeholder="e.g. 2023 or Present"
-                      {...register(`experienceList.${index}.endYear` as const)}
-                    />
-                  </div>
-                  <div className="sm:col-span-2 flex justify-end pt-4">
-                    <button
-                      type="button"
-                      onClick={() => removeExp(index)}
-                      className="p-1.5 text-error hover:bg-error/10 rounded-lg transition-colors"
-                      title="Remove experience"
-                    >
-                      <span className="material-symbols-outlined text-base">delete</span>
-                    </button>
-                  </div>
+                <div className="sm:col-span-4">
+                  <label className="text-[11px] font-semibold text-on-surface-variant block mb-1">
+                    Designation / Role *
+                  </label>
+                  <input
+                    className={inputClass}
+                    placeholder="e.g. Senior Faculty / SME"
+                    {...register(`experienceList.${index}.designation` as const)}
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-[11px] font-semibold text-on-surface-variant block mb-1">
+                    Experience (Months) *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    className={inputClass}
+                    placeholder="e.g. 12"
+                    {...register(`experienceList.${index}.totalMonths` as const, {
+                      valueAsNumber: true,
+                    })}
+                  />
+                </div>
+                <div className="sm:col-span-1 flex justify-end pb-1">
+                  <button
+                    type="button"
+                    onClick={() => removeExp(index)}
+                    className="p-1.5 text-error hover:bg-error/10 rounded-lg transition-colors"
+                    title="Remove experience"
+                  >
+                    <span className="material-symbols-outlined text-base">delete</span>
+                  </button>
                 </div>
               </div>
             ))}

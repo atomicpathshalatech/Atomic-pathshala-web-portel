@@ -81,6 +81,8 @@ export async function finalizeAttempt(attemptId: string, isLate: boolean) {
   let score = 0;
   const answerUpdates = [];
 
+  const { extractCorrectOptionKeys, isAnswerCorrect } = await import("./answer-evaluator");
+
   for (const section of attempt.test.sections) {
     for (const sq of section.questions) {
       const ans = answerMap.get(sq.questionId);
@@ -89,13 +91,8 @@ export async function finalizeAttempt(attemptId: string, isLate: boolean) {
       const selected = Array.isArray(ans.selectedOptionIds) ? (ans.selectedOptionIds as string[]) : [];
       if (selected.length === 0) continue;
 
-      const en =
-        sq.question.translations.find((t) => t.language === "ENGLISH") ?? sq.question.translations[0];
-      const correctIds = (en?.correctOptionIds as string[] | null) ?? [];
-      const isCorrect =
-        correctIds.length > 0 &&
-        correctIds.length === selected.length &&
-        correctIds.every((id) => selected.includes(id));
+      const correctIds = extractCorrectOptionKeys(sq.question);
+      const isCorrect = isAnswerCorrect(correctIds, selected, sq.question.type);
 
       const correctMarks = sq.marksOverride ?? section.marksPerQuestion ?? attempt.test.correctMarks;
       const incorrectMarks =

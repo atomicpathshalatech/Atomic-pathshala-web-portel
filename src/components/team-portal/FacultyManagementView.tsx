@@ -1,25 +1,14 @@
 "use client";
 
 import React, { useState } from "react";
-import { FacultyCard } from "./FacultyCard";
+import { FacultyCard, type FacultyTeacherItem } from "./FacultyCard";
 import { TeacherTrackingTab } from "./TeacherTrackingTab";
-
-interface TeacherData {
-  id: string;
-  employeeCode: string | null;
-  department: string | null;
-  subjects: string[];
-  user: {
-    name: string;
-    photoUrl?: string | null;
-  };
-}
 
 export function FacultyManagementView({
   teachers,
   canDelete,
 }: {
-  teachers: TeacherData[];
+  teachers: FacultyTeacherItem[];
   canDelete: boolean;
 }) {
   const [activeTab, setActiveTab] = useState<"directory" | "tracking">("directory");
@@ -63,17 +52,7 @@ export function FacultyManagementView({
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-gutter">
             {teachers.map((t) => (
-              <FacultyCard
-                key={t.id}
-                teacher={{
-                  id: t.id,
-                  employeeCode: t.employeeCode || "",
-                  department: t.department || "",
-                  subjects: t.subjects,
-                  user: { name: t.user.name, photoUrl: t.user.photoUrl },
-                }}
-                canDelete={canDelete}
-              />
+              <FacultyCard key={t.id} teacher={t} canDelete={canDelete} />
             ))}
           </div>
         )

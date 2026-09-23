@@ -216,7 +216,7 @@ export function StaffInvitationsConsole({ invitableRoles }: { invitableRoles: st
         ) : (
           <div className="space-y-2">
             {pending.map((i) => (
-              <PendingCard key={i.id} inv={i} busy={busyId === i.id} onAct={act} invitableRoles={invitableRoles} />
+              <PendingCard key={i.id} inv={i} busy={busyId === i.id} onAct={act} invitableRoles={invitableRoles} onReload={load} />
             ))}
           </div>
         )}
@@ -281,72 +281,111 @@ export function StaffInvitationsConsole({ invitableRoles }: { invitableRoles: st
   );
 }
 
+import { AdminEditProfileModal } from "@/components/team-portal/AdminEditProfileModal";
+
 function PendingCard({
   inv,
   busy,
   onAct,
   invitableRoles,
+  onReload,
 }: {
   inv: Invitation;
   busy: boolean;
   onAct: (id: string, a: "approve" | "reject" | "resend", role?: string | null) => void;
   invitableRoles: string[];
+  onReload: () => void;
 }) {
   const [role, setRole] = useState(inv.intendedRoleName ?? "");
+  const [isEditOpen, setIsEditOpen] = useState(false);
   const u = inv.createdUser;
   return (
-    <div className="rounded-2xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/40 dark:bg-amber-950/20 p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="font-bold text-slate-900 dark:text-white">{u?.name ?? inv.email}</p>
-          <p className="text-xs text-slate-500">{inv.email} · {inv.phone}</p>
-          <p className="mt-1 text-xs text-slate-500 whitespace-pre-line">{u?.teacher?.bio ?? "—"}</p>
-          <p className="mt-1 text-[11px] text-slate-400">
-            Invited {new Date(inv.createdAt).toLocaleDateString()} · Submitted{" "}
-            {inv.submittedAt ? new Date(inv.submittedAt).toLocaleDateString() : "—"}
-          </p>
-        </div>
-        <div className="flex flex-col items-end gap-2">
-          <select
-            value={role}
-            onChange={(e) => setRole(e.target.value)}
-            className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-2 py-1 text-xs font-semibold"
-          >
-            <option value="">Approve with no role</option>
-            {invitableRoles.map((r) => (
-              <option key={r} value={r}>
-                {r.replace(/_/g, " ")}
-              </option>
-            ))}
-          </select>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => onAct(inv.id, "approve", role || null)}
-              className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 disabled:opacity-50"
+    <>
+      <div className="rounded-2xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/40 dark:bg-amber-950/20 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="font-bold text-slate-900 dark:text-white">{u?.name ?? inv.email}</p>
+            <p className="text-xs text-slate-500">{inv.email} · {inv.phone}</p>
+            <p className="mt-1 text-xs text-slate-500 whitespace-pre-line">{u?.teacher?.bio ?? "—"}</p>
+            <p className="mt-1 text-[11px] text-slate-400">
+              Invited {new Date(inv.createdAt).toLocaleDateString()} · Submitted{" "}
+              {inv.submittedAt ? new Date(inv.submittedAt).toLocaleDateString() : "—"}
+            </p>
+          </div>
+          <div className="flex flex-col items-end gap-2">
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-2 py-1 text-xs font-semibold"
             >
-              Approve
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => onAct(inv.id, "reject")}
-              className="rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-1.5 disabled:opacity-50"
-            >
-              Reject
-            </button>
-            {u && (
-              <a
-                href={`/team/users/${u.id}`}
-                className="rounded-lg border border-slate-300 dark:border-slate-700 text-xs font-bold px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800"
+              <option value="">Approve with no role</option>
+              {invitableRoles.map((r) => (
+                <option key={r} value={r}>
+                  {r.replace(/_/g, " ")}
+                </option>
+              ))}
+            </select>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => onAct(inv.id, "approve", role || null)}
+                className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 disabled:opacity-50"
               >
-                View profile
-              </a>
-            )}
+                Approve
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => onAct(inv.id, "reject")}
+                className="rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-1.5 disabled:opacity-50"
+              >
+                Reject
+              </button>
+              {u && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditOpen(true)}
+                    className="rounded-lg bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-900 text-xs font-bold px-3 py-1.5 transition"
+                  >
+                    Edit Profile
+                  </button>
+                  <a
+                    href={`/team/users/${u.id}`}
+                    className="rounded-lg border border-slate-300 dark:border-slate-700 text-xs font-bold px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800"
+                  >
+                    View profile
+                  </a>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
-    </div>
+
+      {u && isEditOpen && (
+        <AdminEditProfileModal
+          isOpen={isEditOpen}
+          onClose={() => setIsEditOpen(false)}
+          onSuccess={() => {
+            setIsEditOpen(false);
+            onReload();
+          }}
+          userType="user"
+          targetId={u.id}
+          initialData={{
+            name: u.name,
+            email: inv.email,
+            phone: inv.phone,
+            roleName: u.role?.name || role || "TEACHER",
+            department: u.teacher?.department || "Academic",
+            subjects: u.teacher?.subjects || [],
+            bio: u.teacher?.bio || null,
+            status: u.status,
+          }}
+        />
+      )}
+    </>
   );
 }

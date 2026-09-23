@@ -101,7 +101,8 @@ export function toLegacyQuestion(
   const en =
     question.translations.find((t) => t.language === "ENGLISH") ?? question.translations[0] ?? null;
   const options = (en?.options as OptionsJson | null) ?? {};
-  const correctOptionIds = (en?.correctOptionIds as string[] | null) ?? [];
+  const { extractCorrectOptionKeys } = require("@/lib/test-engine/answer-evaluator");
+  const correctOptionIds = extractCorrectOptionKeys(question);
 
   return {
     id: question.id,

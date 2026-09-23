@@ -50,10 +50,11 @@ export const qualificationItemSchema = z.object({
 export type QualificationItem = z.infer<typeof qualificationItemSchema>;
 
 export const experienceItemSchema = z.object({
-  organization: z.string().min(1, "Organization name is required"),
-  designation: z.string().min(1, "Designation is required"),
-  startYear: z.string().min(1, "Start year is required"),
-  endYear: z.string().min(1, "End year is required"),
+  organization: z.string().min(1, "Organization / Institute is required"),
+  designation: z.string().min(1, "Designation / Role is required"),
+  totalMonths: z.coerce.number().optional().default(0),
+  startYear: z.string().optional(),
+  endYear: z.string().optional(),
   description: z.string().optional(),
 });
 export type ExperienceItem = z.infer<typeof experienceItemSchema>;
@@ -87,20 +88,25 @@ export type TeacherCreateInput = z.input<typeof teacherCreateSchema>;
 export const teacherAdminUpdateSchema = z.object({
   name: z.string().min(2).optional(),
   email: z.string().email().optional(),
-  phone: z.string().optional(),
-  employeeCode: z.string().min(2, "Employee code is required"),
-  department: z.enum(DEPARTMENT_OPTIONS),
+  phone: z.string().optional().nullable(),
+  employeeCode: z.string().min(2, "Employee code is required").optional(),
+  department: z.string().min(1, "Department is required").optional(),
+  displayName: z.string().optional().nullable(),
+  roleName: z.string().optional().nullable(),
+  position: z.string().optional().nullable(),
+  status: z.string().optional().nullable(),
+  contractType: z.string().optional().nullable(),
+  contractEnd: z.coerce.date().optional().nullable(),
   subjects: z.array(z.string()).default([]),
-  displayName: z.string().optional(),
   targetExams: z.array(z.string()).default([]),
   classes: z.array(z.string()).default([]),
   languages: z.array(z.string()).default([]),
-  experienceYears: z.string().optional(),
+  experienceYears: z.string().optional().nullable(),
   qualifications: z.array(qualificationItemSchema).default([]),
   experienceList: z.array(experienceItemSchema).default([]),
-  bio: z.string().optional(),
-  photoUrl: z.string().optional(),
-  dob: z.coerce.date().optional(),
+  bio: z.string().optional().nullable(),
+  photoUrl: z.string().optional().nullable(),
+  dob: z.coerce.date().optional().nullable(),
 });
 
 export type TeacherAdminUpdateInput = z.input<typeof teacherAdminUpdateSchema>;

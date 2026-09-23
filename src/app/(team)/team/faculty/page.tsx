@@ -23,7 +23,13 @@ export default async function FacultyListPage() {
   const canDelete = await hasPermission(session.user.id, PERMISSIONS.TEACHER_DELETE);
 
   const teachers = await prisma.teacher.findMany({
-    include: { user: true },
+    include: {
+      user: {
+        include: {
+          role: true,
+        },
+      },
+    },
     orderBy: { createdAt: "desc" },
   });
 
@@ -62,7 +68,28 @@ export default async function FacultyListPage() {
           employeeCode: t.employeeCode,
           department: t.department,
           subjects: t.subjects,
-          user: { name: t.user.name, photoUrl: t.user.photoUrl },
+          displayName: t.displayName,
+          targetExams: t.targetExams,
+          classes: t.classes,
+          languages: t.languages,
+          experienceYears: t.experienceYears,
+          qualifications: (t.qualifications as any) || [],
+          experienceList: (t.experienceList as any) || [],
+          bio: t.bio,
+          dob: t.dob ? t.dob.toISOString() : null,
+          user: {
+            id: t.user.id,
+            name: t.user.name,
+            email: t.user.email,
+            phone: t.user.phone,
+            photoUrl: t.user.photoUrl,
+            status: t.user.status,
+            role: t.user.role?.name || "TEACHER",
+            position: t.user.position,
+            department: t.user.department,
+            contractType: t.user.contractType,
+            contractEnd: t.user.contractEnd ? t.user.contractEnd.toISOString() : null,
+          },
         }))}
         canDelete={canDelete}
       />

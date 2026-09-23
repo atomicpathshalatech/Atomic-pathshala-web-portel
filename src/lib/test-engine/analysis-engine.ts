@@ -322,12 +322,11 @@ export async function calculateAndStoreTestAnalysis(
 
     const correctMarks = sq.marksOverride ?? sq.section.marksPerQuestion ?? test.correctMarks;
     const incorrectMarks = sq.negativeMarksOverride ?? sq.section.negativeMarks ?? test.incorrectMarks;
-    totalMaxMarks += correctMarks;
-
     const enTrans = q.translations.find((t) => t.language === "ENGLISH") ?? q.translations[0];
     const hiTrans = q.translations.find((t) => t.language === "HINDI");
 
-    const correctOptions = (enTrans?.correctOptionIds as string[] | null) ?? [];
+    const { extractCorrectOptionKeys, isAnswerCorrect } = require("./answer-evaluator");
+    const correctOptions = extractCorrectOptionKeys(q);
     const userSelectedOptions = (ans?.selectedOptionIds as string[] | null) ?? [];
     const isAnswered = userSelectedOptions.length > 0;
     const timeSpent = ans?.timeTakenSec ?? 0;
@@ -343,10 +342,7 @@ export async function calculateAndStoreTestAnalysis(
       marksObtained = 0;
       errorCounts.UNANSWERED++;
     } else {
-      const match =
-        correctOptions.length > 0 &&
-        correctOptions.length === userSelectedOptions.length &&
-        correctOptions.every((opt) => userSelectedOptions.includes(opt));
+      const match = isAnswerCorrect(correctOptions, userSelectedOptions, q.type);
 
       if (match) {
         correctCount++;

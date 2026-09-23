@@ -40,19 +40,28 @@ export async function PATCH(request: NextRequest) {
     const userUpdateData: any = {};
     const auditChanges: Record<string, { old: any; new: any }> = {};
 
-    // 1. Name
+    const roleName = currentUser.role?.name || "";
+    const isAdmin = ["ADMIN", "SUPER_ADMIN", "FOUNDER"].includes(roleName);
+
+    // 1. Name (Only admin can change official name)
     if (body.name !== undefined && body.name.trim() !== "" && body.name.trim() !== currentUser.name) {
+      if (!isAdmin) {
+        return apiError("Official name cannot be edited directly. Please contact Administrator.", 403);
+      }
       userUpdateData.name = body.name.trim();
       auditChanges.name = { old: currentUser.name, new: userUpdateData.name };
     }
 
-    // 2. Email with uniqueness
+    // 2. Email with uniqueness (Only admin can change official email)
     if (body.email !== undefined) {
       const trimmedEmail = body.email.trim().toLowerCase();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
         return apiError("Enter a valid email address.", 400);
       }
       if (trimmedEmail !== currentUser.email.toLowerCase()) {
+        if (!isAdmin) {
+          return apiError("Official email address cannot be edited directly. Please contact Administrator.", 403);
+        }
         const emailTaken = await prisma.user.findFirst({
           where: {
             email: { equals: trimmedEmail, mode: "insensitive" },
@@ -68,7 +77,7 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
-    // 3. Phone with uniqueness
+    // 3. Phone with uniqueness (Only admin can change official phone)
     if (body.phone !== undefined) {
       const rawPhone = body.phone ? body.phone.trim() : null;
       const cleanPhone = rawPhone ? rawPhone.replace(/\D/g, "").replace(/^0+/, "").replace(/^91(?=\d{10}$)/, "") : null;
@@ -76,6 +85,9 @@ export async function PATCH(request: NextRequest) {
         return apiError("Enter a valid 10-digit Indian mobile number.", 400);
       }
       if (cleanPhone !== currentUser.phone) {
+        if (!isAdmin) {
+          return apiError("Official mobile number cannot be edited directly. Please contact Administrator.", 403);
+        }
         if (cleanPhone) {
           const phoneTaken = await prisma.user.findFirst({
             where: {

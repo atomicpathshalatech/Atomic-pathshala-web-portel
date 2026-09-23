@@ -68,6 +68,13 @@ export function TeacherForm(props: Props) {
   const targetExams = watch("targetExams") ?? [];
   const classes = watch("classes") ?? [];
   const languages = watch("languages") ?? [];
+  const expWatch = watch("experienceList") ?? [];
+  const totalExperienceMonths = expWatch.reduce(
+    (sum, curr: any) => sum + (Number(curr?.totalMonths) || 0),
+    0
+  );
+  const totalExpYears = Math.floor(totalExperienceMonths / 12);
+  const remainingExpMonths = totalExperienceMonths % 12;
 
   function toggleItem(list: string[], item: string, fieldName: "targetExams" | "classes" | "languages" | "subjects") {
     if (list.includes(item)) {
@@ -223,6 +230,13 @@ export function TeacherForm(props: Props) {
               className={inputClass}
               placeholder="https://... photo url"
               {...register("photoUrl")}
+            />
+          </Field>
+          <Field label="Date of Birth (Optional)">
+            <input
+              type="date"
+              className={inputClass}
+              {...register("dob" as any)}
             />
           </Field>
         </div>
@@ -513,16 +527,40 @@ export function TeacherForm(props: Props) {
               appendExp({
                 organization: "",
                 designation: "",
-                startYear: "",
-                endYear: "Present",
-                description: "",
+                totalMonths: 12,
               })
             }
-            className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl bg-primary/10 text-primary border border-primary/20 hover:bg-primary hover:text-white transition-all"
+            className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl bg-primary/10 text-primary border border-primary/20 hover:bg-primary hover:text-white transition-all shadow-xs"
           >
             <span className="material-symbols-outlined text-sm">add</span>
             Add Experience
           </button>
+        </div>
+
+        {/* Total Cumulative Experience Banner */}
+        <div className="p-3.5 rounded-xl bg-primary/5 dark:bg-primary/10 border border-primary/20 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+              <span className="material-symbols-outlined text-lg">timeline</span>
+            </div>
+            <div>
+              <span className="text-xs font-bold text-on-surface block">Cumulative Total Experience</span>
+              <span className="text-[11px] text-on-surface-variant">
+                Auto-calculated sum of all institute records
+              </span>
+            </div>
+          </div>
+          <div className="text-left sm:text-right">
+            <span className="text-base font-black text-primary block">
+              {totalExperienceMonths} Months
+            </span>
+            {totalExperienceMonths > 0 && (
+              <span className="text-xs font-semibold text-on-surface-variant">
+                {totalExpYears > 0 ? `${totalExpYears} ${totalExpYears === 1 ? "Year" : "Years"}` : ""}
+                {remainingExpMonths > 0 ? ` ${remainingExpMonths} ${remainingExpMonths === 1 ? "Month" : "Months"}` : ""}
+              </span>
+            )}
+          </div>
         </div>
 
         {expFields.length === 0 ? (
@@ -530,73 +568,55 @@ export function TeacherForm(props: Props) {
             No work experience entries added yet. Click &quot;Add Experience&quot; above.
           </p>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {expFields.map((field, index) => (
               <div
                 key={field.id}
-                className="p-4 rounded-xl bg-surface-container-lowest border border-outline-variant/30 space-y-3"
+                className="p-3.5 rounded-xl bg-surface-container-lowest border border-outline-variant/30 grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end"
               >
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-12 gap-3 items-end">
-                  <div className="sm:col-span-4 md:col-span-4">
-                    <label className="text-[11px] font-semibold text-on-surface-variant block mb-1">
-                      Organization / Company *
-                    </label>
-                    <input
-                      className={inputClass}
-                      placeholder="e.g. Atomic Pathshala"
-                      {...register(`experienceList.${index}.organization` as const)}
-                    />
-                  </div>
-                  <div className="sm:col-span-4 md:col-span-4">
-                    <label className="text-[11px] font-semibold text-on-surface-variant block mb-1">
-                      Designation / Role *
-                    </label>
-                    <input
-                      className={inputClass}
-                      placeholder="e.g. Senior Biology Faculty"
-                      {...register(`experienceList.${index}.designation` as const)}
-                    />
-                  </div>
-                  <div className="sm:col-span-2 md:col-span-1.5">
-                    <label className="text-[11px] font-semibold text-on-surface-variant block mb-1">
-                      Start Year *
-                    </label>
-                    <input
-                      className={inputClass}
-                      placeholder="2022"
-                      {...register(`experienceList.${index}.startYear` as const)}
-                    />
-                  </div>
-                  <div className="sm:col-span-2 md:col-span-1.5">
-                    <label className="text-[11px] font-semibold text-on-surface-variant block mb-1">
-                      End Year *
-                    </label>
-                    <input
-                      className={inputClass}
-                      placeholder="Present"
-                      {...register(`experienceList.${index}.endYear` as const)}
-                    />
-                  </div>
-                  <div className="sm:col-span-1 md:col-span-1 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => removeExp(index)}
-                      className="p-2 text-error hover:bg-error/10 rounded-lg transition-colors"
-                      title="Remove Entry"
-                    >
-                      <span className="material-symbols-outlined text-base">delete</span>
-                    </button>
-                  </div>
-                </div>
-                <div>
+                <div className="sm:col-span-5">
                   <label className="text-[11px] font-semibold text-on-surface-variant block mb-1">
-                    Description / Responsibilities (Optional)
+                    Company / Institute Name *
                   </label>
                   <input
                     className={inputClass}
-                    placeholder="e.g. Mentored 500+ students for NEET UG with 95% qualification rate"
-                    {...register(`experienceList.${index}.description` as const)}
+                    placeholder="e.g. Allen Career Institute / Atomic Pathshala"
+                    {...register(`experienceList.${index}.organization` as const)}
                   />
+                </div>
+                <div className="sm:col-span-4">
+                  <label className="text-[11px] font-semibold text-on-surface-variant block mb-1">
+                    Designation / Role *
+                  </label>
+                  <input
+                    className={inputClass}
+                    placeholder="e.g. Senior Faculty / SME"
+                    {...register(`experienceList.${index}.designation` as const)}
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-[11px] font-semibold text-on-surface-variant block mb-1">
+                    Experience (Months) *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    className={inputClass}
+                    placeholder="e.g. 12"
+                    {...register(`experienceList.${index}.totalMonths` as const, {
+                      valueAsNumber: true,
+                    })}
+                  />
+                </div>
+                <div className="sm:col-span-1 flex justify-end pb-1">
+                  <button
+                    type="button"
+                    onClick={() => removeExp(index)}
+                    className="p-1.5 text-error hover:bg-error/10 rounded-lg transition-colors"
+                    title="Remove Entry"
+                  >
+                    <span className="material-symbols-outlined text-base">delete</span>
+                  </button>
                 </div>
               </div>
             ))}

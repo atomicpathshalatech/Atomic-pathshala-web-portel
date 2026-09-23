@@ -103,6 +103,19 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         overrides: user.userPermissionOverrides,
         effectivePermissions,
         auditLogs: user.auditLogs,
+        // Teacher profile details
+        teacherId: user.teacher?.id ?? null,
+        employeeCode: user.teacher?.employeeCode ?? null,
+        displayName: user.teacher?.displayName ?? null,
+        subjects: user.teacher?.subjects ?? (user.subjectScope || []),
+        targetExams: user.teacher?.targetExams ?? [],
+        classes: user.teacher?.classes ?? [],
+        languages: user.teacher?.languages ?? [],
+        experienceYears: user.teacher?.experienceYears ?? null,
+        qualifications: (user.teacher?.qualifications as any) ?? [],
+        experienceList: (user.teacher?.experienceList as any) ?? [],
+        bio: user.teacher?.bio ?? null,
+        dob: user.teacher?.dob ? user.teacher.dob.toISOString() : null,
       },
     });
   } catch (error: any) {
@@ -147,7 +160,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
     const currentUser = await prisma.user.findUnique({
       where: { id: userId },
-      include: { role: true, teacher: { select: { id: true, department: true } } },
+      include: { role: true, teacher: true },
     });
 
     if (!currentUser) {
@@ -393,6 +406,74 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       }
     }
 
+    // Teacher record synchronization
+    const teacherUpdate: any = {};
+    if (body.displayName !== undefined) teacherUpdate.displayName = body.displayName || null;
+    if (body.employeeCode !== undefined && body.employeeCode.trim() !== "") {
+      teacherUpdate.employeeCode = body.employeeCode.trim();
+    }
+    if (body.department !== undefined && body.department.trim() !== "") {
+      teacherUpdate.department = body.department.trim();
+    }
+    if (body.subjects !== undefined && Array.isArray(body.subjects)) {
+      teacherUpdate.subjects = body.subjects;
+    }
+    if (body.targetExams !== undefined && Array.isArray(body.targetExams)) {
+      teacherUpdate.targetExams = body.targetExams;
+    }
+    if (body.classes !== undefined && Array.isArray(body.classes)) {
+      teacherUpdate.classes = body.classes;
+    }
+    if (body.languages !== undefined && Array.isArray(body.languages)) {
+      teacherUpdate.languages = body.languages;
+    }
+    if (body.experienceYears !== undefined) {
+      teacherUpdate.experienceYears = body.experienceYears || null;
+    }
+    if (body.qualifications !== undefined && Array.isArray(body.qualifications)) {
+      teacherUpdate.qualifications = body.qualifications;
+    }
+    if (body.experienceList !== undefined && Array.isArray(body.experienceList)) {
+      teacherUpdate.experienceList = body.experienceList;
+    }
+    if (body.bio !== undefined) {
+      teacherUpdate.bio = body.bio || null;
+    }
+    if (body.dob !== undefined) {
+      teacherUpdate.dob = body.dob ? new Date(body.dob) : null;
+    }
+
+    let updatedTeacher: any = null;
+    if (currentUser.teacher) {
+      if (Object.keys(teacherUpdate).length > 0) {
+        updatedTeacher = await prisma.teacher.update({
+          where: { id: currentUser.teacher.id },
+          data: teacherUpdate,
+        });
+      }
+    } else if (
+      (body.roleName === "TEACHER" || updatedUser.role?.name === "TEACHER") &&
+      (body.employeeCode || (body.subjects && body.subjects.length > 0) || body.department)
+    ) {
+      updatedTeacher = await prisma.teacher.create({
+        data: {
+          userId: userId,
+          employeeCode: body.employeeCode?.trim() || `EMP-${Date.now().toString().slice(-6)}`,
+          department: body.department?.trim() || updatedUser.department || "Academic",
+          subjects: body.subjects && body.subjects.length > 0 ? body.subjects : ["General"],
+          displayName: body.displayName?.trim() || null,
+          targetExams: body.targetExams || [],
+          classes: body.classes || [],
+          languages: body.languages || [],
+          experienceYears: body.experienceYears?.trim() || null,
+          qualifications: body.qualifications || [],
+          experienceList: body.experienceList || [],
+          bio: body.bio?.trim() || null,
+          dob: body.dob ? new Date(body.dob) : null,
+        },
+      });
+    }
+
     return NextResponse.json({
       success: true,
       user: {
@@ -405,6 +486,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         role: updatedUser.role?.name ?? "NONE",
         department: updatedUser.department,
         position: updatedUser.position,
+        teacherId: updatedTeacher?.id ?? currentUser.teacher?.id ?? null,
+        employeeCode: updatedTeacher?.employeeCode ?? currentUser.teacher?.employeeCode ?? null,
+        displayName: updatedTeacher?.displayName ?? null,
+        subjects: updatedTeacher?.subjects ?? body.subjects ?? [],
       },
     });
   } catch (error: any) {

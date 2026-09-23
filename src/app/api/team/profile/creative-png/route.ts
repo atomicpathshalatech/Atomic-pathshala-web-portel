@@ -34,6 +34,20 @@ export async function PATCH(req: NextRequest) {
     const teacher = await prisma.teacher.findUnique({ where: { userId: session.user.id } });
     if (!teacher) return apiError("No teacher profile for this account", 404);
 
+    const currentUser = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      include: { role: true },
+    });
+    const roleName = currentUser?.role?.name || "";
+    const isAdmin = ["ADMIN", "SUPER_ADMIN", "FOUNDER"].includes(roleName);
+
+    if (!isAdmin && (teacher.creativeAssetVersion || 0) >= 2) {
+      return apiError(
+        "Creative PNG cutout update limit reached (maximum 2 self-updates allowed). Please contact an Administrator to update your promotional cutout.",
+        403
+      );
+    }
+
     const { url } = schema.parse(await req.json());
 
     const fetched = await fetch(url).catch(() => null);

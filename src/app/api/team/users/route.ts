@@ -66,7 +66,23 @@ export async function GET(req: NextRequest) {
       where,
       include: {
         role: { select: { id: true, name: true, label: true } },
-        teacher: { select: { id: true, subjects: true, department: true } },
+        teacher: {
+          select: {
+            id: true,
+            employeeCode: true,
+            department: true,
+            subjects: true,
+            displayName: true,
+            targetExams: true,
+            classes: true,
+            languages: true,
+            experienceYears: true,
+            qualifications: true,
+            experienceList: true,
+            bio: true,
+            dob: true,
+          },
+        },
         userPermissionOverrides: { select: { id: true, permissionCode: true, granted: true } },
       },
       orderBy: { createdAt: "desc" },
@@ -101,6 +117,19 @@ export async function GET(req: NextRequest) {
         overridesCount: u.userPermissionOverrides.length,
         createdAt: u.createdAt.toISOString(),
         lastLoginAt: u.lastLoginAt?.toISOString() || null,
+        // Rich teacher fields
+        teacherId: u.teacher?.id || null,
+        employeeCode: u.teacher?.employeeCode || null,
+        displayName: u.teacher?.displayName || null,
+        subjects: u.teacher?.subjects || u.subjectScope || [],
+        targetExams: u.teacher?.targetExams || [],
+        classes: u.teacher?.classes || [],
+        languages: u.teacher?.languages || [],
+        experienceYears: u.teacher?.experienceYears || null,
+        qualifications: (u.teacher?.qualifications as any) || [],
+        experienceList: (u.teacher?.experienceList as any) || [],
+        bio: u.teacher?.bio || null,
+        dob: u.teacher?.dob ? u.teacher.dob.toISOString() : null,
       };
     });
 

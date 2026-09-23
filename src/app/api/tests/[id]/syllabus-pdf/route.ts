@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { generateTestSyllabusHtml, type TestSyllabusChapterItem } from "@/lib/pdf/syllabus-pdf-engine";
+import {
+  generateTestSyllabusPdfBuffer,
+  generateTestSyllabusHtml,
+  type TestSyllabusChapterItem,
+} from "@/lib/pdf/syllabus-pdf-engine";
 
 export async function GET(
   request: NextRequest,
@@ -18,6 +22,7 @@ export async function GET(
     const searchParams = request.nextUrl.searchParams;
     const batchId = searchParams.get("batchId");
     const download = searchParams.get("download") === "true";
+    const format = searchParams.get("format");
 
     const test = await prisma.test.findUnique({
       where: { id: testId },
@@ -56,7 +61,7 @@ export async function GET(
       }
     }
 
-    const htmlContent = generateTestSyllabusHtml({
+    const syllabusData = {
       testId: test.id,
       testName: test.name,
       testCode: test.code,
@@ -67,25 +72,36 @@ export async function GET(
       batchName: batchName || test.testSeries?.name || null,
       chapters,
       generatedAt: test.createdAt,
-    });
-
-    const safeTitle = test.name.replace(/[^a-zA-Z0-9_-]/g, "_");
-    const filename = `Atomic_Pathshala_Syllabus_${safeTitle}.html`;
-
-    const headers: Record<string, string> = {
-      "Content-Type": "text/html; charset=utf-8",
-      "Cache-Control": "public, max-age=3600, s-maxage=3600",
     };
 
-    if (download) {
-      headers["Content-Disposition"] = `attachment; filename="${filename}"`;
-    } else {
-      headers["Content-Disposition"] = `inline; filename="${filename}"`;
+    const safeTitle = test.name.replace(/[^a-zA-Z0-9_-]/g, "_");
+
+    if (format === "html") {
+      const htmlContent = generateTestSyllabusHtml(syllabusData);
+      const filename = `Atomic_Pathshala_Syllabus_${safeTitle}.html`;
+      return new NextResponse(htmlContent, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "Content-Disposition": download ? `attachment; filename="${filename}"` : `inline; filename="${filename}"`,
+          "Cache-Control": "public, max-age=3600, s-maxage=3600",
+        },
+      });
     }
 
-    return new NextResponse(htmlContent, {
+    // Default: Direct vector PDF document
+    const pdfBuffer = await generateTestSyllabusPdfBuffer(syllabusData);
+    const filename = `Atomic_Pathshala_Syllabus_${safeTitle}.pdf`;
+
+    return new NextResponse(new Uint8Array(pdfBuffer), {
       status: 200,
-      headers,
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": download
+          ? `attachment; filename="${filename}"`
+          : `inline; filename="${filename}"`,
+        "Cache-Control": "public, max-age=3600, s-maxage=3600",
+      },
     });
   } catch (err: any) {
     console.error("Error serving test syllabus PDF:", err);

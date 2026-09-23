@@ -69,9 +69,20 @@ export default async function FacultyProfilePage({ params }: { params: { id: str
   // Experience parser
   let experienceList: Array<{ role: string; institute?: string; years?: string }> = [];
   if (Array.isArray(teacher.experienceList)) {
-    experienceList = (teacher.experienceList as any[]).map((e) =>
-      typeof e === "string" ? { role: e } : { role: e.role || "Faculty", institute: e.institute, years: e.years }
-    );
+    experienceList = (teacher.experienceList as any[]).map((e) => {
+      if (typeof e === "string") return { role: e };
+      const role = e.designation || e.role || "Faculty";
+      const institute = e.organization || e.institute || "";
+      let years = e.years;
+      if (e.totalMonths) {
+        const y = Math.floor(Number(e.totalMonths) / 12);
+        const m = Number(e.totalMonths) % 12;
+        years = `${y > 0 ? `${y} yr${y > 1 ? "s" : ""} ` : ""}${m > 0 ? `${m} mo${m > 1 ? "s" : ""}` : ""}`.trim() || `${e.totalMonths} mos`;
+      } else if (e.startYear && e.endYear) {
+        years = `${e.startYear} – ${e.endYear}`;
+      }
+      return { role, institute, years };
+    });
   }
 
   return (
@@ -195,9 +206,16 @@ export default async function FacultyProfilePage({ params }: { params: { id: str
                     <div className="p-1.5 rounded-lg bg-amber-100 text-amber-700 mt-0.5">
                       <Briefcase className="w-4 h-4" />
                     </div>
-                    <div>
-                      <p className="text-xs font-bold text-slate-900">{exp.role}</p>
-                      {exp.institute && <p className="text-[11px] text-slate-500">{exp.institute}</p>}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs font-bold text-slate-900 truncate">{exp.role}</p>
+                        {exp.years && (
+                          <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/60 shrink-0">
+                            {exp.years}
+                          </span>
+                        )}
+                      </div>
+                      {exp.institute && <p className="text-[11px] text-slate-500 mt-0.5">{exp.institute}</p>}
                     </div>
                   </div>
                 ))}

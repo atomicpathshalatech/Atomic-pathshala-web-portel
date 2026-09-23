@@ -119,12 +119,19 @@ export function ProfileImagesSection({ initialPhotoUrl, initialCreativePngUrl, i
             )}
           </div>
           <input ref={photoInput} type="file" accept="image/jpeg,image/jpg,image/png" onChange={handlePhoto} disabled={busyPhoto} className="text-label-sm" />
-          <p className="text-label-sm text-on-surface-variant">Normal photo — shown as your avatar wherever the platform shows a profile picture.</p>
+          <p className="text-label-sm text-on-surface-variant">
+            Normal avatar photo — can be changed anytime without limits.
+          </p>
         </div>
 
         {/* Creative PNG */}
         <div className="space-y-2">
-          <p className="text-label-md font-label-md text-on-surface">Creative PNG / Cutout Photo</p>
+          <div className="flex items-center justify-between">
+            <p className="text-label-md font-label-md text-on-surface">Creative PNG / Cutout Photo</p>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 font-semibold border border-amber-500/20">
+              Max 2 self-updates
+            </span>
+          </div>
           <div
             className="w-28 h-28 rounded-xl overflow-hidden border border-outline-variant flex items-center justify-center"
             style={{
@@ -142,6 +149,9 @@ export function ProfileImagesSection({ initialPhotoUrl, initialCreativePngUrl, i
             )}
           </div>
           <input ref={pngInput} type="file" accept="image/png" onChange={handlePng} disabled={busyPng} className="text-label-sm" />
+          <p className="text-label-sm text-on-surface-variant">
+            Transparent PNG cutout used for promotional posters. Teammates can change up to 2 times (admin controlled thereafter).
+          </p>
           {pngUrl && hasAlpha === false && (
             <p className="text-label-sm text-amber-600 flex items-center gap-1">
               <span className="material-symbols-outlined text-sm">warning</span>

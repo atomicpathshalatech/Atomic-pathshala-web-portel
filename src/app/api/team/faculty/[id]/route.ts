@@ -116,8 +116,49 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       auditChanges.photoUrl = { old: existing.user.photoUrl, new: userUpdateData.photoUrl };
     }
 
-    if (data.department !== existing.department) {
+    // 5. Status
+    if (data.status !== undefined && data.status !== null && data.status !== existing.user.status) {
+      userUpdateData.status = data.status;
+      auditChanges.status = { old: existing.user.status, new: data.status };
+    }
+
+    // 6. Position / Designation
+    if (data.position !== undefined && data.position !== null && data.position !== existing.user.position) {
+      userUpdateData.position = data.position;
+      auditChanges.position = { old: existing.user.position, new: data.position };
+    }
+
+    // 7. Contract Type & End
+    if (data.contractType !== undefined && data.contractType !== null && data.contractType !== existing.user.contractType) {
+      userUpdateData.contractType = data.contractType;
+      auditChanges.contractType = { old: existing.user.contractType, new: data.contractType };
+    }
+    if (data.contractEnd !== undefined) {
+      userUpdateData.contractEnd = data.contractEnd ? new Date(data.contractEnd) : null;
+    }
+
+    // 8. Role Name (RBAC)
+    if (data.roleName) {
+      const { parseGlobalRole } = await import("@/lib/rbac/permissions");
+      const resolvedRole = parseGlobalRole(data.roleName);
+      if (resolvedRole) {
+        let role = await prisma.role.findUnique({ where: { name: resolvedRole as any } });
+        if (!role) {
+          role = await prisma.role.create({
+            data: {
+              name: resolvedRole as any,
+              label: resolvedRole.replace(/_/g, " "),
+              isSystem: true,
+            },
+          });
+        }
+        userUpdateData.roleId = role.id;
+      }
+    }
+
+    if (data.department && data.department !== existing.department) {
       auditChanges.department = { old: existing.department, new: data.department };
+      userUpdateData.department = data.department;
     }
     if (data.displayName !== existing.displayName) {
       auditChanges.displayName = { old: existing.displayName, new: data.displayName };
@@ -126,8 +167,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     const teacher = await prisma.teacher.update({
       where: { id: params.id },
       data: {
-        employeeCode: data.employeeCode,
-        department: data.department,
+        ...(data.employeeCode ? { employeeCode: data.employeeCode } : {}),
+        ...(data.department ? { department: data.department } : {}),
         subjects: data.subjects,
         displayName: data.displayName || null,
         targetExams: data.targetExams,
@@ -140,7 +181,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         ...(data.dob ? { dob: data.dob } : {}),
         ...(Object.keys(userUpdateData).length > 0 ? { user: { update: userUpdateData } } : {}),
       },
-      include: { user: true },
+      include: { user: { include: { role: true } } },
     });
 
     if (Object.keys(auditChanges).length > 0) {

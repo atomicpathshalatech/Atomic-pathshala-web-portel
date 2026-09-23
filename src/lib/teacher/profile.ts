@@ -279,18 +279,27 @@ export async function getTeacherProfileBySlug(slug: string): Promise<TeacherFull
   // Parse structured experienceList
   let experienceList: TeacherExperience[] = [];
   if (Array.isArray(dbTeacher.experienceList)) {
-    experienceList = (dbTeacher.experienceList as any[]).map((e) => ({
-      organization: e.organization || "",
-      designation: e.designation || "",
-      startYear: e.startYear || undefined,
-      endYear: e.endYear || undefined,
-      role: e.designation || e.role || "",
-      duration:
-        e.startYear && e.endYear
-          ? `${e.startYear} — ${e.endYear}`
-          : e.startYear || e.duration || "",
-      description: e.description || undefined,
-    }));
+    experienceList = (dbTeacher.experienceList as any[]).map((e) => {
+      let duration = "";
+      if (e.totalMonths) {
+        const y = Math.floor(Number(e.totalMonths) / 12);
+        const m = Number(e.totalMonths) % 12;
+        duration = `${y > 0 ? `${y} yr${y > 1 ? "s" : ""} ` : ""}${m > 0 ? `${m} mo${m > 1 ? "s" : ""}` : ""}`.trim() || `${e.totalMonths} mos`;
+      } else if (e.startYear && e.endYear) {
+        duration = `${e.startYear} — ${e.endYear}`;
+      } else {
+        duration = e.startYear || e.duration || "";
+      }
+      return {
+        organization: e.organization || "",
+        designation: e.designation || "",
+        startYear: e.startYear || undefined,
+        endYear: e.endYear || undefined,
+        role: e.designation || e.role || "",
+        duration,
+        description: e.description || undefined,
+      };
+    });
   }
 
   const headline = buildHeadline(dbTeacher.displayName, subjects, department, targetExams);

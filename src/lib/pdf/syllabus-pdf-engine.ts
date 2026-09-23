@@ -1,10 +1,12 @@
 /**
  * Official Test Syllabus Engine for Atomic Pathshala
- * Generates an official, printable and downloadable Syllabus Document
+ * Generates an official, printable and downloadable Syllabus Document (Direct PDF & HTML)
  * containing institute header, batch details, test schedule, chapters and topic breakdown.
  */
 
+import { jsPDF } from "jspdf";
 import { getLogoDataUri } from "@/lib/logo";
+import { formatISTDateTime } from "@/lib/date-utils";
 
 export interface TestSyllabusChapterItem {
   id: string;
@@ -29,17 +31,187 @@ export interface TestSyllabusData {
   generatedAt?: Date | string;
 }
 
-import { formatISTDateTime } from "@/lib/date-utils";
+/**
+ * Generates authentic vector PDF buffer directly for downloadable Syllabus files.
+ */
+export async function generateTestSyllabusPdfBuffer(data: TestSyllabusData): Promise<Buffer> {
+  const doc = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: "a4",
+  });
 
+  const pageWidth = 210;
+  const pageHeight = 297;
+  const margin = 16;
+  const contentWidth = pageWidth - margin * 2;
+  let y = margin;
+
+  // Header: Institute Title
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(17);
+  doc.setTextColor(12, 62, 164); // #0c3ea4
+  doc.text("ATOMIC PATHSHALA", margin, y + 5);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text("Learn • Explore • Excel", margin, y + 10);
+
+  // Badge on right: OFFICIAL TEST SYLLABUS
+  doc.setFillColor(12, 62, 164);
+  doc.roundedRect(pageWidth - margin - 52, y, 52, 7.5, 2, 2, "F");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7.5);
+  doc.setTextColor(255, 255, 255);
+  doc.text("OFFICIAL TEST SYLLABUS", pageWidth - margin - 50, y + 5.2);
+
+  y += 16;
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.4);
+  doc.line(margin, y, pageWidth - margin, y);
+  y += 5;
+
+  // Test Title
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.setTextColor(12, 62, 164);
+  const splitTitle = doc.splitTextToSize(data.testName, contentWidth);
+  doc.text(splitTitle, margin, y + 4);
+  y += splitTitle.length * 5.5 + 2;
+
+  // Meta: Schedule & Exam Type
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+  doc.setTextColor(51, 65, 85);
+  const scheduleText = data.openTime ? formatISTDateTime(data.openTime) : "To be announced";
+  const metaLine = `Scheduled: ${scheduleText}  |  Exam: ${data.examType || "Standard"} (${data.durationMin} Mins)${
+    data.batchName ? `  |  Batch: ${data.batchName}` : ""
+  }`;
+  doc.text(metaLine, margin, y + 2);
+  y += 7;
+  doc.line(margin, y, pageWidth - margin, y);
+  y += 7;
+
+  // Group chapters by subject
+  const subjectsMap: Record<string, TestSyllabusChapterItem[]> = {};
+  for (const ch of data.chapters || []) {
+    const sub = ch.subject || "General";
+    if (!subjectsMap[sub]) subjectsMap[sub] = [];
+    subjectsMap[sub].push(ch);
+  }
+
+  const subjectEntries = Object.entries(subjectsMap);
+  if (subjectEntries.length === 0) {
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(9.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text(
+      "Full Syllabus Assessment covering all topics according to the latest pattern.",
+      margin,
+      y + 5
+    );
+  } else {
+    for (const [subject, chapters] of subjectEntries) {
+      // Check page break
+      if (y > pageHeight - 35) {
+        doc.addPage();
+        y = margin;
+      }
+
+      // Subject Header (Clean blue title with underline)
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(12, 62, 164);
+      doc.text(`${subject.toUpperCase()}  (${chapters.length} Chapter${chapters.length > 1 ? "s" : ""})`, margin, y + 4);
+      y += 6;
+      doc.setDrawColor(203, 213, 225);
+      doc.setLineWidth(0.3);
+      doc.line(margin, y, margin + 60, y);
+      y += 5;
+
+      for (const ch of chapters) {
+        if (y > pageHeight - 25) {
+          doc.addPage();
+          y = margin;
+        }
+
+        // Chapter bullet (bold chapter name, same font size as topics, clean text, no box line)
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9.5);
+        doc.setTextColor(15, 23, 42); // slate-900
+
+        const chapterLine = `•  ${ch.chapterTitle}`;
+        const splitChapter = doc.splitTextToSize(chapterLine, contentWidth - 4);
+        doc.text(splitChapter, margin + 2, y + 3);
+        y += splitChapter.length * 4.2 + 1;
+
+        // Subtopics (if any, and not complete chapter)
+        if (!ch.isComplete && ch.topics && ch.topics.length > 0) {
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(9);
+          doc.setTextColor(51, 65, 85);
+
+          for (const topic of ch.topics) {
+            if (y > pageHeight - 20) {
+              doc.addPage();
+              y = margin;
+            }
+            const topicLine = `   –  ${topic}`;
+            const splitTopic = doc.splitTextToSize(topicLine, contentWidth - 10);
+            doc.text(splitTopic, margin + 6, y + 3);
+            y += splitTopic.length * 3.8 + 0.5;
+          }
+        }
+
+        // Custom topics
+        if (ch.customTopics && ch.customTopics.length > 0) {
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(9);
+          doc.setTextColor(51, 65, 85);
+
+          for (const cTopic of ch.customTopics) {
+            if (y > pageHeight - 20) {
+              doc.addPage();
+              y = margin;
+            }
+            const cTopicLine = `   –  [Special] ${cTopic}`;
+            const splitCTopic = doc.splitTextToSize(cTopicLine, contentWidth - 10);
+            doc.text(splitCTopic, margin + 6, y + 3);
+            y += splitCTopic.length * 3.8 + 0.5;
+          }
+        }
+
+        y += 2;
+      }
+
+      y += 4;
+    }
+  }
+
+  // Footer on all pages
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.3);
+    doc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
+    doc.text("Atomic Pathshala Academic Operations • All Rights Reserved", margin, pageHeight - 7);
+    doc.text(`Page ${i} of ${totalPages}`, pageWidth - margin - 18, pageHeight - 7);
+  }
+
+  const arrayBuffer = doc.output("arraybuffer");
+  return Buffer.from(arrayBuffer);
+}
+
+/**
+ * Generates clean, pure white HTML document for browser preview.
+ */
 export function generateTestSyllabusHtml(data: TestSyllabusData): string {
   const logoDataUri = data.logoUri || getLogoDataUri();
-
-  const generatedDate = new Date(data.generatedAt || Date.now()).toLocaleDateString("en-IN", {
-    timeZone: "Asia/Kolkata",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
 
   const testScheduleStr = data.openTime
     ? formatISTDateTime(data.openTime)
@@ -56,36 +228,29 @@ export function generateTestSyllabusHtml(data: TestSyllabusData): string {
   const subjectsHtml = Object.entries(subjectsMap)
     .map(([subject, chapters]) => {
       const chaptersList = chapters
-        .map((ch, idx) => {
-          const isCompleteBadge = ch.isComplete
-            ? `<span style="display:inline-block; background-color:#e0f2fe; color:#0369a1; padding:3px 8px; border-radius:6px; font-size:11px; font-weight:700; white-space:nowrap; flex-shrink:0;">✓ COMPLETE CHAPTER</span>`
-            : "";
-
+        .map((ch) => {
           const topicsList =
             ch.topics && ch.topics.length > 0 && !ch.isComplete
-              ? `<ul style="margin:6px 0 4px 22px; padding:0; list-style-type:disc; font-size:12px; color:#334155; line-height:1.5;">
+              ? `<ul style="margin:4px 0 6px 28px; padding:0; list-style-type:circle; font-size:13px; color:#475569; line-height:1.6;">
                   ${ch.topics.map((t) => `<li style="margin-bottom:2px;">${t}</li>`).join("")}
                  </ul>`
               : "";
 
           const customTopicsList =
             ch.customTopics && ch.customTopics.length > 0
-              ? `<div style="margin:6px 0 4px 22px;">
-                  <span style="font-size:11px; font-weight:700; color:#475569; text-transform:uppercase;">Special / Custom Topics:</span>
-                  <ul style="margin:2px 0 4px 18px; padding:0; list-style-type:circle; font-size:12px; color:#1e293b;">
+              ? `<div style="margin:4px 0 6px 28px;">
+                  <span style="font-size:12px; font-weight:700; color:#475569; text-transform:uppercase;">Special Topics:</span>
+                  <ul style="margin:2px 0 4px 18px; padding:0; list-style-type:circle; font-size:13px; color:#1e293b;">
                     ${ch.customTopics.map((ct) => `<li style="margin-bottom:2px; font-weight:600;">${ct}</li>`).join("")}
                   </ul>
                  </div>`
               : "";
 
           return `
-            <div style="padding:12px 18px; ${idx > 0 ? "border-top:1px solid #e2e8f0;" : ""}">
-              <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
-                <div style="font-size:14px; font-weight:700; color:#0f172a; line-height:1.4;">
-                  <span style="color:#0c3ea4; font-weight:800; margin-right:4px;">${idx + 1}.</span>
-                  ${ch.chapterTitle}
-                </div>
-                ${isCompleteBadge}
+            <div style="padding:4px 0;">
+              <div style="font-size:13px; line-height:1.6; color:#0f172a;">
+                <span style="color:#0c3ea4; margin-right:6px;">•</span>
+                <strong style="font-weight:700;">${ch.chapterTitle}</strong>
               </div>
               ${topicsList}
               ${customTopicsList}
@@ -95,21 +260,14 @@ export function generateTestSyllabusHtml(data: TestSyllabusData): string {
         .join("");
 
       return `
-        <div class="subject-box" style="background:#ffffff; border:1.5px solid #cbd5e1; border-radius:12px; margin-bottom:20px; overflow:hidden; page-break-inside:avoid; break-inside:avoid; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
-          <!-- Subject Header inside the Subject Box -->
-          <div style="background:#f8fafc; border-bottom:1.5px solid #e2e8f0; padding:12px 18px; display:flex; justify-content:space-between; align-items:center;">
-            <div style="display:flex; align-items:center; gap:8px;">
-              <div style="width:6px; height:18px; background:#0c3ea4; border-radius:3px;"></div>
-              <h3 style="margin:0; font-size:15px; font-weight:800; color:#0c3ea4; text-transform:uppercase; letter-spacing:0.5px;">
-                ${subject}
-              </h3>
-            </div>
-            <span style="font-size:11px; font-weight:700; color:#0369a1; background:#e0f2fe; padding:3px 10px; border-radius:999px;">
-              ${chapters.length} Chapter${chapters.length > 1 ? "s" : ""}
-            </span>
+        <div style="margin-bottom:24px; padding-bottom:12px; border-bottom:1px solid #f1f5f9;">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+            <div style="width:4px; height:16px; background:#0c3ea4; border-radius:2px;"></div>
+            <h3 style="margin:0; font-size:14px; font-weight:800; color:#0c3ea4; text-transform:uppercase; letter-spacing:0.5px;">
+              ${subject} <span style="font-size:12px; font-weight:600; color:#64748b; text-transform:none;">(${chapters.length} Chapter${chapters.length > 1 ? "s" : ""})</span>
+            </h3>
           </div>
-          <!-- All Chapters for this Subject inside this single Box -->
-          <div>
+          <div style="padding-left:12px;">
             ${chaptersList}
           </div>
         </div>
@@ -131,7 +289,7 @@ export function generateTestSyllabusHtml(data: TestSyllabusData): string {
       margin: 0;
       padding: 24px;
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #f1f5f9;
+      background: #ffffff;
       color: #0f172a;
       -webkit-font-smoothing: antialiased;
     }
@@ -139,11 +297,9 @@ export function generateTestSyllabusHtml(data: TestSyllabusData): string {
       max-width: 820px;
       margin: 0 auto;
       background: #ffffff;
-      padding: 36px 44px;
-      border-radius: 16px;
-      box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05), 0 8px 10px -6px rgba(0,0,0,0.05);
+      padding: 24px 32px;
       border: 1px solid #e2e8f0;
-      position: relative;
+      border-radius: 12px;
     }
     .no-print {
       display: flex;
@@ -172,7 +328,7 @@ export function generateTestSyllabusHtml(data: TestSyllabusData): string {
 
     @media print {
       body { background: #fff; padding: 0; }
-      .sheet { box-shadow: none; border: none; padding: 20px; max-width: 100%; }
+      .sheet { border: none; padding: 0; max-width: 100%; }
       .no-print { display: none !important; }
     }
   </style>
@@ -181,50 +337,42 @@ export function generateTestSyllabusHtml(data: TestSyllabusData): string {
 
   <div class="no-print">
     <a href="javascript:window.close()" class="btn btn-outline">← Back</a>
-    <button onclick="window.print()" class="btn btn-primary">
-      <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M2.5 8a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1z"/><path d="M5 1a2 2 0 0 0-2 2v2H2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h1v1a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-1h1a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-1V3a2 2 0 0 0-2-2H5zM4 3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2H4V3zm1 5a2 2 0 0 0-2 2v1H2a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v-1a2 2 0 0 0-2-2H5zm7 2v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1z"/></svg>
-      Print / Save as PDF
-    </button>
+    <a href="?download=true" class="btn btn-primary">
+      <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/><path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/></svg>
+      Direct Download PDF
+    </a>
   </div>
 
   <div class="sheet">
     <!-- Header with Branding -->
-    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #e2e8f0; padding-bottom:18px; margin-bottom:22px;">
-      <div style="display:flex; align-items:center; gap:14px;">
-        <img src="${logoDataUri}" alt="Atomic Pathshala" onerror="this.onerror=null;this.src='/brand/logo.png';" style="height:54px; width:54px; object-fit:contain; border-radius:10px; background:#ffffff; padding:2px; border:1px solid #e2e8f0; flex-shrink:0;" />
+    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #e2e8f0; padding-bottom:16px; margin-bottom:20px;">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <img src="${logoDataUri}" alt="Atomic Pathshala" onerror="this.onerror=null;this.src='/brand/logo.png';" style="height:48px; width:48px; object-fit:contain;" />
         <div>
-          <h1 style="margin:0; font-size:22px; font-weight:900; color:#0c3ea4; letter-spacing:-0.5px; line-height:1.2;">ATOMIC PATHSHALA</h1>
-          <p style="margin:3px 0 0 0; font-size:12px; font-weight:600; color:#64748b;">Learn • Explore • Excel</p>
+          <h1 style="margin:0; font-size:20px; font-weight:900; color:#0c3ea4; letter-spacing:-0.5px; line-height:1.2;">ATOMIC PATHSHALA</h1>
+          <p style="margin:2px 0 0 0; font-size:11px; font-weight:600; color:#64748b;">Learn • Explore • Excel</p>
         </div>
       </div>
       <div style="text-align:right;">
-        <span style="display:inline-block; background:#0c3ea4; color:#fff; font-size:11px; font-weight:800; padding:5px 12px; border-radius:6px; letter-spacing:0.5px; text-transform:uppercase;">
+        <span style="display:inline-block; background:#0c3ea4; color:#fff; font-size:10px; font-weight:800; padding:4px 10px; border-radius:4px; letter-spacing:0.5px; text-transform:uppercase;">
           OFFICIAL TEST SYLLABUS
         </span>
       </div>
     </div>
 
-    <!-- Test Meta Details Card with Centered Test Title -->
-    <div style="background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:12px; padding:18px 24px; margin-bottom:24px; text-align:center;">
-      <h2 style="margin:0 0 10px 0; font-size:22px; font-weight:900; color:#0c3ea4; letter-spacing:-0.3px; line-height:1.2;">
+    <!-- Test Meta Details Card -->
+    <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:14px 18px; margin-bottom:20px;">
+      <h2 style="margin:0 0 6px 0; font-size:18px; font-weight:900; color:#0c3ea4; letter-spacing:-0.3px; line-height:1.2;">
         ${data.testName}
       </h2>
-      <div style="display:flex; justify-content:center; align-items:center; flex-wrap:wrap; gap:12px 20px; padding-top:10px; border-top:1px solid #e2e8f0; font-size:13px;">
+      <div style="display:flex; align-items:center; flex-wrap:wrap; gap:8px 16px; font-size:12px; color:#475569;">
         ${
           data.batchName
-            ? `<span style="font-weight:700; color:#0369a1; background:#e0f2fe; padding:3px 12px; border-radius:6px; font-size:12px;">
-                 ${data.batchName}
-               </span>`
+            ? `<span style="font-weight:700; color:#0c3ea4;">Batch: ${data.batchName}</span>`
             : ""
         }
-        <div style="display:flex; align-items:center; gap:6px; color:#334155; font-weight:600;">
-          <span style="color:#64748b; font-size:11px; text-transform:uppercase; font-weight:700;">Scheduled:</span>
-          <span style="color:#0f172a; font-weight:700;">${testScheduleStr}</span>
-        </div>
-        <div style="display:flex; align-items:center; gap:6px; color:#334155; font-weight:600;">
-          <span style="color:#64748b; font-size:11px; text-transform:uppercase; font-weight:700;">Exam & Duration:</span>
-          <span style="color:#0f172a; font-weight:700;">${data.examType || "Standard"} • ${data.durationMin} Mins</span>
-        </div>
+        <div><strong>Scheduled:</strong> ${testScheduleStr}</div>
+        <div><strong>Exam:</strong> ${data.examType || "Standard"} • ${data.durationMin} Mins</div>
       </div>
     </div>
 
@@ -233,14 +381,14 @@ export function generateTestSyllabusHtml(data: TestSyllabusData): string {
       ${
         data.chapters && data.chapters.length > 0
           ? subjectsHtml
-          : `<div style="text-align:center; padding:32px 16px; background:#f8fafc; border:1px dashed #cbd5e1; border-radius:8px; color:#64748b; font-size:13px;">
+          : `<div style="text-align:center; padding:24px 16px; color:#64748b; font-size:13px;">
               Full Syllabus test covering all topics of the curriculum according to latest NTA / exam pattern.
              </div>`
       }
     </div>
 
     <!-- Footer Notice -->
-    <div style="margin-top:32px; padding-top:16px; border-top:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center; font-size:11px; color:#94a3b8;">
+    <div style="margin-top:24px; padding-top:12px; border-top:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center; font-size:10px; color:#94a3b8;">
       <div>Atomic Pathshala Academic Operations • All Rights Reserved</div>
       <div>Questions or doubts? Reach out via Academic Doubt Solver</div>
     </div>
