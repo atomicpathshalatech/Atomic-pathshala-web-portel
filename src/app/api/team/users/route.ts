@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
-import { PERMISSIONS, type PermissionCode } from "@/lib/rbac/permissions";
+import { PERMISSIONS, type PermissionCode, parseGlobalRole } from "@/lib/rbac/permissions";
 
 export async function GET(req: NextRequest) {
   try {
@@ -176,12 +176,13 @@ export async function POST(req: NextRequest) {
     }
 
     // Find role in DB
-    let role = await prisma.role.findUnique({ where: { name: roleName as any } });
+    const resolvedRole = parseGlobalRole(roleName) || "TEACHER";
+    let role = await prisma.role.findUnique({ where: { name: resolvedRole as any } });
     if (!role) {
       role = await prisma.role.create({
         data: {
-          name: roleName as any,
-          label: roleName.replace(/_/g, " "),
+          name: resolvedRole as any,
+          label: resolvedRole.replace(/_/g, " "),
           isSystem: true,
         },
       });

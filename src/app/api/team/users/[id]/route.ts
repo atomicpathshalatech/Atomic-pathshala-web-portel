@@ -4,7 +4,12 @@ import bcrypt from "bcryptjs";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
-import { PERMISSIONS, ROLE_PERMISSION_DEFAULTS, PermissionCode } from "@/lib/rbac/permissions";
+import {
+  PERMISSIONS,
+  ROLE_PERMISSION_DEFAULTS,
+  PermissionCode,
+  parseGlobalRole,
+} from "@/lib/rbac/permissions";
 import { generateTempPassword, sendStaffApprovalEmail } from "@/lib/email/credentials";
 import { getLoginUrl } from "@/lib/email/app-url";
 
@@ -272,18 +277,28 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       }
     } else if (body.roleName && body.roleName !== currentRoleName) {
       // Role change / (re)assignment
-      let newRole = await prisma.role.findUnique({ where: { name: body.roleName } });
+      const resolvedRole = parseGlobalRole(body.roleName);
+      if (!resolvedRole) {
+        return NextResponse.json(
+          {
+            error: `Invalid role "${body.roleName}". Please select a valid system role (e.g. SUPER_ADMIN, FOUNDER, TEACHER, ADMIN).`,
+          },
+          { status: 400 }
+        );
+      }
+
+      let newRole = await prisma.role.findUnique({ where: { name: resolvedRole as any } });
       if (!newRole) {
         newRole = await prisma.role.create({
           data: {
-            name: body.roleName,
-            label: body.roleName.replace(/_/g, " "),
+            name: resolvedRole as any,
+            label: resolvedRole.replace(/_/g, " "),
             isSystem: true,
           },
         });
       }
       updateData.roleId = newRole.id;
-      auditChanges.role = { old: currentRoleName, new: body.roleName };
+      auditChanges.role = { old: currentRoleName, new: resolvedRole };
       // Re-activate a formerly-parked account when a role is assigned back.
       if (
         body.status === undefined &&

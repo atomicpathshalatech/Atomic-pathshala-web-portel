@@ -592,3 +592,71 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PermissionCode[]> = {
   SUPER_ADMIN: [PERMISSIONS.TEAM_PORTAL_ACCESS, ...Object.values(PERMISSIONS)],
   FOUNDER: [PERMISSIONS.TEAM_PORTAL_ACCESS, ...Object.values(PERMISSIONS)],
 };
+
+export const VALID_GLOBAL_ROLES = [
+  "SUPER_ADMIN",
+  "FOUNDER",
+  "ADMIN",
+  "SUB_ADMIN",
+  "TEACHER",
+  "ACADEMIC_HEAD",
+  "DEPARTMENT_HEAD",
+  "CONTENT_CREATOR",
+  "CONTENT_TEAM",
+  "QUESTION_TEAM",
+  "SME",
+  "SALES",
+  "SUPPORT",
+  "FINANCE",
+  "HR",
+  "MARKETING",
+  "DESIGNER",
+  "VIDEO_EDITOR",
+  "STUDENT",
+  "PARENT",
+  "GUEST",
+] as const;
+
+export type GlobalRoleName = (typeof VALID_GLOBAL_ROLES)[number];
+
+export function parseGlobalRole(input: unknown): GlobalRoleName | null {
+  if (!input || typeof input !== "string") return null;
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+
+  // 1. Direct match
+  if (VALID_GLOBAL_ROLES.includes(trimmed as GlobalRoleName)) {
+    return trimmed as GlobalRoleName;
+  }
+
+  // 2. Normalized (uppercase + underscore)
+  const normalized = trimmed.toUpperCase().replace(/[\s-]+/g, "_") as GlobalRoleName;
+  if (VALID_GLOBAL_ROLES.includes(normalized)) {
+    return normalized;
+  }
+
+  // 3. Keyword / title heuristic matching
+  const upper = trimmed.toUpperCase();
+  if (upper.includes("SUPER_ADMIN") || upper.includes("SUPER ADMIN")) return "SUPER_ADMIN";
+  if (upper.includes("FOUNDER")) return "FOUNDER";
+  if (upper.includes("ACADEMIC_HEAD") || upper.includes("ACADEMIC HEAD")) return "ACADEMIC_HEAD";
+  if (upper.includes("DEPARTMENT_HEAD") || upper.includes("DEPARTMENT HEAD")) return "DEPARTMENT_HEAD";
+  if (upper.includes("SUB_ADMIN") || upper.includes("SUB ADMIN")) return "SUB_ADMIN";
+  if (upper.includes("ADMIN")) return "ADMIN";
+  if (upper.includes("TEACHER") || upper.includes("EDUCATOR") || upper.includes("FACULTY")) return "TEACHER";
+  if (upper.includes("CONTENT_CREATOR") || upper.includes("CONTENT CREATOR")) return "CONTENT_CREATOR";
+  if (upper.includes("CONTENT_TEAM") || upper.includes("CONTENT TEAM")) return "CONTENT_TEAM";
+  if (upper.includes("QUESTION_TEAM") || upper.includes("QUESTION TEAM")) return "QUESTION_TEAM";
+  if (upper.includes("SME") || upper.includes("SUBJECT MATTER")) return "SME";
+  if (upper.includes("SALES")) return "SALES";
+  if (upper.includes("SUPPORT")) return "SUPPORT";
+  if (upper.includes("FINANCE")) return "FINANCE";
+  if (upper.includes("HR") || upper.includes("HUMAN RESOURCE")) return "HR";
+  if (upper.includes("MARKETING")) return "MARKETING";
+  if (upper.includes("DESIGNER")) return "DESIGNER";
+  if (upper.includes("VIDEO_EDITOR") || upper.includes("VIDEO EDITOR")) return "VIDEO_EDITOR";
+  if (upper.includes("STUDENT")) return "STUDENT";
+  if (upper.includes("PARENT")) return "PARENT";
+
+  return null;
+}

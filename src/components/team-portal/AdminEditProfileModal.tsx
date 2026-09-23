@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
+import { parseGlobalRole } from "@/lib/rbac/permissions";
 
 export type ProfileUserType = "student" | "teacher" | "user" | "self";
 
@@ -48,6 +49,7 @@ export interface AdminEditProfileModalProps {
     bio?: string | null;
 
     // Staff fields
+    role?: string | null;
     roleName?: string | null;
     position?: string | null;
     status?: string | null;
@@ -56,6 +58,38 @@ export interface AdminEditProfileModalProps {
     contractEnd?: string | Date | null;
     contractNote?: string | null;
   };
+}
+
+export const ROLE_OPTIONS = [
+  { value: "SUPER_ADMIN", label: "Super Admin (Full Access)" },
+  { value: "FOUNDER", label: "Founder (Executive Access)" },
+  { value: "ADMIN", label: "Admin" },
+  { value: "SUB_ADMIN", label: "Sub Admin" },
+  { value: "ACADEMIC_HEAD", label: "Academic Head" },
+  { value: "DEPARTMENT_HEAD", label: "Department Head" },
+  { value: "TEACHER", label: "Teacher / Educator" },
+  { value: "SME", label: "Subject Matter Expert (SME)" },
+  { value: "CONTENT_CREATOR", label: "Content Creator" },
+  { value: "CONTENT_TEAM", label: "Content Team" },
+  { value: "QUESTION_TEAM", label: "Question Team" },
+  { value: "SALES", label: "Sales & CRM" },
+  { value: "SUPPORT", label: "Support & Helpdesk" },
+  { value: "FINANCE", label: "Finance" },
+  { value: "HR", label: "Human Resources (HR)" },
+  { value: "MARKETING", label: "Marketing" },
+  { value: "DESIGNER", label: "Designer" },
+  { value: "VIDEO_EDITOR", label: "Video Editor" },
+  { value: "STUDENT", label: "Student" },
+  { value: "PARENT", label: "Parent" },
+  { value: "NONE", label: "No Role (Former Staff / Revoke Access)" },
+];
+
+function resolveInitialRole(data: any): string {
+  const raw = data.roleName || data.role || "";
+  const parsed = parseGlobalRole(raw);
+  if (parsed) return parsed;
+  if (raw === "NONE" || data.removeRole) return "NONE";
+  return "TEACHER";
 }
 
 const CLASS_OPTIONS = ["Class 9", "Class 10", "Class 11", "Class 12", "Dropper"];
@@ -110,8 +144,13 @@ export function AdminEditProfileModal({
   const [bio, setBio] = useState(initialData.bio || "");
 
   // Staff specific
-  const [roleName, setRoleName] = useState(initialData.roleName || "");
-  const [position, setPosition] = useState(initialData.position || "");
+  const [roleName, setRoleName] = useState(() => resolveInitialRole(initialData));
+  const [position, setPosition] = useState(() => {
+    const p = initialData.position || "";
+    const r = initialData.roleName || (initialData as any).role || "";
+    if (!p && r && !parseGlobalRole(r)) return r;
+    return p;
+  });
   const [status, setStatus] = useState(initialData.status || "ACTIVE");
   const [contractType, setContractType] = useState(initialData.contractType || "FULL_TIME");
   const [contractEnd, setContractEnd] = useState(
@@ -146,8 +185,15 @@ export function AdminEditProfileModal({
     setSubjectsStr((initialData.subjects || []).join(", "));
     setExperienceYears(initialData.experienceYears || "");
     setBio(initialData.bio || "");
-    setRoleName(initialData.roleName || "");
-    setPosition(initialData.position || "");
+    const resolvedRole = resolveInitialRole(initialData);
+    setRoleName(resolvedRole);
+    const initialPos = initialData.position || "";
+    const rawRole = initialData.roleName || (initialData as any).role || "";
+    if (!initialPos && rawRole && !parseGlobalRole(rawRole)) {
+      setPosition(rawRole);
+    } else {
+      setPosition(initialPos);
+    }
     setStatus(initialData.status || "ACTIVE");
     setContractType(initialData.contractType || "FULL_TIME");
     setContractEnd(
@@ -271,10 +317,12 @@ export function AdminEditProfileModal({
       } else {
         // userType === "user"
         url = `/api/team/users/${targetId}`;
+        const sanitizedRole =
+          roleName === "NONE" ? "NONE" : parseGlobalRole(roleName) || "TEACHER";
         payload = {
           ...payload,
           status,
-          roleName: roleName || undefined,
+          roleName: sanitizedRole,
           department: department.trim() || undefined,
           position: position.trim() || undefined,
           contractType: contractType || undefined,
@@ -763,14 +811,24 @@ export function AdminEditProfileModal({
             <div className="space-y-3">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="font-bold text-slate-700 dark:text-slate-300">Role</label>
-                  <input
-                    type="text"
+                  <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                    <span>Role (System RBAC)</span>
+                    <span className="text-[10px] font-normal text-slate-400">Permissions</span>
+                  </label>
+                  <select
                     value={roleName}
                     onChange={(e) => setRoleName(e.target.value)}
-                    placeholder="e.g. ADMIN, TEACHER, CONTENT_CREATOR"
-                    className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold font-mono"
-                  />
+                    className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-white"
+                  >
+                    {ROLE_OPTIONS.map((r) => (
+                      <option key={r.value} value={r.value}>
+                        {r.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    System permissions &amp; administrative access level.
+                  </p>
                 </div>
 
                 <div>
@@ -800,14 +858,20 @@ export function AdminEditProfileModal({
                 </div>
 
                 <div>
-                  <label className="font-bold text-slate-700 dark:text-slate-300">Position / Designation</label>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                    <span>Position / Designation</span>
+                    <span className="text-[10px] font-normal text-slate-400">Public Title</span>
+                  </label>
                   <input
                     type="text"
                     value={position}
                     onChange={(e) => setPosition(e.target.value)}
-                    placeholder="e.g. Senior Faculty, Academic Head"
-                    className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                    placeholder="e.g. Founder and Senior Chemistry Educator"
+                    className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-semibold"
                   />
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Job title or public designation (e.g. Founder &amp; Senior Chemistry Educator).
+                  </p>
                 </div>
 
                 <div>
