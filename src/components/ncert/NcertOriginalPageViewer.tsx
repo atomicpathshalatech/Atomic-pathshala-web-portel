@@ -41,6 +41,11 @@ export function NcertOriginalPageViewer({
   const activeCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const bufferCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  // Scrollable viewing stage — pinch/wheel zoom gestures are captured here,
+  // scoped to just this PDF area (see gesture useEffect below).
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  // Latest scale, readable from native event listeners without re-binding them on every render.
+  const scaleRef = useRef<number>(scale);
 
   // PDF.js references
   const pdfDocRef = useRef<any>(null);
@@ -61,6 +66,18 @@ export function NcertOriginalPageViewer({
     async (doc: any, pageNum: number, currentScale: number, targetCanvas: HTMLCanvasElement | null) => {
       if (!doc || !targetCanvas) return;
 
+      // Pinch/wheel zoom can request many scale changes per second — cancel
+      // whatever was mid-render on this canvas so two renders never race to
+      // draw onto it (previously only an issue in theory, since the +/-
+      // buttons couldn't be clicked fast enough to trigger it).
+      if (renderTaskRef.current) {
+        try {
+          renderTaskRef.current.cancel();
+        } catch {
+          // no-op
+        }
+      }
+
       const page = await doc.getPage(pageNum);
       const ctx = targetCanvas.getContext("2d");
       if (!ctx) return;
@@ -80,7 +97,11 @@ export function NcertOriginalPageViewer({
 
       const task = page.render(renderContext);
       renderTaskRef.current = task;
-      await task.promise;
+      try {
+        await task.promise;
+      } catch (err: any) {
+        if (err?.name !== "RenderingCancelledException") throw err;
+      }
     },
     []
   );
@@ -248,6 +269,116 @@ export function NcertOriginalPageViewer({
     }
   }, [scale, displayedPage, initialLoading, isTransitioning, renderDirect]);
 
+  useEffect(() => {
+    scaleRef.current = scale;
+  }, [scale]);
+
+  // 4. Pinch-to-zoom, double-tap-to-zoom, and trackpad/ctrl+wheel zoom —
+  // scoped to the PDF stage only. These use native (non-passive) listeners
+  // because React's synthetic wheel/touch handlers are passive by default,
+  // so calling preventDefault() inside a React onWheel/onTouchMove handler
+  // is silently ignored — which is exactly why, before this, a two-finger
+  // trackpad pinch or a mobile pinch fell through to the BROWSER's own
+  // page-wide zoom instead of zooming just this PDF page.
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+
+    const clampScale = (s: number) => Math.max(0.6, Math.min(3, Number(s.toFixed(2))));
+    let rafId: number | null = null;
+    let pendingScale: number | null = null;
+
+    const flushScale = () => {
+      rafId = null;
+      if (pendingScale != null) {
+        setScale(pendingScale);
+        pendingScale = null;
+      }
+    };
+
+    const queueScale = (next: number) => {
+      pendingScale = clampScale(next);
+      if (rafId == null) {
+        rafId = requestAnimationFrame(flushScale);
+      }
+    };
+
+    // Trackpad pinch is reported by browsers as `wheel` events with
+    // ctrlKey=true — intercepting only that (not plain scroll) keeps normal
+    // two-finger scrolling of the page untouched. Wheel events fire far less
+    // often than touchmove, so this commits straight to `setScale` (no rAF
+    // queue) for an immediately-responsive zoom instead of waiting a frame.
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      const factor = Math.exp(-e.deltaY * 0.01);
+      setScale(clampScale(scaleRef.current * factor));
+    };
+
+    let pinchStartDist = 0;
+    let pinchStartScale = 1;
+    let lastTapTime = 0;
+    let lastTapX = 0;
+    let lastTapY = 0;
+
+    const touchDistance = (touches: TouchList) => {
+      const a = touches[0];
+      const b = touches[1];
+      if (!a || !b) return 0;
+      return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+    };
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        pinchStartDist = touchDistance(e.touches);
+        pinchStartScale = scaleRef.current;
+      } else if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        if (!touch) return;
+        const now = Date.now();
+        const isDoubleTap =
+          now - lastTapTime < 320 && Math.hypot(touch.clientX - lastTapX, touch.clientY - lastTapY) < 40;
+        if (isDoubleTap) {
+          e.preventDefault();
+          const target = scaleRef.current > 1.35 ? 1.0 : Math.min(2.2, scaleRef.current + 0.85);
+          setScale(clampScale(target));
+          lastTapTime = 0;
+        } else {
+          lastTapTime = now;
+          lastTapX = touch.clientX;
+          lastTapY = touch.clientY;
+        }
+      }
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 2 && pinchStartDist > 0) {
+        e.preventDefault();
+        const factor = touchDistance(e.touches) / pinchStartDist;
+        queueScale(pinchStartScale * factor);
+      }
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) pinchStartDist = 0;
+    };
+
+    stage.addEventListener("wheel", onWheel, { passive: false });
+    stage.addEventListener("touchstart", onTouchStart, { passive: false });
+    stage.addEventListener("touchmove", onTouchMove, { passive: false });
+    stage.addEventListener("touchend", onTouchEnd, { passive: false });
+    stage.addEventListener("touchcancel", onTouchEnd, { passive: false });
+
+    return () => {
+      if (rafId != null) cancelAnimationFrame(rafId);
+      stage.removeEventListener("wheel", onWheel);
+      stage.removeEventListener("touchstart", onTouchStart);
+      stage.removeEventListener("touchmove", onTouchMove);
+      stage.removeEventListener("touchend", onTouchEnd);
+      stage.removeEventListener("touchcancel", onTouchEnd);
+    };
+  }, []);
+
   // Fullscreen toggle
   const toggleFullscreen = () => {
     if (!containerRef.current) return;
@@ -377,7 +508,11 @@ export function NcertOriginalPageViewer({
       </div>
 
       {/* 2. MAIN BOOK VIEWING WORKSPACE WITH SMOOTH 3D PAGE-FLIP CONTAINER */}
-      <div className="flex-1 overflow-auto flex justify-center items-start p-3 sm:p-6 bg-slate-900/90 relative">
+      <div
+        ref={stageRef}
+        className="flex-1 overflow-auto flex justify-center items-start p-3 sm:p-6 bg-slate-900/90 relative"
+        style={{ touchAction: "pan-x pan-y" }}
+      >
         {/* Initial PDF Loading State */}
         {initialLoading && (
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-950/90 backdrop-blur-sm space-y-3">

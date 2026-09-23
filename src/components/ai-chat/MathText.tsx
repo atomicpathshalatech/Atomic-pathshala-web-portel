@@ -13,6 +13,25 @@ interface MathTextProps {
 }
 
 /**
+ * KaTeX only superscripts/subscripts a SINGLE token after `^`/`_` unless
+ * it's wrapped in `{...}` — so AI-generated LaTeX like "10^23" or "s^-1"
+ * (missing braces around multi-digit or signed exponents) renders as
+ * "10²3" / "s⁻1" with only the first character raised, which is exactly
+ * the "powers look wrong" bug this fixes. Scoped to inside $...$ / $$...$$
+ * math segments only, so it never touches markdown's own use of `_` for
+ * italics elsewhere in the text.
+ */
+function autoBraceExponents(mathSegment: string): string {
+  return mathSegment.replace(/([_^])(?!\{)(-?\d+)/g, "$1{$2}");
+}
+
+function fixMathFormatting(text: string): string {
+  return text.replace(/(\${1,2})([\s\S]+?)\1/g, (_match, delims: string, inner: string) => {
+    return `${delims}${autoBraceExponents(inner)}${delims}`;
+  });
+}
+
+/**
  * Renders quiz question/option/explanation text with the same math
  * formatting (KaTeX) used in the chat, so things like "kg m^2 s^-2"
  * render as proper superscripts instead of raw caret text.
@@ -25,7 +44,7 @@ export function MathText({ text, className }: MathTextProps) {
   // Turn every single newline into a markdown hard line-break
   // (two trailing spaces + newline) so line structure is preserved
   // without needing an extra remark-breaks dependency.
-  const withLineBreaks = text.replace(/\n/g, "  \n");
+  const withLineBreaks = fixMathFormatting(text).replace(/\n/g, "  \n");
 
   return (
     <span className={className}>
