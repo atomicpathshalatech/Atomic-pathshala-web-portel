@@ -133,7 +133,7 @@ export function VideoStrip({
   }, [whiteboardSessionId, role, forceLocalOnly]);
 
   if ((forceLocalOnly || useFallbackCamera) && role === "TEACHER") {
-    return <LocalWebcamPreview variant={variant} teacherName={teacherName} />;
+    return <LocalWebcamPreview variant={variant} teacherName={teacherName} compact={compact} />;
   }
 
   if (tokenError && role === "STUDENT") {
@@ -536,26 +536,32 @@ function VideoStripInner({
       {/* Buffering / Connecting / Reconnecting Overlay */}
       {(isConnecting || isReconnecting) && (
         <div className="absolute inset-0 bg-black/80 backdrop-blur-xs flex flex-col items-center justify-center z-30 text-center p-2">
-          <div className="w-6 h-6 border-2 border-blue-400 border-t-transparent rounded-full animate-spin mb-1" />
-          <span className="text-xs font-bold text-blue-300">
-            {isReconnecting ? "Reconnecting stream…" : "Connecting stream…"}
-          </span>
+          <div className={`border-2 border-blue-400 border-t-transparent rounded-full animate-spin ${compact ? "w-4 h-4" : "w-6 h-6 mb-1"}`} />
+          {!compact && (
+            <span className="text-xs font-bold text-blue-300">
+              {isReconnecting ? "Reconnecting stream…" : "Connecting stream…"}
+            </span>
+          )}
         </div>
       )}
 
-      {/* Top Header: Instructor Name & Network Quality Indicator */}
-      <div className="absolute top-2 left-2 right-2 flex items-center justify-between z-20 pointer-events-none">
-        <div className="bg-black/80 backdrop-blur-sm px-2.5 py-1 rounded-lg text-xs font-bold text-white border border-white/10 flex items-center gap-1.5">
-          <span className={`w-2 h-2 rounded-full ${hasTeacherVideo ? "bg-emerald-500 animate-pulse" : "bg-amber-400"}`} />
-          <span className="truncate max-w-[130px]">{teacherName || "Instructor"}</span>
-        </div>
+      {/* Top Header: Instructor Name & Network Quality Indicator — omitted
+          in compact mode (a tiny on-demand audio-only corner bubble has no
+          room for this and it isn't reachable/useful there anyway). */}
+      {!compact && (
+        <div className="absolute top-2 left-2 right-2 flex items-center justify-between z-20 pointer-events-none">
+          <div className="bg-black/80 backdrop-blur-sm px-2.5 py-1 rounded-lg text-xs font-bold text-white border border-white/10 flex items-center gap-1.5">
+            <span className={`w-2 h-2 rounded-full ${hasTeacherVideo ? "bg-emerald-500 animate-pulse" : "bg-amber-400"}`} />
+            <span className="truncate max-w-[130px]">{teacherName || "Instructor"}</span>
+          </div>
 
-        {/* Network status */}
-        <div className="bg-black/80 backdrop-blur-sm px-2 py-1 rounded-lg text-[10px] font-semibold text-slate-300 border border-white/10 flex items-center gap-1">
-          <span className="material-symbols-outlined text-xs text-blue-400">signal_cellular_alt</span>
-          <span>{connectionState === ConnectionState.Connected ? "HD Stream" : connectionState}</span>
+          {/* Network status */}
+          <div className="bg-black/80 backdrop-blur-sm px-2 py-1 rounded-lg text-[10px] font-semibold text-slate-300 border border-white/10 flex items-center gap-1">
+            <span className="material-symbols-outlined text-xs text-blue-400">signal_cellular_alt</span>
+            <span>{connectionState === ConnectionState.Connected ? "HD Stream" : connectionState}</span>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Persistent Live Video Call Modal for Student (Mute, Camera toggle, End call, Self-view) */}
       <LiveVideoCallModal
@@ -586,7 +592,10 @@ function VideoStripInner({
         </div>
       )}
 
-      {/* Interactive Controls Overlay on Hover */}
+      {/* Interactive Controls Overlay on Hover — not shown in compact mode
+          (a tiny on-demand audio-only corner bubble has no room for playback
+          controls, and there's nothing to view/pause there anyway). */}
+      {!compact && (
       <div
         className={`absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-2 pt-6 transition-opacity duration-200 z-20 flex items-center justify-between ${
           controlsHovered || isPaused || isMuted ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto"
@@ -680,6 +689,7 @@ function VideoStripInner({
           </button>
         </div>
       </div>
+      )}
     </div>
   );
 }
@@ -799,9 +809,11 @@ function TeacherDeviceSettingsPopover({
 function LocalWebcamPreview({
   variant,
   teacherName,
+  compact = false,
 }: {
   variant: "header" | "panel";
   teacherName?: string | null;
+  compact?: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [cameraActive, setCameraActive] = useState(true);
@@ -861,34 +873,38 @@ function LocalWebcamPreview({
         </div>
       )}
 
-      <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/70 px-2.5 py-1 rounded-lg text-xs font-bold text-white backdrop-blur-sm border border-white/10">
-        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-        {teacherName || "Educator"} (Local Preview)
-      </div>
+      {!compact && (
+        <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/70 px-2.5 py-1 rounded-lg text-xs font-bold text-white backdrop-blur-sm border border-white/10">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          {teacherName || "Educator"} (Local Preview)
+        </div>
+      )}
 
-      <div className="absolute bottom-2 right-2 flex items-center gap-1.5">
-        <button
-          type="button"
-          onClick={toggleMic}
-          className={`w-7 h-7 rounded-full flex items-center justify-center backdrop-blur-sm transition ${
-            micActive ? "bg-black/60 text-white" : "bg-rose-600 text-white"
-          }`}
-          title={micActive ? "Mute Microphone" : "Unmute Microphone"}
-        >
-          <span className="material-symbols-outlined text-sm">{micActive ? "mic" : "mic_off"}</span>
-        </button>
+      {!compact && (
+        <div className="absolute bottom-2 right-2 flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={toggleMic}
+            className={`w-7 h-7 rounded-full flex items-center justify-center backdrop-blur-sm transition ${
+              micActive ? "bg-black/60 text-white" : "bg-rose-600 text-white"
+            }`}
+            title={micActive ? "Mute Microphone" : "Unmute Microphone"}
+          >
+            <span className="material-symbols-outlined text-sm">{micActive ? "mic" : "mic_off"}</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={toggleCamera}
-          className={`w-7 h-7 rounded-full flex items-center justify-center backdrop-blur-sm transition ${
-            cameraActive ? "bg-black/60 text-white" : "bg-rose-600 text-white"
-          }`}
-          title={cameraActive ? "Turn Off Camera" : "Turn On Camera"}
-        >
-          <span className="material-symbols-outlined text-sm">{cameraActive ? "videocam" : "videocam_off"}</span>
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={toggleCamera}
+            className={`w-7 h-7 rounded-full flex items-center justify-center backdrop-blur-sm transition ${
+              cameraActive ? "bg-black/60 text-white" : "bg-rose-600 text-white"
+            }`}
+            title={cameraActive ? "Turn Off Camera" : "Turn On Camera"}
+          >
+            <span className="material-symbols-outlined text-sm">{cameraActive ? "videocam" : "videocam_off"}</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

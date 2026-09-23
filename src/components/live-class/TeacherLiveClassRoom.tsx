@@ -2981,6 +2981,16 @@ export function TeacherLiveClassRoom({
             connectedStudents={connectedStudents}
             onDisconnectStudent={handleDisconnectStudent}
             compact={isCameraCircle}
+            // "YouTube Live Class" mode is OBS-captured and LiveKit-free by
+            // design (see VideoStrip's forceLocalOnly doc) — except while a
+            // hand raise is actively approved, when the teacher needs a real
+            // LiveKit connection to hear that one student's mic (via
+            // RoomAudioRenderer). Re-checking this on every hand-raise-queue
+            // change is what actually connects/disconnects LiveKit on demand.
+            forceLocalOnly={
+              wbSession?.videoTransport === "YOUTUBE" &&
+              !handRaiseQueue.some((h) => h.status === "APPROVED")
+            }
           />
         </div>
 

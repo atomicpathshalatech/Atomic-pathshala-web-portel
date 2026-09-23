@@ -1568,7 +1568,13 @@ export function StudentLiveClassRoom({
                 : "h-56 bg-black relative border-b border-[#2d2e3b] shrink-0"
             }
           >
-            {isDesktopViewport && (
+            {isDesktopViewport && (!isYouTube || isApprovedSpeaker || teacherAudioConnected || teacherVideoConnected) && (
+              // In YouTube mode the teacher's camera is already inside the
+              // YouTube video itself (OBS captures it) — this box only needs
+              // to exist for the LiveKit audio pathway, so it stays unmounted
+              // (zero LiveKit connection) until this student is actually
+              // granted the mic, exactly mirroring forceLocalOnly on the
+              // teacher's side.
               <VideoStrip
                 whiteboardSessionId={wbSession?.id || batchScheduleId}
                 variant="panel"
@@ -1661,21 +1667,46 @@ export function StudentLiveClassRoom({
           </button>
 
           {isYouTube ? (
-            <YouTubeLivePlayer
-              youtubeVideoId={wbSession?.youtubeVideoId ?? null}
-              title={scheduleTitle}
-              subject={subject || batchName}
-              educatorName={teacherName}
-              scheduledStart={wbSession?.scheduledStart || scheduleTimes?.startTime}
-              livePhase={isLive ? "LIVE" : "PREPARING"}
-            >
-              <VideoPollOverlay
-                poll={videoPollData}
-                onVote={submitAnswer}
-                onDismiss={() => setQuizDismissed(true)}
-                voting={submittingAnswer}
-              />
-            </YouTubeLivePlayer>
+            <div className="relative w-full h-full">
+              <YouTubeLivePlayer
+                youtubeVideoId={wbSession?.youtubeVideoId ?? null}
+                title={scheduleTitle}
+                subject={subject || batchName}
+                educatorName={teacherName}
+                scheduledStart={wbSession?.scheduledStart || scheduleTimes?.startTime}
+                livePhase={isLive ? "LIVE" : "PREPARING"}
+              >
+                <VideoPollOverlay
+                  poll={videoPollData}
+                  onVote={submitAnswer}
+                  onDismiss={() => setQuizDismissed(true)}
+                  voting={submittingAnswer}
+                />
+              </YouTubeLivePlayer>
+
+              {/* Teacher's camera is already baked into the YouTube video via
+                  OBS, so this stays hidden the rest of the time — it only
+                  appears for the on-demand LiveKit audio connection while a
+                  hand raise (or teacher-connect) is actively granted. */}
+              {(isApprovedSpeaker || teacherAudioConnected || teacherVideoConnected) && (
+                <div className="absolute top-2 left-2 w-28 xs:w-32 aspect-video rounded-lg overflow-hidden border border-emerald-500/60 shadow-xl bg-[#10121d] z-20">
+                  <VideoStrip
+                    whiteboardSessionId={wbSession?.id || batchScheduleId}
+                    variant="panel"
+                    role="STUDENT"
+                    teacherName={teacherName}
+                    isApprovedSpeaker={isApprovedSpeaker}
+                    speakerRequestType={speakerRequestType}
+                    speakerToken={speakerToken}
+                    teacherAudioConnected={teacherAudioConnected}
+                    teacherVideoConnected={teacherVideoConnected}
+                    teacherConnectionToken={teacherConnectionToken}
+                    onEndCall={handleEndCall}
+                    compact
+                  />
+                </div>
+              )}
+            </div>
           ) : !isDesktopViewport ? (
             <div className="relative aspect-[16/9] w-full h-full max-w-full max-h-full overflow-hidden flex items-center justify-center">
               <StudentWhiteboardMirror
