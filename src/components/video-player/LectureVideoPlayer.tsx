@@ -120,6 +120,10 @@ export function LectureVideoPlayer({
   const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const progressSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const progressBarRef = useRef<HTMLDivElement>(null);
+  const lastTickTimeRef = useRef<number>(Date.now());
+  const lastReportedTimeRef = useRef<number>(-1);
+  const seekCooldownUntilRef = useRef<number>(0);
+  const scrubTargetTimeRef = useRef<number>(0);
 
   // Playback State
   const [isPlaying, setIsPlaying] = useState(false);
@@ -286,6 +290,29 @@ export function LectureVideoPlayer({
     []
   );
 
+  // Authoritative Seek: updates UI immediately and commits seek to YouTube / HTML5 video
+  // Sets a 1200ms cooldown so stale YouTube polling frames won't snap the timeline back
+  const commitSeek = useCallback(
+    (targetTime: number) => {
+      const activeDur = duration || 999999;
+      const clamped = Math.max(0, Math.min(targetTime, activeDur));
+      setCurrentTime(clamped);
+      lastReportedTimeRef.current = clamped;
+      seekCooldownUntilRef.current = Date.now() + 1200;
+
+      if (isYouTube) {
+        sendYouTubeCommand("seekTo", [clamped, true]);
+      } else if (videoRef.current) {
+        videoRef.current.currentTime = clamped;
+      }
+      if (onTimeUpdate) onTimeUpdate(clamped, duration);
+      if (duration > 0 && onProgressPercentage) {
+        onProgressPercentage(Math.floor((clamped / duration) * 100));
+      }
+    },
+    [duration, isYouTube, sendYouTubeCommand, onTimeUpdate, onProgressPercentage]
+  );
+
   // Helper to dynamically update available qualities from YouTube
   const updateAvailableQualities = useCallback((levels: string[]) => {
     if (!Array.isArray(levels) || levels.length === 0) return;
@@ -409,7 +436,11 @@ export function LectureVideoPlayer({
 
         if (msg.event === "infoDelivery" && msg.info) {
           const info = msg.info;
-          if (typeof info.currentTime === "number" && !isScrubbing) {
+          if (
+            typeof info.currentTime === "number" &&
+            !isScrubbing &&
+            Date.now() >= seekCooldownUntilRef.current
+          ) {
             setCurrentTime(info.currentTime);
           }
           if (typeof info.duration === "number" && info.duration > 0) {
@@ -465,9 +496,6 @@ export function LectureVideoPlayer({
   }, [isYouTube, isScrubbing, onEnded]);
 
   // Robust YouTube progress ticker: combines API calls with continuous smooth time advancement
-  const lastTickTimeRef = useRef<number>(Date.now());
-  const lastReportedTimeRef = useRef<number>(-1);
-
   useEffect(() => {
     if (!isYouTube) return;
     lastTickTimeRef.current = Date.now();
@@ -519,6 +547,22 @@ export function LectureVideoPlayer({
 
       // 3. Update current time & scrub progress bar
       if (!isScrubbing) {
+        if (Date.now() < seekCooldownUntilRef.current) {
+          // In seek cooldown - do not snap back to stale time!
+          if (isPlaying) {
+            setCurrentTime((prev) => {
+              const next = prev + elapsed * playbackSpeed;
+              const clamped = activeDur > 0 ? Math.min(next, activeDur) : next;
+              if (onTimeUpdate) onTimeUpdate(clamped, activeDur);
+              if (activeDur > 0 && onProgressPercentage) {
+                onProgressPercentage(Math.floor((clamped / activeDur) * 100));
+              }
+              return clamped;
+            });
+          }
+          return;
+        }
+
         if (isPlaying) {
           // If reported time has changed noticeably from last time (user sought or fresh frame from YT)
           if (
@@ -590,20 +634,14 @@ export function LectureVideoPlayer({
   const skip = useCallback(
     (seconds: number) => {
       const targetTime = Math.min(Math.max(0, currentTime + seconds), duration || 999999);
-      if (isYouTube) {
-        sendYouTubeCommand("seekTo", [targetTime, true]);
-        setCurrentTime(targetTime);
-      } else if (videoRef.current) {
-        videoRef.current.currentTime = targetTime;
-        setCurrentTime(targetTime);
-      }
+      commitSeek(targetTime);
       triggerFeedback(
         seconds > 0 ? "forward_10" : "replay_10",
         seconds > 0 ? "+10s" : "-10s"
       );
       resetControlsTimer();
     },
-    [currentTime, duration, isYouTube, sendYouTubeCommand, triggerFeedback, resetControlsTimer]
+    [currentTime, duration, commitSeek, triggerFeedback, resetControlsTimer]
   );
 
   // Volume & Mute Handlers
@@ -837,65 +875,84 @@ export function LectureVideoPlayer({
     if (onEnded) onEnded();
   };
 
-  // Progress Bar Scrubbing
-  const calculateScrubPosition = (
-    e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>
-  ) => {
-    if (!progressBarRef.current || duration <= 0) return 0;
-    const rect = progressBarRef.current.getBoundingClientRect();
-    const clientX =
-      "touches" in e && e.touches[0]
-        ? e.touches[0].clientX
-        : (e as React.MouseEvent<HTMLDivElement>).clientX;
-    const pos = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    return pos * duration;
+  // Progress Bar Scrubbing with Pointer Capture & Touch Support
+  const calculateScrubPositionFromClientX = useCallback(
+    (clientX: number) => {
+      if (!progressBarRef.current || duration <= 0) return 0;
+      const rect = progressBarRef.current.getBoundingClientRect();
+      if (rect.width <= 0) return 0;
+      const pos = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      return pos * duration;
+    },
+    [duration]
+  );
+
+  const handleProgressPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (duration <= 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {}
+
+    setIsScrubbing(true);
+    const target = calculateScrubPositionFromClientX(e.clientX);
+    scrubTargetTimeRef.current = target;
+    setCurrentTime(target);
+    setHoverPosition((target / duration) * 100);
+    setHoverTime(target);
+    resetControlsTimer();
   };
 
-  const handleProgressMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!progressBarRef.current || duration <= 0) return;
-    const rect = progressBarRef.current.getBoundingClientRect();
-    const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    setHoverPosition(pos * 100);
-    setHoverTime(pos * duration);
+  const handleProgressPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (duration <= 0) return;
+    const target = calculateScrubPositionFromClientX(e.clientX);
+    const pct = (target / duration) * 100;
+    setHoverPosition(pct);
+    setHoverTime(target);
+
+    if (isScrubbing) {
+      scrubTargetTimeRef.current = target;
+      setCurrentTime(target);
+      resetControlsTimer();
+    }
+  };
+
+  const handleProgressPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (duration <= 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    try {
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      }
+    } catch {}
+
+    const target = calculateScrubPositionFromClientX(e.clientX);
+    setIsScrubbing(false);
+    setHoverTime(null);
+    commitSeek(target);
+    resetControlsTimer();
+  };
+
+  const handleProgressPointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
+    try {
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      }
+    } catch {}
+    setIsScrubbing(false);
+    setHoverTime(null);
+    commitSeek(scrubTargetTimeRef.current);
+    resetControlsTimer();
   };
 
   const handleProgressMouseLeave = () => {
-    setHoverTime(null);
-  };
-
-  const handleProgressMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (duration <= 0) return;
-    setIsScrubbing(true);
-    const target = calculateScrubPosition(e);
-    setCurrentTime(target);
-
-    if (isYouTube) {
-      sendYouTubeCommand("seekTo", [target, true]);
-    } else if (videoRef.current) {
-      videoRef.current.currentTime = target;
+    if (!isScrubbing) {
+      setHoverTime(null);
     }
-
-    const onMouseMove = (moveEvent: MouseEvent) => {
-      if (!progressBarRef.current) return;
-      const rect = progressBarRef.current.getBoundingClientRect();
-      const pos = Math.max(0, Math.min(1, (moveEvent.clientX - rect.left) / rect.width));
-      const t = pos * duration;
-      setCurrentTime(t);
-      if (isYouTube) {
-        sendYouTubeCommand("seekTo", [t, true]);
-      } else if (videoRef.current) {
-        videoRef.current.currentTime = t;
-      }
-    };
-
-    const onMouseUp = () => {
-      setIsScrubbing(false);
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-    };
-
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
   };
 
   // Resume Video Action
@@ -1288,13 +1345,15 @@ export function LectureVideoPlayer({
         {!isLive && (
           <div
             ref={progressBarRef}
-            onMouseMove={handleProgressMouseMove}
+            onPointerDown={handleProgressPointerDown}
+            onPointerMove={handleProgressPointerMove}
+            onPointerUp={handleProgressPointerUp}
+            onPointerCancel={handleProgressPointerCancel}
             onMouseLeave={handleProgressMouseLeave}
-            onMouseDown={handleProgressMouseDown}
-            className="relative w-full h-3 group/progress cursor-pointer flex items-center"
+            className="relative w-full py-3.5 -my-2 group/progress cursor-pointer flex items-center touch-none select-none"
           >
             {/* Background Track */}
-            <div className="w-full h-1 group-hover/progress:h-2 bg-white/25 rounded-full overflow-hidden relative transition-all duration-150">
+            <div className="w-full h-1.5 group-hover/progress:h-2.5 bg-white/25 rounded-full overflow-hidden relative transition-all duration-150">
               {/* Buffer Bar */}
               <div
                 className="absolute top-0 left-0 bottom-0 bg-white/35 rounded-full transition-all duration-200"
@@ -1302,17 +1361,17 @@ export function LectureVideoPlayer({
               />
               {/* Played Bar */}
               <div
-                className={`absolute top-0 left-0 bottom-0 bg-white rounded-full ${
-                  isScrubbing ? "transition-none" : "transition-[width] duration-150 ease-linear"
+                className={`absolute top-0 left-0 bottom-0 bg-blue-500 rounded-full ${
+                  isScrubbing ? "transition-none" : "transition-[width] duration-100 ease-linear"
                 }`}
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
 
-            {/* Blue Circular Thumb Knob matching Screenshot 1 */}
+            {/* Blue Circular Thumb Knob */}
             <div
-              className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-blue-500 rounded-full shadow-lg border-2 border-white pointer-events-none ${
-                isScrubbing ? "transition-none" : "transition-[left] duration-150 ease-linear"
+              className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 group-hover/progress:w-5 group-hover/progress:h-5 bg-blue-500 rounded-full shadow-lg border-2 border-white pointer-events-none transition-transform ${
+                isScrubbing ? "scale-125 transition-none" : "transition-[left] duration-100 ease-linear"
               }`}
               style={{ left: `${progressPercent}%` }}
             />
