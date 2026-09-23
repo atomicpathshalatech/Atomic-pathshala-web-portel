@@ -635,8 +635,6 @@ export function TeacherLiveClassRoom({
             sess?.status === "ENDED"
           ) {
             setShowPostClassModal(true);
-          } else if (!sess?.presentationUrl && sess?.livePhase !== "LIVE") {
-            setShowPreFlightWizard(true);
           } else if (
             sess?.presentationUrl &&
             sess?.pages.length === 1 &&

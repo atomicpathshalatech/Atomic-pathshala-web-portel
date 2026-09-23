@@ -601,6 +601,7 @@ export function BatchDetailClient({
       {showImportModal && (
         <ChapterImportModal
           batchId={batch.id}
+          existingChapterIds={importedChapters.map((c) => c.id)}
           onClose={() => setShowImportModal(false)}
         />
       )}

@@ -9,7 +9,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { Prisma, type ChapterStatus } from "@prisma/client";
 
 export const metadata: Metadata = {
-  title: "Chapters",
+  title: "Chapters Master & Subject Curriculum",
 };
 
 const STATUS_TONE: Record<string, string> = {
@@ -196,16 +196,55 @@ export default async function ChaptersListPage({
     prisma.chapter.count({ where: { status: { in: ["APPROVED", "PUBLISHED"] } } }),
   ]);
 
+  // Group chapters by Subject box layout as requested
+  type SubjectGroup = {
+    subjectId: string;
+    subjectTitle: string;
+    courseTitle: string;
+    chapters: typeof chapters;
+    totalLectures: number;
+    totalDpps: number;
+    totalTests: number;
+  };
+
+  const subjectMap = new Map<string, SubjectGroup>();
+
+  for (const ch of chapters) {
+    const sId = ch.subjectId || "general_subject";
+    const sTitle = ch.subject?.title || "General Subject";
+    const cTitle = ch.subject?.course?.title || "Academic Program";
+
+    if (!subjectMap.has(sId)) {
+      subjectMap.set(sId, {
+        subjectId: sId,
+        subjectTitle: sTitle,
+        courseTitle: cTitle,
+        chapters: [],
+        totalLectures: 0,
+        totalDpps: 0,
+        totalTests: 0,
+      });
+    }
+
+    const group = subjectMap.get(sId)!;
+    group.chapters.push(ch);
+    group.totalLectures += ch._count.lectures;
+    group.totalDpps += ch._count.dpps;
+    group.totalTests += ch._count.tests;
+  }
+
+  const subjectGroups = Array.from(subjectMap.values());
+
   const activeTab = searchParams.status || "ALL";
 
   return (
-    <div className="space-y-6 max-w-6xl">
+    <div className="space-y-6 max-w-6xl font-sans">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Chapters Master</h1>
           <p className="text-xs text-slate-500 mt-1">
-            Author curriculum roadmaps, manage weekly schedules, and review chapters for batch timetable import.
+            Author curriculum roadmaps, manage subject chapters in folder rows, and review chapters for batch import.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -268,9 +307,8 @@ export default async function ChaptersListPage({
         </Link>
       </div>
 
-      {/* Filter Toolbar with Exact Requested Course & Subject Options */}
+      {/* Filter Toolbar */}
       <form className="bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 p-3.5 rounded-2xl flex flex-wrap items-center gap-3" method="get">
-        {/* Course / Exam Dropdown */}
         <select
           name="course"
           defaultValue={selectedCourse ?? ""}
@@ -284,7 +322,6 @@ export default async function ChaptersListPage({
           <option value="JEE Main + Advanced">JEE Main + Advanced</option>
         </select>
 
-        {/* Subject Dropdown */}
         <select
           name="subject"
           defaultValue={selectedSubject ?? ""}
@@ -335,107 +372,162 @@ export default async function ChaptersListPage({
         )}
       </form>
 
-      {/* Chapters Table List */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead className="bg-slate-50 dark:bg-slate-950/60 border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              <tr>
-                <th className="px-6 py-4">Chapter Title &amp; Faculty</th>
-                <th className="px-6 py-4">Subject &amp; Exam</th>
-                <th className="px-6 py-4">Medium</th>
-                <th className="px-6 py-4">Content Roadmap</th>
-                <th className="px-6 py-4">Review Status</th>
-                <th className="px-6 py-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 text-xs">
-              {chapters.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-slate-400">
-                    <span className="material-symbols-outlined text-4xl text-slate-300 dark:text-slate-700 block mb-2">
-                      menu_book
-                    </span>
-                    No chapters found matching this filter.
-                  </td>
-                </tr>
-              ) : (
-                chapters.map((ch) => {
+      {/* ========================================================================= */}
+      {/* SUBJECT BOXES WITH LINE-TYPE FOLDER CHAPTER ROWS */}
+      {/* ========================================================================= */}
+      {subjectGroups.length === 0 ? (
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-dashed border-slate-200 dark:border-slate-800 p-12 text-center text-slate-400 space-y-3">
+          <span className="material-symbols-outlined text-4xl text-slate-300 dark:text-slate-700">
+            menu_book
+          </span>
+          <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200">No Chapters Created Yet</h3>
+          <p className="text-xs text-slate-500 max-w-sm mx-auto">
+            Create your first chapter to start organizing subjects, lectures, DPPs, and practice tests.
+          </p>
+          {canCreate && (
+            <Link
+              href="/team/chapters/new"
+              className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-2xl bg-blue-600 text-white text-xs font-bold shadow-md hover:bg-blue-500 transition"
+            >
+              <span className="material-symbols-outlined text-sm">add</span>
+              <span>Create New Chapter</span>
+            </Link>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {subjectGroups.map((group) => (
+            <div
+              key={group.subjectId}
+              className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-sm overflow-hidden"
+            >
+              {/* 1. Subject Header Box */}
+              <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-50 to-white dark:from-slate-900 dark:to-slate-950 border-b border-slate-200/80 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-2xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 flex items-center justify-center font-black text-sm shrink-0 shadow-xs">
+                    <span className="material-symbols-outlined text-xl">menu_book</span>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white truncate">
+                        {group.subjectTitle}
+                      </h2>
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                        Subject
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                      {group.courseTitle}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Subject Aggregate Stats */}
+                <div className="flex items-center gap-2 text-xs font-mono">
+                  <span className="px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold">
+                    {group.chapters.length} {group.chapters.length === 1 ? "Chapter" : "Chapters"}
+                  </span>
+                  <span className="hidden sm:inline-flex px-2 py-1 rounded-xl bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 font-semibold text-[11px]">
+                    {group.totalLectures} Lecs
+                  </span>
+                  <span className="hidden sm:inline-flex px-2 py-1 rounded-xl bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 font-semibold text-[11px]">
+                    {group.totalTests} Tests
+                  </span>
+                </div>
+              </div>
+
+              {/* 2. Chapters Line-Type Folder Rows (Simple clean line list format) */}
+              <div className="divide-y divide-slate-100 dark:divide-slate-800/80 p-2 sm:p-3">
+                {group.chapters.map((ch, chIdx) => {
                   const facultyName =
                     ch.lectures[0]?.teacher?.user?.name || "Faculty Assigned";
 
                   return (
-                    <tr key={ch.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition">
-                      <td className="px-6 py-4">
-                        <Link href={`/team/chapters/${ch.id}`} className="block group">
-                          <p className="font-bold text-slate-900 dark:text-white group-hover:text-blue-600 transition">
-                            {ch.title}
-                          </p>
+                    <div
+                      key={ch.id}
+                      className="group flex flex-col md:flex-row md:items-center justify-between p-3 sm:px-4 sm:py-3.5 rounded-2xl hover:bg-slate-50/90 dark:hover:bg-slate-800/40 transition gap-2 sm:gap-4"
+                    >
+                      {/* Left: Folder Icon + Chapter Name & ID Code */}
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <span className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 flex items-center justify-center shrink-0 group-hover:bg-blue-50 group-hover:text-blue-600 transition">
+                          <span className="material-symbols-outlined text-lg">folder_open</span>
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-mono font-bold text-slate-400">
+                              #{chIdx + 1}
+                            </span>
+                            <Link
+                              href={`/team/chapters/${ch.id}`}
+                              className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition truncate"
+                            >
+                              {ch.title}
+                            </Link>
+                            {ch.chapterId && (
+                              <span className="font-mono text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                                {ch.chapterId}
+                              </span>
+                            )}
+                          </div>
                           <p className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-0.5">
-                            <span className="material-symbols-outlined text-xs text-blue-500">person</span>
+                            <span>Medium: <strong className="text-slate-600 dark:text-slate-300 font-semibold">{ch.medium}</strong></span>
+                            <span>&middot;</span>
                             <span>{facultyName}</span>
-                            <span>•</span>
+                            <span>&middot;</span>
                             <span className="font-mono text-[10px]">ID: {ch.id.slice(0, 8)}</span>
                           </p>
-                        </Link>
-                      </td>
-
-                      <td className="px-6 py-4">
-                        <p className="font-bold text-slate-800 dark:text-slate-200">{ch.subject.title}</p>
-                        <p className="text-[11px] text-slate-400">{ch.subject.course.title}</p>
-                      </td>
-
-                      <td className="px-6 py-4 font-semibold text-slate-600 dark:text-slate-400">
-                        {ch.medium}
-                      </td>
-
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2 font-mono text-[11px]">
-                          <span className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 font-bold">
-                            {ch._count.lectures} Lecs
-                          </span>
-                          <span className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 font-bold">
-                            {ch._count.dpps} DPPs
-                          </span>
-                          <span className="px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 font-bold">
-                            {ch._count.tests} Tests
-                          </span>
                         </div>
-                      </td>
+                      </div>
 
-                      <td className="px-6 py-4">
-                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider inline-block ${STATUS_TONE[ch.status] || ""}`}>
+                      {/* Middle: Content Roadmap Pills */}
+                      <div className="flex items-center gap-1.5 font-mono text-[11px] shrink-0 pl-11 md:pl-0">
+                        <span className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 font-bold" title="Lectures">
+                          {ch._count.lectures} Lecs
+                        </span>
+                        <span className="px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 font-bold" title="DPPs">
+                          {ch._count.dpps} DPPs
+                        </span>
+                        <span className="px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 font-bold" title="Tests">
+                          {ch._count.tests} Tests
+                        </span>
+                      </div>
+
+                      {/* Right: Status Badge & Open Button */}
+                      <div className="flex items-center justify-between md:justify-end gap-2 shrink-0 pl-11 md:pl-0">
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider inline-block ${
+                            STATUS_TONE[ch.status] || "bg-slate-100 text-slate-600"
+                          }`}
+                        >
                           {ch.status.replaceAll("_", " ")}
                         </span>
-                      </td>
 
-                      <td className="px-6 py-4 text-right">
                         {ch.status === "UNDER_REVIEW" && canReview ? (
                           <Link
                             href={`/team/chapters/${ch.id}`}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs shadow-md transition"
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs shadow-sm transition"
                           >
                             <span className="material-symbols-outlined text-xs">fact_check</span>
-                            <span>Review &amp; Accept</span>
+                            <span>Review</span>
                           </Link>
                         ) : (
                           <Link
                             href={`/team/chapters/${ch.id}`}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-blue-600 hover:text-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs transition"
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-blue-600 hover:text-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs transition shadow-2xs"
                           >
-                            <span>Open Studio</span>
+                            <span>Open</span>
                             <span className="material-symbols-outlined text-xs">arrow_forward</span>
                           </Link>
                         )}
-                      </td>
-                    </tr>
+                      </div>
+                    </div>
                   );
-                })
-              )}
-            </tbody>
-          </table>
+                })}
+              </div>
+            </div>
+          ))}
         </div>
-      </div>
+      )}
     </div>
   );
 }

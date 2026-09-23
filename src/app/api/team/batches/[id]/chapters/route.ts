@@ -61,8 +61,24 @@ export async function POST(
           { title: masterChapter.title },
         ],
       },
-      select: { id: true },
+      select: { id: true, title: true },
     });
+
+    if (dbChapter?.id) {
+      const existingInBatch = await prisma.batchSchedule.findFirst({
+        where: {
+          batchId: batch.id,
+          chapterId: dbChapter.id,
+        },
+      });
+
+      if (existingInBatch) {
+        return apiError(
+          `Chapter "${masterChapter.title}" (${masterChapter.chapterCode}) is already imported into this batch. Duplicate chapter imports are strictly forbidden.`,
+          409
+        );
+      }
+    }
 
     for (let i = 0; i < masterChapter.lectures.length; i++) {
       const lecture = masterChapter.lectures[i];
