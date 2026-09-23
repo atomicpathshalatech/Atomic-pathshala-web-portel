@@ -31,6 +31,9 @@ export function YouTubeLivePlayer({
 }: YouTubeLivePlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  // The real YT.Player wrapper (see the IFrame API bootstrap effect below) —
+  // used for every control action instead of the old raw postMessage guesses.
+  const playerRef = useRef<any>(null);
 
   const [isStreamLive, setIsStreamLive] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
@@ -69,63 +72,105 @@ export function YouTubeLivePlayer({
     return diff > 0 ? diff : 0;
   }, [scheduledStartMs, nowMs]);
 
-  // Send postMessage command to YouTube iframe API
+  // Dispatch a control action through the real YT.Player instance (set up
+  // below) instead of guessing at YouTube's raw postMessage wire format —
+  // that hand-rolled version never reliably told us the stream had actually
+  // gone live, so the "Educator Connecting..." waiting screen never cleared
+  // even once the broadcast was live on YouTube's own side.
   const sendYouTubeCommand = useCallback((func: string, args: unknown[] = []) => {
+    const player = playerRef.current;
+    if (!player) return;
     try {
-      if (iframeRef.current?.contentWindow) {
-        iframeRef.current.contentWindow.postMessage(
-          JSON.stringify({ event: "command", func, args }),
-          "*"
-        );
+      switch (func) {
+        case "playVideo":
+          player.playVideo?.();
+          break;
+        case "pauseVideo":
+          player.pauseVideo?.();
+          break;
+        case "seekTo":
+          player.seekTo?.(args[0], args[1]);
+          break;
+        case "setPlaybackRate":
+          player.setPlaybackRate?.(args[0]);
+          break;
+        case "mute":
+          player.mute?.();
+          break;
+        case "unMute":
+          player.unMute?.();
+          break;
+        case "setVolume":
+          player.setVolume?.(args[0]);
+          break;
+        default:
+          break;
       }
     } catch (err) {
       console.debug("[YouTubeLivePlayer] Command dispatch error", err);
     }
   }, []);
 
-  // Listen for YouTube player state messages (detecting live playback vs unstarted)
+  // Bootstrap the official YouTube IFrame Player API and attach it to our
+  // existing <iframe> (enablejsapi=1 in embedUrl lets the API adopt it in
+  // place). This is what onStateChange === PLAYING actually means the
+  // broadcast is live — the previous raw-postMessage listener could not be
+  // trusted to fire at all.
   useEffect(() => {
-    if (!youtubeVideoId) return;
+    if (!youtubeVideoId || !iframeRef.current) return;
+    let cancelled = false;
+    let player: any = null;
 
-    const handleWindowMessage = (e: MessageEvent) => {
-      try {
-        let msg = e.data;
-        if (typeof msg === "string") {
-          try {
-            msg = JSON.parse(msg);
-          } catch {
-            return;
-          }
-        }
-        if (!msg || typeof msg !== "object") return;
-
-        if (msg.event === "infoDelivery" && msg.info) {
-          const info = msg.info;
-          // 1: PLAYING -> Stream is actively receiving ingest and broadcasting!
-          if (info.playerState === 1) {
-            setIsStreamLive(true);
-          }
-          if (typeof info.currentTime === "number" && info.currentTime > 0) {
-            setIsStreamLive(true);
-          }
-          if (typeof info.playbackRate === "number") {
-            setPlaybackSpeed(info.playbackRate);
-          }
-        } else if (msg.event === "onStateChange") {
-          if (msg.info === 1) {
-            setIsStreamLive(true);
-          }
-        } else if (msg.event === "onPlaybackRateChange") {
-          setPlaybackSpeed(msg.info);
-        }
-      } catch {}
+    const attachPlayer = () => {
+      if (cancelled || !iframeRef.current || !(window as any).YT?.Player) return;
+      player = new (window as any).YT.Player(iframeRef.current, {
+        events: {
+          onReady: () => {
+            playerRef.current = player;
+            player.playVideo?.();
+          },
+          onStateChange: (e: any) => {
+            const YT = (window as any).YT;
+            if (e.data === YT.PlayerState.PLAYING) {
+              setIsStreamLive(true);
+            }
+          },
+          onPlaybackRateChange: (e: any) => {
+            if (typeof e.data === "number") setPlaybackSpeed(e.data);
+          },
+        },
+      });
     };
 
-    window.addEventListener("message", handleWindowMessage);
-    return () => window.removeEventListener("message", handleWindowMessage);
+    if ((window as any).YT?.Player) {
+      attachPlayer();
+    } else {
+      const existingCallback = (window as any).onYouTubeIframeAPIReady;
+      (window as any).onYouTubeIframeAPIReady = () => {
+        existingCallback?.();
+        attachPlayer();
+      };
+      if (!document.getElementById("youtube-iframe-api-script")) {
+        const tag = document.createElement("script");
+        tag.id = "youtube-iframe-api-script";
+        tag.src = "https://www.youtube.com/iframe_api";
+        document.head.appendChild(tag);
+      }
+    }
+
+    return () => {
+      cancelled = true;
+      playerRef.current = null;
+      try {
+        player?.destroy?.();
+      } catch {
+        // no-op
+      }
+    };
   }, [youtubeVideoId]);
 
-  // Periodically request play until YouTube receives live stream ingest
+  // Periodically nudge playback until the live stream is confirmed playing —
+  // a fresh broadcast's embed can load "cued" rather than auto-playing.
   useEffect(() => {
     if (!youtubeVideoId || isStreamLive) return;
     const interval = setInterval(() => {
@@ -369,12 +414,12 @@ export function YouTubeLivePlayer({
               <span className="w-1 h-2 bg-blue-300 rounded-full animate-bounce [animation-delay:600ms]" />
             </div>
 
-            {/* Dynamic Buzzer / Late / Countdown Status */}
+            {/* Dynamic Late / Countdown Status */}
             {lateSeconds > 0 ? (
               <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-300 text-[11px] sm:text-xs font-mono font-bold shadow-lg animate-pulse">
-                <span className="material-symbols-outlined text-sm text-rose-400">notifications_active</span>
+                <span className="material-symbols-outlined text-sm text-rose-400">sensors</span>
                 <span>
-                  Buzzer: {Math.floor(lateSeconds / 60) > 0 ? `${Math.floor(lateSeconds / 60)}m ` : ""}{lateSeconds % 60}s Late • Educator Connecting...
+                  Educator connecting... ({Math.floor(lateSeconds / 60) > 0 ? `${Math.floor(lateSeconds / 60)}m ` : ""}{lateSeconds % 60}s)
                 </span>
               </div>
             ) : countdownSeconds > 0 ? (
