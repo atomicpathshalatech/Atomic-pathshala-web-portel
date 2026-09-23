@@ -58,7 +58,7 @@ export function generateTestSyllabusHtml(data: TestSyllabusData): string {
       const chaptersList = chapters
         .map((ch, idx) => {
           const isCompleteBadge = ch.isComplete
-            ? `<span style="display:inline-block; background-color:#e0f2fe; color:#0369a1; padding:3px 8px; border-radius:6px; font-size:11px; font-weight:700; white-space:nowrap; flex-shrink:0;">✓ COMPLETE CHAPTER INCLUDED</span>`
+            ? `<span style="display:inline-block; background-color:#e0f2fe; color:#0369a1; padding:3px 8px; border-radius:6px; font-size:11px; font-weight:700; white-space:nowrap; flex-shrink:0;">✓ COMPLETE CHAPTER</span>`
             : "";
 
           const topicsList =
@@ -194,34 +194,37 @@ export function generateTestSyllabusHtml(data: TestSyllabusData): string {
         <img src="${logoDataUri}" alt="Atomic Pathshala" onerror="this.onerror=null;this.src='/brand/logo.png';" style="height:54px; width:54px; object-fit:contain; border-radius:10px; background:#ffffff; padding:2px; border:1px solid #e2e8f0; flex-shrink:0;" />
         <div>
           <h1 style="margin:0; font-size:22px; font-weight:900; color:#0c3ea4; letter-spacing:-0.5px; line-height:1.2;">ATOMIC PATHSHALA</h1>
-          <p style="margin:3px 0 0 0; font-size:12px; font-weight:600; color:#64748b;">Premier Medical & Engineering Assessment Portal</p>
+          <p style="margin:3px 0 0 0; font-size:12px; font-weight:600; color:#64748b;">Learn • Explore • Excel</p>
         </div>
       </div>
       <div style="text-align:right;">
         <span style="display:inline-block; background:#0c3ea4; color:#fff; font-size:11px; font-weight:800; padding:5px 12px; border-radius:6px; letter-spacing:0.5px; text-transform:uppercase;">
           OFFICIAL TEST SYLLABUS
         </span>
-        <p style="margin:5px 0 0 0; font-size:11px; color:#94a3b8; font-family:monospace;">Published: ${generatedDate}</p>
       </div>
     </div>
 
-    <!-- Test Meta Details Card -->
-    <div style="background:#f1f5f9; border-radius:10px; padding:16px 20px; margin-bottom:24px; display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:14px;">
-      <div>
-        <div style="font-size:10px; font-weight:700; color:#64748b; text-transform:uppercase;">Test Title</div>
-        <div style="font-size:15px; font-weight:800; color:#0f172a; margin-top:2px;">${data.testName}</div>
-      </div>
-      <div>
-        <div style="font-size:10px; font-weight:700; color:#64748b; text-transform:uppercase;">Batch</div>
-        <div style="font-size:14px; font-weight:700; color:#0c3ea4; margin-top:2px;">${data.batchName || "All Enrolled Batches"}</div>
-      </div>
-      <div>
-        <div style="font-size:10px; font-weight:700; color:#64748b; text-transform:uppercase;">Scheduled Date & Time</div>
-        <div style="font-size:14px; font-weight:700; color:#0f172a; margin-top:2px;">${testScheduleStr}</div>
-      </div>
-      <div>
-        <div style="font-size:10px; font-weight:700; color:#64748b; text-transform:uppercase;">Exam Type & Duration</div>
-        <div style="font-size:14px; font-weight:700; color:#0f172a; margin-top:2px;">${data.examType || "Standard"} • ${data.durationMin} Mins</div>
+    <!-- Test Meta Details Card with Centered Test Title -->
+    <div style="background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:12px; padding:18px 24px; margin-bottom:24px; text-align:center;">
+      <h2 style="margin:0 0 10px 0; font-size:22px; font-weight:900; color:#0c3ea4; letter-spacing:-0.3px; line-height:1.2;">
+        ${data.testName}
+      </h2>
+      <div style="display:flex; justify-content:center; align-items:center; flex-wrap:wrap; gap:12px 20px; padding-top:10px; border-top:1px solid #e2e8f0; font-size:13px;">
+        ${
+          data.batchName
+            ? `<span style="font-weight:700; color:#0369a1; background:#e0f2fe; padding:3px 12px; border-radius:6px; font-size:12px;">
+                 ${data.batchName}
+               </span>`
+            : ""
+        }
+        <div style="display:flex; align-items:center; gap:6px; color:#334155; font-weight:600;">
+          <span style="color:#64748b; font-size:11px; text-transform:uppercase; font-weight:700;">Scheduled:</span>
+          <span style="color:#0f172a; font-weight:700;">${testScheduleStr}</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:6px; color:#334155; font-weight:600;">
+          <span style="color:#64748b; font-size:11px; text-transform:uppercase; font-weight:700;">Exam & Duration:</span>
+          <span style="color:#0f172a; font-weight:700;">${data.examType || "Standard"} • ${data.durationMin} Mins</span>
+        </div>
       </div>
     </div>
 

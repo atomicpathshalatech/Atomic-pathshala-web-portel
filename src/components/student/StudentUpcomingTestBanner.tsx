@@ -14,6 +14,7 @@ import {
   AlertCircle,
   CheckCircle2,
 } from "lucide-react";
+import { formatISTDateTime } from "@/lib/date-utils";
 
 interface UpcomingTestData {
   id: string;
@@ -100,15 +101,8 @@ export function StudentUpcomingTestBanner() {
   }
 
   const scheduledDateStr = testData.scheduledAt
-    ? new Date(testData.scheduledAt).toLocaleString("en-IN", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-        hour: "numeric",
-        minute: "numeric",
-        hour12: true,
-      })
-    : "Date to be announced";
+    ? formatISTDateTime(testData.scheduledAt)
+    : "To be announced";
 
   return (
     <>
@@ -225,7 +219,7 @@ export function StudentUpcomingTestBanner() {
                     Official Syllabus
                   </span>
                   <span className="text-xs text-slate-400 font-medium">
-                    Atomic Pathshala
+                    Atomic Pathshala · Learn • Explore • Excel
                   </span>
                 </div>
                 <h4 className="font-extrabold text-lg text-slate-900 dark:text-white mt-1">
@@ -245,75 +239,100 @@ export function StudentUpcomingTestBanner() {
               </button>
             </div>
 
-            {/* Modal Content - Scrollable Chapters List */}
-            <div className="flex-1 overflow-y-auto space-y-4 pr-1">
-              {testData.chapters.length === 0 ? (
-                <div className="text-center py-8 text-xs text-slate-400 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl p-4">
-                  Full Syllabus Assessment covering all topics according to the latest {testData.examType} syllabus.
-                </div>
-              ) : (
-                testData.chapters.map((ch, idx) => (
-                  <div
-                    key={ch.id || idx}
-                    className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-2.5"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-extrabold text-[10px] flex items-center justify-center">
-                          {idx + 1}
-                        </span>
-                        <h5 className="font-extrabold text-sm text-slate-900 dark:text-white">
-                          {ch.chapterTitle}
-                        </h5>
-                      </div>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">
-                        {ch.subject}
-                      </span>
-                    </div>
+            {/* Modal Content - Scrollable Subject-Wise Chapters List */}
+            {(() => {
+              const subjectsMap: Record<string, typeof testData.chapters> = {};
+              for (const ch of testData.chapters || []) {
+                const sub = ch.subject || "General";
+                if (!subjectsMap[sub]) subjectsMap[sub] = [];
+                subjectsMap[sub].push(ch);
+              }
 
-                    {ch.isComplete ? (
-                      <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 p-2 rounded-xl border border-emerald-200 dark:border-emerald-800">
-                        <CheckCircle2 className="w-4 h-4" />
-                        <span>Complete Chapter Included (All official topics)</span>
-                      </div>
-                    ) : (
-                      ch.topics &&
-                      ch.topics.length > 0 && (
-                        <div className="space-y-1 pt-1">
-                          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                            Selected Topics:
-                          </span>
-                          <ul className="list-disc list-inside text-xs text-slate-700 dark:text-slate-300 space-y-0.5 pl-1">
-                            {ch.topics.map((t, tIdx) => (
-                              <li key={tIdx}>{t}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )
-                    )}
-
-                    {/* Custom Topics if any */}
-                    {ch.customTopics && ch.customTopics.length > 0 && (
-                      <div className="space-y-1 pt-1 border-t border-slate-200 dark:border-slate-700 mt-2">
-                        <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider">
-                          Special / Custom Topics:
-                        </span>
-                        <div className="flex flex-wrap gap-1.5 pt-0.5">
-                          {ch.customTopics.map((ct, ctIdx) => (
-                            <span
-                              key={ctIdx}
-                              className="px-2 py-0.5 rounded bg-amber-100/70 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200 text-xs font-semibold"
-                            >
-                              {ct}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+              if (testData.chapters.length === 0) {
+                return (
+                  <div className="text-center py-8 text-xs text-slate-400 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl p-4">
+                    Full Syllabus Assessment covering all topics according to the latest {testData.examType} syllabus.
                   </div>
-                ))
-              )}
-            </div>
+                );
+              }
+
+              return (
+                <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+                  {Object.entries(subjectsMap).map(([subject, chList]) => (
+                    <div
+                      key={subject}
+                      className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 overflow-hidden shadow-2xs"
+                    >
+                      {/* Compact Subject Header */}
+                      <div className="bg-slate-50 dark:bg-slate-800/80 px-3.5 py-1.5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-1.5 h-3.5 bg-blue-600 rounded-full" />
+                          <h5 className="font-extrabold text-xs text-blue-700 dark:text-blue-300 uppercase tracking-wide">
+                            {subject}
+                          </h5>
+                        </div>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-900">
+                          {chList.length} Chapter{chList.length > 1 ? "s" : ""}
+                        </span>
+                      </div>
+
+                      {/* Chapters in this subject box */}
+                      <div className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                        {chList.map((ch, idx) => (
+                          <div key={ch.id || idx} className="px-3.5 py-2 space-y-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-start gap-1.5 min-w-0">
+                                <span className="text-xs font-bold text-slate-400 shrink-0 mt-0.5">
+                                  {idx + 1}.
+                                </span>
+                                <span className="font-bold text-xs text-slate-900 dark:text-white leading-snug">
+                                  {ch.chapterTitle}
+                                </span>
+                              </div>
+
+                              {ch.isComplete ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800 shrink-0">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                                  <span>Complete Chapter</span>
+                                </span>
+                              ) : null}
+                            </div>
+
+                            {/* Topics if not complete */}
+                            {!ch.isComplete && ch.topics && ch.topics.length > 0 && (
+                              <ul className="list-disc list-inside text-[11px] text-slate-600 dark:text-slate-400 space-y-0.5 pl-4">
+                                {ch.topics.map((t, tIdx) => (
+                                  <li key={tIdx}>{t}</li>
+                                ))}
+                              </ul>
+                            )}
+
+                            {/* Custom Topics if any */}
+                            {ch.customTopics && ch.customTopics.length > 0 && (
+                              <div className="pt-0.5 pl-4">
+                                <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider block">
+                                  Special Topics:
+                                </span>
+                                <div className="flex flex-wrap gap-1 mt-0.5">
+                                  {ch.customTopics.map((ct, ctIdx) => (
+                                    <span
+                                      key={ctIdx}
+                                      className="px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200 text-[10px] font-medium border border-amber-200/60"
+                                    >
+                                      {ct}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
 
             {/* Modal Footer Actions */}
             <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
