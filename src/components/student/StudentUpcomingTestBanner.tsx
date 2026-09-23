@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   Calendar,
   Clock,
@@ -40,6 +41,7 @@ interface UpcomingTestData {
 }
 
 export function StudentUpcomingTestBanner() {
+  const pathname = usePathname();
   const [testData, setTestData] = useState<UpcomingTestData | null>(null);
   const [loading, setLoading] = useState(true);
   const [dismissed, setDismissed] = useState(false);
@@ -52,8 +54,13 @@ export function StudentUpcomingTestBanner() {
     isPast: boolean;
   } | null>(null);
 
-  // Load upcoming test for student
+  // Load upcoming test for student only on dashboard / home
   useEffect(() => {
+    if (pathname !== "/dashboard") {
+      setLoading(false);
+      return;
+    }
+
     fetch("/api/student/upcoming-test")
       .then((res) => res.json())
       .then((json) => {
@@ -63,7 +70,11 @@ export function StudentUpcomingTestBanner() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [pathname]);
+
+  if (pathname !== "/dashboard") {
+    return null;
+  }
 
   // Live countdown timer ticking every 1s
   useEffect(() => {
@@ -257,14 +268,14 @@ export function StudentUpcomingTestBanner() {
               }
 
               return (
-                <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+                <div className="flex-1 overflow-y-auto space-y-4 pr-1">
                   {Object.entries(subjectsMap).map(([subject, chList]) => (
                     <div
                       key={subject}
-                      className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/60 overflow-hidden shadow-2xs"
+                      className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-2xs"
                     >
-                      {/* Compact Subject Header */}
-                      <div className="bg-slate-50 dark:bg-slate-800/80 px-3.5 py-1.5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                      {/* Subject Header */}
+                      <div className="bg-slate-50 dark:bg-slate-800/80 px-3.5 py-2 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <div className="w-1.5 h-3.5 bg-blue-600 rounded-full" />
                           <h5 className="font-extrabold text-xs text-blue-700 dark:text-blue-300 uppercase tracking-wide">
@@ -276,26 +287,15 @@ export function StudentUpcomingTestBanner() {
                         </span>
                       </div>
 
-                      {/* Chapters in this subject box */}
-                      <div className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                      {/* Chapters in this subject - clean plain text bullet format */}
+                      <div className="p-3.5 space-y-2.5">
                         {chList.map((ch, idx) => (
-                          <div key={ch.id || idx} className="px-3.5 py-2 space-y-1">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex items-start gap-1.5 min-w-0">
-                                <span className="text-xs font-bold text-slate-400 shrink-0 mt-0.5">
-                                  {idx + 1}.
-                                </span>
-                                <span className="font-bold text-xs text-slate-900 dark:text-white leading-snug">
-                                  {ch.chapterTitle}
-                                </span>
-                              </div>
-
-                              {ch.isComplete ? (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800 shrink-0">
-                                  <CheckCircle2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-                                  <span>Complete Chapter</span>
-                                </span>
-                              ) : null}
+                          <div key={ch.id || idx} className="space-y-1">
+                            <div className="flex items-baseline gap-2">
+                              <span className="text-blue-600 dark:text-blue-400 text-xs font-bold shrink-0">•</span>
+                              <span className="font-bold text-xs text-slate-900 dark:text-white leading-relaxed">
+                                {ch.chapterTitle}
+                              </span>
                             </div>
 
                             {/* Topics if not complete */}
@@ -310,19 +310,14 @@ export function StudentUpcomingTestBanner() {
                             {/* Custom Topics if any */}
                             {ch.customTopics && ch.customTopics.length > 0 && (
                               <div className="pt-0.5 pl-4">
-                                <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider block">
+                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
                                   Special Topics:
                                 </span>
-                                <div className="flex flex-wrap gap-1 mt-0.5">
+                                <ul className="list-circle list-inside text-[11px] text-slate-700 dark:text-slate-300 space-y-0.5 pl-1">
                                   {ch.customTopics.map((ct, ctIdx) => (
-                                    <span
-                                      key={ctIdx}
-                                      className="px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200 text-[10px] font-medium border border-amber-200/60"
-                                    >
-                                      {ct}
-                                    </span>
+                                    <li key={ctIdx}>{ct}</li>
                                   ))}
-                                </div>
+                                </ul>
                               </div>
                             )}
                           </div>

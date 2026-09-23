@@ -505,7 +505,7 @@ export function StudentShell({
                 <BackButton />
               </div>
             )}
-            <StudentUpcomingTestBanner />
+            {pathname === "/dashboard" && <StudentUpcomingTestBanner />}
             {children}
           </div>
         </main>
