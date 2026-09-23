@@ -35,8 +35,9 @@ import { playHandRaiseChime, playCallConnectedChime, unlockAudioForNotifications
 import { extractYouTubeVideoId } from "@/lib/live-class/youtube";
 import { BroadcastQuizCanvasOverlay } from "@/components/live-class/BroadcastQuizCanvasOverlay";
 
-// Diameter (px) of the floating self-camera bubble shown when the teacher's
-// Material & Setup camera shape is Circular — see floatCamPos below.
+// Size (px) of the floating self-camera bubble — always draggable now,
+// regardless of Material & Setup's camera shape (which only controls the
+// circle-vs-rounded-square clip) — see floatCamPos below.
 const FLOAT_CAM_SIZE = 168;
 
 type WhiteboardPage = { id: string; pageNumber: number; objects: StrokeObject[]; background: string };
@@ -570,6 +571,7 @@ export function TeacherLiveClassRoom({
   const [startClassError, setStartClassError] = useState<string | null>(null);
   const [recordingWarning, setRecordingWarning] = useState<string | null>(null);
   const [youtubeSimulcastWarning, setYoutubeSimulcastWarning] = useState<string | null>(null);
+  const [obsBroadcastUrl, setObsBroadcastUrl] = useState<string | null>(null);
   const [showObsStreamInfo, setShowObsStreamInfo] = useState(false);
   const [slideTemplatesOpen, setSlideTemplatesOpen] = useState(false);
 
@@ -1777,6 +1779,7 @@ export function TeacherLiveClassRoom({
       }
       if (data.recordingWarning) setRecordingWarning(data.recordingWarning);
       if (data.youtubeSimulcastWarning) setYoutubeSimulcastWarning(data.youtubeSimulcastWarning);
+      if (data.obsBroadcastUrl) setObsBroadcastUrl(data.obsBroadcastUrl);
     } catch (err) {
       setStartClassError(err instanceof Error ? err.message : "Could not start the class.");
     } finally {
@@ -2422,7 +2425,7 @@ export function TeacherLiveClassRoom({
               {youtubeSimulcastWarning}
             </div>
           )}
-          {wbSession?.videoTransport === "YOUTUBE" && wbSession?.youtubeStreamKey && (
+          {(wbSession?.videoTransport === "YOUTUBE" || wbSession?.videoTransport === "BOTH") && wbSession?.youtubeStreamKey && (
             <div className="relative">
               <button
                 type="button"
@@ -2450,8 +2453,24 @@ export function TeacherLiveClassRoom({
                       </button>
                     </div>
                     <p className="text-[11px] text-slate-400 leading-relaxed">
-                      Paste these into OBS Studio (<strong>Settings → Stream → Custom</strong>), capture this Atomic Board screen, and click <em>Start Streaming</em>.
+                      Paste these into OBS Studio (<strong>Settings → Stream → Custom</strong>), add the Browser Source URL below as a <strong>Browser Source</strong> (captures board + camera automatically — no manual window capture or cropping needed), and click <em>Start Streaming</em>.
                     </p>
+                    {obsBroadcastUrl && (
+                      <div className="space-y-1">
+                        <p className="text-[10px] uppercase text-emerald-500 font-bold">Browser Source URL (recommended)</p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="flex-1 text-xs font-mono text-white break-all bg-[#10111a] border border-emerald-700/60 rounded-lg px-2 py-1.5">{obsBroadcastUrl}</p>
+                          <button
+                            type="button"
+                            onClick={() => navigator.clipboard?.writeText(obsBroadcastUrl)}
+                            className="p-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white transition shrink-0"
+                            title="Copy Browser Source URL"
+                          >
+                            <span className="material-symbols-outlined text-sm">content_copy</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
                     <div className="space-y-1">
                       <p className="text-[10px] uppercase text-slate-500 font-bold">Server URL</p>
                       <div className="flex items-center gap-1.5">
@@ -2951,28 +2970,24 @@ export function TeacherLiveClassRoom({
         data-open={panelOpen ? "true" : "false"}
         className="live-panel bg-[#1a1b23] border-l border-[#2d2e3b] flex flex-col min-h-0"
       >
-        {/* Teacher's own camera — docked at the top of the panel normally.
-            When Material & Setup's camera shape is Circular, this exact
-            same wrapper instead floats as a small draggable circular bubble
-            over the main slide area (fixed positioning escapes the panel
-            visually without moving in the DOM), and takes up no height in
-            the panel's normal flow. <VideoStrip> itself never moves or
-            unmounts here — only this wrapper's own CSS does. */}
+        {/* Teacher's own camera — always a draggable floating bubble over the
+            main slide area now (fixed positioning escapes the panel
+            visually without moving in the DOM, so it takes up no height in
+            the panel's normal flow). Material & Setup's camera shape only
+            controls whether it's clipped to a circle or a rounded square —
+            movability itself used to be gated to Circular only, which meant
+            the (default) Square shape couldn't be moved at all. <VideoStrip>
+            itself never moves or unmounts here — only this wrapper's own
+            CSS does. */}
         <div
-          onPointerDown={isCameraCircle ? handleFloatCamPointerDown : undefined}
-          onPointerMove={isCameraCircle ? handleFloatCamPointerMove : undefined}
-          onPointerUp={isCameraCircle ? handleFloatCamPointerUp : undefined}
-          onPointerCancel={isCameraCircle ? handleFloatCamPointerUp : undefined}
-          style={
-            isCameraCircle
-              ? { position: "fixed", top: floatCamPos.y, left: floatCamPos.x, width: FLOAT_CAM_SIZE, height: FLOAT_CAM_SIZE, touchAction: "none" }
-              : undefined
-          }
-          className={
-            isCameraCircle
-              ? "z-40 rounded-full overflow-hidden border-2 border-blue-500 shadow-2xl bg-black cursor-grab active:cursor-grabbing select-none"
-              : "h-56 bg-black relative border-b border-[#2d2e3b] shrink-0"
-          }
+          onPointerDown={handleFloatCamPointerDown}
+          onPointerMove={handleFloatCamPointerMove}
+          onPointerUp={handleFloatCamPointerUp}
+          onPointerCancel={handleFloatCamPointerUp}
+          style={{ position: "fixed", top: floatCamPos.y, left: floatCamPos.x, width: FLOAT_CAM_SIZE, height: FLOAT_CAM_SIZE, touchAction: "none" }}
+          className={`z-40 overflow-hidden border-2 border-blue-500 shadow-2xl bg-black cursor-grab active:cursor-grabbing select-none ${
+            isCameraCircle ? "rounded-full" : "rounded-2xl"
+          }`}
         >
           <VideoStrip
             whiteboardSessionId={wbSession.id}
@@ -2980,7 +2995,7 @@ export function TeacherLiveClassRoom({
             settingsPortalRef={settingsPortalRef}
             connectedStudents={connectedStudents}
             onDisconnectStudent={handleDisconnectStudent}
-            compact={isCameraCircle}
+            compact
             // "YouTube Live Class" mode is OBS-captured and LiveKit-free by
             // design (see VideoStrip's forceLocalOnly doc) — except while a
             // hand raise is actively approved, when the teacher needs a real

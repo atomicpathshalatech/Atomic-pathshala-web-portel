@@ -1543,38 +1543,31 @@ export function StudentLiveClassRoom({
 
         {/* Right Fixed Sidebar (Teacher Video on Top + Live Chat Console on Bottom) */}
         <aside className="w-80 xl:w-88 h-full shrink-0 flex flex-col bg-[#10121d] rounded-2xl border border-slate-800/80 overflow-hidden shadow-2xl">
-          {/* Teacher Video — docked at the top of the sidebar normally.
-              When the teacher's Material & Setup camera shape is Circular,
-              this exact same wrapper instead floats as a small draggable
-              circular bubble over the main slide area (fixed positioning
-              escapes the sidebar visually without moving in the DOM), and
-              takes up no height in the sidebar's normal flow, so chat fills
-              that space below. The <VideoStrip> mount itself never moves or
-              unmounts — only this wrapper's own CSS does — so a camera-shape
+          {/* Teacher Video — a draggable floating bubble over the main slide
+              area (fixed positioning escapes the sidebar visually without
+              moving in the DOM), independent of the teacher's own bubble —
+              this student's drag position is their own local preference
+              (own localStorage key below), never synced to or from the
+              teacher's. Movability used to be gated to the Circular camera
+              shape only, which meant the (default) Square shape couldn't be
+              moved; shape now only controls circle-vs-rounded-square clip.
+              The whole thing (not just the mount inside it) is gated on
+              there being anything to show, so an empty bubble never floats
+              over the video when this student has no active grant. The
+              <VideoStrip> mount itself never moves or unmounts while
+              visible — only this wrapper's own CSS does — so a camera-shape
               change arriving mid-class never drops the call. */}
-          <div
-            onPointerDown={isCameraCircle ? handleFloatCamPointerDown : undefined}
-            onPointerMove={isCameraCircle ? handleFloatCamPointerMove : undefined}
-            onPointerUp={isCameraCircle ? handleFloatCamPointerUp : undefined}
-            onPointerCancel={isCameraCircle ? handleFloatCamPointerUp : undefined}
-            style={
-              isCameraCircle
-                ? { position: "fixed", top: floatCamPos.y, left: floatCamPos.x, width: FLOAT_CAM_SIZE, height: FLOAT_CAM_SIZE, touchAction: "none" }
-                : undefined
-            }
-            className={
-              isCameraCircle
-                ? "z-40 rounded-full overflow-hidden border-2 border-blue-500 shadow-2xl bg-black cursor-grab active:cursor-grabbing select-none"
-                : "h-56 bg-black relative border-b border-[#2d2e3b] shrink-0"
-            }
-          >
-            {isDesktopViewport && (!isYouTube || isApprovedSpeaker || teacherAudioConnected || teacherVideoConnected) && (
-              // In YouTube mode the teacher's camera is already inside the
-              // YouTube video itself (OBS captures it) — this box only needs
-              // to exist for the LiveKit audio pathway, so it stays unmounted
-              // (zero LiveKit connection) until this student is actually
-              // granted the mic, exactly mirroring forceLocalOnly on the
-              // teacher's side.
+          {isDesktopViewport && (!isYouTube || isApprovedSpeaker || teacherAudioConnected || teacherVideoConnected) && (
+            <div
+              onPointerDown={handleFloatCamPointerDown}
+              onPointerMove={handleFloatCamPointerMove}
+              onPointerUp={handleFloatCamPointerUp}
+              onPointerCancel={handleFloatCamPointerUp}
+              style={{ position: "fixed", top: floatCamPos.y, left: floatCamPos.x, width: FLOAT_CAM_SIZE, height: FLOAT_CAM_SIZE, touchAction: "none" }}
+              className={`z-40 overflow-hidden border-2 border-blue-500 shadow-2xl bg-black cursor-grab active:cursor-grabbing select-none ${
+                isCameraCircle ? "rounded-full" : "rounded-2xl"
+              }`}
+            >
               <VideoStrip
                 whiteboardSessionId={wbSession?.id || batchScheduleId}
                 variant="panel"
@@ -1588,8 +1581,8 @@ export function StudentLiveClassRoom({
                 teacherConnectionToken={teacherConnectionToken}
                 onEndCall={handleEndCall}
               />
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Approved Speaker Banner */}
           {isApprovedSpeaker && (

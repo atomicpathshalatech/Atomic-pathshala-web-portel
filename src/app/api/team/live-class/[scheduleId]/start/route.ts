@@ -11,6 +11,8 @@ import { videoRoomName } from "@/lib/livekit/server";
 import { startRoomRecording, recordingStorageKey } from "@/lib/livekit/egress";
 import { canTeacherStartClass } from "@/lib/schedule/access-rules";
 import { extractYouTubeVideoId } from "@/lib/live-class/youtube";
+import { createBroadcastToken } from "@/lib/live-class/broadcast-token";
+import { getAppBaseUrl } from "@/lib/email/app-url";
 
 export async function POST(
   request: NextRequest,
@@ -319,22 +321,19 @@ export async function POST(
     }
 
     // 4.5. Auto-create a YouTube broadcast when no manual youtubeVideoId was
-    // supplied, for both YouTube-involving modes:
-    //  - BOTH ("Application Class + YouTube"): step 5's egress pushes RTMP
-    //    to it directly (LiveKit-driven, costs egress minutes).
-    //  - YOUTUBE ("YouTube Live Class"): step 5's egress is skipped
-    //    entirely for this transport (see the `!== "YOUTUBE"` check below)
-    //    — this just hands the teacher a ready Server URL/Stream Key to
-    //    paste into their own OBS/Studio, so they never touch LiveKit at
-    //    all for this mode (zero connection or egress minutes). The manual
-    //    URL field stays available for a teacher who already has an
-    //    external stream set up some other way.
+    // supplied, for both YouTube-involving modes. BOTH and YOUTUBE now both
+    // hand the teacher OBS credentials + an /obs-stage broadcast-page URL
+    // (see BroadcastStage.tsx) instead of paying for LiveKit Egress — Egress
+    // Room Composite only ever records LiveKit room tracks (camera/mic), and
+    // the whiteboard/PPT canvas is 100% client-side and never becomes a
+    // LiveKit track, so a BOTH-mode Egress recording never actually showed
+    // the board. OBS capturing /obs-stage shows exactly what students see.
     // Idempotent — ensureYoutubeBroadcastForWhiteboard reuses an existing
     // broadcast on this same WhiteboardSession rather than creating a
     // second one on a re-start/restart. Failure here is surfaced as a
     // warning, not a hard error — the class still starts either way.
-    let youtubeRtmpUrl: string | undefined;
     let youtubeSimulcastWarning: string | null = null;
+    let obsBroadcastUrl: string | undefined;
     if ((requestedTransport === "BOTH" || requestedTransport === "YOUTUBE") && !requestedYouTubeId) {
       try {
         const { youtubeLiveClassConfigured, ensureYoutubeBroadcastForWhiteboard } = await import(
@@ -357,21 +356,24 @@ export async function POST(
             youtubeIngestUrl: withBroadcast.youtubeIngestUrl,
             youtubeStreamKey: withBroadcast.youtubeStreamKey,
           });
-          if (withBroadcast.youtubeIngestUrl && withBroadcast.youtubeStreamKey) {
-            youtubeRtmpUrl = `${withBroadcast.youtubeIngestUrl.replace(/\/$/, "")}/${withBroadcast.youtubeStreamKey}`;
-          }
         }
       } catch (youtubeError) {
         console.error("[live_class_youtube_broadcast_error]", youtubeError);
         youtubeSimulcastWarning = "Could not set up the YouTube simulcast for this class — it's live on the interactive room only.";
       }
     }
+    if (requestedTransport === "BOTH" || requestedTransport === "YOUTUBE") {
+      const broadcastToken = createBroadcastToken(params.scheduleId, session.user.id);
+      obsBroadcastUrl = `${getAppBaseUrl()}/obs-stage/${params.scheduleId}?token=${broadcastToken}`;
+    }
 
-    // 5. Start Room Recording (Room Composite Egress -> R2, plus a live RTMP
-    // push to YouTube when youtubeRtmpUrl is set) - Idempotent, single identity
+    // 5. Start Room Recording (Room Composite Egress -> R2) for LIVEKIT-only
+    // classes. BOTH and YOUTUBE both skip this now (see 4.5's comment) —
+    // YouTube's own live-stream auto-archive becomes the recording for
+    // those, exactly like the YOUTUBE-only branch already assumed below.
     let recordingWarning: string | null = null;
 
-    if (requestedTransport !== "YOUTUBE") {
+    if (requestedTransport === "LIVEKIT") {
       const isAlreadyRecording =
         wbSession.recordingStatus === "RECORDING" ||
         wbSession.recordingStatus === "RECORDING_STARTING" ||
@@ -385,7 +387,7 @@ export async function POST(
             .catch(() => null);
 
           const storageKey = recordingStorageKey(wbSession.id);
-          const egress = await startRoomRecording(videoRoomName(wbSession.id), storageKey, youtubeRtmpUrl);
+          const egress = await startRoomRecording(videoRoomName(wbSession.id), storageKey);
           if (egress?.egressId) {
             await prisma.whiteboardSession
               .update({
@@ -475,6 +477,7 @@ export async function POST(
       startSlideUrl,
       recordingWarning,
       youtubeSimulcastWarning,
+      obsBroadcastUrl,
     });
   } catch (error) {
     return handleApiError(error);
