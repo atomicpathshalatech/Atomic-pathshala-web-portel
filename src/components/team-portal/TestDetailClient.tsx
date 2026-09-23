@@ -85,15 +85,17 @@ export function TestDetailClient({ test, isDraft, canPublish }: TestDetailClient
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold text-slate-900">{test.name}</h1>
-            <span
-              className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                test.status === "PUBLISHED"
-                  ? "bg-emerald-100 text-emerald-800"
-                  : "bg-amber-100 text-amber-800"
-              }`}
-            >
-              {test.status}
-            </span>
+            {test.status && test.status !== "DRAFT" && (
+              <span
+                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                  test.status === "PUBLISHED"
+                    ? "bg-emerald-100 text-emerald-800"
+                    : "bg-amber-100 text-amber-800"
+                }`}
+              >
+                {test.status}
+              </span>
+            )}
           </div>
           <p className="text-xs text-slate-500 mt-1">
             {test.batchSchedule && `${test.batchSchedule.batch.name} · `}

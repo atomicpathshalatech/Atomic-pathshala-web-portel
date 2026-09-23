@@ -303,15 +303,17 @@ export function ChapterTestsTab({
 
                 {/* Right: Manage / Add Questions Button + 3-Dot Menu */}
                 <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-                  <span
-                    className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                      t.status === "PUBLISHED" || t.status === "ACTIVE"
-                        ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400"
-                        : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
-                    }`}
-                  >
-                    {t.status}
-                  </span>
+                  {t.status && t.status !== "DRAFT" && (
+                    <span
+                      className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                        t.status === "PUBLISHED" || t.status === "ACTIVE"
+                          ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400"
+                          : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
+                      }`}
+                    >
+                      {t.status}
+                    </span>
+                  )}
 
                   {/* Primary Action Button: Manage / Add Questions */}
                   <Link

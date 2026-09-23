@@ -180,16 +180,18 @@ export function SeriesTestsList({
                 </span>
               )}
 
-              {/* Status Badge */}
-              <span
-                className={`px-3 py-1 rounded-full text-[11px] font-bold tracking-wide uppercase ${
-                  t.status === "PUBLISHED"
-                    ? "bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300"
-                    : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
-                }`}
-              >
-                {t.status}
-              </span>
+              {/* Status Badge - Hidden when DRAFT */}
+              {t.status && t.status !== "DRAFT" && (
+                <span
+                  className={`px-3 py-1 rounded-full text-[11px] font-bold tracking-wide uppercase ${
+                    t.status === "PUBLISHED" || t.status === "ACTIVE"
+                      ? "bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300"
+                      : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
+                  }`}
+                >
+                  {t.status}
+                </span>
+              )}
 
               {/* 3-Dots Action Menu */}
               <div className="relative">
