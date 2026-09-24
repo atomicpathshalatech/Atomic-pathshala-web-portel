@@ -573,7 +573,46 @@ export function TeacherLiveClassRoom({
   const [youtubeSimulcastWarning, setYoutubeSimulcastWarning] = useState<string | null>(null);
   const [obsBroadcastUrl, setObsBroadcastUrl] = useState<string | null>(null);
   const [showObsStreamInfo, setShowObsStreamInfo] = useState(false);
+  const [loadingStreamKey, setLoadingStreamKey] = useState(false);
+  const [copiedKeyField, setCopiedKeyField] = useState<string | null>(null);
+  const [streamKeyVisible, setStreamKeyVisible] = useState(false);
   const [slideTemplatesOpen, setSlideTemplatesOpen] = useState(false);
+
+  const copyToClipboard = (text: string, fieldId: string) => {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      setCopiedKeyField(fieldId);
+      setTimeout(() => {
+        setCopiedKeyField((curr) => (curr === fieldId ? null : curr));
+      }, 2000);
+    }
+  };
+
+  const fetchStreamKey = useCallback(async () => {
+    if (!batchScheduleId) return;
+    setLoadingStreamKey(true);
+    try {
+      const data = await postJson(`/api/team/live-class/${batchScheduleId}/stream-key`, {});
+      if (data?.whiteboardSession) {
+        setWbSession((prev) => (prev ? { ...prev, ...data.whiteboardSession } : data.whiteboardSession));
+      }
+      if (data?.obsBroadcastUrl) {
+        setObsBroadcastUrl(data.obsBroadcastUrl);
+      }
+    } catch (err) {
+      console.warn("Could not load stream key:", err);
+    } finally {
+      setLoadingStreamKey(false);
+    }
+  }, [batchScheduleId]);
+
+  useEffect(() => {
+    if (wbSession?.videoTransport === "YOUTUBE" || wbSession?.videoTransport === "BOTH") {
+      if (!wbSession.youtubeStreamKey || !obsBroadcastUrl) {
+        fetchStreamKey();
+      }
+    }
+  }, [wbSession?.videoTransport, wbSession?.youtubeStreamKey, obsBroadcastUrl, fetchStreamKey]);
 
   // Start Class Mode (defaults to scheduled mode)
   const [selectedStartMode, setSelectedStartMode] = useState<"LIVEKIT" | "YOUTUBE" | "BOTH">("LIVEKIT");
@@ -2423,97 +2462,26 @@ export function TeacherLiveClassRoom({
               {youtubeSimulcastWarning}
             </div>
           )}
-          {(wbSession?.videoTransport === "YOUTUBE" || wbSession?.videoTransport === "BOTH") && wbSession?.youtubeStreamKey && (
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setShowObsStreamInfo((v) => !v)}
-                className="flex items-center gap-1.5 rounded-lg bg-red-600/25 border border-red-500/60 px-3 py-1.5 text-xs font-bold text-red-200 hover:bg-red-600/40 transition shadow-sm"
-              >
-                <span className="material-symbols-outlined text-sm">cast</span>
-                OBS Stream Key
-              </button>
-              {showObsStreamInfo && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setShowObsStreamInfo(false)} />
-                  <div className="absolute top-full left-0 mt-2 w-88 p-3.5 rounded-xl border border-[#2d2e3b] bg-[#1a1b23] text-white shadow-2xl z-50 space-y-2.5">
-                    <div className="flex items-center justify-between border-b border-[#2d2e3b] pb-1.5">
-                      <span className="text-xs font-bold text-red-400 flex items-center gap-1">
-                        <span className="material-symbols-outlined text-sm">sensors</span>
-                        OBS Studio Live Streaming
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setShowObsStreamInfo(false)}
-                        className="text-slate-400 hover:text-white"
-                      >
-                        <span className="material-symbols-outlined text-sm">close</span>
-                      </button>
-                    </div>
-                    <p className="text-[11px] text-slate-400 leading-relaxed">
-                      Paste these into OBS Studio (<strong>Settings → Stream → Custom</strong>), add the Browser Source URL below as a <strong>Browser Source</strong> (captures board + camera automatically — no manual window capture or cropping needed), and click <em>Start Streaming</em>.
-                    </p>
-                    {obsBroadcastUrl && (
-                      <div className="space-y-1">
-                        <p className="text-[10px] uppercase text-emerald-500 font-bold">Browser Source URL (recommended)</p>
-                        <div className="flex items-center gap-1.5">
-                          <p className="flex-1 text-xs font-mono text-white break-all bg-[#10111a] border border-emerald-700/60 rounded-lg px-2 py-1.5">{obsBroadcastUrl}</p>
-                          <button
-                            type="button"
-                            onClick={() => navigator.clipboard?.writeText(obsBroadcastUrl)}
-                            className="p-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white transition shrink-0"
-                            title="Copy Browser Source URL"
-                          >
-                            <span className="material-symbols-outlined text-sm">content_copy</span>
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                    <div className="space-y-1">
-                      <p className="text-[10px] uppercase text-slate-500 font-bold">Server URL</p>
-                      <div className="flex items-center gap-1.5">
-                        <p className="flex-1 text-xs font-mono text-white break-all bg-[#10111a] border border-[#2d2e3b] rounded-lg px-2 py-1.5">{wbSession.youtubeIngestUrl}</p>
-                        <button
-                          type="button"
-                          onClick={() => navigator.clipboard?.writeText(wbSession.youtubeIngestUrl || "")}
-                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white transition shrink-0"
-                          title="Copy Server URL"
-                        >
-                          <span className="material-symbols-outlined text-sm">content_copy</span>
-                        </button>
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-[10px] uppercase text-slate-500 font-bold">Stream Key</p>
-                      <div className="flex items-center gap-1.5">
-                        <p className="flex-1 text-xs font-mono text-white break-all bg-[#10111a] border border-[#2d2e3b] rounded-lg px-2 py-1.5">{wbSession.youtubeStreamKey}</p>
-                        <button
-                          type="button"
-                          onClick={() => navigator.clipboard?.writeText(wbSession.youtubeStreamKey || "")}
-                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white transition shrink-0"
-                          title="Copy Stream Key"
-                        >
-                          <span className="material-symbols-outlined text-sm">content_copy</span>
-                        </button>
-                      </div>
-                    </div>
-                    {wbSession.youtubeVideoId && (
-                      <div className="pt-2 border-t border-[#2d2e3b] flex items-center justify-between">
-                        <a
-                          href={`https://www.youtube.com/watch?v=${wbSession.youtubeVideoId}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-[11px] text-red-400 hover:underline flex items-center gap-1 font-semibold"
-                        >
-                          <span className="material-symbols-outlined text-xs">open_in_new</span>
-                          Open Live Stream on YouTube
-                        </a>
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
+          {/* OBS Stream Key & Setup Button (shown whenever mode is YOUTUBE or BOTH) */}
+          {(wbSession?.videoTransport === "YOUTUBE" || wbSession?.videoTransport === "BOTH") && (
+            <button
+              type="button"
+              onClick={() => {
+                setShowObsStreamInfo(true);
+                if (!wbSession?.youtubeStreamKey || !obsBroadcastUrl) {
+                  fetchStreamKey();
+                }
+              }}
+              className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold transition shadow-sm ${
+                !isClassLive
+                  ? "bg-red-600/30 hover:bg-red-600/50 border-red-500 text-red-200 ring-1 ring-red-400/50 cursor-pointer"
+                  : "bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-200 cursor-pointer"
+              }`}
+              title="Open OBS Studio Stream Key, RTMP URL & Browser Source URL"
+            >
+              <span className="material-symbols-outlined text-sm text-red-400">sensors</span>
+              <span>OBS Stream Key</span>
+            </button>
           )}
 
           <button
@@ -4526,6 +4494,206 @@ function ThemeModal({
           </div>
         </div>
       </div>
+
+      {/* OBS Studio Live Streaming Setup Modal */}
+      {showObsStreamInfo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div
+            className="relative w-full max-w-xl bg-[#131520] border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="p-4 sm:p-5 border-b border-slate-800 bg-[#0d0e17] flex items-center justify-between gap-3 shrink-0">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-red-950/80 border border-red-800/60 flex items-center justify-center text-red-400 shrink-0">
+                  <span className="material-symbols-outlined text-lg">sensors</span>
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                    OBS Studio &amp; Live Streaming Setup
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    {isClassLive ? "🔴 Class is currently Live on stream" : "Step 1: Start OBS stream → Step 2: Click Go Live"}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowObsStreamInfo(false)}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
+              >
+                <span className="material-symbols-outlined text-lg">close</span>
+              </button>
+            </div>
+
+            {/* Scrollable Body */}
+            <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 text-xs">
+              {/* Step Guide Banner */}
+              <div className="p-3.5 rounded-xl bg-blue-950/40 border border-blue-800/50 space-y-2">
+                <div className="flex items-center gap-1.5 font-bold text-blue-300">
+                  <span className="material-symbols-outlined text-sm">info</span>
+                  <span>How to Stream with OBS Studio</span>
+                </div>
+                <ol className="list-decimal list-inside space-y-1 text-slate-300 text-[11px] leading-relaxed">
+                  <li>Open OBS Studio → <strong>Settings → Stream → Service: Custom</strong>.</li>
+                  <li>Paste the <strong>Server URL</strong> and <strong>Stream Key</strong> below.</li>
+                  <li>Add a <strong>Browser Source</strong> in OBS using the URL below (Resolution: 1920×1080).</li>
+                  <li>Click <strong>&quot;Start Streaming&quot;</strong> in OBS Studio.</li>
+                  {!isClassLive && (
+                    <li className="text-emerald-400 font-semibold">
+                      Once OBS shows active stream, click <strong>&quot;Start Class (Go Live)&quot;</strong> below to start for students!
+                    </li>
+                  )}
+                </ol>
+              </div>
+
+              {/* 1. Server URL */}
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  1. Server / RTMP URL
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={wbSession?.youtubeIngestUrl || "rtmp://a.rtmp.youtube.com/live2"}
+                    className="flex-1 px-3 py-2 text-xs font-mono rounded-xl bg-[#0a0b12] border border-slate-700 text-slate-200 select-all"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(wbSession?.youtubeIngestUrl || "rtmp://a.rtmp.youtube.com/live2", "serverUrl")}
+                    className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold transition shrink-0 flex items-center gap-1"
+                  >
+                    <span className="material-symbols-outlined text-sm">
+                      {copiedKeyField === "serverUrl" ? "check" : "content_copy"}
+                    </span>
+                    <span>{copiedKeyField === "serverUrl" ? "Copied!" : "Copy"}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 2. Stream Key */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    2. Stream Key
+                  </label>
+                  {loadingStreamKey && (
+                    <span className="text-[10px] text-amber-400 flex items-center gap-1">
+                      <span className="material-symbols-outlined text-xs animate-spin">progress_activity</span>
+                      Fetching key...
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      type={streamKeyVisible ? "text" : "password"}
+                      readOnly
+                      value={wbSession?.youtubeStreamKey || (loadingStreamKey ? "Generating key..." : "Key ready")}
+                      className="w-full px-3 py-2 pr-10 text-xs font-mono rounded-xl bg-[#0a0b12] border border-slate-700 text-slate-200 select-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setStreamKeyVisible(!streamKeyVisible)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                      title={streamKeyVisible ? "Hide Key" : "Show Key"}
+                    >
+                      <span className="material-symbols-outlined text-sm">
+                        {streamKeyVisible ? "visibility_off" : "visibility"}
+                      </span>
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={!wbSession?.youtubeStreamKey}
+                    onClick={() => copyToClipboard(wbSession?.youtubeStreamKey || "", "streamKey")}
+                    className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold transition shrink-0 flex items-center gap-1 disabled:opacity-50"
+                  >
+                    <span className="material-symbols-outlined text-sm">
+                      {copiedKeyField === "streamKey" ? "check" : "content_copy"}
+                    </span>
+                    <span>{copiedKeyField === "streamKey" ? "Copied!" : "Copy"}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 3. Browser Source URL */}
+              {obsBroadcastUrl && (
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1">
+                    <span className="material-symbols-outlined text-xs">camera_alt</span>
+                    3. Browser Source URL (Board + Teacher Camera Mirror)
+                  </label>
+                  <div className="p-3 rounded-xl bg-[#0a0b12] border border-emerald-800/60 space-y-2">
+                    <p className="text-[11px] font-mono text-emerald-300 break-all leading-relaxed select-all">
+                      {obsBroadcastUrl}
+                    </p>
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-800 text-[11px] text-slate-400">
+                      <span>OBS Size: Width 1920, Height 1080</span>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(obsBroadcastUrl, "browserUrl")}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white font-bold transition flex items-center gap-1 shadow-sm cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-xs">
+                          {copiedKeyField === "browserUrl" ? "check" : "content_copy"}
+                        </span>
+                        <span>{copiedKeyField === "browserUrl" ? "Copied URL!" : "Copy Browser URL"}</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 4. YouTube Link */}
+              {wbSession?.youtubeVideoId && (
+                <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
+                  <a
+                    href={`https://www.youtube.com/watch?v=${wbSession.youtubeVideoId}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-red-400 hover:underline flex items-center gap-1.5 font-semibold"
+                  >
+                    <span className="material-symbols-outlined text-sm">smart_display</span>
+                    <span>Open Live Video Page on YouTube</span>
+                  </a>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-slate-800 bg-[#0d0e17] flex items-center justify-between gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowObsStreamInfo(false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800 transition"
+              >
+                Close
+              </button>
+
+              {!isClassLive && (
+                <button
+                  type="button"
+                  disabled={startingClass || !canStartClass}
+                  onClick={() => {
+                    setShowObsStreamInfo(false);
+                    startClass();
+                  }}
+                  className={`px-5 py-2 rounded-xl text-xs font-bold text-white shadow-md transition flex items-center gap-1.5 ${
+                    canStartClass
+                      ? "bg-red-600 hover:bg-red-500 shadow-red-600/30 animate-pulse cursor-pointer"
+                      : "bg-slate-800 text-slate-500 cursor-not-allowed"
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-sm">sensors</span>
+                  <span>{startingClass ? "Starting Live..." : "Start Class (Go Live to Students) →"}</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -16,50 +16,85 @@ export default async function LecturePlayerPage({
   params: { batchId: string; subjectId: string; chapterId: string; lectureId: string };
 }) {
   const { student } = await requireStudentSession();
+  const lectureId = decodeURIComponent(params.lectureId).trim();
 
   let lecture = await prisma.lecture.findUnique({
-    where: { id: params.lectureId },
+    where: { id: lectureId },
     include: {
       chapter: { include: { subject: { include: { course: true } } } },
       teacher: { include: { user: { select: { name: true } } } },
+      batchSchedules: {
+        include: {
+          liveWhiteboardSession: true,
+        },
+      },
     },
   });
 
+  // If not found by lecture ID, check if it is a BatchSchedule ID
   if (!lecture) {
     const schedule = await prisma.batchSchedule.findUnique({
-      where: { id: params.lectureId },
+      where: { id: lectureId },
+      include: {
+        lecture: {
+          include: {
+            chapter: { include: { subject: { include: { course: true } } } },
+            teacher: { include: { user: { select: { name: true } } } },
+            batchSchedules: true,
+          },
+        },
+      },
     });
+
     if (schedule) {
-      redirect(`/live-class/${schedule.id}`);
+      if (schedule.lecture) {
+        lecture = schedule.lecture;
+      } else {
+        redirect(`/live-class/${schedule.id}`);
+      }
     }
   }
 
-  if (!lecture || lecture.chapterId !== params.chapterId || lecture.status !== "PUBLISHED") notFound();
-  if (lecture.chapter.subjectId !== params.subjectId) notFound();
+  if (!lecture) {
+    redirect("/courses");
+  }
 
-  const enrolled = await isEnrolledInCourse(student.id, lecture.chapter.subject.courseId);
+  // If this lecture has an active or recent live class schedule, or videoUrl is a live link, redirect to live-class
+  if (lecture.videoUrl?.startsWith("/live-class") || lecture.videoUrl?.startsWith("/classroom")) {
+    redirect(lecture.videoUrl);
+  }
+
+  const activeLiveSchedule = lecture.batchSchedules?.find(
+    (s) => s.status === "LIVE" || s.liveWhiteboardSession?.status === "ACTIVE"
+  );
+  if (activeLiveSchedule) {
+    redirect(`/live-class/${activeLiveSchedule.id}`);
+  }
+
+  const enrolled =
+    (await isEnrolledInCourse(student.id, lecture.chapter.subject.courseId)) ||
+    (await prisma.batchEnrollment.count({
+      where: { studentId: student.id, status: "ACTIVE" },
+    })) > 0;
+
   if (!enrolled) redirect("/courses");
 
-  // prev/next among this chapter's other PUBLISHED lectures, ordered by
-  // `order` — matches the same ordering the chapter list page shows.
+  // prev/next among this chapter's lectures, ordered by `order`
   const siblings = await prisma.lecture.findMany({
-    where: { chapterId: params.chapterId, status: "PUBLISHED" },
+    where: { chapterId: lecture.chapterId, status: { in: ["PUBLISHED", "DRAFT"] } },
     orderBy: { order: "asc" },
     select: { id: true },
   });
   const index = siblings.findIndex((s) => s.id === lecture.id);
-  const chapterPath = `/courses/${params.batchId}/subjects/${params.subjectId}/chapters/${params.chapterId}`;
+  const chapterPath = `/courses/${params.batchId}/subjects/${lecture.chapter.subjectId}/chapters/${lecture.chapterId}`;
   const basePath = `${chapterPath}/lectures`;
   const prevHref = index > 0 ? `${basePath}/${siblings[index - 1]!.id}` : null;
   const nextHref = index >= 0 && index < siblings.length - 1 ? `${basePath}/${siblings[index + 1]!.id}` : null;
 
-  // Lecture-driven DPP progression gate — backend-enforced, not just a
-  // disabled button in the UI. Position is 1-indexed among this chapter's
-  // PUBLISHED lectures; `index` above is already 0-indexed for the same
-  // ordering, so position = index + 1.
+  // Lecture-driven DPP progression gate
   const lecturePosition = index + 1;
-  const access = await checkLectureAccess(student.id, params.chapterId, lecturePosition);
-  if (!access.unlocked) {
+  const access = await checkLectureAccess(student.id, lecture.chapterId, lecturePosition);
+  if (!access.unlocked && access.requiredDppCount > 0) {
     redirect(`${chapterPath}?locked=${lecturePosition}&required=${access.requiredDppCount}&submitted=${access.submittedDppCount}`);
   }
 

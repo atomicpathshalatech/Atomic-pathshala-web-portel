@@ -172,6 +172,40 @@ export async function POST(
       },
     });
 
+    let obsBroadcastUrl: string | undefined;
+    if (wbSession.videoTransport === "YOUTUBE" || wbSession.videoTransport === "BOTH") {
+      const { createBroadcastToken } = await import("@/lib/live-class/broadcast-token");
+      const { getAppBaseUrl } = await import("@/lib/email/app-url");
+      const broadcastToken = createBroadcastToken(schedule.id, session.user.id);
+      obsBroadcastUrl = `${getAppBaseUrl()}/obs-stage/${schedule.id}?token=${broadcastToken}`;
+
+      if (!wbSession.youtubeStreamKey && !wbSession.youtubeVideoId) {
+        try {
+          const { youtubeLiveClassConfigured, ensureYoutubeBroadcastForWhiteboard } = await import(
+            "@/lib/live-class/youtube-broadcast"
+          );
+          if (youtubeLiveClassConfigured()) {
+            const withBroadcast = await ensureYoutubeBroadcastForWhiteboard(
+              wbSession.id,
+              schedule.title,
+              sessionStart
+            );
+            Object.assign(wbSession, {
+              youtubeBroadcastId: withBroadcast.youtubeBroadcastId,
+              youtubeStreamId: withBroadcast.youtubeStreamId,
+              youtubeVideoId: withBroadcast.youtubeVideoId,
+              youtubeLiveChatId: withBroadcast.youtubeLiveChatId,
+              youtubeStatus: withBroadcast.youtubeStatus,
+              youtubeIngestUrl: withBroadcast.youtubeIngestUrl,
+              youtubeStreamKey: withBroadcast.youtubeStreamKey,
+            });
+          }
+        } catch (ytErr) {
+          console.warn("[preflight_youtube_init_warning]", ytErr);
+        }
+      }
+    }
+
     // Notify connected clients of updated pre-flight configuration
     try {
       await pusherServer.trigger(sessionChannel(wbSession.id), WB_EVENTS.CONFIG_UPDATED, {
@@ -188,6 +222,7 @@ export async function POST(
     return apiSuccess({
       message: "Pre-flight setup saved successfully.",
       whiteboardSession: wbSession,
+      obsBroadcastUrl,
     });
   } catch (error) {
     return handleApiError(error);
