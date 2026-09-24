@@ -184,42 +184,55 @@ export function MessagesPanel({
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [messages]);
 
-  // Periodic YouTube Live Chat polling & merger (every 4s)
+  // Periodic YouTube Live Chat polling & merger. The pagination cursor is
+  // now owned server-side (see the youtube-chat route's chatCache) so every
+  // client just re-fetches the current cache window — no pageToken to track
+  // here anymore. Self-schedules via setTimeout instead of a fixed
+  // setInterval so it can back off to whatever pollingIntervalMillis
+  // YouTube's API actually suggests (it raises this under quota pressure);
+  // a hardcoded 4s regardless of that suggestion, multiplied across every
+  // concurrent viewer independently polling, is what exhausted the daily
+  // YouTube API quota in production.
   useEffect(() => {
     let cancelled = false;
-    let pageToken: string | undefined = undefined;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const MIN_INTERVAL_MS = 4000;
+    const FALLBACK_INTERVAL_MS = 8000;
 
     async function pollYouTube() {
+      let nextDelay = FALLBACK_INTERVAL_MS;
       try {
-        const url = pageToken
-          ? `/api/whiteboard/sessions/${whiteboardSessionId}/youtube-chat?pageToken=${encodeURIComponent(pageToken)}`
-          : `/api/whiteboard/sessions/${whiteboardSessionId}/youtube-chat`;
-        const res = await fetch(url);
+        const res = await fetch(`/api/whiteboard/sessions/${whiteboardSessionId}/youtube-chat`);
         const json = await res.json();
         if (cancelled) return;
-        if (json.success && json.data?.messages?.length > 0) {
-          pageToken = json.data.nextPageToken;
-          const newYtMsgs: ChatMessage[] = json.data.messages;
-          setMessages((prev) => {
-            const existingIds = new Set(prev.map((m) => m.id));
-            const fresh = newYtMsgs.filter((m) => !existingIds.has(m.id));
-            if (fresh.length === 0) return prev;
-            return [...prev, ...fresh].sort(
-              (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-            );
-          });
+        if (json.success) {
+          if (typeof json.data?.pollingIntervalMillis === "number") {
+            nextDelay = Math.max(MIN_INTERVAL_MS, json.data.pollingIntervalMillis);
+          }
+          if (json.data?.messages?.length > 0) {
+            const newYtMsgs: ChatMessage[] = json.data.messages;
+            setMessages((prev) => {
+              const existingIds = new Set(prev.map((m) => m.id));
+              const fresh = newYtMsgs.filter((m) => !existingIds.has(m.id));
+              if (fresh.length === 0) return prev;
+              return [...prev, ...fresh].sort(
+                (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+              );
+            });
+          }
         }
       } catch {
         // silent fallback
+      } finally {
+        if (!cancelled) timer = setTimeout(pollYouTube, nextDelay);
       }
     }
 
-    const interval = setInterval(pollYouTube, 4000);
     pollYouTube();
 
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      if (timer) clearTimeout(timer);
     };
   }, [whiteboardSessionId]);
 
