@@ -3039,7 +3039,7 @@ export function TeacherLiveClassRoom({
             settingsPortalRef={settingsPortalRef}
             connectedStudents={connectedStudents}
             onDisconnectStudent={handleDisconnectStudent}
-            compact
+            compact={isCameraCircle}
             // "YouTube Live Class" mode is OBS-captured and LiveKit-free by
             // design (see VideoStrip's forceLocalOnly doc) — except while a
             // hand raise is actively approved, when the teacher needs a real
