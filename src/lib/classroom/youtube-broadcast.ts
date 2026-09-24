@@ -5,6 +5,7 @@ import {
   createAndBindBroadcast,
   transitionBroadcast as sharedTransitionBroadcast,
   fetchRecordingStatus as sharedFetchRecordingStatus,
+  ensureBroadcastEmbeddable,
 } from "@/lib/youtube/live-broadcast";
 
 /**
@@ -31,7 +32,10 @@ export async function ensureYoutubeBroadcast(classroomSessionId: string, title: 
       teacher: { include: { user: true } },
     },
   });
-  if (existing.youtubeBroadcastId && existing.youtubeStreamId) return existing;
+  if (existing.youtubeBroadcastId && existing.youtubeStreamId) {
+    ensureBroadcastEmbeddable(existing.youtubeBroadcastId).catch(() => {});
+    return existing;
+  }
 
   const schedule = existing.batchScheduleId
     ? await prisma.batchSchedule.findUnique({

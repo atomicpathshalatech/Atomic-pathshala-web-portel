@@ -36,6 +36,7 @@ export function YouTubeLivePlayer({
   const playerRef = useRef<any>(null);
 
   const [isStreamLive, setIsStreamLive] = useState(false);
+  const [hasEmbedError, setHasEmbedError] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
   const [isLiveEdge, setIsLiveEdge] = useState(true);
@@ -45,6 +46,12 @@ export function YouTubeLivePlayer({
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
 
   const hideControlsTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Reset embed error when video changes
+  useEffect(() => {
+    setHasEmbedError(false);
+    setIsStreamLive(false);
+  }, [youtubeVideoId]);
 
   // Realtime clock ticker for Countdown / Late Buzzer
   useEffect(() => {
@@ -125,8 +132,12 @@ export function YouTubeLivePlayer({
         const d = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
         if (d?.event === "infoDelivery" && (d.info?.playerState === 1 || d.info?.playerState === 3)) {
           setIsStreamLive(true);
+          setHasEmbedError(false);
         } else if (d?.event === "onStateChange" && (d.data === 1 || d.data === 3)) {
           setIsStreamLive(true);
+          setHasEmbedError(false);
+        } else if (d?.event === "onError" && (d.data === 150 || d.data === 101 || d.data === 100 || d.data === 5)) {
+          setHasEmbedError(true);
         }
       } catch {
         // ignore non-json messages
@@ -146,6 +157,13 @@ export function YouTubeLivePlayer({
             const YT = (window as any).YT;
             if (e.data === YT.PlayerState.PLAYING || e.data === YT.PlayerState.BUFFERING) {
               setIsStreamLive(true);
+              setHasEmbedError(false);
+            }
+          },
+          onError: (e: any) => {
+            console.warn("[YouTubeLivePlayer] Player error code:", e.data);
+            if (e.data === 150 || e.data === 101 || e.data === 100 || e.data === 5) {
+              setHasEmbedError(true);
             }
           },
           onPlaybackRateChange: (e: any) => {
@@ -268,8 +286,8 @@ export function YouTubeLivePlayer({
   const embedUrl = useMemo(() => {
     if (!youtubeVideoId) return "";
     const origin = typeof window !== "undefined" && window.location.origin ? window.location.origin : "";
-    const originParam = origin ? `&origin=${encodeURIComponent(origin)}` : "";
-    return `https://www.youtube.com/embed/${youtubeVideoId}?autoplay=1&enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&disablekb=1&fs=0&iv_load_policy=3&showinfo=0${originParam}`;
+    const originParam = origin && origin.startsWith("https://") && !origin.includes("localhost") ? `&origin=${encodeURIComponent(origin)}` : "";
+    return `https://www.youtube-nocookie.com/embed/${youtubeVideoId}?autoplay=1&enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&disablekb=1&fs=0&iv_load_policy=3&showinfo=0${originParam}`;
   }, [youtubeVideoId]);
 
   if (!youtubeVideoId || livePhase === "SCHEDULED" || livePhase === "PREPARING") {
@@ -340,7 +358,9 @@ export function YouTubeLivePlayer({
           ref={iframeRef}
           src={embedUrl}
           title={title}
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowFullScreen
+          referrerPolicy="strict-origin-when-cross-origin"
           className="w-[102%] h-[124%] max-w-none border-0 pointer-events-none scale-[1.12] transition-transform duration-300"
         />
 
@@ -354,9 +374,90 @@ export function YouTubeLivePlayer({
         />
       </div>
 
-      {/* ----------------- 2. ATOMIC PATHSHALA BRANDED WAITING STAGE ----------------- */}
+      {/* ----------------- 2. EMBED RESTRICTION FALLBACK CARD ----------------- */}
+      {hasEmbedError && (
+        <div className="absolute inset-0 z-25 bg-gradient-to-br from-[#080b14] via-[#0d1222] to-[#060810] flex flex-col items-center justify-between p-5 sm:p-7 text-center select-none overflow-hidden animate-in fade-in duration-300">
+          {/* Ambient Glow */}
+          <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-rose-600/15 blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-16 -left-16 w-64 h-64 rounded-full bg-blue-600/15 blur-3xl pointer-events-none" />
+
+          {/* Top Info */}
+          <div className="relative z-10 w-full flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-white/10 backdrop-blur-md p-1 border border-white/20 flex items-center justify-center shadow">
+                <img src="/brand/logo.png" alt="Atomic Pathshala" className="w-full h-full object-contain" />
+              </div>
+              <span className="text-xs sm:text-sm font-bold text-white tracking-wide">Atomic Pathshala</span>
+            </div>
+
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs font-bold animate-pulse">
+              <span className="w-2 h-2 rounded-full bg-rose-500" />
+              <span>LIVE BROADCAST ACTIVE</span>
+            </div>
+          </div>
+
+          {/* Center Stream Action */}
+          <div className="relative z-10 my-auto flex flex-col items-center gap-3 max-w-md">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-red-600 to-rose-500 p-3.5 shadow-xl shadow-red-500/25 flex items-center justify-center">
+              <span className="material-symbols-outlined text-3xl text-white">live_tv</span>
+            </div>
+
+            <div>
+              <h3 className="text-base sm:text-lg font-bold text-white leading-tight line-clamp-2">{title}</h3>
+              {educatorName && <p className="text-xs text-slate-300 mt-1 font-medium">Educator: {educatorName}</p>}
+            </div>
+
+            <p className="text-xs text-slate-400">
+              Live broadcast is streaming. Tap below to watch directly with zero lag.
+            </p>
+
+            <div className="flex flex-wrap items-center justify-center gap-2.5 mt-2">
+              <a
+                href={`https://www.youtube.com/watch?v=${youtubeVideoId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs sm:text-sm font-bold shadow-lg shadow-red-600/30 transition flex items-center gap-2 cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-base">play_arrow</span>
+                <span>Watch Stream in New Tab</span>
+                <span className="material-symbols-outlined text-xs">open_in_new</span>
+              </a>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const url = `https://www.youtube.com/watch?v=${youtubeVideoId}`;
+                  window.open(url, "AtomicLiveStream", "width=1280,height=720,menubar=no,toolbar=no,location=no,status=no");
+                }}
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition flex items-center gap-1.5 cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-sm">picture_in_picture_alt</span>
+                <span>Popout Window</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setHasEmbedError(false);
+                  sendYouTubeCommand("playVideo");
+                }}
+                className="px-3.5 py-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-slate-400 hover:text-white text-xs font-medium border border-slate-800 transition flex items-center gap-1 cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-sm">refresh</span>
+                <span>Retry</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="relative z-10 text-[10px] text-slate-500 text-center">
+            Atomic Pathshala High Definition Live Broadcast Engine
+          </div>
+        </div>
+      )}
+
+      {/* ----------------- 3. ATOMIC PATHSHALA BRANDED WAITING STAGE ----------------- */}
       {/* Covers YouTube's raw waiting card until the live stream actually starts broadcasting */}
-      {!isStreamLive && (
+      {!isStreamLive && !hasEmbedError && (
         <div
           onClick={() => {
             if (livePhase === "LIVE") {
@@ -482,7 +583,7 @@ export function YouTubeLivePlayer({
         </div>
       )}
 
-      {/* ----------------- 3. PERMANENT BRANDING WATERMARK (Always on live stream) ----------------- */}
+      {/* ----------------- 4. PERMANENT BRANDING WATERMARK (Always on live stream) ----------------- */}
       {isStreamLive && (
         <div className="absolute top-3 sm:top-4 left-3 sm:left-4 z-20 pointer-events-none select-none flex items-center gap-2.5 animate-in fade-in duration-200">
           <div className="w-8 h-8 rounded-xl bg-white/10 backdrop-blur-md p-1 border border-white/20 flex items-center justify-center shrink-0 shadow-md">
@@ -511,13 +612,24 @@ export function YouTubeLivePlayer({
         </div>
       )}
 
-      {/* ----------------- 4. FLOATING TOP HEADER INFO (Fades with controls) ----------------- */}
+      {/* ----------------- 5. FLOATING TOP HEADER INFO (Fades with controls) ----------------- */}
       {isStreamLive && (
         <div
-          className={`absolute top-0 left-0 right-0 p-3 sm:p-4 bg-gradient-to-b from-black/85 via-black/40 to-transparent flex items-start justify-end pointer-events-none transition-opacity duration-300 z-20 ${
+          className={`absolute top-0 left-0 right-0 p-3 sm:p-4 bg-gradient-to-b from-black/85 via-black/40 to-transparent flex items-start justify-end gap-2 pointer-events-none transition-opacity duration-300 z-20 ${
             showControls ? "opacity-100" : "opacity-0"
           }`}
         >
+          {/* Open in Tab Button */}
+          <a
+            href={`https://www.youtube.com/watch?v=${youtubeVideoId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="pointer-events-auto p-1.5 rounded-lg bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80 transition flex items-center justify-center cursor-pointer shadow-md"
+            title="Open Live Stream in New Tab"
+          >
+            <span className="material-symbols-outlined text-sm">open_in_new</span>
+          </a>
+
           {/* Sync Live Badge */}
           <button
             type="button"
@@ -539,7 +651,7 @@ export function YouTubeLivePlayer({
         </div>
       )}
 
-      {/* ----------------- 5. BOTTOM CONTROL BAR OVERLAY ----------------- */}
+      {/* ----------------- 6. BOTTOM CONTROL BAR OVERLAY ----------------- */}
       {isStreamLive && (
         <div
           className={`absolute bottom-2 left-2 right-2 px-3 py-1.5 bg-[#0e111d]/90 backdrop-blur-md rounded-xl border border-slate-700/80 flex items-center justify-between gap-2 shadow-2xl transition-opacity duration-300 z-20 ${
@@ -595,7 +707,7 @@ export function YouTubeLivePlayer({
             </button>
           </div>
 
-          {/* Right Controls: Speed Selector, Fullscreen */}
+          {/* Right Controls: Speed Selector, External Popout, Fullscreen */}
           <div className="flex items-center gap-1.5 sm:gap-2 relative">
             <div className="relative">
               <button
@@ -633,6 +745,16 @@ export function YouTubeLivePlayer({
                 </div>
               )}
             </div>
+
+            <a
+              href={`https://www.youtube.com/watch?v=${youtubeVideoId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition cursor-pointer"
+              title="Open in YouTube"
+            >
+              <span className="material-symbols-outlined text-base">open_in_new</span>
+            </a>
 
             <button
               type="button"

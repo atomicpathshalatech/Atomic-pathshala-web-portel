@@ -91,9 +91,11 @@ export async function createLiveBroadcast(
       snippet: { title, description: desc, scheduledStartTime },
       status: { privacyStatus: "unlisted", selfDeclaredMadeForKids: false },
       contentDetails: {
+        enableEmbed: true,
         enableAutoStart: true,
         enableAutoStop: true,
         enableDvr: true,
+        recordFromStart: true,
         latencyPreference: "ultraLow",
       },
     }),
@@ -119,6 +121,28 @@ export async function createLiveBroadcast(
   }
 
   return { id: json.id, liveChatId: json.snippet.liveChatId ?? null };
+}
+
+/**
+ * Ensures an existing broadcast has embedding explicitly enabled on YouTube
+ */
+export async function ensureBroadcastEmbeddable(broadcastId: string): Promise<void> {
+  try {
+    await youtubeApiFetch("/videos", {
+      method: "PUT",
+      query: { part: "status" },
+      body: JSON.stringify({
+        id: broadcastId,
+        status: {
+          embeddable: true,
+          privacyStatus: "unlisted",
+          selfDeclaredMadeForKids: false,
+        },
+      }),
+    });
+  } catch (err) {
+    console.warn("[ensureBroadcastEmbeddable error]", err);
+  }
 }
 
 export async function bindBroadcastToStream(broadcastId: string, streamId: string): Promise<void> {

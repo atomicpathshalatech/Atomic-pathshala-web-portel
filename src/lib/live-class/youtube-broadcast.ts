@@ -1,18 +1,10 @@
 import "server-only";
 import { prisma } from "@/lib/db";
-import { youtubeLiveConfigured, createAndBindBroadcast } from "@/lib/youtube/live-broadcast";
+import { youtubeLiveConfigured, createAndBindBroadcast, ensureBroadcastEmbeddable } from "@/lib/youtube/live-broadcast";
 
 /**
  * WhiteboardSession-specific wiring around the shared YouTube Live API
- * client (src/lib/youtube/live-broadcast.ts) — completes the "Phase 2"
- * (YouTubeLiveService) the schema comments on WhiteboardSession's youtube*
- * fields have referenced since they were added, for the "Application Class
- * + YouTube" simulcast mode (videoTransport: BOTH, auto-created broadcast,
- * pushed live via LiveKit Egress — see src/lib/livekit/egress.ts).
- *
- * Deliberately separate from src/lib/live-class/youtube.ts (the older,
- * still-used manual videoId-mapping helpers for the "YouTube Live Class"
- * external-OBS mode) — that mode never calls this function.
+ * client (src/lib/youtube/live-broadcast.ts).
  */
 
 export const youtubeLiveClassConfigured = youtubeLiveConfigured;
@@ -33,7 +25,10 @@ export async function ensureYoutubeBroadcastForWhiteboard(
       teacher: { include: { user: true } },
     },
   });
-  if (existing.youtubeBroadcastId && existing.youtubeStreamId) return existing;
+  if (existing.youtubeBroadcastId && existing.youtubeStreamId) {
+    ensureBroadcastEmbeddable(existing.youtubeBroadcastId).catch(() => {});
+    return existing;
+  }
 
   const schedule = existing.batchScheduleId
     ? await prisma.batchSchedule.findUnique({

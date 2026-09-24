@@ -40,7 +40,7 @@ export function ClassroomYouTubePlayer({ youtubeVideoId, title, onError, classNa
     setLoadError(false);
   }, [youtubeVideoId]);
 
-  const embedUrl = `https://www.youtube.com/embed/${youtubeVideoId}?autoplay=1&rel=0&modestbranding=1&playsinline=1&controls=1`;
+  const embedUrl = `https://www.youtube-nocookie.com/embed/${youtubeVideoId}?autoplay=1&rel=0&modestbranding=1&playsinline=1&controls=1`;
 
   if (loadError) {
     return (
@@ -51,7 +51,7 @@ export function ClassroomYouTubePlayer({ youtubeVideoId, title, onError, classNa
           <button
             type="button"
             onClick={() => setLoadError(false)}
-            className="px-4 py-2 rounded-xl bg-slate-800 text-white text-xs font-semibold hover:bg-slate-700 transition-colors"
+            className="px-4 py-2 rounded-xl bg-slate-800 text-white text-xs font-semibold hover:bg-slate-700 transition-colors cursor-pointer"
           >
             Retry Player
           </button>
@@ -59,9 +59,9 @@ export function ClassroomYouTubePlayer({ youtubeVideoId, title, onError, classNa
             href={`https://www.youtube.com/watch?v=${youtubeVideoId}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="px-4 py-2 rounded-xl bg-red-600 text-white text-xs font-semibold hover:bg-red-500 transition-colors flex items-center gap-1"
+            className="px-4 py-2 rounded-xl bg-red-600 text-white text-xs font-semibold hover:bg-red-500 transition-colors flex items-center gap-1 cursor-pointer"
           >
-            <span>Open in YouTube</span>
+            <span>Open Stream in Tab</span>
             <span className="material-symbols-outlined text-xs">open_in_new</span>
           </a>
         </div>
@@ -77,7 +77,7 @@ export function ClassroomYouTubePlayer({ youtubeVideoId, title, onError, classNa
         title={title}
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
         allowFullScreen
-        referrerPolicy="origin-when-cross-origin"
+        referrerPolicy="strict-origin-when-cross-origin"
         className="w-full h-full border-0"
         onError={() => {
           setLoadError(true);
