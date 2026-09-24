@@ -4,7 +4,6 @@ import dynamic from "next/dynamic";
 import type { ComponentProps } from "react";
 import type { StudentLiveClassRoom as StudentLiveClassRoomType } from "./StudentLiveClassRoom";
 import { LiveRoomSkeleton } from "./LiveRoomSkeleton";
-import { LectureStartSlideOverlay } from "./LectureStartSlideOverlay";
 
 /**
  * Client boundary for the ~1.3k-line StudentLiveClassRoom. Loaded with
@@ -20,10 +19,5 @@ const StudentLiveClassRoom = dynamic(
 export function StudentLiveClassRoomClient(
   props: ComponentProps<typeof StudentLiveClassRoomType>
 ) {
-  return (
-    <>
-      <StudentLiveClassRoom {...props} />
-      <LectureStartSlideOverlay scheduleId={props.batchScheduleId} />
-    </>
-  );
+  return <StudentLiveClassRoom {...props} />;
 }
