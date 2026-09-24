@@ -30,7 +30,7 @@ export default async function StudentLiveClassPage({
 
   if (!scheduleId) notFound();
 
-  const schedule = await prisma.batchSchedule.findUnique({
+  let schedule = await prisma.batchSchedule.findUnique({
     where: { id: scheduleId },
     include: {
       batch: true,
@@ -39,16 +39,79 @@ export default async function StudentLiveClassPage({
       chapter: { select: { title: true } },
     },
   });
+
+  // If not found by BatchSchedule id, check if scheduleId is a lectureId or liveWhiteboardSession id
+  if (!schedule) {
+    schedule = await prisma.batchSchedule.findFirst({
+      where: {
+        OR: [
+          { lectureId: scheduleId },
+          { liveWhiteboardSession: { id: scheduleId } },
+        ],
+      },
+      include: {
+        batch: true,
+        teacher: { include: { user: true } },
+        liveWhiteboardSession: true,
+        chapter: { select: { title: true } },
+      },
+    });
+  }
+
+  // If still not found, check if scheduleId matches a Lecture directly
+  if (!schedule) {
+    const lecture = await prisma.lecture.findUnique({
+      where: { id: scheduleId },
+      include: { chapter: true, teacher: true },
+    });
+    if (lecture) {
+      schedule = await prisma.batchSchedule.findFirst({
+        where: {
+          OR: [{ id: lecture.id }, { lectureId: lecture.id }],
+        },
+        include: {
+          batch: true,
+          teacher: { include: { user: true } },
+          liveWhiteboardSession: true,
+          chapter: { select: { title: true } },
+        },
+      });
+    }
+  }
+
   if (!schedule) notFound();
   if (schedule.type !== "LIVE_CLASS") redirect("/schedule");
 
   const { resolveBatchAccess } = await import("@/lib/batch/entitlement");
   const access = await resolveBatchAccess(student.userId, schedule.batchId);
-  if (
-    access.status !== "ACTIVE_ENROLLMENT" &&
-    access.status !== "ACTIVE_SUBSCRIPTION" &&
-    access.status !== "ADMIN_GRANTED"
-  ) {
+  
+  let hasBatchAccess =
+    access.status === "ACTIVE_ENROLLMENT" ||
+    access.status === "ACTIVE_SUBSCRIPTION" ||
+    access.status === "ADMIN_GRANTED";
+
+  if (!hasBatchAccess && schedule.chapterId) {
+    const { isEnrolledInCourse } = await import("@/lib/lecture/access");
+    const chapter = await prisma.chapter.findUnique({
+      where: { id: schedule.chapterId },
+      include: { subject: true },
+    });
+    if (chapter?.subject?.courseId) {
+      const courseEnrolled = await isEnrolledInCourse(student.id, chapter.subject.courseId);
+      if (courseEnrolled) hasBatchAccess = true;
+    }
+  }
+
+  if (!hasBatchAccess) {
+    const activeEnrollmentCount = await prisma.batchEnrollment.count({
+      where: { studentId: student.id, status: "ACTIVE" },
+    });
+    if (activeEnrollmentCount > 0) {
+      hasBatchAccess = true;
+    }
+  }
+
+  if (!hasBatchAccess) {
     redirect(
       `/schedule?blocked=1&reason=${encodeURIComponent("You are not enrolled in this batch.")}`
     );
@@ -59,9 +122,20 @@ export default async function StudentLiveClassPage({
   const accessEval = canStudentJoinClass(schedule, new Date());
   if (!accessEval.allowed) {
     if (accessEval.isCompleted) {
-      redirect(`/schedule?completedClass=${schedule.id}`);
+      if (
+        schedule.liveWhiteboardSession?.recordingStorageKey ||
+        schedule.liveWhiteboardSession?.recordingStatus === "READY" ||
+        schedule.liveWhiteboardSession?.pdfStorageKey
+      ) {
+        // Allow student to access recorded class / board notes
+      } else {
+        redirect(`/schedule?completedClass=${schedule.id}`);
+      }
+    } else {
+      redirect(
+        `/schedule?blocked=1&reason=${encodeURIComponent(accessEval.reason || "Class is not accessible yet.")}`
+      );
     }
-    redirect(`/schedule?blocked=1&reason=${encodeURIComponent(accessEval.reason || "Class is not accessible yet.")}`);
   }
 
   return (

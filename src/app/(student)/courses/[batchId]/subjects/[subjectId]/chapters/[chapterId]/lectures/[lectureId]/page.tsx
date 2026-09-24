@@ -17,13 +17,23 @@ export default async function LecturePlayerPage({
 }) {
   const { student } = await requireStudentSession();
 
-  const lecture = await prisma.lecture.findUnique({
+  let lecture = await prisma.lecture.findUnique({
     where: { id: params.lectureId },
     include: {
       chapter: { include: { subject: { include: { course: true } } } },
       teacher: { include: { user: { select: { name: true } } } },
     },
   });
+
+  if (!lecture) {
+    const schedule = await prisma.batchSchedule.findUnique({
+      where: { id: params.lectureId },
+    });
+    if (schedule) {
+      redirect(`/live-class/${schedule.id}`);
+    }
+  }
+
   if (!lecture || lecture.chapterId !== params.chapterId || lecture.status !== "PUBLISHED") notFound();
   if (lecture.chapter.subjectId !== params.subjectId) notFound();
 

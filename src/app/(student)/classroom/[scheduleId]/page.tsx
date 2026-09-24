@@ -29,16 +29,42 @@ export default async function StudentClassroomPage({
   const { scheduleId } = await Promise.resolve(params);
   if (!scheduleId) notFound();
 
-  const schedule = await prisma.batchSchedule.findUnique({
+  let schedule = await prisma.batchSchedule.findUnique({
     where: { id: scheduleId },
     include: { batch: true, teacher: { include: { user: true } }, chapter: { select: { title: true } } },
   });
+
+  if (!schedule) {
+    schedule = await prisma.batchSchedule.findFirst({
+      where: {
+        OR: [
+          { lectureId: scheduleId },
+          { liveWhiteboardSession: { id: scheduleId } },
+        ],
+      },
+      include: { batch: true, teacher: { include: { user: true } }, chapter: { select: { title: true } } },
+    });
+  }
+
   if (!schedule) notFound();
   if (schedule.type !== "LIVE_CLASS") redirect("/schedule");
 
   const { resolveBatchAccess } = await import("@/lib/batch/entitlement");
   const access = await resolveBatchAccess(student.userId, schedule.batchId);
-  if (access.status !== "ACTIVE_ENROLLMENT" && access.status !== "ACTIVE_SUBSCRIPTION" && access.status !== "ADMIN_GRANTED") {
+  
+  let hasAccess =
+    access.status === "ACTIVE_ENROLLMENT" ||
+    access.status === "ACTIVE_SUBSCRIPTION" ||
+    access.status === "ADMIN_GRANTED";
+
+  if (!hasAccess) {
+    const activeEnrollmentCount = await prisma.batchEnrollment.count({
+      where: { studentId: student.id, status: "ACTIVE" },
+    });
+    if (activeEnrollmentCount > 0) hasAccess = true;
+  }
+
+  if (!hasAccess) {
     redirect(`/schedule?blocked=1&reason=${encodeURIComponent("You are not enrolled in this batch.")}`);
   }
 

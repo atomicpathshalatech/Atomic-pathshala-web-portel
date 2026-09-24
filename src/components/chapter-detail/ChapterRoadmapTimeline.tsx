@@ -132,10 +132,12 @@ export function ChapterRoadmapTimeline({
                   <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2.5 text-xs">
                     {/* 1. Video Lecture Items */}
                     {step.lectures.map((l) => {
-                      const lectureHref =
-                        batchId && subjectId && chapterId
-                          ? `/courses/${batchId}/subjects/${subjectId}/chapters/${chapterId}/lectures/${l.id}`
-                          : l.videoUrl || "#";
+                      const isLiveLink = l.videoUrl?.startsWith("/live-class") || l.videoUrl?.startsWith("/classroom");
+                      const lectureHref = isLiveLink
+                        ? l.videoUrl
+                        : batchId && subjectId && chapterId
+                        ? `/courses/${batchId}/subjects/${subjectId}/chapters/${chapterId}/lectures/${l.id}`
+                        : l.videoUrl || "#";
 
                       return (
                         <div
