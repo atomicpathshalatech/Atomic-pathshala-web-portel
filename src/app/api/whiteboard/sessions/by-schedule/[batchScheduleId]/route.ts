@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { UnauthorizedError, ForbiddenError } from "@/lib/rbac/guard";
-import { resolveTeacherForSchedule, resolveStudentForSchedule } from "@/lib/whiteboard/access";
+import { resolveTeacherForSchedule, resolveStudentForSchedule, hasLenientLiveClassAccess } from "@/lib/whiteboard/access";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 
 /**
@@ -29,7 +29,25 @@ export async function GET(
     ]);
 
     if (!schedule) return apiError("Scheduled class not found", 404);
-    if (!teacher && !student) throw new ForbiddenError();
+
+    // resolveStudentForSchedule stays strictly batch-scoped (it's shared with
+    // the Test Engine) — this route alone widens, to match the live-class
+    // page's own lenient access check. Without this, a student the page let
+    // through could still 403 here forever and see an indefinite blank
+    // "waiting" screen with no error surfaced (see hasLenientLiveClassAccess).
+    let hasAccess = Boolean(teacher || student);
+    if (!hasAccess) {
+      const studentRow = await prisma.student.findUnique({ where: { userId: session.user.id } });
+      if (studentRow) {
+        hasAccess = await hasLenientLiveClassAccess(
+          session.user.id,
+          studentRow.id,
+          schedule.batchId,
+          schedule.chapterId
+        );
+      }
+    }
+    if (!hasAccess) throw new ForbiddenError();
 
     let wbSession = await prisma.whiteboardSession.findUnique({
       where: { batchScheduleId: params.batchScheduleId },

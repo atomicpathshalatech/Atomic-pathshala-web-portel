@@ -5,7 +5,11 @@ import { prisma } from "@/lib/db";
 import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
-import { cleanDocumentArtifacts } from "@/lib/extraction/pdf-extractor";
+import {
+  cleanDocumentArtifacts,
+  extractTextFromPdfBuffer,
+  extractQuestionsWithAiChunk,
+} from "@/lib/extraction/pdf-extractor";
 import { detectQuestionBlocks } from "@/lib/extraction/boundary-detector";
 import { extractAnswerKey, extractSolutions } from "@/lib/extraction/answer-key-engine";
 import { validateAndClassifyQuestions } from "@/lib/extraction/validator";
@@ -42,6 +46,7 @@ export async function POST(request: NextRequest) {
     const fileName = file ? file.name : `${sourceName}_Document.pdf`;
     const fileSize = file ? file.size : (rawPastedText?.length || 0);
     const expectedCount = endNumber - startNumber + 1;
+    const effectiveSourceName = sourceName || "Exam Document";
 
     // 1. Create Extraction Job in PENDING status
     const job = await prisma.extractionJob.create({
@@ -69,13 +74,18 @@ export async function POST(request: NextRequest) {
 
     // 2. Extract Document Content
     let docText = "";
+    let pageCount = 1;
+    let fileUrl = `/uploads/extraction/${fileName}`;
+
     if (file) {
       const buffer = Buffer.from(await file.arrayBuffer());
-      // In production Node environment: Read text stream from PDF buffer
-      docText = buffer.toString("utf-8");
-      // If binary PDF, fallback to text representation or raw text provided
-      if (docText.includes("%PDF") || docText.length < 50) {
-        docText = rawPastedText || "";
+      const pdfResult = await extractTextFromPdfBuffer(buffer);
+      docText = pdfResult.fullText;
+      pageCount = pdfResult.pageCount || 1;
+
+      // If PDF text is still too sparse, check if user supplied raw text
+      if (docText.trim().length < 50 && rawPastedText?.trim()) {
+        docText = rawPastedText.trim();
       }
     } else {
       docText = rawPastedText || "";
@@ -83,86 +93,192 @@ export async function POST(request: NextRequest) {
 
     const cleanedText = cleanDocumentArtifacts(docText);
 
-    // 3. Detect Question Blocks
-    const rawBlocks = detectQuestionBlocks(cleanedText, startNumber, endNumber);
+    let extractedList: any[] = [];
+    let isAiProcessed = false;
 
-    // 4. Extract Answer Key & Solutions
-    const answersMap = extractAnswerKey(cleanedText, startNumber, endNumber);
-    const solutionsMap = extractSolutions(cleanedText, startNumber, endNumber);
+    // 3. Attempt Gemini AI High-Precision Extraction with Auto-Bilingual & 4-Step Solution
+    if (cleanedText.trim().length >= 30) {
+      try {
+        const aiQuestions = await extractQuestionsWithAiChunk({
+          textChunk: cleanedText.slice(0, 45000), // process document
+          startNumber,
+          endNumber,
+          subjectContext: subject !== "Auto Detect" ? subject : undefined,
+          chapterContext: chapter || undefined,
+          sourceName: effectiveSourceName,
+        });
 
-    // 5. Validate & Classify Questions (Zero-Silent-Error Engine)
-    const { validatedQuestions, report } = validateAndClassifyQuestions(
-      rawBlocks,
-      answersMap,
-      solutionsMap,
-      {
-        sourceName,
-        fileName,
-        fileUrl: job.fileUrl,
-        startNumber,
-        endNumber,
-        defaultSubject: subject !== "Auto Detect" ? subject : undefined,
-        defaultChapter: chapter || undefined,
+        if (aiQuestions && aiQuestions.length > 0) {
+          extractedList = aiQuestions;
+          isAiProcessed = true;
+        }
+      } catch (aiErr) {
+        console.warn("[Upload Extraction Route] AI extraction fallback to regex boundary parser:", aiErr);
       }
-    );
+    }
 
-    // 6. Persist Extracted Questions in Prisma
-    if (validatedQuestions.length > 0) {
-      await prisma.extractedQuestion.createMany({
-        data: validatedQuestions.map((q) => ({
-          jobId: job.id,
-          questionIndex: q.questionIndex,
-          originalNumber: q.originalNumber,
-          pyqExam: job.pyqExam,
-          pyqYear: job.pyqYear,
-          pyqMonth: job.pyqMonth,
-          pyqQuestionNumber: `Question ${String(q.originalNumber).padStart(2, "0")}`,
-          sourceName: q.sourceName,
-          sourcePdfUrl: q.sourcePdfUrl,
-          sourcePdfName: q.sourcePdfName,
-          sourcePage: q.sourcePage,
+    // 4. Fallback to Local Boundary Regex Engine if AI didn't run or returned 0 questions
+    let finalQuestionsToSave: any[] = [];
+    let finalReport: any = null;
+
+    if (isAiProcessed && extractedList.length > 0) {
+      const verified = extractedList.filter((q) => q.status === "VERIFIED").length;
+      const reviewReq = extractedList.filter((q) => q.status === "REVIEW_REQUIRED").length;
+      const errors = extractedList.filter((q) => q.status === "EXTRACTION_ERROR").length;
+      const missing = Math.max(0, expectedCount - extractedList.length);
+
+      const issues: any[] = [];
+      extractedList.forEach((q) => {
+        if (q.reviewReasons && q.reviewReasons.length > 0) {
+          issues.push({
+            questionNumber: q.originalNumber,
+            severity: q.status === "EXTRACTION_ERROR" ? "ERROR" : "WARNING",
+            message: q.reviewReasons.join(" • "),
+          });
+        }
+      });
+
+      finalReport = {
+        sourceName: effectiveSourceName,
+        fileName,
+        expectedRange: `${startNumber}–${endNumber}`,
+        expectedCount,
+        extractedCount: extractedList.length,
+        verifiedCount: verified,
+        reviewCount: reviewReq,
+        errorCount: errors,
+        missingCount: missing,
+        duplicateCount: 0,
+        answerKeyMatchedCount: extractedList.filter((q) => q.correctAnswer).length,
+        solutionsMatchedCount: extractedList.filter((q) => q.solution).length,
+        status: errors > 0 ? "FAILED" : reviewReq > 0 ? "REVIEW_REQUIRED" : "VERIFIED",
+        issues,
+      };
+
+      finalQuestionsToSave = extractedList.map((q, idx) => ({
+        jobId: job.id,
+        questionIndex: idx + 1,
+        originalNumber: q.originalNumber || startNumber + idx,
+        pyqExam: job.pyqExam,
+        pyqYear: job.pyqYear,
+        pyqMonth: job.pyqMonth,
+        pyqQuestionNumber: `Question ${String(q.originalNumber || startNumber + idx).padStart(2, "0")}`,
+        sourceName: effectiveSourceName,
+        sourcePdfUrl: fileUrl,
+        sourcePdfName: fileName,
+        sourcePage: q.sourcePage || 1,
+        statement: q.statement,
+        statementHi: q.statementHi || null,
+        options: q.options,
+        correctAnswer: q.correctAnswer || "A",
+        answerKeySource: q.answerKeySource || "AI_PARSER",
+        solution: q.solution || null,
+        solutionHi: q.solutionHi || null,
+        hasTable: q.hasTable || false,
+        hasImage: q.hasImage || false,
+        hasEquation: q.hasEquation || false,
+        imageUrl: q.imageUrl || null,
+        subject: q.subject || (subject !== "Auto Detect" ? subject : "Physics"),
+        chapter: q.chapter || chapter || null,
+        topic: q.topic || null,
+        subTopic: q.subTopic || null,
+        questionType: q.questionType || "SINGLE_CORRECT",
+        difficulty: q.difficulty || "MEDIUM",
+        status: q.status || "VERIFIED",
+        confidence: q.confidence || 95,
+        confidenceBreakdown: q.confidenceBreakdown || null,
+        reviewReasons: q.reviewReasons || [],
+        originalSnapshot: {
           statement: q.statement,
-          statementHi: q.statementHi || null,
           options: q.options,
           correctAnswer: q.correctAnswer,
-          answerKeySource: q.answerKeySource,
-          solution: q.solution || null,
-          hasTable: q.hasTable,
-          hasImage: q.hasImage,
-          hasEquation: q.hasEquation,
-          subject: q.subject,
-          chapter: q.chapter || null,
-          topic: q.topic || null,
-          subTopic: q.subTopic || null,
-          questionType: q.questionType,
-          difficulty: q.difficulty,
-          status: q.status,
-          confidence: q.confidence,
-          confidenceBreakdown: q.confidenceBreakdown,
-          reviewReasons: q.reviewReasons,
-          originalSnapshot: q.originalSnapshot,
-        })),
+          solution: q.solution,
+        },
+      }));
+    } else {
+      // Regex parsing fallback
+      const rawBlocks = detectQuestionBlocks(cleanedText, startNumber, endNumber);
+      const answersMap = extractAnswerKey(cleanedText, startNumber, endNumber);
+      const solutionsMap = extractSolutions(cleanedText, startNumber, endNumber);
+
+      const { validatedQuestions, report } = validateAndClassifyQuestions(
+        rawBlocks,
+        answersMap,
+        solutionsMap,
+        {
+          sourceName: effectiveSourceName,
+          fileName,
+          fileUrl,
+          startNumber,
+          endNumber,
+          defaultSubject: subject !== "Auto Detect" ? subject : undefined,
+          defaultChapter: chapter || undefined,
+        }
+      );
+
+      finalReport = report;
+      finalQuestionsToSave = validatedQuestions.map((q) => ({
+        jobId: job.id,
+        questionIndex: q.questionIndex,
+        originalNumber: q.originalNumber,
+        pyqExam: job.pyqExam,
+        pyqYear: job.pyqYear,
+        pyqMonth: job.pyqMonth,
+        pyqQuestionNumber: `Question ${String(q.originalNumber).padStart(2, "0")}`,
+        sourceName: q.sourceName,
+        sourcePdfUrl: q.sourcePdfUrl,
+        sourcePdfName: q.sourcePdfName,
+        sourcePage: q.sourcePage,
+        statement: q.statement,
+        statementHi: q.statementHi || null,
+        options: q.options,
+        correctAnswer: q.correctAnswer,
+        answerKeySource: q.answerKeySource,
+        solution: q.solution || null,
+        solutionHi: null,
+        hasTable: q.hasTable,
+        hasImage: q.hasImage,
+        hasEquation: q.hasEquation,
+        imageUrl: null,
+        subject: q.subject,
+        chapter: q.chapter || null,
+        topic: q.topic || null,
+        subTopic: q.subTopic || null,
+        questionType: q.questionType,
+        difficulty: q.difficulty,
+        status: q.status,
+        confidence: q.confidence,
+        confidenceBreakdown: q.confidenceBreakdown,
+        reviewReasons: q.reviewReasons,
+        originalSnapshot: q.originalSnapshot,
+      }));
+    }
+
+    // 5. Persist Extracted Questions in Prisma
+    if (finalQuestionsToSave.length > 0) {
+      await prisma.extractedQuestion.createMany({
+        data: finalQuestionsToSave,
       });
     }
 
-    // 7. Update Job Status & Report
+    // 6. Update Job Status & Report
     const updatedJob = await prisma.extractionJob.update({
       where: { id: job.id },
       data: {
-        extractedCount: report.extractedCount,
-        verifiedCount: report.verifiedCount,
-        reviewCount: report.reviewCount,
-        errorCount: report.errorCount,
-        missingCount: report.missingCount,
-        duplicateCount: report.duplicateCount,
-        status: report.status === "VERIFIED" ? "VERIFIED" : report.status === "REVIEW_REQUIRED" ? "REVIEW_REQUIRED" : "FAILED",
+        extractedCount: finalReport.extractedCount,
+        verifiedCount: finalReport.verifiedCount,
+        reviewCount: finalReport.reviewCount,
+        errorCount: finalReport.errorCount,
+        missingCount: finalReport.missingCount,
+        duplicateCount: finalReport.duplicateCount,
+        status: finalReport.status === "VERIFIED" ? "VERIFIED" : finalReport.status === "REVIEW_REQUIRED" ? "REVIEW_REQUIRED" : "FAILED",
         progress: 100,
         currentStep: "Validation Complete",
-        reportJson: report as any,
+        reportJson: finalReport as any,
       },
     });
 
-    // 8. Audit Log
+    // 7. Audit Log
     await prisma.auditLog.create({
       data: {
         userId: session.user.id,
@@ -170,12 +286,13 @@ export async function POST(request: NextRequest) {
         entityType: "ExtractionJob",
         entityId: job.id,
         metadata: {
-          sourceName,
+          sourceName: effectiveSourceName,
           fileName,
           expectedCount,
-          extractedCount: report.extractedCount,
-          verifiedCount: report.verifiedCount,
+          extractedCount: finalReport.extractedCount,
+          verifiedCount: finalReport.verifiedCount,
           status: updatedJob.status,
+          isAiProcessed,
         },
       },
     });
@@ -183,7 +300,7 @@ export async function POST(request: NextRequest) {
     return apiSuccess(
       {
         job: updatedJob,
-        report,
+        report: finalReport,
       },
       201
     );

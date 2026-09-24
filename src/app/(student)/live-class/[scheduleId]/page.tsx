@@ -185,35 +185,16 @@ export default async function StudentLiveClassPage({
     }
   }
 
-  // Access check
-  const { resolveBatchAccess } = await import("@/lib/batch/entitlement");
-  const access = await resolveBatchAccess(student.userId, schedule.batchId);
-  
-  let hasBatchAccess =
-    access.status === "ACTIVE_ENROLLMENT" ||
-    access.status === "ACTIVE_SUBSCRIPTION" ||
-    access.status === "ADMIN_GRANTED";
-
-  if (!hasBatchAccess && schedule.chapterId) {
-    const { isEnrolledInCourse } = await import("@/lib/lecture/access");
-    const chapter = await prisma.chapter.findUnique({
-      where: { id: schedule.chapterId },
-      include: { subject: true },
-    });
-    if (chapter?.subject?.courseId) {
-      const courseEnrolled = await isEnrolledInCourse(student.id, chapter.subject.courseId);
-      if (courseEnrolled) hasBatchAccess = true;
-    }
-  }
-
-  if (!hasBatchAccess) {
-    const activeEnrollmentCount = await prisma.batchEnrollment.count({
-      where: { studentId: student.id, status: "ACTIVE" },
-    });
-    if (activeEnrollmentCount > 0) {
-      hasBatchAccess = true;
-    }
-  }
+  // Access check — same lenient rule every whiteboard API call this page's
+  // component makes is now also checked against (hasLenientLiveClassAccess),
+  // so a student allowed past this gate never gets silently 403'd downstream.
+  const { hasLenientLiveClassAccess } = await import("@/lib/whiteboard/access");
+  const hasBatchAccess = await hasLenientLiveClassAccess(
+    student.userId,
+    student.id,
+    schedule.batchId,
+    schedule.chapterId
+  );
 
   if (!hasBatchAccess) {
     redirect(

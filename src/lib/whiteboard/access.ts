@@ -4,6 +4,50 @@ import { isPastGracePeriod, endWhiteboardSession } from "@/lib/whiteboard/lifecy
 
 export { resolveTeacherForSchedule, resolveStudentForSchedule } from "@/lib/batch/access";
 
+/**
+ * Wider-than-resolveBatchAccess fallback used ONLY for the live-class
+ * feature — never for resolveStudentForSchedule's other caller (the Test
+ * Engine), which stays strictly batch-scoped on purpose. Mirrors
+ * src/app/(student)/live-class/[scheduleId]/page.tsx's own access check
+ * (course-wide enrollment, then any active enrollment at all) so a student
+ * who is allowed to LOAD that page doesn't then get silently, permanently
+ * 403'd by every whiteboard API call the page's component makes — that
+ * mismatch was leaving students on an indefinite blank "waiting" screen
+ * with no camera/board and no error, even though the page itself loaded.
+ */
+export async function hasLenientLiveClassAccess(
+  studentUserId: string,
+  studentId: string,
+  batchId: string,
+  chapterId: string | null
+): Promise<boolean> {
+  const { resolveBatchAccess } = await import("@/lib/batch/entitlement");
+  const access = await resolveBatchAccess(studentUserId, batchId);
+  if (
+    access.status === "ACTIVE_ENROLLMENT" ||
+    access.status === "ACTIVE_SUBSCRIPTION" ||
+    access.status === "ADMIN_GRANTED"
+  ) {
+    return true;
+  }
+
+  if (chapterId) {
+    const { isEnrolledInCourse } = await import("@/lib/lecture/access");
+    const chapter = await prisma.chapter.findUnique({
+      where: { id: chapterId },
+      include: { subject: true },
+    });
+    if (chapter?.subject?.courseId && (await isEnrolledInCourse(studentId, chapter.subject.courseId))) {
+      return true;
+    }
+  }
+
+  const activeEnrollmentCount = await prisma.batchEnrollment.count({
+    where: { studentId, status: "ACTIVE" },
+  });
+  return activeEnrollmentCount > 0;
+}
+
 export type WhiteboardAccess =
   | { role: "TEACHER"; entityId: string; name: string }
   | { role: "STUDENT"; entityId: string; name: string };
@@ -98,10 +142,19 @@ export async function resolveWhiteboardAccess(
   // exactly the auto-enrollment vulnerability this delegates away from.
   const { resolveBatchAccess } = await import("@/lib/batch/entitlement");
   const access = await resolveBatchAccess(userId, wbSession.batchSchedule.batchId);
+  const strictlyAllowed =
+    access.status === "ACTIVE_ENROLLMENT" ||
+    access.status === "ACTIVE_SUBSCRIPTION" ||
+    access.status === "ADMIN_GRANTED";
+
   if (
-    access.status !== "ACTIVE_ENROLLMENT" &&
-    access.status !== "ACTIVE_SUBSCRIPTION" &&
-    access.status !== "ADMIN_GRANTED"
+    !strictlyAllowed &&
+    !(await hasLenientLiveClassAccess(
+      userId,
+      student.id,
+      wbSession.batchSchedule.batchId,
+      wbSession.batchSchedule.chapterId
+    ))
   ) {
     return null;
   }

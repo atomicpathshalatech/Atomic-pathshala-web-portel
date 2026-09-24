@@ -804,16 +804,33 @@ export function StudentLiveClassRoom({
   useEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    let consecutiveFailures = 0;
 
     async function poll() {
       try {
         const res = await fetch(`/api/whiteboard/sessions/by-schedule/${batchScheduleId}`);
         const json = await res.json();
         if (!res.ok || !json.success) {
-          // On error, keep retrying — don't surface the error yet, just wait
+          consecutiveFailures += 1;
+          // A handful of retries absorbs a transient blip (a slow deploy, a
+          // dropped request) without flashing an error the student would
+          // never actually see resolve itself. Past that, this stops being
+          // transient — most commonly a real access-check failure — and
+          // silently retrying forever left the student staring at an
+          // indefinite "waiting" screen with zero camera/board and zero
+          // explanation of why.
+          if (consecutiveFailures >= 5 && !cancelled) {
+            setError(
+              res.status === 403
+                ? "You don't have access to this class. If you believe this is a mistake, contact support."
+                : "Could not connect to this class. Please refresh the page."
+            );
+          }
           if (!cancelled) timer = setTimeout(poll, 3000);
           return;
         }
+        consecutiveFailures = 0;
+        setError(null);
         if (json.data?.serverTimeMs) {
           serverTimeOffsetRef.current = json.data.serverTimeMs - Date.now();
           setCurrentTimeMs(Date.now() + serverTimeOffsetRef.current);
@@ -1275,6 +1292,27 @@ export function StudentLiveClassRoom({
           sessionTitle={scheduleTitle}
           teacherName={teacherName}
         />
+      </div>
+    );
+  }
+
+  // ---------------- ACCESS / CONNECTION ERROR ----------------
+  // Set after several consecutive failed by-schedule polls (see the poll
+  // effect above) — previously this failure mode retried silently forever
+  // with no error ever surfaced, leaving the student on an indefinite blank
+  // "waiting" screen with no camera/board and no explanation.
+  if (error && phase === "waiting") {
+    return (
+      <div className="min-h-screen-safe w-full bg-[#0b0d14] flex flex-col items-center justify-center gap-4 px-6 text-center">
+        <span className="material-symbols-outlined text-4xl text-rose-400">error</span>
+        <p className="text-sm font-semibold text-white max-w-sm">{error}</p>
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition"
+        >
+          Refresh
+        </button>
       </div>
     );
   }
