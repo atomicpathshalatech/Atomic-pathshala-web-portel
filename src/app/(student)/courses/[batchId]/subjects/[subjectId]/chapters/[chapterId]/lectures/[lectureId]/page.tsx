@@ -18,7 +18,7 @@ export default async function LecturePlayerPage({
   const { student } = await requireStudentSession();
   const lectureId = decodeURIComponent(params.lectureId).trim();
 
-  let lecture = await prisma.lecture.findUnique({
+  let lecture: any = await prisma.lecture.findUnique({
     where: { id: lectureId },
     include: {
       chapter: { include: { subject: { include: { course: true } } } },
@@ -40,7 +40,11 @@ export default async function LecturePlayerPage({
           include: {
             chapter: { include: { subject: { include: { course: true } } } },
             teacher: { include: { user: { select: { name: true } } } },
-            batchSchedules: true,
+            batchSchedules: {
+              include: {
+                liveWhiteboardSession: true,
+              },
+            },
           },
         },
       },
@@ -65,7 +69,7 @@ export default async function LecturePlayerPage({
   }
 
   const activeLiveSchedule = lecture.batchSchedules?.find(
-    (s) => s.status === "LIVE" || s.liveWhiteboardSession?.status === "ACTIVE"
+    (s: any) => s.status === "LIVE" || s.liveWhiteboardSession?.status === "ACTIVE"
   );
   if (activeLiveSchedule) {
     redirect(`/live-class/${activeLiveSchedule.id}`);

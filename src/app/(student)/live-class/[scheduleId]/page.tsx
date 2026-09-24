@@ -60,7 +60,7 @@ export default async function StudentLiveClassPage({
 
   // 3. Tertiary lookup: Check LiveWhiteboardSession directly
   if (!schedule) {
-    const wbSession = await prisma.liveWhiteboardSession.findUnique({
+    const wbSession = await prisma.whiteboardSession.findUnique({
       where: { id: rawScheduleId },
       include: {
         batchSchedule: {
