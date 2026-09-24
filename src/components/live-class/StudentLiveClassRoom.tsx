@@ -851,15 +851,18 @@ export function StudentLiveClassRoom({
           setPhase("ended");
           return; // class is over, stop polling
         }
-        if (wb && wb.status === "ACTIVE") {
+        if (wb && (wb.status === "ACTIVE" || wb.livePhase === "LIVE")) {
           setWbSession(wb);
-          if (wb.livePhase === "LIVE") {
+          if (wb.livePhase === "LIVE" || json.data.schedule?.status === "LIVE") {
             setPhase("live");
             // Keep polling at a slower rate to catch ENDED state
-            if (!cancelled) timer = setTimeout(poll, 5000);
+            if (!cancelled) timer = setTimeout(poll, 4000);
             return;
           }
           setPhase("lobby");
+        } else if (json.data.schedule?.status === "LIVE") {
+          if (wb) setWbSession(wb);
+          setPhase("live");
         }
       } catch {
         // Network error — keep retrying silently
@@ -932,7 +935,10 @@ export function StudentLiveClassRoom({
 
     channel.bind(WB_EVENTS.LIVE_PHASE_CHANGED, (data: { livePhase?: string; phase?: string }) => {
       const p = data.livePhase || data.phase;
-      if (p === "LIVE") setPhase("live");
+      if (p === "LIVE") {
+        setPhase("live");
+        refreshBoard();
+      }
       if (p === "ENDED") setPhase("ended");
     });
 

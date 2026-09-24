@@ -32,7 +32,14 @@ export async function POST(request: NextRequest) {
       const payload = verifyBroadcastToken(broadcastToken);
       if (payload) {
         const wbSession = await prisma.whiteboardSession.findFirst({
-          where: { id: presenceMatch[1]!, batchScheduleId: payload.scheduleId },
+          where: {
+            id: presenceMatch[1]!,
+            OR: [
+              { batchScheduleId: payload.scheduleId },
+              { batchSchedule: { id: payload.scheduleId } },
+              { batchSchedule: { lectureId: payload.scheduleId } },
+            ],
+          },
           select: { id: true },
         });
         if (wbSession) {

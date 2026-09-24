@@ -841,7 +841,6 @@ function LocalWebcamPreview({
         currentStream = s;
         setStream(s);
         setCamError(null);
-        if (videoRef.current) videoRef.current.srcObject = s;
       } catch (err) {
         setCamError(describeMediaError(err));
       }
@@ -851,6 +850,12 @@ function LocalWebcamPreview({
       if (currentStream) currentStream.getTracks().forEach((t) => t.stop());
     };
   }, [cameraActive]);
+
+  useEffect(() => {
+    if (videoRef.current && stream) {
+      videoRef.current.srcObject = stream;
+    }
+  }, [stream, cameraActive]);
 
   const toggleCamera = () => {
     if (stream) stream.getVideoTracks().forEach((t) => (t.enabled = !cameraActive));

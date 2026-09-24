@@ -407,11 +407,9 @@ export function TeacherLiveClassRoom({
       if (!el) return;
       const { clientWidth, clientHeight } = el;
       if (clientWidth <= 0 || clientHeight <= 0) return;
-      // Largest 16:9 rectangle that fits the available canvas area, with only
-      // a hairline gap so the white board fills as much of the dark region
-      // as the aspect ratio allows.
-      const availW = Math.max(200, clientWidth - 2);
-      const availH = Math.max(150, clientHeight - 2);
+      // 16:9 rectangle with comfortable padding so the whiteboard card looks sleek, compact and professional
+      const availW = Math.max(200, clientWidth - 28);
+      const availH = Math.max(150, clientHeight - 28);
       let w = availW;
       let h = Math.round(w * (9 / 16));
       if (h > availH) {
@@ -2818,7 +2816,7 @@ export function TeacherLiveClassRoom({
 
         <div
           ref={stageContainerRef}
-          className={`relative rounded-2xl shadow-2xl overflow-hidden border border-slate-800/80 shrink-0 select-none ${
+          className={`relative rounded-xl shadow-2xl overflow-hidden border border-slate-700/60 shrink-0 select-none ${
             panDragRef.current ? "" : "transition-transform duration-75"
           }`}
           style={{
@@ -2829,27 +2827,24 @@ export function TeacherLiveClassRoom({
             ...(isBackgroundImageUrl(currentPage?.background) ? undefined : slideBackgroundStyle(currentPage?.background)),
           }}
         >
-          {/* Atomic Pathshala Brand Header (Screenshot 1) */}
+          {/* Atomic Pathshala Sleek Brand Header */}
           {!isBackgroundImageUrl(currentPage?.background) && (
-            <div className="absolute top-2 left-3 right-3 z-10 flex items-center justify-between pointer-events-none select-none opacity-95">
+            <div className="absolute top-1.5 left-3 right-3 z-10 flex items-center justify-between pointer-events-none select-none opacity-90">
               {/* Atomic Logo Icon */}
-              <div className="w-9 h-9 bg-white rounded-xl shadow-md border border-slate-200/80 flex items-center justify-center p-1">
-                <span className="text-orange-500 font-extrabold text-base tracking-tighter">A</span>
+              <div className="w-6 h-6 bg-white/95 rounded-lg shadow-sm border border-slate-200 flex items-center justify-center">
+                <span className="text-orange-500 font-black text-xs tracking-tighter">A</span>
               </div>
 
               {/* Horizontal Accent Line */}
-              <div className="flex-1 mx-4 h-[3px] bg-gradient-to-r from-orange-500 via-slate-900 to-black rounded-full" />
+              <div className="flex-1 mx-3 h-[2px] bg-gradient-to-r from-orange-500 via-slate-800 to-transparent rounded-full opacity-60" />
 
-              {/* Atomic Pathshala Logo */}
-              <div className="flex flex-col items-end pr-1">
-                <span className="text-xs font-black tracking-widest text-slate-900 leading-none">
+              {/* Atomic Pathshala Brand Text */}
+              <div className="flex items-center gap-1.5 pr-0.5">
+                <span className="text-[10px] font-black tracking-widest text-slate-800 leading-none">
                   ATOMIC
                 </span>
                 <span className="text-[8px] font-bold tracking-wider text-orange-600 leading-tight">
-                  — PATHSHALA —
-                </span>
-                <span className="text-[6px] font-semibold tracking-tighter text-slate-500">
-                  LEARN • EXPLORE • EXCEL
+                  PATHSHALA
                 </span>
               </div>
             </div>

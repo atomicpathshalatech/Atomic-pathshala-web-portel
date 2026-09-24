@@ -22,7 +22,7 @@ export interface BoardMirrorHandle {
 }
 
 const CAMERA_SIZE = 220;
-const POLL_INTERVAL_MS = 2500;
+const POLL_INTERVAL_MS = 1000;
 
 function isBackgroundImageUrl(background: string | null | undefined): background is string {
   return typeof background === "string" && /^https?:\/\//.test(background);
@@ -50,21 +50,30 @@ function cameraCornerStyle(position: string | null | undefined): React.CSSProper
  */
 function LocalCamera({ shape }: { shape: string | null | undefined }) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let stream: MediaStream | null = null;
+    let currentStream: MediaStream | null = null;
     navigator.mediaDevices
       .getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" }, audio: false })
       .then((s) => {
-        stream = s;
+        currentStream = s;
+        setStream(s);
+        setError(null);
         if (videoRef.current) videoRef.current.srcObject = s;
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Camera unavailable"));
     return () => {
-      stream?.getTracks().forEach((t) => t.stop());
+      currentStream?.getTracks().forEach((t) => t.stop());
     };
   }, []);
+
+  useEffect(() => {
+    if (videoRef.current && stream) {
+      videoRef.current.srcObject = stream;
+    }
+  }, [stream]);
 
   return (
     <div
@@ -228,7 +237,20 @@ export function BroadcastStage({ scheduleId, token }: { scheduleId: string; toke
     );
 
     // Instant Board Updates in OBS
-    channel.bind(WB_EVENTS.BOARD_UPDATED, () => {
+    channel.bind(WB_EVENTS.BOARD_UPDATED, (payload?: { objects?: StrokeObject[]; background?: string }) => {
+      if (payload?.objects && Array.isArray(payload.objects)) {
+        setData((prev) =>
+          prev
+            ? {
+                ...prev,
+                page: {
+                  objects: payload.objects!,
+                  background: payload.background !== undefined ? payload.background : (prev.page?.background ?? null),
+                },
+              }
+            : prev
+        );
+      }
       fetchStage();
     });
     channel.bind(WB_EVENTS.PAGE_CHANGED, () => {
