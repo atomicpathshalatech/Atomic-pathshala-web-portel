@@ -25,10 +25,45 @@ export const fetchRecordingStatus = sharedFetchRecordingStatus;
  * ClassroomSession row they already fetched/created for this batchSchedule.
  */
 export async function ensureYoutubeBroadcast(classroomSessionId: string, title: string, scheduledStartTime: Date) {
-  const existing = await prisma.classroomSession.findUniqueOrThrow({ where: { id: classroomSessionId } });
+  const existing = await prisma.classroomSession.findUniqueOrThrow({
+    where: { id: classroomSessionId },
+    include: {
+      teacher: { include: { user: true } },
+    },
+  });
   if (existing.youtubeBroadcastId && existing.youtubeStreamId) return existing;
 
-  const { stream, broadcast } = await createAndBindBroadcast(title, scheduledStartTime);
+  const schedule = existing.batchScheduleId
+    ? await prisma.batchSchedule.findUnique({
+        where: { id: existing.batchScheduleId },
+        include: {
+          batch: true,
+          teacher: { include: { user: true } },
+        },
+      })
+    : null;
+
+  const teacherName = schedule?.teacher?.user?.name || existing.teacher?.user?.name || "Educator";
+  const subjectName = (schedule as any)?.subject || "";
+  const batchName = schedule?.batch?.name || "";
+
+  const cleanSubject = subjectName ? `[${subjectName}] ` : "";
+  const finalTitle = `${cleanSubject}${title} | ${teacherName} | Atomic Pathshala`.slice(0, 98);
+
+  const description = [
+    `🎓 Atomic Pathshala Live Classroom`,
+    subjectName ? `📚 Subject: ${subjectName}` : null,
+    batchName ? `👥 Batch: ${batchName}` : null,
+    `👨‍🏫 Educator: ${teacherName}`,
+    `🗓️ Date: ${scheduledStartTime.toLocaleDateString("en-IN")}`,
+    ``,
+    `Join Atomic Pathshala live lectures for concept explanation, doubt clearing, and question practice.`,
+    `🌐 Official Portal: https://atomicpathshala.com`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const { stream, broadcast } = await createAndBindBroadcast(finalTitle, scheduledStartTime, description);
 
   return prisma.classroomSession.update({
     where: { id: classroomSessionId },

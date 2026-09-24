@@ -230,6 +230,11 @@ function StudentEngagementPanel({
   onDoubtImageSelected,
   uploadingDoubtImage,
   doubtImageError,
+  pendingDoubtPreviewUrl,
+  pendingDoubtNote,
+  onNoteChange,
+  onConfirmSendDoubt,
+  onCancelPendingDoubt,
 }: {
   wbSessionId?: string;
   currentUserId: string;
@@ -253,11 +258,15 @@ function StudentEngagementPanel({
   onDoubtImageSelected: (e: React.ChangeEvent<HTMLInputElement>) => void;
   uploadingDoubtImage: boolean;
   doubtImageError: string | null;
+  pendingDoubtPreviewUrl?: string | null;
+  pendingDoubtNote?: string;
+  onNoteChange?: (note: string) => void;
+  onConfirmSendDoubt?: () => void;
+  onCancelPendingDoubt?: () => void;
 }) {
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      {/* Live poll — inline card, visible regardless of active tab, never a
-          floating overlay over the canvas. */}
+      {/* Live poll — inline card, visible regardless of active tab */}
       {quiz && !quizDismissed && (
         <div className="m-2.5 mb-0 bg-[#13172b] border-2 border-blue-500 rounded-2xl p-3.5 shadow-xl space-y-2.5 shrink-0 animate-in fade-in slide-in-from-top-1 duration-200">
           <div className="flex items-center justify-between pb-1 border-b border-blue-900/60">
@@ -398,6 +407,63 @@ function StudentEngagementPanel({
                   Lower Hand / Cancel
                 </button>
               </div>
+            ) : pendingDoubtPreviewUrl ? (
+              <div className="bg-[#13172b] border border-blue-500/50 rounded-xl p-3 space-y-2.5 animate-in fade-in duration-200 shadow-xl">
+                <div className="flex items-center justify-between pb-1 border-b border-slate-800">
+                  <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-sm text-blue-400">image</span>
+                    Doubt Photo Preview
+                  </span>
+                  <button
+                    type="button"
+                    onClick={onCancelPendingDoubt}
+                    className="text-slate-400 hover:text-white text-xs cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={pendingDoubtPreviewUrl}
+                  alt="Doubt Preview"
+                  className="w-full max-h-40 object-contain rounded-lg bg-black/60 border border-slate-700/80"
+                />
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Add a Question Note (Optional)
+                  </label>
+                  <textarea
+                    value={pendingDoubtNote || ""}
+                    onChange={(e) => onNoteChange?.(e.target.value)}
+                    placeholder="e.g. Sir please explain step 2, or help me with this question..."
+                    className="w-full bg-[#0a0b12] border border-slate-700 rounded-lg p-2 text-xs text-white placeholder-slate-500 resize-none outline-none focus:border-blue-500"
+                    rows={2}
+                  />
+                </div>
+                {doubtImageError && <p className="text-[11px] text-rose-400">{doubtImageError}</p>}
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={onCancelPendingDoubt}
+                    className="flex-1 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={uploadingDoubtImage}
+                    onClick={onConfirmSendDoubt}
+                    className="flex-1 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md shadow-blue-600/30 cursor-pointer disabled:opacity-60"
+                  >
+                    {uploadingDoubtImage ? (
+                      <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
+                    ) : (
+                      <span className="material-symbols-outlined text-sm">send</span>
+                    )}
+                    <span>{uploadingDoubtImage ? "Uploading…" : "Send Doubt"}</span>
+                  </button>
+                </div>
+              </div>
             ) : (
               <>
                 <p className="text-xs text-slate-400">Choose how you&apos;d like to ask your doubt:</p>
@@ -405,7 +471,7 @@ function StudentEngagementPanel({
                   type="button"
                   onClick={() => onSubmitHandRaise("AUDIO")}
                   disabled={handRaiseBusy}
-                  className="w-full flex items-center gap-3 p-3 rounded-xl border border-slate-700 hover:border-blue-500 bg-slate-800/60 hover:bg-blue-950/30 text-left transition group"
+                  className="w-full flex items-center gap-3 p-3 rounded-xl border border-slate-700 hover:border-blue-500 bg-slate-800/60 hover:bg-blue-950/30 text-left transition group cursor-pointer"
                 >
                   <div className="w-9 h-9 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
                     <span className="material-symbols-outlined text-lg">mic</span>
@@ -419,7 +485,7 @@ function StudentEngagementPanel({
                   type="button"
                   onClick={() => onSubmitHandRaise("VIDEO")}
                   disabled={handRaiseBusy}
-                  className="w-full flex items-center gap-3 p-3 rounded-xl border border-slate-700 hover:border-blue-500 bg-slate-800/60 hover:bg-blue-950/30 text-left transition group"
+                  className="w-full flex items-center gap-3 p-3 rounded-xl border border-slate-700 hover:border-blue-500 bg-slate-800/60 hover:bg-blue-950/30 text-left transition group cursor-pointer"
                 >
                   <div className="w-9 h-9 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
                     <span className="material-symbols-outlined text-lg">videocam</span>
@@ -434,14 +500,14 @@ function StudentEngagementPanel({
                     type="button"
                     onClick={() => onSubmitHandRaise("CHAT")}
                     disabled={handRaiseBusy || uploadingDoubtImage}
-                    className="flex-1 flex items-center gap-3 p-3 rounded-xl border border-slate-700 hover:border-slate-500 bg-slate-800/60 hover:bg-slate-800 text-left transition"
+                    className="flex-1 flex items-center gap-3 p-3 rounded-xl border border-slate-700 hover:border-slate-500 bg-slate-800/60 hover:bg-slate-800 text-left transition cursor-pointer"
                   >
                     <div className="w-9 h-9 rounded-xl bg-slate-700/50 text-slate-300 flex items-center justify-center shrink-0">
                       <span className="material-symbols-outlined text-lg">chat</span>
                     </div>
                     <div className="min-w-0">
                       <h4 className="text-xs font-bold text-white">Send Doubt to Teacher</h4>
-                      <p className="text-[10px] text-slate-400">Text alert, or attach a photo below.</p>
+                      <p className="text-[10px] text-slate-400">Text alert, or attach a photo.</p>
                     </div>
                   </button>
                   <input
@@ -456,7 +522,7 @@ function StudentEngagementPanel({
                     onClick={() => doubtImageInputRef.current?.click()}
                     disabled={handRaiseBusy || uploadingDoubtImage}
                     title="Attach a photo of your doubt (notebook/textbook page)"
-                    className="w-14 shrink-0 flex flex-col items-center justify-center gap-1 rounded-xl border border-slate-700 hover:border-blue-500 bg-slate-800/60 hover:bg-blue-950/30 transition disabled:opacity-60"
+                    className="w-14 shrink-0 flex flex-col items-center justify-center gap-1 rounded-xl border border-slate-700 hover:border-blue-500 bg-slate-800/60 hover:bg-blue-950/30 transition disabled:opacity-60 cursor-pointer"
                   >
                     {uploadingDoubtImage ? (
                       <span className="material-symbols-outlined text-lg text-blue-400 animate-spin">progress_activity</span>
@@ -1061,28 +1127,53 @@ export function StudentLiveClassRoom({
   }
 
   // A photographed doubt (notebook/textbook page) attached to the
-  // "Chat Queue Only" option — upload first, then raise the hand with the
-  // resulting URL, same two-step shape as the plain doubts-page attachment.
+  // "Chat Queue Only" option — preview and optional note before upload.
   const [uploadingDoubtImage, setUploadingDoubtImage] = useState(false);
   const [doubtImageError, setDoubtImageError] = useState<string | null>(null);
+  const [pendingDoubtFile, setPendingDoubtFile] = useState<File | null>(null);
+  const [pendingDoubtPreviewUrl, setPendingDoubtPreviewUrl] = useState<string | null>(null);
+  const [pendingDoubtNote, setPendingDoubtNote] = useState<string>("");
   const doubtImageInputRef = useRef<HTMLInputElement | null>(null);
 
-  async function handleDoubtImageSelected(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleDoubtImageSelected(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
-    if (!file || !wbSession?.id || uploadingDoubtImage || handRaiseBusy) return;
+    if (!file) return;
+    setPendingDoubtFile(file);
+    setPendingDoubtPreviewUrl(URL.createObjectURL(file));
+    setPendingDoubtNote("");
+    setDoubtImageError(null);
+  }
+
+  function handleCancelPendingDoubt() {
+    if (pendingDoubtPreviewUrl) {
+      URL.revokeObjectURL(pendingDoubtPreviewUrl);
+    }
+    setPendingDoubtFile(null);
+    setPendingDoubtPreviewUrl(null);
+    setPendingDoubtNote("");
+    setDoubtImageError(null);
+  }
+
+  async function handleConfirmSendDoubt() {
+    if (!pendingDoubtFile || !wbSession?.id || uploadingDoubtImage || handRaiseBusy) return;
     setUploadingDoubtImage(true);
     setDoubtImageError(null);
     try {
       const formData = new FormData();
-      formData.append("attachment", file);
+      formData.append("attachment", pendingDoubtFile);
       const res = await fetch(`/api/whiteboard/sessions/${wbSession.id}/hand-raise/attachment`, {
         method: "POST",
         body: formData,
       });
       const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.error ?? "Could not upload that image.");
-      await submitHandRaise("CHAT", json.data.url as string);
+      const uploadedUrl = json.data.url as string;
+      const finalPayload = pendingDoubtNote.trim()
+        ? JSON.stringify({ url: uploadedUrl, note: pendingDoubtNote.trim() })
+        : uploadedUrl;
+      await submitHandRaise("CHAT", finalPayload);
+      handleCancelPendingDoubt();
     } catch (err) {
       setDoubtImageError(err instanceof Error ? err.message : "Could not upload that image.");
     } finally {
@@ -1644,6 +1735,11 @@ export function StudentLiveClassRoom({
             onDoubtImageSelected={handleDoubtImageSelected}
             uploadingDoubtImage={uploadingDoubtImage}
             doubtImageError={doubtImageError}
+            pendingDoubtPreviewUrl={pendingDoubtPreviewUrl}
+            pendingDoubtNote={pendingDoubtNote}
+            onNoteChange={setPendingDoubtNote}
+            onConfirmSendDoubt={handleConfirmSendDoubt}
+            onCancelPendingDoubt={handleCancelPendingDoubt}
           />
         </aside>
       </div>
@@ -1838,6 +1934,11 @@ export function StudentLiveClassRoom({
             onDoubtImageSelected={handleDoubtImageSelected}
             uploadingDoubtImage={uploadingDoubtImage}
             doubtImageError={doubtImageError}
+            pendingDoubtPreviewUrl={pendingDoubtPreviewUrl}
+            pendingDoubtNote={pendingDoubtNote}
+            onNoteChange={setPendingDoubtNote}
+            onConfirmSendDoubt={handleConfirmSendDoubt}
+            onCancelPendingDoubt={handleCancelPendingDoubt}
           />
         </div>
       </div>

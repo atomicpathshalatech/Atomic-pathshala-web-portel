@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useImperativeHandle, forwardRef } from "react";
+import PusherClient from "pusher-js";
 import { CanvasEngine, type StrokeObject } from "@/lib/canvas/canvas-engine";
+import { sessionChannel, WB_EVENTS } from "@/lib/realtime/events";
 
 type StageData = {
+  sessionId?: string;
   status: string;
   livePhase: string;
   title: string;
@@ -13,8 +16,13 @@ type StageData = {
   page: { objects: StrokeObject[]; background: string | null } | null;
 };
 
+export interface BoardMirrorHandle {
+  setRemoteLaserActive: (points: { x: number; y: number }[]) => void;
+  pushRemoteLaserStroke: (points: { x: number; y: number }[]) => void;
+}
+
 const CAMERA_SIZE = 220;
-const POLL_INTERVAL_MS = 1500;
+const POLL_INTERVAL_MS = 2500;
 
 function isBackgroundImageUrl(background: string | null | undefined): background is string {
   return typeof background === "string" && /^https?:\/\//.test(background);
@@ -76,15 +84,25 @@ function LocalCamera({ shape }: { shape: string | null | undefined }) {
   );
 }
 
-/** Read-only board mirror, sized to fill its parent at a fixed 16:9 — same
- * CanvasEngine primitive/pattern as StudentLiveClassRoom's own mirror, just
- * full-bleed instead of boxed into a sidebar-adjacent panel. */
-function BoardMirror({ objects, background }: { objects: StrokeObject[]; background: string | null }) {
+/** Read-only board mirror with laser pointer support */
+const BoardMirror = forwardRef<
+  BoardMirrorHandle,
+  { objects: StrokeObject[]; background: string | null }
+>(function BoardMirror({ objects, background }, ref) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const baseRef = useRef<HTMLCanvasElement | null>(null);
   const activeRef = useRef<HTMLCanvasElement | null>(null);
   const engineRef = useRef<CanvasEngine | null>(null);
   const [dim, setDim] = useState({ width: 1280, height: 720 });
+
+  useImperativeHandle(ref, () => ({
+    setRemoteLaserActive: (points) => {
+      engineRef.current?.setRemoteLaserActive(points);
+    },
+    pushRemoteLaserStroke: (points) => {
+      engineRef.current?.pushRemoteLaserStroke(points);
+    },
+  }));
 
   useEffect(() => {
     const compute = () => {
@@ -138,45 +156,91 @@ function BoardMirror({ objects, background }: { objects: StrokeObject[]; backgro
       <canvas ref={activeRef} className="absolute inset-0 w-full h-full pointer-events-none" />
     </div>
   );
-}
+});
 
 /**
  * The full OBS-capturable stage: board + camera composited into one frame,
  * with zero UI chrome (no header/toolbar/chat) — see /obs-stage/[scheduleId]
- * for the page that mounts this. Polls src/app/api/live-class/obs-stage
- * rather than subscribing to Pusher, since that channel is presence-based
- * and requires a real session this token-only page doesn't have.
+ * for the page that mounts this. Connects to Pusher with the broadcast token
+ * to receive instant laser pointer trails and real-time board updates.
  */
 export function BroadcastStage({ scheduleId, token }: { scheduleId: string; token: string }) {
   const [data, setData] = useState<StageData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const mirrorRef = useRef<BoardMirrorHandle | null>(null);
+
+  const fetchStage = async () => {
+    try {
+      const res = await fetch(
+        `/api/live-class/obs-stage/${scheduleId}?token=${encodeURIComponent(token)}`
+      );
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        setError(json.error || "Could not load class session.");
+        return;
+      }
+      setError(null);
+      setData(json.data);
+    } catch {
+      setError("Connection lost — retrying...");
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
-    async function poll() {
-      try {
-        const res = await fetch(
-          `/api/live-class/obs-stage/${scheduleId}?token=${encodeURIComponent(token)}`
-        );
-        const json = await res.json();
-        if (cancelled) return;
-        if (!res.ok || !json.success) {
-          setError(json.error || "Could not load class session.");
-          return;
-        }
-        setError(null);
-        setData(json.data);
-      } catch {
-        if (!cancelled) setError("Connection lost — retrying...");
-      }
-    }
-    poll();
-    const interval = setInterval(poll, POLL_INTERVAL_MS);
+    fetchStage();
+    const interval = setInterval(() => {
+      if (!cancelled) fetchStage();
+    }, POLL_INTERVAL_MS);
+
     return () => {
       cancelled = true;
       clearInterval(interval);
     };
   }, [scheduleId, token]);
+
+  // Realtime Pusher subscription for Laser Pointer and zero-latency board sync in OBS
+  useEffect(() => {
+    if (!data?.sessionId) return;
+    const pusher = new PusherClient(process.env.NEXT_PUBLIC_PUSHER_KEY ?? "", {
+      cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER || "ap2",
+      authEndpoint: `/api/pusher/auth?broadcast_token=${encodeURIComponent(token)}`,
+      auth: {
+        params: {
+          broadcast_token: token,
+        },
+      },
+    });
+
+    const channel = pusher.subscribe(sessionChannel(data.sessionId));
+
+    // Instant Laser Pointer Render in OBS
+    channel.bind(
+      WB_EVENTS.LASER_POINTER,
+      (payload: { points?: { x: number; y: number }[]; phase?: "move" | "end" }) => {
+        if (!Array.isArray(payload?.points) || payload.points.length === 0) return;
+        if (payload.phase === "end") {
+          mirrorRef.current?.pushRemoteLaserStroke(payload.points);
+        } else {
+          mirrorRef.current?.setRemoteLaserActive(payload.points);
+        }
+      }
+    );
+
+    // Instant Board Updates in OBS
+    channel.bind(WB_EVENTS.BOARD_UPDATED, () => {
+      fetchStage();
+    });
+    channel.bind(WB_EVENTS.PAGE_CHANGED, () => {
+      fetchStage();
+    });
+
+    return () => {
+      channel.unbind_all();
+      pusher.unsubscribe(sessionChannel(data.sessionId!));
+      pusher.disconnect();
+    };
+  }, [data?.sessionId, token, scheduleId]);
 
   if (error && !data) {
     return (
@@ -192,7 +256,7 @@ export function BroadcastStage({ scheduleId, token }: { scheduleId: string; toke
 
   return (
     <div className="w-screen h-screen bg-black flex items-center justify-center relative overflow-hidden">
-      <BoardMirror objects={data.page?.objects ?? []} background={data.page?.background ?? "blank"} />
+      <BoardMirror ref={mirrorRef} objects={data.page?.objects ?? []} background={data.page?.background ?? "blank"} />
       <div className="absolute" style={cameraCornerStyle(data.cameraPosition)}>
         <LocalCamera shape={data.cameraShape} />
       </div>

@@ -35,10 +35,8 @@ import { playHandRaiseChime, playCallConnectedChime, unlockAudioForNotifications
 import { extractYouTubeVideoId } from "@/lib/live-class/youtube";
 import { BroadcastQuizCanvasOverlay } from "@/components/live-class/BroadcastQuizCanvasOverlay";
 
-// Size (px) of the floating self-camera bubble — always draggable now,
-// regardless of Material & Setup's camera shape (which only controls the
-// circle-vs-rounded-square clip) — see floatCamPos below.
-const FLOAT_CAM_SIZE = 168;
+// Size (px) of the floating self-camera bubble — draggable & resizable (120px to 400px)
+const DEFAULT_FLOAT_CAM_SIZE = 180;
 
 type WhiteboardPage = { id: string; pageNumber: number; objects: StrokeObject[]; background: string };
 type LivePhase = "SCHEDULED" | "PREPARING" | "LIVE" | "ENDED" | (string & {});
@@ -473,6 +471,23 @@ export function TeacherLiveClassRoom({
   // fixed-position draggable circular bubble, so toggling the camera shape
   // (which can arrive mid-class from the wizard) never remounts the video
   // and drops the LiveKit connection.
+  const [floatCamSize, setFloatCamSize] = useState<number>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("atomic_teacher_floating_cam_size");
+        if (saved) {
+          const s = parseInt(saved, 10);
+          if (!isNaN(s) && s >= 120 && s <= 400) return s;
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return DEFAULT_FLOAT_CAM_SIZE;
+  });
+  const floatCamResizingRef = useRef(false);
+  const floatCamResizeStartRef = useRef({ startX: 0, startY: 0, startSize: 180 });
+
   const [floatCamPos, setFloatCamPos] = useState<{ x: number; y: number }>({ x: 16, y: 70 });
   const floatCamDraggingRef = useRef(false);
   const floatCamDragOffsetRef = useRef({ x: 0, y: 0 });
@@ -481,13 +496,13 @@ export function TeacherLiveClassRoom({
   // not the whole viewport, so it can't drift over the toolbar/side panel.
   const stageContainerRef = useRef<HTMLDivElement>(null);
 
-  function clampToStage(x: number, y: number): { x: number; y: number } {
+  function clampToStage(x: number, y: number, size = floatCamSize): { x: number; y: number } {
     const rect = stageContainerRef.current?.getBoundingClientRect();
     if (!rect) return { x, y };
     const minX = rect.left + 8;
     const minY = rect.top + 8;
-    const maxX = Math.max(minX, rect.right - FLOAT_CAM_SIZE - 8);
-    const maxY = Math.max(minY, rect.bottom - FLOAT_CAM_SIZE - 8);
+    const maxX = Math.max(minX, rect.right - size - 8);
+    const maxY = Math.max(minY, rect.bottom - size - 8);
     return { x: Math.min(Math.max(x, minX), maxX), y: Math.min(Math.max(y, minY), maxY) };
   }
 
@@ -498,7 +513,7 @@ export function TeacherLiveClassRoom({
       if (saved) {
         const parsed = JSON.parse(saved);
         if (typeof parsed.x === "number" && typeof parsed.y === "number") {
-          setFloatCamPos(clampToStage(parsed.x, parsed.y));
+          setFloatCamPos(clampToStage(parsed.x, parsed.y, floatCamSize));
           return;
         }
       }
@@ -508,16 +523,16 @@ export function TeacherLiveClassRoom({
     const rect = stageContainerRef.current?.getBoundingClientRect();
     setFloatCamPos(
       rect
-        ? clampToStage(rect.right - FLOAT_CAM_SIZE - 16, rect.top + 16)
-        : { x: Math.max(16, window.innerWidth - FLOAT_CAM_SIZE - 16), y: 70 }
+        ? clampToStage(rect.right - floatCamSize - 16, rect.top + 16, floatCamSize)
+        : { x: Math.max(16, window.innerWidth - floatCamSize - 16), y: 70 }
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isCameraCircle]);
+  }, [isCameraCircle, floatCamSize]);
 
   function handleFloatCamPointerDown(e: React.PointerEvent<HTMLDivElement>) {
     if (e.button !== 0) return;
     const target = e.target as HTMLElement;
-    if (target.closest("button")) return;
+    if (target.closest("button") || target.closest("[data-resize-handle]")) return;
     floatCamDraggingRef.current = true;
     const rect = e.currentTarget.getBoundingClientRect();
     floatCamDragOffsetRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
@@ -547,6 +562,38 @@ export function TeacherLiveClassRoom({
       }
       return pos;
     });
+  }
+
+  function handleFloatCamResizePointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    e.stopPropagation();
+    if (e.button !== 0) return;
+    floatCamResizingRef.current = true;
+    floatCamResizeStartRef.current = { startX: e.clientX, startY: e.clientY, startSize: floatCamSize };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+
+  function handleFloatCamResizePointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!floatCamResizingRef.current) return;
+    const deltaX = e.clientX - floatCamResizeStartRef.current.startX;
+    const deltaY = e.clientY - floatCamResizeStartRef.current.startY;
+    const delta = Math.max(deltaX, deltaY);
+    const newSize = Math.min(400, Math.max(120, Math.round(floatCamResizeStartRef.current.startSize + delta)));
+    setFloatCamSize(newSize);
+  }
+
+  function handleFloatCamResizePointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    if (!floatCamResizingRef.current) return;
+    floatCamResizingRef.current = false;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
+    try {
+      localStorage.setItem("atomic_teacher_floating_cam_size", String(floatCamSize));
+    } catch {
+      // ignore
+    }
   }
 
   const [openPopup, setOpenPopup] = useState<PopupId>(null);
@@ -1965,7 +2012,11 @@ export function TeacherLiveClassRoom({
    * for the production domain, *.vercel.app, and localhost) - otherwise
    * the canvas would be tainted and toBlob() would throw.
    */
-  async function compositeDoubtImage(imageUrl: string): Promise<Blob> {
+  /** Composites a (possibly portrait, possibly cross-origin) doubt photo
+   * onto a blank 1920x1080 canvas, fit inside the left ~45% with a clean
+   * frame, leaving the right side and margins blank.
+   */
+  async function compositeDoubtImage(imageUrl: string, topOffset = 80): Promise<Blob> {
     const img = new Image();
     img.crossOrigin = "anonymous";
     await new Promise<void>((resolve, reject) => {
@@ -1983,24 +2034,21 @@ export function TeacherLiveClassRoom({
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
 
-    // Reserve the top strip for the "Doubt from X" label, fit the photo
-    // (preserving its aspect ratio, whatever orientation it was shot in)
-    // into a boxed region on the left — everything right of it, and below
-    // if the photo is short, stays blank canvas.
+    // Boxed region on the left, top-aligned without unnecessary vertical gaps
     const areaX = 60;
-    const areaY = 130;
-    const areaW = 840;
-    const areaH = 900;
+    const areaY = topOffset;
+    const areaW = 860;
+    const areaH = Math.max(300, VIRTUAL_HEIGHT - areaY - 40);
     const scale = Math.min(areaW / img.naturalWidth, areaH / img.naturalHeight);
     const drawW = img.naturalWidth * scale;
     const drawH = img.naturalHeight * scale;
-    const drawX = areaX + (areaW - drawW) / 2;
-    const drawY = areaY + (areaH - drawH) / 2;
+    const drawX = areaX;
+    const drawY = areaY;
 
     ctx.drawImage(img, drawX, drawY, drawW, drawH);
-    ctx.strokeStyle = "#94a3b8";
-    ctx.lineWidth = 4;
-    ctx.strokeRect(drawX - 2, drawY - 2, drawW + 4, drawH + 4);
+    ctx.strokeStyle = "#cbd5e1";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(drawX - 1, drawY - 1, drawW + 2, drawH + 2);
 
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
     if (!blob) throw new Error("Could not process the doubt photo.");
@@ -2008,28 +2056,58 @@ export function TeacherLiveClassRoom({
   }
 
   /** "Pick" a photographed doubt onto the board: creates a new slide,
-   * composites the doubt's photo into a framed region on the left (see
-   * compositeDoubtImage above) with a text label naming who sent it,
-   * switches to it, then removes the entry from the queue (same
-   * create-then-patch two-step handleAddPageWithTemplate already uses,
-   * rather than teaching the create route a new body shape). */
+   * composites the doubt's photo into a framed region on the left with a
+   * clean label and student note, switches to it, then removes the entry
+   * from the queue. */
   async function handlePickDoubt(item: HandRaiseQueueItem) {
     if (!wbSession || !item.imageUrl) return;
+
+    let photoUrl = item.imageUrl;
+    let studentNote = "";
+    try {
+      if (item.imageUrl.startsWith("{")) {
+        const parsed = JSON.parse(item.imageUrl);
+        photoUrl = parsed.url || item.imageUrl;
+        studentNote = (parsed.note || "").trim();
+      }
+    } catch {
+      // plain url string
+    }
+
     try {
       const data = await postJson(`/api/whiteboard/sessions/${wbSession.id}/pages`);
       const newPage = data.page as WhiteboardPage;
+      const objects: StrokeObject[] = [];
+
+      // Clean, elegant label
       const nameLabel = {
         id: crypto.randomUUID(),
         type: "text" as const,
-        text: `Doubt from ${item.studentName}`,
-        color: "#dc2626",
-        size: 40,
+        text: `Doubt: ${item.studentName}`,
+        color: "#0f172a",
+        size: 26,
         position: { x: 60, y: 30 },
-        width: Math.max(240, item.studentName.length * 26),
-        height: 60,
+        width: Math.max(260, item.studentName.length * 20),
+        height: 38,
       };
+      objects.push(nameLabel as any);
 
-      const composited = await compositeDoubtImage(item.imageUrl);
+      if (studentNote) {
+        const noteLabel = {
+          id: crypto.randomUUID(),
+          type: "text" as const,
+          text: `Q: ${studentNote}`,
+          color: "#334155",
+          size: 20,
+          position: { x: 60, y: 70 },
+          width: 860,
+          height: 36,
+        };
+        objects.push(noteLabel as any);
+      }
+
+      const topOffset = studentNote ? 120 : 75;
+      const composited = await compositeDoubtImage(photoUrl, topOffset);
       const formData = new FormData();
       formData.append("file", new File([composited], `doubt_${Date.now()}.png`, { type: "image/png" }));
       const uploadRes = await fetch(
@@ -2043,9 +2121,9 @@ export function TeacherLiveClassRoom({
       const background: string = uploadJson.data.page.background;
 
       await patchJson(`/api/whiteboard/sessions/${wbSession.id}/pages/${newPage.id}`, {
-        objects: [nameLabel],
+        objects,
       });
-      const updatedPage = { ...newPage, background, objects: [nameLabel] };
+      const updatedPage = { ...newPage, background, objects };
       setWbSession((prev) =>
         prev
           ? {
@@ -2055,7 +2133,7 @@ export function TeacherLiveClassRoom({
             }
           : prev
       );
-      engineRef.current?.loadObjects([nameLabel] as unknown as StrokeObject[]);
+      engineRef.current?.loadObjects(objects);
       await handleDeleteHandRaise(item.id);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Could not pick that doubt onto the board.");
@@ -2950,8 +3028,8 @@ export function TeacherLiveClassRoom({
           onPointerMove={handleFloatCamPointerMove}
           onPointerUp={handleFloatCamPointerUp}
           onPointerCancel={handleFloatCamPointerUp}
-          style={{ position: "fixed", top: floatCamPos.y, left: floatCamPos.x, width: FLOAT_CAM_SIZE, height: FLOAT_CAM_SIZE, touchAction: "none" }}
-          className={`z-40 overflow-hidden border-2 border-blue-500 shadow-2xl bg-black cursor-grab active:cursor-grabbing select-none ${
+          style={{ position: "fixed", top: floatCamPos.y, left: floatCamPos.x, width: floatCamSize, height: floatCamSize, touchAction: "none" }}
+          className={`z-40 overflow-hidden border-2 border-slate-700/80 hover:border-blue-500 shadow-2xl bg-black cursor-grab active:cursor-grabbing select-none group/cam transition-[border-color] ${
             isCameraCircle ? "rounded-full" : "rounded-2xl"
           }`}
         >
@@ -2973,6 +3051,19 @@ export function TeacherLiveClassRoom({
               !handRaiseQueue.some((h) => h.status === "APPROVED")
             }
           />
+
+          {/* Corner Resize Handle */}
+          <div
+            data-resize-handle="true"
+            onPointerDown={handleFloatCamResizePointerDown}
+            onPointerMove={handleFloatCamResizePointerMove}
+            onPointerUp={handleFloatCamResizePointerUp}
+            onPointerCancel={handleFloatCamResizePointerUp}
+            className="absolute bottom-0 right-0 w-6 h-6 flex items-center justify-center cursor-nwse-resize bg-black/70 hover:bg-blue-600 text-white/80 hover:text-white rounded-tl-lg opacity-0 group-hover/cam:opacity-100 transition-opacity z-50 shadow-md"
+            title="Drag to resize camera bubble"
+          >
+            <span className="material-symbols-outlined text-xs">aspect_ratio</span>
+          </div>
         </div>
 
         <div className="flex border-b border-[#2d2e3b] px-3 pt-3 shrink-0 gap-1 overflow-x-auto">
@@ -4187,14 +4278,36 @@ function HandRaisePanel({
                   </span>
                 </div>
 
-                {h.imageUrl && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={h.imageUrl}
-                    alt={`Doubt photo from ${h.studentName}`}
-                    className="w-full max-h-40 object-cover rounded-lg border border-[#2d2e3b]"
-                  />
-                )}
+                {h.imageUrl && (() => {
+                  let imgUrl = h.imageUrl;
+                  let note = "";
+                  if (h.imageUrl.startsWith("{")) {
+                    try {
+                      const p = JSON.parse(h.imageUrl);
+                      imgUrl = p.url || h.imageUrl;
+                      note = (p.note || "").trim();
+                    } catch {
+                      // plain
+                    }
+                  }
+                  return (
+                    <div className="space-y-1.5">
+                      {note && (
+                        <p className="text-xs text-slate-300 bg-slate-900/90 p-2 rounded-lg border border-slate-800 leading-relaxed font-medium">
+                          &ldquo;{note}&rdquo;
+                        </p>
+                      )}
+                      {imgUrl && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={imgUrl}
+                          alt={`Doubt photo from ${h.studentName}`}
+                          className="w-full max-h-44 object-cover rounded-lg border border-[#2d2e3b]"
+                        />
+                      )}
+                    </div>
+                  );
+                })()}
 
                 <div className="flex items-center justify-between pt-1 border-t border-[#1e202e]">
                   <span className="text-[10px] text-gray-500">

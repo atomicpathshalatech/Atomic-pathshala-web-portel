@@ -65,7 +65,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }
       // A photographed doubt — only meaningful for a CHAT-type raise (no
       // audio/video call involved), uploaded first via .../hand-raise/attachment.
-      if (typeof body?.imageUrl === "string" && body.imageUrl.startsWith("http")) {
+      if (typeof body?.imageUrl === "string" && (body.imageUrl.startsWith("http") || body.imageUrl.startsWith("{"))) {
         imageUrl = body.imageUrl;
       }
     } catch {

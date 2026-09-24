@@ -5,25 +5,19 @@ import { prisma } from "@/lib/db";
 import { pusherServer } from "@/lib/realtime/pusher-server";
 import { resolveWhiteboardAccess } from "@/lib/whiteboard/access";
 import { resolveClassroomAccess } from "@/lib/classroom/access";
+import { verifyBroadcastToken } from "@/lib/live-class/broadcast-token";
 import { apiError } from "@/lib/api/response";
 
 /**
- * Pusher channel authorizer. This is the ONLY place identity for realtime
- * channels gets decided — the browser client never gets to declare its own
- * user id or name (unlike the draft `ws` code this replaces, which trusted
- * `?userId=&userName=` query params). Access is delegated to
- * resolveWhiteboardAccess() in src/lib/whiteboard/access.ts — the same
- * function every /api/whiteboard/* route uses — so realtime and REST access
- * can never drift out of sync with each other.
+ * Pusher channel authorizer. Identity for realtime channels gets decided
+ * here via session or verified broadcast token (for OBS Browser Sources).
  */
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return apiError("Unauthorized", 401);
-
   const body = await request.text();
   const params = new URLSearchParams(body);
   const socketId = params.get("socket_id");
   const channelName = params.get("channel_name");
+  const broadcastToken = params.get("broadcast_token") || request.nextUrl.searchParams.get("broadcast_token");
   if (!socketId || !channelName) return apiError("Missing socket_id/channel_name", 400);
 
   const presenceMatch = channelName.match(/^presence-wb-session-(.+)$/);
@@ -33,9 +27,29 @@ export async function POST(request: NextRequest) {
   const classroomTeacherMatch = channelName.match(/^private-classroom-teacher-(.+)$/);
 
   try {
+    // 1. Check Broadcast Token (OBS Browser Source / Headless ingest)
+    if (broadcastToken && presenceMatch) {
+      const payload = verifyBroadcastToken(broadcastToken);
+      if (payload) {
+        const wbSession = await prisma.whiteboardSession.findFirst({
+          where: { id: presenceMatch[1]!, batchScheduleId: payload.scheduleId },
+          select: { id: true },
+        });
+        if (wbSession) {
+          const authResponse = pusherServer.authorizeChannel(socketId, channelName, {
+            user_id: `OBS:${payload.teacherUserId}`,
+            user_info: { name: "OBS Stage", role: "OBS" },
+          });
+          return Response.json(authResponse);
+        }
+      }
+    }
+
+    // 2. Standard Session Authorization
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) return apiError("Unauthorized", 401);
+
     if (presenceMatch) {
-      // Non-null: the regex has exactly one capture group, so a truthy
-      // match always has index 1 populated.
       const access = await resolveWhiteboardAccess(session.user.id, presenceMatch[1]!);
       if (!access) return apiError("Forbidden", 403);
 

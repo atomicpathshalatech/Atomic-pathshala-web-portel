@@ -43,6 +43,7 @@ export async function GET(request: NextRequest, { params }: { params: { schedule
     });
 
     return apiSuccess({
+      sessionId: wbSession.id,
       status: wbSession.status,
       livePhase: wbSession.livePhase,
       title: wbSession.title,

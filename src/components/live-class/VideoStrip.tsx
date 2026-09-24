@@ -825,10 +825,19 @@ function LocalWebcamPreview({
     let currentStream: MediaStream | null = null;
     async function initCam() {
       try {
-        const s = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" },
-          audio: true,
-        });
+        let s: MediaStream | null = null;
+        try {
+          s = await navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" },
+            audio: true,
+          });
+        } catch {
+          // Fallback to video only if mic is locked by OBS/browser or denied
+          s = await navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" },
+            audio: false,
+          });
+        }
         currentStream = s;
         setStream(s);
         setCamError(null);

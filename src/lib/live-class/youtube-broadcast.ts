@@ -27,10 +27,46 @@ export async function ensureYoutubeBroadcastForWhiteboard(
   title: string,
   scheduledStartTime: Date
 ) {
-  const existing = await prisma.whiteboardSession.findUniqueOrThrow({ where: { id: whiteboardSessionId } });
+  const existing = await prisma.whiteboardSession.findUniqueOrThrow({
+    where: { id: whiteboardSessionId },
+    include: {
+      teacher: { include: { user: true } },
+    },
+  });
   if (existing.youtubeBroadcastId && existing.youtubeStreamId) return existing;
 
-  const { stream, broadcast } = await createAndBindBroadcast(title, scheduledStartTime);
+  const schedule = existing.batchScheduleId
+    ? await prisma.batchSchedule.findUnique({
+        where: { id: existing.batchScheduleId },
+        include: {
+          batch: true,
+          teacher: { include: { user: true } },
+        },
+      })
+    : null;
+
+  const teacherName = schedule?.teacher?.user?.name || existing.teacher?.user?.name || "Educator";
+  const subjectName = (schedule as any)?.subject || "";
+  const batchName = schedule?.batch?.name || "";
+
+  // Rich formatted academic title (YouTube limit 100 chars)
+  const cleanSubject = subjectName ? `[${subjectName}] ` : "";
+  const finalTitle = `${cleanSubject}${title} | ${teacherName} | Atomic Pathshala`.slice(0, 98);
+
+  const description = [
+    `🎓 Atomic Pathshala Live Classroom`,
+    subjectName ? `📚 Subject: ${subjectName}` : null,
+    batchName ? `👥 Batch: ${batchName}` : null,
+    `👨‍🏫 Educator: ${teacherName}`,
+    `🗓️ Date: ${scheduledStartTime.toLocaleDateString("en-IN")}`,
+    ``,
+    `Join Atomic Pathshala live lectures for concept explanation, doubt clearing, and question practice.`,
+    `🌐 Official Portal: https://atomicpathshala.com`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const { stream, broadcast } = await createAndBindBroadcast(finalTitle, scheduledStartTime, description);
 
   return prisma.whiteboardSession.update({
     where: { id: whiteboardSessionId },

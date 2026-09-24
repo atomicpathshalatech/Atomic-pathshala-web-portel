@@ -75,12 +75,20 @@ export interface CreateLiveBroadcastResult {
 }
 
 /** liveBroadcasts.insert — always unlisted; Atomic Pathshala, not YouTube, is the access-control layer. */
-export async function createLiveBroadcast(title: string, scheduledStartTime: string): Promise<CreateLiveBroadcastResult> {
+export async function createLiveBroadcast(
+  title: string,
+  scheduledStartTime: string,
+  description?: string
+): Promise<CreateLiveBroadcastResult> {
+  const desc =
+    description ||
+    `Atomic Pathshala Live Interactive Lecture: ${title}\n\nJoin live for comprehensive concept explanation, doubt clearing, and problem solving sessions.\n\nWebsite: https://atomicpathshala.com`;
+
   const json = await youtubeApiFetch<{ id: string; snippet: { liveChatId?: string } }>("/liveBroadcasts", {
     method: "POST",
     query: { part: "snippet,status,contentDetails" },
     body: JSON.stringify({
-      snippet: { title, scheduledStartTime },
+      snippet: { title, description: desc, scheduledStartTime },
       status: { privacyStatus: "unlisted", selfDeclaredMadeForKids: false },
       contentDetails: {
         enableAutoStart: true,
@@ -167,10 +175,10 @@ export async function fetchRecordingStatus(youtubeVideoId: string): Promise<Reco
   return { recordingVideoId: null, recordingStatus: "PROCESSING" };
 }
 
-export async function createAndBindBroadcast(title: string, scheduledStartTime: Date) {
+export async function createAndBindBroadcast(title: string, scheduledStartTime: Date, description?: string) {
   const [stream, broadcast] = await Promise.all([
     createLiveStream(title),
-    createLiveBroadcast(title, scheduledStartTime.toISOString()),
+    createLiveBroadcast(title, scheduledStartTime.toISOString(), description),
   ]);
   await bindBroadcastToStream(broadcast.id, stream.id);
   return { stream, broadcast };

@@ -114,12 +114,25 @@ export function YouTubeLivePlayer({
   // Bootstrap the official YouTube IFrame Player API and attach it to our
   // existing <iframe> (enablejsapi=1 in embedUrl lets the API adopt it in
   // place). This is what onStateChange === PLAYING actually means the
-  // broadcast is live — the previous raw-postMessage listener could not be
-  // trusted to fire at all.
+  // broadcast is live.
   useEffect(() => {
     if (!youtubeVideoId || !iframeRef.current) return;
     let cancelled = false;
     let player: any = null;
+
+    const handleMessage = (event: MessageEvent) => {
+      try {
+        const d = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+        if (d?.event === "infoDelivery" && (d.info?.playerState === 1 || d.info?.playerState === 3)) {
+          setIsStreamLive(true);
+        } else if (d?.event === "onStateChange" && (d.data === 1 || d.data === 3)) {
+          setIsStreamLive(true);
+        }
+      } catch {
+        // ignore non-json messages
+      }
+    };
+    window.addEventListener("message", handleMessage);
 
     const attachPlayer = () => {
       if (cancelled || !iframeRef.current || !(window as any).YT?.Player) return;
@@ -131,7 +144,7 @@ export function YouTubeLivePlayer({
           },
           onStateChange: (e: any) => {
             const YT = (window as any).YT;
-            if (e.data === YT.PlayerState.PLAYING) {
+            if (e.data === YT.PlayerState.PLAYING || e.data === YT.PlayerState.BUFFERING) {
               setIsStreamLive(true);
             }
           },
@@ -160,6 +173,7 @@ export function YouTubeLivePlayer({
 
     return () => {
       cancelled = true;
+      window.removeEventListener("message", handleMessage);
       playerRef.current = null;
       try {
         player?.destroy?.();
@@ -169,8 +183,7 @@ export function YouTubeLivePlayer({
     };
   }, [youtubeVideoId]);
 
-  // Periodically nudge playback until the live stream is confirmed playing —
-  // a fresh broadcast's embed can load "cued" rather than auto-playing.
+  // Periodically nudge playback until the live stream is confirmed playing
   useEffect(() => {
     if (!youtubeVideoId || isStreamLive) return;
     const interval = setInterval(() => {
@@ -344,7 +357,17 @@ export function YouTubeLivePlayer({
       {/* ----------------- 2. ATOMIC PATHSHALA BRANDED WAITING STAGE ----------------- */}
       {/* Covers YouTube's raw waiting card until the live stream actually starts broadcasting */}
       {!isStreamLive && (
-        <div className="absolute inset-0 z-20 bg-gradient-to-br from-[#080a14] via-[#0d1224] to-[#060810] flex flex-col items-center justify-between p-4 sm:p-7 select-none overflow-hidden animate-in fade-in duration-300">
+        <div
+          onClick={() => {
+            if (livePhase === "LIVE") {
+              sendYouTubeCommand("playVideo");
+              setIsStreamLive(true);
+            }
+          }}
+          className={`absolute inset-0 z-20 bg-gradient-to-br from-[#080a14] via-[#0d1224] to-[#060810] flex flex-col items-center justify-between p-4 sm:p-7 select-none overflow-hidden animate-in fade-in duration-300 ${
+            livePhase === "LIVE" ? "cursor-pointer" : ""
+          }`}
+        >
           {/* Ambient decorative glow */}
           <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-blue-600/15 blur-3xl pointer-events-none" />
           <div className="absolute -bottom-16 -left-16 w-64 h-64 rounded-full bg-rose-600/10 blur-3xl pointer-events-none" />
@@ -414,8 +437,21 @@ export function YouTubeLivePlayer({
               <span className="w-1 h-2 bg-blue-300 rounded-full animate-bounce [animation-delay:600ms]" />
             </div>
 
-            {/* Dynamic Late / Countdown Status */}
-            {lateSeconds > 0 ? (
+            {/* Dynamic Status / Tap to Play */}
+            {livePhase === "LIVE" ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  sendYouTubeCommand("playVideo");
+                  setIsStreamLive(true);
+                }}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white text-xs sm:text-sm font-bold shadow-xl shadow-red-600/30 ring-2 ring-red-400/40 animate-pulse cursor-pointer transition transform active:scale-95"
+              >
+                <span className="material-symbols-outlined text-base">play_arrow</span>
+                <span>🔴 Live Broadcast Started — Tap to Watch</span>
+              </button>
+            ) : lateSeconds > 0 ? (
               <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-300 text-[11px] sm:text-xs font-mono font-bold shadow-lg animate-pulse">
                 <span className="material-symbols-outlined text-sm text-rose-400">sensors</span>
                 <span>
@@ -439,7 +475,9 @@ export function YouTubeLivePlayer({
 
           {/* Bottom Notice */}
           <div className="relative z-10 text-[10px] sm:text-[11px] text-slate-400 text-center">
-            Class will broadcast automatically the second the teacher goes live.
+            {livePhase === "LIVE"
+              ? "Live broadcast is currently active. Tap anywhere to begin playback."
+              : "Class will broadcast automatically the second the teacher goes live."}
           </div>
         </div>
       )}
