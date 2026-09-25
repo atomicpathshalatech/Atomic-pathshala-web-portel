@@ -319,21 +319,315 @@ function QuestionExtras({
   );
 }
 
+function estimateQuestionHeight(q: QuizQuestion): number {
+  let h = 24;
+  const textLen = q.text?.length || 40;
+  h += Math.ceil(textLen / 45) * 20;
+
+  if (q.passage?.trim()) {
+    h += 24 + Math.ceil(q.passage.length / 45) * 16;
+  }
+  if (q.columnI?.length && q.columnII?.length) {
+    h += 35 + Math.max(q.columnI.length, q.columnII.length) * 26;
+  }
+  if (q.tableHeaders?.length && q.tableRows?.length) {
+    h += 35 + q.tableRows.length * 24;
+  }
+  if (q.statements?.length) {
+    h += 24 + q.statements.length * 22;
+  }
+  if (q.sequenceItems?.length) {
+    h += 45;
+  }
+  if (q.flowchartSteps?.length) {
+    h += 50;
+  }
+  if (q.assertionText?.trim() && q.reasonText?.trim()) {
+    h += 60;
+  }
+  if (q.imageRequired) {
+    h += 130;
+  }
+
+  const isShortOptions = q.options?.every((opt) => opt.length <= 18) ?? false;
+  if (isShortOptions) {
+    h += Math.ceil((q.options?.length || 4) / 2) * 26 + 10;
+  } else {
+    h += (q.options?.length || 4) * 28 + 10;
+  }
+
+  return h;
+}
+
+interface QuestionPage {
+  pageIndex: number;
+  subject: string;
+  left: (QuizQuestion & { globalIndex: number })[];
+  right: (QuizQuestion & { globalIndex: number })[];
+}
+
+function partitionQuestionsIntoPages(questions: QuizQuestion[]): QuestionPage[] {
+  const pages: QuestionPage[] = [];
+  const MAX_COL_HEIGHT = 860;
+  const SUBJECT_HEADER_HEIGHT = 45;
+
+  const subjectMap = new Map<string, (QuizQuestion & { globalIndex: number })[]>();
+  questions.forEach((q, idx) => {
+    const list = subjectMap.get(q.subject) || [];
+    list.push({ ...q, globalIndex: idx + 1 });
+    subjectMap.set(q.subject, list);
+  });
+
+  subjectMap.forEach((subjQuestions, subjectName) => {
+    let currentPage: QuestionPage = {
+      pageIndex: pages.length + 1,
+      subject: subjectName,
+      left: [],
+      right: [],
+    };
+    let currentCol: "left" | "right" = "left";
+    let currentLeftHeight = SUBJECT_HEADER_HEIGHT;
+    let currentRightHeight = SUBJECT_HEADER_HEIGHT;
+
+    subjQuestions.forEach((q) => {
+      const qHeight = estimateQuestionHeight(q);
+
+      if (currentCol === "left") {
+        if (currentLeftHeight + qHeight <= MAX_COL_HEIGHT || currentPage.left.length === 0) {
+          currentPage.left.push(q);
+          currentLeftHeight += qHeight;
+        } else {
+          currentCol = "right";
+          currentPage.right.push(q);
+          currentRightHeight += qHeight;
+        }
+      } else {
+        if (currentRightHeight + qHeight <= MAX_COL_HEIGHT || currentPage.right.length === 0) {
+          currentPage.right.push(q);
+          currentRightHeight += qHeight;
+        } else {
+          pages.push(currentPage);
+          currentPage = {
+            pageIndex: pages.length + 1,
+            subject: subjectName,
+            left: [q],
+            right: [],
+          };
+          currentCol = "left";
+          currentLeftHeight = qHeight;
+          currentRightHeight = 0;
+        }
+      }
+    });
+
+    if (currentPage.left.length > 0 || currentPage.right.length > 0) {
+      pages.push(currentPage);
+    }
+  });
+
+  return pages;
+}
+
+function estimateSolutionHeight(q: QuizQuestion): number {
+  let h = 28;
+  if (q.explanationSteps?.length) {
+    h += q.explanationSteps.reduce(
+      (sum, step) => sum + Math.max(20, Math.ceil((step?.length || 40) / 45) * 16 + 4),
+      0
+    );
+  } else {
+    h += Math.max(26, Math.ceil((q.explanation?.length || 50) / 45) * 16);
+  }
+  return h + 14;
+}
+
+interface SolutionPage {
+  pageIndex: number;
+  hasAnswerKey: boolean;
+  left: (QuizQuestion & { globalIndex: number })[];
+  right: (QuizQuestion & { globalIndex: number })[];
+}
+
+function partitionSolutionsIntoPages(questions: QuizQuestion[]): SolutionPage[] {
+  const pages: SolutionPage[] = [];
+  const MAX_COL_HEIGHT = 860;
+  const ANSWER_KEY_HEIGHT = 140;
+
+  const indexedQuestions = questions.map((q, idx) => ({ ...q, globalIndex: idx + 1 }));
+
+  let isFirstPage = true;
+  let currentPage: SolutionPage = {
+    pageIndex: 1,
+    hasAnswerKey: true,
+    left: [],
+    right: [],
+  };
+  let currentCol: "left" | "right" = "left";
+  let currentLeftHeight = ANSWER_KEY_HEIGHT;
+  let currentRightHeight = ANSWER_KEY_HEIGHT;
+
+  indexedQuestions.forEach((q) => {
+    const sHeight = estimateSolutionHeight(q);
+
+    if (currentCol === "left") {
+      if (currentLeftHeight + sHeight <= MAX_COL_HEIGHT || currentPage.left.length === 0) {
+        currentPage.left.push(q);
+        currentLeftHeight += sHeight;
+      } else {
+        currentCol = "right";
+        currentPage.right.push(q);
+        currentRightHeight += sHeight;
+      }
+    } else {
+      if (currentRightHeight + sHeight <= MAX_COL_HEIGHT || currentPage.right.length === 0) {
+        currentPage.right.push(q);
+        currentRightHeight += sHeight;
+      } else {
+        pages.push(currentPage);
+        isFirstPage = false;
+        currentPage = {
+          pageIndex: pages.length + 1,
+          hasAnswerKey: false,
+          left: [q],
+          right: [],
+        };
+        currentCol = "left";
+        currentLeftHeight = sHeight;
+        currentRightHeight = 0;
+      }
+    }
+  });
+
+  if (currentPage.left.length > 0 || currentPage.right.length > 0) {
+    pages.push(currentPage);
+  }
+
+  return pages;
+}
+
+function PdfWatermark() {
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: "50%",
+        left: "50%",
+        transform: "translate(-50%, -50%) rotate(-30deg)",
+        opacity: 0.04,
+        pointerEvents: "none",
+        textAlign: "center",
+        zIndex: 0,
+        userSelect: "none",
+        width: "500px",
+      }}
+    >
+      <img
+        src="/atomic-logo.png"
+        alt=""
+        crossOrigin="anonymous"
+        style={{ width: "160px", height: "auto", margin: "0 auto 12px", display: "block" }}
+      />
+      <div
+        style={{
+          fontSize: "32px",
+          fontWeight: 800,
+          letterSpacing: "4px",
+          color: "#000000",
+          fontFamily: '"Times New Roman", Times, serif',
+        }}
+      >
+        ATOMIC PATHSHALA
+      </div>
+    </div>
+  );
+}
+
+function PdfPageHeader({
+  title,
+  subtitle,
+  quizId,
+}: {
+  title: string;
+  subtitle: string;
+  quizId: string;
+}) {
+  return (
+    <div
+      style={{
+        zIndex: 1,
+        borderBottom: "1.5px solid #000000",
+        paddingBottom: "8px",
+        marginBottom: "14px",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        <img
+          src="/atomic-logo.png"
+          alt="Atomic Pathshala"
+          crossOrigin="anonymous"
+          style={{ height: "32px", width: "auto" }}
+        />
+        <div>
+          <div style={{ fontSize: "14px", fontWeight: 800, letterSpacing: "0.5px", color: "#0f172a" }}>
+            ATOMIC PATHSHALA
+          </div>
+          <div style={{ fontSize: "11px", color: "#64748b" }}>{subtitle}</div>
+        </div>
+      </div>
+      <div style={{ textAlign: "right" }}>
+        <div style={{ fontSize: "13px", fontWeight: 700, color: "#0f172a" }}>{title}</div>
+        <div style={{ fontSize: "11px", color: "#64748b" }}>Quiz ID: {quizId || "—"}</div>
+      </div>
+    </div>
+  );
+}
+
+function PdfPageFooter({
+  quizId,
+  currentPage,
+  totalPages,
+}: {
+  quizId: string;
+  currentPage: number;
+  totalPages: number;
+}) {
+  return (
+    <div
+      style={{
+        zIndex: 1,
+        borderTop: "1px solid #cbd5e1",
+        paddingTop: "6px",
+        marginTop: "8px",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        fontSize: "11px",
+        color: "#64748b",
+      }}
+    >
+      <span>Quiz ID: {quizId || "—"}</span>
+      <span style={{ fontWeight: 600 }}>Atomic Pathshala — Target NEET</span>
+      <span>
+        Page {currentPage} of {totalPages}
+      </span>
+    </div>
+  );
+}
+
 function PdfQuestionBlock({
   q,
   globalIndex,
-  column,
-  spacerPx,
 }: {
-  q: QuizQuestion;
+  q: QuizQuestion & { globalIndex: number };
   globalIndex: number;
-  column: "left" | "right";
-  spacerPx: number;
 }) {
   return (
-    <div data-qid={q.id} data-col={column} style={{ marginTop: spacerPx, marginBottom: "20px" }}>
-      <div style={{ display: "flex", gap: "6px", fontSize: "15px", lineHeight: 1.6 }}>
-        <strong>{globalIndex}.</strong>
+    <div style={{ marginBottom: "18px", fontSize: "13.5px", lineHeight: 1.5, wordBreak: "break-word" }}>
+      <div style={{ display: "flex", gap: "6px", alignItems: "flex-start" }}>
+        <strong style={{ minWidth: "22px", color: "#0f172a" }}>{globalIndex}.</strong>
         <div style={{ flex: 1 }}>
           <MathText text={q.text} />
           <QuestionExtras question={q} variant="pdf" />
@@ -344,17 +638,52 @@ function PdfQuestionBlock({
           display: "grid",
           gridTemplateColumns: q.options.every((opt) => opt.length <= 18) ? "1fr 1fr" : "1fr",
           columnGap: "10px",
-          rowGap: "5px",
+          rowGap: "4px",
           marginTop: "6px",
-          fontSize: "14.5px",
-          paddingLeft: "18px",
+          fontSize: "13px",
+          paddingLeft: "26px",
         }}
       >
         {q.options.map((opt, i) => (
-          <div key={i}>
-            <MathText text={`(${i + 1}) ${opt}`} />
+          <div key={i} style={{ display: "flex", gap: "4px" }}>
+            <span style={{ fontWeight: 600, color: "#334155" }}>({i + 1})</span>
+            <span>
+              <MathText text={opt} />
+            </span>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function PdfSolutionBlock({
+  q,
+  globalIndex,
+}: {
+  q: QuizQuestion & { globalIndex: number };
+  globalIndex: number;
+}) {
+  return (
+    <div style={{ marginBottom: "14px", fontSize: "13px", lineHeight: 1.5, wordBreak: "break-word" }}>
+      <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: "4px" }}>
+        <span>Q{globalIndex}. </span>
+        <span style={{ color: "#15803d" }}>
+          Correct: ({q.correctIndex + 1}) {q.options[q.correctIndex] ? `— ${q.options[q.correctIndex]}` : ""}
+        </span>
+      </div>
+      <div style={{ color: "#334155", paddingLeft: "8px", borderLeft: "2px solid #e2e8f0" }}>
+        {q.explanationSteps?.length ? (
+          <ol style={{ paddingLeft: "16px", margin: 0 }}>
+            {q.explanationSteps.map((step, idx) => (
+              <li key={idx} style={{ marginBottom: "2px" }}>
+                <MathText text={step} />
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <MathText text={q.explanation || "Detailed solution not available."} />
+        )}
       </div>
     </div>
   );
@@ -394,7 +723,6 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
   const [error, setError] = useState<string | null>(null);
   const [testName, setTestName] = useState("");
   const [quizId, setQuizId] = useState("");
-  const [pdfSpacers, setPdfSpacers] = useState<Record<string, number>>({});
   const [dbQuizId, setDbQuizId] = useState<string | null>(null);
   const [attemptId, setAttemptId] = useState<string | null>(null);
   const dbQuizIdRef = useRef<string | null>(null);
@@ -402,9 +730,7 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
   const questionStartTimeRef = useRef<number>(Date.now());
   const resultSubmittedRef = useRef(false);
   const reviewRef = useRef<HTMLDivElement>(null);
-  const coverRef = useRef<HTMLDivElement>(null);
-  const questionsRef = useRef<HTMLDivElement>(null);
-  const resultsRef = useRef<HTMLDivElement>(null);
+  const pdfContainerRef = useRef<HTMLDivElement>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const currentQuestion = questions[currentIndex] ?? null;
   const isLastQuestion = currentIndex === questions.length - 1;
@@ -794,101 +1120,56 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
   }, [entries]);
   const totalMarks = questions.length * 4;
 
-  const computeAndApplySpacers = useCallback(async () => {
-    if (!questionsRef.current) return;
-
-    setPdfSpacers({});
-    await nextFrame();
-
-    const container = questionsRef.current;
-    const containerTop = container.getBoundingClientRect().top;
-
-    const computeForColumn = (columnName: "left" | "right") => {
-      const blocks = Array.from(
-        container.querySelectorAll<HTMLElement>(`[data-col="${columnName}"]`)
-      );
-      const spacers: Record<string, number> = {};
-      let extraOffset = 0;
-
-      for (const block of blocks) {
-        const rect = block.getBoundingClientRect();
-        const top = rect.top - containerTop + extraOffset;
-        const height = rect.height;
-        const bottom = top + height;
-
-        const pageIndexTop = Math.floor(top / PDF_PAGE_PX);
-        const pageIndexBottom = Math.floor((bottom - 1) / PDF_PAGE_PX);
-
-        if (pageIndexBottom > pageIndexTop && height < PDF_PAGE_PX) {
-          const nextPageStart = (pageIndexTop + 1) * PDF_PAGE_PX;
-          const needed = Math.ceil(nextPageStart - top);
-          const qid = block.getAttribute("data-qid") || "";
-          if (qid) spacers[qid] = needed;
-          extraOffset += needed;
-        }
-      }
-
-      return spacers;
-    };
-
-    const leftSpacers = computeForColumn("left");
-    const rightSpacers = computeForColumn("right");
-
-    setPdfSpacers({ ...leftSpacers, ...rightSpacers });
-    await nextFrame();
-  }, []);
+  const questionPages = useMemo(() => partitionQuestionsIntoPages(questions), [questions]);
+  const solutionPages = useMemo(() => partitionSolutionsIntoPages(questions), [questions]);
+  const totalNumberedPages = questionPages.length + solutionPages.length;
 
   const downloadReviewPdf = useCallback(async () => {
-    if (!coverRef.current || !questionsRef.current || !resultsRef.current) return;
+    if (!pdfContainerRef.current) return;
     setIsGeneratingPdf(true);
     setError(null);
     try {
-      const pdf = new jsPDF("p", "mm", "a4");
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+        compress: true,
+      });
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
 
-      const renderSectionOnNewPages = async (el: HTMLElement) => {
-        const canvas = await html2canvas(el, {
+      await waitForImages(pdfContainerRef.current);
+      await nextFrame();
+
+      const pageElements = Array.from(
+        pdfContainerRef.current.querySelectorAll<HTMLElement>("[data-pdf-page]")
+      );
+
+      if (pageElements.length === 0) {
+        throw new Error("No pages available for PDF generation");
+      }
+
+      let pageIndex = 0;
+      for (const pageEl of pageElements) {
+        const canvas = await html2canvas(pageEl, {
           scale: 2,
           useCORS: true,
           backgroundColor: "#ffffff",
+          logging: false,
         });
-        const imgData = canvas.toDataURL("image/png");
-        const imgWidth = pageWidth;
-        const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
-        let heightLeft = imgHeight;
-        let position = 0;
-
-        pdf.addPage();
-        pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
-
-        while (heightLeft > 0) {
-          position = heightLeft - imgHeight;
+        const imgData = canvas.toDataURL("image/jpeg", 0.95);
+        if (pageIndex > 0) {
           pdf.addPage();
-          pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-          heightLeft -= pageHeight;
         }
-      };
-
-      await waitForImages(coverRef.current);
-      const coverCanvas = await html2canvas(coverRef.current, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: "#ffffff",
-      });
-      pdf.addImage(coverCanvas.toDataURL("image/png"), "PNG", 0, 0, pageWidth, pageHeight);
-
-      await computeAndApplySpacers();
-      await renderSectionOnNewPages(questionsRef.current);
-
-      await renderSectionOnNewPages(resultsRef.current);
+        pdf.addImage(imgData, "JPEG", 0, 0, pageWidth, pageHeight, undefined, "FAST");
+        pageIndex++;
+      }
 
       const idPart = quizId || generateQuizId();
       const chapterPart = (chapterLabel || "Full Syllabus").trim();
       const topicPart = (topicLabel || "General").trim();
-      const pdfFileName = `Quiz-${idPart} : ${chapterPart}(${topicPart})-Atomic_Pathshala.pdf`;
+      const pdfFileName = `Quiz-${idPart}_${chapterPart}(${topicPart})-Atomic_Pathshala.pdf`;
 
       pdf.save(pdfFileName);
 
@@ -905,13 +1186,13 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
         });
       }
     } catch (err) {
+      console.error("PDF generation failed:", err);
       alert("PDF Error: " + String(err));
       setError("Could not generate PDF. Please try again.");
     } finally {
       setIsGeneratingPdf(false);
-      setPdfSpacers({});
     }
-  }, [testName, quizId, chapterLabel, topicLabel, computeAndApplySpacers]);
+  }, [quizId, chapterLabel, topicLabel]);
 
   useEffect(() => {
     if (stage !== "summary" || resultSubmittedRef.current || subjectResults.length === 0) return;
@@ -963,251 +1244,293 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
         <p className="text-sm font-semibold text-atomic-orange">NEET Quiz</p>
       </header>
 
-      {/* Hidden cover page — captured for PDF export only */}
+      {/* Hidden discrete multi-page container — captured for PDF export */}
       <div
-        ref={coverRef}
+        ref={pdfContainerRef}
         style={{
           position: "fixed",
           top: 0,
           left: "-10000px",
-          width: "794px",
-          minHeight: "1123px",
-          backgroundColor: "#ffffff",
-          fontFamily: "Georgia, 'Times New Roman', serif",
-          color: "#1a1a1a",
-          padding: "48px 56px",
-          boxSizing: "border-box",
+          zIndex: -100,
+          opacity: 1,
+          pointerEvents: "none",
         }}
       >
-        <div style={{ textAlign: "center", marginTop: "24px" }}>
-          <h1
-            style={{
-              fontSize: "40px",
-              fontWeight: 700,
-              letterSpacing: "2px",
-              margin: 0,
-              color: "#0f172a",
-            }}
-          >
-            ATOMIC PATHSHALA
-          </h1>
-          <img
-            src="/atomic-logo.png"
-            alt="Atomic Pathshala"
-            crossOrigin="anonymous"
-            style={{ width: "110px", height: "auto", margin: "24px auto 0", display: "block" }}
-          />
-        </div>
-        <div style={{ marginTop: "56px", border: "1.5px solid #cbd5e1", borderRadius: "4px" }}>
-          {[
-            ["Quiz ID", quizId || "—"],
-            ["Quiz Name", testName || "NEET Practice Quiz"],
-            ["Subject", subjectLabel],
-            ["Chapter", chapterLabel],
-            ["Topic", topicLabel],
-            ["Total Questions", String(questions.length)],
-            ["Total Marks", String(totalMarks)],
-          ].map(([label, value], idx) => (
-            <div
-              key={label}
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                padding: "14px 24px",
-                borderBottom: idx === 6 ? "none" : "1px solid #e2e8f0",
-                fontSize: "15px",
-              }}
-            >
-              <span style={{ fontWeight: 600, color: "#334155" }}>{label}</span>
-              <span style={{ color: "#0f172a" }}>{value}</span>
-            </div>
-          ))}
-        </div>
-        <div style={{ position: "absolute", bottom: "48px", left: 0, right: 0 }}>
-          <div style={{ display: "flex", justifyContent: "center", gap: "48px" }}>
-            <div style={{ textAlign: "center" }}>
+        {/* Cover Page */}
+        <div
+          data-pdf-page="true"
+          style={{
+            width: "794px",
+            height: "1123px",
+            backgroundColor: "#ffffff",
+            fontFamily: "Georgia, 'Times New Roman', serif",
+            color: "#1a1a1a",
+            padding: "48px 56px",
+            boxSizing: "border-box",
+            position: "relative",
+            overflow: "hidden",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "space-between",
+          }}
+        >
+          <PdfWatermark />
+          <div style={{ zIndex: 1 }}>
+            <div style={{ textAlign: "center", marginTop: "16px" }}>
+              <h1
+                style={{
+                  fontSize: "38px",
+                  fontWeight: 700,
+                  letterSpacing: "2px",
+                  margin: 0,
+                  color: "#0f172a",
+                }}
+              >
+                ATOMIC PATHSHALA
+              </h1>
               <img
-                src="/telegram-qr.png"
-                alt="Telegram QR"
+                src="/atomic-logo.png"
+                alt="Atomic Pathshala"
                 crossOrigin="anonymous"
-                style={{ width: "110px", height: "110px", margin: "0 auto", display: "block" }}
+                style={{ width: "100px", height: "auto", margin: "20px auto 0", display: "block" }}
               />
-              <p style={{ marginTop: "8px", fontSize: "12px", color: "#475569" }}>
-                Join us on Telegram
-              </p>
             </div>
-            <div style={{ textAlign: "center" }}>
-              <img
-                src="/AP-YT-QR-CODE.png"
-                alt="YouTube QR"
-                crossOrigin="anonymous"
-                style={{ width: "110px", height: "110px", margin: "0 auto", display: "block" }}
-              />
-              <p style={{ marginTop: "8px", fontSize: "12px", color: "#475569" }}>
-                Subscribe on YouTube
-              </p>
+
+            <div style={{ marginTop: "44px", border: "1.5px solid #cbd5e1", borderRadius: "6px" }}>
+              {[
+                ["Quiz ID", quizId || "—"],
+                ["Quiz Name", testName || "NEET Practice Quiz"],
+                ["Subject", subjectLabel],
+                ["Chapter", chapterLabel],
+                ["Topic", topicLabel],
+                ["Total Questions", String(questions.length)],
+                ["Total Marks", String(totalMarks)],
+              ].map(([label, value], idx) => (
+                <div
+                  key={label}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    padding: "12px 24px",
+                    borderBottom: idx === 6 ? "none" : "1px solid #e2e8f0",
+                    fontSize: "14.5px",
+                  }}
+                >
+                  <span style={{ fontWeight: 600, color: "#334155" }}>{label}</span>
+                  <span style={{ color: "#0f172a" }}>{value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ zIndex: 1, marginBottom: "16px" }}>
+            <div style={{ display: "flex", justifyContent: "center", gap: "56px" }}>
+              <div style={{ textAlign: "center" }}>
+                <img
+                  src="/telegram-qr.png"
+                  alt="Telegram QR"
+                  crossOrigin="anonymous"
+                  style={{ width: "100px", height: "100px", margin: "0 auto", display: "block" }}
+                />
+                <p style={{ marginTop: "6px", fontSize: "11.5px", color: "#475569" }}>
+                  Join us on Telegram
+                </p>
+              </div>
+              <div style={{ textAlign: "center" }}>
+                <img
+                  src="/AP-YT-QR-CODE.png"
+                  alt="YouTube QR"
+                  crossOrigin="anonymous"
+                  style={{ width: "100px", height: "100px", margin: "0 auto", display: "block" }}
+                />
+                <p style={{ marginTop: "6px", fontSize: "11.5px", color: "#475569" }}>
+                  Subscribe on YouTube
+                </p>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Hidden PDF: QUESTIONS */}
-      <div
-        ref={questionsRef}
-        style={{
-          position: "fixed",
-          top: 0,
-          left: "-10000px",
-          width: "794px",
-          backgroundColor: "#ffffff",
-          fontFamily: '"Times New Roman", Times, serif',
-          color: "#111111",
-          padding: "36px 44px",
-          boxSizing: "border-box",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            borderBottom: "2px solid #000000",
-            paddingBottom: "10px",
-            marginBottom: "24px",
-          }}
-        >
-          <img src="/atomic-logo.png" alt="Atomic Pathshala" style={{ height: "38px" }} />
-          <p style={{ fontStyle: "italic", fontWeight: 700, fontSize: "15px", margin: 0 }}>
-            {testName || "Practice Paper"}
-          </p>
-        </div>
-        {Array.from(new Set(questions.map((q) => q.subject))).map((subjectName) => {
-          const subjectQuestions = questions
-            .map((q, idx) => ({ ...q, globalIndex: idx + 1 }))
-            .filter((q) => q.subject === subjectName);
-          const mid = Math.ceil(subjectQuestions.length / 2);
-          const leftColumn = subjectQuestions.slice(0, mid);
-          const rightColumn = subjectQuestions.slice(mid);
-          return (
-            <div key={subjectName} style={{ marginBottom: "8px" }}>
-              <h2
+        {/* Question Pages */}
+        {questionPages.map((page) => (
+          <div
+            key={`q-page-${page.pageIndex}-${page.subject}`}
+            data-pdf-page="true"
+            style={{
+              width: "794px",
+              height: "1123px",
+              backgroundColor: "#ffffff",
+              fontFamily: '"Times New Roman", Times, serif',
+              color: "#111111",
+              padding: "32px 40px 24px 40px",
+              boxSizing: "border-box",
+              position: "relative",
+              overflow: "hidden",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+            }}
+          >
+            <PdfWatermark />
+            <div style={{ zIndex: 1, display: "flex", flexDirection: "column", flex: 1 }}>
+              <PdfPageHeader
+                title={testName || "NEET Practice Paper"}
+                subtitle={`${subjectLabel} • ${chapterLabel}`}
+                quizId={quizId || "—"}
+              />
+
+              <div
                 style={{
                   textAlign: "center",
-                  fontSize: "21px",
+                  fontSize: "15px",
                   fontWeight: 700,
                   textTransform: "uppercase",
-                  borderBottom: "1px solid #000000",
-                  paddingBottom: "6px",
-                  marginBottom: "18px",
                   letterSpacing: "1px",
+                  borderBottom: "1.5px solid #000000",
+                  paddingBottom: "4px",
+                  marginBottom: "12px",
                 }}
               >
-                {subjectName}
-              </h2>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", columnGap: "28px" }}>
-                <div style={{ borderRight: "1px solid #cccccc", paddingRight: "14px" }}>
-                  {leftColumn.map((q) => (
-                    <PdfQuestionBlock
-                      key={q.id}
-                      q={q}
-                      globalIndex={q.globalIndex}
-                      column="left"
-                      spacerPx={pdfSpacers[q.id] ?? 0}
-                    />
+                {page.subject}
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  columnGap: "24px",
+                  flex: 1,
+                }}
+              >
+                <div style={{ borderRight: "1px solid #e2e8f0", paddingRight: "12px" }}>
+                  {page.left.map((q) => (
+                    <PdfQuestionBlock key={q.id} q={q} globalIndex={q.globalIndex} />
                   ))}
                 </div>
-                <div style={{ paddingLeft: "14px" }}>
-                  {rightColumn.map((q) => (
-                    <PdfQuestionBlock
-                      key={q.id}
-                      q={q}
-                      globalIndex={q.globalIndex}
-                      column="right"
-                      spacerPx={pdfSpacers[q.id] ?? 0}
-                    />
+                <div style={{ paddingLeft: "12px" }}>
+                  {page.right.map((q) => (
+                    <PdfQuestionBlock key={q.id} q={q} globalIndex={q.globalIndex} />
                   ))}
                 </div>
               </div>
             </div>
-          );
-        })}
-      </div>
 
-      {/* Hidden PDF: ANSWER KEY + SOLUTIONS */}
-      <div
-        ref={resultsRef}
-        style={{
-          position: "fixed",
-          top: 0,
-          left: "-10000px",
-          width: "794px",
-          backgroundColor: "#ffffff",
-          fontFamily: '"Times New Roman", Times, serif',
-          color: "#111111",
-          padding: "36px 44px",
-          boxSizing: "border-box",
-        }}
-      >
-        <h2
-          style={{
-            fontSize: "21px",
-            fontWeight: 700,
-            textAlign: "center",
-            textTransform: "uppercase",
-            borderBottom: "1px solid #000000",
-            paddingBottom: "6px",
-            marginBottom: "18px",
-            letterSpacing: "1px",
-          }}
-        >
-          Answer Key
-        </h2>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(6, 1fr)",
-            gap: "8px",
-            fontSize: "15px",
-            marginBottom: "28px",
-          }}
-        >
-          {questions.map((q, i) => (
-            <div key={q.id}>
-              {i + 1}. ({q.correctIndex + 1})
+            <PdfPageFooter
+              quizId={quizId || "—"}
+              currentPage={page.pageIndex}
+              totalPages={totalNumberedPages}
+            />
+          </div>
+        ))}
+
+        {/* Solution Pages */}
+        {solutionPages.map((sPage) => (
+          <div
+            key={`sol-page-${sPage.pageIndex}`}
+            data-pdf-page="true"
+            style={{
+              width: "794px",
+              height: "1123px",
+              backgroundColor: "#ffffff",
+              fontFamily: '"Times New Roman", Times, serif',
+              color: "#111111",
+              padding: "32px 40px 24px 40px",
+              boxSizing: "border-box",
+              position: "relative",
+              overflow: "hidden",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+            }}
+          >
+            <PdfWatermark />
+            <div style={{ zIndex: 1, display: "flex", flexDirection: "column", flex: 1 }}>
+              <PdfPageHeader
+                title="Answer Key & Solutions"
+                subtitle={`${subjectLabel} • ${chapterLabel}`}
+                quizId={quizId || "—"}
+              />
+
+              {sPage.hasAnswerKey && (
+                <div
+                  style={{
+                    marginBottom: "14px",
+                    padding: "10px 14px",
+                    backgroundColor: "#f8fafc",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: "6px",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontWeight: 700,
+                      fontSize: "12.5px",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.5px",
+                      marginBottom: "6px",
+                      color: "#0f172a",
+                    }}
+                  >
+                    Answer Key
+                  </div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(8, 1fr)",
+                      gap: "4px 8px",
+                      fontSize: "12px",
+                      color: "#1e293b",
+                    }}
+                  >
+                    {questions.map((q, i) => (
+                      <div key={q.id}>
+                        <strong>Q{i + 1}:</strong> ({q.correctIndex + 1})
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div
+                style={{
+                  fontSize: "14px",
+                  fontWeight: 700,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.5px",
+                  borderBottom: "1.5px solid #000000",
+                  paddingBottom: "3px",
+                  marginBottom: "12px",
+                }}
+              >
+                Detailed Solutions
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  columnGap: "24px",
+                  flex: 1,
+                }}
+              >
+                <div style={{ borderRight: "1px solid #e2e8f0", paddingRight: "12px" }}>
+                  {sPage.left.map((q) => (
+                    <PdfSolutionBlock key={q.id} q={q} globalIndex={q.globalIndex} />
+                  ))}
+                </div>
+                <div style={{ paddingLeft: "12px" }}>
+                  {sPage.right.map((q) => (
+                    <PdfSolutionBlock key={q.id} q={q} globalIndex={q.globalIndex} />
+                  ))}
+                </div>
+              </div>
             </div>
-          ))}
-        </div>
 
-        <h2
-          style={{
-            fontSize: "21px",
-            fontWeight: 700,
-            textAlign: "center",
-            textTransform: "uppercase",
-            borderBottom: "1px solid #000000",
-            paddingBottom: "6px",
-            marginBottom: "18px",
-            letterSpacing: "1px",
-          }}
-        >
-          Solutions
-        </h2>
-                {questions.map((q, i) => (
-          <div key={q.id} style={{ marginBottom: "16px", fontSize: "15px", lineHeight: 1.6 }}>
-            <p style={{ fontWeight: 700, margin: "0 0 3px" }}>
-              {i + 1}. Correct Answer: ({q.correctIndex + 1})
-            </p>
-            {q.explanationSteps?.length ? (
-              <ol style={{ paddingLeft: "18px", margin: 0 }}>
-                {q.explanationSteps.map((step, idx) => (
-                  <li key={idx} style={{ marginBottom: "3px" }}>
-                    <MathText text={step} />
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <MathText text={q.explanation} />
-            )}
+            <PdfPageFooter
+              quizId={quizId || "—"}
+              currentPage={questionPages.length + sPage.pageIndex}
+              totalPages={totalNumberedPages}
+            />
           </div>
         ))}
       </div>

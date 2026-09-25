@@ -4,9 +4,20 @@ const prisma = getPrisma();
 
 const DAILY_FREE_LIMIT = 500;
 
+// Explicit VIP Lifetime Whitelist (Saniya & Ishrat)
+const VIP_WHITELIST_USER_IDS = new Set([
+  "cmtwhvpo30004440bug9ul3jp", // Shaniya / Saniya
+  "cmtyh1jmt0004voamz8t60o6e", // Ishrat khan
+  "cmu3ov4hg0004a42el9c4w3d0", // Taiba Ishrat
+]);
+
 // Uses the AI Chat UserAccess model — the "effective access" record.
 // Active students and users have full access to question practice and quizzes.
 export async function hasActiveSubscription(userId: string): Promise<boolean> {
+  if (VIP_WHITELIST_USER_IDS.has(userId)) {
+    return true;
+  }
+
   // 1. Registered active students have full practice access
   try {
     const student = await prisma.student.findUnique({
