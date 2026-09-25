@@ -135,28 +135,56 @@ export function PreFlightSetupWizard({
       }
 
       try {
-        const constraints: MediaStreamConstraints = {
-          video: camEnabled
-            ? selectedVideoId
-              ? { deviceId: { exact: selectedVideoId } }
-              : true
-            : false,
-          audio: micEnabled
-            ? selectedAudioId
-              ? { deviceId: { exact: selectedAudioId } }
-              : true
-            : false,
-        };
+        let stream: MediaStream | null = null;
+        try {
+          const constraints: MediaStreamConstraints = {
+            video: camEnabled
+              ? selectedVideoId
+                ? { deviceId: { ideal: selectedVideoId }, width: { ideal: 1280 }, height: { ideal: 720 } }
+                : true
+              : false,
+            audio: micEnabled
+              ? selectedAudioId
+                ? { deviceId: { ideal: selectedAudioId } }
+                : true
+              : false,
+          };
+          if (constraints.video || constraints.audio) {
+            stream = await navigator.mediaDevices.getUserMedia(constraints);
+          }
+        } catch (firstErr) {
+          console.warn("Combined getUserMedia failed, attempting fallbacks:", firstErr);
+          try {
+            if (camEnabled && micEnabled) {
+              try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                  video: selectedVideoId ? { deviceId: { ideal: selectedVideoId } } : true,
+                  audio: false,
+                });
+              } catch {
+                stream = await navigator.mediaDevices.getUserMedia({
+                  video: false,
+                  audio: selectedAudioId ? { deviceId: { ideal: selectedAudioId } } : true,
+                });
+              }
+            } else if (camEnabled) {
+              stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+            } else if (micEnabled) {
+              stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+            }
+          } catch (secondErr) {
+            console.warn("All getUserMedia fallbacks failed:", secondErr);
+          }
+        }
 
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        if (!active) {
-          stream.getTracks().forEach((t) => t.stop());
+        if (!active || !stream) {
+          if (stream) stream.getTracks().forEach((t) => t.stop());
           return;
         }
 
         streamRef.current = stream;
 
-        if (videoRef.current && camEnabled) {
+        if (videoRef.current && camEnabled && stream.getVideoTracks().length > 0) {
           videoRef.current.srcObject = stream;
         }
 

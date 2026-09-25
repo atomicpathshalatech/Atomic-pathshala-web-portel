@@ -427,18 +427,19 @@ export async function POST(
     }
 
     // 6. Realtime Broadcast State Change
+    const effectiveYouTubeId = requestedYouTubeId || wbSession.youtubeVideoId || null;
     try {
       await pusherServer.trigger(sessionChannel(wbSession.id), WB_EVENTS.LIVE_PHASE_CHANGED, {
         phase: "LIVE",
         livePhase: "LIVE",
         videoTransport: requestedTransport,
-        youtubeVideoId: requestedYouTubeId,
+        youtubeVideoId: effectiveYouTubeId,
         actualStartedAt: (wbSession.actualStartedAt || now).toISOString(),
         serverTime: now.toISOString(),
       });
       await pusherServer.trigger(sessionChannel(wbSession.id), WB_EVENTS.CONFIG_UPDATED, {
         videoTransport: requestedTransport,
-        youtubeVideoId: requestedYouTubeId,
+        youtubeVideoId: effectiveYouTubeId,
       });
     } catch (pushErr) {
       console.warn("Realtime broadcast warning:", pushErr);

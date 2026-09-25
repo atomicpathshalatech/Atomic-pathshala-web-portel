@@ -54,8 +54,19 @@ interface WhiteboardSessionData {
 // in StudentLiveClassRoom.
 const FLOAT_CAM_SIZE = 128;
 
-function isBackgroundImageUrl(background: string | undefined): background is string {
-  return typeof background === "string" && /^https?:\/\//.test(background);
+function isBackgroundImageUrl(background: string | null | undefined): background is string {
+  if (typeof background !== "string" || !background.trim()) return false;
+  const bg = background.trim().toLowerCase();
+  if (["blank", "light", "dark", "grid", "lines", "dots", "graph"].includes(bg)) {
+    return false;
+  }
+  return (
+    bg.startsWith("http://") ||
+    bg.startsWith("https://") ||
+    bg.startsWith("/") ||
+    bg.startsWith("data:image/") ||
+    bg.startsWith("blob:")
+  );
 }
 
 function formatHms(totalSec: number) {
@@ -933,10 +944,21 @@ export function StudentLiveClassRoom({
       setQuiz(null);
     });
 
-    channel.bind(WB_EVENTS.LIVE_PHASE_CHANGED, (data: { livePhase?: string; phase?: string }) => {
+    channel.bind(WB_EVENTS.LIVE_PHASE_CHANGED, (data: any) => {
       const p = data.livePhase || data.phase;
       if (p === "LIVE") {
         setPhase("live");
+        setWbSession((prev) =>
+          prev
+            ? {
+                ...prev,
+                livePhase: "LIVE",
+                videoTransport: data.videoTransport ?? prev.videoTransport,
+                youtubeVideoId: data.youtubeVideoId !== undefined ? data.youtubeVideoId : prev.youtubeVideoId,
+                actualStartedAt: data.actualStartedAt ?? prev.actualStartedAt,
+              }
+            : prev
+        );
         refreshBoard();
       }
       if (p === "ENDED") setPhase("ended");
@@ -964,6 +986,8 @@ export function StudentLiveClassRoom({
               presentationType: data.presentationType ?? prev.presentationType,
               classroomTheme: data.classroomTheme ?? prev.classroomTheme,
               cameraShape: data.cameraShape ?? prev.cameraShape,
+              videoTransport: data.videoTransport ?? prev.videoTransport,
+              youtubeVideoId: data.youtubeVideoId !== undefined ? data.youtubeVideoId : prev.youtubeVideoId,
             }
           : prev
       );

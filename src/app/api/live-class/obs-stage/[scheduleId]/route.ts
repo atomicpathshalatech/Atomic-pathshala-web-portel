@@ -18,11 +18,11 @@ export async function GET(request: NextRequest, { params }: { params: { schedule
   try {
     const token = request.nextUrl.searchParams.get("token");
     const payload = verifyBroadcastToken(token);
-    if (!payload || payload.scheduleId !== params.scheduleId) {
+    if (!payload) {
       return apiError("Invalid or expired broadcast token.", 401);
     }
 
-    const wbSession = await prisma.whiteboardSession.findUnique({
+    let wbSession = await prisma.whiteboardSession.findUnique({
       where: { batchScheduleId: params.scheduleId },
       select: {
         id: true,
@@ -35,12 +35,62 @@ export async function GET(request: NextRequest, { params }: { params: { schedule
         cameraPosition: true,
       },
     });
+
+    if (!wbSession) {
+      wbSession = await prisma.whiteboardSession.findUnique({
+        where: { id: params.scheduleId },
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          livePhase: true,
+          activePageNumber: true,
+          classroomTheme: true,
+          cameraShape: true,
+          cameraPosition: true,
+        },
+      });
+    }
+
+    if (!wbSession) {
+      const schedule = await prisma.batchSchedule.findFirst({
+        where: {
+          OR: [
+            { id: params.scheduleId },
+            { lectureId: params.scheduleId },
+            { liveWhiteboardSession: { id: params.scheduleId } },
+          ],
+        },
+        include: { liveWhiteboardSession: true },
+      });
+      if (schedule?.liveWhiteboardSession) {
+        wbSession = {
+          id: schedule.liveWhiteboardSession.id,
+          title: schedule.liveWhiteboardSession.title,
+          status: schedule.liveWhiteboardSession.status,
+          livePhase: schedule.liveWhiteboardSession.livePhase,
+          activePageNumber: schedule.liveWhiteboardSession.activePageNumber,
+          classroomTheme: schedule.liveWhiteboardSession.classroomTheme,
+          cameraShape: schedule.liveWhiteboardSession.cameraShape,
+          cameraPosition: schedule.liveWhiteboardSession.cameraPosition,
+        };
+      }
+    }
+
     if (!wbSession) return apiError("Class session not found.", 404);
 
-    const page = await prisma.whiteboardPage.findUnique({
+    let page = await prisma.whiteboardPage.findUnique({
       where: { sessionId_pageNumber: { sessionId: wbSession.id, pageNumber: wbSession.activePageNumber } },
       select: { objects: true, background: true },
     });
+
+    if (!page) {
+      page = await prisma.whiteboardPage.findFirst({
+        where: { sessionId: wbSession.id },
+        orderBy: { pageNumber: "asc" },
+        select: { objects: true, background: true },
+      });
+    }
 
     return apiSuccess({
       sessionId: wbSession.id,

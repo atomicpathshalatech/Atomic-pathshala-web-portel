@@ -25,7 +25,18 @@ const CAMERA_SIZE = 220;
 const POLL_INTERVAL_MS = 1000;
 
 function isBackgroundImageUrl(background: string | null | undefined): background is string {
-  return typeof background === "string" && /^https?:\/\//.test(background);
+  if (typeof background !== "string" || !background.trim()) return false;
+  const bg = background.trim().toLowerCase();
+  if (["blank", "light", "dark", "grid", "lines", "dots", "graph"].includes(bg)) {
+    return false;
+  }
+  return (
+    bg.startsWith("http://") ||
+    bg.startsWith("https://") ||
+    bg.startsWith("/") ||
+    bg.startsWith("data:image/") ||
+    bg.startsWith("blob:")
+  );
 }
 
 function cameraCornerStyle(position: string | null | undefined): React.CSSProperties {
@@ -44,26 +55,33 @@ function cameraCornerStyle(position: string | null | undefined): React.CSSProper
 }
 
 /**
- * Local, LiveKit-free camera feed — this page is meant to be captured whole
- * by OBS as a Browser Source, so the camera just needs to be real pixels on
- * this page (getUserMedia), never a network call anywhere.
+ * Local camera preview for OBS browser source if supported by environment.
+ * If media permissions are blocked or unsupported inside OBS CEF,
+ * renders nothing rather than blocking the whiteboard canvas with an error box.
  */
 function LocalCamera({ shape }: { shape: string | null | undefined }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let currentStream: MediaStream | null = null;
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) return;
+
     navigator.mediaDevices
-      .getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" }, audio: false })
+      .getUserMedia({
+        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" },
+        audio: false,
+      })
       .then((s) => {
         currentStream = s;
         setStream(s);
-        setError(null);
         if (videoRef.current) videoRef.current.srcObject = s;
       })
-      .catch((err) => setError(err instanceof Error ? err.message : "Camera unavailable"));
+      .catch(() => {
+        // Silently omit in OBS browser source so board is never blocked
+        setStream(null);
+      });
+
     return () => {
       currentStream?.getTracks().forEach((t) => t.stop());
     };
@@ -75,6 +93,8 @@ function LocalCamera({ shape }: { shape: string | null | undefined }) {
     }
   }, [stream]);
 
+  if (!stream) return null;
+
   return (
     <div
       className={`overflow-hidden border-4 border-blue-500 shadow-2xl bg-black ${
@@ -82,27 +102,21 @@ function LocalCamera({ shape }: { shape: string | null | undefined }) {
       }`}
       style={{ width: CAMERA_SIZE, height: CAMERA_SIZE }}
     >
-      {error ? (
-        <div className="w-full h-full flex items-center justify-center text-white/70 text-xs text-center p-2">
-          {error}
-        </div>
-      ) : (
-        <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
-      )}
+      <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
     </div>
   );
 }
 
-/** Read-only board mirror with laser pointer support */
+/** Read-only board mirror with laser pointer and PDF/PPT/Theme support */
 const BoardMirror = forwardRef<
   BoardMirrorHandle,
-  { objects: StrokeObject[]; background: string | null }
->(function BoardMirror({ objects, background }, ref) {
+  { objects: StrokeObject[]; background: string | null; classroomTheme?: string | null }
+>(function BoardMirror({ objects, background, classroomTheme }, ref) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const baseRef = useRef<HTMLCanvasElement | null>(null);
   const activeRef = useRef<HTMLCanvasElement | null>(null);
   const engineRef = useRef<CanvasEngine | null>(null);
-  const [dim, setDim] = useState({ width: 1280, height: 720 });
+  const [dim, setDim] = useState({ width: 1920, height: 1080 });
 
   useImperativeHandle(ref, () => ({
     setRemoteLaserActive: (points) => {
@@ -147,19 +161,28 @@ const BoardMirror = forwardRef<
   }, []);
 
   useEffect(() => {
-    engineRef.current?.syncSize();
-    engineRef.current?.loadObjects(objects);
+    if (engineRef.current) {
+      engineRef.current.syncSize();
+      engineRef.current.loadObjects(objects);
+    }
   }, [dim, objects]);
+
+  const isDark = background === "dark" || classroomTheme === "DARK";
 
   return (
     <div
       ref={containerRef}
-      className="relative overflow-hidden bg-white"
+      className={`relative overflow-hidden ${isDark ? "bg-[#10131d]" : "bg-white"}`}
       style={{ width: dim.width, height: dim.height }}
     >
       {isBackgroundImageUrl(background) && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={background} alt="" className="absolute inset-0 w-full h-full object-contain pointer-events-none" />
+        <img
+          src={background}
+          alt=""
+          crossOrigin="anonymous"
+          className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+        />
       )}
       <canvas ref={baseRef} className="absolute inset-0 w-full h-full" />
       <canvas ref={activeRef} className="absolute inset-0 w-full h-full pointer-events-none" />
@@ -278,7 +301,12 @@ export function BroadcastStage({ scheduleId, token }: { scheduleId: string; toke
 
   return (
     <div className="w-screen h-screen bg-black flex items-center justify-center relative overflow-hidden">
-      <BoardMirror ref={mirrorRef} objects={data.page?.objects ?? []} background={data.page?.background ?? "blank"} />
+      <BoardMirror
+        ref={mirrorRef}
+        objects={data.page?.objects ?? []}
+        background={data.page?.background ?? "blank"}
+        classroomTheme={data.classroomTheme}
+      />
       <div className="absolute" style={cameraCornerStyle(data.cameraPosition)}>
         <LocalCamera shape={data.cameraShape} />
       </div>

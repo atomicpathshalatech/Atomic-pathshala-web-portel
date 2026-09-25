@@ -53,32 +53,6 @@ export function YouTubeLivePlayer({
     setIsStreamLive(false);
   }, [youtubeVideoId]);
 
-  // Realtime clock ticker for Countdown / Late Buzzer
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setNowMs(Date.now());
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const scheduledStartMs = useMemo(() => {
-    if (!scheduledStart) return null;
-    const ms = new Date(scheduledStart).getTime();
-    return isNaN(ms) ? null : ms;
-  }, [scheduledStart]);
-
-  const lateSeconds = useMemo(() => {
-    if (!scheduledStartMs) return 0;
-    const diff = Math.floor((nowMs - scheduledStartMs) / 1000);
-    return diff > 0 ? diff : 0;
-  }, [scheduledStartMs, nowMs]);
-
-  const countdownSeconds = useMemo(() => {
-    if (!scheduledStartMs) return 0;
-    const diff = Math.floor((scheduledStartMs - nowMs) / 1000);
-    return diff > 0 ? diff : 0;
-  }, [scheduledStartMs, nowMs]);
-
   // Dispatch a control action through the real YT.Player instance (set up
   // below) instead of guessing at YouTube's raw postMessage wire format —
   // that hand-rolled version never reliably told us the stream had actually
@@ -117,6 +91,43 @@ export function YouTubeLivePlayer({
       console.debug("[YouTubeLivePlayer] Command dispatch error", err);
     }
   }, []);
+
+  // When class phase is LIVE, trigger play and ensure stream is marked live
+  useEffect(() => {
+    if (livePhase === "LIVE" && youtubeVideoId) {
+      sendYouTubeCommand("playVideo");
+      const timer = setTimeout(() => {
+        setIsStreamLive(true);
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [livePhase, youtubeVideoId, sendYouTubeCommand]);
+
+  // Realtime clock ticker for Countdown / Late Buzzer
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const scheduledStartMs = useMemo(() => {
+    if (!scheduledStart) return null;
+    const ms = new Date(scheduledStart).getTime();
+    return isNaN(ms) ? null : ms;
+  }, [scheduledStart]);
+
+  const lateSeconds = useMemo(() => {
+    if (!scheduledStartMs) return 0;
+    const diff = Math.floor((nowMs - scheduledStartMs) / 1000);
+    return diff > 0 ? diff : 0;
+  }, [scheduledStartMs, nowMs]);
+
+  const countdownSeconds = useMemo(() => {
+    if (!scheduledStartMs) return 0;
+    const diff = Math.floor((scheduledStartMs - nowMs) / 1000);
+    return diff > 0 ? diff : 0;
+  }, [scheduledStartMs, nowMs]);
 
   // Bootstrap the official YouTube IFrame Player API and attach it to our
   // existing <iframe> (enablejsapi=1 in embedUrl lets the API adopt it in
@@ -287,7 +298,7 @@ export function YouTubeLivePlayer({
     if (!youtubeVideoId) return "";
     const origin = typeof window !== "undefined" && window.location.origin ? window.location.origin : "";
     const originParam = origin && origin.startsWith("https://") && !origin.includes("localhost") ? `&origin=${encodeURIComponent(origin)}` : "";
-    return `https://www.youtube-nocookie.com/embed/${youtubeVideoId}?autoplay=1&enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&disablekb=1&fs=0&iv_load_policy=3&showinfo=0${originParam}`;
+    return `https://www.youtube-nocookie.com/embed/${youtubeVideoId}?autoplay=1&mute=1&enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&disablekb=1&fs=0&iv_load_policy=3&showinfo=0${originParam}`;
   }, [youtubeVideoId]);
 
   if (!youtubeVideoId || livePhase === "SCHEDULED" || livePhase === "PREPARING") {

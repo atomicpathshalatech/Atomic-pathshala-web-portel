@@ -101,6 +101,25 @@ export async function resolveWhiteboardAccess(
     };
   }
 
+  // Check if current user is an assigned teacher for this batch or schedule
+  const teacherProfile = await prisma.teacher.findFirst({
+    where: { userId },
+    include: { user: true },
+  });
+  if (teacherProfile) {
+    const isScheduleTeacher = wbSession.batchSchedule.teacherId === teacherProfile.id;
+    const isBatchTeacher = await prisma.batchTeacher.findFirst({
+      where: { batchId: wbSession.batchSchedule.batchId, teacherId: teacherProfile.id },
+    });
+    if (isScheduleTeacher || isBatchTeacher) {
+      return {
+        role: "TEACHER",
+        entityId: teacherProfile.id,
+        name: teacherProfile.user.name,
+      };
+    }
+  }
+
   // Every non-owning-teacher call (which, in practice, is nearly every
   // student action — sending a chat message, answering a quiz, raising a
   // hand) used to pay for this admin-permission check and the student
