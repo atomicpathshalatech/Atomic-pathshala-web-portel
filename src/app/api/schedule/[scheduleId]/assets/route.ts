@@ -12,9 +12,13 @@ import { createPresignedDownloadUrl } from "@/lib/storage/r2-client";
 /**
  * Resolves original uploaded presentation download URL
  */
-async function resolveOriginalDownloadUrl(
+/**
+ * Resolves original uploaded presentation download/preview URL
+ */
+async function resolveOriginalUrl(
   urlOrKey: string,
-  fallbackFilename: string
+  fallbackFilename: string,
+  disposition: "inline" | "attachment" = "inline"
 ): Promise<string> {
   if (
     !urlOrKey.startsWith("http://") &&
@@ -24,8 +28,9 @@ async function resolveOriginalDownloadUrl(
   ) {
     return createPresignedDownloadUrl({
       key: urlOrKey,
-      expiresInSeconds: 900,
-      contentDisposition: `attachment; filename="${encodeURIComponent(fallbackFilename)}"`,
+      expiresInSeconds: 3600,
+      contentDisposition: `${disposition}; filename="${encodeURIComponent(fallbackFilename)}"`,
+      contentType: "application/pdf",
     });
   }
 
@@ -37,10 +42,11 @@ async function resolveOriginalDownloadUrl(
     if (fileAsset?.storageKey) {
       return createPresignedDownloadUrl({
         key: fileAsset.storageKey,
-        expiresInSeconds: 900,
-        contentDisposition: `attachment; filename="${encodeURIComponent(
+        expiresInSeconds: 3600,
+        contentDisposition: `${disposition}; filename="${encodeURIComponent(
           fallbackFilename || fileAsset.originalFilename
         )}"`,
+        contentType: fileAsset.mimeType || "application/pdf",
       });
     }
   }
@@ -52,12 +58,15 @@ async function resolveOriginalDownloadUrl(
       pathnameKey &&
       (pathnameKey.startsWith("modules/") ||
         pathnameKey.startsWith("documents/") ||
-        pathnameKey.startsWith("classes/"))
+        pathnameKey.startsWith("classes/") ||
+        pathnameKey.startsWith("slides/") ||
+        pathnameKey.startsWith("pdf/"))
     ) {
       return createPresignedDownloadUrl({
         key: pathnameKey,
-        expiresInSeconds: 900,
-        contentDisposition: `attachment; filename="${encodeURIComponent(fallbackFilename)}"`,
+        expiresInSeconds: 3600,
+        contentDisposition: `${disposition}; filename="${encodeURIComponent(fallbackFilename)}"`,
+        contentType: "application/pdf",
       });
     }
   } catch {
@@ -90,8 +99,8 @@ export async function GET(
       return apiError("Missing scheduleId parameter", 400);
     }
 
-    // 1. Fetch the canonical BatchSchedule
-    const schedule = await prisma.batchSchedule.findUnique({
+    // 1. Fetch the canonical BatchSchedule (or resolve by Lecture / Session ID)
+    let schedule = await prisma.batchSchedule.findUnique({
       where: { id: scheduleId },
       include: {
         batch: {
@@ -112,6 +121,43 @@ export async function GET(
         },
       },
     });
+
+    if (!schedule) {
+      const lecture = await prisma.lecture.findUnique({
+        where: { id: scheduleId },
+        include: { chapter: { include: { subject: { include: { course: true } } } }, teacher: true },
+      });
+      if (lecture) {
+        schedule = await prisma.batchSchedule.findFirst({
+          where: { OR: [{ id: lecture.id }, { lectureId: lecture.id }] },
+          include: {
+            batch: { select: { id: true, name: true, code: true, thumbnailUrl: true } },
+            teacher: { include: { user: { select: { id: true, name: true, photoUrl: true, email: true } } } },
+            lecture: { select: { id: true, videoUrl: true, slidesUrl: true } },
+            liveWhiteboardSession: { include: { pages: { select: { id: true } } } },
+          },
+        });
+      }
+    }
+
+    if (!schedule) {
+      const wb = await prisma.whiteboardSession.findUnique({
+        where: { id: scheduleId },
+        include: {
+          batchSchedule: {
+            include: {
+              batch: { select: { id: true, name: true, code: true, thumbnailUrl: true } },
+              teacher: { include: { user: { select: { id: true, name: true, photoUrl: true, email: true } } } },
+              lecture: { select: { id: true, videoUrl: true, slidesUrl: true } },
+              liveWhiteboardSession: { include: { pages: { select: { id: true } } } },
+            },
+          },
+        },
+      });
+      if (wb?.batchSchedule) {
+        schedule = wb.batchSchedule;
+      }
+    }
 
     if (!schedule) {
       return apiError("Class schedule not found", 404);
@@ -158,6 +204,16 @@ export async function GET(
     // 3. Resolve Recording Asset
     let wbSession = schedule.liveWhiteboardSession;
 
+    if (!wbSession && schedule.lectureId) {
+      const sibling = await prisma.batchSchedule.findFirst({
+        where: { lectureId: schedule.lectureId, liveWhiteboardSession: { isNot: null } },
+        include: { liveWhiteboardSession: { include: { pages: { select: { id: true } } } } },
+      });
+      if (sibling?.liveWhiteboardSession) {
+        wbSession = sibling.liveWhiteboardSession;
+      }
+    }
+
     // Self-heal recording if active / processing
     if (wbSession?.recordingEgressId && wbSession.recordingStatus !== "READY" && wbSession.recordingStatus !== "FAILED") {
       const reconciled = await reconcileRecordingStatus({
@@ -182,7 +238,7 @@ export async function GET(
         wbSession.recordingStatus === "READY" && Boolean(wbSession.recordingStorageKey);
       const isDirectYoutube = Boolean(wbSession.youtubeVideoId);
 
-      if (isArchivedYoutube) {
+      if (isArchivedYoutube && wbSession.youtubeArchiveVideoUrl) {
         recordingStatus = "READY";
         recordingUrl = wbSession.youtubeArchiveVideoUrl;
         recordingType = "YOUTUBE";
@@ -193,10 +249,14 @@ export async function GET(
           expiresInSeconds: 7200, // 2-hour playback window
         });
         recordingType = "VIDEO";
-      } else if (isDirectYoutube) {
+      } else if (isDirectYoutube && wbSession.youtubeVideoId) {
         recordingStatus = "READY";
         recordingUrl = `https://www.youtube.com/watch?v=${wbSession.youtubeVideoId}`;
         recordingType = "YOUTUBE";
+      } else if (schedule.lecture?.videoUrl) {
+        recordingStatus = "READY";
+        recordingUrl = schedule.lecture.videoUrl;
+        recordingType = schedule.lecture.videoUrl.includes("youtube.com") || schedule.lecture.videoUrl.includes("youtu.be") ? "YOUTUBE" : "VIDEO";
       } else if (
         wbSession.recordingStatus === "RECORDING" ||
         wbSession.recordingStatus === "STARTING" ||
@@ -206,10 +266,6 @@ export async function GET(
         recordingStatus = "PROCESSING";
       } else if (wbSession.recordingStatus === "FAILED") {
         recordingStatus = "FAILED";
-      } else if (schedule.lecture?.videoUrl) {
-        recordingStatus = "READY";
-        recordingUrl = schedule.lecture.videoUrl;
-        recordingType = schedule.lecture.videoUrl.includes("youtube.com") || schedule.lecture.videoUrl.includes("youtu.be") ? "YOUTUBE" : "VIDEO";
       }
     } else if (schedule.lecture?.videoUrl) {
       recordingStatus = "READY";
@@ -219,9 +275,11 @@ export async function GET(
 
     // 4. Resolve Notes & PDF Asset
     let notesStatus: "READY" | "PROCESSING" | "UNAVAILABLE" = "UNAVAILABLE";
+    let notesPreviewUrl: string | null = null;
     let notesDownloadUrl: string | null = null;
     let notesFilename: string | null = null;
     let hasOriginalSlides = false;
+    let originalPreviewUrl: string | null = null;
     let originalDownloadUrl: string | null = null;
     let originalFilename: string | null = null;
 
@@ -232,9 +290,15 @@ export async function GET(
         hasOriginalSlides = true;
         originalFilename =
           wbSession.presentationName || `${schedule.title.replace(/[^a-zA-Z0-9_-]/g, "_")}_Presentation.pdf`;
-        originalDownloadUrl = await resolveOriginalDownloadUrl(
+        originalPreviewUrl = await resolveOriginalUrl(
           presUrl,
-          originalFilename
+          originalFilename,
+          "inline"
+        );
+        originalDownloadUrl = await resolveOriginalUrl(
+          presUrl,
+          originalFilename,
+          "attachment"
         );
       }
 
@@ -263,25 +327,35 @@ export async function GET(
       if (activePdfKey && wbSession.pdfStatus === "READY") {
         notesStatus = "READY";
         notesFilename = `${schedule.title.replace(/[^a-zA-Z0-9_-]/g, "_")}_Notes.pdf`;
+        notesPreviewUrl = await createPresignedDownloadUrl({
+          key: activePdfKey,
+          expiresInSeconds: 3600,
+          contentDisposition: `inline; filename="${encodeURIComponent(notesFilename)}"`,
+          contentType: "application/pdf",
+        });
         notesDownloadUrl = await createPresignedDownloadUrl({
           key: activePdfKey,
           expiresInSeconds: 3600,
           contentDisposition: `attachment; filename="${encodeURIComponent(notesFilename)}"`,
+          contentType: "application/pdf",
         });
       } else if (wbSession.pdfStatus === "GENERATING") {
         notesStatus = "PROCESSING";
-      } else if (hasOriginalSlides && originalDownloadUrl) {
+      } else if (hasOriginalSlides && (originalPreviewUrl || originalDownloadUrl)) {
         // Fallback: If annotated export is not available, original slides serve as class notes
         notesStatus = "READY";
+        notesPreviewUrl = originalPreviewUrl;
         notesDownloadUrl = originalDownloadUrl;
         notesFilename = originalFilename;
       } else if (schedule.lecture?.slidesUrl) {
         notesStatus = "READY";
+        notesPreviewUrl = schedule.lecture.slidesUrl;
         notesDownloadUrl = schedule.lecture.slidesUrl;
         notesFilename = `${schedule.title.replace(/[^a-zA-Z0-9_-]/g, "_")}_Notes.pdf`;
       }
     } else if (schedule.lecture?.slidesUrl) {
       notesStatus = "READY";
+      notesPreviewUrl = schedule.lecture.slidesUrl;
       notesDownloadUrl = schedule.lecture.slidesUrl;
       notesFilename = `${schedule.title.replace(/[^a-zA-Z0-9_-]/g, "_")}_Notes.pdf`;
     }
@@ -307,9 +381,11 @@ export async function GET(
       },
       notes: {
         status: notesStatus,
+        previewUrl: notesPreviewUrl,
         downloadUrl: notesDownloadUrl,
         filename: notesFilename,
         hasOriginalSlides,
+        originalPreviewUrl,
         originalDownloadUrl,
         originalFilename,
       },

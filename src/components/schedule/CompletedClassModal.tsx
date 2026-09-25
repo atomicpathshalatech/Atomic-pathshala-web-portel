@@ -24,9 +24,11 @@ export interface CompletedClassAssets {
   };
   notes: {
     status: "READY" | "PROCESSING" | "UNAVAILABLE";
+    previewUrl?: string | null;
     downloadUrl: string | null;
     filename: string | null;
     hasOriginalSlides: boolean;
+    originalPreviewUrl?: string | null;
     originalDownloadUrl: string | null;
     originalFilename: string | null;
   };
@@ -121,10 +123,20 @@ export function CompletedClassModal({
     };
   }, [scheduleId]);
 
-  const activeNotesUrl =
-    notesType === "original" && assets?.notes.originalDownloadUrl
-      ? assets.notes.originalDownloadUrl
-      : assets?.notes.downloadUrl;
+  const activeNotesPreviewUrl =
+    notesType === "original"
+      ? assets?.notes.originalPreviewUrl || assets?.notes.originalDownloadUrl
+      : assets?.notes.previewUrl || assets?.notes.downloadUrl;
+
+  const activeNotesDownloadUrl =
+    notesType === "original"
+      ? assets?.notes.originalDownloadUrl || assets?.notes.originalPreviewUrl
+      : assets?.notes.downloadUrl || assets?.notes.previewUrl;
+
+  const activeNotesFilename =
+    notesType === "original"
+      ? assets?.notes.originalFilename || "original_presentation.pdf"
+      : assets?.notes.filename || "class_notes.pdf";
 
   const subjectBadgeClass = getSubjectBadge(subject);
   const startTimeStr = formatISTTime(startsAt);
@@ -310,7 +322,7 @@ export function CompletedClassModal({
                   )}
                 </div>
 
-                {assets?.notes?.status === "READY" && activeNotesUrl && (
+                {assets?.notes?.status === "READY" && (activeNotesPreviewUrl || activeNotesDownloadUrl) && (
                   <div className="flex items-center gap-2 ml-auto">
                     <button
                       type="button"
@@ -323,8 +335,8 @@ export function CompletedClassModal({
                     </button>
 
                     <a
-                      href={activeNotesUrl}
-                      download
+                      href={activeNotesDownloadUrl || activeNotesPreviewUrl || "#"}
+                      download={activeNotesFilename}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-bold transition shadow-md shadow-blue-500/20 cursor-pointer"
@@ -337,10 +349,10 @@ export function CompletedClassModal({
               </div>
 
               {/* Embedded In-App PDF Viewer (Rendered directly in the lower section) */}
-              {assets?.notes?.status === "READY" && activeNotesUrl ? (
+              {assets?.notes?.status === "READY" && activeNotesPreviewUrl ? (
                 <div className="w-full flex-1 min-h-[350px] sm:min-h-[460px] rounded-2xl overflow-hidden border border-white/10 bg-slate-900 shadow-xl flex flex-col">
                   <iframe
-                    src={`${activeNotesUrl}#toolbar=0&navpanes=0`}
+                    src={`${activeNotesPreviewUrl}#toolbar=0&navpanes=0`}
                     title="Class Notes PDF Viewer"
                     className="w-full flex-1 border-0 min-h-[350px] sm:min-h-[460px] bg-slate-800"
                   />
@@ -399,7 +411,7 @@ export function CompletedClassModal({
       </div>
 
       {/* In-App Fullscreen PDF Notes Viewer */}
-      {isNotesFullscreen && activeNotesUrl && (
+      {isNotesFullscreen && (activeNotesPreviewUrl || activeNotesDownloadUrl) && (
         <div className="fixed inset-0 z-60 bg-slate-950/95 flex flex-col p-2 sm:p-4 animate-in fade-in duration-200">
           <div className="flex items-center justify-between p-3 bg-slate-900 border border-white/10 rounded-2xl mb-2 text-white">
             <div className="flex items-center gap-2">
@@ -410,8 +422,8 @@ export function CompletedClassModal({
             </div>
             <div className="flex items-center gap-2">
               <a
-                href={activeNotesUrl}
-                download
+                href={activeNotesDownloadUrl || activeNotesPreviewUrl || "#"}
+                download={activeNotesFilename}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-1 transition"
@@ -431,7 +443,7 @@ export function CompletedClassModal({
           </div>
           <div className="flex-1 w-full rounded-2xl overflow-hidden border border-white/10 bg-slate-900">
             <iframe
-              src={`${activeNotesUrl}#toolbar=1&navpanes=0`}
+              src={`${activeNotesPreviewUrl || activeNotesDownloadUrl}#toolbar=1&navpanes=0`}
               title="Full Screen Class Notes PDF"
               className="w-full h-full border-0 bg-slate-800"
             />

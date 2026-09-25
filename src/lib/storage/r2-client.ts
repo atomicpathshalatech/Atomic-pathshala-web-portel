@@ -172,6 +172,7 @@ export async function createPresignedDownloadUrl(params: {
   key: string;
   expiresInSeconds?: number;
   contentDisposition?: string;
+  contentType?: string;
 }): Promise<string> {
   const { bucketName } = getR2Credentials();
   const client = getR2Client();
@@ -181,6 +182,7 @@ export async function createPresignedDownloadUrl(params: {
     Bucket: bucketName,
     Key: params.key,
     ResponseContentDisposition: params.contentDisposition,
+    ResponseContentType: params.contentType,
   });
 
   return getSignedUrl(client, command, { expiresIn });
