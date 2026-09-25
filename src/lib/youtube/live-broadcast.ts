@@ -244,9 +244,73 @@ export async function fetchRecordingStatus(youtubeVideoId: string): Promise<Reco
   return { recordingVideoId: null, recordingStatus: "PROCESSING" };
 }
 
+// Cache the master stream in memory so we reuse the single channel stream key across all classes
+let cachedMasterStream: CreateLiveStreamResult | null = null;
+
+/**
+ * Returns the channel's single persistent Master Live Stream.
+ * Ensures the teacher only ever needs ONE stream key in OBS for all classes.
+ */
+export async function getOrCreateMasterLiveStream(): Promise<CreateLiveStreamResult> {
+  if (cachedMasterStream) {
+    return cachedMasterStream;
+  }
+
+  // 1. Check environment variable override
+  if (process.env.YOUTUBE_STREAM_ID && process.env.YOUTUBE_STREAM_KEY) {
+    cachedMasterStream = {
+      id: process.env.YOUTUBE_STREAM_ID,
+      ingestUrl: process.env.YOUTUBE_INGEST_URL || "rtmp://a.rtmp.youtube.com/live2",
+      streamKey: process.env.YOUTUBE_STREAM_KEY,
+    };
+    return cachedMasterStream;
+  }
+
+  // 2. Check if a master stream already exists on the YouTube channel
+  try {
+    const listRes = await youtubeApiFetch<{
+      items?: Array<{
+        id: string;
+        snippet?: { title?: string };
+        cdn?: { ingestionInfo?: { ingestionAddress?: string; streamName?: string } };
+        status?: { streamStatus?: string };
+      }>;
+    }>("/liveStreams", {
+      method: "GET",
+      query: { part: "snippet,cdn,status", mine: "true", maxResults: "10" },
+    });
+
+    if (listRes.items && listRes.items.length > 0) {
+      const matching =
+        listRes.items.find(
+          (item) =>
+            item.snippet?.title?.includes("Atomic Pathshala") &&
+            item.cdn?.ingestionInfo?.streamName
+        ) ||
+        listRes.items.find((item) => item.cdn?.ingestionInfo?.streamName);
+
+      if (matching && matching.cdn?.ingestionInfo?.streamName) {
+        cachedMasterStream = {
+          id: matching.id,
+          ingestUrl: matching.cdn.ingestionInfo.ingestionAddress || "rtmp://a.rtmp.youtube.com/live2",
+          streamKey: matching.cdn.ingestionInfo.streamName,
+        };
+        return cachedMasterStream;
+      }
+    }
+  } catch (err) {
+    console.warn("[getOrCreateMasterLiveStream list warning]", err);
+  }
+
+  // 3. Create a single permanent Master Live Stream on the channel if none exists
+  const newStream = await createLiveStream("Atomic Pathshala Master Live Stream");
+  cachedMasterStream = newStream;
+  return cachedMasterStream;
+}
+
 export async function createAndBindBroadcast(title: string, scheduledStartTime: Date, description?: string) {
   const [stream, broadcast] = await Promise.all([
-    createLiveStream(title),
+    getOrCreateMasterLiveStream(),
     createLiveBroadcast(title, scheduledStartTime.toISOString(), description),
   ]);
   await bindBroadcastToStream(broadcast.id, stream.id);

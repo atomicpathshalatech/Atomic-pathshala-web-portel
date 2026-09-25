@@ -100,47 +100,36 @@ export async function POST(
     }
 
     // Generate or fetch YouTube broadcast credentials
-    let serverUrl = wbSession.youtubeIngestUrl || "rtmp://a.rtmp.youtube.com/live2";
+    let serverUrl = "rtmp://a.rtmp.youtube.com/live2";
     let streamKey = wbSession.youtubeStreamKey || null;
     let videoId = wbSession.youtubeVideoId || null;
 
-    if (!streamKey && !wbSession.youtubeVideoId) {
-      try {
-        const { youtubeLiveClassConfigured, ensureYoutubeBroadcastForWhiteboard } = await import(
-          "@/lib/live-class/youtube-broadcast"
-        );
-        if (youtubeLiveClassConfigured()) {
-          const withBroadcast = await ensureYoutubeBroadcastForWhiteboard(
-            wbSession.id,
-            schedule.title,
-            scheduledStart
-          );
-          serverUrl = withBroadcast.youtubeIngestUrl || serverUrl;
-          streamKey = withBroadcast.youtubeStreamKey || streamKey;
-          videoId = withBroadcast.youtubeVideoId || videoId;
-          wbSession = withBroadcast;
+    try {
+      const { youtubeLiveConfigured, getOrCreateMasterLiveStream } = await import(
+        "@/lib/youtube/live-broadcast"
+      );
+      if (youtubeLiveConfigured()) {
+        const masterStream = await getOrCreateMasterLiveStream();
+        serverUrl = masterStream.ingestUrl || serverUrl;
+        streamKey = masterStream.streamKey || streamKey;
+
+        if (wbSession.youtubeStreamKey !== streamKey || wbSession.youtubeIngestUrl !== serverUrl) {
+          wbSession = await prisma.whiteboardSession.update({
+            where: { id: wbSession.id },
+            data: {
+              youtubeIngestUrl: serverUrl,
+              youtubeStreamKey: streamKey,
+            },
+          });
         }
-      } catch (ytErr) {
-        console.warn("[youtube_stream_key_gen_warning]", ytErr);
       }
+    } catch (ytErr) {
+      console.warn("[youtube_master_stream_key_fetch_warning]", ytErr);
     }
 
-    // If still no stream key (e.g. YouTube OAuth not set up or offline mode), provide stable fallback key
-    if (!streamKey) {
-      const fallbackKey = `ap-live-${schedule.id.slice(-8)}-${Date.now().toString(36)}`;
-      wbSession = await prisma.whiteboardSession.update({
-        where: { id: wbSession.id },
-        data: {
-          youtubeIngestUrl: serverUrl,
-          youtubeStreamKey: fallbackKey,
-          videoTransport: wbSession.videoTransport === "LIVEKIT" ? "YOUTUBE" : wbSession.videoTransport,
-        },
-      });
-      streamKey = fallbackKey;
-    }
-
+    const { YOUTUBE_OAUTH_PRODUCTION_URL } = await import("@/lib/youtube/oauth-config");
     const broadcastToken = createBroadcastToken(schedule.id, session.user.id);
-    const obsBroadcastUrl = `${getAppBaseUrl()}/obs-stage/${schedule.id}?token=${broadcastToken}`;
+    const obsBroadcastUrl = `${YOUTUBE_OAUTH_PRODUCTION_URL}/obs-stage/${schedule.id}?token=${broadcastToken}`;
 
     return apiSuccess({
       whiteboardSession: wbSession,
