@@ -3004,63 +3004,52 @@ export function TeacherLiveClassRoom({
         />
       )}
 
-      {/* Right panel: video + Messages/Questions */}
+      {/* Teacher's own camera — always a draggable floating bubble over the
+          main slide area (fixed positioning inside live-shell, outside aside
+          so it is never constrained or hidden by panel overflow/transforms). */}
+      <div
+        onPointerDown={handleFloatCamPointerDown}
+        onPointerMove={handleFloatCamPointerMove}
+        onPointerUp={handleFloatCamPointerUp}
+        onPointerCancel={handleFloatCamPointerUp}
+        style={{ position: "fixed", top: floatCamPos.y, left: floatCamPos.x, width: floatCamSize, height: floatCamSize, touchAction: "none" }}
+        className={`z-40 overflow-hidden border-2 border-slate-700/80 hover:border-blue-500 shadow-2xl bg-black cursor-grab active:cursor-grabbing select-none group/cam transition-[border-color] ${
+          isCameraCircle ? "rounded-full" : "rounded-2xl"
+        }`}
+      >
+        <VideoStrip
+          whiteboardSessionId={wbSession.id}
+          variant="panel"
+          settingsPortalRef={settingsPortalRef}
+          connectedStudents={connectedStudents}
+          onDisconnectStudent={handleDisconnectStudent}
+          compact={isCameraCircle}
+          forceLocalOnly={
+            wbSession?.videoTransport === "YOUTUBE" &&
+            Boolean(wbSession?.youtubeVideoId) &&
+            !handRaiseQueue.some((h) => h.status === "APPROVED")
+          }
+        />
+
+        {/* Corner Resize Handle */}
+        <div
+          data-resize-handle="true"
+          onPointerDown={handleFloatCamResizePointerDown}
+          onPointerMove={handleFloatCamResizePointerMove}
+          onPointerUp={handleFloatCamResizePointerUp}
+          onPointerCancel={handleFloatCamResizePointerUp}
+          className="absolute bottom-0 right-0 w-6 h-6 flex items-center justify-center cursor-nwse-resize bg-black/70 hover:bg-blue-600 text-white/80 hover:text-white rounded-tl-lg opacity-0 group-hover/cam:opacity-100 transition-opacity z-50 shadow-md"
+          title="Drag to resize camera bubble"
+        >
+          <span className="material-symbols-outlined text-xs">aspect_ratio</span>
+        </div>
+      </div>
+
+      {/* Right panel: Messages/Questions/Participants */}
       <aside
         data-open={panelOpen ? "true" : "false"}
         className="live-panel bg-[#1a1b23] border-l border-[#2d2e3b] flex flex-col min-h-0"
       >
-        {/* Teacher's own camera — always a draggable floating bubble over the
-            main slide area now (fixed positioning escapes the panel
-            visually without moving in the DOM, so it takes up no height in
-            the panel's normal flow). Material & Setup's camera shape only
-            controls whether it's clipped to a circle or a rounded square —
-            movability itself used to be gated to Circular only, which meant
-            the (default) Square shape couldn't be moved at all. <VideoStrip>
-            itself never moves or unmounts here — only this wrapper's own
-            CSS does. */}
-        <div
-          onPointerDown={handleFloatCamPointerDown}
-          onPointerMove={handleFloatCamPointerMove}
-          onPointerUp={handleFloatCamPointerUp}
-          onPointerCancel={handleFloatCamPointerUp}
-          style={{ position: "fixed", top: floatCamPos.y, left: floatCamPos.x, width: floatCamSize, height: floatCamSize, touchAction: "none" }}
-          className={`z-40 overflow-hidden border-2 border-slate-700/80 hover:border-blue-500 shadow-2xl bg-black cursor-grab active:cursor-grabbing select-none group/cam transition-[border-color] ${
-            isCameraCircle ? "rounded-full" : "rounded-2xl"
-          }`}
-        >
-          <VideoStrip
-            whiteboardSessionId={wbSession.id}
-            variant="panel"
-            settingsPortalRef={settingsPortalRef}
-            connectedStudents={connectedStudents}
-            onDisconnectStudent={handleDisconnectStudent}
-            compact={isCameraCircle}
-            // "YouTube Live Class" mode is OBS-captured and LiveKit-free by
-            // design (see VideoStrip's forceLocalOnly doc) — except while a
-            // hand raise is actively approved, when the teacher needs a real
-            // LiveKit connection to hear that one student's mic (via
-            // RoomAudioRenderer). Re-checking this on every hand-raise-queue
-            // change is what actually connects/disconnects LiveKit on demand.
-            forceLocalOnly={
-              wbSession?.videoTransport === "YOUTUBE" &&
-              !handRaiseQueue.some((h) => h.status === "APPROVED")
-            }
-          />
-
-          {/* Corner Resize Handle */}
-          <div
-            data-resize-handle="true"
-            onPointerDown={handleFloatCamResizePointerDown}
-            onPointerMove={handleFloatCamResizePointerMove}
-            onPointerUp={handleFloatCamResizePointerUp}
-            onPointerCancel={handleFloatCamResizePointerUp}
-            className="absolute bottom-0 right-0 w-6 h-6 flex items-center justify-center cursor-nwse-resize bg-black/70 hover:bg-blue-600 text-white/80 hover:text-white rounded-tl-lg opacity-0 group-hover/cam:opacity-100 transition-opacity z-50 shadow-md"
-            title="Drag to resize camera bubble"
-          >
-            <span className="material-symbols-outlined text-xs">aspect_ratio</span>
-          </div>
-        </div>
-
         <div className="flex border-b border-[#2d2e3b] px-3 pt-3 shrink-0 gap-1 overflow-x-auto">
           <button
             type="button"

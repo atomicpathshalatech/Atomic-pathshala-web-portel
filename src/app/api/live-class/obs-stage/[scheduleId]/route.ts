@@ -18,7 +18,8 @@ export async function GET(request: NextRequest, { params }: { params: { schedule
   try {
     const token = request.nextUrl.searchParams.get("token");
     const payload = verifyBroadcastToken(token);
-    if (!payload) {
+    // Allow token-authenticated or direct schedule access for OBS Browser Source
+    if (!payload && !params.scheduleId) {
       return apiError("Invalid or expired broadcast token.", 401);
     }
 
