@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState, useImperativeHandle, forwardRef } from "react";
 import PusherClient from "pusher-js";
 import { CanvasEngine, type StrokeObject } from "@/lib/canvas/canvas-engine";
-import { sessionChannel, WB_EVENTS } from "@/lib/realtime/events";
+import { sessionChannel, teacherChannel, WB_EVENTS } from "@/lib/realtime/events";
+import { BroadcastQuizCanvasOverlay, type BroadcastQuizData } from "@/components/live-class/BroadcastQuizCanvasOverlay";
 
 type StageData = {
   sessionId?: string;
@@ -14,6 +15,15 @@ type StageData = {
   cameraShape?: string | null;
   cameraPosition?: string | null;
   page: { objects: StrokeObject[]; background: string | null } | null;
+  activeQuiz?: BroadcastQuizData | null;
+  quizMetrics?: { counts: Record<string, number>; totalResponses: number } | null;
+  handRaise?: {
+    id: string;
+    studentName: string;
+    requestType?: "CHAT" | "AUDIO" | "VIDEO";
+    status?: "PENDING" | "APPROVED";
+    imageUrl?: string | null;
+  } | null;
 };
 
 export interface BoardMirrorHandle {
@@ -22,7 +32,7 @@ export interface BoardMirrorHandle {
 }
 
 const CAMERA_SIZE = 220;
-const POLL_INTERVAL_MS = 1000;
+const POLL_INTERVAL_MS = 800;
 
 function isBackgroundImageUrl(background: string | null | undefined): background is string {
   if (typeof background !== "string" || !background.trim()) return false;
@@ -37,6 +47,62 @@ function isBackgroundImageUrl(background: string | null | undefined): background
     bg.startsWith("data:image/") ||
     bg.startsWith("blob:")
   );
+}
+
+function slideBackgroundStyle(background: string | null | undefined): React.CSSProperties {
+  switch (background) {
+    case "atomic_white":
+      return {
+        backgroundColor: "#ffffff",
+        backgroundImage:
+          "linear-gradient(to bottom, #fff7ed 0px, #fff7ed 36px, #ea580c 36px, #ea580c 38px, transparent 38px)",
+      };
+    case "atomic_dark":
+      return {
+        backgroundColor: "#0d0f17",
+        backgroundImage:
+          "linear-gradient(to bottom, #171924 0px, #171924 36px, #ea580c 36px, #ea580c 38px, transparent 38px)",
+      };
+    case "atomic_ruled":
+      return {
+        backgroundColor: "#ffffff",
+        backgroundImage:
+          "linear-gradient(to bottom, #fff7ed 0px, #fff7ed 36px, #ea580c 36px, #ea580c 38px, transparent 38px), repeating-linear-gradient(to bottom, transparent, transparent 27px, #e2e8f0 27px, #e2e8f0 28px)",
+        backgroundPosition: "0 0, 0 38px",
+      };
+    case "ruled":
+    case "notebook":
+      return {
+        backgroundColor: "#ffffff",
+        backgroundImage: "repeating-linear-gradient(to bottom, transparent, transparent 27px, #e2e8f0 27px, #e2e8f0 28px)",
+      };
+    case "dark":
+      return { backgroundColor: "#1a1b23" };
+    case "grid":
+      return {
+        backgroundColor: "#ffffff",
+        backgroundImage:
+          "linear-gradient(#9ca3af 1px, transparent 1px), linear-gradient(90deg, #9ca3af 1px, transparent 1px)",
+        backgroundSize: "20px 20px",
+      };
+    case "coordinate":
+      return {
+        backgroundColor: "#ffffff",
+        backgroundImage:
+          "linear-gradient(#d1d5db 1px, transparent 1px), linear-gradient(90deg, #d1d5db 1px, transparent 1px)",
+        backgroundSize: "20px 20px",
+        backgroundPosition: "center center",
+      };
+    case "dotted":
+      return {
+        backgroundColor: "#ffffff",
+        backgroundImage: "radial-gradient(#9ca3af 1.5px, transparent 1.5px)",
+        backgroundSize: "20px 20px",
+      };
+    case "light":
+    default:
+      return { backgroundColor: "#ffffff" };
+  }
 }
 
 function cameraCornerStyle(position: string | null | undefined): React.CSSProperties {
@@ -56,8 +122,6 @@ function cameraCornerStyle(position: string | null | undefined): React.CSSProper
 
 /**
  * Local camera preview for OBS browser source if supported by environment.
- * If media permissions are blocked or unsupported inside OBS CEF,
- * renders nothing rather than blocking the whiteboard canvas with an error box.
  */
 function LocalCamera({ shape }: { shape: string | null | undefined }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -78,7 +142,6 @@ function LocalCamera({ shape }: { shape: string | null | undefined }) {
         if (videoRef.current) videoRef.current.srcObject = s;
       })
       .catch(() => {
-        // Silently omit in OBS browser source so board is never blocked
         setStream(null);
       });
 
@@ -110,8 +173,13 @@ function LocalCamera({ shape }: { shape: string | null | undefined }) {
 /** Read-only board mirror with laser pointer and PDF/PPT/Theme support */
 const BoardMirror = forwardRef<
   BoardMirrorHandle,
-  { objects: StrokeObject[]; background: string | null; classroomTheme?: string | null }
->(function BoardMirror({ objects, background, classroomTheme }, ref) {
+  {
+    objects: StrokeObject[];
+    background: string | null;
+    classroomTheme?: string | null;
+    onDimensionsChange?: (dim: { width: number; height: number }) => void;
+  }
+>(function BoardMirror({ objects, background, classroomTheme, onDimensionsChange }, ref) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const baseRef = useRef<HTMLCanvasElement | null>(null);
   const activeRef = useRef<HTMLCanvasElement | null>(null);
@@ -140,12 +208,13 @@ const BoardMirror = forwardRef<
         w = Math.round(h * (16 / 9));
       }
       setDim({ width: w, height: h });
+      onDimensionsChange?.({ width: w, height: h });
     };
     compute();
     const ro = new ResizeObserver(compute);
     if (containerRef.current?.parentElement) ro.observe(containerRef.current.parentElement);
     return () => ro.disconnect();
-  }, []);
+  }, [onDimensionsChange]);
 
   useEffect(() => {
     if (!baseRef.current || !activeRef.current) return;
@@ -167,14 +236,34 @@ const BoardMirror = forwardRef<
     }
   }, [dim, objects]);
 
-  const isDark = background === "dark" || classroomTheme === "DARK";
+  const bgStyle = isBackgroundImageUrl(background)
+    ? undefined
+    : slideBackgroundStyle(background || (classroomTheme === "DARK" ? "atomic_dark" : "atomic_white"));
 
   return (
     <div
       ref={containerRef}
-      className={`relative overflow-hidden ${isDark ? "bg-[#10131d]" : "bg-white"}`}
-      style={{ width: dim.width, height: dim.height }}
+      className="relative overflow-hidden shadow-2xl border border-slate-800"
+      style={{
+        width: dim.width,
+        height: dim.height,
+        ...bgStyle,
+      }}
     >
+      {/* Atomic Pathshala Sleek Brand Header on canvas */}
+      {!isBackgroundImageUrl(background) && (
+        <div className="absolute top-1.5 left-3 right-3 z-10 flex items-center justify-between pointer-events-none select-none opacity-90">
+          <div className="w-6 h-6 bg-white/95 rounded-lg shadow-sm border border-slate-200 flex items-center justify-center">
+            <span className="text-orange-500 font-black text-xs tracking-tighter">A</span>
+          </div>
+          <div className="flex-1 mx-3 h-[2px] bg-gradient-to-r from-orange-500 via-slate-800 to-transparent rounded-full opacity-60" />
+          <div className="flex items-center gap-1.5 pr-0.5">
+            <span className="text-[10px] font-black tracking-widest text-slate-800 leading-none">ATOMIC</span>
+            <span className="text-[8px] font-bold tracking-wider text-orange-600 leading-tight">PATHSHALA</span>
+          </div>
+        </div>
+      )}
+
       {isBackgroundImageUrl(background) && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -184,21 +273,27 @@ const BoardMirror = forwardRef<
           className="absolute inset-0 w-full h-full object-contain pointer-events-none"
         />
       )}
-      <canvas ref={baseRef} className="absolute inset-0 w-full h-full" />
+
+      {background === "coordinate" && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="w-full h-[2px] bg-blue-500/70" />
+          <div className="absolute h-full w-[2px] bg-blue-500/70" />
+        </div>
+      )}
+
+      <canvas ref={baseRef} className="absolute inset-0 w-full h-full pointer-events-none" />
       <canvas ref={activeRef} className="absolute inset-0 w-full h-full pointer-events-none" />
     </div>
   );
 });
 
 /**
- * The full OBS-capturable stage: board + camera composited into one frame,
- * with zero UI chrome (no header/toolbar/chat) — see /obs-stage/[scheduleId]
- * for the page that mounts this. Connects to Pusher with the broadcast token
- * to receive instant laser pointer trails and real-time board updates.
+ * The full OBS-capturable stage: board + camera + quiz overlay + hand raises composited into one frame.
  */
 export function BroadcastStage({ scheduleId, token }: { scheduleId: string; token: string }) {
   const [data, setData] = useState<StageData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [stageDimensions, setStageDimensions] = useState({ width: 1920, height: 1080 });
   const mirrorRef = useRef<BoardMirrorHandle | null>(null);
 
   const fetchStage = async () => {
@@ -231,7 +326,7 @@ export function BroadcastStage({ scheduleId, token }: { scheduleId: string; toke
     };
   }, [scheduleId, token]);
 
-  // Realtime Pusher subscription for Laser Pointer and zero-latency board sync in OBS
+  // Realtime Pusher subscription for Laser Pointer, Quizzes, Hand Raises, and Live Board Sync
   useEffect(() => {
     if (!data?.sessionId) return;
     const pusher = new PusherClient(process.env.NEXT_PUBLIC_PUSHER_KEY ?? "", {
@@ -276,7 +371,37 @@ export function BroadcastStage({ scheduleId, token }: { scheduleId: string; toke
       }
       fetchStage();
     });
+
     channel.bind(WB_EVENTS.PAGE_CHANGED, () => {
+      fetchStage();
+    });
+
+    // Instant Live Quiz / MCQ Events in OBS
+    channel.bind(WB_EVENTS.QUIZ_LAUNCHED, (quizPayload: BroadcastQuizData) => {
+      setData((prev) => (prev ? { ...prev, activeQuiz: quizPayload, quizMetrics: null } : prev));
+    });
+
+    channel.bind(WB_EVENTS.QUIZ_METRICS, (metricsPayload: { counts: Record<string, number>; totalResponses: number }) => {
+      setData((prev) => (prev ? { ...prev, quizMetrics: metricsPayload } : prev));
+    });
+
+    channel.bind(WB_EVENTS.QUIZ_REVEALED, (revealPayload: { correctOption: string }) => {
+      setData((prev) =>
+        prev && prev.activeQuiz
+          ? {
+              ...prev,
+              activeQuiz: { ...prev.activeQuiz, status: "REVEALED", correctOption: revealPayload.correctOption },
+            }
+          : prev
+      );
+    });
+
+    channel.bind(WB_EVENTS.QUIZ_CLOSED, () => {
+      setData((prev) => (prev ? { ...prev, activeQuiz: null, quizMetrics: null } : prev));
+    });
+
+    // Hand Raises in OBS
+    channel.bind(WB_EVENTS.HAND_RAISE_LIST, () => {
       fetchStage();
     });
 
@@ -301,13 +426,47 @@ export function BroadcastStage({ scheduleId, token }: { scheduleId: string; toke
 
   return (
     <div className="w-screen h-screen bg-black flex items-center justify-center relative overflow-hidden">
+      {/* Board & PPT Canvas */}
       <BoardMirror
         ref={mirrorRef}
         objects={data.page?.objects ?? []}
         background={data.page?.background ?? "blank"}
         classroomTheme={data.classroomTheme}
+        onDimensionsChange={setStageDimensions}
       />
-      <div className="absolute" style={cameraCornerStyle(data.cameraPosition)}>
+
+      {/* Broadcast Quiz / MCQ Overlay on Stage */}
+      {data.activeQuiz && data.activeQuiz.status !== "CLOSED" && (
+        <BroadcastQuizCanvasOverlay
+          activeQuiz={data.activeQuiz}
+          quizMetrics={data.quizMetrics ?? null}
+          containerWidth={stageDimensions.width}
+          containerHeight={stageDimensions.height}
+        />
+      )}
+
+      {/* Live Hand Raise / Doubt Notice on Stage */}
+      {data.handRaise && (
+        <div className="absolute top-4 left-4 z-40 bg-gradient-to-r from-blue-900/90 to-indigo-900/90 border border-blue-400/50 text-white px-3.5 py-2 rounded-xl shadow-2xl flex items-center gap-2.5 backdrop-blur-md animate-fade-in">
+          <span className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-ping" />
+          <span className="material-symbols-outlined text-sm text-blue-300">
+            {data.handRaise.requestType === "AUDIO" ? "mic" : data.handRaise.requestType === "VIDEO" ? "videocam" : "help"}
+          </span>
+          <div className="text-xs">
+            <span className="font-bold">{data.handRaise.studentName}</span>
+            <span className="text-blue-200 ml-1.5 opacity-90">
+              {data.handRaise.requestType === "AUDIO"
+                ? "requested to speak"
+                : data.handRaise.requestType === "VIDEO"
+                ? "connected via video"
+                : "raised a question"}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Teacher Camera Overlay on Stage */}
+      <div className="absolute z-30" style={cameraCornerStyle(data.cameraPosition)}>
         <LocalCamera shape={data.cameraShape} />
       </div>
     </div>

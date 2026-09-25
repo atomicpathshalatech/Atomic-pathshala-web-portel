@@ -93,6 +93,49 @@ export async function GET(request: NextRequest, { params }: { params: { schedule
       });
     }
 
+    // Active live quiz/poll data for OBS stage overlay
+    const activeQuiz = await prisma.quizSession.findFirst({
+      where: {
+        whiteboardSessionId: wbSession.id,
+        status: { in: ["ACTIVE", "REVEALED"] },
+      },
+      orderBy: { startedAt: "desc" },
+      select: {
+        id: true,
+        questionText: true,
+        options: true,
+        timeLimitSec: true,
+        status: true,
+        correctOption: true,
+        startedAt: true,
+      },
+    });
+
+    let quizMetrics = null;
+    if (activeQuiz) {
+      const responses = await prisma.quizResponse.findMany({
+        where: { quizSessionId: activeQuiz.id },
+        select: { selectedOption: true },
+      });
+      const counts: Record<string, number> = {};
+      responses.forEach((r: { selectedOption: string }) => {
+        counts[r.selectedOption] = (counts[r.selectedOption] || 0) + 1;
+      });
+      quizMetrics = { counts, totalResponses: responses.length };
+    }
+
+    // Active hand raise data
+    const activeHandRaise = await prisma.handRaiseEvent.findFirst({
+      where: {
+        whiteboardSessionId: wbSession.id,
+        status: { in: ["PENDING", "APPROVED"] },
+      },
+      orderBy: { raisedAt: "desc" },
+      include: {
+        student: { include: { user: true } },
+      },
+    });
+
     return apiSuccess({
       sessionId: wbSession.id,
       status: wbSession.status,
@@ -102,6 +145,27 @@ export async function GET(request: NextRequest, { params }: { params: { schedule
       cameraShape: wbSession.cameraShape,
       cameraPosition: wbSession.cameraPosition,
       page: page ?? null,
+      activeQuiz: activeQuiz
+        ? {
+            id: activeQuiz.id,
+            questionText: activeQuiz.questionText,
+            options: (activeQuiz.options as any) || [],
+            timeLimitSec: activeQuiz.timeLimitSec,
+            status: activeQuiz.status,
+            correctOption: activeQuiz.correctOption,
+            startedAt: activeQuiz.startedAt ? activeQuiz.startedAt.toISOString() : null,
+          }
+        : null,
+      quizMetrics,
+      handRaise: activeHandRaise
+        ? {
+            id: activeHandRaise.id,
+            studentName: activeHandRaise.student?.user?.name || "Student",
+            requestType: activeHandRaise.requestType,
+            status: activeHandRaise.status,
+            imageUrl: activeHandRaise.imageUrl || null,
+          }
+        : null,
     });
   } catch (error) {
     return handleApiError(error);

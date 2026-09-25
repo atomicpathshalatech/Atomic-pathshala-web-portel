@@ -28,13 +28,15 @@ export async function POST(request: NextRequest) {
 
   try {
     // 1. Check Broadcast Token (OBS Browser Source / Headless ingest)
-    if (broadcastToken && presenceMatch) {
+    if (broadcastToken && (presenceMatch || teacherMatch)) {
       const payload = verifyBroadcastToken(broadcastToken);
       if (payload) {
+        const targetSessionId = (presenceMatch ? presenceMatch[1] : teacherMatch?.[1])!;
         const wbSession = await prisma.whiteboardSession.findFirst({
           where: {
-            id: presenceMatch[1]!,
+            id: targetSessionId,
             OR: [
+              { id: payload.scheduleId },
               { batchScheduleId: payload.scheduleId },
               { batchSchedule: { id: payload.scheduleId } },
               { batchSchedule: { lectureId: payload.scheduleId } },
@@ -43,11 +45,16 @@ export async function POST(request: NextRequest) {
           select: { id: true },
         });
         if (wbSession) {
-          const authResponse = pusherServer.authorizeChannel(socketId, channelName, {
-            user_id: `OBS:${payload.teacherUserId}`,
-            user_info: { name: "OBS Stage", role: "OBS" },
-          });
-          return Response.json(authResponse);
+          if (presenceMatch) {
+            const authResponse = pusherServer.authorizeChannel(socketId, channelName, {
+              user_id: `OBS:${payload.teacherUserId}`,
+              user_info: { name: "OBS Stage", role: "OBS" },
+            });
+            return Response.json(authResponse);
+          } else {
+            const authResponse = pusherServer.authorizeChannel(socketId, channelName);
+            return Response.json(authResponse);
+          }
         }
       }
     }
