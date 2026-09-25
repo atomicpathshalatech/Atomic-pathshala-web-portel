@@ -359,7 +359,16 @@ export async function POST(
         }
       } catch (youtubeError) {
         console.error("[live_class_youtube_broadcast_error]", youtubeError);
-        youtubeSimulcastWarning = "Could not set up the YouTube simulcast for this class — it's live on the interactive room only.";
+        const reason = youtubeError instanceof Error ? youtubeError.message : String(youtubeError);
+        // Surface the real cause so a teacher/admin isn't left guessing why OBS
+        // has no valid stream key — quota exhaustion and a revoked/expired
+        // OAuth token look identical from the OBS side ("Failed to connect").
+        const hint = /quota/i.test(reason)
+          ? " YouTube API daily quota is exhausted (resets ~12:30 PM IST) — request a quota increase in Google Cloud Console."
+          : /invalid_grant|unauthorized|401|insufficient/i.test(reason)
+          ? " The YouTube account authorization looks expired or missing scopes — reconnect YouTube in team settings."
+          : "";
+        youtubeSimulcastWarning = `Could not set up the YouTube simulcast for this class — no stream key was created, so OBS cannot connect.${hint}`;
       }
     }
     if (requestedTransport === "BOTH" || requestedTransport === "YOUTUBE") {
