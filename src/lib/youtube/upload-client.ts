@@ -27,6 +27,10 @@ interface CachedToken {
 // and this is never on a per-request hot path.
 let cachedToken: CachedToken | null = null;
 
+export function clearCachedYoutubeToken(): void {
+  cachedToken = null;
+}
+
 export class YoutubeNotConfiguredError extends Error {
   constructor() {
     super("YouTube OAuth credentials are not configured (YOUTUBE_CLIENT_ID / YOUTUBE_CLIENT_SECRET / YOUTUBE_REFRESH_TOKEN).");
@@ -38,8 +42,8 @@ export function youtubeArchiveConfigured(): boolean {
   return Boolean(process.env.YOUTUBE_CLIENT_ID && process.env.YOUTUBE_CLIENT_SECRET && process.env.YOUTUBE_REFRESH_TOKEN);
 }
 
-export async function getYoutubeAccessToken(): Promise<string> {
-  if (cachedToken && cachedToken.expiresAt > Date.now() + 30_000) {
+export async function getYoutubeAccessToken(forceFresh = false): Promise<string> {
+  if (!forceFresh && cachedToken && cachedToken.expiresAt > Date.now() + 30_000) {
     return cachedToken.accessToken;
   }
 

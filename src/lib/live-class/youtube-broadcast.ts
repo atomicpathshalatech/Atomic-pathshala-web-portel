@@ -25,7 +25,7 @@ export async function ensureYoutubeBroadcastForWhiteboard(
       teacher: { include: { user: true } },
     },
   });
-  if (existing.youtubeBroadcastId && existing.youtubeStreamId) {
+  if (existing.youtubeBroadcastId && existing.youtubeStreamId && existing.youtubeStreamKey) {
     ensureBroadcastEmbeddable(existing.youtubeBroadcastId).catch(() => {});
     return existing;
   }

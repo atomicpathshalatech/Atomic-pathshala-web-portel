@@ -1,5 +1,5 @@
 import "server-only";
-import { getYoutubeAccessToken, youtubeArchiveConfigured } from "@/lib/youtube/upload-client";
+import { getYoutubeAccessToken, clearCachedYoutubeToken, youtubeArchiveConfigured, isRetryableYoutubeError } from "@/lib/youtube/upload-client";
 
 /**
  * Schema-agnostic YouTube Live Streaming API (Data API v3) client — the pure
@@ -19,27 +19,56 @@ export function youtubeLiveConfigured(): boolean {
   return youtubeArchiveConfigured();
 }
 
-async function youtubeApiFetch<T>(path: string, init: RequestInit & { query?: Record<string, string> } = {}): Promise<T> {
-  const accessToken = await getYoutubeAccessToken();
+async function youtubeApiFetch<T>(
+  path: string,
+  init: RequestInit & { query?: Record<string, string> } = {},
+  retries = 2
+): Promise<T> {
   const { query, ...rest } = init;
   const url = new URL(`${YOUTUBE_API_BASE}${path}`);
   for (const [key, value] of Object.entries(query ?? {})) url.searchParams.set(key, value);
 
-  const res = await fetch(url.toString(), {
-    ...rest,
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-      ...(rest.headers ?? {}),
-    },
-  });
+  let lastError: Error | null = null;
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`YouTube API ${path} failed (${res.status}): ${text}`);
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const accessToken = await getYoutubeAccessToken(attempt > 0);
+      const res = await fetch(url.toString(), {
+        ...rest,
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+          ...(rest.headers ?? {}),
+        },
+      });
+
+      if (res.status === 401 && attempt < retries) {
+        clearCachedYoutubeToken();
+        await new Promise((r) => setTimeout(r, 600));
+        continue;
+      }
+
+      if ((res.status === 429 || res.status >= 500) && attempt < retries) {
+        await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+        continue;
+      }
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(`YouTube API ${path} failed (${res.status}): ${text}`);
+      }
+      if (res.status === 204) return undefined as T;
+      return res.json() as Promise<T>;
+    } catch (err: any) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      if (attempt >= retries || !isRetryableYoutubeError(err)) {
+        throw lastError;
+      }
+      await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+    }
   }
-  if (res.status === 204) return undefined as T;
-  return res.json() as Promise<T>;
+
+  throw lastError || new Error(`YouTube API ${path} failed after retries`);
 }
 
 export interface CreateLiveStreamResult {
@@ -74,7 +103,7 @@ export interface CreateLiveBroadcastResult {
   liveChatId: string | null;
 }
 
-/** liveBroadcasts.insert — always unlisted; Atomic Pathshala, not YouTube, is the access-control layer. */
+/** liveBroadcasts.insert — strictly UNLISTED for batch privacy; Atomic Pathshala is the access-control layer. */
 export async function createLiveBroadcast(
   title: string,
   scheduledStartTime: string,
@@ -101,8 +130,7 @@ export async function createLiveBroadcast(
     }),
   });
 
-  // Explicitly ensure the created broadcast's video status has embeddable: true
-  // so external websites/webviews can embed the video without "playback disabled by video owner"
+  // Explicitly ensure the created broadcast's video status has embeddable: true and privacyStatus: "unlisted"
   try {
     await youtubeApiFetch("/videos", {
       method: "PUT",
@@ -124,7 +152,7 @@ export async function createLiveBroadcast(
 }
 
 /**
- * Ensures an existing broadcast has embedding explicitly enabled on YouTube
+ * Ensures an existing broadcast has embedding explicitly enabled and remains unlisted on YouTube
  */
 export async function ensureBroadcastEmbeddable(broadcastId: string): Promise<void> {
   try {
@@ -146,10 +174,27 @@ export async function ensureBroadcastEmbeddable(broadcastId: string): Promise<vo
 }
 
 export async function bindBroadcastToStream(broadcastId: string, streamId: string): Promise<void> {
-  await youtubeApiFetch(`/liveBroadcasts/bind`, {
-    method: "POST",
-    query: { id: broadcastId, streamId, part: "id" },
-  });
+  try {
+    await youtubeApiFetch(`/liveBroadcasts/bind`, {
+      method: "POST",
+      query: { id: broadcastId, streamId, part: "id" },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (/alreadyBound|redundant/i.test(message)) return;
+    // Retry once after brief pause if stream was freshly created
+    await new Promise((r) => setTimeout(r, 1200));
+    try {
+      await youtubeApiFetch(`/liveBroadcasts/bind`, {
+        method: "POST",
+        query: { id: broadcastId, streamId, part: "id" },
+      });
+    } catch (retryErr) {
+      const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
+      if (/alreadyBound|redundant/i.test(retryMsg)) return;
+      throw retryErr;
+    }
+  }
 }
 
 export async function transitionBroadcast(youtubeBroadcastId: string, status: "live" | "complete"): Promise<void> {
