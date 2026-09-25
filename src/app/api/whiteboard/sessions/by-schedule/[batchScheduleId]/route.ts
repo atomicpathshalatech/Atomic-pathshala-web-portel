@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { UnauthorizedError, ForbiddenError } from "@/lib/rbac/guard";
 import { resolveTeacherForSchedule, resolveStudentForSchedule, hasLenientLiveClassAccess } from "@/lib/whiteboard/access";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { cache } from "@/lib/cache/redis";
 
 /**
  * Looks up the live session (if any) for a scheduled class, keyed by
@@ -49,46 +50,50 @@ export async function GET(
     }
     if (!hasAccess) throw new ForbiddenError();
 
-    let wbSession = await prisma.whiteboardSession.findUnique({
-      where: { batchScheduleId: params.batchScheduleId },
-      // livePhase lets the student client tell "session exists but teacher
-      // hasn't hit Start Class yet" (PREPARING — show the lobby, chat is
-      // already live) apart from "class is actually live" (LIVE — mount
-      select: {
-        id: true,
-        title: true,
-        status: true,
-        livePhase: true,
-        videoTransport: true,
-        youtubeVideoId: true,
-        startedAt: true,
-        endedAt: true,
-        presentationUrl: true,
-        presentationName: true,
-        presentationType: true,
-        classroomTheme: true,
-        cameraShape: true,
-        cameraPosition: true,
-        scheduledStart: true,
-        scheduledEnd: true,
-        actualStartedAt: true,
-        actualEndedAt: true,
-        totalExtendedMinutes: true,
-      },
-    });
+    let wbSession = await cache.getOrSet(
+      `wb:schedule:${params.batchScheduleId}`,
+      async () => {
+        let ws = await prisma.whiteboardSession.findUnique({
+          where: { batchScheduleId: params.batchScheduleId },
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            livePhase: true,
+            videoTransport: true,
+            youtubeVideoId: true,
+            startedAt: true,
+            endedAt: true,
+            presentationUrl: true,
+            presentationName: true,
+            presentationType: true,
+            classroomTheme: true,
+            cameraShape: true,
+            cameraPosition: true,
+            scheduledStart: true,
+            scheduledEnd: true,
+            actualStartedAt: true,
+            actualEndedAt: true,
+            totalExtendedMinutes: true,
+          },
+        });
 
-    if (!wbSession && schedule.lectureId) {
-      const siblingSchedule = await prisma.batchSchedule.findFirst({
-        where: {
-          lectureId: schedule.lectureId,
-          liveWhiteboardSession: { isNot: null },
-        },
-        include: { liveWhiteboardSession: true },
-      });
-      if (siblingSchedule?.liveWhiteboardSession) {
-        wbSession = siblingSchedule.liveWhiteboardSession as any;
-      }
-    }
+        if (!ws && schedule.lectureId) {
+          const siblingSchedule = await prisma.batchSchedule.findFirst({
+            where: {
+              lectureId: schedule.lectureId,
+              liveWhiteboardSession: { isNot: null },
+            },
+            include: { liveWhiteboardSession: true },
+          });
+          if (siblingSchedule?.liveWhiteboardSession) {
+            ws = siblingSchedule.liveWhiteboardSession as any;
+          }
+        }
+        return ws;
+      },
+      3
+    );
 
 
 

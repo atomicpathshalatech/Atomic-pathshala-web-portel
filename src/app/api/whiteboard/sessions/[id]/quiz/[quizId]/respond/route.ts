@@ -7,6 +7,7 @@ import { resolveWhiteboardAccess } from "@/lib/whiteboard/access";
 import { quizResponseSchema } from "@/lib/validation/whiteboard";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { pushQuizMetrics } from "@/lib/whiteboard/quiz";
+import { checkRateLimit, rateLimitExceededResponse } from "@/lib/security/rate-limit";
 
 /**
  * Student submits an answer. The deadline and elapsed time are both computed
@@ -19,6 +20,11 @@ export async function POST(
   { params }: { params: { id: string; quizId: string } }
 ) {
   try {
+    const rateCheck = await checkRateLimit(request, "TEST_SERIES");
+    if (!rateCheck.success) {
+      return rateLimitExceededResponse(rateCheck);
+    }
+
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
     const access = await resolveWhiteboardAccess(session.user.id, params.id);

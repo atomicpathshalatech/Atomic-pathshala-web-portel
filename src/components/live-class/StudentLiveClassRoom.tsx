@@ -625,6 +625,8 @@ export function StudentLiveClassRoom({
       timeLimitSec: quiz.timeLimitSec,
       startedAt: quiz.startedAt,
       status: quiz.status === "REVEALED" ? "REVEALED" : "ACTIVE",
+      counts: (quiz as any).counts,
+      totalVotes: (quiz as any).totalVotes,
       mySelection,
     };
   }, [quiz, quizDismissed, mySelection]);
@@ -1032,11 +1034,17 @@ export function StudentLiveClassRoom({
 
     channel.bind(
       WB_EVENTS.QUIZ_REVEALED,
-      (data: { id: string; correctOption: string | null }) => {
+      (data: { id: string; correctOption: string | null; counts?: Record<string, number>; totalResponses?: number; correctCount?: number }) => {
         setQuiz((prev) => {
           if (prev && prev.id === data.id) {
             playPollRevealChime(mySelection === data.correctOption);
-            return { ...prev, status: "REVEALED", correctOption: data.correctOption };
+            return {
+              ...prev,
+              status: "REVEALED",
+              correctOption: data.correctOption,
+              counts: data.counts,
+              totalVotes: data.totalResponses,
+            } as any;
           }
           return prev;
         });
@@ -1302,14 +1310,13 @@ export function StudentLiveClassRoom({
 
   const isThemeDark = wbSession?.classroomTheme !== "LIGHT";
   const isCameraCircle = wbSession?.cameraShape === "CIRCULAR";
-  // In BOTH mode the teacher keeps the full interactive LiveKit room, but
-  // students watch the YouTube simulcast instead of connecting to LiveKit
-  // directly (removes per-student LiveKit viewer cost/capacity limits,
-  // which is the actual point of adding YouTube here) — falls back to the
-  // LiveKit view only if the broadcast hasn't been created yet.
+  // YouTube mode is active ONLY when an actual YouTube video id exists.
+  // If YouTube streaming failed or was unconfigured, we seamlessly fall back
+  // to the interactive whiteboard canvas + LiveKit / WebRTC camera room so
+  // students are never left with a blank or broken screen.
   const isYouTube =
-    wbSession?.videoTransport === "YOUTUBE" ||
-    (wbSession?.videoTransport === "BOTH" && Boolean(wbSession?.youtubeVideoId));
+    (wbSession?.videoTransport === "YOUTUBE" || wbSession?.videoTransport === "BOTH") &&
+    Boolean(wbSession?.youtubeVideoId);
 
   // ---------------- CLASS ENDED ----------------
   // Students see ONLY "Class Ended" + Student Learning Feedback.

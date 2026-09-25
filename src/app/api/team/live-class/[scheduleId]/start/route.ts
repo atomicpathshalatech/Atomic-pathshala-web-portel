@@ -334,6 +334,8 @@ export async function POST(
     // warning, not a hard error — the class still starts either way.
     let youtubeSimulcastWarning: string | null = null;
     let obsBroadcastUrl: string | undefined;
+    let effectiveTransport = requestedTransport;
+
     if ((requestedTransport === "BOTH" || requestedTransport === "YOUTUBE") && !requestedYouTubeId) {
       try {
         const { youtubeLiveClassConfigured, ensureYoutubeBroadcastForWhiteboard } = await import(
@@ -341,6 +343,7 @@ export async function POST(
         );
         if (!youtubeLiveClassConfigured()) {
           youtubeSimulcastWarning = "YouTube isn't configured on this environment — class started on the interactive room only.";
+          effectiveTransport = "LIVEKIT";
         } else {
           const withBroadcast = await ensureYoutubeBroadcastForWhiteboard(wbSession.id, schedule.title, scheduledStart);
           // Merge the newly-created broadcast fields in so the response
@@ -360,18 +363,22 @@ export async function POST(
       } catch (youtubeError) {
         console.error("[live_class_youtube_broadcast_error]", youtubeError);
         const reason = youtubeError instanceof Error ? youtubeError.message : String(youtubeError);
-        // Surface the real cause so a teacher/admin isn't left guessing why OBS
-        // has no valid stream key — quota exhaustion and a revoked/expired
-        // OAuth token look identical from the OBS side ("Failed to connect").
         const hint = /quota/i.test(reason)
-          ? " YouTube API daily quota is exhausted (resets ~12:30 PM IST) — request a quota increase in Google Cloud Console."
+          ? " YouTube API daily quota is exhausted — students will join via interactive in-app live classroom."
           : /invalid_grant|unauthorized|401|insufficient/i.test(reason)
-          ? " The YouTube account authorization looks expired or missing scopes — reconnect YouTube in team settings."
+          ? " YouTube authorization expired — students will join via interactive in-app live classroom."
           : "";
-        youtubeSimulcastWarning = `Could not set up the YouTube simulcast for this class — no stream key was created, so OBS cannot connect.${hint}`;
+        youtubeSimulcastWarning = `Could not create YouTube stream (${reason.slice(0, 80)}...).${hint} Interactive App Class is active for all students.`;
+        // Fallback to LIVEKIT so students receive live whiteboard and camera
+        effectiveTransport = "LIVEKIT";
+        await prisma.whiteboardSession.update({
+          where: { id: wbSession.id },
+          data: { videoTransport: "LIVEKIT" },
+        }).catch(() => null);
+        wbSession.videoTransport = "LIVEKIT";
       }
     }
-    if (requestedTransport === "BOTH" || requestedTransport === "YOUTUBE") {
+    if (requestedTransport === "BOTH" || requestedTransport === "YOUTUBE" || effectiveTransport === "LIVEKIT") {
       const broadcastToken = createBroadcastToken(params.scheduleId, session.user.id);
       obsBroadcastUrl = `${YOUTUBE_OAUTH_PRODUCTION_URL}/obs-stage/${params.scheduleId}?token=${broadcastToken}`;
     }
@@ -432,13 +439,13 @@ export async function POST(
       await pusherServer.trigger(sessionChannel(wbSession.id), WB_EVENTS.LIVE_PHASE_CHANGED, {
         phase: "LIVE",
         livePhase: "LIVE",
-        videoTransport: requestedTransport,
+        videoTransport: effectiveTransport,
         youtubeVideoId: effectiveYouTubeId,
         actualStartedAt: (wbSession.actualStartedAt || now).toISOString(),
         serverTime: now.toISOString(),
       });
       await pusherServer.trigger(sessionChannel(wbSession.id), WB_EVENTS.CONFIG_UPDATED, {
-        videoTransport: requestedTransport,
+        videoTransport: effectiveTransport,
         youtubeVideoId: effectiveYouTubeId,
       });
     } catch (pushErr) {
