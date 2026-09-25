@@ -12,7 +12,7 @@ import { startRoomRecording, recordingStorageKey } from "@/lib/livekit/egress";
 import { canTeacherStartClass } from "@/lib/schedule/access-rules";
 import { extractYouTubeVideoId } from "@/lib/live-class/youtube";
 import { createBroadcastToken } from "@/lib/live-class/broadcast-token";
-import { getAppBaseUrl } from "@/lib/email/app-url";
+import { YOUTUBE_OAUTH_PRODUCTION_URL } from "@/lib/youtube/oauth-config";
 
 export async function POST(
   request: NextRequest,
@@ -373,7 +373,7 @@ export async function POST(
     }
     if (requestedTransport === "BOTH" || requestedTransport === "YOUTUBE") {
       const broadcastToken = createBroadcastToken(params.scheduleId, session.user.id);
-      obsBroadcastUrl = `${getAppBaseUrl()}/obs-stage/${params.scheduleId}?token=${broadcastToken}`;
+      obsBroadcastUrl = `${YOUTUBE_OAUTH_PRODUCTION_URL}/obs-stage/${params.scheduleId}?token=${broadcastToken}`;
     }
 
     // 5. Start Room Recording (Room Composite Egress -> R2) for LIVEKIT-only
