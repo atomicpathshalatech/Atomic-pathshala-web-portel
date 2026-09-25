@@ -1,4 +1,4 @@
-﻿import pptxgen from "pptxgenjs";
+import pptxgen from "pptxgenjs";
 import { PageDataForExport } from "./pdf-generator";
 import { VIRTUAL_WIDTH, VIRTUAL_HEIGHT } from "@/lib/canvas/canvas-engine";
 import { SLIDE_WATERMARK, getLogoBase64 } from "@/lib/whiteboard/branding";
@@ -7,14 +7,75 @@ import { SLIDE_WATERMARK, getLogoBase64 } from "@/lib/whiteboard/branding";
  * Generates an authoritative 16:9 PPTX presentation with native PowerPoint
  * shapes, slide backgrounds, and the Atomic Pathshala watermark.
  */
-/** Same fetch-and-embed approach as pdf-generator.ts's helper of the same
- * shape — kept as a separate copy (not a shared import) since pptxgenjs
- * and jsPDF want the image handed to them in slightly different shapes,
- * and this file already duplicates the PageDataForExport-shaped rendering
- * logic pdf-generator.ts has for the same reason. */
-async function fetchBackgroundImage(url: string): Promise<{ dataUrl: string } | null> {
+import { getR2ObjectBuffer } from "@/lib/storage/r2-client";
+import { keyFromPublicUrl } from "@/lib/storage";
+import fs from "fs";
+import path from "path";
+
+async function fetchBackgroundImage(urlOrKey: string): Promise<{ dataUrl: string } | null> {
+  if (!urlOrKey) return null;
+
+  if (urlOrKey.startsWith("data:image/")) {
+    return { dataUrl: urlOrKey };
+  }
+
+  let r2Key: string | null = null;
+  const knownPrefixes = [
+    "whiteboard-backgrounds/",
+    "classes/",
+    "modules/",
+    "documents/",
+    "slides/",
+    "profile-images/",
+    "question-images/",
+    "pdf/",
+  ];
+
+  for (const prefix of knownPrefixes) {
+    if (urlOrKey.includes(prefix)) {
+      const idx = urlOrKey.indexOf(prefix);
+      const sub = urlOrKey.substring(idx);
+      r2Key = sub.split("?")[0]?.split("#")[0] ?? null;
+      break;
+    }
+  }
+
+  if (!r2Key) {
+    r2Key = keyFromPublicUrl(urlOrKey);
+  }
+
+  if (r2Key) {
+    try {
+      const r2Obj = await getR2ObjectBuffer(r2Key);
+      if (r2Obj && r2Obj.buffer.length > 0) {
+        const base64 = r2Obj.buffer.toString("base64");
+        const ct = r2Obj.contentType || "image/png";
+        return { dataUrl: `data:${ct};base64,${base64}` };
+      }
+    } catch (err) {
+      console.warn("[PPTX Generator] Direct R2 getObject failed, will try fallback:", err);
+    }
+  }
+
+  if (urlOrKey.startsWith("/") && !urlOrKey.startsWith("/api/")) {
+    const localPath = path.join(process.cwd(), "public", urlOrKey.replace(/^\/+/, ""));
+    if (fs.existsSync(localPath)) {
+      try {
+        const buf = fs.readFileSync(localPath);
+        const base64 = buf.toString("base64");
+        return { dataUrl: `data:image/png;base64,${base64}` };
+      } catch (err) {
+        console.warn("[PPTX Generator] Local file read error:", err);
+      }
+    }
+  }
+
   try {
-    const res = await fetch(url);
+    const fullUrl = urlOrKey.startsWith("/")
+      ? `${process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}${urlOrKey}`
+      : urlOrKey;
+
+    const res = await fetch(fullUrl);
     if (!res.ok) return null;
     const contentType = res.headers.get("content-type") || "image/png";
     const arrayBuffer = await res.arrayBuffer();
@@ -48,21 +109,110 @@ export async function generateWhiteboardPptx(
   for (const p of pages) {
     const slide = pres.addSlide();
 
-    // 1. Background
-    if (/^https?:\/\//.test(p.background)) {
+    // 1. Background (Includes PPT Background Image, Official Header Template & Branding)
+    const isImageBg =
+      p.background &&
+      (p.background.startsWith("data:image/") ||
+        p.background.startsWith("http://") ||
+        p.background.startsWith("https://") ||
+        p.background.startsWith("/") ||
+        p.background.includes("whiteboard-backgrounds/") ||
+        p.background.includes("classes/"));
+
+    if (isImageBg) {
       const img = await fetchBackgroundImage(p.background);
       if (img) {
-        // Full-bleed image covering the whole slide, same as the PDF
-        // exporter's addImage(0, 0, w, h) — this was previously ALWAYS
-        // "FFFFFF" for any non-dark background, meaning a PDF-based class
-        // (background = an uploaded image URL) exported as blank white
-        // slides with only ink drawn over nothing.
         slide.background = { data: img.dataUrl };
       } else {
         slide.background = { color: "FFFFFF" };
       }
+    } else if (
+      p.background === "atomic_white" ||
+      !p.background ||
+      p.background === "light" ||
+      p.background === "blank"
+    ) {
+      slide.background = { color: "FFFFFF" };
+      // Top header banner
+      slide.addShape("rect", {
+        x: 0,
+        y: 0,
+        w: slideWidthInches,
+        h: 0.28,
+        fill: { color: "FFF7ED" },
+        line: { color: "FFF7ED" },
+      });
+      // Orange accent line
+      slide.addShape("rect", {
+        x: 0,
+        y: 0.28,
+        w: slideWidthInches,
+        h: 0.025,
+        fill: { color: "EA580C" },
+        line: { color: "EA580C" },
+      });
+      if (logoBase64) {
+        try {
+          slide.addImage({
+            data: logoBase64,
+            x: 0.2,
+            y: 0.04,
+            w: 0.45,
+            h: 0.2,
+          });
+        } catch {}
+      }
+      slide.addText(`ATOMIC PATHSHALA • ${sessionTitle}`, {
+        x: logoBase64 ? 0.75 : 0.25,
+        y: 0.04,
+        w: 6.0,
+        h: 0.2,
+        fontSize: 8.5,
+        bold: true,
+        color: "EA580C",
+        valign: "middle",
+        margin: 0,
+      });
     } else if (p.background === "dark" || p.background === "atomic_dark") {
-      slide.background = { color: "12141E" };
+      slide.background = { color: "0D0F17" };
+      slide.addShape("rect", {
+        x: 0,
+        y: 0,
+        w: slideWidthInches,
+        h: 0.28,
+        fill: { color: "171924" },
+        line: { color: "171924" },
+      });
+      slide.addShape("rect", {
+        x: 0,
+        y: 0.28,
+        w: slideWidthInches,
+        h: 0.025,
+        fill: { color: "EA580C" },
+        line: { color: "EA580C" },
+      });
+      if (logoBase64) {
+        try {
+          slide.addImage({
+            data: logoBase64,
+            x: 0.2,
+            y: 0.04,
+            w: 0.45,
+            h: 0.2,
+          });
+        } catch {}
+      }
+      slide.addText(`ATOMIC PATHSHALA • ${sessionTitle}`, {
+        x: logoBase64 ? 0.75 : 0.25,
+        y: 0.04,
+        w: 6.0,
+        h: 0.2,
+        fontSize: 8.5,
+        bold: true,
+        color: "EA580C",
+        valign: "middle",
+        margin: 0,
+      });
     } else {
       slide.background = { color: "FFFFFF" };
     }

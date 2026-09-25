@@ -262,3 +262,34 @@ export async function uploadBufferToR2(params: {
   await client.send(command);
   return { key: params.key };
 }
+
+/**
+ * Retrieves an in-memory Buffer for an object stored in Cloudflare R2.
+ * Directly streams the object using authenticated credentials without requiring public bucket access.
+ */
+export async function getR2ObjectBuffer(key: string): Promise<{ buffer: Buffer; contentType: string } | null> {
+  try {
+    const { bucketName } = getR2Credentials();
+    const client = getR2Client();
+
+    const command = new GetObjectCommand({
+      Bucket: bucketName,
+      Key: key,
+    });
+
+    const res = await client.send(command);
+    if (!res.Body) return null;
+
+    const byteArray = await res.Body.transformToByteArray();
+    return {
+      buffer: Buffer.from(byteArray),
+      contentType: res.ContentType || "image/png",
+    };
+  } catch (err: any) {
+    if (err.name === "NoSuchKey" || err.$metadata?.httpStatusCode === 404) {
+      return null;
+    }
+    console.warn("[R2] getR2ObjectBuffer error for key:", key, err?.message || err);
+    return null;
+  }
+}

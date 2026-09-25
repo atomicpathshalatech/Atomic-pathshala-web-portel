@@ -39,8 +39,8 @@ export async function generateWhiteboardPdf(
 
     const p = pages[i]!;
 
-    // 1. Draw Background
-    await drawSlideBackground(doc, p.background, pdfWidth, pdfHeight);
+    // 1. Draw Background (Includes PPT Background Image, Official Header Template & Branding)
+    await drawSlideBackground(doc, p.background, pdfWidth, pdfHeight, sessionTitle, logoBase64);
 
     // 2. Render all strokes, shapes, and text
     for (const obj of p.objects || []) {
@@ -94,23 +94,109 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } {
   };
 }
 
-/** Fetches an uploaded background image (page background URL, including
- * PDF pages loaded via "Load Presentation") and returns it as a data URI
- * jsPDF's addImage can embed directly. Returns null on any failure — the
- * caller falls back to a plain white background rather than aborting the
- * whole multi-page export over one bad image. */
+import { getR2ObjectBuffer } from "@/lib/storage/r2-client";
+import { keyFromPublicUrl } from "@/lib/storage";
+import fs from "fs";
+import path from "path";
+
+/**
+ * Robust background image fetcher:
+ * 1. Checks if the background is a direct Data URI.
+ * 2. If it is an R2 key or an R2 URL (whiteboard-backgrounds, classes, etc.),
+ *    loads the buffer directly from R2 SDK via getR2ObjectBuffer (never fails from CORS or private bucket permissions).
+ * 3. If it is a local public file (/brand/..., etc.), reads from local filesystem.
+ * 4. Fallback to HTTP fetch.
+ */
 async function fetchBackgroundImage(
-  url: string
+  urlOrKey: string
 ): Promise<{ dataUrl: string; format: "PNG" | "JPEG" | "WEBP" } | null> {
+  if (!urlOrKey) return null;
+
+  // 1. Data URI
+  if (urlOrKey.startsWith("data:image/")) {
+    const format: "PNG" | "JPEG" | "WEBP" =
+      urlOrKey.includes("jpeg") || urlOrKey.includes("jpg")
+        ? "JPEG"
+        : urlOrKey.includes("webp")
+        ? "WEBP"
+        : "PNG";
+    return { dataUrl: urlOrKey, format };
+  }
+
+  // 2. Extract potential R2 storage key
+  let r2Key: string | null = null;
+  const knownPrefixes = [
+    "whiteboard-backgrounds/",
+    "classes/",
+    "modules/",
+    "documents/",
+    "slides/",
+    "profile-images/",
+    "question-images/",
+    "pdf/",
+  ];
+
+  for (const prefix of knownPrefixes) {
+    if (urlOrKey.includes(prefix)) {
+      const idx = urlOrKey.indexOf(prefix);
+      const sub = urlOrKey.substring(idx);
+      r2Key = sub.split("?")[0]?.split("#")[0] ?? null;
+      break;
+    }
+  }
+
+  if (!r2Key) {
+    r2Key = keyFromPublicUrl(urlOrKey);
+  }
+
+  // If identified as R2 asset, load directly via R2 SDK
+  if (r2Key) {
+    try {
+      const r2Obj = await getR2ObjectBuffer(r2Key);
+      if (r2Obj && r2Obj.buffer.length > 0) {
+        const base64 = r2Obj.buffer.toString("base64");
+        const ct = r2Obj.contentType || "image/png";
+        let format: "PNG" | "JPEG" | "WEBP" = "PNG";
+        if (ct.includes("jpeg") || ct.includes("jpg") || /\.jpe?g(\?|$)/i.test(r2Key)) format = "JPEG";
+        else if (ct.includes("webp") || /\.webp(\?|$)/i.test(r2Key)) format = "WEBP";
+        return { dataUrl: `data:${ct};base64,${base64}`, format };
+      }
+    } catch (err) {
+      console.warn("[PDF Generator] Direct R2 getObject failed, will try fallback:", err);
+    }
+  }
+
+  // 3. Local filesystem in public directory
+  if (urlOrKey.startsWith("/") && !urlOrKey.startsWith("/api/")) {
+    const localPath = path.join(process.cwd(), "public", urlOrKey.replace(/^\/+/, ""));
+    if (fs.existsSync(localPath)) {
+      try {
+        const buf = fs.readFileSync(localPath);
+        const base64 = buf.toString("base64");
+        let format: "PNG" | "JPEG" | "WEBP" = "PNG";
+        if (/\.jpe?g$/i.test(localPath)) format = "JPEG";
+        else if (/\.webp$/i.test(localPath)) format = "WEBP";
+        return { dataUrl: `data:image/${format.toLowerCase()};base64,${base64}`, format };
+      } catch (err) {
+        console.warn("[PDF Generator] Local file read error:", err);
+      }
+    }
+  }
+
+  // 4. HTTP Fetch fallback
   try {
-    const res = await fetch(url);
+    const fullUrl = urlOrKey.startsWith("/")
+      ? `${process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}${urlOrKey}`
+      : urlOrKey;
+
+    const res = await fetch(fullUrl);
     if (!res.ok) return null;
     const contentType = res.headers.get("content-type") || "";
     const arrayBuffer = await res.arrayBuffer();
     const base64 = Buffer.from(arrayBuffer).toString("base64");
     let format: "PNG" | "JPEG" | "WEBP" = "PNG";
-    if (contentType.includes("jpeg") || /\.jpe?g(\?|$)/i.test(url)) format = "JPEG";
-    else if (contentType.includes("webp") || /\.webp(\?|$)/i.test(url)) format = "WEBP";
+    if (contentType.includes("jpeg") || /\.jpe?g(\?|$)/i.test(urlOrKey)) format = "JPEG";
+    else if (contentType.includes("webp") || /\.webp(\?|$)/i.test(urlOrKey)) format = "WEBP";
     return { dataUrl: `data:${contentType || "image/png"};base64,${base64}`, format };
   } catch (err) {
     console.warn("[PDF Generator] Could not fetch background image:", err);
@@ -118,68 +204,209 @@ async function fetchBackgroundImage(
   }
 }
 
-async function drawSlideBackground(doc: jsPDF, bg: string, w: number, h: number): Promise<void> {
-  if (!bg) {
-    doc.setFillColor(255, 255, 255);
-    doc.rect(0, 0, w, h, "F");
-    return;
-  }
+async function drawSlideBackground(
+  doc: jsPDF,
+  bg: string,
+  w: number,
+  h: number,
+  sessionTitle: string = "Class Notes",
+  logoBase64?: string | null
+): Promise<void> {
+  const isImageBg =
+    bg &&
+    (bg.startsWith("data:image/") ||
+      bg.startsWith("http://") ||
+      bg.startsWith("https://") ||
+      bg.startsWith("/") ||
+      bg.includes("whiteboard-backgrounds/") ||
+      bg.includes("classes/"));
 
-  if (bg.startsWith("data:image/")) {
-    try {
-      const format = bg.includes("jpeg") || bg.includes("jpg") ? "JPEG" : bg.includes("webp") ? "WEBP" : "PNG";
-      doc.addImage(bg, format, 0, 0, w, h);
-      return;
-    } catch (err) {
-      console.warn("[PDF Generator] Data URL addImage error:", err);
-    }
-  }
-
-  if (/^https?:\/\//.test(bg) || bg.startsWith("/")) {
-    const fullUrl = bg.startsWith("/")
-      ? `${process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}${bg}`
-      : bg;
-    const img = await fetchBackgroundImage(fullUrl);
+  if (isImageBg) {
+    const img = await fetchBackgroundImage(bg);
     if (img) {
       try {
         doc.addImage(img.dataUrl, img.format, 0, 0, w, h);
         return;
       } catch (err) {
-        console.warn("[PDF Generator] Background addImage failed, falling back to white:", err);
+        console.warn("[PDF Generator] Background addImage failed, drawing clean theme:", err);
       }
     }
+  }
+
+  // Official Theme: Atomic White (Brand Template with Orange Accent & Header Logo)
+  if (bg === "atomic_white" || !bg || bg === "light" || bg === "blank") {
     doc.setFillColor(255, 255, 255);
     doc.rect(0, 0, w, h, "F");
+
+    // Top Header Banner
+    doc.setFillColor(255, 247, 237); // #FFF7ED
+    doc.rect(0, 0, w, 26, "F");
+
+    // Orange Accent Line
+    doc.setFillColor(234, 88, 12); // #EA580C
+    doc.rect(0, 26, w, 2, "F");
+
+    // Header Logo & Branding
+    if (logoBase64) {
+      try {
+        doc.addImage(logoBase64, "PNG", 16, 4, 38, 18);
+      } catch {
+        // Soft fallback
+      }
+    }
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(234, 88, 12);
+    doc.text("ATOMIC PATHSHALA", logoBase64 ? 58 : 18, 17);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text(`•  ${sessionTitle}`, logoBase64 ? 170 : 130, 17);
     return;
   }
 
-  if (bg === "dark" || bg === "atomic_dark") {
-    doc.setFillColor(18, 20, 30);
+  // Official Theme: Atomic Dark
+  if (bg === "atomic_dark" || bg === "dark") {
+    doc.setFillColor(13, 15, 23); // #0D0F17
     doc.rect(0, 0, w, h, "F");
-  } else if (bg === "ruled" || bg === "atomic_ruled") {
-    doc.setFillColor(255, 255, 255);
-    doc.rect(0, 0, w, h, "F");
-    doc.setDrawColor(230, 235, 245);
-    doc.setLineWidth(0.5);
-    for (let y = 30; y < h; y += 18) {
-      doc.line(0, y, w, y);
+
+    // Top Header Banner
+    doc.setFillColor(23, 25, 36); // #171924
+    doc.rect(0, 0, w, 26, "F");
+
+    // Orange Accent Line
+    doc.setFillColor(234, 88, 12); // #EA580C
+    doc.rect(0, 26, w, 2, "F");
+
+    if (logoBase64) {
+      try {
+        doc.addImage(logoBase64, "PNG", 16, 4, 38, 18);
+      } catch {
+        // Soft fallback
+      }
     }
-  } else if (bg === "grid") {
-    doc.setFillColor(255, 255, 255);
-    doc.rect(0, 0, w, h, "F");
-    doc.setDrawColor(240, 240, 245);
-    doc.setLineWidth(0.5);
-    for (let x = 0; x < w; x += 15) {
-      doc.line(x, 0, x, h);
-    }
-    for (let y = 0; y < h; y += 15) {
-      doc.line(0, y, w, y);
-    }
-  } else {
-    // Default clean white
-    doc.setFillColor(255, 255, 255);
-    doc.rect(0, 0, w, h, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(234, 88, 12);
+    doc.text("ATOMIC PATHSHALA", logoBase64 ? 58 : 18, 17);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    doc.text(`•  ${sessionTitle}`, logoBase64 ? 170 : 130, 17);
+    return;
   }
+
+  // Official Theme: Atomic Ruled
+  if (bg === "atomic_ruled") {
+    doc.setFillColor(255, 255, 255);
+    doc.rect(0, 0, w, h, "F");
+
+    // Top Header Banner
+    doc.setFillColor(255, 247, 237);
+    doc.rect(0, 0, w, 26, "F");
+    doc.setFillColor(234, 88, 12);
+    doc.rect(0, 26, w, 2, "F");
+
+    if (logoBase64) {
+      try {
+        doc.addImage(logoBase64, "PNG", 16, 4, 38, 18);
+      } catch {}
+    }
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(234, 88, 12);
+    doc.text("ATOMIC PATHSHALA", logoBase64 ? 58 : 18, 17);
+
+    // Ruled lines below header
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.5);
+    for (let y = 48; y < h - 20; y += 18) {
+      doc.line(0, y, w, y);
+    }
+    return;
+  }
+
+  // Notebook Ruled with Margin
+  if (bg === "ruled" || bg === "notebook" || bg === "lines") {
+    doc.setFillColor(255, 255, 255);
+    doc.rect(0, 0, w, h, "F");
+
+    // Left red margin
+    doc.setDrawColor(248, 113, 113);
+    doc.setLineWidth(0.8);
+    doc.line(45, 0, 45, h);
+
+    // Horizontal lines
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.5);
+    for (let y = 32; y < h - 20; y += 18) {
+      doc.line(0, y, w, y);
+    }
+    return;
+  }
+
+  // Math Grid
+  if (bg === "grid" || bg === "graph") {
+    doc.setFillColor(255, 255, 255);
+    doc.rect(0, 0, w, h, "F");
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.5);
+    for (let x = 0; x < w; x += 15) doc.line(x, 0, x, h);
+    for (let y = 0; y < h; y += 15) doc.line(0, y, w, y);
+    return;
+  }
+
+  // Coordinate Plane (XY Axes with Grid)
+  if (bg === "coordinate") {
+    doc.setFillColor(255, 255, 255);
+    doc.rect(0, 0, w, h, "F");
+
+    // Light grid
+    doc.setDrawColor(241, 245, 249);
+    doc.setLineWidth(0.5);
+    for (let x = 0; x < w; x += 15) doc.line(x, 0, x, h);
+    for (let y = 0; y < h; y += 15) doc.line(0, y, w, y);
+
+    // Main X-Axis
+    const midY = Math.round(h / 2);
+    const midX = Math.round(w / 2);
+    doc.setDrawColor(100, 116, 139);
+    doc.setLineWidth(1.2);
+    doc.line(10, midY, w - 10, midY); // X Axis
+    doc.line(midX, 10, midX, h - 10); // Y Axis
+
+    // Arrowheads
+    doc.setFillColor(100, 116, 139);
+    doc.triangle(w - 10, midY, w - 16, midY - 3, w - 16, midY + 3, "FD"); // +X
+    doc.triangle(midX, 10, midX - 3, 16, midX + 3, 16, "FD"); // +Y
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    doc.setTextColor(100, 116, 139);
+    doc.text("+X", w - 24, midY - 5);
+    doc.text("+Y", midX + 6, 20);
+    doc.text("O (0,0)", midX + 4, midY + 10);
+    return;
+  }
+
+  // Dotted Pattern
+  if (bg === "dotted" || bg === "dots") {
+    doc.setFillColor(255, 255, 255);
+    doc.rect(0, 0, w, h, "F");
+    doc.setFillColor(203, 213, 225);
+    for (let x = 10; x < w; x += 18) {
+      for (let y = 10; y < h; y += 18) {
+        doc.circle(x, y, 0.75, "F");
+      }
+    }
+    return;
+  }
+
+  // Default clean white
+  doc.setFillColor(255, 255, 255);
+  doc.rect(0, 0, w, h, "F");
 }
 
 function renderStroke(doc: jsPDF, stroke: any, scale: number) {
