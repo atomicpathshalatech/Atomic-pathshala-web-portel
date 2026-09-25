@@ -486,7 +486,35 @@ export function TeacherLiveClassRoom({
   const floatCamResizingRef = useRef(false);
   const floatCamResizeStartRef = useRef({ startX: 0, startY: 0, startSize: 180 });
 
-  const [floatCamPos, setFloatCamPos] = useState<{ x: number; y: number }>({ x: 16, y: 70 });
+  // Camera layout mode: docked at the top of the right panel (default for SQUARE shape)
+  // or floating bubble over the whiteboard canvas (default for CIRCULAR shape)
+  const [cameraDocked, setCameraDocked] = useState<boolean>(() => !isCameraCircle);
+
+  // Sync with isCameraCircle if camera shape changes in wizard
+  useEffect(() => {
+    if (isCameraCircle) {
+      setCameraDocked(false);
+    }
+  }, [isCameraCircle]);
+
+  const [floatCamPos, setFloatCamPos] = useState<{ x: number; y: number }>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("atomic_teacher_floating_cam_pos");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (typeof parsed.x === "number" && typeof parsed.y === "number" && parsed.x > 80) {
+            return parsed;
+          }
+        }
+      } catch {
+        // ignore
+      }
+      const defaultX = Math.max(120, window.innerWidth - 340 - 200);
+      return { x: defaultX, y: 76 };
+    }
+    return { x: 700, y: 76 };
+  });
   const floatCamDraggingRef = useRef(false);
   const floatCamDragOffsetRef = useRef({ x: 0, y: 0 });
   // The actual PPT/slide stage element (see the div this ref is attached to
@@ -496,7 +524,13 @@ export function TeacherLiveClassRoom({
 
   function clampToStage(x: number, y: number, size = floatCamSize): { x: number; y: number } {
     const rect = stageContainerRef.current?.getBoundingClientRect();
-    if (!rect) return { x, y };
+    if (!rect || rect.width === 0) {
+      const minX = 80;
+      const minY = 70;
+      const maxX = typeof window !== "undefined" ? Math.max(minX, window.innerWidth - size - 320) : 800;
+      const maxY = typeof window !== "undefined" ? Math.max(minY, window.innerHeight - size - 80) : 600;
+      return { x: Math.min(Math.max(x, minX), maxX), y: Math.min(Math.max(y, minY), maxY) };
+    }
     const minX = rect.left + 8;
     const minY = rect.top + 8;
     const maxX = Math.max(minX, rect.right - size - 8);
@@ -510,7 +544,7 @@ export function TeacherLiveClassRoom({
       const saved = localStorage.getItem("atomic_teacher_floating_cam_pos");
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (typeof parsed.x === "number" && typeof parsed.y === "number") {
+        if (typeof parsed.x === "number" && typeof parsed.y === "number" && parsed.x > 80) {
           setFloatCamPos(clampToStage(parsed.x, parsed.y, floatCamSize));
           return;
         }
@@ -520,9 +554,9 @@ export function TeacherLiveClassRoom({
     }
     const rect = stageContainerRef.current?.getBoundingClientRect();
     setFloatCamPos(
-      rect
+      rect && rect.width > 0
         ? clampToStage(rect.right - floatCamSize - 16, rect.top + 16, floatCamSize)
-        : { x: Math.max(16, window.innerWidth - floatCamSize - 16), y: 70 }
+        : { x: Math.max(120, window.innerWidth - floatCamSize - 340), y: 76 }
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCameraCircle, floatCamSize]);
@@ -3004,52 +3038,104 @@ export function TeacherLiveClassRoom({
         />
       )}
 
-      {/* Teacher's own camera — always a draggable floating bubble over the
-          main slide area (fixed positioning inside live-shell, outside aside
-          so it is never constrained or hidden by panel overflow/transforms). */}
-      <div
-        onPointerDown={handleFloatCamPointerDown}
-        onPointerMove={handleFloatCamPointerMove}
-        onPointerUp={handleFloatCamPointerUp}
-        onPointerCancel={handleFloatCamPointerUp}
-        style={{ position: "fixed", top: floatCamPos.y, left: floatCamPos.x, width: floatCamSize, height: floatCamSize, touchAction: "none" }}
-        className={`z-40 overflow-hidden border-2 border-slate-700/80 hover:border-blue-500 shadow-2xl bg-black cursor-grab active:cursor-grabbing select-none group/cam transition-[border-color] ${
-          isCameraCircle ? "rounded-full" : "rounded-2xl"
-        }`}
-      >
-        <VideoStrip
-          whiteboardSessionId={wbSession.id}
-          variant="panel"
-          settingsPortalRef={settingsPortalRef}
-          connectedStudents={connectedStudents}
-          onDisconnectStudent={handleDisconnectStudent}
-          compact={isCameraCircle}
-          forceLocalOnly={
-            wbSession?.videoTransport === "YOUTUBE" &&
-            Boolean(wbSession?.youtubeVideoId) &&
-            !handRaiseQueue.some((h) => h.status === "APPROVED")
-          }
-        />
-
-        {/* Corner Resize Handle */}
+      {/* Teacher's Floating Camera Bubble over Canvas */}
+      {!cameraDocked && (
         <div
-          data-resize-handle="true"
-          onPointerDown={handleFloatCamResizePointerDown}
-          onPointerMove={handleFloatCamResizePointerMove}
-          onPointerUp={handleFloatCamResizePointerUp}
-          onPointerCancel={handleFloatCamResizePointerUp}
-          className="absolute bottom-0 right-0 w-6 h-6 flex items-center justify-center cursor-nwse-resize bg-black/70 hover:bg-blue-600 text-white/80 hover:text-white rounded-tl-lg opacity-0 group-hover/cam:opacity-100 transition-opacity z-50 shadow-md"
-          title="Drag to resize camera bubble"
+          onPointerDown={handleFloatCamPointerDown}
+          onPointerMove={handleFloatCamPointerMove}
+          onPointerUp={handleFloatCamPointerUp}
+          onPointerCancel={handleFloatCamPointerUp}
+          style={{
+            position: "fixed",
+            top: floatCamPos.y,
+            left: floatCamPos.x,
+            width: floatCamSize,
+            height: floatCamSize,
+            touchAction: "none",
+          }}
+          className={`z-40 overflow-hidden border-2 border-slate-700/80 hover:border-blue-500 shadow-2xl bg-black cursor-grab active:cursor-grabbing select-none group/cam transition-[border-color] ${
+            isCameraCircle ? "rounded-full" : "rounded-2xl"
+          }`}
         >
-          <span className="material-symbols-outlined text-xs">aspect_ratio</span>
-        </div>
-      </div>
+          <VideoStrip
+            whiteboardSessionId={wbSession.id}
+            variant="panel"
+            settingsPortalRef={settingsPortalRef}
+            connectedStudents={connectedStudents}
+            onDisconnectStudent={handleDisconnectStudent}
+            compact={isCameraCircle}
+            forceLocalOnly={
+              wbSession?.videoTransport === "YOUTUBE" &&
+              Boolean(wbSession?.youtubeVideoId) &&
+              !handRaiseQueue.some((h) => h.status === "APPROVED")
+            }
+          />
 
-      {/* Right panel: Messages/Questions/Participants */}
+          {/* Dock back to sidebar button */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setCameraDocked(true);
+            }}
+            className="absolute top-2 right-2 bg-black/80 hover:bg-blue-600 text-white p-1.5 rounded-lg text-xs opacity-0 group-hover/cam:opacity-100 transition shadow z-50 flex items-center justify-center gap-1"
+            title="Dock camera to sidebar"
+          >
+            <span className="material-symbols-outlined text-xs">dock_to_right</span>
+            <span className="text-[10px] font-medium hidden sm:inline">Dock</span>
+          </button>
+
+          {/* Corner Resize Handle */}
+          <div
+            data-resize-handle="true"
+            onPointerDown={handleFloatCamResizePointerDown}
+            onPointerMove={handleFloatCamResizePointerMove}
+            onPointerUp={handleFloatCamResizePointerUp}
+            onPointerCancel={handleFloatCamResizePointerUp}
+            className="absolute bottom-0 right-0 w-6 h-6 flex items-center justify-center cursor-nwse-resize bg-black/70 hover:bg-blue-600 text-white/80 hover:text-white rounded-tl-lg opacity-0 group-hover/cam:opacity-100 transition-opacity z-50 shadow-md"
+            title="Drag to resize camera bubble"
+          >
+            <span className="material-symbols-outlined text-xs">aspect_ratio</span>
+          </div>
+        </div>
+      )}
+
+      {/* Right panel: Camera (Docked) + Messages/Questions/Participants */}
       <aside
         data-open={panelOpen ? "true" : "false"}
         className="live-panel bg-[#1a1b23] border-l border-[#2d2e3b] flex flex-col min-h-0"
       >
+        {/* Docked Teacher Camera View */}
+        {cameraDocked && (
+          <div className="w-full shrink-0 border-b border-[#2d2e3b] p-3 bg-[#13151f]">
+            <div className="relative w-full aspect-video rounded-xl overflow-hidden border border-slate-700/80 bg-black shadow-lg group/dockedcam">
+              <VideoStrip
+                whiteboardSessionId={wbSession.id}
+                variant="panel"
+                settingsPortalRef={settingsPortalRef}
+                connectedStudents={connectedStudents}
+                onDisconnectStudent={handleDisconnectStudent}
+                compact={false}
+                forceLocalOnly={
+                  wbSession?.videoTransport === "YOUTUBE" &&
+                  Boolean(wbSession?.youtubeVideoId) &&
+                  !handRaiseQueue.some((h) => h.status === "APPROVED")
+                }
+              />
+              {/* Float on canvas button */}
+              <button
+                type="button"
+                onClick={() => setCameraDocked(false)}
+                className="absolute top-2 right-2 bg-black/80 hover:bg-blue-600 text-white px-2 py-1 rounded-lg text-xs opacity-0 group-hover/dockedcam:opacity-100 transition shadow flex items-center gap-1 z-30"
+                title="Float camera on canvas"
+              >
+                <span className="material-symbols-outlined text-xs">open_in_new</span>
+                <span className="text-[10px] font-medium">Float</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="flex border-b border-[#2d2e3b] px-3 pt-3 shrink-0 gap-1 overflow-x-auto">
           <button
             type="button"
