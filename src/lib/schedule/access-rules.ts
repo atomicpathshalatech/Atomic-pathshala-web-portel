@@ -105,7 +105,6 @@ export function isScheduleGenuinelyLive(schedule: ScheduleAccessTarget): boolean
   }
   return (
     schedule.status === "LIVE" ||
-    schedule.liveWhiteboardSession?.status === "ACTIVE" ||
     schedule.liveWhiteboardSession?.livePhase === "LIVE"
   );
 }
@@ -462,28 +461,7 @@ export function canTeacherStartClass(
     };
   }
 
-  // STRICT T-5 RULE: Cannot start before startsAt - 5 minutes
-  if (nowMs < startOpensAt.getTime()) {
-    return {
-      allowed: false,
-      status: nowMs >= opensAt.getTime() ? "TEACHER_ENTRY_OPEN" : "SCHEDULED",
-      code: "START_TOO_EARLY",
-      reason: "Start Class is not available yet. Classes can only be started starting 5 minutes before scheduled start time.",
-      opensAt,
-      startOpensAt,
-      startsAt,
-      endsAt,
-      isLive: false,
-      isCompleted: false,
-      isCancelled: false,
-      isWindowOpen: nowMs >= opensAt.getTime(),
-      secondsUntilWindowOpens,
-      secondsUntilStartOpens,
-      secondsUntilStartsAt,
-    };
-  }
-
-  // T-5 reached: Start Class is allowed
+  // Start Class is allowed whenever educator is ready (or starting stream)
   return {
     allowed: true,
     status: "READY",
@@ -498,7 +476,7 @@ export function canTeacherStartClass(
     isWindowOpen: true,
     secondsUntilWindowOpens: 0,
     secondsUntilStartOpens: 0,
-    secondsUntilStartsAt,
+    secondsUntilStartsAt: 0,
   };
 }
 

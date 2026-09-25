@@ -92,13 +92,13 @@ export function YouTubeLivePlayer({
     }
   }, []);
 
-  // When class phase is LIVE, trigger play and ensure stream is marked live
+  // When video ID exists, trigger play and ensure stream is marked live
   useEffect(() => {
-    if (livePhase === "LIVE" && youtubeVideoId) {
+    if (youtubeVideoId) {
       sendYouTubeCommand("playVideo");
       const timer = setTimeout(() => {
         setIsStreamLive(true);
-      }, 1500);
+      }, 500);
       return () => clearTimeout(timer);
     }
   }, [livePhase, youtubeVideoId, sendYouTubeCommand]);
@@ -301,7 +301,7 @@ export function YouTubeLivePlayer({
     return `https://www.youtube-nocookie.com/embed/${youtubeVideoId}?autoplay=1&mute=1&enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&disablekb=1&fs=0&iv_load_policy=3&showinfo=0${originParam}`;
   }, [youtubeVideoId]);
 
-  if (!youtubeVideoId || livePhase === "SCHEDULED" || livePhase === "PREPARING") {
+  if (!youtubeVideoId || livePhase === "SCHEDULED") {
     return (
       <div className={`w-full aspect-video bg-[#0a0c16] rounded-2xl border border-slate-800 flex flex-col items-center justify-center p-6 text-center space-y-4 shadow-inner relative overflow-hidden ${className}`}>
         {/* Glow */}

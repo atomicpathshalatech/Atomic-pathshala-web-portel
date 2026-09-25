@@ -37,27 +37,51 @@ export async function POST(
 
     const fullYouTubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
-    // 1. Update WhiteboardSession
-    const wbSession = await prisma.whiteboardSession.upsert({
-      where: { batchScheduleId: params.scheduleId },
-      update: {
-        videoTransport: "YOUTUBE",
-        youtubeVideoId: videoId,
-      },
-      create: {
-        batchScheduleId: params.scheduleId,
-        teacherId: schedule.teacherId || session.user.id,
-        title: schedule.title,
-        status: "ACTIVE",
-        livePhase: "LIVE",
-        videoTransport: "YOUTUBE",
-        youtubeVideoId: videoId,
-        scheduledStart: schedule.startsAt,
-        scheduledEnd: schedule.endsAt,
-      },
-    });
+    const now = new Date();
 
-    // 2. If connected to a Lecture curriculum record, update videoUrl & status
+    // 1. Update WhiteboardSession & Schedule Status
+    const [wbSession] = await Promise.all([
+      prisma.whiteboardSession.upsert({
+        where: { batchScheduleId: params.scheduleId },
+        update: {
+          status: "ACTIVE",
+          livePhase: "LIVE",
+          videoTransport: "YOUTUBE",
+          youtubeVideoId: videoId,
+          actualStartedAt: schedule.liveWhiteboardSession?.actualStartedAt || now,
+          startedAt: schedule.liveWhiteboardSession?.startedAt || now,
+        },
+        create: {
+          batchScheduleId: params.scheduleId,
+          teacherId: schedule.teacherId || session.user.id,
+          title: schedule.title,
+          status: "ACTIVE",
+          livePhase: "LIVE",
+          videoTransport: "YOUTUBE",
+          youtubeVideoId: videoId,
+          actualStartedAt: now,
+          startedAt: now,
+          scheduledStart: schedule.startsAt,
+          scheduledEnd: schedule.endsAt,
+          pages: {
+            create: {
+              pageNumber: 1,
+              objects: [],
+            },
+          },
+        },
+      }),
+      prisma.batchSchedule.update({
+        where: { id: params.scheduleId },
+        data: { status: "LIVE" },
+      }),
+    ]);
+
+    // 2. Invalidate cache so polling students see live state immediately
+    const { cache } = await import("@/lib/cache/redis");
+    await cache.del(`wb:schedule:${params.scheduleId}`);
+
+    // 3. If connected to a Lecture curriculum record, update videoUrl & status
     if (schedule.lectureId) {
       await prisma.lecture.update({
         where: { id: schedule.lectureId },
@@ -68,13 +92,23 @@ export async function POST(
       }).catch((err) => console.warn("[map-youtube] Lecture update notice:", err));
     }
 
-    // 3. Real-time broadcast
+    // 4. Real-time broadcast
     try {
+      await pusherServer.trigger(sessionChannel(wbSession.id), WB_EVENTS.LIVE_PHASE_CHANGED, {
+        phase: "LIVE",
+        livePhase: "LIVE",
+        videoTransport: "YOUTUBE",
+        youtubeVideoId: videoId,
+        actualStartedAt: now.toISOString(),
+        serverTime: now.toISOString(),
+      });
       await pusherServer.trigger(sessionChannel(wbSession.id), WB_EVENTS.CONFIG_UPDATED, {
         videoTransport: "YOUTUBE",
         youtubeVideoId: videoId,
       });
-    } catch {}
+    } catch (pushErr) {
+      console.warn("[map-youtube] Pusher broadcast warning:", pushErr);
+    }
 
     return apiSuccess({
       message: "YouTube live class mapped successfully.",

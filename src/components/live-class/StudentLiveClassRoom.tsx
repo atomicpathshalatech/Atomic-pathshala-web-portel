@@ -866,7 +866,8 @@ export function StudentLiveClassRoom({
         }
         if (wb && (wb.status === "ACTIVE" || wb.livePhase === "LIVE")) {
           setWbSession(wb);
-          if (wb.livePhase === "LIVE" || json.data.schedule?.status === "LIVE") {
+          const hasYouTubeStream = Boolean(wb.youtubeVideoId) && wb.livePhase !== "ENDED" && wb.status !== "ENDED";
+          if (wb.livePhase === "LIVE" || json.data.schedule?.status === "LIVE" || hasYouTubeStream) {
             setPhase("live");
             // Keep polling at a slower rate to catch ENDED state
             if (!cancelled) timer = setTimeout(poll, 4000);
@@ -1303,7 +1304,10 @@ export function StudentLiveClassRoom({
     ? new Date(wbSession.actualStartedAt).getTime()
     : null;
 
-  const isLive = phase === "live" || wbSession?.livePhase === "LIVE";
+  const isLive =
+    phase === "live" ||
+    wbSession?.livePhase === "LIVE" ||
+    (Boolean(wbSession?.youtubeVideoId) && wbSession?.livePhase !== "ENDED" && wbSession?.status !== "ENDED" && phase !== "ended");
   const secondsUntilStart = scheduledStartMs > 0 ? Math.floor((scheduledStartMs - currentTimeMs) / 1000) : 0;
   const elapsedSeconds = actualStartedAtMs ? Math.max(0, Math.floor((currentTimeMs - actualStartedAtMs) / 1000)) : 0;
   const remainingSeconds = scheduledEndMs > 0 ? Math.floor((scheduledEndMs - currentTimeMs) / 1000) : 0;
