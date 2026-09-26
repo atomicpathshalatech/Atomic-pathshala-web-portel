@@ -208,7 +208,7 @@ export async function createLiveBroadcast(
     throw new Error("Failed to create YouTube Live Broadcast across all configuration tiers.");
   }
 
-  // Attempt to mark video status unlisted & embeddable silently (does not fail broadcast if unpermitted)
+  // Explicitly mark video status unlisted & embeddable on YouTube
   try {
     await youtubeApiFetch("/videos", {
       method: "PUT",
@@ -217,6 +217,7 @@ export async function createLiveBroadcast(
         id: json.id,
         status: {
           privacyStatus: "unlisted",
+          embeddable: true,
           selfDeclaredMadeForKids: false,
         },
       }),

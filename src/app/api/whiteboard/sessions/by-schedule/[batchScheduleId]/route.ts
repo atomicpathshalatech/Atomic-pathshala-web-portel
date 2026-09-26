@@ -95,7 +95,11 @@ export async function GET(
       3
     );
 
-
+    if (wbSession?.youtubeVideoId) {
+      import("@/lib/youtube/live-broadcast")
+        .then(({ ensureBroadcastEmbeddable }) => ensureBroadcastEmbeddable(wbSession.youtubeVideoId!))
+        .catch(() => {});
+    }
 
     const {
       canStudentJoinClass,

@@ -393,8 +393,8 @@ export function YouTubeLivePlayer({
   const embedUrl = useMemo(() => {
     if (!youtubeVideoId) return "";
     const origin = typeof window !== "undefined" && window.location.origin ? window.location.origin : "";
-    const originParam = origin && origin.startsWith("https://") && !origin.includes("localhost") ? `&origin=${encodeURIComponent(origin)}` : "";
-    return `https://www.youtube-nocookie.com/embed/${youtubeVideoId}?autoplay=1&mute=1&enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&disablekb=1&fs=0&iv_load_policy=3&showinfo=0${originParam}`;
+    const originParam = origin ? `&origin=${encodeURIComponent(origin)}` : "";
+    return `https://www.youtube.com/embed/${youtubeVideoId}?autoplay=1&mute=1&enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&fs=0${originParam}`;
   }, [youtubeVideoId]);
 
   if (!youtubeVideoId || livePhase === "SCHEDULED") {

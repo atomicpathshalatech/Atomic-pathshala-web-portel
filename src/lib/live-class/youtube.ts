@@ -28,7 +28,7 @@ export function isValidYouTubeVideoId(id: string): boolean {
 
 export function buildYouTubeEmbedUrl(
   videoId: string,
-  options?: { autoplay?: boolean; mute?: boolean }
+  options?: { autoplay?: boolean; mute?: boolean; origin?: string }
 ): string {
   const params = new URLSearchParams({
     modestbranding: "1",
@@ -39,8 +39,9 @@ export function buildYouTubeEmbedUrl(
 
   if (options?.autoplay) params.set("autoplay", "1");
   if (options?.mute) params.set("mute", "1");
+  if (options?.origin) params.set("origin", options.origin);
 
-  return `https://www.youtube-nocookie.com/embed/${videoId}?${params.toString()}`;
+  return `https://www.youtube.com/embed/${videoId}?${params.toString()}`;
 }
 
 export type ConfigureYouTubeSessionInput = {
