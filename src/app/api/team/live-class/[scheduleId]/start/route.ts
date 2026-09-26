@@ -446,19 +446,25 @@ export async function POST(
 
     // 6. Realtime Broadcast State Change
     const effectiveYouTubeId = requestedYouTubeId || wbSession.youtubeVideoId || null;
+    const livePhasePayload = {
+      phase: "LIVE",
+      livePhase: "LIVE",
+      videoTransport: effectiveTransport,
+      youtubeVideoId: effectiveYouTubeId,
+      actualStartedAt: (wbSession.actualStartedAt || now).toISOString(),
+      serverTime: now.toISOString(),
+    };
+    const configPayload = {
+      videoTransport: effectiveTransport,
+      youtubeVideoId: effectiveYouTubeId,
+    };
     try {
-      await pusherServer.trigger(sessionChannel(wbSession.id), WB_EVENTS.LIVE_PHASE_CHANGED, {
-        phase: "LIVE",
-        livePhase: "LIVE",
-        videoTransport: effectiveTransport,
-        youtubeVideoId: effectiveYouTubeId,
-        actualStartedAt: (wbSession.actualStartedAt || now).toISOString(),
-        serverTime: now.toISOString(),
-      });
-      await pusherServer.trigger(sessionChannel(wbSession.id), WB_EVENTS.CONFIG_UPDATED, {
-        videoTransport: effectiveTransport,
-        youtubeVideoId: effectiveYouTubeId,
-      });
+      await pusherServer.trigger(sessionChannel(wbSession.id), WB_EVENTS.LIVE_PHASE_CHANGED, livePhasePayload);
+      await pusherServer.trigger(sessionChannel(wbSession.id), WB_EVENTS.CONFIG_UPDATED, configPayload);
+      if (params.scheduleId && params.scheduleId !== wbSession.id) {
+        await pusherServer.trigger(sessionChannel(params.scheduleId), WB_EVENTS.LIVE_PHASE_CHANGED, livePhasePayload);
+        await pusherServer.trigger(sessionChannel(params.scheduleId), WB_EVENTS.CONFIG_UPDATED, configPayload);
+      }
     } catch (pushErr) {
       console.warn("Realtime broadcast warning:", pushErr);
     }

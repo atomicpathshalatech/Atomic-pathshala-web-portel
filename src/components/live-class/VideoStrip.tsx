@@ -545,23 +545,7 @@ function VideoStripInner({
         </div>
       )}
 
-      {/* Top Header: Instructor Name & Network Quality Indicator — omitted
-          in compact mode (a tiny on-demand audio-only corner bubble has no
-          room for this and it isn't reachable/useful there anyway). */}
-      {!compact && (
-        <div className="absolute top-2 left-2 right-2 flex items-center justify-between z-20 pointer-events-none">
-          <div className="bg-black/80 backdrop-blur-sm px-2.5 py-1 rounded-lg text-xs font-bold text-white border border-white/10 flex items-center gap-1.5">
-            <span className={`w-2 h-2 rounded-full ${hasTeacherVideo ? "bg-emerald-500 animate-pulse" : "bg-amber-400"}`} />
-            <span className="truncate max-w-[130px]">{teacherName || "Instructor"}</span>
-          </div>
-
-          {/* Network status */}
-          <div className="bg-black/80 backdrop-blur-sm px-2 py-1 rounded-lg text-[10px] font-semibold text-slate-300 border border-white/10 flex items-center gap-1">
-            <span className="material-symbols-outlined text-xs text-blue-400">signal_cellular_alt</span>
-            <span>{connectionState === ConnectionState.Connected ? "HD Stream" : connectionState}</span>
-          </div>
-        </div>
-      )}
+      {/* Top Header: Instructor Name overlay removed per user requirement for clean camera view */}
 
       {/* Persistent Live Video Call Modal for Student (Mute, Camera toggle, End call, Self-view) */}
       <LiveVideoCallModal

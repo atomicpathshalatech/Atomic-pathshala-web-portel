@@ -938,16 +938,21 @@ export function StudentLiveClassRoom({
 
   // Subscribe to realtime Pusher session events
   useEffect(() => {
-    if (!wbSession?.id) return;
+    const channelId = wbSession?.id || batchScheduleId;
+    if (!channelId) return;
     const client = getPusherClient();
-    const channel = client.subscribe(sessionChannel(wbSession.id));
+    const channel = client.subscribe(sessionChannel(channelId));
+    const secondaryChannel =
+      wbSession?.id && wbSession.id !== batchScheduleId
+        ? client.subscribe(sessionChannel(batchScheduleId))
+        : null;
 
-    channel.bind(WB_EVENTS.SESSION_ENDED, () => {
+    const handleSessionEnded = () => {
       setPhase("ended");
       setQuiz(null);
-    });
+    };
 
-    channel.bind(WB_EVENTS.LIVE_PHASE_CHANGED, (data: any) => {
+    const handleLivePhaseChanged = (data: any) => {
       const p = data.livePhase || data.phase;
       if (p === "LIVE") {
         setPhase("live");
@@ -965,9 +970,9 @@ export function StudentLiveClassRoom({
         refreshBoard();
       }
       if (p === "ENDED") setPhase("ended");
-    });
+    };
 
-    channel.bind(WB_EVENTS.SESSION_EXTENDED, (data: { newScheduledEnd: string; totalExtendedMinutes: number }) => {
+    const handleSessionExtended = (data: { newScheduledEnd: string; totalExtendedMinutes: number }) => {
       setWbSession((prev) =>
         prev
           ? {
@@ -977,9 +982,9 @@ export function StudentLiveClassRoom({
             }
           : prev
       );
-    });
+    };
 
-    channel.bind(WB_EVENTS.CONFIG_UPDATED, (data: any) => {
+    const handleConfigUpdated = (data: any) => {
       setWbSession((prev) =>
         prev
           ? {
@@ -994,21 +999,32 @@ export function StudentLiveClassRoom({
             }
           : prev
       );
-    });
+    };
 
-    channel.bind(
-      WB_EVENTS.BOARD_UPDATED,
-      (data?: { pageNumber?: number; objects?: StrokeObject[]; background?: string }) => {
-        if (data?.objects && Array.isArray(data.objects)) {
-          setBoardObjects(data.objects);
-          setBoardEmpty(data.objects.length === 0);
-          if (data.background) setBoardBackground(data.background);
-        } else {
-          refreshBoard();
-        }
+    const handleBoardUpdated = (data?: { pageNumber?: number; objects?: StrokeObject[]; background?: string }) => {
+      if (data?.objects && Array.isArray(data.objects)) {
+        setBoardObjects(data.objects);
+        setBoardEmpty(data.objects.length === 0);
+        if (data.background) setBoardBackground(data.background);
+      } else {
+        refreshBoard();
       }
-    );
+    };
+
+    channel.bind(WB_EVENTS.SESSION_ENDED, handleSessionEnded);
+    channel.bind(WB_EVENTS.LIVE_PHASE_CHANGED, handleLivePhaseChanged);
+    channel.bind(WB_EVENTS.SESSION_EXTENDED, handleSessionExtended);
+    channel.bind(WB_EVENTS.CONFIG_UPDATED, handleConfigUpdated);
+    channel.bind(WB_EVENTS.BOARD_UPDATED, handleBoardUpdated);
     channel.bind(WB_EVENTS.PAGE_CHANGED, () => refreshBoard());
+
+    if (secondaryChannel) {
+      secondaryChannel.bind(WB_EVENTS.SESSION_ENDED, handleSessionEnded);
+      secondaryChannel.bind(WB_EVENTS.LIVE_PHASE_CHANGED, handleLivePhaseChanged);
+      secondaryChannel.bind(WB_EVENTS.SESSION_EXTENDED, handleSessionExtended);
+      secondaryChannel.bind(WB_EVENTS.CONFIG_UPDATED, handleConfigUpdated);
+      secondaryChannel.bind(WB_EVENTS.BOARD_UPDATED, handleBoardUpdated);
+    }
 
     // Laser pointer — never persisted, so it bypasses boardObjects/setState
     // entirely and goes straight into whichever mirror is mounted (see
@@ -1098,37 +1114,37 @@ export function StudentLiveClassRoom({
       }
     );
 
-    // Restore teacher-connect state after a refresh — server state is
-    // authoritative, so this fills in what the last Pusher event (missed
-    // while the page was reloading) would have set, including a freshly
-    // minted token so the client can actually resume publishing.
-    fetch(`/api/whiteboard/sessions/${wbSession.id}/teacher-connect`)
-      .then((r) => r.json())
-      .then((j) => {
-        if (j.success && j.data) {
-          setTeacherAudioConnected(!!j.data.audioConnected);
-          setTeacherVideoConnected(!!j.data.videoConnected);
-          setTeacherConnectionToken(j.data.connectionToken ?? null);
-        }
-      })
-      .catch(() => {});
+    // Restore teacher-connect state after a refresh
+    if (wbSession?.id) {
+      fetch(`/api/whiteboard/sessions/${wbSession.id}/teacher-connect`)
+        .then((r) => r.json())
+        .then((j) => {
+          if (j.success && j.data) {
+            setTeacherAudioConnected(!!j.data.audioConnected);
+            setTeacherVideoConnected(!!j.data.videoConnected);
+            setTeacherConnectionToken(j.data.connectionToken ?? null);
+          }
+        })
+        .catch(() => {});
 
-    // Check existing quiz
-
-    fetch(`/api/whiteboard/sessions/${wbSession.id}/quiz`)
-      .then((r) => r.json())
-      .then((j) => {
-        if (j.success && j.data?.quiz && j.data.quiz.status !== "CLOSED") {
-          setQuiz(j.data.quiz);
-          setMySelection(j.data.mySelection ?? null);
-        }
-      })
-      .catch(() => {});
+      fetch(`/api/whiteboard/sessions/${wbSession.id}/quiz`)
+        .then((r) => r.json())
+        .then((j) => {
+          if (j.success && j.data?.quiz && j.data.quiz.status !== "CLOSED") {
+            setQuiz(j.data.quiz);
+            setMySelection(j.data.mySelection ?? null);
+          }
+        })
+        .catch(() => {});
+    }
 
     return () => {
-      client.unsubscribe(sessionChannel(wbSession.id));
+      client.unsubscribe(sessionChannel(channelId));
+      if (secondaryChannel) {
+        client.unsubscribe(sessionChannel(batchScheduleId));
+      }
     };
-  }, [wbSession?.id]);
+  }, [wbSession?.id, batchScheduleId, currentUserId]);
 
   // Quiz countdown
   useEffect(() => {
@@ -1307,6 +1323,7 @@ export function StudentLiveClassRoom({
   const isLive =
     phase === "live" ||
     wbSession?.livePhase === "LIVE" ||
+    Boolean(wbSession?.actualStartedAt && wbSession?.livePhase !== "ENDED" && wbSession?.status !== "ENDED" && phase !== "ended") ||
     (Boolean(wbSession?.youtubeVideoId) && wbSession?.livePhase !== "ENDED" && wbSession?.status !== "ENDED" && phase !== "ended");
   const secondsUntilStart = scheduledStartMs > 0 ? Math.floor((scheduledStartMs - currentTimeMs) / 1000) : 0;
   const elapsedSeconds = actualStartedAtMs ? Math.max(0, Math.floor((currentTimeMs - actualStartedAtMs) / 1000)) : 0;
