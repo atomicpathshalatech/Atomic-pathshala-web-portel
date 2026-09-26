@@ -75,8 +75,29 @@ export function UnifiedQuestionEditor({
   // Translations initial data
   const translationEn = initialQuestion?.translations?.find((t: any) => t.language === "ENGLISH");
   const translationHi = initialQuestion?.translations?.find((t: any) => t.language === "HINDI");
-  const optionsEnData = translationEn?.options || initialQuestion?.optionsEn || {};
-  const optionsHiData = translationHi?.options || initialQuestion?.optionsHi || {};
+  
+  const rawOptEn = typeof translationEn?.options === "string" 
+    ? (() => { try { return JSON.parse(translationEn.options); } catch { return {}; } })() 
+    : (translationEn?.options || initialQuestion?.optionsEn || {});
+  
+  const rawOptHi = typeof translationHi?.options === "string" 
+    ? (() => { try { return JSON.parse(translationHi.options); } catch { return {}; } })() 
+    : (translationHi?.options || initialQuestion?.optionsHi || {});
+
+  const optionsEnData = {
+    A: rawOptEn.A || initialQuestion?.optionAEn || "",
+    B: rawOptEn.B || initialQuestion?.optionBEn || "",
+    C: rawOptEn.C || initialQuestion?.optionCEn || "",
+    D: rawOptEn.D || initialQuestion?.optionDEn || "",
+  };
+
+  const optionsHiData = {
+    A: rawOptHi.A || initialQuestion?.optionAHi || "",
+    B: rawOptHi.B || initialQuestion?.optionBHi || "",
+    C: rawOptHi.C || initialQuestion?.optionCHi || "",
+    D: rawOptHi.D || initialQuestion?.optionDHi || "",
+  };
+
   const initialCorrect =
     translationEn?.correctOptionIds?.[0] ||
     translationHi?.correctOptionIds?.[0] ||

@@ -130,17 +130,6 @@ export function QuestionLiveReviewPanel({
             />
           </div>
         )}
-
-        {/* Diagram in Student View */}
-        {diagramUrl && (
-          <div className="flex items-center justify-center p-2.5 bg-slate-50 rounded-xl border border-slate-200">
-            <img
-              src={diagramUrl}
-              alt="Question Figure"
-              className="max-h-48 max-w-full object-contain rounded-lg shadow-xs border border-slate-200"
-            />
-          </div>
-        )}
       </div>
 
       {/* 2. Live Options Review Cards */}

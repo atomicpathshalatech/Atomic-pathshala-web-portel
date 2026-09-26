@@ -4,8 +4,8 @@ import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { WhiteboardPdfDownloadButton } from "@/components/whiteboard/WhiteboardPdfDownloadButton";
 import { PrepareSlidesModal } from "@/components/live-class/PrepareSlidesModal";
-import { CompletedClassModal } from "./CompletedClassModal";
 import { UnifiedStartClassModal } from "@/components/team-portal/UnifiedStartClassModal";
+import { CompletedClassModal } from "@/components/schedule/CompletedClassModal";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -144,19 +144,19 @@ export function HorizontalScheduleCalendar({
   const [clientTimeMs, setClientTimeMs] = useState<number>(Date.now());
   const [batchDropdownOpen, setBatchDropdownOpen] = useState(false);
   const [blockedBannerDismissed, setBlockedBannerDismissed] = useState(false);
-  const [autoCompletedScheduleId, setAutoCompletedScheduleId] = useState<string | null>(null);
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
+  const router = useRouter();
 
-  // Auto-open modal if directed with ?completedClass=<id>
+  // Auto-navigate to watch page if directed with ?completedClass=<id>
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const autoId = params.get("completedClass");
       if (autoId) {
-        setAutoCompletedScheduleId(autoId);
+        router.replace(role === "TEACHER" ? `/team/live-class/${autoId}/recording` : `/watch/${autoId}`);
       }
     }
-  }, []);
+  }, [role, router]);
 
   // Local ticker every second for authoritative boundary updates
   useEffect(() => {
@@ -581,23 +581,6 @@ export function HorizontalScheduleCalendar({
           </div>
         )}
       </main>
-
-      {autoCompletedScheduleId && (() => {
-        const autoSchedule = initialSchedules.find((s) => s.id === autoCompletedScheduleId);
-        if (!autoSchedule) return null;
-        return (
-          <CompletedClassModal
-            scheduleId={autoSchedule.id}
-            classTitle={autoSchedule.title}
-            subject={autoSchedule.subject}
-            batchName={autoSchedule.batch.name}
-            teacherName={autoSchedule.teacher?.user?.name}
-            startsAt={autoSchedule.startsAt}
-            endsAt={autoSchedule.endsAt}
-            onClose={() => setAutoCompletedScheduleId(null)}
-          />
-        );
-      })()}
     </div>
   );
 }
@@ -628,9 +611,14 @@ function TimelineLectureRow({
   const studentEval = canStudentJoin(scheduleTarget, clientNow);
   const teacherEval = canTeacherStart(scheduleTarget, clientNow);
   const effectiveStatus = getEffectiveScheduleStatus(scheduleTarget, clientNow);
+  const router = useRouter();
   const [prepareSlidesOpen, setPrepareSlidesOpen] = useState(false);
-  const [completedModalOpen, setCompletedModalOpen] = useState(false);
   const [startClassModalOpen, setStartClassModalOpen] = useState(false);
+
+  const watchUrl =
+    role === "TEACHER"
+      ? `/team/live-class/${item.id}/recording`
+      : `/watch/${item.id}`;
 
   const isLive = effectiveStatus === "LIVE";
   const isCompleted = effectiveStatus === "COMPLETED";
@@ -719,7 +707,7 @@ function TimelineLectureRow({
       <div
         onClick={() => {
           if (isCompleted && item.type === "LIVE_CLASS") {
-            setCompletedModalOpen(true);
+            router.push(watchUrl);
           }
         }}
         className={`flex-1 bg-white dark:bg-slate-900 rounded-2xl p-2.5 sm:p-3 shadow-xs hover:shadow-sm transition-all border ${
@@ -871,18 +859,26 @@ function TimelineLectureRow({
               )
             ) : isCompleted ? (
               <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setCompletedModalOpen(true);
-                  }}
-                  className="inline-flex items-center gap-1.5 py-1 px-3 bg-[#a33900] hover:bg-orange-800 text-white rounded-lg text-[11px] font-bold shadow-sm transition active:scale-95 shrink-0 cursor-pointer"
-                  title="Play Class Recording & Download Notes"
+                <Link
+                  href={watchUrl}
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-flex items-center gap-1.5 py-1 px-3 bg-[#a33900] hover:bg-orange-800 text-white rounded-lg text-[11px] font-bold shadow-sm transition active:scale-95 shrink-0"
+                  title="Play Class Recording"
                 >
                   <span className="material-symbols-outlined text-[14px]">play_circle</span>
-                  <span>Play / Notes</span>
-                </button>
+                  <span>Play Class</span>
+                </Link>
+                {item.liveWhiteboardSession?.id && (
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <WhiteboardPdfDownloadButton
+                      sessionId={item.liveWhiteboardSession.id}
+                      className="inline-flex items-center gap-1 py-1 px-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-[11px] font-semibold border border-slate-200 dark:border-slate-700 transition active:scale-95"
+                    >
+                      <span className="material-symbols-outlined text-[13px]">picture_as_pdf</span>
+                      <span>Class PDF</span>
+                    </WhiteboardPdfDownloadButton>
+                  </div>
+                )}
               </div>
             ) : isCancelled ? (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 text-[10px] font-bold border border-rose-200 dark:border-rose-900/50 shrink-0">
@@ -980,18 +976,6 @@ function TimelineLectureRow({
           scheduleId={item.id}
           classTitle={item.title}
           onClose={() => setPrepareSlidesOpen(false)}
-        />
-      )}
-      {completedModalOpen && (
-        <CompletedClassModal
-          scheduleId={item.id}
-          classTitle={item.title}
-          subject={item.subject}
-          batchName={item.batch.name}
-          teacherName={item.teacher?.user?.name}
-          startsAt={item.startsAt}
-          endsAt={item.endsAt}
-          onClose={() => setCompletedModalOpen(false)}
         />
       )}
     </div>
