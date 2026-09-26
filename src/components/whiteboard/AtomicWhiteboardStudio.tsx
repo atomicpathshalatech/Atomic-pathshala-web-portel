@@ -1331,9 +1331,9 @@ export function AtomicWhiteboardStudio({
           </div>
         </aside>
 
-        {/* Right Floating Live Camera Tile with Beauty Filters */}
+        {/* Right Floating Live Camera Tile with Beauty Filters (Clean feed for OBS Window Capture) */}
         {isCameraOpen && (
-          <div className="absolute top-4 right-4 z-20 w-52 h-40 bg-[#12131e] rounded-2xl border border-[#2d3045] shadow-2xl overflow-hidden flex flex-col">
+          <div className="absolute top-4 right-4 z-20 w-52 h-40 bg-black rounded-2xl shadow-2xl overflow-hidden flex flex-col group border border-transparent hover:border-slate-700/60 transition-all">
             <div className="relative flex-1 bg-black flex items-center justify-center overflow-hidden">
               {/* Always keep video in DOM to allow stream attachment */}
               <video
@@ -1367,15 +1367,15 @@ export function AtomicWhiteboardStudio({
               )}
 
               {cameraActive && cameraStream && (
-                <div className="absolute bottom-1.5 left-1.5 flex items-center gap-1.5 bg-black/70 px-2 py-0.5 rounded-md text-[9px] font-bold text-white backdrop-blur-sm">
+                <div className="absolute top-1.5 left-1.5 flex items-center gap-1.5 bg-black/60 px-2 py-0.5 rounded-md text-[9px] font-bold text-white backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                   <span>{CAMERA_FILTERS.find((f) => f.id === cameraFilter)?.label || "Live"}</span>
                 </div>
               )}
             </div>
 
-            {/* Bottom Mini Controls for Camera & Quick Beauty Filters */}
-            <div className="h-8 bg-[#171926] px-2 flex items-center justify-between border-t border-[#252838] relative">
+            {/* Hover-revealed Controls for Camera & Quick Beauty Filters */}
+            <div className="absolute bottom-0 left-0 right-0 h-8 bg-black/80 backdrop-blur-md px-2 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity z-20">
               <div className="flex items-center gap-1">
                 <button
                   type="button"

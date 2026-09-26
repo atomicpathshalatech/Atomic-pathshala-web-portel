@@ -119,6 +119,7 @@ export function UnifiedChapterScheduleTimeline({
   const [lecLanguage, setLecLanguage] = useState(
     chapterMedium === "HINDI" ? "Hindi" : chapterMedium === "HINGLISH" ? "Hinglish" : "English"
   );
+  const [lecVideoUrl, setLecVideoUrl] = useState("");
   const [notesUrl, setNotesUrl] = useState("");
 
   // Form states - DPP
@@ -278,6 +279,7 @@ export function UnifiedChapterScheduleTimeline({
           durationMin: Number(lecDurationMin) || 60,
           language: lecLanguage,
           order: Number(lecOrder) || lectures.length + 1,
+          videoUrl: lecVideoUrl.trim() || undefined,
         }),
       });
       const json = await res.json();
@@ -288,7 +290,8 @@ export function UnifiedChapterScheduleTimeline({
 
       setLectures((prev) => [...prev, json.data.lecture]);
       setShowAddLectureModal(false);
-      toast.success("Lecture scheduled successfully!");
+      setLecVideoUrl("");
+      toast.success(lecVideoUrl.trim() ? "Old class recording added successfully!" : "Lecture scheduled successfully!");
       router.refresh();
     } catch (err: any) {
       setFormError(err.message || "Network error");
@@ -314,6 +317,7 @@ export function UnifiedChapterScheduleTimeline({
           startTime: lecStartTime || null,
           durationMin: Number(lecDurationMin) || 60,
           language: lecLanguage,
+          videoUrl: lecVideoUrl.trim() || "",
         }),
       });
       const json = await res.json();
@@ -326,6 +330,7 @@ export function UnifiedChapterScheduleTimeline({
         prev.map((l) => (l.id === editingLecture.id ? json.data.lecture : l))
       );
       setEditingLecture(null);
+      setLecVideoUrl("");
       toast.success("Lecture updated successfully!");
       router.refresh();
     } catch (err: any) {
@@ -633,6 +638,7 @@ export function UnifiedChapterScheduleTimeline({
                   setLecStartTime("10:00");
                   setLecDurationMin(90);
                   setLecOrder(lectures.length + 1);
+                  setLecVideoUrl("");
                   setFormError("");
                   setShowAddLectureModal(true);
                 }}
@@ -640,6 +646,25 @@ export function UnifiedChapterScheduleTimeline({
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add Lecture</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setLecTitle(`${chapterTitle} — Lecture ${String(lectures.length + 1).padStart(2, "0")} (Recorded)`);
+                  setLecScheduledDate(new Date().toISOString().split("T")[0] || "");
+                  setLecStartTime("10:00");
+                  setLecDurationMin(90);
+                  setLecOrder(lectures.length + 1);
+                  setLecVideoUrl("");
+                  setFormError("");
+                  setShowAddLectureModal(true);
+                }}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-md shadow-purple-500/20 transition cursor-pointer"
+                title="Add past recorded class by pasting unlisted YouTube URL"
+              >
+                <Video className="w-3.5 h-3.5" />
+                <span>Add Old Class (YouTube)</span>
               </button>
 
               <button
@@ -961,6 +986,7 @@ export function UnifiedChapterScheduleTimeline({
                                     setLecStartTime(lec.startTime || "10:00");
                                     setLecDurationMin(lec.durationMin || 60);
                                     setLecLanguage(lec.language || "Hindi");
+                                    setLecVideoUrl(lec.videoUrl || "");
                                     setFormError("");
                                   }}
                                   className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition text-left cursor-pointer"
@@ -1220,6 +1246,22 @@ export function UnifiedChapterScheduleTimeline({
                     <option value="English">English</option>
                   </select>
                 </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Unlisted YouTube Recording Link (Optional for Old / Past Classes)
+                </label>
+                <input
+                  type="url"
+                  value={lecVideoUrl}
+                  onChange={(e) => setLecVideoUrl(e.target.value)}
+                  placeholder="https://www.youtube.com/watch?v=... or https://youtu.be/..."
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 font-mono text-xs"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Paste unlisted YouTube link. The class will be automatically saved as a completed recording for students with interactive playback.
+                </p>
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">

@@ -124,8 +124,9 @@ export async function createLiveBroadcast(
     Math.max(nowMs + 15_000, isNaN(inputTimeMs) ? nowMs + 15_000 : inputTimeMs)
   ).toISOString();
 
-  let json: { id: string; snippet: { liveChatId?: string } };
+  let json: { id: string; snippet: { liveChatId?: string } } | undefined;
 
+  // Tier 1: Full broadcast config with DVR and auto-start (NO enableEmbed, which is invalid on standard channels)
   try {
     json = await youtubeApiFetch<{ id: string; snippet: { liveChatId?: string } }>("/liveBroadcasts", {
       method: "POST",
@@ -134,7 +135,6 @@ export async function createLiveBroadcast(
         snippet: { title: cleanTitle, description: desc, scheduledStartTime: validStartTime },
         status: { privacyStatus: "unlisted", selfDeclaredMadeForKids: false },
         contentDetails: {
-          enableEmbed: true,
           enableAutoStart: true,
           enableAutoStop: true,
           enableDvr: true,
@@ -143,29 +143,72 @@ export async function createLiveBroadcast(
         },
       }),
     });
-  } catch (err) {
-    console.warn("[youtube_live_broadcast_fallback_attempt]", err);
-    // Fallback: minimal broadcast payload without strict latency/DVR settings
-    json = await youtubeApiFetch<{ id: string; snippet: { liveChatId?: string } }>("/liveBroadcasts", {
-      method: "POST",
-      query: { part: "snippet,status,contentDetails" },
-      body: JSON.stringify({
-        snippet: {
-          title: cleanTitle,
-          description: desc,
-          scheduledStartTime: new Date(Date.now() + 30_000).toISOString(),
-        },
-        status: { privacyStatus: "unlisted", selfDeclaredMadeForKids: false },
-        contentDetails: {
-          enableEmbed: true,
-          enableAutoStart: true,
-          enableAutoStop: true,
-        },
-      }),
-    });
+  } catch (err1) {
+    console.warn("[youtube_live_broadcast_fallback_tier1]", err1);
+    // Tier 2: Without latency preference
+    try {
+      json = await youtubeApiFetch<{ id: string; snippet: { liveChatId?: string } }>("/liveBroadcasts", {
+        method: "POST",
+        query: { part: "snippet,status,contentDetails" },
+        body: JSON.stringify({
+          snippet: {
+            title: cleanTitle,
+            description: desc,
+            scheduledStartTime: new Date(Date.now() + 30_000).toISOString(),
+          },
+          status: { privacyStatus: "unlisted", selfDeclaredMadeForKids: false },
+          contentDetails: {
+            enableAutoStart: true,
+            enableAutoStop: true,
+            enableDvr: true,
+            recordFromStart: true,
+          },
+        }),
+      });
+    } catch (err2) {
+      console.warn("[youtube_live_broadcast_fallback_tier2]", err2);
+      // Tier 3: Minimal contentDetails
+      try {
+        json = await youtubeApiFetch<{ id: string; snippet: { liveChatId?: string } }>("/liveBroadcasts", {
+          method: "POST",
+          query: { part: "snippet,status,contentDetails" },
+          body: JSON.stringify({
+            snippet: {
+              title: cleanTitle,
+              description: desc,
+              scheduledStartTime: new Date(Date.now() + 30_000).toISOString(),
+            },
+            status: { privacyStatus: "unlisted", selfDeclaredMadeForKids: false },
+            contentDetails: {
+              enableAutoStart: true,
+              enableAutoStop: true,
+            },
+          }),
+        });
+      } catch (err3) {
+        console.warn("[youtube_live_broadcast_fallback_tier3]", err3);
+        // Tier 4: Basic broadcast without contentDetails
+        json = await youtubeApiFetch<{ id: string; snippet: { liveChatId?: string } }>("/liveBroadcasts", {
+          method: "POST",
+          query: { part: "snippet,status" },
+          body: JSON.stringify({
+            snippet: {
+              title: cleanTitle,
+              description: desc,
+              scheduledStartTime: new Date(Date.now() + 30_000).toISOString(),
+            },
+            status: { privacyStatus: "unlisted", selfDeclaredMadeForKids: false },
+          }),
+        });
+      }
+    }
   }
 
-  // Explicitly ensure the created broadcast's video status has embeddable: true and privacyStatus: "unlisted"
+  if (!json?.id) {
+    throw new Error("Failed to create YouTube Live Broadcast across all configuration tiers.");
+  }
+
+  // Attempt to mark video status unlisted & embeddable silently (does not fail broadcast if unpermitted)
   try {
     await youtubeApiFetch("/videos", {
       method: "PUT",
@@ -173,17 +216,16 @@ export async function createLiveBroadcast(
       body: JSON.stringify({
         id: json.id,
         status: {
-          embeddable: true,
           privacyStatus: "unlisted",
           selfDeclaredMadeForKids: false,
         },
       }),
     });
   } catch (err) {
-    console.warn("[youtube_video_embeddable_update_warning]", err);
+    console.warn("[youtube_video_status_update_warning]", err);
   }
 
-  return { id: json.id, liveChatId: json.snippet.liveChatId ?? null };
+  return { id: json.id, liveChatId: json.snippet?.liveChatId ?? null };
 }
 
 /**

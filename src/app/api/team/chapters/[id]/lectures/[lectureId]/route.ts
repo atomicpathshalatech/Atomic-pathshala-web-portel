@@ -47,18 +47,56 @@ export async function PATCH(
         updated.startTime,
         updated.durationMin || 60
       );
-      await prisma.batchSchedule.updateMany({
+      const { extractYouTubeVideoId } = await import("@/lib/live-class/youtube");
+      const ytVideoId = updated.videoUrl ? extractYouTubeVideoId(updated.videoUrl) : null;
+      const isPastCompletedClass = Boolean(ytVideoId);
+
+      const matchingSchedules = await prisma.batchSchedule.findMany({
         where: {
           OR: [{ id: updated.id }, { lectureId: updated.id }],
         },
-        data: {
-          title: updated.title,
-          startsAt,
-          endsAt,
-        },
+        select: { id: true, teacherId: true },
       });
-    } catch {
-      // Non-blocking sync
+
+      for (const s of matchingSchedules) {
+        await prisma.batchSchedule.update({
+          where: { id: s.id },
+          data: {
+            title: updated.title,
+            startsAt,
+            endsAt,
+            ...(isPastCompletedClass && { status: "COMPLETED" }),
+          },
+        });
+
+        if (isPastCompletedClass && ytVideoId) {
+          await prisma.whiteboardSession.upsert({
+            where: { batchScheduleId: s.id },
+            update: {
+              status: "ENDED",
+              livePhase: "ENDED",
+              videoTransport: "YOUTUBE",
+              youtubeVideoId: ytVideoId,
+              recordingStatus: "READY",
+            },
+            create: {
+              batchScheduleId: s.id,
+              teacherId: s.teacherId || updated.teacherId,
+              title: updated.title,
+              status: "ENDED",
+              livePhase: "ENDED",
+              videoTransport: "YOUTUBE",
+              youtubeVideoId: ytVideoId,
+              recordingStatus: "READY",
+              actualStartedAt: startsAt || new Date(),
+              actualEndedAt: endsAt || new Date(),
+              pages: { create: { pageNumber: 1, objects: [] } },
+            },
+          });
+        }
+      }
+    } catch (syncErr) {
+      console.error("[lecture_patch_sync_error]", syncErr);
     }
 
     await prisma.auditLog.create({

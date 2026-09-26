@@ -36,6 +36,7 @@ export function YouTubeLivePlayer({
   const playerRef = useRef<any>(null);
 
   const [isStreamLive, setIsStreamLive] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(true);
   const [hasEmbedError, setHasEmbedError] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
@@ -43,6 +44,8 @@ export function YouTubeLivePlayer({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
 
   const hideControlsTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -51,46 +54,87 @@ export function YouTubeLivePlayer({
   useEffect(() => {
     setHasEmbedError(false);
     setIsStreamLive(false);
+    setCurrentTime(0);
+    setDuration(0);
+    setIsLiveEdge(true);
   }, [youtubeVideoId]);
 
-  // Dispatch a control action through the real YT.Player instance (set up
-  // below) instead of guessing at YouTube's raw postMessage wire format —
-  // that hand-rolled version never reliably told us the stream had actually
-  // gone live, so the "Educator Connecting..." waiting screen never cleared
-  // even once the broadcast was live on YouTube's own side.
+  // Dispatch a control action through the real YT.Player instance
   const sendYouTubeCommand = useCallback((func: string, args: unknown[] = []) => {
     const player = playerRef.current;
-    if (!player) return;
-    try {
-      switch (func) {
-        case "playVideo":
-          player.playVideo?.();
-          break;
-        case "pauseVideo":
-          player.pauseVideo?.();
-          break;
-        case "seekTo":
-          player.seekTo?.(args[0], args[1]);
-          break;
-        case "setPlaybackRate":
-          player.setPlaybackRate?.(args[0]);
-          break;
-        case "mute":
-          player.mute?.();
-          break;
-        case "unMute":
-          player.unMute?.();
-          break;
-        case "setVolume":
-          player.setVolume?.(args[0]);
-          break;
-        default:
-          break;
+    if (player) {
+      try {
+        switch (func) {
+          case "playVideo":
+            player.playVideo?.();
+            break;
+          case "pauseVideo":
+            player.pauseVideo?.();
+            break;
+          case "seekTo":
+            player.seekTo?.(args[0], args[1] ?? true);
+            break;
+          case "setPlaybackRate":
+            player.setPlaybackRate?.(args[0]);
+            break;
+          case "mute":
+            player.mute?.();
+            break;
+          case "unMute":
+            player.unMute?.();
+            break;
+          case "setVolume":
+            player.setVolume?.(args[0]);
+            break;
+          default:
+            break;
+        }
+      } catch (err) {
+        console.debug("[YouTubeLivePlayer] Command dispatch error", err);
       }
-    } catch (err) {
-      console.debug("[YouTubeLivePlayer] Command dispatch error", err);
+    }
+    // PostMessage fallback directly to iframe
+    try {
+      iframeRef.current?.contentWindow?.postMessage(
+        JSON.stringify({
+          event: "command",
+          func,
+          args,
+        }),
+        "*"
+      );
+    } catch {
+      // ignore
     }
   }, []);
+
+  // Poll player current time & duration regularly for DVR seekbar
+  useEffect(() => {
+    if (!isStreamLive) return;
+    const interval = setInterval(() => {
+      try {
+        const player = playerRef.current;
+        if (player) {
+          const cur = player.getCurrentTime?.();
+          const dur = player.getDuration?.();
+          if (typeof cur === "number" && !isNaN(cur)) {
+            setCurrentTime(cur);
+          }
+          if (typeof dur === "number" && !isNaN(dur) && dur > 0) {
+            setDuration(dur);
+            if (dur - (cur ?? 0) <= 6) {
+              setIsLiveEdge(true);
+            } else {
+              setIsLiveEdge(false);
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }, 500);
+    return () => clearInterval(interval);
+  }, [isStreamLive]);
 
   // When video ID exists, trigger play and ensure stream is marked live
   useEffect(() => {
@@ -129,10 +173,7 @@ export function YouTubeLivePlayer({
     return diff > 0 ? diff : 0;
   }, [scheduledStartMs, nowMs]);
 
-  // Bootstrap the official YouTube IFrame Player API and attach it to our
-  // existing <iframe> (enablejsapi=1 in embedUrl lets the API adopt it in
-  // place). This is what onStateChange === PLAYING actually means the
-  // broadcast is live.
+  // Bootstrap the official YouTube IFrame Player API
   useEffect(() => {
     if (!youtubeVideoId || !iframeRef.current) return;
     let cancelled = false;
@@ -144,9 +185,15 @@ export function YouTubeLivePlayer({
         if (d?.event === "infoDelivery" && (d.info?.playerState === 1 || d.info?.playerState === 3)) {
           setIsStreamLive(true);
           setHasEmbedError(false);
-        } else if (d?.event === "onStateChange" && (d.data === 1 || d.data === 3)) {
-          setIsStreamLive(true);
-          setHasEmbedError(false);
+          setIsPlaying(true);
+        } else if (d?.event === "onStateChange") {
+          if (d.data === 1 || d.data === 3) {
+            setIsStreamLive(true);
+            setHasEmbedError(false);
+            setIsPlaying(true);
+          } else if (d.data === 2) {
+            setIsPlaying(false);
+          }
         } else if (d?.event === "onError" && (d.data === 150 || d.data === 101 || d.data === 100 || d.data === 5)) {
           setHasEmbedError(true);
         }
@@ -163,12 +210,16 @@ export function YouTubeLivePlayer({
           onReady: () => {
             playerRef.current = player;
             player.playVideo?.();
+            setIsPlaying(true);
           },
           onStateChange: (e: any) => {
             const YT = (window as any).YT;
             if (e.data === YT.PlayerState.PLAYING || e.data === YT.PlayerState.BUFFERING) {
               setIsStreamLive(true);
               setHasEmbedError(false);
+              setIsPlaying(true);
+            } else if (e.data === YT.PlayerState.PAUSED) {
+              setIsPlaying(false);
             }
           },
           onError: (e: any) => {
@@ -229,18 +280,63 @@ export function YouTubeLivePlayer({
   };
 
   const handleSeek = (offsetSeconds: number) => {
-    setIsLiveEdge(false);
-    sendYouTubeCommand("seekTo", [offsetSeconds > 0 ? 999999 : 0, true]);
+    const cur = playerRef.current?.getCurrentTime?.() ?? currentTime;
+    const dur = playerRef.current?.getDuration?.() ?? duration;
+    const target = Math.max(0, cur + offsetSeconds);
+    setCurrentTime(target);
+    if (dur > 0 && target >= dur - 6) {
+      setIsLiveEdge(true);
+    } else {
+      setIsLiveEdge(false);
+    }
+    sendYouTubeCommand("seekTo", [target, true]);
+    resetControlsTimer();
+  };
+
+  const handleSliderSeek = (targetTime: number) => {
+    setCurrentTime(targetTime);
+    const dur = duration || (playerRef.current?.getDuration?.() ?? 0);
+    if (dur > 0 && targetTime >= dur - 6) {
+      setIsLiveEdge(true);
+    } else {
+      setIsLiveEdge(false);
+    }
+    sendYouTubeCommand("seekTo", [targetTime, true]);
     resetControlsTimer();
   };
 
   const handleGoLive = () => {
-    sendYouTubeCommand("seekTo", [999999, true]);
+    const dur = playerRef.current?.getDuration?.() ?? duration;
+    sendYouTubeCommand("seekTo", [dur > 0 ? dur : 999999, true]);
     sendYouTubeCommand("playVideo", []);
     setPlaybackSpeed(1);
     sendYouTubeCommand("setPlaybackRate", [1]);
     setIsLiveEdge(true);
+    setIsPlaying(true);
     resetControlsTimer();
+  };
+
+  const togglePlayPause = () => {
+    if (isPlaying) {
+      sendYouTubeCommand("pauseVideo");
+      setIsPlaying(false);
+    } else {
+      sendYouTubeCommand("playVideo");
+      setIsPlaying(true);
+    }
+    resetControlsTimer();
+  };
+
+  const formatDisplayTime = (seconds: number) => {
+    if (isNaN(seconds) || seconds < 0) return "00:00";
+    const totalSec = Math.floor(seconds);
+    const hrs = Math.floor(totalSec / 3600);
+    const mins = Math.floor((totalSec % 3600) / 60);
+    const secs = totalSec % 60;
+    if (hrs > 0) {
+      return `${hrs}:${mins < 10 ? "0" : ""}${mins}:${secs < 10 ? "0" : ""}${secs}`;
+    }
+    return `${mins < 10 ? "0" : ""}${mins}:${secs < 10 ? "0" : ""}${secs}`;
   };
 
   const toggleMute = () => {
@@ -662,121 +758,188 @@ export function YouTubeLivePlayer({
         </div>
       )}
 
-      {/* ----------------- 6. BOTTOM CONTROL BAR OVERLAY ----------------- */}
+      {/* ----------------- 6. BOTTOM CONTROL BAR & TIMELINE OVERLAY ----------------- */}
       {isStreamLive && (
         <div
-          className={`absolute bottom-2 left-2 right-2 px-3 py-1.5 bg-[#0e111d]/90 backdrop-blur-md rounded-xl border border-slate-700/80 flex items-center justify-between gap-2 shadow-2xl transition-opacity duration-300 z-20 ${
+          className={`absolute bottom-2 left-2 right-2 p-2 bg-[#0e111d]/95 backdrop-blur-md rounded-xl border border-slate-700/80 flex flex-col gap-2 shadow-2xl transition-opacity duration-300 z-20 ${
             showControls ? "opacity-100" : "opacity-0 pointer-events-none"
           }`}
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Left Controls: Sync Live, Seek -10s, Seek +10s */}
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={handleGoLive}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                isLiveEdge
-                  ? "bg-rose-600/20 text-rose-400 border border-rose-500/40"
-                  : "bg-rose-600 hover:bg-rose-500 text-white shadow-sm"
-              }`}
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
-              <span>Sync Live</span>
-            </button>
+          {/* Timeline Scrubber Bar */}
+          <div className="flex items-center gap-2.5 px-1 pt-0.5">
+            <span className="text-[11px] font-mono text-slate-300 select-none shrink-0 font-medium">
+              {formatDisplayTime(currentTime)}
+            </span>
 
-            <button
-              type="button"
-              onClick={() => handleSeek(-10)}
-              className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition text-xs font-semibold flex items-center gap-0.5 cursor-pointer"
-              title="Rewind 10 seconds"
-            >
-              <span className="material-symbols-outlined text-base">replay_10</span>
-              <span className="hidden sm:inline text-[11px]">-10s</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleSeek(10)}
-              className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition text-xs font-semibold flex items-center gap-0.5 cursor-pointer"
-              title="Forward 10 seconds"
-            >
-              <span className="material-symbols-outlined text-base">forward_10</span>
-              <span className="hidden sm:inline text-[11px]">+10s</span>
-            </button>
-
-            {/* Mute / Unmute Button */}
-            <button
-              type="button"
-              onClick={toggleMute}
-              className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition text-xs font-semibold flex items-center cursor-pointer ml-1"
-              title={isMuted ? "Unmute" : "Mute"}
-            >
-              <span className="material-symbols-outlined text-base">
-                {isMuted ? "volume_off" : "volume_up"}
-              </span>
-            </button>
-          </div>
-
-          {/* Right Controls: Speed Selector, External Popout, Fullscreen */}
-          <div className="flex items-center gap-1.5 sm:gap-2 relative">
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setShowSpeedMenu((v) => !v)}
-                className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono font-bold flex items-center gap-1 border border-slate-700 transition cursor-pointer"
-                title="Playback Speed"
-              >
-                <span className="material-symbols-outlined text-sm">speed</span>
-                <span>{playbackSpeed}x</span>
-              </button>
-
-              {showSpeedMenu && (
-                <div className="absolute bottom-full right-0 mb-2 w-28 bg-[#141726] border border-slate-700 rounded-xl p-1 shadow-2xl z-30 space-y-0.5 animate-in fade-in zoom-in-95 duration-150">
-                  <div className="text-[10px] uppercase font-bold text-slate-400 px-2 py-1 border-b border-slate-800">
-                    Playback Speed
-                  </div>
-                  {SPEED_OPTIONS.map((rate) => (
-                    <button
-                      key={rate}
-                      type="button"
-                      onClick={() => handleSpeedChange(rate)}
-                      className={`w-full text-left px-2 py-1.5 rounded-lg text-xs font-medium flex items-center justify-between transition cursor-pointer ${
-                        playbackSpeed === rate
-                          ? "bg-blue-600 text-white font-bold"
-                          : "text-slate-300 hover:bg-slate-800"
-                      }`}
-                    >
-                      <span>{rate}x</span>
-                      {playbackSpeed === rate && (
-                        <span className="material-symbols-outlined text-xs">check</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
+            <div className="relative flex-1 flex items-center group/slider py-1">
+              <input
+                type="range"
+                min={0}
+                max={Math.max(duration, currentTime, 1)}
+                step={1}
+                value={currentTime}
+                onChange={(e) => handleSliderSeek(Number(e.target.value))}
+                className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-red-500 hover:h-2 transition-all focus:outline-none"
+              />
             </div>
 
-            <a
-              href={`https://www.youtube.com/watch?v=${youtubeVideoId}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition cursor-pointer"
-              title="Open in YouTube"
-            >
-              <span className="material-symbols-outlined text-base">open_in_new</span>
-            </a>
+            <div className="flex items-center gap-1.5 shrink-0 select-none">
+              {isLiveEdge ? (
+                <span className="flex items-center gap-1 text-[10px] font-bold text-rose-400 uppercase tracking-wider bg-rose-950/60 border border-rose-800/60 px-2 py-0.5 rounded-full">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+                  LIVE
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleGoLive}
+                  className="flex items-center gap-1 text-[10px] font-bold text-amber-300 uppercase tracking-wider bg-amber-950/60 border border-amber-800/60 px-2 py-0.5 rounded-full hover:bg-rose-600 hover:text-white transition cursor-pointer"
+                  title="Click to jump to live edge"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  <span>-{formatDisplayTime(Math.max(0, duration - currentTime))}</span>
+                </button>
+              )}
+            </div>
+          </div>
 
-            <button
-              type="button"
-              onClick={toggleFullscreen}
-              className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition cursor-pointer"
-              title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
-            >
-              <span className="material-symbols-outlined text-base">
-                {isFullscreen ? "fullscreen_exit" : "fullscreen"}
-              </span>
-            </button>
+          {/* Controls Row */}
+          <div className="flex items-center justify-between gap-2">
+            {/* Left Controls: Play/Pause, Rewind, Forward, Sync Live */}
+            <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+              {/* Play / Pause Toggle */}
+              <button
+                type="button"
+                onClick={togglePlayPause}
+                className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition flex items-center justify-center cursor-pointer"
+                title={isPlaying ? "Pause" : "Play"}
+              >
+                <span className="material-symbols-outlined text-base">
+                  {isPlaying ? "pause" : "play_arrow"}
+                </span>
+              </button>
+
+              {/* Rewind 10s */}
+              <button
+                type="button"
+                onClick={() => handleSeek(-10)}
+                className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition text-xs font-semibold flex items-center gap-0.5 cursor-pointer"
+                title="Rewind 10 seconds"
+              >
+                <span className="material-symbols-outlined text-base">replay_10</span>
+                <span className="hidden sm:inline text-[11px]">-10s</span>
+              </button>
+
+              {/* Rewind 30s */}
+              <button
+                type="button"
+                onClick={() => handleSeek(-30)}
+                className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition text-xs font-semibold flex items-center gap-0.5 cursor-pointer hidden md:flex"
+                title="Rewind 30 seconds"
+              >
+                <span className="material-symbols-outlined text-base">replay_30</span>
+                <span className="text-[11px]">-30s</span>
+              </button>
+
+              {/* Forward 10s */}
+              <button
+                type="button"
+                onClick={() => handleSeek(10)}
+                className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition text-xs font-semibold flex items-center gap-0.5 cursor-pointer"
+                title="Forward 10 seconds"
+              >
+                <span className="material-symbols-outlined text-base">forward_10</span>
+                <span className="hidden sm:inline text-[11px]">+10s</span>
+              </button>
+
+              {/* Sync Live Button */}
+              <button
+                type="button"
+                onClick={handleGoLive}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ml-1 ${
+                  isLiveEdge
+                    ? "bg-rose-600/20 text-rose-400 border border-rose-500/40"
+                    : "bg-rose-600 hover:bg-rose-500 text-white shadow-sm ring-2 ring-rose-400/50 animate-pulse"
+                }`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+                <span>{isLiveEdge ? "Live Edge" : "Catch Up Live"}</span>
+              </button>
+
+              {/* Mute / Unmute Button */}
+              <button
+                type="button"
+                onClick={toggleMute}
+                className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition text-xs font-semibold flex items-center cursor-pointer ml-0.5"
+                title={isMuted ? "Unmute" : "Mute"}
+              >
+                <span className="material-symbols-outlined text-base">
+                  {isMuted ? "volume_off" : "volume_up"}
+                </span>
+              </button>
+            </div>
+
+            {/* Right Controls: Speed Selector, Popout, Fullscreen */}
+            <div className="flex items-center gap-1.5 sm:gap-2 relative">
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowSpeedMenu((v) => !v)}
+                  className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono font-bold flex items-center gap-1 border border-slate-700 transition cursor-pointer"
+                  title="Playback Speed"
+                >
+                  <span className="material-symbols-outlined text-sm">speed</span>
+                  <span>{playbackSpeed}x</span>
+                </button>
+
+                {showSpeedMenu && (
+                  <div className="absolute bottom-full right-0 mb-2 w-28 bg-[#141726] border border-slate-700 rounded-xl p-1 shadow-2xl z-30 space-y-0.5 animate-in fade-in zoom-in-95 duration-150">
+                    <div className="text-[10px] uppercase font-bold text-slate-400 px-2 py-1 border-b border-slate-800">
+                      Playback Speed
+                    </div>
+                    {SPEED_OPTIONS.map((rate) => (
+                      <button
+                        key={rate}
+                        type="button"
+                        onClick={() => handleSpeedChange(rate)}
+                        className={`w-full text-left px-2 py-1.5 rounded-lg text-xs font-medium flex items-center justify-between transition cursor-pointer ${
+                          playbackSpeed === rate
+                            ? "bg-blue-600 text-white font-bold"
+                            : "text-slate-300 hover:bg-slate-800"
+                        }`}
+                      >
+                        <span>{rate}x</span>
+                        {playbackSpeed === rate && (
+                          <span className="material-symbols-outlined text-xs">check</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <a
+                href={`https://www.youtube.com/watch?v=${youtubeVideoId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition cursor-pointer"
+                title="Open in YouTube"
+              >
+                <span className="material-symbols-outlined text-base">open_in_new</span>
+              </a>
+
+              <button
+                type="button"
+                onClick={toggleFullscreen}
+                className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition cursor-pointer"
+                title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+              >
+                <span className="material-symbols-outlined text-base">
+                  {isFullscreen ? "fullscreen_exit" : "fullscreen"}
+                </span>
+              </button>
+            </div>
           </div>
         </div>
       )}
