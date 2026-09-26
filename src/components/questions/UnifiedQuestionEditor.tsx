@@ -150,7 +150,6 @@ export function UnifiedQuestionEditor({
 
   // Solution Inbuilt AI Assistant & Diagram states
   const [solutionRefinePrompt, setSolutionRefinePrompt] = useState<string>("");
-  const [isDiagramZoomed, setIsDiagramZoomed] = useState<boolean>(false);
 
   // Helper: Persist New Topic to Master Catalog
   const handleSaveNewTopic = async (overrideName?: string) => {
@@ -344,16 +343,25 @@ export function UnifiedQuestionEditor({
   const [solutionEn, setSolutionEn] = useState<string>(translationEn?.solution || initialQuestion?.solutionEn || "");
   const [solutionHi, setSolutionHi] = useState<string>(translationHi?.solution || initialQuestion?.solutionHi || "");
 
-  // Diagram / Reference Image (Question Diagram)
+  // 1. Reference / Source Screenshot (Editor Verification Only — NEVER shown to students/PDF)
+  const initialRefImg =
+    initialQuestion?.referenceImageUrl ||
+    initialQuestion?.assets?.find((a: any) => a.type === "REFERENCE")?.publicUrl ||
+    null;
+  const [referenceImageUrl, setReferenceImageUrl] = useState<string | null>(initialRefImg);
+  const [isRefImgZoomed, setIsRefImgZoomed] = useState<boolean>(false);
+  const refFileInputRef = useRef<HTMLInputElement>(null);
+
+  // 2. Question Content Diagram / Figure (Genuine Diagram — Student Facing)
   const initialDiag =
     initialQuestion?.imageUrl ||
     initialQuestion?.figureUrl ||
-    initialQuestion?.referenceImageUrl ||
-    initialQuestion?.assets?.find((a: any) => a.type === "REFERENCE" || a.type === "FIGURE")?.publicUrl ||
+    initialQuestion?.assets?.find((a: any) => a.type === "DIAGRAM" || a.type === "FIGURE")?.publicUrl ||
     null;
   const [diagramUrl, setDiagramUrl] = useState<string | null>(initialDiag);
+  const [isDiagramZoomed, setIsDiagramZoomed] = useState<boolean>(false);
 
-  // Dedicated Solution Diagram / Image (Independent from Question Diagram)
+  // 3. Dedicated Solution Diagram / Image (Independent from Question Diagram)
   const initialSolImg =
     initialQuestion?.solutionImageUrl ||
     initialQuestion?.assets?.find((a: any) => a.type === "SOLUTION")?.publicUrl ||
@@ -363,7 +371,7 @@ export function UnifiedQuestionEditor({
   const [isSolutionImgZoomed, setIsSolutionImgZoomed] = useState<boolean>(false);
   const solutionFileInputRef = useRef<HTMLInputElement>(null);
 
-  // 3. AI PIPELINE STATES
+  // 4. AI PIPELINE STATES
   const [isExtracting, setIsExtracting] = useState<boolean>(false);
   const [isTranslating, setIsTranslating] = useState<boolean>(false);
   const [isGeneratingSolution, setIsGeneratingSolution] = useState<boolean>(false);
@@ -505,7 +513,8 @@ export function UnifiedQuestionEditor({
           subTopic: extracted.subTopic || subTopic || "",
           difficulty: extracted.difficulty || difficulty || "MEDIUM",
           type: extracted.type || questionType || "SINGLE_CORRECT",
-          referenceImageUrl: imgUrl || diagramUrl || undefined,
+          referenceImageUrl: imgUrl || referenceImageUrl || undefined,
+          figureUrl: diagramUrl || undefined,
           solutionImageUrl: solutionImageUrl || undefined,
           source,
         }),
@@ -653,7 +662,7 @@ export function UnifiedQuestionEditor({
       try {
         shortUrl = await uploadImageFile(file);
         if (shortUrl) {
-          setDiagramUrl(shortUrl);
+          setReferenceImageUrl(shortUrl);
         }
       } catch (uploadErr) {
         console.warn("Upload warning, proceeding with extraction:", uploadErr);
@@ -1033,7 +1042,7 @@ export function UnifiedQuestionEditor({
         solutionEn: solutionEn.trim() || undefined,
         solutionHi: solutionHi.trim() || undefined,
         figureUrl: diagramUrl || undefined,
-        referenceImageUrl: diagramUrl || undefined,
+        referenceImageUrl: referenceImageUrl || undefined,
         solutionImageUrl: solutionImageUrl || undefined,
         dppId,
         testSectionId,
@@ -1392,7 +1401,117 @@ export function UnifiedQuestionEditor({
           </div>
         )}
       </div>
-      {/* 3. PROMINENT QUESTION REFERENCE / DIAGRAM DOCK (Right below Ingestion) */}
+      {/* 3. PROMINENT QUESTION REFERENCE SCREENSHOT DOCK (Editor Verification Only) */}
+      {referenceImageUrl && (
+        <div className="bg-amber-50/70 border border-amber-200 rounded-2xl p-3.5 sm:p-4 shadow-xs space-y-2.5 animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center justify-between pb-2 border-b border-amber-200/80 flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 rounded-xl bg-amber-100 text-amber-800">
+                <ImageIcon className="w-4 h-4" />
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-xs font-bold text-amber-950 uppercase tracking-wide">
+                    Source / Reference Screenshot
+                  </h4>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-950 font-bold">
+                    Editor Only
+                  </span>
+                </div>
+                <p className="text-[10px] text-amber-700">
+                  Visible to teacher/admin for verification. Will NOT appear on student tests, reviews, or PDF exports.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setIsRefImgZoomed(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-xs font-semibold transition cursor-pointer"
+                title="View Full Size"
+              >
+                <ZoomIn className="w-3 h-3" />
+                <span className="hidden sm:inline">Zoom</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => refFileInputRef.current?.click()}
+                className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-lg text-xs font-semibold transition cursor-pointer"
+                title="Replace Reference Image"
+              >
+                <Upload className="w-3 h-3" />
+                <span className="hidden sm:inline">Replace</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setReferenceImageUrl(null)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-semibold transition cursor-pointer"
+                title="Remove Reference Image"
+              >
+                <XCircle className="w-3 h-3" />
+                <span className="hidden sm:inline">Remove</span>
+              </button>
+              <input
+                type="file"
+                ref={refFileInputRef}
+                accept="image/*"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const toastId = toast.loading("Uploading reference screenshot...");
+                    try {
+                      const url = await uploadImageFile(file);
+                      if (url) {
+                        setReferenceImageUrl(url);
+                        toast.success("Reference screenshot updated!", { id: toastId });
+                      }
+                    } catch (err: any) {
+                      toast.error(err.message || "Failed to upload reference image.", { id: toastId });
+                    }
+                  }
+                }}
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-center p-2 bg-white/80 rounded-xl border border-amber-200/80 max-h-48 overflow-hidden">
+            <img
+              src={referenceImageUrl}
+              alt="Source Screenshot"
+              className="max-h-44 object-contain rounded-lg shadow-xs cursor-pointer hover:scale-102 transition"
+              onClick={() => setIsRefImgZoomed(true)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* FULLSCREEN REFERENCE IMAGE MODAL */}
+      {isRefImgZoomed && referenceImageUrl && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in"
+          onClick={() => setIsRefImgZoomed(false)}
+        >
+          <div className="relative max-w-4xl max-h-[90vh] bg-white rounded-2xl p-4 shadow-2xl space-y-3" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b pb-2">
+              <h3 className="text-xs font-black uppercase text-slate-800">Source / Reference Screenshot Full Size</h3>
+              <button
+                type="button"
+                onClick={() => setIsRefImgZoomed(false)}
+                className="p-1 text-slate-400 hover:text-slate-800 rounded-lg font-bold"
+              >
+                ✕ Close
+              </button>
+            </div>
+            <div className="flex items-center justify-center overflow-auto max-h-[75vh]">
+              <img src={referenceImageUrl} alt="Zoomed Reference Screenshot" className="max-h-[70vh] object-contain rounded-xl" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3B. GENUINE QUESTION DIAGRAM DOCK (Student Facing — Optional) */}
       {diagramUrl && (
         <div className="bg-white border border-blue-200 rounded-2xl p-3.5 sm:p-4 shadow-xs space-y-2.5 animate-in fade-in slide-in-from-top-2">
           <div className="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2">
@@ -1401,11 +1520,16 @@ export function UnifiedQuestionEditor({
                 <ImageIcon className="w-4 h-4" />
               </span>
               <div>
-                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide">
-                  Question Reference Diagram / Screenshot
-                </h4>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide">
+                    Question Content Figure / Diagram
+                  </h4>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold">
+                    Student Facing
+                  </span>
+                </div>
                 <p className="text-[10px] text-slate-500">
-                  Visible in direct view for accurate question formatting.
+                  Genuine diagram/figure required as part of the question content.
                 </p>
               </div>
             </div>
@@ -1438,6 +1562,27 @@ export function UnifiedQuestionEditor({
                 <XCircle className="w-3 h-3" />
                 <span className="hidden sm:inline">Remove</span>
               </button>
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept="image/*"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const toastId = toast.loading("Uploading question figure...");
+                    try {
+                      const url = await uploadImageFile(file);
+                      if (url) {
+                        setDiagramUrl(url);
+                        toast.success("Question diagram uploaded!", { id: toastId });
+                      }
+                    } catch (err: any) {
+                      toast.error(err.message || "Failed to upload diagram.", { id: toastId });
+                    }
+                  }
+                }}
+              />
             </div>
           </div>
 
@@ -1460,7 +1605,7 @@ export function UnifiedQuestionEditor({
         >
           <div className="relative max-w-4xl max-h-[90vh] bg-white rounded-2xl p-4 shadow-2xl space-y-3" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b pb-2">
-              <h3 className="text-xs font-black uppercase text-slate-800">Reference Diagram Full Size</h3>
+              <h3 className="text-xs font-black uppercase text-slate-800">Question Diagram Full Size</h3>
               <button
                 type="button"
                 onClick={() => setIsDiagramZoomed(false)}

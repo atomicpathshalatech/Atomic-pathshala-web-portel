@@ -192,7 +192,14 @@ export async function fetchCanonicalTestData(testId: string): Promise<FormattedE
         enTrans?.correctOptionIds || hiTrans?.correctOptionIds
       );
 
-      const imageUrl = q.imageUrl || q.assets?.find((a) => a.type === "DIAGRAM" || a.type === "REFERENCE")?.publicUrl;
+      // STRICT RULE: Only use genuine question diagram/figure image, NEVER reference/OCR screenshot
+      const diagramAsset = q.assets?.find((a) => a.type === "DIAGRAM" || a.type === "FIGURE");
+      const genuineCandidateUrl = diagramAsset?.publicUrl || q.imageUrl;
+      const isReferenceImage =
+        Boolean(genuineCandidateUrl) &&
+        (genuineCandidateUrl === (q as any).referenceImageUrl ||
+          q.assets?.some((a) => a.type === "REFERENCE" && a.publicUrl === genuineCandidateUrl));
+      const validDiagramUrl = isReferenceImage ? null : genuineCandidateUrl;
 
       const formattedQ: FormattedExportQuestion = {
         number: globalQuestionNumber,
@@ -206,7 +213,7 @@ export async function fetchCanonicalTestData(testId: string): Promise<FormattedE
         correctOptionLabel: correctLabel,
         solutionEn: enTrans?.solution || q.solution || "",
         solutionHi: hiTrans?.solution || enTrans?.solution || q.solution || "",
-        imageUrl: imageUrl || null,
+        imageUrl: validDiagramUrl || null,
       };
 
       allQuestions.push(formattedQ);
@@ -322,17 +329,22 @@ export function generateTestPaperHtml(
   const enSectionRange = sectionBreakdowns.map((sb) => `${sb.name}: ${sb.startQ}-${sb.endQ}`).join(", ") || `Physics: 1-45, Chemistry: 46-90, Biology: 91-180`;
   const hiSectionRange = sectionBreakdowns.map((sb) => `${sb.name}: ${sb.startQ} से ${sb.endQ}`).join(", ") || `भौतिक विज्ञान: 1 से 45, रसायन विज्ञान: 46 से 90, जीव विज्ञान: 91 से 180`;
 
-  // Helper to chunk questions into authentic pages of 3-4 questions each (matching ALLEN density)
-  function chunkQuestionsIntoPages(questions: FormattedExportQuestion[], maxWeight = 4): FormattedExportQuestion[][] {
+  // Helper to chunk questions into authentic exam pages (5-6 questions per page standard)
+  function chunkQuestionsIntoPages(questions: FormattedExportQuestion[], maxWeight = 5.2): FormattedExportQuestion[][] {
     const chunks: FormattedExportQuestion[][] = [];
     let currentChunk: FormattedExportQuestion[] = [];
     let currentWeight = 0;
 
     for (const q of questions) {
-      let weight = 1.0;
-      if (q.imageUrl) weight += 0.5;
-      if ((q.statementEn && q.statementEn.length > 220) || (q.statementHi && q.statementHi.length > 220)) weight += 0.4;
+      let weight = 0.9;
+      if (q.imageUrl) weight += 1.0;
+      const maxLen = Math.max((q.statementEn || "").length, (q.statementHi || "").length);
+      if (maxLen > 240) weight += 0.4;
+      else if (maxLen > 140) weight += 0.2;
       
+      const hasLongOptions = q.options.some((opt) => (opt.textEn || "").length > 30 || (opt.textHi || "").length > 30);
+      if (hasLongOptions) weight += 0.3;
+
       if (currentChunk.length > 0 && currentWeight + weight > maxWeight) {
         chunks.push(currentChunk);
         currentChunk = [q];
@@ -350,7 +362,7 @@ export function generateTestPaperHtml(
 
   let totalQuestionPagesCount = 0;
   test.sections.forEach((sec) => {
-    totalQuestionPagesCount += chunkQuestionsIntoPages(sec.questions, 4).length;
+    totalQuestionPagesCount += chunkQuestionsIntoPages(sec.questions, 5.2).length;
   });
 
   const intermediateRoughCount = 0;
@@ -607,7 +619,7 @@ export function generateTestPaperHtml(
   };
 
   test.sections.forEach((section, sIdx) => {
-    const pagesForSection = chunkQuestionsIntoPages(section.questions, 4.0);
+    const pagesForSection = chunkQuestionsIntoPages(section.questions, 5.2);
 
     pagesForSection.forEach((questionsInPage) => {
       const questionsChunkHtml = questionsInPage.map((q) => {

@@ -209,7 +209,8 @@ export async function POST(request: NextRequest) {
         subTopic: subTopic?.trim() || null,
         type: type as QuestionType,
         difficulty: difficulty as Difficulty,
-        imageUrl: figureUrl?.trim() || referenceImageUrl?.trim() || null,
+        imageUrl: figureUrl?.trim() || null, // STRICTLY for genuine question figure/diagram
+        referenceImageUrl: referenceImageUrl?.trim() || null, // Editor-only reference image
         category: category?.trim() || null,
         pyqExam: pyqExam?.trim() || null,
         pyqYear: pyqYear ? parseInt(String(pyqYear), 10) || null : null,
@@ -483,7 +484,8 @@ export async function PUT(request: NextRequest) {
         pyqQuestionNumber: targetQNum,
         pyqSource: formattedPyqSource,
         solution: solutionEn?.trim() || solutionHi?.trim() || existing.solution,
-        imageUrl: figureUrl?.trim() || referenceImageUrl?.trim() || existing.imageUrl,
+        imageUrl: figureUrl !== undefined ? (figureUrl?.trim() || null) : existing.imageUrl,
+        referenceImageUrl: referenceImageUrl !== undefined ? (referenceImageUrl?.trim() || null) : (existing as any).referenceImageUrl,
         tags: tagsString || existing.tags,
         version: { increment: 1 },
         editedById: session.user.id,
@@ -517,11 +519,9 @@ export async function PUT(request: NextRequest) {
       },
     });
 
-    // Keep a REFERENCE QuestionAsset row in sync on edit too (POST already
-    // does this on create). Question.imageUrl is still the primary field the
-    // edit form reads back, but the asset table should not go stale.
-    const referenceUrlForAsset = (figureUrl?.trim() || referenceImageUrl?.trim() || "") as string;
-    if (figureUrl !== undefined || referenceImageUrl !== undefined) {
+    // Keep a REFERENCE QuestionAsset row in sync on edit
+    const referenceUrlForAsset = (referenceImageUrl?.trim() || "") as string;
+    if (referenceImageUrl !== undefined) {
       if (referenceUrlForAsset) {
         const existingRefAsset = await prisma.questionAsset.findFirst({
           where: { questionId, type: "REFERENCE" },

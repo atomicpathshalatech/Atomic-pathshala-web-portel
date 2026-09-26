@@ -93,7 +93,8 @@ export async function importVerifiedQuestionsToDraft(
         pyqSource: formattedPyqSource,
         questionCode,
         solution: eq.solution || null,
-        imageUrl: eq.imageUrl || null,
+        imageUrl: null, // STRICTLY for genuine diagram only
+        referenceImageUrl: eq.imageUrl || null, // Editor-only source screenshot
         tags: tagsArray.join(", "),
         status: "DRAFT",
         isPublished: false,

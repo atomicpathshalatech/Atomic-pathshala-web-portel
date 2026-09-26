@@ -25,6 +25,7 @@ import {
   UserCheck,
   BookOpen,
   Flag,
+  Image as ImageIcon,
 } from "lucide-react";
 import { FormulaText } from "@/components/test-portal/FormulaText";
 import { SecureDeleteResourceModal } from "@/components/common/SecureDeleteResourceModal";
@@ -136,6 +137,7 @@ export function QuestionManagementTable({
   const [viewQuestionIndex, setViewQuestionIndex] = useState<number | null>(null);
   const [viewQuestionLang, setViewQuestionLang] = useState<"ENGLISH" | "HINDI">("ENGLISH");
   const [showSolution, setShowSolution] = useState(false);
+  const [showReferenceSource, setShowReferenceSource] = useState(false);
 
   // Modals
   const [reviewModalQuestion, setReviewModalQuestion] = useState<{
@@ -1211,14 +1213,37 @@ export function QuestionManagementTable({
                     className="text-sm sm:text-base font-bold text-slate-900 dark:text-white leading-relaxed block"
                   />
 
-                  {/* Question Image (if present) */}
+                  {/* Genuine Question Diagram (if present) */}
                   {viewingQuestion.imageUrl && (
                     <div className="pt-2">
                       <img
                         src={viewingQuestion.imageUrl}
-                        alt="Question Reference Figure"
+                        alt="Question Diagram"
                         className="max-h-72 max-w-full rounded-xl object-contain border border-slate-200 dark:border-slate-700 shadow-sm bg-white"
                       />
+                    </div>
+                  )}
+
+                  {/* Optional Source/Reference Image (Editor-only on demand) */}
+                  {(viewingQuestion as any).referenceImageUrl && (
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowReferenceSource((prev) => !prev)}
+                        className="text-[11px] font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 flex items-center gap-1.5 transition cursor-pointer"
+                      >
+                        <ImageIcon className="w-3.5 h-3.5" />
+                        <span>{showReferenceSource ? "Hide Source Screenshot" : "View Source Screenshot (Editor Only)"}</span>
+                      </button>
+                      {showReferenceSource && (
+                        <div className="mt-2 p-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700">
+                          <img
+                            src={(viewingQuestion as any).referenceImageUrl}
+                            alt="Source Screenshot"
+                            className="max-h-60 max-w-full rounded-lg object-contain"
+                          />
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

@@ -2097,6 +2097,7 @@ model Question {
   type          QuestionType @default(SINGLE_CORRECT)
   difficulty    Difficulty   @default(MEDIUM)
   imageUrl      String?
+  referenceImageUrl String?
   category      String?
   pyqSource     String?
   pyqExam       String?
