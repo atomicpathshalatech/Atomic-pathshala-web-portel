@@ -20,6 +20,8 @@ export function extractYouTubeVideoId(input: string): string | null {
   return match ? match[1] ?? null : null;
 }
 
+export const extractYoutubeVideoId = extractYouTubeVideoId;
+
 export function isValidYouTubeVideoId(id: string): boolean {
   return /^[a-zA-Z0-9_-]{11}$/.test(id);
 }

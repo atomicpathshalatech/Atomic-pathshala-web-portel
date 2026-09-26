@@ -95,7 +95,7 @@ export async function PATCH(
         resolvedTeacherId = t?.id ?? null;
       }
       if (resolvedTeacherId) {
-        await prisma.whiteboardSession.upsert({
+        const wb = await prisma.whiteboardSession.upsert({
           where: { batchScheduleId: schedule.id },
           update: {
             ...(input.videoTransport && { videoTransport: input.videoTransport }),
@@ -109,6 +109,21 @@ export async function PATCH(
             youtubeVideoId: input.youtubeVideoId || null,
           },
         });
+
+        if (wb.youtubeBroadcastId) {
+          const { updateYoutubeBroadcastForWhiteboard, cancelYoutubeBroadcastForWhiteboard } = await import(
+            "@/lib/live-class/youtube-broadcast"
+          );
+          if (input.status === "CANCELLED") {
+            cancelYoutubeBroadcastForWhiteboard(wb.id).catch((err) => {
+              console.warn("[Schedule] Broadcast cancel warning:", err);
+            });
+          } else if (existing.title !== schedule.title || isTimeChange) {
+            updateYoutubeBroadcastForWhiteboard(wb.id, schedule.title, schedule.startsAt).catch((err) => {
+              console.warn("[Schedule] Broadcast update warning:", err);
+            });
+          }
+        }
       }
     }
 
@@ -294,6 +309,18 @@ export async function DELETE(
     // any student has a real attempt — clear those first so the cascade
     // below can actually complete instead of throwing a raw FK violation.
     const attemptsCleared = await clearAttemptsForSchedules([params.scheduleId]);
+
+    // Check if there is an associated WhiteboardSession with a YouTube broadcast to cancel
+    const wbToCancel = await prisma.whiteboardSession.findFirst({
+      where: { batchScheduleId: params.scheduleId },
+      select: { id: true, youtubeBroadcastId: true },
+    });
+    if (wbToCancel?.youtubeBroadcastId) {
+      const { cancelYoutubeBroadcastForWhiteboard } = await import("@/lib/live-class/youtube-broadcast");
+      cancelYoutubeBroadcastForWhiteboard(wbToCancel.id).catch((err) => {
+        console.warn("[Schedule Delete] Broadcast cancel warning:", err);
+      });
+    }
 
     const deleted = await prisma.batchSchedule.deleteMany({
       where: { id: params.scheduleId, batchId: params.id },

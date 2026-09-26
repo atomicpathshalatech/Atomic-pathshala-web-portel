@@ -93,7 +93,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         tid = t?.id;
       }
       if (tid) {
-        await prisma.whiteboardSession.upsert({
+        const wb = await prisma.whiteboardSession.upsert({
           where: { batchScheduleId: schedule.id },
           update: {
             videoTransport: input.videoTransport || "LIVEKIT",
@@ -107,6 +107,18 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             youtubeVideoId: input.youtubeVideoId || null,
           },
         });
+
+        // For Model 1 (Application Class streaming to YouTube): pre-create unlisted broadcast if YouTube is configured
+        if (wb.videoTransport === "YOUTUBE" && !wb.youtubeVideoId) {
+          const { youtubeLiveClassConfigured, ensureYoutubeBroadcastForWhiteboard } = await import(
+            "@/lib/live-class/youtube-broadcast"
+          );
+          if (youtubeLiveClassConfigured()) {
+            ensureYoutubeBroadcastForWhiteboard(wb.id, schedule.title, schedule.startsAt).catch((err) => {
+              console.warn("[BatchSchedule] Auto YouTube broadcast creation warning:", err);
+            });
+          }
+        }
       }
     }
 

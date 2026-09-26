@@ -81,3 +81,32 @@ export async function ensureYoutubeBroadcastForWhiteboard(
     },
   });
 }
+
+export async function updateYoutubeBroadcastForWhiteboard(
+  whiteboardSessionId: string,
+  title: string,
+  scheduledStartTime: Date
+) {
+  const session = await prisma.whiteboardSession.findUnique({
+    where: { id: whiteboardSessionId },
+    select: { youtubeBroadcastId: true },
+  });
+  if (session?.youtubeBroadcastId) {
+    const { updateLiveBroadcast } = await import("@/lib/youtube/live-broadcast");
+    await updateLiveBroadcast(session.youtubeBroadcastId, {
+      title,
+      scheduledStartTime: scheduledStartTime.toISOString(),
+    });
+  }
+}
+
+export async function cancelYoutubeBroadcastForWhiteboard(whiteboardSessionId: string) {
+  const session = await prisma.whiteboardSession.findUnique({
+    where: { id: whiteboardSessionId },
+    select: { youtubeBroadcastId: true },
+  });
+  if (session?.youtubeBroadcastId) {
+    const { deleteLiveBroadcast } = await import("@/lib/youtube/live-broadcast");
+    await deleteLiveBroadcast(session.youtubeBroadcastId);
+  }
+}

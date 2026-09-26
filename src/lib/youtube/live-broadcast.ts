@@ -228,6 +228,42 @@ export async function createLiveBroadcast(
   return { id: json.id, liveChatId: json.snippet?.liveChatId ?? null };
 }
 
+export async function updateLiveBroadcast(
+  broadcastId: string,
+  updates: { title?: string; scheduledStartTime?: string; description?: string }
+): Promise<void> {
+  try {
+    const body: Record<string, any> = { id: broadcastId, snippet: {} };
+    if (updates.title) {
+      body.snippet.title = updates.title.replace(/[<>{}]/g, "").trim().slice(0, 92);
+    }
+    if (updates.scheduledStartTime) {
+      body.snippet.scheduledStartTime = updates.scheduledStartTime;
+    }
+    if (updates.description) {
+      body.snippet.description = updates.description;
+    }
+    await youtubeApiFetch("/liveBroadcasts", {
+      method: "PUT",
+      query: { part: "snippet" },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    console.warn("[updateLiveBroadcast warning]", err);
+  }
+}
+
+export async function deleteLiveBroadcast(broadcastId: string): Promise<void> {
+  try {
+    await youtubeApiFetch("/liveBroadcasts", {
+      method: "DELETE",
+      query: { id: broadcastId },
+    });
+  } catch (err) {
+    console.warn("[deleteLiveBroadcast warning]", err);
+  }
+}
+
 /**
  * Ensures an existing broadcast has embedding explicitly enabled and remains unlisted on YouTube
  */
