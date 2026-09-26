@@ -5,13 +5,35 @@ import { detectNeetQuestionType } from "./neet-question-classifier";
 export interface AiExtractionResult {
   statementEn: string;
   statementHi?: string;
+  optionsEn: {
+    A: string;
+    B: string;
+    C: string;
+    D: string;
+    [key: string]: string;
+  };
+  optionsHi?: {
+    A: string;
+    B: string;
+    C: string;
+    D: string;
+    [key: string]: string;
+  };
   optionA: string;
   optionB: string;
   optionC: string;
   optionD: string;
+  correctAnswer: string[];
   correctOptionIds: string[];
   solutionEn?: string;
   solutionHi?: string;
+  subject?: string;
+  chapter?: string;
+  topic?: string;
+  subTopic?: string;
+  difficulty?: "EASY" | "MEDIUM" | "HARD";
+  type?: string;
+  hasFigure?: boolean;
   figureRequired?: boolean;
   figureType?: string;
   confidence: number;
@@ -67,70 +89,160 @@ export interface TranslationVerificationResult {
   suggestedCorrection?: string;
 }
 
+function normalizeOptionKey(keyRaw: string): "A" | "B" | "C" | "D" {
+  const clean = keyRaw.trim().toUpperCase();
+  if (clean === "1" || clean === "A" || clean === "क" || clean === "अ") return "A";
+  if (clean === "2" || clean === "B" || clean === "ख" || clean === "ब") return "B";
+  if (clean === "3" || clean === "C" || clean === "ग" || clean === "स") return "C";
+  if (clean === "4" || clean === "D" || clean === "घ" || clean === "द") return "D";
+  return "A";
+}
+
 /**
  * Intelligent parser that extracts question statement, options A/B/C/D, answer, and solution from raw text or OCR output.
- * Preserves mathematical & scientific symbols.
+ * Preserves mathematical & scientific symbols, LaTeX, and handles Hindi/English formats.
  */
 export function parseQuestionFromRawText(rawText: string): AiExtractionResult {
-  const text = rawText.trim();
+  let text = (rawText || "").trim();
+  if (!text) {
+    return {
+      statementEn: "",
+      optionsEn: { A: "", B: "", C: "", D: "" },
+      optionA: "",
+      optionB: "",
+      optionC: "",
+      optionD: "",
+      correctAnswer: ["A"],
+      correctOptionIds: ["A"],
+      confidence: 0,
+    };
+  }
+
+  // 1. Strip leading question index/prefix (e.g. "Q. 1", "Q1.", "1. ", "1) ", "Question 1:", "प्रश्न 1:")
+  // so it's not confused with Option 1 / Option A
+  text = text.replace(/^(?:Q(?:uestion|ues)?\.?\s*\d+[\.:\)]?|प्रश्न\s*\d+[\.:\)]?|\d+[\.:\)]\s+)/i, "").trim();
+
   let statementEn = "";
-  let optionA = "";
-  let optionB = "";
-  let optionC = "";
-  let optionD = "";
+  let statementHi = "";
+  const optionsMapEn: Record<string, string> = { A: "", B: "", C: "", D: "" };
+  const optionsMapHi: Record<string, string> = { A: "", B: "", C: "", D: "" };
   const correctOptionIds: string[] = [];
   let solutionEn = "";
+  let solutionHi = "";
 
-  const optionRegex = /(?:^|\n|\s+)(?:\(([A-D1-4a-d])\)|([A-D1-4a-d])[\.\)])\s+/gi;
+  // 2. Look for Answer and Solution markers at the end
+  const ansRegex = /(?:^|\n|\s+)(?:ans(?:wer)?|correct\s*option|उत्तर|सही\s*विकल्प)\s*[:=-]\s*\(?([A-D1-4a-dक-घअ-द])\)?/i;
+  const ansMatch = text.match(ansRegex);
+  if (ansMatch && ansMatch[1]) {
+    const normAns = normalizeOptionKey(ansMatch[1]);
+    correctOptionIds.push(normAns);
+  }
+
+  const solSplitRegex = /(?:^|\n|\s+)(?:sol(?:ution)?|explanation|व्याख्या|हल)\s*[:=-]/i;
+  const solIndex = text.search(solSplitRegex);
+  if (solIndex !== -1) {
+    const trailingSol = text.substring(solIndex).trim();
+    text = text.substring(0, solIndex).trim();
+    if (/[\u0900-\u097F]/.test(trailingSol)) {
+      solutionHi = trailingSol;
+    } else {
+      solutionEn = trailingSol;
+    }
+  }
+
+  // Also clean trailing answer line if present in question body
+  text = text.replace(/(?:^|\n|\s+)(?:ans(?:wer)?|correct\s*option|उत्तर|सही\s*विकल्प)\s*[:=-]\s*\(?[A-D1-4a-dक-घअ-द]?\)?/i, "").trim();
+
+  // 3. Robust Option Extraction Regex
+  // Matches: (A), (B), (C), (D) | (1), (2), (3), (4) | (a), (b), (c), (d) | (क), (ख), (ग), (घ)
+  // [A], [B], [C], [D] | A., B., C., D. | A), B), C), D) | Option A:, Option B: | \n1., \n2., \n3., \n4.
+  const optionRegex = /(?:^|\n|\s+)(?:\(([A-D1-4a-dक-घअ-द])\)|\[([A-D1-4a-d])\]|(?:Option\s*[\(:]?\s*([A-D1-4a-d])[\):]?)|([A-D1-4a-d])[\.\)]|([क-घअ-द])[\.\)]|(?<=\n)\s*([1-4])[\.\)])\s+/gi;
   const matches = Array.from(text.matchAll(optionRegex));
 
   if (matches.length >= 2 && matches[0]) {
     statementEn = text.substring(0, matches[0].index ?? 0).trim();
+
     for (let i = 0; i < matches.length; i++) {
       const match = matches[i];
       if (!match) continue;
       const nextMatch = matches[i + 1];
-      const optLetter = ((match[1] || match[2]) ?? "A").toUpperCase();
+
+      const rawKey = match[1] || match[2] || match[3] || match[4] || match[5] || match[6] || "A";
+      const key = normalizeOptionKey(rawKey);
+
       const startIndex = (match.index ?? 0) + match[0].length;
       const endIndex = nextMatch && nextMatch.index !== undefined ? nextMatch.index : text.length;
-      let optText = text.substring(startIndex, endIndex).trim();
+      const optText = text.substring(startIndex, endIndex).trim();
 
-      if (i === matches.length - 1) {
-        const solMatch = optText.search(/(?:ans(?:wer)?|sol(?:ution)?|correct\s*option)\s*[:=-]/i);
-        if (solMatch !== -1) {
-          const trailing = optText.substring(solMatch).trim();
-          optText = optText.substring(0, solMatch).trim();
-          const ansChar = trailing.match(/(?:ans(?:wer)?|correct\s*option)\s*[:=-]\s*\(?([A-D1-4a-d])\)?/i);
-          if (ansChar && ansChar[1]) {
-            const letter = ansChar[1].toUpperCase().replace("1", "A").replace("2", "B").replace("3", "C").replace("4", "D");
-            correctOptionIds.push(letter);
-          }
-          solutionEn = trailing;
-        }
+      if (/[\u0900-\u097F]/.test(optText)) {
+        optionsMapHi[key] = optText;
+        if (!optionsMapEn[key]) optionsMapEn[key] = optText;
+      } else {
+        optionsMapEn[key] = optText;
+        if (!optionsMapHi[key]) optionsMapHi[key] = optText;
       }
-
-      if (optLetter === "A" || optLetter === "1") optionA = optText;
-      else if (optLetter === "B" || optLetter === "2") optionB = optText;
-      else if (optLetter === "C" || optLetter === "3") optionC = optText;
-      else if (optLetter === "D" || optLetter === "4") optionD = optText;
     }
   } else {
-    statementEn = text;
+    // If no option markers were matched with standard regex, check for 4-line blocks
+    const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+    if (lines.length >= 5) {
+      const potentialOpts = lines.slice(-4);
+      statementEn = lines.slice(0, -4).join("\n").trim();
+      optionsMapEn.A = potentialOpts[0] || "";
+      optionsMapEn.B = potentialOpts[1] || "";
+      optionsMapEn.C = potentialOpts[2] || "";
+      optionsMapEn.D = potentialOpts[3] || "";
+    } else {
+      statementEn = text;
+    }
   }
 
-  const figureRequired = /(?:figure|diagram|graph|circuit|shown below|in the table)/i.test(statementEn);
+  // Detect if statement is Hindi or English
+  if (/[\u0900-\u097F]/.test(statementEn)) {
+    statementHi = statementEn;
+  }
+
+  const figureRequired = /(?:figure|diagram|graph|circuit|shown below|in the table|चित्र|आरेख|ग्राफ|परिपथ)/i.test(
+    statementEn || statementHi
+  );
+
+  const finalCorrect = correctOptionIds.length > 0 ? correctOptionIds : ["A"];
+
+  const metadata = generateAiMetadata(statementEn || statementHi, optionsMapEn);
 
   return {
     statementEn: statementEn || text,
-    optionA,
-    optionB,
-    optionC,
-    optionD,
-    correctOptionIds: correctOptionIds.length > 0 ? correctOptionIds : ["A"],
-    solutionEn,
+    statementHi: statementHi || undefined,
+    optionsEn: {
+      A: optionsMapEn.A || "",
+      B: optionsMapEn.B || "",
+      C: optionsMapEn.C || "",
+      D: optionsMapEn.D || "",
+    },
+    optionsHi: optionsMapHi.A ? {
+      A: optionsMapHi.A || "",
+      B: optionsMapHi.B || "",
+      C: optionsMapHi.C || "",
+      D: optionsMapHi.D || "",
+    } : undefined,
+    optionA: optionsMapEn.A || "",
+    optionB: optionsMapEn.B || "",
+    optionC: optionsMapEn.C || "",
+    optionD: optionsMapEn.D || "",
+    correctAnswer: finalCorrect,
+    correctOptionIds: finalCorrect,
+    solutionEn: solutionEn || undefined,
+    solutionHi: solutionHi || undefined,
+    subject: metadata.subject,
+    chapter: metadata.chapter,
+    topic: metadata.topic,
+    subTopic: metadata.subTopic,
+    difficulty: metadata.difficulty,
+    type: metadata.questionType,
+    hasFigure: figureRequired,
     figureRequired,
     figureType: figureRequired ? "Diagram" : undefined,
-    confidence: matches.length >= 4 ? 96 : 82,
+    confidence: matches.length >= 4 ? 98 : matches.length >= 2 ? 88 : 75,
   };
 }
 
@@ -180,17 +292,36 @@ Output ONLY raw JSON.`;
 
     try {
       const parsed = JSON.parse(jsonStr);
+      const optA = parsed.optionA || parsed.optionsEn?.A || "";
+      const optB = parsed.optionB || parsed.optionsEn?.B || "";
+      const optC = parsed.optionC || parsed.optionsEn?.C || "";
+      const optD = parsed.optionD || parsed.optionsEn?.D || "";
+      const correctList = Array.isArray(parsed.correctOptionIds)
+        ? parsed.correctOptionIds
+        : Array.isArray(parsed.correctAnswer)
+        ? parsed.correctAnswer
+        : [parsed.correctAnswer || parsed.correctOption || "A"];
+
       return {
         statementEn: parsed.statementEn || "",
         statementHi: parsed.statementHi || undefined,
-        optionA: parsed.optionA || "",
-        optionB: parsed.optionB || "",
-        optionC: parsed.optionC || "",
-        optionD: parsed.optionD || "",
-        correctOptionIds: Array.isArray(parsed.correctOptionIds) ? parsed.correctOptionIds : ["A"],
+        optionsEn: {
+          A: optA,
+          B: optB,
+          C: optC,
+          D: optD,
+        },
+        optionsHi: parsed.optionsHi || undefined,
+        optionA: optA,
+        optionB: optB,
+        optionC: optC,
+        optionD: optD,
+        correctOptionIds: correctList,
+        correctAnswer: correctList,
         solutionEn: parsed.solutionEn || undefined,
         solutionHi: parsed.solutionHi || undefined,
-        figureRequired: Boolean(parsed.figureRequired),
+        figureRequired: Boolean(parsed.figureRequired || parsed.hasFigure),
+        hasFigure: Boolean(parsed.figureRequired || parsed.hasFigure),
         figureType: parsed.figureType || undefined,
         confidence: parsed.confidence || 90,
       };

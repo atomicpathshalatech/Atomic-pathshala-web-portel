@@ -415,27 +415,39 @@ export function AtomicQuestionEditor({
     }
   };
 
-  // AI Assistant Callbacks
+  // AI Assistant Callbacks & Extraction Applier
   const handleApplyExtraction = (extracted: any) => {
+    if (!extracted) return;
+
     if (extracted.statementEn) setStatementEn(extracted.statementEn);
     if (extracted.statementHi) setStatementHi(extracted.statementHi);
 
-    if (extracted.optionsEn) {
-      if (extracted.optionsEn.A) setOptionAEn(extracted.optionsEn.A);
-      if (extracted.optionsEn.B) setOptionBEn(extracted.optionsEn.B);
-      if (extracted.optionsEn.C) setOptionCEn(extracted.optionsEn.C);
-      if (extracted.optionsEn.D) setOptionDEn(extracted.optionsEn.D);
-    }
+    // English Options
+    const optEnA = extracted.optionsEn?.A || extracted.optionA || extracted.options?.A || "";
+    const optEnB = extracted.optionsEn?.B || extracted.optionB || extracted.options?.B || "";
+    const optEnC = extracted.optionsEn?.C || extracted.optionC || extracted.options?.C || "";
+    const optEnD = extracted.optionsEn?.D || extracted.optionD || extracted.options?.D || "";
+    if (optEnA) setOptionAEn(optEnA);
+    if (optEnB) setOptionBEn(optEnB);
+    if (optEnC) setOptionCEn(optEnC);
+    if (optEnD) setOptionDEn(optEnD);
 
-    if (extracted.optionsHi) {
-      if (extracted.optionsHi.A) setOptionAHi(extracted.optionsHi.A);
-      if (extracted.optionsHi.B) setOptionBHi(extracted.optionsHi.B);
-      if (extracted.optionsHi.C) setOptionCHi(extracted.optionsHi.C);
-      if (extracted.optionsHi.D) setOptionDHi(extracted.optionsHi.D);
-    }
+    // Hindi Options
+    const optHiA = extracted.optionsHi?.A || extracted.options?.A || "";
+    const optHiB = extracted.optionsHi?.B || extracted.options?.B || "";
+    const optHiC = extracted.optionsHi?.C || extracted.options?.C || "";
+    const optHiD = extracted.optionsHi?.D || extracted.options?.D || "";
+    if (optHiA) setOptionAHi(optHiA);
+    if (optHiB) setOptionBHi(optHiB);
+    if (optHiC) setOptionCHi(optHiC);
+    if (optHiD) setOptionDHi(optHiD);
 
-    if (extracted.correctAnswer && extracted.correctAnswer[0]) {
-      setCorrectOption(extracted.correctAnswer[0].toUpperCase());
+    // Correct Answer
+    const correct = Array.isArray(extracted.correctAnswer)
+      ? extracted.correctAnswer[0]
+      : (extracted.correctAnswer || extracted.correctOption || "");
+    if (correct) {
+      setCorrectOption(String(correct).toUpperCase().trim());
     }
 
     if (extracted.solutionEn) setSolutionEn(extracted.solutionEn);
@@ -446,6 +458,80 @@ export function AtomicQuestionEditor({
     if (extracted.topic) setTopic(extracted.topic);
     if (extracted.difficulty) setDifficulty(extracted.difficulty);
     if (extracted.hasFigure) setFigureCaption(extracted.figureCaption || "Figure 1.1");
+  };
+
+  // Helper: Text Auto-Extraction
+  const handleExtractFromText = async (rawText: string) => {
+    const toastId = toast.loading("Parsing question & extracting separate options...");
+    try {
+      const res = await fetch("/api/team/questions/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "extract",
+          payload: {
+            rawText,
+            subject: subject || "Chemistry",
+            chapter: chapter || "",
+          },
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Text extraction failed.");
+      }
+      const data = json.data?.result;
+      if (data) {
+        handleApplyExtraction(data);
+        toast.success("✨ Question statement & options extracted cleanly into separate fields!", { id: toastId });
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to extract question", { id: toastId });
+    }
+  };
+
+  // Helper: Smart Statement Paste Handler (Detects questions with options and extracts statement + separate options)
+  const handleStatementFieldPaste = async (
+    e: React.ClipboardEvent<HTMLTextAreaElement>,
+    _lang: "ENGLISH" | "HINDI",
+    setter: React.Dispatch<React.SetStateAction<string>>
+  ) => {
+    // 1. Check for image in clipboard
+    const items = e.clipboardData?.items;
+    if (items) {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item && item.type.startsWith("image/")) {
+          e.preventDefault();
+          e.stopPropagation();
+          const file = item.getAsFile();
+          if (file) {
+            handlePasteImageToField(e, (md) =>
+              setter((prev: string) => (prev ? prev + " " + md : md))
+            );
+          }
+          return;
+        }
+      }
+    }
+
+    // 2. Check for text containing question statement + options
+    const pastedText = e.clipboardData?.getData("text") || "";
+    if (pastedText && pastedText.trim().length > 15) {
+      const hasOptionMarkers =
+        /(?:\([A-D1-4a-dक-घअ-द]\)|\[[A-D1-4a-d]\]|(?:Option\s*[\(:]?\s*[A-D1-4a-d])|\b[A-D][\.\)]|\b[क-घअ-द][\.\)]|(?<=\n)\s*[1-4][\.\)])/i.test(
+          pastedText
+        ) ||
+        pastedText.split("\n").map((l) => l.trim()).filter(Boolean).length >= 5;
+
+      if (hasOptionMarkers) {
+        e.preventDefault();
+        e.stopPropagation();
+        toast.info("✨ Question statement & options detected! Extracting into separate fields...");
+        await handleExtractFromText(pastedText.trim());
+        return;
+      }
+    }
   };
 
   // 1-Click Translation Action
@@ -1109,6 +1195,8 @@ export function AtomicQuestionEditor({
             optionsEn={{ A: optionAEn, B: optionBEn, C: optionCEn, D: optionDEn }}
             optionsHi={{ A: optionAHi, B: optionBHi, C: optionCHi, D: optionDHi }}
             correctAnswer={[correctOption]}
+            subject={subject}
+            chapter={chapter}
             onApplyExtraction={handleApplyExtraction}
             onApplyTranslation={(txt, lang) => {
               if (lang === "HINDI") setStatementHi(txt);
@@ -1238,13 +1326,9 @@ export function AtomicQuestionEditor({
                   <textarea
                     rows={3}
                     required
-                    placeholder="e.g. Which of the following statements is correct regarding the Bohr model? (You can paste Ctrl+V images directly here)"
+                    placeholder="e.g. Which of the following statements is correct regarding the Bohr model? (You can paste Ctrl+V images or questions with options directly here)"
                     value={statementEn}
-                    onPaste={(e) =>
-                      handlePasteImageToField(e, (md) =>
-                        setStatementEn((prev: string) => (prev ? prev + " " + md : md))
-                      )
-                    }
+                    onPaste={(e) => handleStatementFieldPaste(e, "ENGLISH", setStatementEn)}
                     onChange={(e) => setStatementEn(e.target.value)}
                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-4 rounded-2xl text-sm text-slate-900 dark:text-white focus:bg-white focus:border-blue-500 outline-none font-sans leading-relaxed shadow-sm transition placeholder-slate-400"
                   />
@@ -1282,13 +1366,9 @@ export function AtomicQuestionEditor({
                   </div>
                   <textarea
                     rows={3}
-                    placeholder="e.g. हाइड्रोजन परमाणु के संबंध में निम्नलिखित में से कौन सा कथन सही है? (यहाँ सीधे Ctrl+V से इमेज पेस्ट कर सकते हैं)"
+                    placeholder="e.g. हाइड्रोजन परमाणु के संबंध में निम्नलिखित में से कौन सा कथन सही है? (यहाँ सीधे Ctrl+V से प्रश्न और विकल्प पेस्ट कर सकते हैं)"
                     value={statementHi}
-                    onPaste={(e) =>
-                      handlePasteImageToField(e, (md) =>
-                        setStatementHi((prev: string) => (prev ? prev + " " + md : md))
-                      )
-                    }
+                    onPaste={(e) => handleStatementFieldPaste(e, "HINDI", setStatementHi)}
                     onChange={(e) => setStatementHi(e.target.value)}
                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-4 rounded-2xl text-sm text-slate-900 dark:text-white focus:bg-white focus:border-blue-500 outline-none font-sans leading-relaxed shadow-sm transition placeholder-slate-400"
                   />

@@ -10,6 +10,8 @@ interface AiAssistantToolsProps {
   optionsHi: Record<string, string>;
   correctAnswer: string[];
   questionId?: string;
+  subject?: string;
+  chapter?: string;
   onApplyExtraction: (extracted: any) => void;
   onApplyTranslation: (translatedText: string, targetLang: "ENGLISH" | "HINDI") => void;
   onApplySolution: (solution: any) => void;
@@ -23,6 +25,8 @@ export function AiAssistantTools({
   optionsHi,
   correctAnswer,
   questionId,
+  subject,
+  chapter,
   onApplyExtraction,
   onApplyTranslation,
   onApplySolution,
@@ -50,6 +54,8 @@ export function AiAssistantTools({
             payload: {
               imageBase64: ocrImagePreview,
               mimeType: ocrImageFile?.type || "image/png",
+              subject,
+              chapter,
             },
           }),
         });
@@ -76,7 +82,7 @@ export function AiAssistantTools({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "extract",
-          payload: { rawText: rawExtractText },
+          payload: { rawText: rawExtractText, subject, chapter },
         }),
       });
       const json = await res.json();

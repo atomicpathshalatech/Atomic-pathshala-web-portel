@@ -374,7 +374,7 @@ export function UnifiedQuestionEditor({
     return json.data?.url || null;
   };
 
-  // Helper: In-field image paste handler for Textareas & Inputs (Statement, Options, Solution)
+  // Helper: In-field image paste handler for Textareas & Inputs (Options, Solution)
   const handleFieldImagePaste = async (
     e: React.ClipboardEvent<HTMLTextAreaElement | HTMLInputElement>,
     setter: React.Dispatch<React.SetStateAction<string>>
@@ -409,6 +409,48 @@ export function UnifiedQuestionEditor({
         } catch (err: any) {
           toast.error(err.message || "Failed to upload image.", { id: toastId });
         }
+        return;
+      }
+    }
+  };
+
+  // Helper: Smart Statement Paste Handler (Detects questions with options and extracts statement + separate options)
+  const handleStatementFieldPaste = async (
+    e: React.ClipboardEvent<HTMLTextAreaElement>,
+    _lang: "ENGLISH" | "HINDI",
+    _setter: React.Dispatch<React.SetStateAction<string>>
+  ) => {
+    // 1. Check for image in clipboard
+    const items = e.clipboardData?.items;
+    if (items) {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item && item.type.startsWith("image/")) {
+          e.preventDefault();
+          e.stopPropagation();
+          const file = item.getAsFile();
+          if (file) {
+            handleImageUploadAndExtract(file);
+          }
+          return;
+        }
+      }
+    }
+
+    // 2. Check for text containing question statement + options
+    const pastedText = e.clipboardData?.getData("text") || "";
+    if (pastedText && pastedText.trim().length > 15) {
+      const hasOptionMarkers =
+        /(?:\([A-D1-4a-dक-घअ-द]\)|\[[A-D1-4a-d]\]|(?:Option\s*[\(:]?\s*[A-D1-4a-d])|\b[A-D][\.\)]|\b[क-घअ-द][\.\)]|(?<=\n)\s*[1-4][\.\)])/i.test(
+          pastedText
+        ) ||
+        pastedText.split("\n").map((l) => l.trim()).filter(Boolean).length >= 5;
+
+      if (hasOptionMarkers) {
+        e.preventDefault();
+        e.stopPropagation();
+        toast.info("✨ Question statement & options detected! Extracting into separate fields...");
+        await handleTextAutoExtract(pastedText.trim());
         return;
       }
     }
@@ -1727,7 +1769,7 @@ export function UnifiedQuestionEditor({
                 placeholder="हिंदी में प्रश्न कथन यहाँ लिखें या इमेज पेस्ट करें (Ctrl+V)..."
                 value={statementHi}
                 onChange={(e) => setStatementHi(e.target.value)}
-                onPaste={(e) => handleFieldImagePaste(e, setStatementHi)}
+                onPaste={(e) => handleStatementFieldPaste(e, "HINDI", setStatementHi)}
                 className="w-full bg-slate-50 border border-slate-300 rounded-2xl p-3.5 text-xs sm:text-sm text-slate-900 outline-none resize-none leading-relaxed focus:bg-white focus:border-blue-500 transition"
               />
               <EquationLivePreview content={statementHi} label="Hindi Statement KaTeX" />
@@ -1805,7 +1847,7 @@ export function UnifiedQuestionEditor({
                 placeholder="Write question statement in English or paste image (Ctrl+V)..."
                 value={statementEn}
                 onChange={(e) => setStatementEn(e.target.value)}
-                onPaste={(e) => handleFieldImagePaste(e, setStatementEn)}
+                onPaste={(e) => handleStatementFieldPaste(e, "ENGLISH", setStatementEn)}
                 className="w-full bg-slate-50 border border-slate-300 rounded-2xl p-3.5 text-xs sm:text-sm text-slate-900 outline-none resize-none leading-relaxed focus:bg-white focus:border-blue-500 transition"
               />
               <EquationLivePreview content={statementEn} label="English Statement KaTeX" />

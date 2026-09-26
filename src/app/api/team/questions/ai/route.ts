@@ -102,10 +102,25 @@ export async function POST(request: NextRequest) {
       return apiSuccess({ solution: solutionResult });
     }
 
-    // 4. Legacy actions preserved for backwards compatibility
+    // 4. Text Extraction (with Gemini Bilingual Engine + Instant Offline Parser Fallback)
     if (action === "extract") {
-      const result = parseQuestionFromRawText(payload.rawText || "");
-      return apiSuccess({ result });
+      const rawText = (payload.rawText || payload.text || "").trim();
+      if (!rawText) return apiError("rawText is required for question extraction.", 400);
+
+      try {
+        const aiResult = await extractBilingualQuestionFromText({
+          rawText,
+          subjectContext: payload.subject,
+          chapterContext: payload.chapter,
+          topicContext: payload.topic,
+          difficultyContext: payload.difficulty,
+        });
+        return apiSuccess({ result: aiResult });
+      } catch (aiErr) {
+        console.warn("[Questions AI Route] Gemini text extraction fallback to offline parser:", aiErr);
+        const result = parseQuestionFromRawText(rawText);
+        return apiSuccess({ result });
+      }
     }
 
     if (action === "translate") {
