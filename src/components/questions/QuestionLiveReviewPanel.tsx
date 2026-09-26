@@ -66,93 +66,93 @@ export function QuestionLiveReviewPanel({
   ];
 
   return (
-    <div className="bg-gradient-to-b from-slate-900 via-slate-900 to-[#0c1938] text-white rounded-3xl p-6 shadow-2xl border border-slate-700/80 space-y-6 select-none font-sans animate-in fade-in">
+    <div className="bg-white text-slate-900 rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-200 space-y-4 select-none font-sans animate-in fade-in">
       {/* Top Review Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-800">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-blue-500 text-white flex items-center justify-center shadow-md shadow-blue-500/30">
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center">
             <Eye className="w-4 h-4" />
           </div>
           <div>
-            <h3 className="text-sm font-black tracking-tight text-white flex items-center gap-2">
-              <span>Live Student View &amp; Review Column</span>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30 font-bold">
-                Real-Time KaTeX Rendered
+            <h3 className="text-xs sm:text-sm font-extrabold tracking-tight text-slate-900 flex items-center gap-2">
+              <span>Student View Preview</span>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 font-bold">
+                KaTeX Live
               </span>
             </h3>
-            <p className="text-[11px] text-slate-400">
-              Instant preview of what students will see on their test screen
+            <p className="text-[11px] text-slate-500">
+              Live preview of what students will see on screen
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           {subject && (
-            <span className="px-2.5 py-1 rounded-xl bg-slate-800 text-blue-300 font-bold text-xs border border-slate-700">
+            <span className="px-2 py-0.5 rounded-lg bg-blue-50 text-blue-700 font-bold text-[11px] border border-blue-200">
               {subject}
             </span>
           )}
           {chapter && (
-            <span className="px-2.5 py-1 rounded-xl bg-slate-800 text-slate-300 font-medium text-xs border border-slate-700 max-w-[200px] truncate">
+            <span className="px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 font-medium text-[11px] border border-slate-200 max-w-[180px] truncate">
               {chapter}
             </span>
           )}
-          <span className="px-2.5 py-1 rounded-xl bg-emerald-950/80 text-emerald-400 font-bold text-xs border border-emerald-800">
+          <span className="px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-700 font-bold text-[11px] border border-emerald-200">
             +{marks} / -{negativeMarks}
           </span>
         </div>
       </div>
 
       {/* 1. Live Statement Review */}
-      <div className="space-y-4">
+      <div className="space-y-2.5">
         {statementHi.trim() && (
-          <div className="space-y-1 bg-slate-800/60 p-4 rounded-2xl border border-slate-700/60">
-            <div className="flex items-center justify-between text-[11px] font-bold text-amber-400 font-mono">
-              <span>[कथन - HINDI REVIEW]</span>
+          <div className="space-y-1 bg-slate-50/80 p-3 rounded-xl border border-slate-200">
+            <div className="flex items-center justify-between text-[10px] font-bold text-amber-800 font-mono">
+              <span>[कथन - हिंदी पूर्वावलोकन]</span>
             </div>
             <EquationLivePreview
               content={statementHi}
               label="हिंदी प्रश्न"
-              className="bg-transparent border-0 p-0 text-white dark:text-white"
+              className="bg-transparent border-0 p-0 text-slate-900"
             />
           </div>
         )}
 
         {statementEn.trim() && (
-          <div className="space-y-1 bg-slate-800/60 p-4 rounded-2xl border border-slate-700/60">
-            <div className="flex items-center justify-between text-[11px] font-bold text-blue-400 font-mono">
-              <span>[STATEMENT - ENGLISH REVIEW]</span>
+          <div className="space-y-1 bg-slate-50/80 p-3 rounded-xl border border-slate-200">
+            <div className="flex items-center justify-between text-[10px] font-bold text-blue-800 font-mono">
+              <span>[STATEMENT - ENGLISH PREVIEW]</span>
             </div>
             <EquationLivePreview
               content={statementEn}
               label="English Statement"
-              className="bg-transparent border-0 p-0 text-white dark:text-white"
+              className="bg-transparent border-0 p-0 text-slate-900"
             />
           </div>
         )}
 
         {/* Diagram in Student View */}
         {diagramUrl && (
-          <div className="flex items-center justify-center p-3 bg-slate-800/40 rounded-2xl border border-slate-700/50">
+          <div className="flex items-center justify-center p-2.5 bg-slate-50 rounded-xl border border-slate-200">
             <img
               src={diagramUrl}
               alt="Question Figure"
-              className="max-h-60 max-w-full object-contain rounded-xl shadow-lg border border-slate-700"
+              className="max-h-48 max-w-full object-contain rounded-lg shadow-xs border border-slate-200"
             />
           </div>
         )}
       </div>
 
       {/* 2. Live Options Review Cards */}
-      <div className="space-y-2.5 pt-2">
-        <div className="flex items-center justify-between text-xs font-black uppercase text-slate-400 tracking-wider">
-          <span>Options Review</span>
-          <span className="text-[11px] text-emerald-400 font-mono">
-            Correct Key: Option ({correctOption || "None"})
+      <div className="space-y-2 pt-1">
+        <div className="flex items-center justify-between text-xs font-bold uppercase text-slate-600 tracking-wider">
+          <span>Options Preview</span>
+          <span className="text-[11px] text-emerald-700 font-mono font-bold">
+            Correct Answer: Option ({correctOption || "None"})
           </span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
           {optionsList.map((opt) => {
             const isCorrect = correctOption === opt.key;
             const hasText = opt.en.trim() || opt.hi.trim();
@@ -161,46 +161,46 @@ export function QuestionLiveReviewPanel({
             return (
               <div
                 key={opt.key}
-                className={`p-3.5 rounded-2xl border transition-all ${
+                className={`p-2.5 rounded-xl border transition-all ${
                   isCorrect
-                    ? "bg-emerald-950/70 border-emerald-500 ring-2 ring-emerald-500/30 shadow-lg shadow-emerald-950/50"
-                    : "bg-slate-800/70 border-slate-700/70 text-slate-200"
+                    ? "bg-emerald-50/90 border-emerald-500 shadow-xs"
+                    : "bg-slate-50/60 border-slate-200 text-slate-800"
                 }`}
               >
-                <div className="flex items-start gap-3">
+                <div className="flex items-start gap-2.5">
                   <span
-                    className={`w-7 h-7 shrink-0 rounded-xl font-mono font-black text-xs flex items-center justify-center ${
+                    className={`w-6 h-6 shrink-0 rounded-lg font-mono font-black text-xs flex items-center justify-center ${
                       isCorrect
-                        ? "bg-emerald-500 text-white shadow-md shadow-emerald-500/40"
-                        : "bg-slate-700 text-slate-300 border border-slate-600"
+                        ? "bg-emerald-600 text-white shadow-xs"
+                        : "bg-white text-slate-700 border border-slate-300"
                     }`}
                   >
-                    {isCorrect ? <Check className="w-4 h-4 stroke-[3]" /> : opt.key}
+                    {isCorrect ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : opt.key}
                   </span>
 
-                  <div className="flex-1 space-y-1 overflow-x-auto">
+                  <div className="flex-1 space-y-1 overflow-x-auto text-xs">
                     {opt.hi.trim() && (
-                      <div className="text-xs text-amber-200">
+                      <div className="text-amber-950 font-medium">
                         <EquationLivePreview
                           content={opt.hi}
                           label={`Option (${opt.key}) Hindi`}
-                          className="bg-transparent border-0 p-0 text-amber-200 dark:text-amber-200"
+                          className="bg-transparent border-0 p-0 text-amber-950"
                         />
                       </div>
                     )}
                     {opt.en.trim() && (
-                      <div className="text-xs text-slate-100 font-medium">
+                      <div className="text-slate-900 font-medium">
                         <EquationLivePreview
                           content={opt.en}
                           label={`Option (${opt.key}) English`}
-                          className="bg-transparent border-0 p-0 text-white dark:text-white"
+                          className="bg-transparent border-0 p-0 text-slate-900"
                         />
                       </div>
                     )}
                   </div>
 
                   {isCorrect && (
-                    <span className="shrink-0 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                    <span className="shrink-0 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
                       Correct Key
                     </span>
                   )}
@@ -213,44 +213,44 @@ export function QuestionLiveReviewPanel({
 
       {/* 3. Live Solution Review */}
       {(solutionEn.trim() || solutionHi.trim() || solutionImageUrl) && (
-        <div className="space-y-3 pt-3 border-t border-slate-800">
-          <div className="flex items-center justify-between text-xs font-black uppercase text-blue-400 tracking-wider">
-            <span>Authoritative Solution Review</span>
-            <span className="text-[11px] text-slate-400 font-mono">4-Part NCERT Method</span>
+        <div className="space-y-2 pt-2 border-t border-slate-100">
+          <div className="flex items-center justify-between text-xs font-bold uppercase text-blue-700 tracking-wider">
+            <span>Solution Preview</span>
+            <span className="text-[10px] text-slate-500 font-mono">Step-by-Step</span>
           </div>
 
-          <div className="bg-slate-800/60 p-4 rounded-2xl border border-slate-700/60 space-y-3">
+          <div className="bg-slate-50/80 p-3 rounded-xl border border-slate-200 space-y-2">
             {solutionHi.trim() && (
-              <div className="space-y-1">
-                <span className="text-[11px] font-bold text-amber-400 font-mono">[हिंदी व्याख्या]</span>
+              <div className="space-y-0.5">
+                <span className="text-[10px] font-bold text-amber-800 font-mono">[हिंदी व्याख्या]</span>
                 <EquationLivePreview
                   content={solutionHi}
                   label="Hindi Solution"
-                  className="bg-transparent border-0 p-0 text-slate-200 dark:text-slate-200 text-xs leading-relaxed"
+                  className="bg-transparent border-0 p-0 text-slate-800 text-xs leading-relaxed"
                 />
               </div>
             )}
 
             {solutionEn.trim() && (
-              <div className="space-y-1">
-                <span className="text-[11px] font-bold text-blue-400 font-mono">[ENGLISH SOLUTION]</span>
+              <div className="space-y-0.5">
+                <span className="text-[10px] font-bold text-blue-800 font-mono">[ENGLISH SOLUTION]</span>
                 <EquationLivePreview
                   content={solutionEn}
                   label="English Solution"
-                  className="bg-transparent border-0 p-0 text-slate-200 dark:text-slate-200 text-xs leading-relaxed"
+                  className="bg-transparent border-0 p-0 text-slate-800 text-xs leading-relaxed"
                 />
               </div>
             )}
 
             {solutionImageUrl && (
-              <div className="pt-2">
-                <span className="text-[11px] font-bold text-blue-400 font-mono block mb-1">
+              <div className="pt-1">
+                <span className="text-[10px] font-bold text-blue-800 font-mono block mb-1">
                   [SOLUTION DIAGRAM]
                 </span>
                 <img
                   src={solutionImageUrl}
                   alt="Solution Figure"
-                  className="max-h-56 object-contain rounded-xl border border-slate-700"
+                  className="max-h-44 object-contain rounded-lg border border-slate-200"
                 />
               </div>
             )}

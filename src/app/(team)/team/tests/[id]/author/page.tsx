@@ -28,7 +28,10 @@ export default async function TestAuthorPage({ params }: { params: { id: string 
             orderBy: { order: "asc" },
             include: {
               question: {
-                include: { translations: true },
+                include: {
+                  translations: true,
+                  assets: true,
+                },
               },
             },
           },
@@ -70,6 +73,9 @@ export default async function TestAuthorPage({ params }: { params: { id: string 
 
       const slotNumber = sectionStart + (typeof sq.order === "number" && sq.order > 0 ? sq.order - 1 : qIdx);
 
+      const refAsset = q.assets?.find((a: any) => a.type === "REFERENCE" || a.type === "FIGURE");
+      const resolvedImg = q.imageUrl || refAsset?.publicUrl || undefined;
+
       initialQuestions.push({
         id: q.id,
         questionCode: q.questionCode || undefined,
@@ -95,7 +101,7 @@ export default async function TestAuthorPage({ params }: { params: { id: string 
         correctOption: correct,
         solutionHi: trHi?.solution || "",
         solutionEn: trEn?.solution || "",
-        imageUrl: q.imageUrl || undefined,
+        imageUrl: resolvedImg,
         isSaved: true,
       });
     });

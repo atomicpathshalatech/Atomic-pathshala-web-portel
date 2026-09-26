@@ -112,20 +112,20 @@ export function EquationLivePreview({
 
   return (
     <div
-      className={`p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 text-slate-900 dark:text-slate-100 text-xs shadow-sm transition-all ${className}`}
+      className={`p-2.5 rounded-xl bg-white border border-slate-200 text-slate-900 text-xs shadow-xs transition-all ${className}`}
     >
-      <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-200/60 dark:border-slate-700/60">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 flex items-center gap-1 font-mono">
-          <span className="material-symbols-outlined text-xs">visibility</span>
-          {label} (Student View)
+      <div className="flex items-center justify-between pb-1 mb-1 border-b border-slate-100">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 flex items-center gap-1 font-mono">
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500" />
+          {label} (Live Preview)
         </span>
-        <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 font-bold">
-          KaTeX / Formula Rendered
+        <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold">
+          Rendered
         </span>
       </div>
 
       <div
-        className="font-medium text-sm leading-relaxed overflow-x-auto py-1"
+        className="font-medium text-xs sm:text-sm leading-relaxed overflow-x-auto py-0.5 text-slate-800"
         dangerouslySetInnerHTML={{ __html: html }}
       />
     </div>

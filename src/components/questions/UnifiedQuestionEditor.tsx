@@ -324,9 +324,13 @@ export function UnifiedQuestionEditor({
   const [solutionHi, setSolutionHi] = useState<string>(translationHi?.solution || initialQuestion?.solutionHi || "");
 
   // Diagram / Reference Image (Question Diagram)
-  const [diagramUrl, setDiagramUrl] = useState<string | null>(
-    initialQuestion?.imageUrl || initialQuestion?.figureUrl || null
-  );
+  const initialDiag =
+    initialQuestion?.imageUrl ||
+    initialQuestion?.figureUrl ||
+    initialQuestion?.referenceImageUrl ||
+    initialQuestion?.assets?.find((a: any) => a.type === "REFERENCE" || a.type === "FIGURE")?.publicUrl ||
+    null;
+  const [diagramUrl, setDiagramUrl] = useState<string | null>(initialDiag);
 
   // Dedicated Solution Diagram / Image (Independent from Question Diagram)
   const initialSolImg =
@@ -1062,9 +1066,9 @@ export function UnifiedQuestionEditor({
   };
 
   return (
-    <div className="space-y-6 select-none font-sans pb-32">
+    <div className="space-y-4 select-none font-sans pb-20">
       {/* 1. TOP CONTEXT & QUESTION ID BANNER */}
-      <div className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white border border-slate-200 rounded-2xl p-3.5 sm:p-4 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div className="space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-blue-600 text-white">
@@ -1369,58 +1373,58 @@ export function UnifiedQuestionEditor({
       </div>
       {/* 3. PROMINENT QUESTION REFERENCE / DIAGRAM DOCK (Right below Ingestion) */}
       {diagramUrl && (
-        <div className="bg-white border-2 border-blue-200 rounded-3xl p-5 shadow-sm space-y-3 animate-in fade-in slide-in-from-top-2">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+        <div className="bg-white border border-blue-200 rounded-2xl p-3.5 sm:p-4 shadow-xs space-y-2.5 animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2">
             <div className="flex items-center gap-2">
-              <span className="p-2 rounded-2xl bg-blue-100 text-blue-700">
-                <ImageIcon className="w-5 h-5" />
+              <span className="p-1.5 rounded-xl bg-blue-100 text-blue-700">
+                <ImageIcon className="w-4 h-4" />
               </span>
               <div>
-                <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">
-                  Question Reference Diagram / Screenshot in View
+                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide">
+                  Question Reference Diagram / Screenshot
                 </h4>
-                <p className="text-[11px] text-slate-500">
-                  Kept in direct view so you don't need to scroll down to check formulas or figures.
+                <p className="text-[10px] text-slate-500">
+                  Visible in direct view for accurate question formatting.
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 onClick={() => setIsDiagramZoomed(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
+                className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition cursor-pointer"
                 title="View Full Size"
               >
-                <ZoomIn className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Zoom Fullscreen</span>
+                <ZoomIn className="w-3 h-3" />
+                <span className="hidden sm:inline">Zoom</span>
               </button>
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-xs font-bold transition cursor-pointer"
+                className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-semibold transition cursor-pointer"
                 title="Replace Diagram"
               >
-                <Upload className="w-3.5 h-3.5" />
+                <Upload className="w-3 h-3" />
                 <span className="hidden sm:inline">Replace</span>
               </button>
               <button
                 type="button"
                 onClick={() => setDiagramUrl(null)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold transition cursor-pointer"
+                className="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-semibold transition cursor-pointer"
                 title="Remove Diagram"
               >
-                <XCircle className="w-3.5 h-3.5" />
+                <XCircle className="w-3 h-3" />
                 <span className="hidden sm:inline">Remove</span>
               </button>
             </div>
           </div>
 
-          <div className="flex items-center justify-center p-3 bg-slate-50 rounded-2xl border border-slate-200/80 max-h-64 overflow-hidden">
+          <div className="flex items-center justify-center p-2 bg-slate-50 rounded-xl border border-slate-200/80 max-h-48 overflow-hidden">
             <img
               src={diagramUrl}
               alt="Question Diagram"
-              className="max-h-56 object-contain rounded-xl shadow-xs cursor-pointer hover:scale-102 transition"
+              className="max-h-44 object-contain rounded-lg shadow-xs cursor-pointer hover:scale-102 transition"
               onClick={() => setIsDiagramZoomed(true)}
             />
           </div>
@@ -1433,13 +1437,13 @@ export function UnifiedQuestionEditor({
           className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in"
           onClick={() => setIsDiagramZoomed(false)}
         >
-          <div className="relative max-w-4xl max-h-[90vh] bg-white rounded-3xl p-4 shadow-2xl space-y-3" onClick={(e) => e.stopPropagation()}>
+          <div className="relative max-w-4xl max-h-[90vh] bg-white rounded-2xl p-4 shadow-2xl space-y-3" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b pb-2">
               <h3 className="text-xs font-black uppercase text-slate-800">Reference Diagram Full Size</h3>
               <button
                 type="button"
                 onClick={() => setIsDiagramZoomed(false)}
-                className="p-1 text-slate-400 hover:text-slate-800 rounded-lg"
+                className="p-1 text-slate-400 hover:text-slate-800 rounded-lg font-bold"
               >
                 ✕ Close
               </button>
@@ -1452,15 +1456,15 @@ export function UnifiedQuestionEditor({
       )}
 
       {/* 4. DUAL COLUMN BILINGUAL WORKSPACE (Section 2 — Clean Question & Options) */}
-      <div className="space-y-4">
+      <div className="space-y-3">
         {/* Section 2 Header Bar */}
-        <div className="bg-white border border-slate-200 rounded-3xl p-4 shadow-sm flex flex-wrap items-center justify-between gap-3">
+        <div className="bg-white border border-slate-200 rounded-2xl p-3 sm:p-4 shadow-xs flex flex-wrap items-center justify-between gap-2.5">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-black text-slate-700 uppercase tracking-wider">
+            <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
               2. Question Statement &amp; Options
             </span>
-            <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 font-bold">
-              Dual Column: हिंदी + English
+            <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-bold">
+              हिंदी + English
             </span>
           </div>
 
@@ -1469,32 +1473,32 @@ export function UnifiedQuestionEditor({
               type="button"
               onClick={handleCheckTranslation}
               disabled={isTranslating}
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl text-xs font-black text-blue-800 shadow-sm transition disabled:opacity-50 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl text-xs font-bold text-blue-800 shadow-xs transition disabled:opacity-50 cursor-pointer"
             >
               {isTranslating ? (
                 <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-600" />
               ) : (
                 <Sparkles className="w-3.5 h-3.5 text-blue-600" />
               )}
-              <span>Check Translation &amp; Alignment</span>
+              <span>Sync Translation &amp; Alignment</span>
             </button>
           </div>
         </div>
 
         {/* SIDE-BY-SIDE CLEAN COLUMNS (Only Statements & Options) */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* COLUMN 1: HINDI (हिंदी) */}
-          <div className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-sm space-y-5">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-4">
+            <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 flex-wrap gap-2">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-black text-amber-800 bg-amber-100 px-3 py-1 rounded-full">
-                  हिंदी (Hindi Statement &amp; Options)
+                <span className="text-xs font-bold text-amber-900 bg-amber-100 px-2.5 py-0.5 rounded-full">
+                  हिंदी (Hindi)
                 </span>
                 <button
                   type="button"
                   onClick={handleCheckTranslation}
                   disabled={isTranslating || (!statementHi && !statementEn)}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg text-[11px] font-bold text-amber-900 transition disabled:opacity-40 cursor-pointer"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg text-[10px] font-bold text-amber-900 transition disabled:opacity-40 cursor-pointer"
                   title="Translate Hindi content to English"
                 >
                   <Sparkles className="w-3 h-3 text-amber-600" />
@@ -1507,25 +1511,32 @@ export function UnifiedQuestionEditor({
             </div>
 
             {/* Statement Hi */}
-            <div className="space-y-1.5">
+            <div className="space-y-1">
               <label className="block text-xs font-bold text-slate-700">
                 प्रश्न कथन (Statement in Hindi)
               </label>
               <textarea
-                rows={5}
+                rows={3}
                 placeholder="हिंदी में प्रश्न कथन यहाँ लिखें या इमेज पेस्ट करें (Ctrl+V)..."
                 value={statementHi}
                 onChange={(e) => setStatementHi(e.target.value)}
                 onPaste={(e) => handleStatementFieldPaste(e, "HINDI", setStatementHi)}
-                className="w-full bg-slate-50 border border-slate-300 rounded-2xl p-3.5 text-xs sm:text-sm text-slate-900 outline-none resize-none leading-relaxed focus:bg-white focus:border-blue-500 transition"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-xs sm:text-sm text-slate-900 outline-none resize-none leading-relaxed focus:bg-white focus:border-blue-500 transition"
               />
-              <EquationLivePreview content={statementHi} label="Hindi Statement KaTeX" />
+              {statementHi.trim() && (
+                <EquationLivePreview
+                  content={statementHi}
+                  label="हिंदी प्रश्न पूर्वावलोकन"
+                  alwaysShow={true}
+                  className="mt-1.5"
+                />
+              )}
             </div>
 
             {/* Hindi Options A, B, C, D */}
-            <div className="space-y-2.5">
+            <div className="space-y-2">
               <label className="block text-xs font-bold text-slate-700">
-                विकल्प (Options in Hindi) — Click circle to select correct answer (Ctrl+V image paste supported)
+                विकल्प (Options in Hindi) — Click circle to select correct answer
               </label>
 
               {[
@@ -1538,24 +1549,24 @@ export function UnifiedQuestionEditor({
                 return (
                   <div
                     key={opt.key}
-                    className={`p-3 rounded-2xl border transition ${
+                    className={`p-2.5 rounded-xl border transition ${
                       isSelected
-                        ? "bg-emerald-50/80 border-emerald-500 shadow-sm"
+                        ? "bg-emerald-50/90 border-emerald-500 shadow-xs"
                         : "bg-slate-50 border-slate-200 focus-within:bg-white focus-within:border-blue-400"
                     }`}
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2.5">
                       <button
                         type="button"
                         onClick={() => handleSelectCorrectOption(opt.key)}
                         title={`Select (${opt.key}) as correct answer`}
-                        className={`w-7 h-7 rounded-xl font-mono font-black text-xs flex items-center justify-center transition cursor-pointer ${
+                        className={`w-6 h-6 rounded-lg font-mono font-bold text-xs flex items-center justify-center transition cursor-pointer ${
                           isSelected
-                            ? "bg-emerald-600 text-white shadow-md shadow-emerald-500/20"
+                            ? "bg-emerald-600 text-white shadow-xs"
                             : "bg-white text-slate-600 border border-slate-300 hover:border-emerald-400"
                         }`}
                       >
-                        {isSelected ? <Check className="w-4 h-4" /> : opt.key}
+                        {isSelected ? <Check className="w-3.5 h-3.5" /> : opt.key}
                       </button>
 
                       <input
@@ -1564,14 +1575,15 @@ export function UnifiedQuestionEditor({
                         value={opt.val}
                         onChange={(e) => opt.setVal(e.target.value)}
                         onPaste={(e) => handleFieldImagePaste(e, opt.setVal)}
-                        className="flex-1 bg-transparent text-xs sm:text-sm text-slate-900 font-medium outline-none"
+                        className="flex-1 bg-transparent text-xs text-slate-900 font-medium outline-none"
                       />
                     </div>
                     {opt.val.trim() && (
                       <EquationLivePreview
                         content={opt.val}
                         label={`विकल्प (${opt.key})`}
-                        className="mt-2 bg-white border border-slate-200 p-2"
+                        alwaysShow={true}
+                        className="mt-1.5"
                       />
                     )}
                   </div>
@@ -1581,17 +1593,17 @@ export function UnifiedQuestionEditor({
           </div>
 
           {/* COLUMN 2: ENGLISH */}
-          <div className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-sm space-y-5">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-4">
+            <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 flex-wrap gap-2">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-black text-blue-800 bg-blue-100 px-3 py-1 rounded-full">
-                  English (Statement &amp; Options)
+                <span className="text-xs font-bold text-blue-900 bg-blue-100 px-2.5 py-0.5 rounded-full">
+                  English
                 </span>
                 <button
                   type="button"
                   onClick={handleCheckTranslation}
                   disabled={isTranslating || (!statementHi && !statementEn)}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg text-[11px] font-bold text-blue-900 transition disabled:opacity-40 cursor-pointer"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg text-[10px] font-bold text-blue-900 transition disabled:opacity-40 cursor-pointer"
                   title="Translate English content to Hindi"
                 >
                   <Sparkles className="w-3 h-3 text-blue-600" />
@@ -1604,25 +1616,32 @@ export function UnifiedQuestionEditor({
             </div>
 
             {/* Statement En */}
-            <div className="space-y-1.5">
+            <div className="space-y-1">
               <label className="block text-xs font-bold text-slate-700">
                 Question Statement (English)
               </label>
               <textarea
-                rows={5}
+                rows={3}
                 placeholder="Write question statement in English or paste image (Ctrl+V)..."
                 value={statementEn}
                 onChange={(e) => setStatementEn(e.target.value)}
                 onPaste={(e) => handleStatementFieldPaste(e, "ENGLISH", setStatementEn)}
-                className="w-full bg-slate-50 border border-slate-300 rounded-2xl p-3.5 text-xs sm:text-sm text-slate-900 outline-none resize-none leading-relaxed focus:bg-white focus:border-blue-500 transition"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-xs sm:text-sm text-slate-900 outline-none resize-none leading-relaxed focus:bg-white focus:border-blue-500 transition"
               />
-              <EquationLivePreview content={statementEn} label="English Statement KaTeX" />
+              {statementEn.trim() && (
+                <EquationLivePreview
+                  content={statementEn}
+                  label="English Statement Preview"
+                  alwaysShow={true}
+                  className="mt-1.5"
+                />
+              )}
             </div>
 
             {/* English Options A, B, C, D */}
-            <div className="space-y-2.5">
+            <div className="space-y-2">
               <label className="block text-xs font-bold text-slate-700">
-                Options (English) — Click circle to select correct answer (Ctrl+V image paste supported)
+                Options (English) — Click circle to select correct answer
               </label>
 
               {[
@@ -1635,24 +1654,24 @@ export function UnifiedQuestionEditor({
                 return (
                   <div
                     key={opt.key}
-                    className={`p-3 rounded-2xl border transition ${
+                    className={`p-2.5 rounded-xl border transition ${
                       isSelected
-                        ? "bg-emerald-50/80 border-emerald-500 shadow-sm"
+                        ? "bg-emerald-50/90 border-emerald-500 shadow-xs"
                         : "bg-slate-50 border-slate-200 focus-within:bg-white focus-within:border-blue-400"
                     }`}
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2.5">
                       <button
                         type="button"
                         onClick={() => handleSelectCorrectOption(opt.key)}
                         title={`Select (${opt.key}) as correct answer`}
-                        className={`w-7 h-7 rounded-xl font-mono font-black text-xs flex items-center justify-center transition cursor-pointer ${
+                        className={`w-6 h-6 rounded-lg font-mono font-bold text-xs flex items-center justify-center transition cursor-pointer ${
                           isSelected
-                            ? "bg-emerald-600 text-white shadow-md shadow-emerald-500/20"
+                            ? "bg-emerald-600 text-white shadow-xs"
                             : "bg-white text-slate-600 border border-slate-300 hover:border-emerald-400"
                         }`}
                       >
-                        {isSelected ? <Check className="w-4 h-4" /> : opt.key}
+                        {isSelected ? <Check className="w-3.5 h-3.5" /> : opt.key}
                       </button>
 
                       <input
@@ -1661,14 +1680,15 @@ export function UnifiedQuestionEditor({
                         value={opt.val}
                         onChange={(e) => opt.setVal(e.target.value)}
                         onPaste={(e) => handleFieldImagePaste(e, opt.setVal)}
-                        className="flex-1 bg-transparent text-xs sm:text-sm text-slate-900 font-medium outline-none"
+                        className="flex-1 bg-transparent text-xs text-slate-900 font-medium outline-none"
                       />
                     </div>
                     {opt.val.trim() && (
                       <EquationLivePreview
                         content={opt.val}
                         label={`Option (${opt.key})`}
-                        className="mt-2 bg-white border border-slate-200 p-2"
+                        alwaysShow={true}
+                        className="mt-1.5"
                       />
                     )}
                   </div>
@@ -1680,24 +1700,21 @@ export function UnifiedQuestionEditor({
       </div>
 
       {/* 5. DEDICATED BILINGUAL SOLUTION STUDIO (Inbuilt AI Assistant & Regenerator) */}
-      <div className="bg-white border-2 border-blue-200/80 rounded-3xl p-5 sm:p-6 shadow-sm space-y-5">
+      <div className="bg-white border border-blue-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-4">
         {/* Solution Header & Regenerate Button */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-          <div className="space-y-1">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+          <div className="space-y-0.5">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                <Sparkles className="w-4 h-4 text-blue-600" />
+              <span className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-blue-600" />
                 3. Step-by-Step Bilingual Solution Studio
               </span>
-              <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-800 font-extrabold">
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-800 font-bold">
                 Explaining • Concept • Solution • Final Answer
               </span>
-              <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-200">
-                LaTeX Enabled
-              </span>
             </div>
-            <p className="text-xs text-slate-500">
-              Authoritative step-by-step NCERT solution. If the solution needs change, use the inbuilt AI regenerator below.
+            <p className="text-[11px] text-slate-500">
+              Authoritative step-by-step solution. Inbuilt AI regenerator available below.
             </p>
           </div>
 
@@ -1707,17 +1724,17 @@ export function UnifiedQuestionEditor({
               type="button"
               onClick={() => handleGenerateSolution()}
               disabled={isGeneratingSolution}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs sm:text-sm shadow-md shadow-blue-500/25 transition active:scale-95 disabled:opacity-50 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition active:scale-95 disabled:opacity-50 cursor-pointer"
             >
               {isGeneratingSolution ? (
                 <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>Regenerating Solution...</span>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Regenerating...</span>
                 </>
               ) : (
                 <>
-                  <Sparkles className="w-4 h-4" />
-                  <span>Regenerate Solution with AI</span>
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Regenerate Solution</span>
                 </>
               )}
             </button>
@@ -1725,21 +1742,18 @@ export function UnifiedQuestionEditor({
         </div>
 
         {/* Inbuilt AI Assistant Prompt Bar */}
-        <div className="p-4 rounded-2xl bg-slate-50 border border-blue-100 space-y-3">
+        <div className="p-3 rounded-xl bg-slate-50 border border-blue-100 space-y-2">
           <div className="flex items-center gap-2">
-            <Wand2 className="w-4 h-4 text-blue-600 shrink-0" />
-            <span className="text-xs font-black text-slate-800">
-              Inbuilt AI Solution Assistant:
-            </span>
-            <span className="text-[11px] text-slate-500 hidden sm:inline">
-              Type custom instructions to modify or refine the solution
+            <Wand2 className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+            <span className="text-xs font-bold text-slate-800">
+              AI Solution Prompt / Refinement:
             </span>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-2">
             <input
               type="text"
-              placeholder="e.g. 'Show full algebraic derivation line-by-line', 'Explain why Option B is incorrect', 'Add NCERT Page reference'..."
+              placeholder="e.g. 'Show full algebraic derivation', 'Explain why Option B is incorrect'..."
               value={solutionRefinePrompt}
               onChange={(e) => setSolutionRefinePrompt(e.target.value)}
               onKeyDown={(e) => {
@@ -1748,45 +1762,22 @@ export function UnifiedQuestionEditor({
                   handleGenerateSolution(solutionRefinePrompt);
                 }
               }}
-              className="flex-1 px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 outline-none focus:border-blue-500 transition"
+              className="flex-1 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs text-slate-900 outline-none focus:border-blue-500 transition"
             />
             <button
               type="button"
               onClick={() => handleGenerateSolution(solutionRefinePrompt)}
               disabled={isGeneratingSolution}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs rounded-xl shadow-xs transition disabled:opacity-50 shrink-0 cursor-pointer"
+              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg shadow-xs transition disabled:opacity-50 shrink-0 cursor-pointer"
             >
-              {isGeneratingSolution ? "Generating..." : "Apply AI Refinement"}
+              {isGeneratingSolution ? "Generating..." : "Apply Prompt"}
             </button>
-          </div>
-
-          {/* Quick Prompt Pills */}
-          <div className="flex flex-wrap items-center gap-1.5 pt-1">
-            <span className="text-[10px] font-bold text-slate-400">Quick prompts:</span>
-            {[
-              "Show full step-by-step mathematical substitution",
-              "Explain why incorrect options are wrong",
-              "Include NCERT Class 11/12 specific page reference",
-              "Make Hindi explanation simpler and clearer",
-            ].map((pill) => (
-              <button
-                key={pill}
-                type="button"
-                onClick={() => {
-                  setSolutionRefinePrompt(pill);
-                  handleGenerateSolution(pill);
-                }}
-                className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:border-blue-400 hover:bg-blue-50 text-[11px] text-slate-600 font-medium transition cursor-pointer"
-              >
-                + {pill}
-              </button>
-            ))}
           </div>
         </div>
 
         {/* Answer Mismatch Conflict Alert */}
         {answerMismatchWarning && (
-          <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-bold flex items-center justify-between gap-3 animate-in fade-in">
+          <div className="p-3 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-bold flex items-center justify-between gap-2 animate-in fade-in">
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
               <span>{answerMismatchWarning}</span>
@@ -1800,7 +1791,7 @@ export function UnifiedQuestionEditor({
                   toast.success(`Switched to AI recommended Option (${aiRecommendedAnswer})!`);
                 }
               }}
-              className="px-3 py-1 bg-amber-600 text-white rounded-lg text-[11px] font-black hover:bg-amber-700 transition"
+              className="px-2.5 py-1 bg-amber-600 text-white rounded-lg text-[11px] font-bold hover:bg-amber-700 transition"
             >
               Use Option ({aiRecommendedAnswer})
             </button>
@@ -1808,26 +1799,20 @@ export function UnifiedQuestionEditor({
         )}
 
         {/* DEDICATED SOLUTION DIAGRAM / FIGURE DOCK */}
-        <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-4 space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <span className="p-2 rounded-xl bg-blue-100 text-blue-700">
-                <ImageIcon className="w-4 h-4" />
+        <div className="bg-slate-50 border border-slate-200/90 rounded-xl p-3 space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 rounded-lg bg-blue-100 text-blue-700">
+                <ImageIcon className="w-3.5 h-3.5" />
               </span>
               <div>
-                <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
-                  Dedicated Solution Figure / Working Diagram
-                  <span className="text-[10px] px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 font-bold border border-blue-200">
-                    Independent
-                  </span>
+                <h4 className="text-xs font-bold text-slate-800">
+                  Solution Figure / Working Diagram
                 </h4>
-                <p className="text-[11px] text-slate-500">
-                  Paste or upload a dedicated step-by-step visual, circuit diagram, or graph specifically for the solution.
-                </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <input
                 type="file"
                 ref={solutionFileInputRef}
@@ -1857,15 +1842,15 @@ export function UnifiedQuestionEditor({
                 type="button"
                 onClick={() => solutionFileInputRef.current?.click()}
                 disabled={isUploadingSolImg}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
+                className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold transition shadow-xs cursor-pointer"
               >
-                <Upload className="w-3.5 h-3.5" />
+                <Upload className="w-3 h-3" />
                 <span>
                   {isUploadingSolImg
                     ? "Uploading..."
                     : solutionImageUrl
-                    ? "Replace Solution Figure"
-                    : "Upload / Paste Solution Figure"}
+                    ? "Replace Figure"
+                    : "Upload / Paste Figure"}
                 </span>
               </button>
 
@@ -1874,19 +1859,19 @@ export function UnifiedQuestionEditor({
                   <button
                     type="button"
                     onClick={() => setIsSolutionImgZoomed(true)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
+                    className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold transition cursor-pointer"
                     title="Zoom Full Size"
                   >
-                    <ZoomIn className="w-3.5 h-3.5" />
+                    <ZoomIn className="w-3 h-3" />
                     <span className="hidden sm:inline">Zoom</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setSolutionImageUrl(null)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold transition cursor-pointer"
-                    title="Remove Solution Figure"
+                    className="inline-flex items-center gap-1 px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-semibold transition cursor-pointer"
+                    title="Remove Figure"
                   >
-                    <XCircle className="w-3.5 h-3.5" />
+                    <XCircle className="w-3 h-3" />
                     <span className="hidden sm:inline">Remove</span>
                   </button>
                 </>
@@ -1895,11 +1880,11 @@ export function UnifiedQuestionEditor({
           </div>
 
           {solutionImageUrl && (
-            <div className="flex items-center justify-center p-3 bg-white rounded-xl border border-slate-200 max-h-56 overflow-hidden">
+            <div className="flex items-center justify-center p-2 bg-white rounded-lg border border-slate-200 max-h-48 overflow-hidden">
               <img
                 src={solutionImageUrl}
                 alt="Solution Figure"
-                className="max-h-52 object-contain rounded-lg shadow-xs cursor-pointer hover:scale-102 transition"
+                className="max-h-44 object-contain rounded-md shadow-xs cursor-pointer hover:scale-102 transition"
                 onClick={() => setIsSolutionImgZoomed(true)}
               />
             </div>
@@ -1913,7 +1898,7 @@ export function UnifiedQuestionEditor({
             onClick={() => setIsSolutionImgZoomed(false)}
           >
             <div
-              className="relative max-w-4xl max-h-[90vh] bg-white rounded-3xl p-4 shadow-2xl space-y-3"
+              className="relative max-w-4xl max-h-[90vh] bg-white rounded-2xl p-4 shadow-2xl space-y-3"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between border-b pb-2">
@@ -1940,11 +1925,11 @@ export function UnifiedQuestionEditor({
         )}
 
         {/* SIDE-BY-SIDE SOLUTION TEXTAREAS */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Hindi Solution Card */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
-              <span className="text-xs font-black text-amber-900 bg-amber-100 px-3 py-1 rounded-full">
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+              <span className="text-xs font-bold text-amber-900 bg-amber-100 px-2.5 py-0.5 rounded-full">
                 हिंदी हल (Hindi Solution)
               </span>
               <FormulaInsertToolbar
@@ -1952,20 +1937,27 @@ export function UnifiedQuestionEditor({
               />
             </div>
             <textarea
-              rows={9}
+              rows={4}
               placeholder="कथन : ... \n\nसिद्धांत : ... \n\nहल : ... \n\nअंतिम उत्तर : विकल्प (...)"
               value={solutionHi}
               onChange={(e) => setSolutionHi(e.target.value)}
               onPaste={(e) => handleFieldImagePaste(e, setSolutionHi)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-2xl p-4 text-xs sm:text-sm text-slate-900 outline-none resize-none leading-relaxed font-mono focus:bg-white focus:border-blue-500 transition"
+              className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-xs sm:text-sm text-slate-900 outline-none resize-none leading-relaxed font-mono focus:bg-white focus:border-blue-500 transition"
             />
-            <EquationLivePreview content={solutionHi} label="Hindi Solution KaTeX Preview" />
+            {solutionHi.trim() && (
+              <EquationLivePreview
+                content={solutionHi}
+                label="हिंदी समाधान पूर्वावलोकन"
+                alwaysShow={true}
+                className="mt-1.5"
+              />
+            )}
           </div>
 
           {/* English Solution Card */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
-              <span className="text-xs font-black text-blue-900 bg-blue-100 px-3 py-1 rounded-full">
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+              <span className="text-xs font-bold text-blue-900 bg-blue-100 px-2.5 py-0.5 rounded-full">
                 English Solution (Detailed Derivation)
               </span>
               <FormulaInsertToolbar
@@ -1973,14 +1965,21 @@ export function UnifiedQuestionEditor({
               />
             </div>
             <textarea
-              rows={9}
+              rows={4}
               placeholder="Explaining : ... \n\nConcept : ... \n\nSolution : ... \n\nFinal Answer : Option (...)"
               value={solutionEn}
               onChange={(e) => setSolutionEn(e.target.value)}
               onPaste={(e) => handleFieldImagePaste(e, setSolutionEn)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-2xl p-4 text-xs sm:text-sm text-slate-900 outline-none resize-none leading-relaxed font-mono focus:bg-white focus:border-blue-500 transition"
+              className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-xs sm:text-sm text-slate-900 outline-none resize-none leading-relaxed font-mono focus:bg-white focus:border-blue-500 transition"
             />
-            <EquationLivePreview content={solutionEn} label="English Solution KaTeX Preview" />
+            {solutionEn.trim() && (
+              <EquationLivePreview
+                content={solutionEn}
+                label="English Solution Preview"
+                alwaysShow={true}
+                className="mt-1.5"
+              />
+            )}
           </div>
         </div>
       </div>
@@ -2009,7 +2008,7 @@ export function UnifiedQuestionEditor({
       />
 
       {/* 5. STICKY BOTTOM ACTION BAR (Save & Slot Navigation) */}
-      <footer className="bg-white border border-slate-200 rounded-3xl p-4 sm:p-5 shadow-lg flex flex-wrap items-center justify-between gap-4">
+      <footer className="bg-white border border-slate-200 rounded-2xl p-3 sm:p-4 shadow-md flex flex-wrap items-center justify-between gap-3">
         {/* Left Side: Navigation or Cancel */}
         <div>
           {mode === "bank" ? (
