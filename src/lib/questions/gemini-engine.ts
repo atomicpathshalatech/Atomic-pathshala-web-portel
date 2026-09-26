@@ -292,7 +292,7 @@ YOUR TASK (ALL-IN-ONE INGESTION IN A SINGLE RESPONSE):
    - If Hindi only: Extract Hindi AND generate authentic NCERT English translation for statementEn and optionsEn.
    - If bilingual: Extract both with 1:1 option alignment.
    - Convert math and equations to standard LaTeX ($...$).
-   - CHEMICAL STRUCTURES & BRANCHING: Preserve exact carbon chain connectivity and branch attachment points. Use KaTeX $\text{NC}-\underset{\text{CHO}}{\overset{\text{CH}_3}{\text{C}}}-\text{CH}_2-\text{CH}_2-\text{COOH}$ or clean monospace alignment.
+   - CHEMICAL STRUCTURES & BRANCHING: Preserve exact carbon chain connectivity and branch attachment points. Use KaTeX $\\text{NC}-\\underset{\\text{CHO}}{\\overset{\\text{CH}_3}{\\text{C}}}-\\text{CH}_2-\\text{CH}_2-\\text{COOH}$ or clean monospace alignment.
 
 2. DEDUCE CORRECT ANSWER:
    - Identify or deduce the 100% scientifically correct option in "correctAnswer": ["A"].
