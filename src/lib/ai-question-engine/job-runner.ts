@@ -317,6 +317,8 @@ async function runGenerationJobWorker(batchId: string, params: StartJobParams): 
           },
         });
       }
+    }
+
     // 5. Finalize Batch Completion
     const finalGeneratedCount = validatedQuestionsSoFar.length;
     await prisma.aiGenerationBatch.update({
