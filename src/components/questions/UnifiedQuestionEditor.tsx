@@ -35,7 +35,6 @@ import { EquationLivePreview } from "./EquationLivePreview";
 import { FormulaInsertToolbar } from "./FormulaInsertToolbar";
 import { QuestionIdBadge } from "./QuestionIdBadge";
 import { QuestionMetadataDrawer } from "./QuestionMetadataDrawer";
-import { QuestionLiveReviewPanel } from "./QuestionLiveReviewPanel";
 
 export interface UnifiedQuestionEditorProps {
   mode: "bank" | "dpp" | "test";
@@ -2162,29 +2161,6 @@ export function UnifiedQuestionEditor({
           </div>
         </div>
       </div>
-
-      {/* 6. DEDICATED REAL-TIME STUDENT PREVIEW & LIVE REVIEW COLUMN */}
-      <QuestionLiveReviewPanel
-        statementEn={statementEn}
-        statementHi={statementHi}
-        optionAEn={optionAEn}
-        optionAHi={optionAHi}
-        optionBEn={optionBEn}
-        optionBHi={optionBHi}
-        optionCEn={optionCEn}
-        optionCHi={optionCHi}
-        optionDEn={optionDEn}
-        optionDHi={optionDHi}
-        correctOption={correctOption}
-        solutionEn={solutionEn}
-        solutionHi={solutionHi}
-        diagramUrl={diagramUrl}
-        solutionImageUrl={solutionImageUrl}
-        subject={subject}
-        chapter={chapter}
-        marks={marks}
-        negativeMarks={negativeMarks}
-      />
 
       {/* 5. STICKY BOTTOM ACTION BAR (Save & Slot Navigation) */}
       <footer className="bg-white border border-slate-200 rounded-2xl p-3 sm:p-4 shadow-md flex flex-wrap items-center justify-between gap-3">
