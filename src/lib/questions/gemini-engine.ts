@@ -41,11 +41,10 @@ export interface ExtractedQuestionData {
 
 // Cost-effective and ultra-fast Gemini Flash model hierarchy
 const GEMINI_MODELS = [
-  "gemini-2.5-flash",
   "gemini-2.0-flash",
   "gemini-1.5-flash",
   "gemini-1.5-flash-8b",
-  "gemini-flash-latest",
+  "gemini-2.0-flash-lite-preview-02-05",
 ] as const;
 
 /**

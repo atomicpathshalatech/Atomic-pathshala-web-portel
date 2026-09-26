@@ -317,16 +317,15 @@ async function runGenerationJobWorker(batchId: string, params: StartJobParams): 
           },
         });
       }
-    }
-
     // 5. Finalize Batch Completion
+    const finalGeneratedCount = validatedQuestionsSoFar.length;
     await prisma.aiGenerationBatch.update({
       where: { id: batchId },
       data: {
-        status: "COMPLETED",
+        status: finalGeneratedCount > 0 ? "COMPLETED" : "FAILED",
         progress: 100,
-        currentStep: "Generation & Validation Complete",
-        generatedCount: rawQuestions.length,
+        currentStep: finalGeneratedCount > 0 ? "Generation & Validation Complete" : "No questions generated.",
+        generatedCount: finalGeneratedCount,
         passedCount,
         needsReviewCount,
         failedCount,
@@ -345,22 +344,29 @@ async function runGenerationJobWorker(batchId: string, params: StartJobParams): 
           subject: params.subject,
           chapter: params.chapter,
           totalRequested: params.totalQuestions,
-          generated: rawQuestions.length,
+          generated: finalGeneratedCount,
           passed: passedCount,
           needsReview: needsReviewCount,
           failed: failedCount,
         },
       },
-    });
+    }).catch(() => {});
   } catch (err: any) {
-    console.error(`[JobRunner] Generation batch ${batchId} failed:`, err);
-    await prisma.aiGenerationBatch.update({
-      where: { id: batchId },
-      data: {
-        status: "FAILED",
-        currentStep: "Generation failed due to an error.",
-        errorDetails: err?.message || String(err),
-      },
-    });
+    console.error(`[JobRunner] Generation batch ${batchId} error:`, err);
+    try {
+      const existingCount = await prisma.aiGeneratedQuestion.count({ where: { batchId } });
+      await prisma.aiGenerationBatch.update({
+        where: { id: batchId },
+        data: {
+          status: existingCount > 0 ? "COMPLETED" : "FAILED",
+          progress: 100,
+          currentStep: existingCount > 0 ? "Generation completed (partial)" : "Generation failed due to an error.",
+          generatedCount: existingCount,
+          errorDetails: err?.message || String(err),
+        },
+      });
+    } catch (dbErr) {
+      console.error(`[JobRunner] Could not update batch status for ${batchId}:`, dbErr);
+    }
   }
 }

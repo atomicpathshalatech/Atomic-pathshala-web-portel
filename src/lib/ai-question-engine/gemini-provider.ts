@@ -64,7 +64,7 @@ export class GeminiProvider implements AIProvider {
     });
   }
 
-  async generateQuestions(params: {
+  private async generateSingleBatch(params: {
     method: "AI" | "PDF";
     subject: string;
     chapter: string;
@@ -141,6 +141,78 @@ export class GeminiProvider implements AIProvider {
         };
       });
     });
+  }
+
+  async generateQuestions(params: {
+    method: "AI" | "PDF";
+    subject: string;
+    chapter: string;
+    selectedTopics: string[];
+    selectedSubtopics?: string[];
+    difficultyMix: Record<NeetDifficulty, number>;
+    questionTypeCounts: Record<string, number>;
+    language: GenerationLanguage;
+    sourceText?: string;
+    sourceImageDescriptions?: Array<{ id: string; page: number; description: string }>;
+  }): Promise<RawAiGeneratedQuestion[]> {
+    const totalRequested = Object.values(params.questionTypeCounts).reduce((a, b) => a + b, 0);
+
+    if (totalRequested <= 5) {
+      return this.generateSingleBatch(params);
+    }
+
+    // Chunk generation into manageable sub-batches (max 5 questions per call)
+    const CHUNK_SIZE = 5;
+    const numChunks = Math.ceil(totalRequested / CHUNK_SIZE);
+    const accumulatedQuestions: RawAiGeneratedQuestion[] = [];
+
+    for (let chunkIdx = 0; chunkIdx < numChunks; chunkIdx++) {
+      const remainingTotal = totalRequested - accumulatedQuestions.length;
+      const currentChunkTarget = Math.min(CHUNK_SIZE, remainingTotal);
+      if (currentChunkTarget <= 0) break;
+
+      const subTypeCounts: Record<string, number> = {};
+      const subDiffMix: Record<NeetDifficulty, number> = { EASY: 0, MEDIUM: 0, HARD: 0, ULTRA: 0 };
+
+      // Allocate question types for this chunk
+      for (const [type, totalTypeCount] of Object.entries(params.questionTypeCounts)) {
+        if (totalTypeCount > 0) {
+          const chunkTypeCount = Math.max(1, Math.round((totalTypeCount / totalRequested) * currentChunkTarget));
+          subTypeCounts[type] = chunkTypeCount;
+        }
+      }
+
+      // Allocate difficulty mix for this chunk
+      for (const [diff, totalDiffCount] of Object.entries(params.difficultyMix)) {
+        if (totalDiffCount > 0) {
+          const chunkDiffCount = Math.max(0, Math.round((totalDiffCount / totalRequested) * currentChunkTarget));
+          subDiffMix[diff as NeetDifficulty] = chunkDiffCount;
+        }
+      }
+
+      try {
+        const chunkQuestions = await this.generateSingleBatch({
+          ...params,
+          questionTypeCounts: Object.keys(subTypeCounts).length > 0 ? subTypeCounts : { SINGLE_CORRECT: currentChunkTarget },
+          difficultyMix: subDiffMix,
+        });
+
+        for (const q of chunkQuestions) {
+          q.questionIndex = accumulatedQuestions.length + 1;
+          accumulatedQuestions.push(q);
+          if (accumulatedQuestions.length >= totalRequested) break;
+        }
+      } catch (chunkErr) {
+        console.warn(`[GeminiProvider] Chunk ${chunkIdx + 1}/${numChunks} generation error:`, chunkErr);
+        if (accumulatedQuestions.length > 0) {
+          break; // Return partial successful batch if we already generated questions
+        } else {
+          throw chunkErr;
+        }
+      }
+    }
+
+    return accumulatedQuestions;
   }
 
   async validateQuestion(question: {
