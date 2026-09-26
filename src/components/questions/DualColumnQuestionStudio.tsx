@@ -791,35 +791,50 @@ export function DualColumnQuestionStudio({
         ) : (
           /* ACTIVE DUAL-COLUMN QUESTION BUILDER VIA UNIFIED QUESTION EDITOR */
           <div className="flex-1 overflow-y-auto min-h-0 p-4 sm:p-6 lg:p-8 animate-in fade-in">
-            <UnifiedQuestionEditor
-              key={currentQuestionNumber}
-              mode={mode}
-              testId={testId}
-              testSectionId={activeSubjectObj?.sectionId}
-              dppId={dppId}
-              slotNumber={currentQuestionNumber}
-              totalSlots={totalQuestionsCount}
-              questionId={questionsMap[currentQuestionNumber]?.id}
-              initialQuestion={questionsMap[currentQuestionNumber] || {
-                subject: activeSubject,
-              }}
-              onSaveSuccess={(saved) => {
-                setQuestionsMap((prev) => ({
-                  ...prev,
-                  [currentQuestionNumber]: {
-                    ...currentQ,
-                    ...saved,
-                    id: saved?.id || currentQ.id,
-                    questionCode: saved?.questionCode || currentQ.questionCode,
-                    isSaved: true,
-                  },
-                }));
-              }}
-              onDelete={handleDeleteSlotQuestion}
-              onNext={handleNextQuestion}
-              onPrev={handlePrevQuestion}
-              onCancelHref={backHref}
-            />
+            {(() => {
+              const activeRange = activeSubjectObj ? sectionOffsets[activeSubjectObj.name] : null;
+              const sectionRelativeOrder = activeRange
+                ? Math.max(1, currentQuestionNumber - activeRange.start + 1)
+                : currentQuestionNumber;
+
+              return (
+                <UnifiedQuestionEditor
+                  key={currentQuestionNumber}
+                  mode={mode}
+                  testId={testId}
+                  testSectionId={activeSubjectObj?.sectionId}
+                  dppId={dppId}
+                  slotNumber={currentQuestionNumber}
+                  order={sectionRelativeOrder}
+                  totalSlots={totalQuestionsCount}
+                  questionId={questionsMap[currentQuestionNumber]?.id}
+                  initialQuestion={
+                    questionsMap[currentQuestionNumber] || {
+                      subject: activeSubject,
+                    }
+                  }
+                  onSaveSuccess={(saved) => {
+                    setQuestionsMap((prev) => ({
+                      ...prev,
+                      [currentQuestionNumber]: {
+                        ...currentQ,
+                        ...saved,
+                        id: saved?.id || currentQ.id,
+                        questionCode: saved?.questionCode || currentQ.questionCode,
+                        questionNumber: currentQuestionNumber,
+                        subject: saved?.subject || currentQ.subject || activeSubject,
+                        isSaved: true,
+                      },
+                    }));
+                    setActiveAuthoringSlots((prev) => ({ ...prev, [currentQuestionNumber]: true }));
+                  }}
+                  onDelete={handleDeleteSlotQuestion}
+                  onNext={handleNextQuestion}
+                  onPrev={handlePrevQuestion}
+                  onCancelHref={backHref}
+                />
+              );
+            })()}
           </div>
         )}
       </div>

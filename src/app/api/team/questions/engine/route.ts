@@ -137,6 +137,8 @@ export async function POST(request: NextRequest) {
       isPublished = true,
       dppId,
       testSectionId,
+      order,
+      slotNumber,
     } = body;
 
     let formattedPyqSource = pyqSource?.trim() || null;
@@ -311,14 +313,48 @@ export async function POST(request: NextRequest) {
 
     // 6. Link to Test Section if requested
     if (testSectionId) {
-      const secCount = await prisma.sectionQuestion.count({ where: { sectionId: testSectionId } });
-      sectionQuestion = await prisma.sectionQuestion.create({
-        data: {
-          sectionId: testSectionId,
-          questionId: question.id,
-          order: secCount + 1,
+      const targetSecOrder =
+        typeof order === "number" && order > 0
+          ? order
+          : typeof slotNumber === "number" && slotNumber > 0
+          ? slotNumber
+          : (await prisma.sectionQuestion.count({ where: { sectionId: testSectionId } })) + 1;
+
+      const existingAtSlot = await prisma.sectionQuestion.findUnique({
+        where: {
+          sectionId_order: {
+            sectionId: testSectionId,
+            order: targetSecOrder,
+          },
         },
       });
+
+      if (existingAtSlot) {
+        sectionQuestion = await prisma.sectionQuestion.update({
+          where: { id: existingAtSlot.id },
+          data: {
+            questionId: question.id,
+          },
+        });
+      } else {
+        sectionQuestion = await prisma.sectionQuestion.upsert({
+          where: {
+            sectionId_questionId: {
+              sectionId: testSectionId,
+              questionId: question.id,
+            },
+          },
+          update: {
+            order: targetSecOrder,
+          },
+          create: {
+            sectionId: testSectionId,
+            questionId: question.id,
+            order: targetSecOrder,
+          },
+        });
+      }
+
       await prisma.question.update({
         where: { id: question.id },
         data: { usageCount: { increment: 1 } },
@@ -392,6 +428,8 @@ export async function PUT(request: NextRequest) {
       tags = [],
       dppId,
       testSectionId,
+      order,
+      slotNumber,
     } = body;
 
     if (!questionId) {
@@ -594,51 +632,62 @@ export async function PUT(request: NextRequest) {
     let sectionQuestion = null;
     let dppQuestion = null;
 
-    // Link to Test Section if requested and not yet linked
+    // Link to Test Section if requested
     if (testSectionId) {
-      const existingSecLink = await prisma.sectionQuestion.findFirst({
-        where: { sectionId: testSectionId, questionId },
-      });
-      if (!existingSecLink) {
-        const targetSection = await prisma.section.findUnique({
-          where: { id: testSectionId },
-          select: { testId: true },
-        });
-
-        const existingTestLink = targetSection?.testId
-          ? await prisma.sectionQuestion.findFirst({
-              where: {
-                questionId,
-                section: { testId: targetSection.testId },
-              },
-            })
+      const targetSecOrder =
+        typeof order === "number" && order > 0
+          ? order
+          : typeof slotNumber === "number" && slotNumber > 0
+          ? slotNumber
           : null;
 
-        if (existingTestLink) {
-          const secCount = await prisma.sectionQuestion.count({ where: { sectionId: testSectionId } });
-          sectionQuestion = await prisma.sectionQuestion.update({
-            where: { id: existingTestLink.id },
-            data: {
-              sectionId: testSectionId,
-              order: secCount + 1,
-            },
-          });
-        } else {
-          const secCount = await prisma.sectionQuestion.count({ where: { sectionId: testSectionId } });
-          sectionQuestion = await prisma.sectionQuestion.create({
-            data: {
-              sectionId: testSectionId,
-              questionId,
-              order: secCount + 1,
-            },
-          });
-          await prisma.question.update({
-            where: { id: questionId },
-            data: { usageCount: { increment: 1 } },
-          });
+      const secCount = await prisma.sectionQuestion.count({ where: { sectionId: testSectionId } });
+      const finalOrder = targetSecOrder ?? (secCount + 1);
+
+      // Check if slot order is already occupied in this section
+      const existingAtSlot = await prisma.sectionQuestion.findUnique({
+        where: {
+          sectionId_order: {
+            sectionId: testSectionId,
+            order: finalOrder,
+          },
+        },
+      });
+
+      // Check if this question is already linked in this section
+      const existingQuestionSecLink = await prisma.sectionQuestion.findFirst({
+        where: {
+          sectionId: testSectionId,
+          questionId,
+        },
+      });
+
+      if (existingAtSlot && existingAtSlot.questionId !== questionId) {
+        // If this question had another link in the section, remove it first to avoid collision
+        if (existingQuestionSecLink && existingQuestionSecLink.id !== existingAtSlot.id) {
+          await prisma.sectionQuestion.delete({ where: { id: existingQuestionSecLink.id } });
         }
+        sectionQuestion = await prisma.sectionQuestion.update({
+          where: { id: existingAtSlot.id },
+          data: { questionId },
+        });
+      } else if (existingQuestionSecLink) {
+        sectionQuestion = await prisma.sectionQuestion.update({
+          where: { id: existingQuestionSecLink.id },
+          data: { order: finalOrder },
+        });
       } else {
-        sectionQuestion = existingSecLink;
+        sectionQuestion = await prisma.sectionQuestion.create({
+          data: {
+            sectionId: testSectionId,
+            questionId,
+            order: finalOrder,
+          },
+        });
+        await prisma.question.update({
+          where: { id: questionId },
+          data: { usageCount: { increment: 1 } },
+        });
       }
     }
 

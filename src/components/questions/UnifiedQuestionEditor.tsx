@@ -50,6 +50,7 @@ export interface UnifiedQuestionEditorProps {
   testSectionId?: string;
   testName?: string;
   slotNumber?: number;
+  order?: number;
   totalSlots?: number;
   onSaveSuccess?: (savedQuestion: any) => void;
   onDelete?: () => void;
@@ -68,6 +69,7 @@ export function UnifiedQuestionEditor({
   testSectionId,
   testName,
   slotNumber = 1,
+  order,
   totalSlots = 1,
   onSaveSuccess,
   onDelete,
@@ -1066,6 +1068,8 @@ export function UnifiedQuestionEditor({
         camDrawData: camDrawData || undefined,
         dppId,
         testSectionId,
+        order,
+        slotNumber,
         isPublished: false,
         status: submitToReview ? "REVIEW_1" : "DRAFT",
       };
