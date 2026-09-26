@@ -170,7 +170,7 @@ export async function runQuestionValidationPipeline({
   // ==========================================
   const contentAccuracy = Math.max(50, Math.min(100, aiValResult.isScientificallySound ? 96 : 60));
   const answerConfidence =
-    finalStatus === "ANSWER_VALIDATION_FAILED" ? 40 : Math.max(60, aiValResult.solverConfidence || 95);
+    finalStatus === "NEEDS_REVIEW" ? 75 : Math.max(60, aiValResult.solverConfidence || 95);
   const ncertAlignment = question.pyqStyle === "STANDARD" ? 95 : 97;
   const neetRelevance = question.difficulty === "ULTRA" ? 98 : 95;
   const languageQuality = aiValResult.bilingualEquivalent ? 96 : 70;
