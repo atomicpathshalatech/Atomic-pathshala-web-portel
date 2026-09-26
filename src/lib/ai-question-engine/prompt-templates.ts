@@ -115,7 +115,21 @@ ${
 `
     : ""
 }
-${sourceGroundingClause}
+SOLUTION CONCISENESS & FORMATTING RULES:
+- Keep "solutionEn" and "solutionHi" SMALL, CONCISE, and STRICTLY TO THE POINT (maximum 3-5 lines).
+- DO NOT write long bloated essays or verbose introductions.
+- Directly state the core concept/formula and the direct justification for the correct option.
+- STRICTLY NO markdown bold asterisks (NO ** or *). Use clean plain text with LaTeX $...$ for math/symbols.
+- Structure:
+  English:
+  Concept : [1-line core rule/formula]
+  Solution : [Concise 1-3 line step-by-step derivation or option verification]
+  Final Answer : Option (X)
+
+  Hindi:
+  सिद्धांत : [1-पंक्ति का मुख्य सूत्र/नियम]
+  हल : [संक्षिप्त 1-3 पंक्ति का चरणबद्ध हल]
+  अंतिम उत्तर : विकल्प (X)
 
 OUTPUT FORMAT:
 Return ONLY a valid JSON object matching the following JSON schema with NO markdown codeblock fencing or commentary:
@@ -139,8 +153,8 @@ Return ONLY a valid JSON object matching the following JSON schema with NO markd
         "D": "विकल्प D हिंदी में"
       },
       "correctAnswer": ["B"],
-      "solutionEn": "Comprehensive step-by-step solution in English explaining why B is correct and why other options are incorrect...",
-      "solutionHi": "हिंदी में विस्तृत चरण-दर-चरण समाधान...",
+      "solutionEn": "Concept : Core principle or formula\\nSolution : Concise 1-3 line justification\\nFinal Answer : Option (B)",
+      "solutionHi": "सिद्धांत : मुख्य सूत्र या नियम\\nहल : संक्षिप्त 1-3 पंक्ति का हल\\nअंतिम उत्तर : विकल्प (B)",
       "subject": "${subject}",
       "chapter": "${chapter}",
       "topic": "Specific topic from selected topics",

@@ -131,19 +131,19 @@ YOUR TASK (ALL-IN-ONE INGESTION IN A SINGLE RESPONSE):
 2. SCIENTIFICALLY VERIFIED CORRECT ANSWER:
    - Identify visibly marked answer or deduce the 100% scientifically correct option ("A", "B", "C", or "D"). Put in "correctAnswer": ["A"].
 
-3. 4-STEP BILINGUAL SOLUTION:
-   - Structure "solutionEn" EXACTLY in these 4 labeled sections:
-     Explaining : [1-2 sentences stating given parameters and what we need to calculate/find]
-     Concept : This question is based on [Specific scientific law, theorem, formula, or concept name]
-     Solution :
-     [Step-by-step derivation with LaTeX formulas $...$ for calculation, OR point-by-point evaluation of each option with NCERT reasoning]
+3. CONCISE & TO-THE-POINT BILINGUAL SOLUTION (Max 3-5 lines, STRICTLY NO markdown stars '**' or '*'):
+   - Keep solution SHORT, CRISP, direct, and to the point. No bloated introductory filler.
+   - "solutionEn":
+     Concept : [1-line core formula or scientific rule]
+     Solution : [Concise 1-3 line derivation or direct option verification]
      Final Answer : Option (X)
 
-   - Structure "solutionHi" with authentic Devanagari translation:
-     कथन (Explaining) : [संक्षिप्त विवरण कि प्रश्न में क्या दिया गया है और क्या ज्ञात करना है]
-     सिद्धांत (Concept) : यह प्रश्न [सिद्धांत/नियम का नाम] पर आधारित है।
-     हल (Solution) : [चरण-दर-चरण गणितीय हल या प्रत्येक विकल्प का वैज्ञानिक विश्लेषण]
-     अंतिम उत्तर (Final Answer) : विकल्प (X)
+   - "solutionHi":
+     सिद्धांत : [1-पंक्ति का मुख्य सूत्र या नियम]
+     हल : [संक्षिप्त 1-3 पंक्ति का चरणबद्ध हल]
+     अंतिम उत्तर : विकल्प (X)
+
+   - CRITICAL: DO NOT use markdown bold asterisks (NO ** or *). Use clean plain text with LaTeX $...$ for equations and symbols only.
 
 4. CURRICULUM TAXONOMY & QUESTION TYPE:
    - "subject": "Physics" | "Chemistry" | "Biology" | "Mathematics"
@@ -161,8 +161,8 @@ RETURN STRICT JSON SCHEMA:
   "optionsEn": { "A": "...", "B": "...", "C": "...", "D": "..." },
   "optionsHi": { "A": "...", "B": "...", "C": "...", "D": "..." },
   "correctAnswer": ["A"],
-  "solutionEn": "Explaining : ...\\nConcept : ...\\nSolution : ...\\nFinal Answer : Option (A)",
-  "solutionHi": "कथन (Explaining) : ...\\nसिद्धांत (Concept) : ...\\nहल (Solution) : ...\\nअंतिम उत्तर (Final Answer) : विकल्प (A)",
+  "solutionEn": "Concept : ...\\nSolution : ...\\nFinal Answer : Option (A)",
+  "solutionHi": "सिद्धांत : ...\\nहल : ...\\nअंतिम उत्तर : विकल्प (A)",
   "hasFigure": false,
   "figureCaption": "",
   "subject": "Physics",
@@ -289,9 +289,11 @@ YOUR TASK (ALL-IN-ONE INGESTION IN A SINGLE RESPONSE):
 2. DEDUCE CORRECT ANSWER:
    - Identify or deduce the 100% scientifically correct option in "correctAnswer": ["A"].
 
-3. 4-STEP BILINGUAL SOLUTION:
-   - "solutionEn": Explaining, Concept, Solution, Final Answer : Option (X).
-   - "solutionHi": कथन (Explaining), सिद्धांत (Concept), हल (Solution), अंतिम उत्तर (Final Answer) : विकल्प (X).
+3. CONCISE & TO-THE-POINT BILINGUAL SOLUTION (Max 3-5 lines, STRICTLY NO markdown stars '**' or '*'):
+   - Keep solution SHORT, CRISP, and direct. No bloated filler.
+   - "solutionEn": Concept : [1-line rule/formula], Solution : [1-3 line derivation or reason], Final Answer : Option (X)
+   - "solutionHi": सिद्धांत : [1-पंक्ति का सूत्र/नियम], हल : [संक्षिप्त 1-3 पंक्ति का हल], अंतिम उत्तर : विकल्प (X)
+   - CRITICAL: NO markdown asterisks (NO ** or *).
 
 4. CURRICULUM TAXONOMY:
    - "subject", "chapter", "topic", "subTopic", "difficulty", "type".
@@ -308,8 +310,8 @@ RETURN STRICT JSON SCHEMA:
   "optionsEn": { "A": "...", "B": "...", "C": "...", "D": "..." },
   "optionsHi": { "A": "...", "B": "...", "C": "...", "D": "..." },
   "correctAnswer": ["A"],
-  "solutionEn": "Explaining : ...\\nConcept : ...\\nSolution : ...\\nFinal Answer : Option (A)",
-  "solutionHi": "कथन (Explaining) : ...\\nसिद्धांत (Concept) : ...\\nहल (Solution) : ...\\nअंतिम उत्तर (Final Answer) : विकल्प (A)",
+  "solutionEn": "Concept : ...\\nSolution : ...\\nFinal Answer : Option (A)",
+  "solutionHi": "सिद्धांत : ...\\nहल : ...\\nअंतिम उत्तर : विकल्प (A)",
   "subject": "${subjectContext || "Biology"}",
   "chapter": "${chapterContext || "General"}",
   "topic": "${topicContext || "Core Concept"}",
@@ -416,32 +418,31 @@ ${userSelectedPrompt}
 ${userReferencePrompt}
 ${userInstructionPrompt}
 
-MANDATORY SOLUTION STRUCTURE:
-"solutionEn" with blank lines (\\n\\n) between sections:
-Explaining : [1-2 sentences stating given parameters]
+MANDATORY SOLUTION STRUCTURE (SMALL, CRISP, AND STRICTLY TO THE POINT):
+- Maximum 3-5 lines total. DO NOT write long explanations or bloated introductory paragraphs.
+- STRICTLY NO markdown bold asterisks (NO ** or *). Use clean plain text. LaTeX $...$ only for math/formulas.
 
-Concept : This question is based on [Specific concept name]
+"solutionEn":
+Concept : [1-line core rule/formula/theorem]
 
 Solution :
-[Step-by-step calculation with LaTeX formulas, OR point-by-point option breakdown]
+[Concise 1-3 line step-by-step calculation or direct option evaluation]
 
 Final Answer : Option (X)
 
-"solutionHi" with Devanagari translation:
-कथन (Explaining) : [...]
+"solutionHi":
+सिद्धांत : [1-पंक्ति का मुख्य सूत्र या नियम]
 
-सिद्धांत (Concept) : यह प्रश्न [...] पर आधारित है।
+हल :
+[संक्षिप्त 1-3 पंक्ति का चरणबद्ध हल]
 
-हल (Solution) :
-[...]
-
-अंतिम उत्तर (Final Answer) : विकल्प (X)
+अंतिम उत्तर : विकल्प (X)
 
 RETURN STRICT JSON SCHEMA:
 {
   "recommendedAnswer": "A",
-  "solutionEn": "Explaining : ...\\n\\nConcept : ...\\n\\nSolution :\\n...\\n\\nFinal Answer : Option (A)",
-  "solutionHi": "कथन (Explaining) : ...\\n\\nसिद्धांत (Concept) : ...\\n\\nहल (Solution) :\\n...\\n\\nअंतिम उत्तर (Final Answer) : विकल्प (A)"
+  "solutionEn": "Concept : ...\\n\\nSolution :\\n...\\n\\nFinal Answer : Option (A)",
+  "solutionHi": "सिद्धांत : ...\\n\\nहल :\\n...\\n\\nअंतिम उत्तर : विकल्प (A)"
 }`;
 
     const response = await model.generateContent(prompt);
@@ -471,15 +472,31 @@ RETURN STRICT JSON SCHEMA:
 }
 
 /**
- * Normalizes vertical spacing in solutions ensuring clean double-newlines between sections
+ * Normalizes vertical spacing and sanitizes solutions ensuring clean double-newlines between sections
+ * and stripping unnecessary markdown asterisks (**, *), headings, or clutter.
  */
 export function formatSolutionSpacing(sol: string): string {
   if (!sol) return "";
   let formatted = sol.trim();
+
+  // 1. Remove markdown bold/italic asterisks & underscores (e.g. **Electron:** -> Electron:)
+  formatted = formatted.replace(/\*\*(.*?)\*\*/g, "$1");
+  formatted = formatted.replace(/\*(.*?)\*/g, "$1");
+  formatted = formatted.replace(/__(.*?)__/g, "$1");
+  formatted = formatted.replace(/\*/g, "");
+
+  // 2. Remove markdown heading hashes (### Concept -> Concept)
+  formatted = formatted.replace(/^#{1,6}\s+/gm, "");
+
+  // 3. Clean and normalize section linebreaks
   formatted = formatted.replace(/([^\n])\s*\n\s*(Concept\s*:|सिद्धांत(\s*\(Concept\))?\s*:)/gi, "$1\n\n$2");
   formatted = formatted.replace(/([^\n])\s*\n\s*(Solution\s*:|हल(\s*\(Solution\))?\s*:)/gi, "$1\n\n$2");
   formatted = formatted.replace(/([^\n])\s*\n\s*(Final Answer\s*:|अंतिम उत्तर(\s*\(Final Answer\))?\s*:)/gi, "$1\n\n$2");
-  return formatted;
+
+  // 4. Collapse excessive multiple blank lines into standard double newlines
+  formatted = formatted.replace(/\n{3,}/g, "\n\n");
+
+  return formatted.trim();
 }
 
 /**

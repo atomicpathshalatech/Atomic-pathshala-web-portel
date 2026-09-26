@@ -1952,7 +1952,7 @@ export function UnifiedQuestionEditor({
                 3. Step-by-Step Bilingual Solution Studio
               </span>
               <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-800 font-bold">
-                Explaining • Concept • Solution • Final Answer
+                Concept • Solution • Final Answer
               </span>
             </div>
             <p className="text-[11px] text-slate-500">

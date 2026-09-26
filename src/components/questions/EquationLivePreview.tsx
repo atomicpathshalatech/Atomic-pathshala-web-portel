@@ -65,6 +65,12 @@ function renderMathAndText(text: string): string {
             .replace(/</g, "&lt;")
             .replace(/>/g, "&gt;");
 
+          // Handle markdown bold/italic asterisks cleanly without displaying raw '**' or '*'
+          textPart = textPart.replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-slate-900">$1</strong>');
+          textPart = textPart.replace(/\*(.*?)\*/g, "$1");
+          textPart = textPart.replace(/__(.*?)__/g, '<strong class="font-bold text-slate-900">$1</strong>');
+          textPart = textPart.replace(/\*/g, "");
+
           textPart = textPart.replace(
             /!\[([^\]]*)\]\((https?:\/\/[^\s\)]+|data:image\/[^\s\)]+|\/uploads\/[^\s\)]+|[^\s\)]+)\)/gi,
             (_match, widthParam, url) => {
