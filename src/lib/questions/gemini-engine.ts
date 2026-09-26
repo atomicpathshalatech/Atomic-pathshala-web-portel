@@ -127,6 +127,13 @@ YOUR TASK (ALL-IN-ONE INGESTION IN A SINGLE RESPONSE):
      * If the image is Hindi-only: Extract Hindi AND generate authentic NCERT English translation for "statementEn" and "optionsEn" { A, B, C, D }.
      * If the image contains both: Extract both versions with 1:1 option alignment (Option 1 ↔ A, Option 2 ↔ B, etc.).
    - Standard LaTeX notation $...$ for all inline math, equations, symbols, fractions, powers, and chemical formulas (e.g. $\\text{H}_2\\text{SO}_4$, $\\text{Ca}^{2+}$).
+   - CRITICAL: CHEMICAL STRUCTURES & BRANCHING FIDELITY (ORGANIC CHEMISTRY / IUPAC):
+     * When extracting branched chemical structures (e.g. IUPAC naming questions), trace EVERY carbon atom in the chain and determine EXACTLY which carbon atom has vertical/diagonal branches attached.
+     * NEVER misalign substituents or attach them to adjacent carbons! (For example, in $\\text{NC}-\\text{C}(\\text{CH}_3)(\\text{CHO})-\\text{CH}_2-\\text{CH}_2-\\text{COOH}$, the $\\text{CH}_3$ on top and $\\text{CHO}$ on bottom are bonded directly to the carbon atom $\\text{C}$, NOT to $\\text{CH}_2$!).
+     * Format branched chemical structures using LaTeX KaTeX:
+       $$\\text{NC}-\\underset{\\text{CHO}}{\\overset{\\text{CH}_3}{\\text{C}}}-\\text{CH}_2-\\text{CH}_2-\\text{COOH}$$
+       or condensed structural formula $\\text{NC}-\\text{C}(\\text{CH}_3)(\\text{CHO})-\\text{CH}_2-\\text{CH}_2-\\text{COOH}$
+       or perfectly column-aligned monospace lines.
 
 2. SCIENTIFICALLY VERIFIED CORRECT ANSWER:
    - Identify visibly marked answer or deduce the 100% scientifically correct option ("A", "B", "C", or "D"). Put in "correctAnswer": ["A"].
@@ -285,6 +292,7 @@ YOUR TASK (ALL-IN-ONE INGESTION IN A SINGLE RESPONSE):
    - If Hindi only: Extract Hindi AND generate authentic NCERT English translation for statementEn and optionsEn.
    - If bilingual: Extract both with 1:1 option alignment.
    - Convert math and equations to standard LaTeX ($...$).
+   - CHEMICAL STRUCTURES & BRANCHING: Preserve exact carbon chain connectivity and branch attachment points. Use KaTeX $\text{NC}-\underset{\text{CHO}}{\overset{\text{CH}_3}{\text{C}}}-\text{CH}_2-\text{CH}_2-\text{COOH}$ or clean monospace alignment.
 
 2. DEDUCE CORRECT ANSWER:
    - Identify or deduce the 100% scientifically correct option in "correctAnswer": ["A"].

@@ -27,8 +27,12 @@ CRITICAL RULES:
 1. GEOMETRY PRESERVATION (MATCH REFERENCE):
    - Preserve relative coordinates, bond angles, branching orientation, and layout as closely as possible to the source image.
    - Do NOT redesign or arbitrarily standardize unless specifically required for clarity.
-2. CHEMICAL FIDELITY:
-   - Identify all atoms (C, H, O, N, S, P, halogens, R groups, functional groups like OH, COOH, NH2, CHO, NO2, CH3, etc.).
+2. CHEMICAL FIDELITY & EXACT BRANCH ATTACHMENT:
+   - Identify all atoms and functional groups (C, H, O, N, S, P, halogens, OH, COOH, NH2, CHO, NO2, CH3, CN/NC, CH2, etc.).
+   - FOR BRANCHED ALKANES / ACIDS / IUPAC MOLECULES (e.g. NC — C(CH3)(CHO) — CH2 — CH2 — COOH):
+     * Pay extreme attention to WHICH specific carbon atom in the chain bears the branches.
+     * Attach vertical bonds directly to the specific central carbon atom ('C'), NEVER to adjacent groups like 'CH2'.
+     * Position top substituents (e.g. CH3) vertically above and bottom substituents (e.g. CHO) vertically below that exact atom's (x, y) coordinate.
    - Identify all bonds (single, double, triple, aromatic, wedge, dash, wavy, coordinate).
    - Identify ring systems (benzene, cyclohexane, cyclopentane, etc.) and their substituent attachment points.
    - Identify reaction arrows (forward, reversible, equilibrium, resonance) with exact top reagents (e.g. "KMnO4 / H+") and bottom conditions (e.g. "Δ, 273 K").

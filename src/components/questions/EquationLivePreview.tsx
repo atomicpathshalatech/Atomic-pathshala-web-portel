@@ -60,6 +60,22 @@ function renderMathAndText(text: string): string {
           return katex.renderToString(math, { throwOnError: false, displayMode: false });
         } else {
           // Normal text: handle embedded markdown images ![width](url)
+          // Check if text has multiline ASCII/Unicode chemical structure with vertical bonds (| or ｜ or ¦)
+          const lines = part.split("\n");
+          const hasVerticalBonds = lines.some((l) => /[\s\t]*[|｜¦][\s\t]*/.test(l));
+
+          if (hasVerticalBonds && lines.length >= 3) {
+            const escaped = lines
+              .map((line) =>
+                line
+                  .replace(/&/g, "&amp;")
+                  .replace(/</g, "&lt;")
+                  .replace(/>/g, "&gt;")
+              )
+              .join("\n");
+            return `<div class="my-2 overflow-x-auto"><pre class="font-mono text-xs sm:text-sm font-bold leading-normal tracking-normal text-slate-900 bg-slate-50 border border-slate-200/90 rounded-xl p-3 inline-block shadow-xs whitespace-pre">${escaped}</pre></div>`;
+          }
+
           let textPart = part
             .replace(/&/g, "&amp;")
             .replace(/</g, "&lt;")

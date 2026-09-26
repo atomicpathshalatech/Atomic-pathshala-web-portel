@@ -260,6 +260,7 @@ export async function extractFromImage(
 
     const prompt = `You are an expert exam question digitizer for Indian national competitive exams (NEET, JEE Main, CBSE).
 Analyze the provided question image and extract all elements with high precision.
+For chemical structures with branches (e.g. IUPAC molecules): Carefully identify the exact carbon atom where branches connect. Do not shift branches to adjacent carbons. Use LaTeX KaTeX $\\text{NC}-\\underset{\\text{CHO}}{\\overset{\\text{CH}_3}{\\text{C}}}-\\text{CH}_2-\\text{CH}_2-\\text{COOH}$ or clean monospace alignment.
 Return a STRICT JSON object with these exact keys:
 {
   "statementEn": "Complete question text in English. Use standard LaTeX syntax for mathematical/scientific formulas enclosed in $...$ or $$...$$.",
