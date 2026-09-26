@@ -724,6 +724,9 @@ export function TeacherLiveClassRoom({
         const data = await postJson("/api/whiteboard/sessions", { batchScheduleId });
         if (!cancelled) {
           const sess = data.whiteboardSession;
+          if (sess && (!sess.pages || sess.pages.length === 0)) {
+            sess.pages = [{ id: "temp-p1", pageNumber: 1, objects: [], background: "blank" }];
+          }
           setWbSession(sess);
           if (
             sess?.livePhase === "ENDING" ||
@@ -876,16 +879,20 @@ export function TeacherLiveClassRoom({
   }, [eraserRadius]);
 
   const flushAutosave = useCallback(async () => {
-    if (!wbSession || !currentPage || !pendingObjectsRef.current) return;
+    if (!wbSession || !pendingObjectsRef.current) return;
+    const targetPage: WhiteboardPage | null =
+      currentPage ?? (wbSession.pages?.[0] ?? null);
+    if (!targetPage) return;
+
     const objects = pendingObjectsRef.current;
     try {
-      await patchJson(`/api/whiteboard/sessions/${wbSession.id}/pages/${currentPage.id}`, { objects });
+      await patchJson(`/api/whiteboard/sessions/${wbSession.id}/pages/${targetPage.id}`, { objects });
       setSaveState("saved");
       setWbSession((prev) =>
         prev
           ? {
               ...prev,
-              pages: prev.pages.map((p) => (p.id === currentPage.id ? { ...p, objects } : p)),
+              pages: prev.pages.map((p) => (p.id === targetPage!.id ? { ...p, objects } : p)),
             }
           : prev
       );

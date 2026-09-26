@@ -97,6 +97,17 @@ export async function POST(
           },
         },
       });
+    } else {
+      const pageCount = await prisma.whiteboardPage.count({ where: { sessionId: wbSession.id } });
+      if (pageCount === 0) {
+        await prisma.whiteboardPage.create({
+          data: {
+            sessionId: wbSession.id,
+            pageNumber: 1,
+            objects: [],
+          },
+        });
+      }
     }
 
     // Generate or fetch YouTube broadcast credentials

@@ -42,6 +42,12 @@ export async function POST(request: NextRequest) {
       }
 
       if (existing.status === "ACTIVE") {
+        if (!existing.pages || existing.pages.length === 0) {
+          const p1 = await prisma.whiteboardPage.create({
+            data: { sessionId: existing.id, pageNumber: 1, objects: [] },
+          });
+          existing.pages = [p1];
+        }
         return apiSuccess({ whiteboardSession: existing, resumed: true });
       }
 

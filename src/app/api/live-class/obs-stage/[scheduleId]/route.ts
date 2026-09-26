@@ -86,11 +86,29 @@ export async function GET(request: NextRequest, { params }: { params: { schedule
     });
 
     if (!page) {
-      page = await prisma.whiteboardPage.findFirst({
-        where: { sessionId: wbSession.id },
-        orderBy: { pageNumber: "asc" },
+      page = await prisma.whiteboardPage.create({
+        data: {
+          sessionId: wbSession.id,
+          pageNumber: 1,
+          objects: [],
+        },
         select: { objects: true, background: true },
       });
+    }
+
+    let parsedObjects: any[] = [];
+    if (page && page.objects) {
+      if (Array.isArray(page.objects)) {
+        parsedObjects = page.objects;
+      } else if (typeof page.objects === "string") {
+        try {
+          parsedObjects = JSON.parse(page.objects);
+        } catch {
+          parsedObjects = [];
+        }
+      } else if (typeof page.objects === "object" && Array.isArray((page.objects as any).objects)) {
+        parsedObjects = (page.objects as any).objects;
+      }
     }
 
     // Active live quiz/poll data for OBS stage overlay
@@ -144,7 +162,10 @@ export async function GET(request: NextRequest, { params }: { params: { schedule
       classroomTheme: wbSession.classroomTheme,
       cameraShape: wbSession.cameraShape,
       cameraPosition: wbSession.cameraPosition,
-      page: page ?? null,
+      page: {
+        objects: parsedObjects,
+        background: page?.background ?? null,
+      },
       activeQuiz: activeQuiz
         ? {
             id: activeQuiz.id,

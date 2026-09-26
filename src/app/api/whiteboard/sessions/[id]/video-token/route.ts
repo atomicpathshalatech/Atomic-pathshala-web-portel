@@ -27,6 +27,23 @@ import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
  */
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
+    const broadcastToken = _request.nextUrl.searchParams.get("broadcast_token");
+    if (broadcastToken) {
+      const { verifyBroadcastToken } = await import("@/lib/live-class/broadcast-token");
+      const payload = verifyBroadcastToken(broadcastToken);
+      if (payload) {
+        const url = process.env.NEXT_PUBLIC_LIVEKIT_URL;
+        if (!url) return apiError("Video calling isn't configured on this server yet.", 503);
+        const roomName = videoRoomName(params.id);
+        const token = await createStudentViewerToken({
+          identity: `OBS:${payload.teacherUserId}`,
+          name: "OBS Stage",
+          roomName,
+        });
+        return apiSuccess({ token, url, identity: `OBS:${payload.teacherUserId}`, role: "OBS" });
+      }
+    }
+
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
 

@@ -120,10 +120,53 @@ function cameraCornerStyle(position: string | null | undefined): React.CSSProper
   }
 }
 
-/**
- * Local camera preview for OBS browser source if supported by environment.
- */
-function LocalCamera({ shape }: { shape: string | null | undefined }) {
+import {
+  LiveKitRoom,
+  VideoTrack,
+  useTracks,
+  RoomAudioRenderer,
+} from "@livekit/components-react";
+import { Track } from "livekit-client";
+
+function LiveKitCameraStream({
+  shape,
+  onTrackStatus,
+}: {
+  shape: string | null | undefined;
+  onTrackStatus?: (active: boolean) => void;
+}) {
+  const tracks = useTracks([Track.Source.Camera]);
+  const cameraTrack = tracks.find((t) => t.source === Track.Source.Camera && !t.participant.isLocal) || tracks[0];
+  const isLive = Boolean(cameraTrack && cameraTrack.publication && !cameraTrack.publication.isMuted);
+
+  useEffect(() => {
+    onTrackStatus?.(isLive);
+  }, [isLive, onTrackStatus]);
+
+  if (isLive && cameraTrack) {
+    return (
+      <div
+        className={`overflow-hidden border-4 border-blue-500 shadow-2xl bg-black ${
+          shape === "CIRCULAR" ? "rounded-full" : "rounded-2xl"
+        }`}
+        style={{ width: CAMERA_SIZE, height: CAMERA_SIZE }}
+      >
+        <RoomAudioRenderer />
+        <VideoTrack trackRef={cameraTrack} className="w-full h-full object-cover scale-x-[-1]" />
+      </div>
+    );
+  }
+
+  return null;
+}
+
+function LocalCameraFallback({
+  shape,
+  title,
+}: {
+  shape: string | null | undefined;
+  title?: string;
+}) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
 
@@ -156,18 +199,85 @@ function LocalCamera({ shape }: { shape: string | null | undefined }) {
     }
   }, [stream]);
 
-  if (!stream) return null;
+  if (stream) {
+    return (
+      <div
+        className={`overflow-hidden border-4 border-blue-500 shadow-2xl bg-black ${
+          shape === "CIRCULAR" ? "rounded-full" : "rounded-2xl"
+        }`}
+        style={{ width: CAMERA_SIZE, height: CAMERA_SIZE }}
+      >
+        <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
+      </div>
+    );
+  }
 
+  // Stylish Educator Live Card when webcam is held by teacher studio tab
   return (
     <div
-      className={`overflow-hidden border-4 border-blue-500 shadow-2xl bg-black ${
+      className={`overflow-hidden border-4 border-blue-500 shadow-2xl bg-[#0e101a] flex flex-col items-center justify-center p-3 text-center ${
         shape === "CIRCULAR" ? "rounded-full" : "rounded-2xl"
       }`}
       style={{ width: CAMERA_SIZE, height: CAMERA_SIZE }}
     >
-      <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
+      <div className="w-16 h-16 rounded-full bg-blue-950/80 border-2 border-blue-400 flex items-center justify-center text-blue-300 mb-2 shadow-inner">
+        <span className="material-symbols-outlined text-3xl">account_circle</span>
+      </div>
+      <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-500/60 text-emerald-300 text-[10px] font-black">
+        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+        EDUCATOR LIVE
+      </div>
+      {title && <span className="text-white text-[11px] font-bold mt-1 max-w-[170px] truncate">{title}</span>}
     </div>
   );
+}
+
+function BroadcastCamera({
+  sessionId,
+  token,
+  shape,
+  title,
+}: {
+  sessionId?: string;
+  token: string;
+  shape: string | null | undefined;
+  title?: string;
+}) {
+  const [livekitCreds, setLivekitCreds] = useState<{ token: string; url: string } | null>(null);
+  const [isRemoteActive, setIsRemoteActive] = useState(false);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    let cancelled = false;
+    fetch(`/api/whiteboard/sessions/${sessionId}/video-token?broadcast_token=${encodeURIComponent(token)}`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (!cancelled && json.success && json.data?.url && json.data?.token) {
+          setLivekitCreds({ token: json.data.token, url: json.data.url });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, token]);
+
+  if (livekitCreds?.token && livekitCreds?.url) {
+    return (
+      <LiveKitRoom
+        token={livekitCreds.token}
+        serverUrl={livekitCreds.url}
+        connect={true}
+        audio={false}
+        video={false}
+      >
+        <LiveKitCameraStream shape={shape} onTrackStatus={setIsRemoteActive} />
+        {!isRemoteActive && <LocalCameraFallback shape={shape} title={title} />}
+      </LiveKitRoom>
+    );
+  }
+
+  return <LocalCameraFallback shape={shape} title={title} />;
 }
 
 /** Read-only board mirror with laser pointer and PDF/PPT/Theme support */
@@ -467,7 +577,12 @@ export function BroadcastStage({ scheduleId, token }: { scheduleId: string; toke
 
       {/* Teacher Camera Overlay on Stage */}
       <div className="absolute z-30" style={cameraCornerStyle(data.cameraPosition)}>
-        <LocalCamera shape={data.cameraShape} />
+        <BroadcastCamera
+          sessionId={data.sessionId}
+          token={token}
+          shape={data.cameraShape}
+          title={data.title}
+        />
       </div>
     </div>
   );
