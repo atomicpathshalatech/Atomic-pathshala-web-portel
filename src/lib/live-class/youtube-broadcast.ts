@@ -44,9 +44,14 @@ export async function ensureYoutubeBroadcastForWhiteboard(
   const subjectName = (schedule as any)?.subject || "";
   const batchName = schedule?.batch?.name || "";
 
-  // Rich formatted academic title (YouTube limit 100 chars)
+  // Rich formatted academic title (YouTube limit 100 chars, no HTML characters)
   const cleanSubject = subjectName ? `[${subjectName}] ` : "";
-  const finalTitle = `${cleanSubject}${title} | ${teacherName} | Atomic Pathshala`.slice(0, 98);
+  const finalTitle = `${cleanSubject}${title} | ${teacherName} | Atomic Pathshala`
+    .replace(/[<>{}]/g, "")
+    .trim()
+    .slice(0, 92);
+
+  const effectiveStartTime = new Date(Math.max(Date.now() + 15_000, scheduledStartTime.getTime()));
 
   const description = [
     `🎓 Atomic Pathshala Live Classroom`,
@@ -61,7 +66,7 @@ export async function ensureYoutubeBroadcastForWhiteboard(
     .filter(Boolean)
     .join("\n");
 
-  const { stream, broadcast } = await createAndBindBroadcast(finalTitle, scheduledStartTime, description);
+  const { stream, broadcast } = await createAndBindBroadcast(finalTitle, effectiveStartTime, description);
 
   return prisma.whiteboardSession.update({
     where: { id: whiteboardSessionId },

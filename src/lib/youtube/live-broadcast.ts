@@ -113,22 +113,57 @@ export async function createLiveBroadcast(
     description ||
     `Atomic Pathshala Live Interactive Lecture: ${title}\n\nJoin live for comprehensive concept explanation, doubt clearing, and problem solving sessions.\n\nWebsite: https://atomicpathshala.com`;
 
-  const json = await youtubeApiFetch<{ id: string; snippet: { liveChatId?: string } }>("/liveBroadcasts", {
-    method: "POST",
-    query: { part: "snippet,status,contentDetails" },
-    body: JSON.stringify({
-      snippet: { title, description: desc, scheduledStartTime },
-      status: { privacyStatus: "unlisted", selfDeclaredMadeForKids: false },
-      contentDetails: {
-        enableEmbed: true,
-        enableAutoStart: true,
-        enableAutoStop: true,
-        enableDvr: true,
-        recordFromStart: true,
-        latencyPreference: "ultraLow",
-      },
-    }),
-  });
+  const cleanTitle = (title || "Atomic Pathshala Live Lecture")
+    .replace(/[<>{}]/g, "")
+    .trim()
+    .slice(0, 92);
+
+  const nowMs = Date.now();
+  const inputTimeMs = new Date(scheduledStartTime).getTime();
+  const validStartTime = new Date(
+    Math.max(nowMs + 15_000, isNaN(inputTimeMs) ? nowMs + 15_000 : inputTimeMs)
+  ).toISOString();
+
+  let json: { id: string; snippet: { liveChatId?: string } };
+
+  try {
+    json = await youtubeApiFetch<{ id: string; snippet: { liveChatId?: string } }>("/liveBroadcasts", {
+      method: "POST",
+      query: { part: "snippet,status,contentDetails" },
+      body: JSON.stringify({
+        snippet: { title: cleanTitle, description: desc, scheduledStartTime: validStartTime },
+        status: { privacyStatus: "unlisted", selfDeclaredMadeForKids: false },
+        contentDetails: {
+          enableEmbed: true,
+          enableAutoStart: true,
+          enableAutoStop: true,
+          enableDvr: true,
+          recordFromStart: true,
+          latencyPreference: "low",
+        },
+      }),
+    });
+  } catch (err) {
+    console.warn("[youtube_live_broadcast_fallback_attempt]", err);
+    // Fallback: minimal broadcast payload without strict latency/DVR settings
+    json = await youtubeApiFetch<{ id: string; snippet: { liveChatId?: string } }>("/liveBroadcasts", {
+      method: "POST",
+      query: { part: "snippet,status,contentDetails" },
+      body: JSON.stringify({
+        snippet: {
+          title: cleanTitle,
+          description: desc,
+          scheduledStartTime: new Date(Date.now() + 30_000).toISOString(),
+        },
+        status: { privacyStatus: "unlisted", selfDeclaredMadeForKids: false },
+        contentDetails: {
+          enableEmbed: true,
+          enableAutoStart: true,
+          enableAutoStop: true,
+        },
+      }),
+    });
+  }
 
   // Explicitly ensure the created broadcast's video status has embeddable: true and privacyStatus: "unlisted"
   try {

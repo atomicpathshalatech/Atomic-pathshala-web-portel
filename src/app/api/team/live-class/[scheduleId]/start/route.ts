@@ -362,13 +362,24 @@ export async function POST(
         }
       } catch (youtubeError) {
         console.error("[live_class_youtube_broadcast_error]", youtubeError);
-        const reason = youtubeError instanceof Error ? youtubeError.message : String(youtubeError);
+        let reason = youtubeError instanceof Error ? youtubeError.message : String(youtubeError);
+        try {
+          const jsonMatch = reason.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            if (parsed?.error?.message) {
+              reason = parsed.error.message;
+            }
+          }
+        } catch {
+          // ignore json parse error
+        }
         const hint = /quota/i.test(reason)
           ? " YouTube API daily quota is exhausted — students will join via interactive in-app live classroom."
           : /invalid_grant|unauthorized|401|insufficient/i.test(reason)
           ? " YouTube authorization expired — students will join via interactive in-app live classroom."
           : "";
-        youtubeSimulcastWarning = `Could not create YouTube stream (${reason.slice(0, 80)}...).${hint} Interactive App Class is active for all students.`;
+        youtubeSimulcastWarning = `Could not create YouTube stream (${reason.slice(0, 90)}).${hint} Interactive App Class is active for all students.`;
         // Fallback to LIVEKIT so students receive live whiteboard and camera
         effectiveTransport = "LIVEKIT";
         await prisma.whiteboardSession.update({
