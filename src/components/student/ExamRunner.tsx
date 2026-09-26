@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { FormulaText } from "@/components/test-portal/FormulaText";
 import { ExamLanguageModal } from "./ExamLanguageModal";
 import { ExamInstructionsView } from "./ExamInstructionsView";
+import { CamDrawRenderer } from "@/components/camdraw/CamDrawRenderer";
 
 export type QuestionData = {
   id: string;
@@ -22,6 +23,8 @@ export type QuestionData = {
   optionBHi?: string | null;
   optionCHi?: string | null;
   optionDHi?: string | null;
+  imageUrl?: string | null;
+  camDrawData?: any;
   mySelection: string | null;
 };
 
@@ -655,6 +658,28 @@ export function ExamRunner({
                 text={statement || "No statement available."}
                 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white leading-relaxed block"
               />
+
+              {/* CamDraw Universal Vector Structure */}
+              {currentQ?.camDrawData && (
+                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 flex justify-center my-3">
+                  <CamDrawRenderer
+                    document={currentQ.camDrawData}
+                    theme="light"
+                    maxWidth={550}
+                  />
+                </div>
+              )}
+
+              {/* Student-Facing Question Diagram (if genuine diagram and no CamDraw vector) */}
+              {!currentQ?.camDrawData && currentQ?.imageUrl && (
+                <div className="flex justify-center my-3 p-2 bg-white dark:bg-slate-950/40 rounded-2xl border border-slate-200 dark:border-slate-800">
+                  <img
+                    src={currentQ.imageUrl}
+                    alt="Question Diagram"
+                    className="max-h-64 object-contain rounded-xl"
+                  />
+                </div>
+              )}
             </div>
 
             {/* Options List */}

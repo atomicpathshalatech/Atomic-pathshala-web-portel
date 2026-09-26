@@ -13,6 +13,9 @@ import { AiAssistantTools } from "./AiAssistantTools";
 import { SimilarityReport, SimilarityMatch } from "@/lib/questions/similarity";
 import { AiMetadataSuggestion } from "@/lib/questions/ai-service";
 import { detectNeetQuestionType, NEET_QUESTION_TYPES, NeetTypeDetectionResult } from "@/lib/questions/neet-question-classifier";
+import { CamDrawDocument } from "@/lib/camdraw/types";
+import { CamDrawRenderer } from "@/components/camdraw/CamDrawRenderer";
+import { CamDrawEditor } from "@/components/camdraw/CamDrawEditor";
 
 export interface AtomicQuestionEditorProps {
   questionId?: string;
@@ -137,6 +140,9 @@ export function AtomicQuestionEditor({
   // Figure / Diagram attachment (For Student UI)
   const [figureUrl, setFigureUrl] = useState(initialQuestion?.imageUrl || "");
   const [figureCaption, setFigureCaption] = useState("");
+  const [camDrawData, setCamDrawData] = useState<CamDrawDocument | null>(initialQuestion?.camDrawData || null);
+  const [isCamDrawModalOpen, setIsCamDrawModalOpen] = useState(false);
+  const [camDrawRecognizing, setCamDrawRecognizing] = useState(false);
 
   // Taxonomy states
   const [subject, setSubject] = useState(initialQuestion?.subject || initialSubject);
@@ -589,6 +595,35 @@ export function AtomicQuestionEditor({
     }
   };
 
+  const handleRecreateWithCamDraw = async () => {
+    if (!questionImagePreview) {
+      toast.error("Please upload or attach a question reference image first.");
+      return;
+    }
+    setCamDrawRecognizing(true);
+    const toastId = toast.loading("AI Vision reading scientific structures...");
+    try {
+      const res = await fetch("/api/team/camdraw/recognize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageUrl: questionImagePreview,
+          subject: subject || "Chemistry",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to recognize structure");
+      }
+      setCamDrawData(data.document);
+      toast.success("Structure reconstructed into CamDraw vector!", { id: toastId });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to recognize structure", { id: toastId });
+    } finally {
+      setCamDrawRecognizing(false);
+    }
+  };
+
   const handleSubmit = async () => {
     setSaveError("");
 
@@ -633,6 +668,7 @@ export function AtomicQuestionEditor({
         solutionHi: solutionHi.trim() || undefined,
         figureUrl: figureUrl.trim() || undefined,
         figureCaption: figureCaption.trim() || undefined,
+        camDrawData: camDrawData || undefined,
         referenceImageUrl: questionImagePreview || undefined,
         solutionImageUrl: solutionImagePreview || undefined,
         tags,
@@ -1411,6 +1447,99 @@ export function AtomicQuestionEditor({
                 </div>
               )}
             </div>
+
+            {/* B2. CAMDRAW STRUCTURE / VECTOR DOCK */}
+            <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 text-white space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="p-1 rounded-lg bg-blue-500/20 text-blue-400">
+                    <span className="material-symbols-outlined text-base">draw</span>
+                  </span>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wide">
+                      CamDraw Vector Structure (Editable Diagram)
+                    </h4>
+                    <p className="text-[11px] text-slate-400">
+                      High-fidelity chemical structures, circuits, optics &amp; bio vectors
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {questionImagePreview && (
+                    <button
+                      type="button"
+                      onClick={handleRecreateWithCamDraw}
+                      disabled={camDrawRecognizing}
+                      className="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 transition flex items-center gap-1.5 disabled:opacity-50"
+                      title="Convert uploaded screenshot into editable vector diagram"
+                    >
+                      <span className="material-symbols-outlined text-sm">auto_fix_high</span>
+                      <span>Recreate with CamDraw</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setIsCamDrawModalOpen(true)}
+                    className="px-3 py-1.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white shadow-md transition flex items-center gap-1.5"
+                  >
+                    <span className="material-symbols-outlined text-sm">edit</span>
+                    <span>{camDrawData?.elements?.length ? "Edit in CamDraw" : "Open CamDraw Editor"}</span>
+                  </button>
+
+                  {camDrawData?.elements && camDrawData.elements.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCamDrawData(null);
+                        toast.info("CamDraw structure removed.");
+                      }}
+                      className="px-2 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-red-950/40 text-slate-400 hover:text-red-400 transition"
+                      title="Remove Structure"
+                    >
+                      <span className="material-symbols-outlined text-sm">delete</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Vector Preview */}
+              {camDrawData?.elements && camDrawData.elements.length > 0 ? (
+                <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 flex flex-col items-center justify-center relative group">
+                  <CamDrawRenderer document={camDrawData} theme="dark" maxWidth={550} maxHeight={260} />
+                  <button
+                    type="button"
+                    onClick={() => setIsCamDrawModalOpen(true)}
+                    className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-2 text-xs font-bold text-white backdrop-blur-[2px] rounded-xl"
+                  >
+                    <span className="material-symbols-outlined text-base">edit</span>
+                    <span>Click to Edit in CamDraw Studio</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="p-4 rounded-xl border border-dashed border-slate-800 bg-slate-950/40 text-center">
+                  <p className="text-xs text-slate-500">
+                    No chemical structure or scientific vector attached. Click &quot;Open CamDraw Editor&quot; or &quot;Recreate with CamDraw&quot; to build or recognize structures from reference image.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* CAMDRAW MODAL */}
+            {isCamDrawModalOpen && (
+              <CamDrawEditor
+                initialDocument={camDrawData}
+                referenceImageUrl={questionImagePreview || undefined}
+                hintSubject={subject}
+                onSave={(newDoc) => {
+                  setCamDrawData(newDoc);
+                  setIsCamDrawModalOpen(false);
+                  toast.success("CamDraw structure attached to question!");
+                }}
+                onClose={() => setIsCamDrawModalOpen(false)}
+              />
+            )}
 
             {/* C. OPTIONS (A, B, C, D) & CORRECT ANSWER */}
             <div className="space-y-3">

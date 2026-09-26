@@ -5,6 +5,8 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { Simulation3DModal } from "@/components/live-class/Simulation3DModal";
 import { ScienceLabsModal } from "@/components/live-class/ScienceLabsModal";
+import { CamDrawEditor } from "@/components/camdraw/CamDrawEditor";
+import { exportCamDrawToSvgString } from "@/lib/camdraw/renderer";
 
 // ---- PEN STYLES & COLOR PALETTES (Screenshots 2, 4, 5) ----
 export const PEN_STYLES = [
@@ -272,6 +274,7 @@ export function AtomicWhiteboardStudio({
   const [is3DOpen, setIs3DOpen] = useState(false);
   const [isSimOpen, setIsSimOpen] = useState(false);
   const [isThemeOpen, setIsThemeOpen] = useState(false);
+  const [isCamDrawOpen, setIsCamDrawOpen] = useState(false);
 
   // Poll / Quiz State (Requirement 7)
   const [isPollOpen, setIsPollOpen] = useState(false);
@@ -1148,6 +1151,15 @@ export function AtomicWhiteboardStudio({
 
             <button
               type="button"
+              onClick={() => setIsCamDrawOpen(true)}
+              className="px-3 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-xs font-bold text-purple-300 flex items-center gap-1.5 transition"
+            >
+              <span className="material-symbols-outlined text-sm">draw</span>
+              CamDraw
+            </button>
+
+            <button
+              type="button"
               onClick={() => {
                 updateDeviceList();
                 setIsSettingsOpen(true);
@@ -1961,6 +1973,23 @@ export function AtomicWhiteboardStudio({
           onClose={() => setIsSimOpen(false)}
           onStampToWhiteboard={handleInsertSnapshot}
         />
+      )}
+
+      {/* CamDraw Interactive Vector Editor Modal */}
+      {isCamDrawOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-[#0f111a] border border-[#2d3045] rounded-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden shadow-2xl">
+            <CamDrawEditor
+              onSave={(doc) => {
+                const svgStr = exportCamDrawToSvgString(doc, { theme: "dark", responsive: true });
+                const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgStr)}`;
+                handleInsertSnapshot(dataUrl, "CamDraw Vector Structure");
+                setIsCamDrawOpen(false);
+              }}
+              onClose={() => setIsCamDrawOpen(false)}
+            />
+          </div>
+        </div>
       )}
 
       {/* Slide Themes Modal */}

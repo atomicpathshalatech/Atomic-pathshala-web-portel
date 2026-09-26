@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { QuestionReviewItem } from "@/lib/test-engine/analysis-engine";
 import { FormulaText } from "@/components/test-portal/FormulaText";
+import { CamDrawRenderer } from "@/components/camdraw/CamDrawRenderer";
 
 export function QuestionReviewSection({
   questions,
@@ -148,6 +149,28 @@ export function QuestionReviewSection({
                   text={statement}
                   className="text-sm sm:text-base font-bold text-slate-900 dark:text-white leading-relaxed block"
                 />
+
+                {/* CamDraw Universal Vector Structure */}
+                {q.camDrawData && (
+                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 flex justify-center my-3">
+                    <CamDrawRenderer
+                      document={q.camDrawData}
+                      theme="light"
+                      maxWidth={550}
+                    />
+                  </div>
+                )}
+
+                {/* Question Diagram (if genuine diagram and no CamDraw vector) */}
+                {!q.camDrawData && q.imageUrl && (
+                  <div className="flex justify-center my-3 p-2 bg-white dark:bg-slate-950/40 rounded-2xl border border-slate-200 dark:border-slate-800">
+                    <img
+                      src={q.imageUrl}
+                      alt="Question Diagram"
+                      className="max-h-64 object-contain rounded-xl"
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Options Grid */}

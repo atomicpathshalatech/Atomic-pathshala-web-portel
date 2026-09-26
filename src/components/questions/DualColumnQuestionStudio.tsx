@@ -32,6 +32,8 @@ export interface QuestionEntry {
   solutionHi: string;
   solutionEn: string;
   imageUrl?: string;
+  referenceImageUrl?: string;
+  camDrawData?: any;
   isSaved?: boolean;
 }
 

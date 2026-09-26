@@ -70,6 +70,8 @@ export default async function DppAuthorPage({ params }: { params: { id: string }
       solutionHi: trHi?.solution || "",
       solutionEn: trEn?.solution || "",
       imageUrl: q.imageUrl || undefined,
+      referenceImageUrl: (q as any).referenceImageUrl || undefined,
+      camDrawData: (q as any).camDrawData || undefined,
       isSaved: true,
     });
     slotIdx++;

@@ -100,6 +100,8 @@ export default async function TestAttemptPage({ params }: { params: { id: string
       optionBHi: hiOpts.B || null,
       optionCHi: hiOpts.C || null,
       optionDHi: hiOpts.D || null,
+      imageUrl: sq.question.imageUrl || null,
+      camDrawData: (sq.question as any).camDrawData || null,
       mySelection: answersMap.get(sq.question.id) ?? null,
     };
   });

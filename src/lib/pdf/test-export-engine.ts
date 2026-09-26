@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db";
 import { renderFormulaContent } from "@/lib/test-portal/formula";
+import { exportCamDrawToSvgString, parseCamDrawDocument } from "@/lib/camdraw/renderer";
 
 export interface TestExportOptions {
   withSolution: boolean;
@@ -32,6 +33,7 @@ export interface FormattedExportQuestion {
   solutionEn: string;
   solutionHi: string;
   imageUrl?: string | null;
+  camDrawSvg?: string | null;
 }
 
 export interface FormattedExportSection {
@@ -201,6 +203,17 @@ export async function fetchCanonicalTestData(testId: string): Promise<FormattedE
           q.assets?.some((a) => a.type === "REFERENCE" && a.publicUrl === genuineCandidateUrl));
       const validDiagramUrl = isReferenceImage ? null : genuineCandidateUrl;
 
+      // Render vector SVG for CamDraw data
+      let camDrawSvg: string | null = null;
+      const parsedCamDraw = parseCamDrawDocument((q as any).camDrawData);
+      if (parsedCamDraw && parsedCamDraw.elements?.length > 0) {
+        try {
+          camDrawSvg = exportCamDrawToSvgString(parsedCamDraw, "print");
+        } catch {
+          camDrawSvg = null;
+        }
+      }
+
       const formattedQ: FormattedExportQuestion = {
         number: globalQuestionNumber,
         id: q.id,
@@ -214,6 +227,7 @@ export async function fetchCanonicalTestData(testId: string): Promise<FormattedE
         solutionEn: enTrans?.solution || q.solution || "",
         solutionHi: hiTrans?.solution || enTrans?.solution || q.solution || "",
         imageUrl: validDiagramUrl || null,
+        camDrawSvg,
       };
 
       allQuestions.push(formattedQ);
@@ -651,13 +665,21 @@ export function generateTestPaperHtml(
              </div>`
           : `<div class="opts-stacked">${q.options.map((opt, i) => renderOptionItem(opt, i, false)).join("")}</div>`;
 
-        const diagramHi = q.imageUrl ? `
+        const diagramHi = q.camDrawSvg ? `
+          <div class="q-diagram-wrap q-camdraw-wrap">
+            ${q.camDrawSvg}
+          </div>
+        ` : q.imageUrl ? `
           <div class="q-diagram-wrap">
             <img src="${q.imageUrl}" alt="Diagram for Question ${q.number}" class="q-diagram-img" />
           </div>
         ` : "";
 
-        const diagramEn = q.imageUrl ? `
+        const diagramEn = q.camDrawSvg ? `
+          <div class="q-diagram-wrap q-camdraw-wrap">
+            ${q.camDrawSvg}
+          </div>
+        ` : q.imageUrl ? `
           <div class="q-diagram-wrap">
             <img src="${q.imageUrl}" alt="Diagram for Question ${q.number}" class="q-diagram-img" />
           </div>
@@ -898,12 +920,20 @@ export function generateTestPaperHtml(
         const solEnHtml = renderFormulaContent(q.solutionEn || q.solutionHi || "Detailed explanation provided as per standard textbook principles.");
         const solHiHtml = renderFormulaContent(q.solutionHi || q.solutionEn || "विस्तृत व्याख्या मानक पाठ्यपुस्तक सिद्धांतों के अनुसार प्रदान की गई है।");
 
-        const diagramHi = q.imageUrl ? `
+        const diagramHi = q.camDrawSvg ? `
+          <div class="sol-diagram-wrap sol-camdraw-wrap">
+            ${q.camDrawSvg}
+          </div>
+        ` : q.imageUrl ? `
           <div class="sol-diagram-wrap">
             <img src="${q.imageUrl}" alt="Diagram for Q${q.number}" class="sol-diagram-img" />
           </div>
         ` : "";
-        const diagramEn = q.imageUrl ? `
+        const diagramEn = q.camDrawSvg ? `
+          <div class="sol-diagram-wrap sol-camdraw-wrap">
+            ${q.camDrawSvg}
+          </div>
+        ` : q.imageUrl ? `
           <div class="sol-diagram-wrap">
             <img src="${q.imageUrl}" alt="Diagram for Q${q.number}" class="sol-diagram-img" />
           </div>

@@ -133,6 +133,7 @@ export async function POST(request: NextRequest) {
       figureUrl,
       referenceImageUrl,
       solutionImageUrl,
+      camDrawData,
       isPublished = true,
       dppId,
       testSectionId,
@@ -211,6 +212,7 @@ export async function POST(request: NextRequest) {
         difficulty: difficulty as Difficulty,
         imageUrl: figureUrl?.trim() || null, // STRICTLY for genuine question figure/diagram
         referenceImageUrl: referenceImageUrl?.trim() || null, // Editor-only reference image
+        camDrawData: camDrawData || null, // Canonical CamDraw Vector document
         category: category?.trim() || null,
         pyqExam: pyqExam?.trim() || null,
         pyqYear: pyqYear ? parseInt(String(pyqYear), 10) || null : null,
@@ -386,6 +388,7 @@ export async function PUT(request: NextRequest) {
       figureUrl,
       referenceImageUrl,
       solutionImageUrl,
+      camDrawData,
       tags = [],
       dppId,
       testSectionId,
@@ -486,6 +489,7 @@ export async function PUT(request: NextRequest) {
         solution: solutionEn?.trim() || solutionHi?.trim() || existing.solution,
         imageUrl: figureUrl !== undefined ? (figureUrl?.trim() || null) : existing.imageUrl,
         referenceImageUrl: referenceImageUrl !== undefined ? (referenceImageUrl?.trim() || null) : (existing as any).referenceImageUrl,
+        camDrawData: camDrawData !== undefined ? (camDrawData || null) : (existing as any).camDrawData,
         tags: tagsString || existing.tags,
         version: { increment: 1 },
         editedById: session.user.id,

@@ -1,0 +1,596 @@
+/**
+ * CAMDRAW — PRESET TEMPLATES & ACADEMIC STRUCTURES
+ * Extensible library of standardized structures across STEM subjects
+ */
+
+import { CamDrawDocument } from "./types";
+
+export interface StructureTemplate {
+  id: string;
+  name: string;
+  category: "Chemistry" | "Organic Reactions" | "Physics" | "Biology" | "Mathematics";
+  description: string;
+  doc: CamDrawDocument;
+}
+
+export const CAMDRAW_TEMPLATES: StructureTemplate[] = [
+  // 1. BENZENE RING
+  {
+    id: "benzene_ring",
+    name: "Benzene Ring",
+    category: "Chemistry",
+    description: "Standard aromatic benzene ring with delocalized pi electron ring",
+    doc: {
+      version: 1,
+      type: "chemical",
+      canvas: { width: 300, height: 300, background: "transparent" },
+      elements: [
+        {
+          id: "r_benzene",
+          type: "ring",
+          ringType: "benzene",
+          cx: 150,
+          cy: 150,
+          radius: 65,
+          rotation: 0,
+          aromaticCircle: true,
+          color: "#1e293b",
+        },
+      ],
+    },
+  },
+
+  // 2. PHENOL
+  {
+    id: "phenol_structure",
+    name: "Phenol (C6H5OH)",
+    category: "Chemistry",
+    description: "Benzene ring with hydroxyl substituent",
+    doc: {
+      version: 1,
+      type: "chemical",
+      canvas: { width: 340, height: 360, background: "transparent" },
+      elements: [
+        {
+          id: "r_phenol",
+          type: "ring",
+          ringType: "benzene",
+          cx: 170,
+          cy: 210,
+          radius: 60,
+          rotation: 0,
+          aromaticCircle: true,
+          color: "#1e293b",
+        },
+        {
+          id: "b_oh",
+          type: "bond",
+          start: { x: 170, y: 150 },
+          end: { x: 170, y: 100 },
+          bondType: "single",
+          thickness: 2.2,
+          color: "#1e293b",
+        },
+        {
+          id: "a_oh",
+          type: "atom",
+          x: 170,
+          y: 75,
+          symbol: "OH",
+          fontSize: 20,
+          color: "#0f172a",
+        },
+      ],
+    },
+  },
+
+  // 3. TOLUENE & BENZOIC ACID
+  {
+    id: "benzoic_acid",
+    name: "Benzoic Acid (C6H5COOH)",
+    category: "Chemistry",
+    description: "Aromatic carboxylic acid with COOH group",
+    doc: {
+      version: 1,
+      type: "chemical",
+      canvas: { width: 340, height: 380, background: "transparent" },
+      elements: [
+        {
+          id: "r_benzo",
+          type: "ring",
+          ringType: "benzene",
+          cx: 170,
+          cy: 230,
+          radius: 60,
+          rotation: 0,
+          aromaticCircle: true,
+          color: "#1e293b",
+        },
+        {
+          id: "b_cooh",
+          type: "bond",
+          start: { x: 170, y: 170 },
+          end: { x: 170, y: 110 },
+          bondType: "single",
+          thickness: 2.2,
+          color: "#1e293b",
+        },
+        {
+          id: "a_cooh",
+          type: "atom",
+          x: 170,
+          y: 80,
+          symbol: "COOH",
+          fontSize: 20,
+          color: "#0f172a",
+        },
+      ],
+    },
+  },
+
+  // 4. ETHANOL / ACETONE
+  {
+    id: "acetone_structure",
+    name: "Acetone (CH3COCH3)",
+    category: "Chemistry",
+    description: "Propan-2-one with carbonyl double bond",
+    doc: {
+      version: 1,
+      type: "chemical",
+      canvas: { width: 380, height: 300, background: "transparent" },
+      elements: [
+        {
+          id: "a_c1",
+          type: "atom",
+          x: 80,
+          y: 200,
+          symbol: "H3C",
+          fontSize: 18,
+        },
+        {
+          id: "a_c2",
+          type: "atom",
+          x: 190,
+          y: 200,
+          symbol: "C",
+          fontSize: 18,
+        },
+        {
+          id: "a_c3",
+          type: "atom",
+          x: 300,
+          y: 200,
+          symbol: "CH3",
+          fontSize: 18,
+        },
+        {
+          id: "a_o",
+          type: "atom",
+          x: 190,
+          y: 80,
+          symbol: "O",
+          fontSize: 18,
+          lonePairs: 2,
+        },
+        {
+          id: "b_12",
+          type: "bond",
+          start: { x: 115, y: 200 },
+          end: { x: 175, y: 200 },
+          bondType: "single",
+        },
+        {
+          id: "b_23",
+          type: "bond",
+          start: { x: 205, y: 200 },
+          end: { x: 265, y: 200 },
+          bondType: "single",
+        },
+        {
+          id: "b_c_o",
+          type: "bond",
+          start: { x: 190, y: 180 },
+          end: { x: 190, y: 105 },
+          bondType: "double",
+        },
+      ],
+    },
+  },
+
+  // 5. ORGANIC REACTION: ALCOHOL OXIDATION
+  {
+    id: "reaction_alcohol_oxidation",
+    name: "Ethanol to Acetic Acid (Oxidation)",
+    category: "Organic Reactions",
+    description: "Oxidation of primary alcohol using alkaline KMnO4 with heat",
+    doc: {
+      version: 1,
+      type: "reaction",
+      canvas: { width: 700, height: 260, background: "transparent" },
+      elements: [
+        {
+          id: "a_reactant",
+          type: "atom",
+          x: 120,
+          y: 130,
+          symbol: "CH3-CH2-OH",
+          fontSize: 22,
+          color: "#0f172a",
+        },
+        {
+          id: "arr_1",
+          type: "reaction_arrow",
+          start: { x: 250, y: 130 },
+          end: { x: 450, y: 130 },
+          arrowStyle: "forward",
+          topReagents: "Alk. KMnO4 + Δ",
+          bottomConditions: "Acidified (H+)",
+          thickness: 2.5,
+          color: "#0284c7",
+        },
+        {
+          id: "a_product",
+          type: "atom",
+          x: 570,
+          y: 130,
+          symbol: "CH3-COOH",
+          fontSize: 22,
+          color: "#0f172a",
+        },
+      ],
+    },
+  },
+
+  // 6. SN2 CURVED ARROW MECHANISM
+  {
+    id: "mechanism_sn2",
+    name: "SN2 Nucleophilic Substitution (Curved Arrow)",
+    category: "Organic Reactions",
+    description: "Backside attack of hydroxide on methyl bromide showing electron movement",
+    doc: {
+      version: 1,
+      type: "reaction",
+      canvas: { width: 750, height: 320, background: "transparent" },
+      elements: [
+        {
+          id: "a_nuc",
+          type: "atom",
+          x: 80,
+          y: 160,
+          symbol: "HO⁻",
+          fontSize: 22,
+          lonePairs: 3,
+          color: "#dc2626",
+        },
+        {
+          id: "a_sub",
+          type: "atom",
+          x: 270,
+          y: 160,
+          symbol: "CH3-Br",
+          fontSize: 22,
+          color: "#0f172a",
+        },
+        {
+          id: "c_arr_1",
+          type: "curved_arrow",
+          start: { x: 115, y: 145 },
+          control: { x: 185, y: 95 },
+          end: { x: 235, y: 145 },
+          arrowHead: "double_barb",
+          color: "#dc2626",
+        },
+        {
+          id: "c_arr_2",
+          type: "curved_arrow",
+          start: { x: 295, y: 145 },
+          control: { x: 330, y: 100 },
+          end: { x: 350, y: 145 },
+          arrowHead: "double_barb",
+          color: "#dc2626",
+        },
+        {
+          id: "arr_main",
+          type: "reaction_arrow",
+          start: { x: 370, y: 160 },
+          end: { x: 480, y: 160 },
+          arrowStyle: "forward",
+          topReagents: "Acetone (polar aprotic)",
+          thickness: 2.2,
+        },
+        {
+          id: "a_prod",
+          type: "atom",
+          x: 600,
+          y: 160,
+          symbol: "HO-CH3  +  Br⁻",
+          fontSize: 22,
+          color: "#0f172a",
+        },
+      ],
+    },
+  },
+
+  // 7. PHYSICS: RC CIRCUIT DIAGRAM
+  {
+    id: "physics_rc_circuit",
+    name: "RC Circuit Diagram",
+    category: "Physics",
+    description: "Series resistor-capacitor circuit connected with DC battery and switch",
+    doc: {
+      version: 1,
+      type: "physics",
+      canvas: { width: 600, height: 380, background: "transparent" },
+      elements: [
+        {
+          id: "sym_batt",
+          type: "physics_symbol",
+          symbolType: "battery",
+          x: 100,
+          y: 190,
+          width: 50,
+          height: 80,
+          label: "V = 12V",
+        },
+        {
+          id: "sym_res",
+          type: "physics_symbol",
+          symbolType: "resistor",
+          x: 300,
+          y: 80,
+          width: 100,
+          height: 35,
+          label: "R = 100 Ω",
+        },
+        {
+          id: "sym_cap",
+          type: "physics_symbol",
+          symbolType: "capacitor",
+          x: 480,
+          y: 190,
+          width: 40,
+          height: 80,
+          label: "C = 10 µF",
+        },
+        {
+          id: "sym_sw",
+          type: "physics_symbol",
+          symbolType: "switch",
+          x: 170,
+          y: 80,
+          width: 60,
+          height: 35,
+          label: "S (t=0)",
+        },
+        {
+          id: "conn_top",
+          type: "connector",
+          points: [
+            { x: 100, y: 150 },
+            { x: 100, y: 80 },
+            { x: 150, y: 80 },
+          ],
+          style: "solid",
+        },
+        {
+          id: "conn_mid",
+          type: "connector",
+          points: [
+            { x: 220, y: 80 },
+            { x: 260, y: 80 },
+          ],
+          style: "solid",
+        },
+        {
+          id: "conn_top_right",
+          type: "connector",
+          points: [
+            { x: 350, y: 80 },
+            { x: 480, y: 80 },
+            { x: 480, y: 150 },
+          ],
+          style: "solid",
+        },
+        {
+          id: "conn_bottom",
+          type: "connector",
+          points: [
+            { x: 480, y: 230 },
+            { x: 480, y: 300 },
+            { x: 100, y: 300 },
+            { x: 100, y: 230 },
+          ],
+          style: "solid",
+        },
+      ],
+    },
+  },
+
+  // 8. PHYSICS: RAY OPTICS (CONVEX LENS)
+  {
+    id: "physics_convex_lens_rays",
+    name: "Ray Optics: Convex Lens Ray Diagram",
+    category: "Physics",
+    description: "Refraction of parallel and focal rays through a bi-convex lens",
+    doc: {
+      version: 1,
+      type: "physics",
+      canvas: { width: 700, height: 350, background: "transparent" },
+      elements: [
+        {
+          id: "p_axis",
+          type: "connector",
+          points: [
+            { x: 50, y: 175 },
+            { x: 650, y: 175 },
+          ],
+          style: "dashed",
+          color: "#64748b",
+        },
+        {
+          id: "lens_1",
+          type: "physics_symbol",
+          symbolType: "convex_lens",
+          x: 350,
+          y: 175,
+          width: 30,
+          height: 220,
+          label: "Convex Lens",
+        },
+        {
+          id: "obj_arrow",
+          type: "physics_symbol",
+          symbolType: "force_vector",
+          x: 150,
+          y: 175,
+          width: 20,
+          height: 80,
+          rotation: -90,
+          label: "Object (AB)",
+        },
+        {
+          id: "ray_1",
+          type: "connector",
+          points: [
+            { x: 150, y: 95 },
+            { x: 350, y: 95 },
+            { x: 550, y: 255 },
+          ],
+          style: "solid",
+          arrowEnd: true,
+          color: "#2563eb",
+        },
+        {
+          id: "ray_2",
+          type: "connector",
+          points: [
+            { x: 150, y: 95 },
+            { x: 350, y: 175 },
+            { x: 550, y: 255 },
+          ],
+          style: "solid",
+          arrowEnd: true,
+          color: "#dc2626",
+        },
+        {
+          id: "img_arrow",
+          type: "physics_symbol",
+          symbolType: "force_vector",
+          x: 550,
+          y: 175,
+          width: 20,
+          height: 80,
+          rotation: 90,
+          label: "Real Image (A'B')",
+        },
+        {
+          id: "lbl_f1",
+          type: "text",
+          x: 250,
+          y: 195,
+          text: "F₁",
+          fontSize: 14,
+        },
+        {
+          id: "lbl_f2",
+          type: "text",
+          x: 450,
+          y: 195,
+          text: "F₂",
+          fontSize: 14,
+        },
+      ],
+    },
+  },
+
+  // 9. BIOLOGY: EUKARYOTIC CELL
+  {
+    id: "biology_cell_diagram",
+    name: "Animal Cell Schematic",
+    category: "Biology",
+    description: "Simplified animal cell with nucleus, mitochondria and cell membrane labels",
+    doc: {
+      version: 1,
+      type: "biology",
+      canvas: { width: 600, height: 400, background: "transparent" },
+      elements: [
+        {
+          id: "cell_mem",
+          type: "bio_shape",
+          shapeType: "cell_membrane",
+          x: 300,
+          y: 200,
+          width: 420,
+          height: 280,
+          label: "Plasma Membrane",
+        },
+        {
+          id: "nuc",
+          type: "bio_shape",
+          shapeType: "nucleus",
+          x: 260,
+          y: 180,
+          width: 120,
+          height: 120,
+          label: "Nucleus",
+        },
+        {
+          id: "mito_1",
+          type: "bio_shape",
+          shapeType: "mitochondria",
+          x: 420,
+          y: 140,
+          width: 70,
+          height: 40,
+          label: "Mitochondria",
+        },
+        {
+          id: "mito_2",
+          type: "bio_shape",
+          shapeType: "mitochondria",
+          x: 180,
+          y: 260,
+          width: 70,
+          height: 40,
+          label: "Mitochondria",
+        },
+      ],
+    },
+  },
+
+  // 10. MATHEMATICS: CARTESIAN PLANE & PARABOLA
+  {
+    id: "math_parabola_graph",
+    name: "Parabolic Graph y = x²",
+    category: "Mathematics",
+    description: "Standard coordinate axes with quadratic function curve",
+    doc: {
+      version: 1,
+      type: "math",
+      canvas: { width: 500, height: 400, background: "transparent" },
+      elements: [
+        {
+          id: "axes_1",
+          type: "math_plot",
+          plotType: "axes",
+          cx: 250,
+          cy: 280,
+          width: 360,
+          height: 300,
+          xLabel: "X-axis",
+          yLabel: "Y-axis",
+        },
+        {
+          id: "curve_parabola",
+          type: "math_plot",
+          plotType: "parabola",
+          cx: 250,
+          cy: 280,
+          width: 160,
+          height: 160,
+          label: "y = x²",
+        },
+      ],
+    },
+  },
+];

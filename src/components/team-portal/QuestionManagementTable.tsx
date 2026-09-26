@@ -26,9 +26,11 @@ import {
   BookOpen,
   Flag,
   Image as ImageIcon,
+  Compass,
 } from "lucide-react";
 import { FormulaText } from "@/components/test-portal/FormulaText";
 import { SecureDeleteResourceModal } from "@/components/common/SecureDeleteResourceModal";
+import { CamDrawRenderer } from "@/components/camdraw/CamDrawRenderer";
 
 export interface QuestionRow {
   id: string;
@@ -637,6 +639,12 @@ export function QuestionManagementTable({
                               <span>{q.pyqSource || `${q.pyqExam} ${q.pyqYear || ""}`}</span>
                             </span>
                           )}
+                          {(q as any).camDrawData && (
+                            <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded inline-flex items-center gap-1 font-mono">
+                              <Compass className="w-2.5 h-2.5 text-indigo-600" />
+                              <span>CamDraw Vector</span>
+                            </span>
+                          )}
                         </div>
                         <p className="line-clamp-2 text-slate-900 font-medium text-xs leading-relaxed">
                           {primaryStatement}
@@ -946,11 +954,21 @@ export function QuestionManagementTable({
             </div>
 
             {/* Question Brief */}
-            <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 text-xs space-y-1">
+            <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 text-xs space-y-2">
               <span className="font-bold text-slate-700 block">Statement:</span>
               <p className="text-slate-900 line-clamp-3">
                 {reviewModalQuestion.question.translations[0]?.statement || "—"}
               </p>
+
+              {(reviewModalQuestion.question as any).camDrawData && (
+                <div className="p-3 bg-white rounded-xl border border-slate-200 flex justify-center">
+                  <CamDrawRenderer
+                    document={(reviewModalQuestion.question as any).camDrawData}
+                    theme="light"
+                    maxHeight={160}
+                  />
+                </div>
+              )}
             </div>
 
             <form onSubmit={handleReviewDecision} className="space-y-4">

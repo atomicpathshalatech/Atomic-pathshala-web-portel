@@ -129,6 +129,8 @@ export type QuestionReviewItem = {
   optionsHi?: Record<string, string>;
   solutionEn?: string | null;
   solutionHi?: string | null;
+  imageUrl?: string | null;
+  camDrawData?: any;
   ncertReference?: {
     book?: string | null;
     page?: string | null;
@@ -417,6 +419,8 @@ export async function calculateAndStoreTestAnalysis(
       optionsHi: (hiTrans?.options as Record<string, string>) || {},
       solutionEn: enTrans?.solution || q.solution,
       solutionHi: hiTrans?.solution,
+      imageUrl: q.imageUrl || null,
+      camDrawData: (q as any).camDrawData || null,
       ncertReference: {
         book: q.ncertBook,
         page: q.ncertPage,

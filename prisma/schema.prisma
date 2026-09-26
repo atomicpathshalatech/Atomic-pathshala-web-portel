@@ -2098,6 +2098,8 @@ model Question {
   difficulty    Difficulty   @default(MEDIUM)
   imageUrl      String?
   referenceImageUrl String?
+  camDrawData       Json?
+  camDrawVersion    Int?         @default(1)
   category      String?
   pyqSource     String?
   pyqExam       String?

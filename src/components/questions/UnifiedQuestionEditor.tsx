@@ -31,11 +31,14 @@ import {
   Wand2,
   Tag,
   Trash2,
+  Compass,
 } from "lucide-react";
 import { EquationLivePreview } from "./EquationLivePreview";
 import { FormulaInsertToolbar } from "./FormulaInsertToolbar";
 import { QuestionIdBadge } from "./QuestionIdBadge";
 import { QuestionMetadataDrawer } from "./QuestionMetadataDrawer";
+import { CamDrawRenderer } from "@/components/camdraw/CamDrawRenderer";
+import { CamDrawEditor } from "@/components/camdraw/CamDrawEditor";
 
 export interface UnifiedQuestionEditorProps {
   mode: "bank" | "dpp" | "test";
@@ -372,6 +375,10 @@ export function UnifiedQuestionEditor({
   const [isUploadingSolImg, setIsUploadingSolImg] = useState<boolean>(false);
   const [isSolutionImgZoomed, setIsSolutionImgZoomed] = useState<boolean>(false);
   const solutionFileInputRef = useRef<HTMLInputElement>(null);
+
+  // 4. CamDraw Vector Structure State
+  const [camDrawData, setCamDrawData] = useState<any>(initialQuestion?.camDrawData || null);
+  const [isCamDrawModalOpen, setIsCamDrawModalOpen] = useState<boolean>(false);
 
   // 4. AI PIPELINE STATES
   const [isExtracting, setIsExtracting] = useState<boolean>(false);
@@ -1056,6 +1063,7 @@ export function UnifiedQuestionEditor({
         figureUrl: diagramUrl || undefined,
         referenceImageUrl: referenceImageUrl || undefined,
         solutionImageUrl: solutionImageUrl || undefined,
+        camDrawData: camDrawData || undefined,
         dppId,
         testSectionId,
         isPublished: false,
@@ -1451,6 +1459,108 @@ export function UnifiedQuestionEditor({
             />
           </div>
         </div>
+      )}
+
+      {/* 3A. CAMDRAW UNIVERSAL STRUCTURE ENGINE DOCK */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm text-white space-y-3">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-800 flex-wrap gap-2">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-md">
+              <Compass className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-xs font-black uppercase tracking-wider text-white">
+                  CamDraw Vector Structure
+                </h4>
+                {camDrawData?.elements?.length > 0 ? (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold">
+                    {camDrawData.elements.length} Vector Elements Active
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-400">
+                    No Structure Attached
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Vector academic diagrams render with high fidelity in Student Test, Review &amp; PDF exports.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {referenceImageUrl && (
+              <button
+                type="button"
+                onClick={() => setIsCamDrawModalOpen(true)}
+                className="px-3 py-1.5 rounded-xl text-xs font-black bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-md transition flex items-center gap-1.5"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Recreate with CamDraw</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setIsCamDrawModalOpen(true)}
+              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white shadow-md transition flex items-center gap-1.5"
+            >
+              <Compass className="w-3.5 h-3.5" />
+              <span>{camDrawData?.elements?.length > 0 ? "Edit in CamDraw" : "Open CamDraw Editor"}</span>
+            </button>
+
+            {camDrawData?.elements?.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setCamDrawData(null);
+                  toast.info("CamDraw structure detached.");
+                }}
+                className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-red-950/40 text-slate-400 hover:text-red-400 transition"
+                title="Remove Structure"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Live Vector Preview inside Question Editor */}
+        {camDrawData?.elements?.length > 0 ? (
+          <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 flex flex-col items-center justify-center relative group">
+            <CamDrawRenderer document={camDrawData} theme="dark" maxWidth={600} maxHeight={280} />
+            <button
+              type="button"
+              onClick={() => setIsCamDrawModalOpen(true)}
+              className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-2 text-xs font-extrabold text-white backdrop-blur-[2px] rounded-xl"
+            >
+              <Compass className="w-4 h-4" />
+              <span>Click to Edit in CamDraw Studio</span>
+            </button>
+          </div>
+        ) : (
+          <div className="p-4 rounded-xl border border-dashed border-slate-800 bg-slate-950/40 text-center">
+            <p className="text-xs text-slate-500">
+              No chemical structure or scientific vector attached. Click &quot;Open CamDraw Editor&quot; or &quot;Recreate with CamDraw&quot; to build or recognize structures from reference image.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* CAMDRAW FULL INTERACTIVE STUDIO MODAL */}
+      {isCamDrawModalOpen && (
+        <CamDrawEditor
+          initialDocument={camDrawData}
+          referenceImageUrl={referenceImageUrl}
+          hintSubject={subject}
+          onSave={(newDoc) => {
+            setCamDrawData(newDoc);
+            setIsCamDrawModalOpen(false);
+            toast.success("CamDraw structure attached to question!");
+          }}
+          onClose={() => setIsCamDrawModalOpen(false)}
+        />
       )}
 
       {/* FULLSCREEN REFERENCE IMAGE MODAL */}
