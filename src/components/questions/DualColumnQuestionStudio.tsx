@@ -314,7 +314,41 @@ export function DualColumnQuestionStudio({
     }
   };
 
+  const handleDeleteSlotQuestion = async () => {
+    const q = questionsMap[currentQuestionNumber];
+    if (!q || (!q.isSaved && !q.statementEn && !q.statementHi && !q.id)) {
+      toast.info(`Slot #${currentQuestionNumber} is already empty.`);
+      return;
+    }
 
+    if (!confirm(`Are you sure you want to delete and clear question slot #${currentQuestionNumber}?`)) {
+      return;
+    }
+
+    try {
+      if (q.id && testId) {
+        await fetch(`/api/team/tests/${testId}/questions/${q.id}`, {
+          method: "DELETE",
+        }).catch(() => {});
+      }
+
+      setQuestionsMap((prev) => {
+        const next = { ...prev };
+        delete next[currentQuestionNumber];
+        return next;
+      });
+
+      setActiveAuthoringSlots((prev) => {
+        const next = { ...prev };
+        delete next[currentQuestionNumber];
+        return next;
+      });
+
+      toast.success(`Slot #${currentQuestionNumber} cleared successfully. You can now add a new question.`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to clear question slot.");
+    }
+  };
 
   return (
     <div className="flex h-screen-safe w-full bg-[#f1f4fb] text-slate-900 overflow-hidden font-sans select-none">
@@ -779,6 +813,7 @@ export function DualColumnQuestionStudio({
                   },
                 }));
               }}
+              onDelete={handleDeleteSlotQuestion}
               onNext={handleNextQuestion}
               onPrev={handlePrevQuestion}
               onCancelHref={backHref}

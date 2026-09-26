@@ -30,6 +30,7 @@ import {
   PlusCircle,
   Wand2,
   Tag,
+  Trash2,
 } from "lucide-react";
 import { EquationLivePreview } from "./EquationLivePreview";
 import { FormulaInsertToolbar } from "./FormulaInsertToolbar";
@@ -48,6 +49,7 @@ export interface UnifiedQuestionEditorProps {
   slotNumber?: number;
   totalSlots?: number;
   onSaveSuccess?: (savedQuestion: any) => void;
+  onDelete?: () => void;
   onNext?: () => void;
   onPrev?: () => void;
   onCancelHref?: string;
@@ -65,6 +67,7 @@ export function UnifiedQuestionEditor({
   slotNumber = 1,
   totalSlots = 1,
   onSaveSuccess,
+  onDelete,
   onNext,
   onPrev,
   onCancelHref = "/team/questions",
@@ -1096,6 +1099,15 @@ export function UnifiedQuestionEditor({
 
       if (onSaveSuccess) {
         onSaveSuccess(savedQ);
+      }
+
+      // Automatically advance to the next question slot in test / DPP mode
+      if (mode !== "bank" && onNext) {
+        if (slotNumber < totalSlots) {
+          onNext();
+        } else {
+          toast.success("All question slots completed!");
+        }
       } else if (mode === "bank") {
         router.push("/team/questions");
         router.refresh();
@@ -1108,69 +1120,7 @@ export function UnifiedQuestionEditor({
   };
 
   return (
-    <div className="space-y-4 select-none font-sans pb-20">
-      {/* 1. TOP CONTEXT & QUESTION ID BANNER */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-3.5 sm:p-4 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-blue-600 text-white">
-              {mode === "test" ? "Test Authoring Studio" : mode === "dpp" ? "DPP Studio" : "Question Bank"}
-            </span>
-
-            {testName && (
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-700 font-bold">
-                Test: {testName}
-              </span>
-            )}
-            {dppName && (
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-700 font-bold">
-                DPP: {dppName}
-              </span>
-            )}
-
-            {(mode === "test" || mode === "dpp") && (
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-800 font-bold font-mono">
-                Slot #{slotNumber} of {totalSlots}
-              </span>
-            )}
-
-            {isAutoDraftSaved && (
-              <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-300 text-emerald-800 font-bold flex items-center gap-1.5 animate-in fade-in">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span>⚡ Auto-saved to AI Drafts</span>
-              </span>
-            )}
-
-            {aiCostInfo && (
-              <span
-                title={`Tokens: ${aiCostInfo.totalTokens} (In: ${aiCostInfo.inputTokens}, Out: ${aiCostInfo.outputTokens}) | Key: ${aiCostInfo.keyMasked} (${aiCostInfo.tier} Tier)`}
-                className={`text-[11px] px-2.5 py-0.5 rounded-full font-mono font-bold flex items-center gap-1.5 animate-in fade-in ${
-                  aiCostInfo.isFreeTier
-                    ? "bg-emerald-50 border border-emerald-300 text-emerald-800"
-                    : "bg-blue-50 border border-blue-300 text-blue-800"
-                }`}
-              >
-                <span>🪙 AI Cost:</span>
-                <span className="font-extrabold">
-                  {aiCostInfo.isFreeTier ? "0.00 Paise (Free Tier)" : `${aiCostInfo.costPaise} Paise`}
-                </span>
-              </span>
-            )}
-          </div>
-
-          <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-            Add New Question
-          </h2>
-          <p className="text-xs text-slate-500">
-            Unified bilingual creation with mandatory NCERT metadata, auto-OCR paste, and subject-aware solutions.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3 self-start md:self-auto">
-          <QuestionIdBadge questionCode={generatedCode} subjectName={subject} isSaving={isSaving} />
-        </div>
-      </div>
-
+    <div className="space-y-3.5 select-none font-sans pb-20">
       {/* AI SUGGESTED METADATA BANNER (Interactive Teacher Approval) */}
       {aiSuggestedMetadata && (
         <div className="bg-blue-50 border-2 border-blue-300/80 rounded-3xl p-5 sm:p-6 shadow-md animate-in fade-in slide-in-from-top-3">
@@ -1251,26 +1201,26 @@ export function UnifiedQuestionEditor({
         </div>
       )}
 
-      {/* 2. SLEEK METADATA SUMMARY STRIP & POPUP DRAWER BUTTON */}
+      {/* 2. COMPACT METADATA STRIP & QUESTION CODE BADGE */}
       <div
-        className={`bg-white rounded-3xl p-4 sm:p-5 shadow-sm border transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+        className={`bg-white rounded-2xl p-3 sm:p-4 shadow-xs border transition-all flex flex-col md:flex-row md:items-center justify-between gap-3 ${
           missingFieldErrors.subject || missingFieldErrors.chapter || missingFieldErrors.topic
             ? "border-rose-400 ring-2 ring-rose-500/20 bg-rose-50/20"
             : "border-slate-200"
         }`}
       >
-        <div className="flex items-center gap-2.5 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-            <BookOpen className="w-4 h-4 text-blue-600" />
+            <BookOpen className="w-3.5 h-3.5 text-blue-600" />
             <span>Metadata:</span>
           </span>
 
-          <span className="px-3 py-1 bg-blue-100/80 text-[#0c3ea4] font-black text-xs rounded-xl shadow-xs border border-blue-200">
+          <span className="px-2.5 py-0.5 bg-blue-100/80 text-[#0c3ea4] font-black text-xs rounded-lg shadow-xs border border-blue-200">
             {subject}
           </span>
 
           <span
-            className={`px-3 py-1 rounded-xl text-xs font-bold border shadow-xs max-w-[240px] truncate ${
+            className={`px-2.5 py-0.5 rounded-lg text-xs font-bold border shadow-xs max-w-[220px] truncate ${
               chapter
                 ? "bg-slate-100 text-slate-800 border-slate-200"
                 : "bg-rose-100 text-rose-700 border-rose-200"
@@ -1280,35 +1230,39 @@ export function UnifiedQuestionEditor({
           </span>
 
           {topic && (
-            <span className="px-2.5 py-1 bg-slate-50 text-slate-700 font-medium text-xs rounded-xl border border-slate-200 max-w-[200px] truncate hidden sm:inline-block">
+            <span className="px-2 py-0.5 bg-slate-50 text-slate-700 font-medium text-xs rounded-lg border border-slate-200 max-w-[180px] truncate hidden sm:inline-block">
               {topic}
             </span>
           )}
 
-          <span className="px-2.5 py-1 rounded-xl text-[11px] font-black uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
+          <span className="px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
             {difficulty}
           </span>
 
-          <span className="px-2.5 py-1 rounded-xl text-[11px] font-mono font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+          <span className="px-2 py-0.5 rounded-lg text-[10px] font-mono font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
             +{marks} / -{negativeMarks}
           </span>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setIsMetadataDrawerOpen(true)}
-          className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl font-black text-xs transition shadow-sm cursor-pointer ${
-            missingFieldErrors.subject || missingFieldErrors.chapter || missingFieldErrors.topic
-              ? "bg-rose-600 hover:bg-rose-700 text-white animate-pulse shadow-rose-500/30"
-              : "bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 hover:border-blue-300"
-          }`}
-        >
-          <Sliders className="w-4 h-4" />
-          <span>Edit Metadata &amp; Taxonomy (Side Popup)</span>
-          {(missingFieldErrors.subject || missingFieldErrors.chapter || missingFieldErrors.topic) && (
-            <span className="w-2 h-2 rounded-full bg-white animate-ping" />
-          )}
-        </button>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <QuestionIdBadge questionCode={generatedCode} subjectName={subject} isSaving={isSaving} />
+
+          <button
+            type="button"
+            onClick={() => setIsMetadataDrawerOpen(true)}
+            className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-black text-xs transition shadow-xs cursor-pointer ${
+              missingFieldErrors.subject || missingFieldErrors.chapter || missingFieldErrors.topic
+                ? "bg-rose-600 hover:bg-rose-700 text-white animate-pulse shadow-rose-500/30"
+                : "bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 hover:border-blue-300"
+            }`}
+          >
+            <Sliders className="w-3.5 h-3.5" />
+            <span>Edit Metadata</span>
+            {(missingFieldErrors.subject || missingFieldErrors.chapter || missingFieldErrors.topic) && (
+              <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+            )}
+          </button>
+        </div>
       </div>
 
       {/* DEDICATED SLIDING METADATA DRAWER / POPUP */}
@@ -2163,14 +2117,14 @@ export function UnifiedQuestionEditor({
       </div>
 
       {/* 5. STICKY BOTTOM ACTION BAR (Save & Slot Navigation) */}
-      <footer className="bg-white border border-slate-200 rounded-2xl p-3 sm:p-4 shadow-md flex flex-wrap items-center justify-between gap-3">
-        {/* Left Side: Navigation or Cancel */}
-        <div>
+      <footer className="sticky bottom-0 z-30 bg-white/95 backdrop-blur-md border border-slate-200 rounded-2xl p-3 sm:p-4 shadow-xl flex flex-wrap items-center justify-between gap-3 mt-4">
+        {/* Left Side: Navigation, Cancel or Delete */}
+        <div className="flex items-center gap-2 flex-wrap">
           {mode === "bank" ? (
             <button
               type="button"
               onClick={() => router.push(onCancelHref)}
-              className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-bold transition"
+              className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-bold transition cursor-pointer"
             >
               Cancel
             </button>
@@ -2180,14 +2134,27 @@ export function UnifiedQuestionEditor({
                 type="button"
                 onClick={onPrev}
                 disabled={slotNumber <= 1}
-                className="px-4 py-2 rounded-xl border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs disabled:opacity-40 transition"
+                className="px-4 py-2 rounded-xl border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs disabled:opacity-40 transition cursor-pointer"
               >
                 ← Prev Slot
               </button>
-              <span className="text-xs font-mono font-bold text-slate-500">
+              <span className="text-xs font-mono font-bold text-slate-600 px-1">
                 Slot {slotNumber} / {totalSlots}
               </span>
             </div>
+          )}
+
+          {onDelete && (
+            <button
+              type="button"
+              onClick={onDelete}
+              disabled={isSaving}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs transition active:scale-95 disabled:opacity-40 cursor-pointer ml-1 sm:ml-2"
+              title="Delete question and clear this slot"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete Question</span>
+            </button>
           )}
         </div>
 
@@ -2208,12 +2175,12 @@ export function UnifiedQuestionEditor({
             type="button"
             onClick={() => handleSaveQuestion(true)}
             disabled={isSaving}
-            className="inline-flex items-center gap-2 px-8 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs sm:text-sm shadow-md shadow-blue-500/25 transition disabled:opacity-50 cursor-pointer"
+            className="inline-flex items-center gap-2 px-8 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs sm:text-sm shadow-md shadow-blue-500/25 transition disabled:opacity-50 cursor-pointer"
           >
             <Save className="w-4 h-4" />
             <span>
               {isSaving
-                ? "Saving Question..."
+                ? "Saving..."
                 : mode === "bank"
                 ? "Save & Submit to Review (Stage 1)"
                 : "Save Question"}
@@ -2225,7 +2192,7 @@ export function UnifiedQuestionEditor({
               type="button"
               onClick={onNext}
               disabled={slotNumber >= totalSlots}
-              className="px-4 py-2 rounded-xl bg-[#0c3ea4] hover:bg-blue-700 text-white font-bold text-xs shadow-sm transition disabled:opacity-40"
+              className="px-4 py-2 rounded-xl bg-[#0c3ea4] hover:bg-blue-700 text-white font-bold text-xs shadow-sm transition disabled:opacity-40 cursor-pointer"
             >
               Next Slot →
             </button>
