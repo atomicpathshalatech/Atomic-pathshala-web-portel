@@ -67,35 +67,9 @@ export function DualColumnQuestionStudio({
   const [currentQuestionNumber, setCurrentQuestionNumber] = useState(1);
   const [jumpInput, setJumpInput] = useState("1");
   const [viewMode, setViewMode] = useState<"side-by-side" | "hindi" | "english">("side-by-side");
-
-  // Keyboard shortcut: Ctrl + X / Cmd + X to toggle sidebar hide/show
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && (e.key === "x" || e.key === "X")) {
-        const activeTag = document.activeElement?.tagName?.toLowerCase();
-        const hasSelection = (window.getSelection()?.toString().length ?? 0) > 0;
-        // Don't intercept if user is cutting text in an input/textarea
-        if ((activeTag === "input" || activeTag === "textarea") && hasSelection) {
-          return;
-        }
-
-        e.preventDefault();
-        setIsSidebarHidden((prev) => {
-          const next = !prev;
-          toast.info(next ? "Question sidebar hidden (Ctrl+X to restore)" : "Question sidebar restored (Ctrl+X)");
-          return next;
-        });
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
-
-  // State: whether editor form is active for the current question
-  const [activeAuthoringSlots, setActiveAuthoringSlots] = useState<Record<number, boolean>>({});
   const [showImportModal, setShowImportModal] = useState(false);
   const [importQuery, setImportQuery] = useState("");
+  const [activeAuthoringSlots, setActiveAuthoringSlots] = useState<Record<number, boolean>>({});
 
   // Questions cache for the test
   const [questionsMap, setQuestionsMap] = useState<Record<number, QuestionEntry>>(() => {
@@ -132,6 +106,73 @@ export function DualColumnQuestionStudio({
     solutionHi: "",
     solutionEn: "",
     isSaved: false,
+  };
+
+  // Keyboard shortcut: Ctrl + X / Cmd + X to toggle sidebar hide/show
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === "x" || e.key === "X")) {
+        const activeTag = document.activeElement?.tagName?.toLowerCase();
+        const hasSelection = (window.getSelection()?.toString().length ?? 0) > 0;
+        // Don't intercept if user is cutting text in an input/textarea
+        if ((activeTag === "input" || activeTag === "textarea") && hasSelection) {
+          return;
+        }
+
+        e.preventDefault();
+        setIsSidebarHidden((prev) => {
+          const next = !prev;
+          toast.info(next ? "Question sidebar hidden (Ctrl+X to restore)" : "Question sidebar restored (Ctrl+X)");
+          return next;
+        });
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  const [sidebarTab, setSidebarTab] = useState<"palette" | "metadata">("palette");
+
+  // Dynamic taxonomy lists for Left Sidebar Metadata editing
+  const [sidebarChapters, setSidebarChapters] = useState<Array<{ id: string; title: string }>>([]);
+  const [sidebarTopics, setSidebarTopics] = useState<Array<{ id: string; title: string }>>([]);
+
+  useEffect(() => {
+    if (!activeSubject) return;
+    fetch(`/api/team/ai-questions/taxonomy?subject=${encodeURIComponent(activeSubject)}`)
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.success && Array.isArray(json.data?.chapters)) {
+          setSidebarChapters(json.data.chapters);
+        }
+      })
+      .catch(() => {});
+  }, [activeSubject]);
+
+  useEffect(() => {
+    if (!activeSubject || !currentQ.chapter) {
+      setSidebarTopics([]);
+      return;
+    }
+    fetch(`/api/team/ai-questions/taxonomy?subject=${encodeURIComponent(activeSubject)}&chapter=${encodeURIComponent(currentQ.chapter)}`)
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.success && Array.isArray(json.data?.topics)) {
+          setSidebarTopics(json.data.topics);
+        }
+      })
+      .catch(() => {});
+  }, [activeSubject, currentQ.chapter]);
+
+  const updateCurrentQuestionMeta = (updates: Partial<QuestionEntry>) => {
+    setQuestionsMap((prev) => ({
+      ...prev,
+      [currentQuestionNumber]: {
+        ...currentQ,
+        ...updates,
+      },
+    }));
   };
 
   const isQuestionPopulated = Boolean(
@@ -313,96 +354,235 @@ export function DualColumnQuestionStudio({
           </div>
 
           {!sidebarCollapsed && (
-            <div className="mt-3">
-              <h2 className="font-black text-base text-white tracking-tight">{title}</h2>
-              <p className="text-xs text-blue-200 font-medium mt-0.5">
-                {savedQuestionsCount} / {totalQuestionsCount} Questions
-              </p>
+            <div className="mt-3 space-y-2.5">
+              <div>
+                <h2 className="font-black text-base text-white tracking-tight">{title}</h2>
+                <p className="text-xs text-blue-200 font-medium mt-0.5">
+                  {savedQuestionsCount} / {totalQuestionsCount} Questions
+                </p>
+              </div>
+
+              {/* Sidebar Tabs: Palette vs Metadata */}
+              <div className="flex items-center bg-[#092e7a] p-1 rounded-xl text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setSidebarTab("palette")}
+                  className={`flex-1 py-1.5 rounded-lg transition text-center flex items-center justify-center gap-1.5 ${
+                    sidebarTab === "palette"
+                      ? "bg-white text-[#0c3ea4] shadow-sm font-black"
+                      : "text-blue-200 hover:text-white"
+                  }`}
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Q. Palette</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSidebarTab("metadata")}
+                  className={`flex-1 py-1.5 rounded-lg transition text-center flex items-center justify-center gap-1.5 ${
+                    sidebarTab === "metadata"
+                      ? "bg-white text-[#0c3ea4] shadow-sm font-black"
+                      : "text-blue-200 hover:text-white"
+                  }`}
+                >
+                  <Sliders className="w-3.5 h-3.5" />
+                  <span>Metadata</span>
+                </button>
+              </div>
             </div>
           )}
         </div>
 
-        {/* Section Accordions & Question Grid */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-3">
-          {subjects.map((sub) => {
-            const isSubActive = activeSubject === sub.name;
-            const subSaved = Object.values(questionsMap).filter(
-              (q) => q.subject === sub.name && q.isSaved
-            ).length;
-            const startQ = sectionOffsets[sub.name]?.start || 1;
+        {/* TAB 1: SECTION ACCORDIONS & QUESTION PALETTE */}
+        {sidebarTab === "palette" && (
+          <div className="flex-1 overflow-y-auto p-3 space-y-3">
+            {subjects.map((sub) => {
+              const isSubActive = activeSubject === sub.name;
+              const subSaved = Object.values(questionsMap).filter(
+                (q) => q.subject === sub.name && q.isSaved
+              ).length;
+              const startQ = sectionOffsets[sub.name]?.start || 1;
 
-            return (
-              <div key={sub.name} className="space-y-1">
-                {/* Section Accordion Header */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveSubject(sub.name);
-                    const range = sectionOffsets[sub.name];
-                    if (range && (currentQuestionNumber < range.start || currentQuestionNumber > range.end)) {
-                      setCurrentQuestionNumber(range.start);
-                      setJumpInput(String(range.start));
-                    }
-                  }}
-                  className={`w-full flex items-center justify-between p-2 rounded-xl text-xs font-extrabold transition ${
-                    isSubActive
-                      ? "bg-white text-[#0c3ea4] shadow-md"
-                      : "text-blue-100 hover:bg-white/10"
-                  }`}
-                >
-                  <div className="flex items-center gap-2 truncate">
-                    <span className="truncate">{sub.name}</span>
-                  </div>
+              return (
+                <div key={sub.name} className="space-y-1">
+                  {/* Section Accordion Header */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveSubject(sub.name);
+                      const range = sectionOffsets[sub.name];
+                      if (range && (currentQuestionNumber < range.start || currentQuestionNumber > range.end)) {
+                        setCurrentQuestionNumber(range.start);
+                        setJumpInput(String(range.start));
+                      }
+                    }}
+                    className={`w-full flex items-center justify-between p-2 rounded-xl text-xs font-extrabold transition ${
+                      isSubActive
+                        ? "bg-white text-[#0c3ea4] shadow-md"
+                        : "text-blue-100 hover:bg-white/10"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 truncate">
+                      <span className="truncate">{sub.name}</span>
+                    </div>
 
-                  {!sidebarCollapsed && (
-                    <div className="flex items-center gap-1 shrink-0">
-                      <span className="text-[11px] font-mono opacity-80">
-                        {subSaved}/{sub.total}
-                      </span>
-                      {isSubActive ? (
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      ) : (
-                        <ChevronRight className="w-3.5 h-3.5" />
-                      )}
+                    {!sidebarCollapsed && (
+                      <div className="flex items-center gap-1 shrink-0">
+                        <span className="text-[11px] font-mono opacity-80">
+                          {subSaved}/{sub.total}
+                        </span>
+                        {isSubActive ? (
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        ) : (
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        )}
+                      </div>
+                    )}
+                  </button>
+
+                  {/* Question Grid for Active Section */}
+                  {isSubActive && !sidebarCollapsed && (
+                    <div className="grid grid-cols-5 gap-1.5 p-2 bg-[#092e7a]/50 rounded-2xl border border-white/5 animate-in fade-in">
+                      {Array.from({ length: sub.total }, (_, i) => {
+                        const qNum = startQ + i;
+                        const q = questionsMap[qNum];
+                        const isCurrent = currentQuestionNumber === qNum;
+                        const isSaved = q?.isSaved;
+
+                        return (
+                          <button
+                            key={qNum}
+                            type="button"
+                            onClick={() => handleSelectQuestion(qNum)}
+                            className={`h-7 rounded-lg text-xs font-black transition relative flex items-center justify-center ${
+                              isCurrent
+                                ? "bg-white text-[#0c3ea4] ring-2 ring-blue-400 shadow-md scale-105 z-10"
+                                : isSaved
+                                ? "bg-emerald-500 text-white hover:bg-emerald-600"
+                                : "bg-[#0c3ea4] text-blue-200 border border-white/20 hover:bg-white/10"
+                            }`}
+                          >
+                            {qNum}
+                            {isSaved && !isCurrent && (
+                              <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 bg-white rounded-full" />
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
-                </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
-                {/* Question Grid for Active Section */}
-                {isSubActive && !sidebarCollapsed && (
-                  <div className="grid grid-cols-5 gap-1.5 p-2 bg-[#092e7a]/50 rounded-2xl border border-white/5 animate-in fade-in">
-                    {Array.from({ length: sub.total }, (_, i) => {
-                      const qNum = startQ + i;
-                      const q = questionsMap[qNum];
-                      const isCurrent = currentQuestionNumber === qNum;
-                      const isSaved = q?.isSaved;
+        {/* TAB 2: METADATA & TAXONOMY CONTROLS IN LEFT SIDEBAR */}
+        {sidebarTab === "metadata" && (
+          <div className="flex-1 overflow-y-auto p-3 space-y-4 text-xs animate-in fade-in">
+            <div className="p-2.5 rounded-2xl bg-[#092e7a]/80 border border-white/10 space-y-3">
+              <span className="text-[11px] font-black uppercase text-blue-200 tracking-wider block">
+                Q.{currentQuestionNumber} Metadata Settings
+              </span>
 
-                      return (
-                        <button
-                          key={qNum}
-                          type="button"
-                          onClick={() => handleSelectQuestion(qNum)}
-                          className={`h-7 rounded-lg text-xs font-black transition relative flex items-center justify-center ${
-                            isCurrent
-                              ? "bg-white text-[#0c3ea4] ring-2 ring-blue-400 shadow-md scale-105 z-10"
-                              : isSaved
-                              ? "bg-emerald-500 text-white hover:bg-emerald-600"
-                              : "bg-[#0c3ea4] text-blue-200 border border-white/20 hover:bg-white/10"
-                          }`}
-                        >
-                          {qNum}
-                          {isSaved && !isCurrent && (
-                            <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 bg-white rounded-full" />
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
+              {/* Subject */}
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-blue-100">Subject</label>
+                <select
+                  value={currentQ.subject || activeSubject}
+                  onChange={(e) => updateCurrentQuestionMeta({ subject: e.target.value })}
+                  className="w-full px-2.5 py-1.5 bg-white text-slate-900 rounded-xl font-bold text-xs outline-none"
+                >
+                  {subjects.map((s) => (
+                    <option key={s.name} value={s.name}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
               </div>
-            );
-          })}
-        </div>
+
+              {/* Chapter */}
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-blue-100">Chapter</label>
+                <select
+                  value={currentQ.chapter || ""}
+                  onChange={(e) => updateCurrentQuestionMeta({ chapter: e.target.value, topic: "" })}
+                  className="w-full px-2.5 py-1.5 bg-white text-slate-900 rounded-xl font-medium text-xs outline-none"
+                >
+                  <option value="">-- Select Chapter --</option>
+                  {sidebarChapters.map((c) => (
+                    <option key={c.id} value={c.title}>
+                      {c.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Topic */}
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-blue-100">Topic</label>
+                <select
+                  value={currentQ.topic || ""}
+                  onChange={(e) => updateCurrentQuestionMeta({ topic: e.target.value })}
+                  className="w-full px-2.5 py-1.5 bg-white text-slate-900 rounded-xl font-medium text-xs outline-none"
+                >
+                  <option value="">-- Select Topic --</option>
+                  {sidebarTopics.map((t) => (
+                    <option key={t.id} value={t.title}>
+                      {t.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Difficulty */}
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-blue-100">Difficulty</label>
+                <div className="grid grid-cols-3 gap-1 text-[10px] font-black">
+                  {(["EASY", "MEDIUM", "HARD"] as const).map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => updateCurrentQuestionMeta({ difficulty: d })}
+                      className={`py-1 rounded-lg transition ${
+                        currentQ.difficulty === d
+                          ? "bg-white text-[#0c3ea4] shadow-sm"
+                          : "bg-[#0c3ea4] text-blue-200 border border-white/20 hover:bg-white/10"
+                      }`}
+                    >
+                      {d}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Marks */}
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-blue-100">Marking Scheme</label>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 flex items-center bg-white px-2 py-1 rounded-xl text-slate-900">
+                    <span className="text-emerald-600 font-bold mr-1">+</span>
+                    <input
+                      type="number"
+                      value={currentQ.marks || 4}
+                      onChange={(e) => updateCurrentQuestionMeta({ marks: Number(e.target.value) })}
+                      className="w-full bg-transparent font-black text-xs outline-none"
+                    />
+                  </div>
+                  <div className="flex-1 flex items-center bg-white px-2 py-1 rounded-xl text-slate-900">
+                    <span className="text-rose-600 font-bold mr-1">-</span>
+                    <input
+                      type="number"
+                      value={currentQ.negativeMarks || 1}
+                      onChange={(e) => updateCurrentQuestionMeta({ negativeMarks: Number(e.target.value) })}
+                      className="w-full bg-transparent font-black text-xs outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Footer info and collapse toggle */}
         <div className="p-3 border-t border-white/10 text-xs text-blue-200 flex items-center justify-between">

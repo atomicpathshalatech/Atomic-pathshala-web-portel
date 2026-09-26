@@ -1485,10 +1485,22 @@ export function UnifiedQuestionEditor({
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* COLUMN 1: HINDI (हिंदी) */}
           <div className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-sm space-y-5">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <span className="text-xs font-black text-amber-800 bg-amber-100 px-3 py-1 rounded-full">
-                हिंदी (Hindi Statement &amp; Options)
-              </span>
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-black text-amber-800 bg-amber-100 px-3 py-1 rounded-full">
+                  हिंदी (Hindi Statement &amp; Options)
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCheckTranslation}
+                  disabled={isTranslating || (!statementHi && !statementEn)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg text-[11px] font-bold text-amber-900 transition disabled:opacity-40 cursor-pointer"
+                  title="Translate Hindi content to English"
+                >
+                  <Sparkles className="w-3 h-3 text-amber-600" />
+                  <span>→ English</span>
+                </button>
+              </div>
               <FormulaInsertToolbar
                 onInsert={(snippet) => setStatementHi((prev) => (prev ? prev + " " + snippet : snippet))}
               />
@@ -1570,10 +1582,22 @@ export function UnifiedQuestionEditor({
 
           {/* COLUMN 2: ENGLISH */}
           <div className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-sm space-y-5">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <span className="text-xs font-black text-blue-800 bg-blue-100 px-3 py-1 rounded-full">
-                English (Statement &amp; Options)
-              </span>
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-black text-blue-800 bg-blue-100 px-3 py-1 rounded-full">
+                  English (Statement &amp; Options)
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCheckTranslation}
+                  disabled={isTranslating || (!statementHi && !statementEn)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg text-[11px] font-bold text-blue-900 transition disabled:opacity-40 cursor-pointer"
+                  title="Translate English content to Hindi"
+                >
+                  <Sparkles className="w-3 h-3 text-blue-600" />
+                  <span>→ Hindi</span>
+                </button>
+              </div>
               <FormulaInsertToolbar
                 onInsert={(snippet) => setStatementEn((prev) => (prev ? prev + " " + snippet : snippet))}
               />
