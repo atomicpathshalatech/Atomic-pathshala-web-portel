@@ -36,6 +36,7 @@ export default async function LecturePlayerPage({
     const schedule = await prisma.batchSchedule.findUnique({
       where: { id: lectureId },
       include: {
+        liveWhiteboardSession: true,
         lecture: {
           include: {
             chapter: { include: { subject: { include: { course: true } } } },
@@ -53,6 +54,8 @@ export default async function LecturePlayerPage({
     if (schedule) {
       if (schedule.lecture) {
         lecture = schedule.lecture;
+      } else if (schedule.status === "COMPLETED" || schedule.liveWhiteboardSession?.status === "ENDED") {
+        redirect(`/watch/${schedule.id}`);
       } else {
         redirect(`/live-class/${schedule.id}`);
       }

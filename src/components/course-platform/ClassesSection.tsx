@@ -50,7 +50,11 @@ export function ClassesSection({ course }: { course?: any }) {
             const isLive = effectiveStatus === "LIVE";
             const isCancelled = effectiveStatus === "CANCELLED";
             const wb = cls.liveWhiteboardSession;
-            const hasRecording = wb?.recordingStatus === "READY" || Boolean(wb?.recordingStorageKey);
+            const hasRecording =
+              wb?.recordingStatus === "READY" ||
+              Boolean(wb?.recordingStorageKey) ||
+              Boolean(wb?.youtubeVideoId) ||
+              Boolean(wb?.youtubeArchiveVideoUrl);
             const isRecordingProcessing = wb?.recordingStatus === "PROCESSING" || wb?.recordingStatus === "STOPPING";
 
             return (
@@ -124,7 +128,7 @@ export function ClassesSection({ course }: { course?: any }) {
                     <>
                       {hasRecording ? (
                         <Link
-                          href={`/live-class/${cls.id}`}
+                          href={`/watch/${cls.id}`}
                           className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-primary text-on-primary font-bold text-xs shadow-xs hover:opacity-90 active:scale-95 transition"
                           title="Play Recorded Class"
                         >

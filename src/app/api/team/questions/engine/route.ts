@@ -386,6 +386,8 @@ export async function PUT(request: NextRequest) {
       referenceImageUrl,
       solutionImageUrl,
       tags = [],
+      dppId,
+      testSectionId,
     } = body;
 
     if (!questionId) {
@@ -585,6 +587,55 @@ export async function PUT(request: NextRequest) {
       }
     }
 
+    let sectionQuestion = null;
+    let dppQuestion = null;
+
+    // Link to Test Section if requested and not yet linked
+    if (testSectionId) {
+      const existingSecLink = await prisma.sectionQuestion.findFirst({
+        where: { sectionId: testSectionId, questionId },
+      });
+      if (!existingSecLink) {
+        const secCount = await prisma.sectionQuestion.count({ where: { sectionId: testSectionId } });
+        sectionQuestion = await prisma.sectionQuestion.create({
+          data: {
+            sectionId: testSectionId,
+            questionId,
+            order: secCount + 1,
+          },
+        });
+        await prisma.question.update({
+          where: { id: questionId },
+          data: { usageCount: { increment: 1 } },
+        });
+      } else {
+        sectionQuestion = existingSecLink;
+      }
+    }
+
+    // Link to DPP if requested and not yet linked
+    if (dppId) {
+      const existingDppLink = await prisma.dppQuestion.findFirst({
+        where: { dppId, questionId },
+      });
+      if (!existingDppLink) {
+        const dppCount = await prisma.dppQuestion.count({ where: { dppId } });
+        dppQuestion = await prisma.dppQuestion.create({
+          data: {
+            dppId,
+            questionId,
+            order: dppCount + 1,
+          },
+        });
+        await prisma.question.update({
+          where: { id: questionId },
+          data: { usageCount: { increment: 1 } },
+        });
+      } else {
+        dppQuestion = existingDppLink;
+      }
+    }
+
     // 4. Audit Log
     await prisma.auditLog.create({
       data: {
@@ -597,11 +648,13 @@ export async function PUT(request: NextRequest) {
           subject: updated.subject,
           chapter: updated.chapter,
           version: updated.version,
+          testSectionId: testSectionId || null,
+          dppId: dppId || null,
         },
       },
     });
 
-    return apiSuccess({ question: updated });
+    return apiSuccess({ question: updated, sectionQuestion, dppQuestion });
   } catch (error) {
     return handleApiError(error);
   }

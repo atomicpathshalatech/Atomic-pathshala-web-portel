@@ -182,7 +182,7 @@ export default async function ChapterPage({
           id: s.id,
           title: s.title,
           order: stepNum,
-          videoUrl: `/live-class/${s.id}`,
+          videoUrl: effStatus === "COMPLETED" ? `/watch/${s.id}` : `/live-class/${s.id}`,
           isCompleted: effStatus === "COMPLETED",
           isLocked: false,
           isCancelled,

@@ -8,6 +8,7 @@ interface EquationLivePreviewProps {
   content: string;
   label?: string;
   className?: string;
+  alwaysShow?: boolean;
 }
 
 /**
@@ -91,19 +92,21 @@ export function EquationLivePreview({
   content,
   label = "Live Render Preview",
   className = "",
+  alwaysShow = false,
 }: EquationLivePreviewProps) {
   const html = useMemo(() => renderMathAndText(content), [content]);
 
-  // Only render preview box if there is actual content and either math/chemistry symbols or images exist
+  // Render preview if there is content
   const hasMathOrFormula = useMemo(() => {
     if (!content || !content.trim()) return false;
+    if (alwaysShow) return true;
     return (
       /!\[.*?\]\(.*?\)/.test(content) ||
       /[_{}\^\\\$]|->|=>|→|⇌|√|\/|[0-9]+[+-]|\b(frac|sqrt|alpha|beta|theta|pi|lambda|Delta|sin|cos|tan)\b/i.test(
         content
       )
     );
-  }, [content]);
+  }, [content, alwaysShow]);
 
   if (!hasMathOrFormula || !html) return null;
 

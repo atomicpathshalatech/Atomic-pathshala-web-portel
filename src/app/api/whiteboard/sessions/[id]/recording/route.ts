@@ -92,7 +92,7 @@ export async function GET(
       liveSessionId: effective.id,
       providerRecordingId: effective.recordingEgressId || null,
       status: effective.recordingStatus,
-      available: isReady || youtubeReady,
+      available: isReady || youtubeReady || Boolean(directYouTubeUrl),
       url: presignedUrl,
       startedAt: effective.actualStartedAt || effective.startedAt,
       stoppedAt: effective.actualEndedAt || effective.endedAt,

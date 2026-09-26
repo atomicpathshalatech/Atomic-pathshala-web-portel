@@ -102,9 +102,15 @@ export default async function WatchLecturePage({ params }: { params?: { lectureI
 
     if (schedule?.lecture) {
       lecture = schedule.lecture;
-    } else if (schedule) {
       let resolvedRecUrl = "";
       if (
+        schedule.liveWhiteboardSession?.youtubeArchiveStatus === "COMPLETED" &&
+        schedule.liveWhiteboardSession.youtubeArchiveVideoUrl
+      ) {
+        resolvedRecUrl = schedule.liveWhiteboardSession.youtubeArchiveVideoUrl;
+      } else if (schedule.liveWhiteboardSession?.youtubeVideoId) {
+        resolvedRecUrl = `https://www.youtube.com/watch?v=${schedule.liveWhiteboardSession.youtubeVideoId}`;
+      } else if (
         schedule.liveWhiteboardSession?.recordingStorageKey &&
         schedule.liveWhiteboardSession.recordingStatus === "READY"
       ) {
@@ -139,14 +145,19 @@ export default async function WatchLecturePage({ params }: { params?: { lectureI
     let resolvedVideoUrl = lecture.videoUrl;
     let pendingSessionStatus: string | undefined;
 
-    // If lecture.videoUrl is not set, check if any attached batchSchedule has a ready recording
+    // If lecture.videoUrl is not set, check if any attached batchSchedule has a ready recording or youtube video
     if (!resolvedVideoUrl) {
       const scheduleWithRec = lecture.batchSchedules?.find(
         (s) =>
-          s.liveWhiteboardSession?.recordingStatus === "READY" &&
-          s.liveWhiteboardSession.recordingStorageKey
+          (s.liveWhiteboardSession?.recordingStatus === "READY" && s.liveWhiteboardSession.recordingStorageKey) ||
+          s.liveWhiteboardSession?.youtubeArchiveVideoUrl ||
+          s.liveWhiteboardSession?.youtubeVideoId
       );
-      if (scheduleWithRec?.liveWhiteboardSession?.recordingStorageKey) {
+      if (scheduleWithRec?.liveWhiteboardSession?.youtubeArchiveVideoUrl) {
+        resolvedVideoUrl = scheduleWithRec.liveWhiteboardSession.youtubeArchiveVideoUrl;
+      } else if (scheduleWithRec?.liveWhiteboardSession?.youtubeVideoId) {
+        resolvedVideoUrl = `https://www.youtube.com/watch?v=${scheduleWithRec.liveWhiteboardSession.youtubeVideoId}`;
+      } else if (scheduleWithRec?.liveWhiteboardSession?.recordingStorageKey) {
         try {
           resolvedVideoUrl = await createPresignedDownloadUrl({
             key: scheduleWithRec.liveWhiteboardSession.recordingStorageKey,

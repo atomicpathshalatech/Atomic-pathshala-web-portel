@@ -34,6 +34,8 @@ import {
 import { EquationLivePreview } from "./EquationLivePreview";
 import { FormulaInsertToolbar } from "./FormulaInsertToolbar";
 import { QuestionIdBadge } from "./QuestionIdBadge";
+import { QuestionMetadataDrawer } from "./QuestionMetadataDrawer";
+import { QuestionLiveReviewPanel } from "./QuestionLiveReviewPanel";
 
 export interface UnifiedQuestionEditorProps {
   mode: "bank" | "dpp" | "test";
@@ -116,6 +118,7 @@ export function UnifiedQuestionEditor({
 
   // Validation Error Highlight Flags
   const [missingFieldErrors, setMissingFieldErrors] = useState<Record<string, boolean>>({});
+  const [isMetadataDrawerOpen, setIsMetadataDrawerOpen] = useState<boolean>(false);
 
   // Dynamic Custom Topic & Subtopic Addition
   const [isAddingCustomTopic, setIsAddingCustomTopic] = useState<boolean>(false);
@@ -1202,372 +1205,104 @@ export function UnifiedQuestionEditor({
         </div>
       )}
 
-      {/* 2. MANDATORY METADATA BAR AT THE TOP (Section 1) */}
+      {/* 2. SLEEK METADATA SUMMARY STRIP & POPUP DRAWER BUTTON */}
       <div
-        className={`bg-white rounded-3xl p-6 shadow-sm border transition-all ${
+        className={`bg-white rounded-3xl p-4 sm:p-5 shadow-sm border transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 ${
           missingFieldErrors.subject || missingFieldErrors.chapter || missingFieldErrors.topic
-            ? "border-rose-400 ring-2 ring-rose-500/20 bg-rose-50/10"
-            : "border-slate-200/80"
+            ? "border-rose-400 ring-2 ring-rose-500/20 bg-rose-50/20"
+            : "border-slate-200"
         }`}
       >
-        <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
-          <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <span className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
             <BookOpen className="w-4 h-4 text-blue-600" />
-            <span>1. Mandatory Question Metadata</span>
-            <span className="text-[10px] text-rose-500 lowercase font-normal">* required before save</span>
-          </h3>
-          <span className="text-[11px] font-bold text-slate-400">Step 1 of 3</span>
-        </div>
+            <span>Metadata:</span>
+          </span>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
-          {/* Subject */}
-          <div>
-            <label className="block font-bold text-slate-700 mb-1.5">
-              Subject <span className="text-rose-500">*</span>
-            </label>
-            <select
-              value={subject}
-              onChange={(e) => {
-                setSubject(e.target.value);
-                setChapter("");
-                setTopic("");
-              }}
-              className={`w-full px-3.5 py-2.5 bg-slate-50 border rounded-2xl font-bold text-slate-800 outline-none transition focus:bg-white focus:border-blue-500 ${
-                missingFieldErrors.subject ? "border-rose-500 bg-rose-50" : "border-slate-200"
-              }`}
-            >
-              {subjectsList.map((s) => (
-                <option key={s.id} value={s.name}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <span className="px-3 py-1 bg-blue-100/80 text-[#0c3ea4] font-black text-xs rounded-xl shadow-xs border border-blue-200">
+            {subject}
+          </span>
 
-          {/* Chapter */}
-          <div>
-            <label className="block font-bold text-slate-700 mb-1.5">
-              Chapter <span className="text-rose-500">*</span>
-            </label>
-            <select
-              value={chapter}
-              onChange={(e) => {
-                setChapter(e.target.value);
-                setTopic("");
-              }}
-              disabled={!subject}
-              className={`w-full px-3.5 py-2.5 bg-slate-50 border rounded-2xl font-semibold text-slate-800 outline-none transition focus:bg-white focus:border-blue-500 disabled:opacity-50 ${
-                missingFieldErrors.chapter ? "border-rose-500 bg-rose-50" : "border-slate-200"
-              }`}
-            >
-              <option value="">-- Select Chapter --</option>
-              {chaptersList.map((c) => (
-                <option key={c.id} value={c.title}>
-                  {c.displayTitle || c.title}
-                </option>
-              ))}
-            </select>
-          </div>
+          <span
+            className={`px-3 py-1 rounded-xl text-xs font-bold border shadow-xs max-w-[240px] truncate ${
+              chapter
+                ? "bg-slate-100 text-slate-800 border-slate-200"
+                : "bg-rose-100 text-rose-700 border-rose-200"
+            }`}
+          >
+            {chapter ? chapter : "⚠ No Chapter Selected"}
+          </span>
 
-          {/* Topic */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="font-bold text-slate-700">
-                Topic <span className="text-rose-500">*</span>
-              </label>
-              <button
-                type="button"
-                onClick={() => setIsAddingCustomTopic(!isAddingCustomTopic)}
-                className="text-[11px] font-bold text-blue-600 hover:text-blue-800 transition flex items-center gap-0.5 cursor-pointer"
-              >
-                {isAddingCustomTopic ? "✕ Cancel" : "+ Custom Topic"}
-              </button>
-            </div>
-
-            {isAddingCustomTopic ? (
-              <div className="flex items-center gap-1.5">
-                <input
-                  type="text"
-                  placeholder="New Topic name..."
-                  value={customTopicInput}
-                  onChange={(e) => setCustomTopicInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      handleSaveNewTopic();
-                    }
-                  }}
-                  className="w-full px-3 py-2 bg-white border border-blue-400 rounded-xl font-semibold text-slate-900 outline-none text-xs"
-                />
-                <button
-                  type="button"
-                  onClick={() => handleSaveNewTopic()}
-                  disabled={isSavingTaxonomy}
-                  className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shrink-0 transition cursor-pointer"
-                >
-                  {isSavingTaxonomy ? "..." : "Save"}
-                </button>
-              </div>
-            ) : (
-              <select
-                value={topic}
-                onChange={(e) => {
-                  if (e.target.value === "__NEW_TOPIC__") {
-                    setIsAddingCustomTopic(true);
-                  } else {
-                    setTopic(e.target.value);
-                  }
-                }}
-                disabled={!chapter}
-                className={`w-full px-3.5 py-2.5 bg-slate-50 border rounded-2xl font-semibold text-slate-800 outline-none transition focus:bg-white focus:border-blue-500 disabled:opacity-50 ${
-                  missingFieldErrors.topic ? "border-rose-500 bg-rose-50" : "border-slate-200"
-                }`}
-              >
-                <option value="">-- Select Topic --</option>
-                {topicsList.map((t) => (
-                  <option key={t.id || t.title} value={t.title}>
-                    {t.title}
-                  </option>
-                ))}
-                <option value="__NEW_TOPIC__">+ Add Custom Topic to Catalog...</option>
-              </select>
-            )}
-          </div>
-
-          {/* Question Type */}
-          <div>
-            <label className="block font-bold text-slate-700 mb-1.5">
-              Question Type <span className="text-rose-500">*</span>
-            </label>
-            <select
-              value={questionType}
-              onChange={(e) => setQuestionType(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-800 outline-none transition focus:bg-white focus:border-blue-500"
-            >
-              <option value="SINGLE_CORRECT">Single Correct (MCQ)</option>
-              <option value="MULTIPLE_CORRECT">Multiple Correct</option>
-              <option value="ASSERTION_REASON">Assertion &amp; Reason</option>
-              <option value="STATEMENT_BASED">Statement-Based (I &amp; II)</option>
-              <option value="MATCH_COLUMN">Match The Columns</option>
-              <option value="NUMERICAL">Numerical / Integer</option>
-            </select>
-          </div>
-
-          {/* Difficulty */}
-          <div>
-            <label className="block font-bold text-slate-700 mb-1.5">Difficulty</label>
-            <div className="grid grid-cols-4 gap-1 p-1 bg-slate-100 rounded-2xl border border-slate-200 text-center font-black text-[11px]">
-              {(["EASY", "MEDIUM", "HARD", "ULTRA"] as const).map((d) => (
-                <button
-                  key={d}
-                  type="button"
-                  onClick={() => setDifficulty(d)}
-                  className={`py-1.5 rounded-xl transition ${
-                    difficulty === d
-                      ? d === "EASY"
-                        ? "bg-emerald-600 text-white shadow-sm"
-                        : d === "MEDIUM"
-                        ? "bg-blue-600 text-white shadow-sm"
-                        : d === "HARD"
-                        ? "bg-amber-600 text-white shadow-sm"
-                        : "bg-blue-600 text-white shadow-sm"
-                      : "text-slate-600 hover:text-slate-900"
-                  }`}
-                >
-                  {d}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Category */}
-          <div>
-            <label className="block font-bold text-slate-700 mb-1.5">Category</label>
-            <select
-              value={category}
-              onChange={(e) => {
-                const val = e.target.value;
-                setCategory(val);
-                if (val === "NEET_PYQ") {
-                  setPyqExam("NEET");
-                } else if (val === "JEE_MAINS_PYQ") {
-                  setPyqExam("JEE_MAINS");
-                } else if (val === "JEE_ADVANCED_PYQ") {
-                  setPyqExam("JEE_ADVANCED");
-                }
-              }}
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl font-semibold text-slate-800 outline-none transition focus:bg-white focus:border-blue-500"
-            >
-              <option value="NCERT Canonical">NCERT Canonical (Line-by-Line)</option>
-              <option value="NEET_PYQ">NEET PYQs</option>
-              <option value="JEE_MAINS_PYQ">JEE Mains PYQs</option>
-              <option value="JEE_ADVANCED_PYQ">JEE Advanced PYQs</option>
-              <option value="PYQ Inspired">PYQ Inspired</option>
-              <option value="Exemplar">NCERT Exemplar</option>
-              <option value="High-Yield Concept">High-Yield Concept</option>
-            </select>
-          </div>
-
-          {/* PYQ Details (if Category is a PYQ or pyqExam is set) */}
-          {(category === "NEET_PYQ" || category === "JEE_MAINS_PYQ" || category === "JEE_ADVANCED_PYQ" || pyqExam) && (
-            <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-black tracking-wide text-amber-900 uppercase">
-                  PYQ Source &amp; Numbering
-                </span>
-                <span className="px-2.5 py-0.5 rounded-full bg-amber-200/80 text-amber-900 font-mono text-[11px] font-bold">
-                  {pyqExam === "NEET" && `NEET ${pyqYear} — ${pyqQuestionNumber}`}
-                  {pyqExam === "JEE_MAINS" && `JEE Main ${pyqYear} — ${pyqMonth} — ${pyqQuestionNumber}`}
-                  {pyqExam === "JEE_ADVANCED" && `JEE Advanced ${pyqYear} — ${pyqQuestionNumber}`}
-                  {!["NEET", "JEE_MAINS", "JEE_ADVANCED"].includes(pyqExam) && `${pyqExam || "PYQ"} ${pyqYear} — ${pyqQuestionNumber}`}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Exam</label>
-                  <select
-                    value={pyqExam}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setPyqExam(val);
-                      if (val === "NEET") setCategory("NEET_PYQ");
-                      else if (val === "JEE_MAINS") setCategory("JEE_MAINS_PYQ");
-                      else if (val === "JEE_ADVANCED") setCategory("JEE_ADVANCED_PYQ");
-                    }}
-                    className="w-full px-3 py-2 bg-white border border-amber-300 rounded-xl font-medium text-slate-800 outline-none"
-                  >
-                    <option value="NEET">NEET</option>
-                    <option value="JEE_MAINS">JEE Mains</option>
-                    <option value="JEE_ADVANCED">JEE Advanced</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Year</label>
-                  <select
-                    value={pyqYear}
-                    onChange={(e) => setPyqYear(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-amber-300 rounded-xl font-medium text-slate-800 outline-none"
-                  >
-                    {Array.from({ length: 20 }, (_, i) => 2026 - i).map((y) => (
-                      <option key={y} value={String(y)}>{y}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {pyqExam === "JEE_MAINS" && (
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Session / Month</label>
-                    <select
-                      value={pyqMonth}
-                      onChange={(e) => setPyqMonth(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-amber-300 rounded-xl font-medium text-slate-800 outline-none"
-                    >
-                      <option value="January">January</option>
-                      <option value="April">April</option>
-                    </select>
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Question Number</label>
-                  <input
-                    type="text"
-                    value={pyqQuestionNumber}
-                    onChange={(e) => setPyqQuestionNumber(e.target.value)}
-                    placeholder="e.g. Question 01"
-                    className="w-full px-3 py-2 bg-white border border-amber-300 rounded-xl font-mono text-xs text-slate-800 outline-none"
-                  />
-                </div>
-              </div>
-            </div>
+          {topic && (
+            <span className="px-2.5 py-1 bg-slate-50 text-slate-700 font-medium text-xs rounded-xl border border-slate-200 max-w-[200px] truncate hidden sm:inline-block">
+              {topic}
+            </span>
           )}
 
-          {/* Subtopic (Optional with Custom Add to Catalog) */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="font-bold text-slate-700">Sub-topic (Optional)</label>
-              <button
-                type="button"
-                onClick={() => setIsAddingCustomSubtopic(!isAddingCustomSubtopic)}
-                className="text-[11px] font-bold text-blue-600 hover:text-blue-800 transition flex items-center gap-0.5 cursor-pointer"
-              >
-                {isAddingCustomSubtopic ? "✕ Cancel" : "+ Custom Subtopic"}
-              </button>
-            </div>
+          <span className="px-2.5 py-1 rounded-xl text-[11px] font-black uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
+            {difficulty}
+          </span>
 
-            {isAddingCustomSubtopic ? (
-              <div className="flex items-center gap-1.5">
-                <input
-                  type="text"
-                  placeholder="New Subtopic name..."
-                  value={customSubtopicInput}
-                  onChange={(e) => setCustomSubtopicInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      handleSaveNewSubtopic();
-                    }
-                  }}
-                  className="w-full px-3 py-2 bg-white border border-blue-400 rounded-xl font-medium text-slate-900 outline-none text-xs"
-                />
-                <button
-                  type="button"
-                  onClick={() => handleSaveNewSubtopic()}
-                  disabled={isSavingTaxonomy}
-                  className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shrink-0 transition cursor-pointer"
-                >
-                  {isSavingTaxonomy ? "..." : "Save"}
-                </button>
-              </div>
-            ) : (
-              <div>
-                <input
-                  type="text"
-                  list="subtopics-datalist"
-                  placeholder="Select or enter sub-topic..."
-                  value={subTopic}
-                  onChange={(e) => setSubTopic(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl font-medium text-slate-800 outline-none transition focus:bg-white focus:border-blue-500"
-                />
-                <datalist id="subtopics-datalist">
-                  {topicsList
-                    .find((t) => t.title.toLowerCase() === topic.toLowerCase())
-                    ?.subtopics?.map((st) => (
-                      <option key={st} value={st} />
-                    ))}
-                </datalist>
-              </div>
-            )}
-          </div>
-
-          {/* Marks */}
-          <div>
-            <label className="block font-bold text-slate-700 mb-1.5">Marking Scheme</label>
-            <div className="flex items-center gap-2">
-              <div className="flex-1 flex items-center bg-emerald-50 border border-emerald-200 px-3 py-2 rounded-2xl">
-                <span className="text-emerald-700 font-bold mr-1">+</span>
-                <input
-                  type="number"
-                  value={marks}
-                  onChange={(e) => setMarks(Number(e.target.value))}
-                  className="w-full bg-transparent font-black text-emerald-800 outline-none"
-                />
-              </div>
-              <div className="flex-1 flex items-center bg-rose-50 border border-rose-200 px-3 py-2 rounded-2xl">
-                <span className="text-rose-700 font-bold mr-1">-</span>
-                <input
-                  type="number"
-                  value={negativeMarks}
-                  onChange={(e) => setNegativeMarks(Number(e.target.value))}
-                  className="w-full bg-transparent font-black text-rose-800 outline-none"
-                />
-              </div>
-            </div>
-          </div>
+          <span className="px-2.5 py-1 rounded-xl text-[11px] font-mono font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+            +{marks} / -{negativeMarks}
+          </span>
         </div>
+
+        <button
+          type="button"
+          onClick={() => setIsMetadataDrawerOpen(true)}
+          className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl font-black text-xs transition shadow-sm cursor-pointer ${
+            missingFieldErrors.subject || missingFieldErrors.chapter || missingFieldErrors.topic
+              ? "bg-rose-600 hover:bg-rose-700 text-white animate-pulse shadow-rose-500/30"
+              : "bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 hover:border-blue-300"
+          }`}
+        >
+          <Sliders className="w-4 h-4" />
+          <span>Edit Metadata &amp; Taxonomy (Side Popup)</span>
+          {(missingFieldErrors.subject || missingFieldErrors.chapter || missingFieldErrors.topic) && (
+            <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+          )}
+        </button>
       </div>
+
+      {/* DEDICATED SLIDING METADATA DRAWER / POPUP */}
+      <QuestionMetadataDrawer
+        isOpen={isMetadataDrawerOpen}
+        onClose={() => setIsMetadataDrawerOpen(false)}
+        subject={subject}
+        setSubject={setSubject}
+        chapter={chapter}
+        setChapter={setChapter}
+        topic={topic}
+        setTopic={setTopic}
+        subTopic={subTopic}
+        setSubTopic={setSubTopic}
+        questionType={questionType}
+        setQuestionType={setQuestionType}
+        difficulty={difficulty}
+        setDifficulty={setDifficulty}
+        category={category}
+        setCategory={setCategory}
+        pyqExam={pyqExam}
+        setPyqExam={setPyqExam}
+        pyqYear={pyqYear}
+        setPyqYear={setPyqYear}
+        pyqMonth={pyqMonth}
+        setPyqMonth={setPyqMonth}
+        pyqQuestionNumber={pyqQuestionNumber}
+        setPyqQuestionNumber={setPyqQuestionNumber}
+        marks={marks}
+        setMarks={setMarks}
+        negativeMarks={negativeMarks}
+        setNegativeMarks={setNegativeMarks}
+        subjectsList={subjectsList}
+        chaptersList={chaptersList}
+        topicsList={topicsList}
+        missingFieldErrors={missingFieldErrors}
+        onSaveNewTopic={handleSaveNewTopic}
+        onSaveNewSubtopic={handleSaveNewSubtopic}
+        isSavingTaxonomy={isSavingTaxonomy}
+      />
 
       {/* 3. AUTO-EXTRACT DROP & PASTE ZONE (Section 4 — No Manual Click Needed) */}
       <div
@@ -1820,6 +1555,13 @@ export function UnifiedQuestionEditor({
                         className="flex-1 bg-transparent text-xs sm:text-sm text-slate-900 font-medium outline-none"
                       />
                     </div>
+                    {opt.val.trim() && (
+                      <EquationLivePreview
+                        content={opt.val}
+                        label={`विकल्प (${opt.key})`}
+                        className="mt-2 bg-white border border-slate-200 p-2"
+                      />
+                    )}
                   </div>
                 );
               })}
@@ -1898,6 +1640,13 @@ export function UnifiedQuestionEditor({
                         className="flex-1 bg-transparent text-xs sm:text-sm text-slate-900 font-medium outline-none"
                       />
                     </div>
+                    {opt.val.trim() && (
+                      <EquationLivePreview
+                        content={opt.val}
+                        label={`Option (${opt.key})`}
+                        className="mt-2 bg-white border border-slate-200 p-2"
+                      />
+                    )}
                   </div>
                 );
               })}
@@ -2211,6 +1960,29 @@ export function UnifiedQuestionEditor({
           </div>
         </div>
       </div>
+
+      {/* 6. DEDICATED REAL-TIME STUDENT PREVIEW & LIVE REVIEW COLUMN */}
+      <QuestionLiveReviewPanel
+        statementEn={statementEn}
+        statementHi={statementHi}
+        optionAEn={optionAEn}
+        optionAHi={optionAHi}
+        optionBEn={optionBEn}
+        optionBHi={optionBHi}
+        optionCEn={optionCEn}
+        optionCHi={optionCHi}
+        optionDEn={optionDEn}
+        optionDHi={optionDHi}
+        correctOption={correctOption}
+        solutionEn={solutionEn}
+        solutionHi={solutionHi}
+        diagramUrl={diagramUrl}
+        solutionImageUrl={solutionImageUrl}
+        subject={subject}
+        chapter={chapter}
+        marks={marks}
+        negativeMarks={negativeMarks}
+      />
 
       {/* 5. STICKY BOTTOM ACTION BAR (Save & Slot Navigation) */}
       <footer className="bg-white border border-slate-200 rounded-3xl p-4 sm:p-5 shadow-lg flex flex-wrap items-center justify-between gap-4">

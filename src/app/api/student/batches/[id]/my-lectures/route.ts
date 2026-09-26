@@ -60,6 +60,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
                         pdfStatus: true,
                         youtubeArchiveStatus: true,
                         youtubeArchiveVideoUrl: true,
+                        youtubeVideoId: true,
                       },
                     },
                   },
@@ -100,6 +101,9 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
           watchHref = `/watch/${lecture.id}`;
         } else if (wb) {
           if (wb.youtubeArchiveStatus === "COMPLETED" && wb.youtubeArchiveVideoUrl) {
+            recordingStatus = "AVAILABLE";
+            watchHref = `/watch/${schedule!.id}`;
+          } else if (wb.youtubeVideoId) {
             recordingStatus = "AVAILABLE";
             watchHref = `/watch/${schedule!.id}`;
           } else if (wb.recordingStatus === "READY") {

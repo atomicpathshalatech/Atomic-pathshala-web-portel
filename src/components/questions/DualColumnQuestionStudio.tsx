@@ -143,13 +143,6 @@ export function DualColumnQuestionStudio({
 
   const savedQuestionsCount = Object.values(questionsMap).filter((q) => q.isSaved).length;
 
-  // Active Subject details
-  const activeSubjectObj = subjects.find((s) => s.name === activeSubject) || subjects[0];
-  const activeSubjectTotal = activeSubjectObj?.total || 45;
-  const activeSubjectSaved = Object.values(questionsMap).filter(
-    (q) => q.subject === activeSubject && q.isSaved
-  ).length;
-
   // Compute start/end question numbers for each section
   const sectionOffsets = React.useMemo(() => {
     let offset = 1;
@@ -160,6 +153,32 @@ export function DualColumnQuestionStudio({
     }
     return map;
   }, [subjects]);
+
+  // Dynamically derive current section based on slot range
+  const currentSection = React.useMemo(() => {
+    const found = subjects.find((sub) => {
+      const range = sectionOffsets[sub.name];
+      return range && currentQuestionNumber >= range.start && currentQuestionNumber <= range.end;
+    });
+    return found || subjects[0];
+  }, [subjects, sectionOffsets, currentQuestionNumber]);
+
+  // Keep activeSubject in sync with currentSection
+  useEffect(() => {
+    if (currentSection?.name && currentSection.name !== activeSubject) {
+      setActiveSubject(currentSection.name);
+    }
+  }, [currentSection, activeSubject]);
+
+  // Active Subject details derived from currentSection
+  const activeSubjectObj = currentSection;
+  const activeSubjectTotal = activeSubjectObj?.total || 45;
+  const activeSubjectSaved = Object.values(questionsMap).filter((q) => {
+    if (!activeSubjectObj) return q.isSaved;
+    const range = sectionOffsets[activeSubjectObj.name];
+    const inRange = range && q.questionNumber >= range.start && q.questionNumber <= range.end;
+    return (q.subject === activeSubjectObj.name || inRange) && q.isSaved;
+  }).length;
 
 
 

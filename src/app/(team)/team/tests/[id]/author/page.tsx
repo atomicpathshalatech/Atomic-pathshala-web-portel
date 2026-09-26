@@ -41,13 +41,10 @@ export default async function TestAuthorPage({ params }: { params: { id: string 
 
   const subjects = test.sections.map((sec) => {
     const isBio = sec.name?.toLowerCase().includes("bio") || sec.subject?.toLowerCase().includes("bio");
-    const totalCount = sec.targetCount && sec.targetCount > 0
-      ? sec.targetCount
-      : isBio
-      ? 90
-      : 45;
+    const baseTarget = sec.targetCount && sec.targetCount > 0 ? sec.targetCount : isBio ? 90 : 45;
+    const totalCount = Math.max(sec.questions.length, baseTarget);
     return {
-      name: sec.name || "Section",
+      name: sec.name || sec.subject || "Section",
       count: sec.questions.length,
       total: totalCount,
       sectionId: sec.id,
@@ -55,9 +52,15 @@ export default async function TestAuthorPage({ params }: { params: { id: string 
   });
 
   const initialQuestions: import("@/components/questions/DualColumnQuestionStudio").QuestionEntry[] = [];
-  let slotIdx = 1;
-  for (const sec of test.sections) {
-    for (const sq of sec.questions) {
+  let currentSectionOffset = 1;
+
+  for (let sIdx = 0; sIdx < test.sections.length; sIdx++) {
+    const sec = test.sections[sIdx];
+    const secObj = subjects[sIdx];
+    if (!sec || !secObj) continue;
+    const sectionStart = currentSectionOffset;
+
+    sec.questions.forEach((sq, qIdx) => {
       const q = sq.question;
       const trEn = q.translations.find((t) => t.language === "ENGLISH");
       const trHi = q.translations.find((t) => t.language === "HINDI");
@@ -65,11 +68,13 @@ export default async function TestAuthorPage({ params }: { params: { id: string 
       const optHi = (trHi?.options as any) || {};
       const correct = (trEn?.correctOptionIds as any)?.[0] || (trHi?.correctOptionIds as any)?.[0] || "A";
 
+      const slotNumber = sectionStart + (typeof sq.order === "number" && sq.order > 0 ? sq.order - 1 : qIdx);
+
       initialQuestions.push({
         id: q.id,
         questionCode: q.questionCode || undefined,
-        questionNumber: slotIdx,
-        subject: q.subject,
+        questionNumber: slotNumber,
+        subject: sec.name || q.subject,
         chapter: q.chapter || "",
         topic: q.topic || "",
         subTopic: q.subTopic || "",
@@ -93,8 +98,9 @@ export default async function TestAuthorPage({ params }: { params: { id: string 
         imageUrl: q.imageUrl || undefined,
         isSaved: true,
       });
-      slotIdx++;
-    }
+    });
+
+    currentSectionOffset += secObj.total;
   }
 
   const totalQuestions = subjects.reduce(
