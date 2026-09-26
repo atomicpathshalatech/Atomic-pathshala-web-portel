@@ -4,7 +4,7 @@ import type { ModuleElementInput } from "@/lib/validation/module";
 import { MODULE_ELEMENT_TYPES } from "@/lib/validation/module";
 import { geminiKeyManager } from "@/lib/ai/gemini-key-manager";
 
-const MODEL_FALLBACKS = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-flash-latest"] as const;
+const MODEL_FALLBACKS = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-3.6-flash"] as const;
 
 const TEXT_ELEMENT_TYPES = MODULE_ELEMENT_TYPES;
 

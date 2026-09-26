@@ -256,7 +256,7 @@ export async function extractFromImage(
   const cleanBase64 = imageBase64.replace(/^data:image\/[a-z]+;base64,/, "");
 
   return geminiKeyManager.executeWithRotation(async (client: GoogleGenerativeAI) => {
-    const model = client.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const model = client.getGenerativeModel({ model: "gemini-3.8-flash" });
 
     const prompt = `You are an expert exam question digitizer for Indian national competitive exams (NEET, JEE Main, CBSE).
 Analyze the provided question image and extract all elements with high precision.
@@ -342,7 +342,7 @@ export async function generateEducationalTranslation(
 
   try {
     return await geminiKeyManager.executeWithRotation(async (client: GoogleGenerativeAI) => {
-      const model = client.getGenerativeModel({ model: "gemini-2.0-flash" });
+      const model = client.getGenerativeModel({ model: "gemini-3.8-flash" });
       const targetLang = sourceLanguage === "ENGLISH" ? "Hindi (Devanagari)" : "English";
 
       const prompt = `Translate the following scientific / mathematical exam content from ${sourceLanguage} to ${targetLang}.
@@ -393,7 +393,7 @@ export async function verifyTranslation(
 
   try {
     return await geminiKeyManager.executeWithRotation(async (client: GoogleGenerativeAI) => {
-      const model = client.getGenerativeModel({ model: "gemini-2.0-flash" });
+      const model = client.getGenerativeModel({ model: "gemini-3.8-flash" });
       const prompt = `You are an NCERT Bilingual Examination Quality Auditor.
 Compare the English question and Hindi translation:
 English: "${englishText}"

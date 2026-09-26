@@ -142,7 +142,7 @@ You MUST output a valid, parseable JSON object matching this schema strictly (no
 
 export async function solveDoubtWithAi(input: SolveDoubtInput): Promise<AiDoubtSolution> {
   const keys = getGeminiApiKeys();
-  const modelNames = ["gemini-3.6-flash", "gemini-1.5-flash", "gemini-2.0-flash"];
+  const modelNames = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-3.6-flash"];
 
   // Format conversation history for multi-turn context
   let conversationContext = "";

@@ -110,7 +110,7 @@ export async function recognizeStructureFromImage(
     }. Match original geometry closely.`;
 
     const rawText = await geminiKeyManager.executeWithRotation(async (client: GoogleGenerativeAI) => {
-      const model = client.getGenerativeModel({ model: "gemini-2.0-flash" });
+      const model = client.getGenerativeModel({ model: "gemini-3.8-flash" });
       const response = await model.generateContent([
         RECOGNITION_SYSTEM_PROMPT,
         inlinePart,
