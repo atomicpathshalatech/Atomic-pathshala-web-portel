@@ -235,26 +235,6 @@ export function ChapterForm({
           />
           {errors.description && <p className={errorClass}>{errors.description.message}</p>}
         </div>
-
-        <div>
-          <label className={labelClass}>Learning Objectives</label>
-          <textarea
-            className={inputClass}
-            rows={3}
-            placeholder="Key learning outcomes / important concepts covered"
-            {...register("learningObjectives")}
-          />
-        </div>
-
-        <div>
-          <label className={labelClass}>Prerequisites</label>
-          <textarea
-            className={inputClass}
-            rows={2}
-            placeholder="What should students already know before starting this chapter?"
-            {...register("prerequisites")}
-          />
-        </div>
       </div>
 
       <div className="glass-card p-stack-md rounded-xl flex items-center justify-between gap-4">
