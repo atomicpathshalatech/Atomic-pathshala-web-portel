@@ -596,18 +596,43 @@ export async function PUT(request: NextRequest) {
         where: { sectionId: testSectionId, questionId },
       });
       if (!existingSecLink) {
-        const secCount = await prisma.sectionQuestion.count({ where: { sectionId: testSectionId } });
-        sectionQuestion = await prisma.sectionQuestion.create({
-          data: {
-            sectionId: testSectionId,
-            questionId,
-            order: secCount + 1,
-          },
+        const targetSection = await prisma.section.findUnique({
+          where: { id: testSectionId },
+          select: { testId: true },
         });
-        await prisma.question.update({
-          where: { id: questionId },
-          data: { usageCount: { increment: 1 } },
-        });
+
+        const existingTestLink = targetSection?.testId
+          ? await prisma.sectionQuestion.findFirst({
+              where: {
+                questionId,
+                section: { testId: targetSection.testId },
+              },
+            })
+          : null;
+
+        if (existingTestLink) {
+          const secCount = await prisma.sectionQuestion.count({ where: { sectionId: testSectionId } });
+          sectionQuestion = await prisma.sectionQuestion.update({
+            where: { id: existingTestLink.id },
+            data: {
+              sectionId: testSectionId,
+              order: secCount + 1,
+            },
+          });
+        } else {
+          const secCount = await prisma.sectionQuestion.count({ where: { sectionId: testSectionId } });
+          sectionQuestion = await prisma.sectionQuestion.create({
+            data: {
+              sectionId: testSectionId,
+              questionId,
+              order: secCount + 1,
+            },
+          });
+          await prisma.question.update({
+            where: { id: questionId },
+            data: { usageCount: { increment: 1 } },
+          });
+        }
       } else {
         sectionQuestion = existingSecLink;
       }

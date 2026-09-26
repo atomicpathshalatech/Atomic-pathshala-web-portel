@@ -381,8 +381,18 @@ export function UnifiedQuestionEditor({
   // Save State
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [generatedCode, setGeneratedCode] = useState<string | null>(initialQuestion?.questionCode || null);
-  const [currentDraftId, setCurrentDraftId] = useState<string | null>(questionId || null);
-  const [isAutoDraftSaved, setIsAutoDraftSaved] = useState<boolean>(Boolean(initialQuestion?.id));
+  const [currentDraftId, setCurrentDraftId] = useState<string | null>(questionId || initialQuestion?.id || null);
+  const [isAutoDraftSaved, setIsAutoDraftSaved] = useState<boolean>(Boolean(questionId || initialQuestion?.id));
+
+  useEffect(() => {
+    const effectiveId = questionId || initialQuestion?.id || null;
+    if (effectiveId) {
+      setCurrentDraftId(effectiveId);
+    }
+    if (initialQuestion?.questionCode) {
+      setGeneratedCode(initialQuestion.questionCode);
+    }
+  }, [questionId, initialQuestion?.id, initialQuestion?.questionCode]);
   const [aiCostInfo, setAiCostInfo] = useState<{
     costPaise: number;
     isFreeTier: boolean;
@@ -1051,7 +1061,7 @@ export function UnifiedQuestionEditor({
       };
 
       let res;
-      const targetId = questionId || currentDraftId;
+      const targetId = questionId || currentDraftId || initialQuestion?.id;
       if (targetId) {
         res = await fetch("/api/team/questions/engine", {
           method: "PUT",
@@ -1072,6 +1082,9 @@ export function UnifiedQuestionEditor({
       }
 
       const savedQ = json.data?.question;
+      if (savedQ?.id) {
+        setCurrentDraftId(savedQ.id);
+      }
       if (savedQ?.questionCode) {
         setGeneratedCode(savedQ.questionCode);
       }

@@ -763,6 +763,7 @@ export function DualColumnQuestionStudio({
               dppId={dppId}
               slotNumber={currentQuestionNumber}
               totalSlots={totalQuestionsCount}
+              questionId={questionsMap[currentQuestionNumber]?.id}
               initialQuestion={questionsMap[currentQuestionNumber] || {
                 subject: activeSubject,
               }}
@@ -772,6 +773,8 @@ export function DualColumnQuestionStudio({
                   [currentQuestionNumber]: {
                     ...currentQ,
                     ...saved,
+                    id: saved?.id || currentQ.id,
+                    questionCode: saved?.questionCode || currentQ.questionCode,
                     isSaved: true,
                   },
                 }));

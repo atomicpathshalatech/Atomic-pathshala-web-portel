@@ -643,12 +643,13 @@ export function AtomicQuestionEditor({
         testSectionId,
       };
 
-      if (questionId) {
+      const targetId = questionId || initialQuestion?.id;
+      if (targetId) {
         const res = await fetch("/api/team/questions/engine", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            questionId,
+            questionId: targetId,
             ...payload,
           }),
         });
