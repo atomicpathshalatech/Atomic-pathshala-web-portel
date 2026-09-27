@@ -1,11 +1,13 @@
 /**
- * CAMDRAW — UNIVERSAL STRUCTURE RECOGNITION, CREATION & QUESTION INTEGRATION
- * Canonical Type Definitions & Data Model
+ * CAMDRAW — UNIVERSAL CHEMICAL STRUCTURE RECOGNITION, GRAPH ENGINE & CHEMDRAW STUDIO
+ * Canonical Type Definitions & Molecular Graph Data Model
  */
 
 export type CamDrawDocType =
   | "chemical"
   | "reaction"
+  | "coordination"
+  | "mechanism"
   | "physics"
   | "biology"
   | "math"
@@ -19,7 +21,18 @@ export type BondType =
   | "wedge"
   | "dash"
   | "wavy"
-  | "coordinate";
+  | "coordinate"
+  | "delocalized"
+  | "hydrogen"
+  | "single_or_double";
+
+export type StereoType =
+  | "none"
+  | "up" // Solid wedge
+  | "down" // Hashed wedge / dash
+  | "either" // Wavy / undefined stereochemistry
+  | "cis"
+  | "trans";
 
 export type RingType =
   | "benzene"
@@ -27,17 +40,36 @@ export type RingType =
   | "cyclopentane"
   | "cyclobutane"
   | "cyclopropane"
+  | "cycloheptane"
+  | "cyclooctane"
+  | "naphthalene"
+  | "anthracene"
+  | "phenanthrene"
   | "pyridine"
+  | "pyrimidine"
+  | "pyrazine"
   | "pyrrole"
   | "furan"
-  | "naphthalene";
+  | "thiophene"
+  | "imidazole"
+  | "indole"
+  | "purine"
+  | "quinoline";
 
 export type ReactionArrowStyle =
   | "forward"
   | "reversible"
   | "equilibrium"
   | "resonance"
-  | "retrosynthetic";
+  | "retrosynthetic"
+  | "curved_flow";
+
+export type BracketType =
+  | "square" // [ ... ] (Coordination complexes, charges)
+  | "round" // ( ... )
+  | "curly" // { ... }
+  | "polymer" // -[ ... ]_n-
+  | "transition_state"; // [ ... ]‡
 
 export type PhysicsSymbolType =
   | "resistor"
@@ -87,28 +119,47 @@ export interface BaseElement {
   scale?: number;
 }
 
+/**
+ * High-Fidelity Graph Atom
+ */
 export interface AtomElement extends BaseElement {
   type: "atom";
   x: number;
   y: number;
-  symbol: string; // e.g. 'C', 'H', 'O', 'N', 'CH3', 'COOH', 'OH', etc.
-  charge?: string; // '+', '-', '2+', 'δ+', 'δ-', etc.
-  lonePairs?: number; // 0, 1, 2, 3
+  symbol: string; // e.g. 'C', 'H', 'O', 'N', 'CH3', 'COOH', 'OH', 'Pt', 'Fe', etc.
+  charge?: string; // '+', '-', '2+', '3+', 'δ+', 'δ-', etc.
+  lonePairs?: number; // 0, 1, 2, 3, 4
+  radicals?: number; // 0, 1 (radical dot), 2 (diradical)
   subscript?: string;
   superscript?: string;
   fontSize?: number;
   isImplicitH?: boolean;
+  implicitHCount?: number;
+  isotope?: number; // e.g. 13 for 13C, 2 for D, 3 for T
+  valency?: number;
+  oxidationState?: number;
+  atomIndex?: number;
 }
 
+/**
+ * High-Fidelity Graph Bond
+ */
 export interface BondElement extends BaseElement {
   type: "bond";
   start: Point & { atomId?: string };
   end: Point & { atomId?: string };
   bondType: BondType;
+  stereo?: StereoType;
+  order?: number; // 1, 2, 3, 1.5
   thickness?: number;
-  doubleBondAlignment?: "center" | "left" | "right";
+  doubleBondAlignment?: "center" | "left" | "right" | "auto";
+  donorAtomId?: string; // For coordinate/dative bonds (arrow points start -> end)
+  isAromatic?: boolean;
 }
 
+/**
+ * Ring System Element
+ */
 export interface RingElement extends BaseElement {
   type: "ring";
   ringType: RingType;
@@ -117,14 +168,23 @@ export interface RingElement extends BaseElement {
   radius: number;
   rotation: number;
   aromaticCircle?: boolean;
+  heteroAtoms?: Array<{
+    vertexIndex: number; // 0 to N-1
+    symbol: string; // e.g. 'N', 'O', 'S'
+    charge?: string;
+  }>;
   substituents?: Array<{
-    vertexIndex: number; // 0 to 5 for 6-ring
+    vertexIndex: number;
     label: string;
     bondType?: BondType;
+    stereo?: StereoType;
     length?: number;
   }>;
 }
 
+/**
+ * Reaction Arrow with Top/Bottom Reagents and Conditions
+ */
 export interface ReactionArrowElement extends BaseElement {
   type: "reaction_arrow";
   start: Point;
@@ -135,12 +195,35 @@ export interface ReactionArrowElement extends BaseElement {
   thickness?: number;
 }
 
+/**
+ * Curved Electron Flow Arrow for Reaction Mechanisms
+ */
 export interface CurvedArrowElement extends BaseElement {
   type: "curved_arrow";
   start: Point;
   control: Point;
   end: Point;
-  arrowHead: "double_barb" | "single_barb" | "fish_hook"; // electron pair vs radical
+  arrowHead: "double_barb" | "single_barb" | "fish_hook"; // electron pair (double) vs radical (single)
+  sourceType?: "atom" | "bond" | "lone_pair";
+  targetType?: "atom" | "bond";
+  sourceId?: string;
+  targetId?: string;
+  thickness?: number;
+}
+
+/**
+ * Coordination Complex or Polymer Bracket
+ */
+export interface BracketElement extends BaseElement {
+  type: "bracket";
+  bracketType: BracketType;
+  x: number; // Top-left x
+  y: number; // Top-left y
+  width: number;
+  height: number;
+  charge?: string; // e.g. "2+", "4-", "-"
+  subscript?: string; // e.g. "n" for polymer
+  label?: string; // e.g. "‡" for transition state
   thickness?: number;
 }
 
@@ -151,7 +234,7 @@ export interface PhysicsSymbolElement extends BaseElement {
   y: number;
   width: number;
   height: number;
-  label?: string; // e.g. "R1 = 10 Ω"
+  label?: string;
   value?: string;
 }
 
@@ -205,6 +288,7 @@ export type CamDrawElement =
   | AtomElement
   | BondElement
   | RingElement
+  | BracketElement
   | ReactionArrowElement
   | CurvedArrowElement
   | PhysicsSymbolElement
@@ -214,11 +298,28 @@ export type CamDrawElement =
   | ConnectorElement
   | FreehandElement;
 
+export interface MolecularGraph {
+  atoms: AtomElement[];
+  bonds: BondElement[];
+  rings?: RingElement[];
+  brackets?: BracketElement[];
+  formula?: string; // e.g. "C6H12O6"
+  smiles?: string;
+  iupacName?: string;
+}
+
 export interface CamDrawCanvas {
   width: number;
   height: number;
   background?: string;
   gridEnabled?: boolean;
+}
+
+export interface CamDrawValidationReport {
+  valid: boolean;
+  warnings: string[];
+  errors: string[];
+  valencyMap?: Record<string, { current: number; max: number; valid: boolean }>;
 }
 
 export interface CamDrawMetadata {
@@ -228,6 +329,9 @@ export interface CamDrawMetadata {
   warnings?: string[];
   recognizedAt?: string;
   recognizedFrom?: string; // image url or 'manual'
+  formula?: string;
+  molecularWeight?: number;
+  validationReport?: CamDrawValidationReport;
 }
 
 export interface CamDrawDocument {
@@ -235,6 +339,7 @@ export interface CamDrawDocument {
   type: CamDrawDocType;
   canvas: CamDrawCanvas;
   elements: CamDrawElement[];
+  molecularGraph?: MolecularGraph;
   metadata?: CamDrawMetadata;
 }
 
@@ -247,7 +352,7 @@ export function createEmptyCamDrawDocument(
   height: number = 500
 ): CamDrawDocument {
   return {
-    version: 1,
+    version: 2,
     type,
     canvas: {
       width,

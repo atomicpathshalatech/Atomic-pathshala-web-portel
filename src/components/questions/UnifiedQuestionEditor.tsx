@@ -471,13 +471,13 @@ export function UnifiedQuestionEditor({
     }
   };
 
-  // Helper: Smart Statement Paste Handler (Detects questions with options and extracts statement + separate options)
+  // Helper: Statement Paste Handler (Pasted images are embedded directly into statement markdown; no auto-extract hijacking)
   const handleStatementFieldPaste = async (
     e: React.ClipboardEvent<HTMLTextAreaElement>,
     _lang: "ENGLISH" | "HINDI",
-    _setter: React.Dispatch<React.SetStateAction<string>>
+    setter: React.Dispatch<React.SetStateAction<string>>
   ) => {
-    // 1. Check for image in clipboard
+    // 1. Check for image in clipboard -> Directly upload & embed as markdown in statement field
     const items = e.clipboardData?.items;
     if (items) {
       for (let i = 0; i < items.length; i++) {
@@ -486,31 +486,32 @@ export function UnifiedQuestionEditor({
           e.preventDefault();
           e.stopPropagation();
           const file = item.getAsFile();
-          if (file) {
-            handleImageUploadAndExtract(file);
+          if (!file) return;
+
+          const target = e.currentTarget;
+          const start = target.selectionStart ?? target.value.length;
+          const end = target.selectionEnd ?? target.value.length;
+          const origVal = target.value;
+
+          const toastId = toast.loading("Uploading pasted image to statement...");
+          try {
+            const url = await uploadImageFile(file);
+            if (url) {
+              const markdownImg = `\n![60%](${url})\n`;
+              const newVal = origVal.slice(0, start) + markdownImg + origVal.slice(end);
+              setter(newVal);
+              toast.success("Image embedded into statement!", { id: toastId });
+            } else {
+              toast.error("Could not obtain image URL.", { id: toastId });
+            }
+          } catch (err: any) {
+            toast.error(err.message || "Failed to upload image.", { id: toastId });
           }
           return;
         }
       }
     }
-
-    // 2. Check for text containing question statement + options
-    const pastedText = e.clipboardData?.getData("text") || "";
-    if (pastedText && pastedText.trim().length > 15) {
-      const hasOptionMarkers =
-        /(?:\([A-D1-4a-dक-घअ-द]\)|\[[A-D1-4a-d]\]|(?:Option\s*[\(:]?\s*[A-D1-4a-d])|\b[A-D][\.\)]|\b[क-घअ-द][\.\)]|(?<=\n)\s*[1-4][\.\)])/i.test(
-          pastedText
-        ) ||
-        pastedText.split("\n").map((l) => l.trim()).filter(Boolean).length >= 5;
-
-      if (hasOptionMarkers) {
-        e.preventDefault();
-        e.stopPropagation();
-        toast.info("✨ Question statement & options detected! Extracting into separate fields...");
-        await handleTextAutoExtract(pastedText.trim());
-        return;
-      }
-    }
+    // Normal text pasting continues natively into the textarea without overwriting other fields.
   };
 
   // Auto-Draft Ingestion Helper (Guarantees zero data loss as soon as question is generated/extracted)

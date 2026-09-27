@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import {
   CamDrawDocument,
@@ -8,6 +8,7 @@ import {
   AtomElement,
   BondElement,
   RingElement,
+  BracketElement,
   ReactionArrowElement,
   CurvedArrowElement,
   PhysicsSymbolElement,
@@ -22,6 +23,8 @@ import {
 } from "@/lib/camdraw/types";
 import { CamDrawRenderer, exportCamDrawToSvgString } from "./CamDrawRenderer";
 import { CAMDRAW_TEMPLATES } from "@/lib/camdraw/templates";
+import { validateChemicalDocument } from "@/lib/camdraw/validator";
+import { cleanStructure, centerStructureOnCanvas, normalizeGraphTopology } from "@/lib/camdraw/graph";
 import {
   Sparkles,
   Undo,
@@ -49,7 +52,12 @@ import {
   Zap,
   RotateCw,
   Compass,
-  FileCode,
+  Sliders,
+  CheckCircle2,
+  Wand2,
+  AlignCenter,
+  ShieldCheck,
+  ShieldAlert,
 } from "lucide-react";
 
 export interface CamDrawEditorProps {
@@ -67,6 +75,7 @@ type ActiveTool =
   | "atom"
   | "bond"
   | "ring"
+  | "bracket"
   | "reaction_arrow"
   | "curved_arrow"
   | "charge"
@@ -83,7 +92,7 @@ export function CamDrawEditor({
   hintSubject = "Chemistry",
   onSave,
   onClose,
-  title = "CamDraw Academic Structure Studio",
+  title = "CamDraw Chemical Structure & STEM Studio",
 }: CamDrawEditorProps) {
   // 1. Core Document & History State
   const [doc, setDoc] = useState<CamDrawDocument>(() => {
@@ -121,7 +130,7 @@ export function CamDrawEditor({
   const [customAtomInput, setCustomAtomInput] = useState("");
   const [selectedBondType, setSelectedBondType] = useState<BondType>("single");
   const [selectedRingType, setSelectedRingType] = useState<RingType>("benzene");
-  const [selectedCharge, setSelectedCharge] = useState("+");
+  const [bracketCharge, setBracketCharge] = useState("2+");
   const [selectedPhysSymbol, setSelectedPhysSymbol] = useState<PhysicsSymbolType>("resistor");
   const [selectedBioShape, setSelectedBioShape] = useState<BioShapeType>("cell_membrane");
   const [reactionTopText, setReactionTopText] = useState("KMnO4 / H+");
@@ -129,20 +138,24 @@ export function CamDrawEditor({
 
   // 3. Selection & Canvas Interaction States
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStartPos, setDragStartPos] = useState<{ x: number; y: number } | null>(null);
   const [bondStartPoint, setBondStartPoint] = useState<{ x: number; y: number } | null>(null);
   const [curvedStartPoint, setCurvedStartPoint] = useState<{ x: number; y: number } | null>(null);
-  const [zoomLevel, setZoomLevel] = useState(1);
   const [showGrid, setShowGrid] = useState(true);
   const [showReferenceSideBySide, setShowReferenceSideBySide] = useState<boolean>(
     Boolean(referenceImageUrl)
   );
+  const [referenceOverlayOpacity, setReferenceOverlayOpacity] = useState<number>(0);
   const [showTemplatesModal, setShowTemplatesModal] = useState(false);
+  const [showValidationModal, setShowValidationModal] = useState(false);
   const [isRecognizing, setIsRecognizing] = useState(false);
   const [matchMode, setMatchMode] = useState<"MATCH_REFERENCE" | "AUTO_ORGANIZE">("MATCH_REFERENCE");
 
   const canvasRef = useRef<SVGSVGElement>(null);
+
+  // Real-time Chemical Validation
+  const validationReport = useMemo(() => {
+    return validateChemicalDocument(doc);
+  }, [doc]);
 
   // Push new state to history
   const updateDocument = (newDoc: CamDrawDocument) => {
@@ -209,7 +222,7 @@ export function CamDrawEditor({
     }
 
     setIsRecognizing(true);
-    const toastId = toast.loading("Analyzing structure & geometry with CamDraw Vision...");
+    const toastId = toast.loading("Analyzing structure & molecular graph with CamDraw 2.0...");
 
     try {
       const res = await fetch("/api/team/camdraw/recognize", {
@@ -231,12 +244,12 @@ export function CamDrawEditor({
       if (result?.document && result.document.elements?.length > 0) {
         updateDocument(result.document);
         toast.success(
-          `Reconstructed structure with ${result.confidence}% confidence!`,
+          `Reconstructed chemical graph with ${result.confidence}% confidence!`,
           { id: toastId }
         );
       } else {
         toast.warning(
-          "Could not detect scientific structure clearly. Please create or refine manually.",
+          "Could not detect structure clearly. Please create or refine manually.",
           { id: toastId }
         );
       }
@@ -260,7 +273,6 @@ export function CamDrawEditor({
     let x = Math.round(clientX * scaleX);
     let y = Math.round(clientY * scaleY);
 
-    // Snap to grid (10px grid)
     if (showGrid) {
       x = Math.round(x / 10) * 10;
       y = Math.round(y / 10) * 10;
@@ -298,7 +310,7 @@ export function CamDrawEditor({
         cy: coords.y,
         radius: 60,
         rotation: 0,
-        aromaticCircle: selectedRingType === "benzene",
+        aromaticCircle: selectedRingType === "benzene" || selectedRingType === "naphthalene" || selectedRingType === "pyridine",
       };
       updateDocument({
         ...doc,
@@ -318,17 +330,36 @@ export function CamDrawEditor({
           bondType: selectedBondType,
           thickness: 2.2,
         };
-        updateDocument({
-          ...doc,
-          elements: [...doc.elements, newBond],
-        });
+        updateDocument(
+          normalizeGraphTopology({
+            ...doc,
+            elements: [...doc.elements, newBond],
+          })
+        );
         setBondStartPoint(null);
         setSelectedElementId(id);
       }
+    } else if (activeTool === "bracket") {
+      const newBracket: BracketElement = {
+        id,
+        type: "bracket",
+        bracketType: "square",
+        x: coords.x - 120,
+        y: coords.y - 80,
+        width: 240,
+        height: 160,
+        charge: bracketCharge,
+        thickness: 2.5,
+      };
+      updateDocument({
+        ...doc,
+        elements: [...doc.elements, newBracket],
+      });
+      setSelectedElementId(id);
     } else if (activeTool === "reaction_arrow") {
       if (!bondStartPoint) {
         setBondStartPoint(coords);
-        toast.info("Click arrow end position");
+        toast.info("Click arrow destination position");
       } else {
         const newArrow: ReactionArrowElement = {
           id,
@@ -350,7 +381,7 @@ export function CamDrawEditor({
     } else if (activeTool === "curved_arrow") {
       if (!curvedStartPoint) {
         setCurvedStartPoint(coords);
-        toast.info("Click arrow destination");
+        toast.info("Click electron movement target position");
       } else {
         const midX = (curvedStartPoint.x + coords.x) / 2;
         const midY = Math.min(curvedStartPoint.y, coords.y) - 40;
@@ -440,6 +471,20 @@ export function CamDrawEditor({
     }
   };
 
+  // Clean structure (Auto-layout & Angle snap)
+  const handleCleanStructure = () => {
+    const cleaned = cleanStructure(doc);
+    updateDocument(cleaned);
+    toast.success("Structure angles and bond lengths standardized!");
+  };
+
+  // Center structure on canvas
+  const handleCenterStructure = () => {
+    const centered = centerStructureOnCanvas(doc);
+    updateDocument(centered);
+    toast.success("Structure centered on canvas!");
+  };
+
   // Delete currently selected element
   const deleteSelectedElement = () => {
     if (!selectedElementId) return;
@@ -502,11 +547,13 @@ export function CamDrawEditor({
 
   // Save and Return to Question
   const handleSaveAndApply = () => {
+    const normalized = normalizeGraphTopology(doc);
     const finalDoc: CamDrawDocument = {
-      ...doc,
+      ...normalized,
       metadata: {
-        ...doc.metadata,
+        ...normalized.metadata,
         matchMode,
+        validationReport,
       },
     };
     onSave(finalDoc);
@@ -528,7 +575,7 @@ export function CamDrawEditor({
               <h1 className="text-sm font-black tracking-tight text-white flex items-center gap-2">
                 <span>{title}</span>
                 <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">
-                  Vector Engine v1.0
+                  ChemDraw Engine 2.0
                 </span>
               </h1>
             </div>
@@ -557,6 +604,32 @@ export function CamDrawEditor({
 
         {/* Action Controls */}
         <div className="flex items-center gap-2">
+          {/* Chemical Validation Badge */}
+          <button
+            type="button"
+            onClick={() => setShowValidationModal(true)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 ${
+              validationReport.errors.length > 0
+                ? "bg-red-500/20 border-red-500/40 text-red-400 hover:bg-red-500/30"
+                : validationReport.warnings.length > 0
+                ? "bg-amber-500/20 border-amber-500/40 text-amber-400 hover:bg-amber-500/30"
+                : "bg-emerald-500/20 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/30"
+            }`}
+          >
+            {validationReport.errors.length > 0 ? (
+              <ShieldAlert className="w-4 h-4" />
+            ) : (
+              <ShieldCheck className="w-4 h-4" />
+            )}
+            <span>
+              {validationReport.errors.length > 0
+                ? `${validationReport.errors.length} Valence Error`
+                : validationReport.warnings.length > 0
+                ? `${validationReport.warnings.length} Warning`
+                : "Valences Valid"}
+            </span>
+          </button>
+
           {/* Reference Split view toggle */}
           {referenceImageUrl && (
             <button
@@ -569,7 +642,7 @@ export function CamDrawEditor({
               }`}
             >
               <Split className="w-3.5 h-3.5" />
-              <span>Reference Split</span>
+              <span>Split Ref</span>
             </button>
           )}
 
@@ -582,7 +655,7 @@ export function CamDrawEditor({
               className="px-3.5 py-1.5 rounded-xl text-xs font-extrabold bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-md transition flex items-center gap-1.5 disabled:opacity-50"
             >
               <Sparkles className="w-3.5 h-3.5 animate-pulse" />
-              <span>{isRecognizing ? "Recognizing..." : "Recreate with AI"}</span>
+              <span>{isRecognizing ? "Recognizing..." : "Reconstruct AI"}</span>
             </button>
           )}
 
@@ -603,7 +676,7 @@ export function CamDrawEditor({
             className="px-4 py-1.5 rounded-xl text-xs font-black bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg transition flex items-center gap-1.5"
           >
             <Check className="w-4 h-4" />
-            <span>Apply to Question</span>
+            <span>Apply Structure</span>
           </button>
 
           {onClose && (
@@ -630,7 +703,7 @@ export function CamDrawEditor({
                 <span className="text-xs font-black text-slate-200">Reference Source</span>
               </div>
               <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-400">
-                Original Geometry
+                Original Image
               </span>
             </div>
             <div className="flex-1 p-4 overflow-auto flex items-center justify-center bg-slate-950/50">
@@ -640,46 +713,24 @@ export function CamDrawEditor({
                 className="max-w-full max-h-full object-contain rounded-xl border border-slate-800 shadow-lg"
               />
             </div>
-            {doc.metadata?.confidence !== undefined && (
-              <div className="p-3 border-t border-slate-800 bg-slate-900/50 flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-slate-400">CamDraw Fidelity:</span>
-                  <span
-                    className={`text-xs font-black px-2 py-0.5 rounded-full ${
-                      doc.metadata.confidence >= 80
-                        ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                        : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
-                    }`}
-                  >
-                    {doc.metadata.confidence}%
-                  </span>
-                </div>
-                <div className="flex items-center gap-1 text-[11px] text-slate-400 font-bold">
-                  <button
-                    type="button"
-                    onClick={() => setMatchMode("MATCH_REFERENCE")}
-                    className={`px-2 py-1 rounded ${
-                      matchMode === "MATCH_REFERENCE"
-                        ? "bg-blue-600 text-white"
-                        : "hover:bg-slate-800"
-                    }`}
-                  >
-                    Match Geometry
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setMatchMode("AUTO_ORGANIZE")}
-                    className={`px-2 py-1 rounded ${
-                      matchMode === "AUTO_ORGANIZE"
-                        ? "bg-blue-600 text-white"
-                        : "hover:bg-slate-800"
-                    }`}
-                  >
-                    Auto Layout
-                  </button>
-                </div>
-              </div>
-            )}
+            {/* Overlay Opacity Slider */}
+            <div className="p-3 border-t border-slate-800 bg-slate-900/70 flex items-center justify-between text-xs">
+              <span className="text-slate-400 font-bold flex items-center gap-1">
+                <Sliders className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Canvas Overlay:</span>
+              </span>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={referenceOverlayOpacity * 100}
+                onChange={(e) => setReferenceOverlayOpacity(Number(e.target.value) / 100)}
+                className="w-32 accent-indigo-500 cursor-pointer"
+              />
+              <span className="font-mono text-slate-300 w-8 text-right">
+                {Math.round(referenceOverlayOpacity * 100)}%
+              </span>
+            </div>
           </div>
         )}
 
@@ -714,7 +765,7 @@ export function CamDrawEditor({
                     }`}
                   >
                     <AtomIcon className="w-3.5 h-3.5" />
-                    <span>Atom ({selectedAtomSymbol})</span>
+                    <span>Atom ({customAtomInput || selectedAtomSymbol})</span>
                   </button>
 
                   <button
@@ -740,6 +791,18 @@ export function CamDrawEditor({
                   >
                     <CircleDot className="w-3.5 h-3.5" />
                     <span>Ring ({selectedRingType})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveTool("bracket")}
+                    className={`px-2.5 py-1 rounded-lg font-bold flex items-center gap-1.5 transition ${
+                      activeTool === "bracket"
+                        ? "bg-blue-600 text-white"
+                        : "bg-slate-800 text-slate-300 hover:text-white"
+                    }`}
+                  >
+                    <span>[ ] Bracket ({bracketCharge})</span>
                   </button>
 
                   <button
@@ -771,20 +834,18 @@ export function CamDrawEditor({
               )}
 
               {category === "physics" && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTool("physics_symbol")}
-                    className={`px-2.5 py-1 rounded-lg font-bold flex items-center gap-1.5 transition ${
-                      activeTool === "physics_symbol"
-                        ? "bg-blue-600 text-white"
-                        : "bg-slate-800 text-slate-300 hover:text-white"
-                    }`}
-                  >
-                    <Zap className="w-3.5 h-3.5" />
-                    <span>Symbol ({selectedPhysSymbol})</span>
-                  </button>
-                </>
+                <button
+                  type="button"
+                  onClick={() => setActiveTool("physics_symbol")}
+                  className={`px-2.5 py-1 rounded-lg font-bold flex items-center gap-1.5 transition ${
+                    activeTool === "physics_symbol"
+                      ? "bg-blue-600 text-white"
+                      : "bg-slate-800 text-slate-300 hover:text-white"
+                  }`}
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  <span>Symbol ({selectedPhysSymbol})</span>
+                </button>
               )}
 
               {category === "biology" && (
@@ -834,6 +895,24 @@ export function CamDrawEditor({
             <div className="flex items-center gap-1 shrink-0">
               <button
                 type="button"
+                onClick={handleCleanStructure}
+                className="px-2 py-1 rounded-lg bg-slate-800 text-slate-200 hover:text-white hover:bg-slate-700 flex items-center gap-1 font-bold"
+                title="Standardize bond lengths & angles (Auto-Clean)"
+              >
+                <Wand2 className="w-3.5 h-3.5 text-amber-400" />
+                <span>Clean</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleCenterStructure}
+                className="px-2 py-1 rounded-lg bg-slate-800 text-slate-200 hover:text-white hover:bg-slate-700 flex items-center gap-1 font-bold"
+                title="Center structure in canvas"
+              >
+                <AlignCenter className="w-3.5 h-3.5 text-blue-400" />
+                <span>Center</span>
+              </button>
+              <button
+                type="button"
                 onClick={handleUndo}
                 disabled={historyIdx === 0}
                 className="p-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white disabled:opacity-30"
@@ -875,12 +954,15 @@ export function CamDrawEditor({
           <div className="p-2 bg-slate-900 border-b border-slate-800 flex items-center gap-2 overflow-x-auto text-xs">
             {activeTool === "atom" && (
               <div className="flex items-center gap-1">
-                <span className="text-[11px] text-slate-400 font-bold mr-1">Atom:</span>
+                <span className="text-[11px] text-slate-400 font-bold mr-1">Atom / Group:</span>
                 {[
                   "C",
                   "H",
                   "O",
                   "N",
+                  "S",
+                  "P",
+                  "F",
                   "Cl",
                   "Br",
                   "I",
@@ -891,7 +973,10 @@ export function CamDrawEditor({
                   "NO2",
                   "CH3",
                   "OCH3",
-                  "C2H5",
+                  "NC",
+                  "Pt",
+                  "Fe",
+                  "Cu",
                 ].map((sym) => (
                   <button
                     key={sym}
@@ -911,10 +996,10 @@ export function CamDrawEditor({
                 ))}
                 <input
                   type="text"
-                  placeholder="Custom atom..."
+                  placeholder="Custom label..."
                   value={customAtomInput}
                   onChange={(e) => setCustomAtomInput(e.target.value)}
-                  className="w-24 px-2 py-0.5 rounded bg-slate-950 border border-slate-700 text-white font-mono text-xs"
+                  className="w-28 px-2 py-0.5 rounded bg-slate-950 border border-slate-700 text-white font-mono text-xs"
                 />
               </div>
             )}
@@ -951,7 +1036,7 @@ export function CamDrawEditor({
 
             {activeTool === "ring" && (
               <div className="flex items-center gap-1">
-                <span className="text-[11px] text-slate-400 font-bold mr-1">Ring:</span>
+                <span className="text-[11px] text-slate-400 font-bold mr-1">Ring System:</span>
                 {(
                   [
                     "benzene",
@@ -959,6 +1044,7 @@ export function CamDrawEditor({
                     "cyclopentane",
                     "cyclobutane",
                     "cyclopropane",
+                    "naphthalene",
                     "pyridine",
                     "pyrrole",
                     "furan",
@@ -977,6 +1063,33 @@ export function CamDrawEditor({
                     {rType}
                   </button>
                 ))}
+              </div>
+            )}
+
+            {activeTool === "bracket" && (
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-slate-400 font-bold">Coordination Charge:</span>
+                {["4-", "3-", "2-", "-", "0", "+", "2+", "3+"].map((ch) => (
+                  <button
+                    key={ch}
+                    type="button"
+                    onClick={() => setBracketCharge(ch)}
+                    className={`px-2 py-0.5 rounded font-bold font-mono transition ${
+                      bracketCharge === ch
+                        ? "bg-blue-600 text-white"
+                        : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                    }`}
+                  >
+                    {ch}
+                  </button>
+                ))}
+                <input
+                  type="text"
+                  value={bracketCharge}
+                  onChange={(e) => setBracketCharge(e.target.value)}
+                  placeholder="Custom charge"
+                  className="w-20 px-2 py-0.5 rounded bg-slate-950 border border-slate-700 text-white text-xs font-mono"
+                />
               </div>
             )}
 
@@ -1064,12 +1177,14 @@ export function CamDrawEditor({
                   />
                 )}
 
-                {/* Render All Document Elements */}
+                {/* Render All Document Elements with Reference Image Overlay */}
                 <CamDrawRenderer
                   document={doc}
                   theme="dark"
                   interactive={true}
                   selectedElementId={selectedElementId}
+                  referenceImageUrl={referenceImageUrl}
+                  referenceOpacity={referenceOverlayOpacity}
                   onElementClick={(id) => {
                     setSelectedElementId(id);
                     setActiveTool("select");
@@ -1113,6 +1228,24 @@ export function CamDrawEditor({
                       }}
                       className="w-14 px-2 py-0.5 rounded bg-slate-950 border border-slate-700 text-white font-mono"
                     />
+                    <span>Lone Pairs:</span>
+                    <select
+                      value={(selectedEl as AtomElement).lonePairs || 0}
+                      onChange={(e) => {
+                        const count = Number(e.target.value);
+                        const updated = doc.elements.map((el) =>
+                          el.id === selectedEl.id ? { ...el, lonePairs: count || undefined } : el
+                        );
+                        updateDocument({ ...doc, elements: updated as any });
+                      }}
+                      className="px-2 py-0.5 rounded bg-slate-950 border border-slate-700 text-white"
+                    >
+                      <option value="0">0</option>
+                      <option value="1">1 pair (2e⁻)</option>
+                      <option value="2">2 pairs (4e⁻)</option>
+                      <option value="3">3 pairs (6e⁻)</option>
+                      <option value="4">4 pairs (8e⁻)</option>
+                    </select>
                   </div>
                 )}
                 {selectedEl.type === "bond" && (
@@ -1133,7 +1266,25 @@ export function CamDrawEditor({
                       <option value="triple">Triple</option>
                       <option value="wedge">Wedge</option>
                       <option value="dash">Dash</option>
+                      <option value="wavy">Wavy</option>
+                      <option value="coordinate">Coordinate</option>
                     </select>
+                  </div>
+                )}
+                {selectedEl.type === "bracket" && (
+                  <div className="flex items-center gap-2">
+                    <span>Charge:</span>
+                    <input
+                      type="text"
+                      value={(selectedEl as BracketElement).charge || ""}
+                      onChange={(e) => {
+                        const updated = doc.elements.map((el) =>
+                          el.id === selectedEl.id ? { ...el, charge: e.target.value || undefined } : el
+                        );
+                        updateDocument({ ...doc, elements: updated as any });
+                      }}
+                      className="w-16 px-2 py-0.5 rounded bg-slate-950 border border-slate-700 text-white font-mono"
+                    />
                   </div>
                 )}
               </div>
@@ -1161,14 +1312,77 @@ export function CamDrawEditor({
         </div>
       </div>
 
-      {/* 3. PRESET TEMPLATES MODAL */}
+      {/* 3. CHEMICAL VALIDATION MODAL */}
+      {showValidationModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <h3 className="font-extrabold text-base text-white flex items-center gap-2">
+                {validationReport.errors.length > 0 ? (
+                  <ShieldAlert className="w-5 h-5 text-red-400" />
+                ) : (
+                  <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                )}
+                <span>Chemical Graph & Valence Report</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowValidationModal(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1 text-xs">
+              {validationReport.errors.length === 0 && validationReport.warnings.length === 0 ? (
+                <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 flex items-center gap-3">
+                  <CheckCircle2 className="w-6 h-6 shrink-0" />
+                  <div>
+                    <p className="font-bold text-sm">Valid Chemical Structure</p>
+                    <p className="text-emerald-400/80">
+                      All carbon valences, octets, bonds, and attachments satisfy standard chemical rules.
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+
+              {validationReport.errors.map((err, idx) => (
+                <div key={idx} className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                  <span>{err}</span>
+                </div>
+              ))}
+
+              {validationReport.warnings.map((warn, idx) => (
+                <div key={idx} className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <span>{warn}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowValidationModal(false)}
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold"
+              >
+                Got It
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4. PRESET TEMPLATES MODAL */}
       {showTemplatesModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-2xl w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-3xl w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <h3 className="font-extrabold text-base text-white flex items-center gap-2">
                 <Layers className="w-5 h-5 text-blue-400" />
-                <span>CamDraw Standard Academic Presets</span>
+                <span>CamDraw Academic Structure Library</span>
               </h3>
               <button
                 type="button"
@@ -1179,7 +1393,7 @@ export function CamDrawEditor({
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[60vh] overflow-y-auto pr-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 max-h-[60vh] overflow-y-auto pr-1">
               {CAMDRAW_TEMPLATES.map((tpl) => (
                 <div
                   key={tpl.id}
@@ -1187,15 +1401,15 @@ export function CamDrawEditor({
                   className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 hover:border-blue-500 transition cursor-pointer group space-y-2"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                    <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
                       {tpl.category}
                     </span>
                     <Plus className="w-4 h-4 text-slate-500 group-hover:text-blue-400 transition" />
                   </div>
-                  <h4 className="font-bold text-sm text-white group-hover:text-blue-400 transition">
+                  <h4 className="font-bold text-xs text-white group-hover:text-blue-400 transition">
                     {tpl.name}
                   </h4>
-                  <p className="text-xs text-slate-400 line-clamp-2">{tpl.description}</p>
+                  <p className="text-[11px] text-slate-400 line-clamp-2">{tpl.description}</p>
                 </div>
               ))}
             </div>
@@ -1205,4 +1419,5 @@ export function CamDrawEditor({
     </div>
   );
 }
+
 export default CamDrawEditor;

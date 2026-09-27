@@ -1,12 +1,14 @@
 /**
- * CAMDRAW — AI STRUCTURE RECOGNITION ENGINE
- * Vision-powered extraction of structured STEM diagrams & chemical structures
- * Preserves reference geometry and outputs editable CamDrawDocument JSON
+ * CAMDRAW — ADVANCED CHEMICAL STRUCTURE RECOGNITION ENGINE (CAMDRAW 2.0)
+ * Vision-powered extraction of molecular graphs, stereochemistry, coordination complexes,
+ * and academic STEM diagrams with geometry preservation and graph topology normalization.
  */
 
 import { geminiKeyManager } from "@/lib/ai/gemini-key-manager";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { CamDrawDocument, CamDrawElement, createEmptyCamDrawDocument } from "./types";
+import { normalizeGraphTopology, centerStructureOnCanvas } from "./graph";
+import { validateChemicalDocument } from "./validator";
 
 export interface StructureRecognitionResult {
   success: boolean;
@@ -18,47 +20,63 @@ export interface StructureRecognitionResult {
   error?: string;
 }
 
-const RECOGNITION_SYSTEM_PROMPT = `You are CamDraw Recognition Engine, an expert AI specialized in recognizing academic scientific diagrams, chemical structures, organic mechanisms, physics schematics, and math plots from reference question images.
+const ADVANCED_CHEMICAL_SYSTEM_PROMPT = `You are the CamDraw Advanced Chemical Structure & Molecular Graph Engine.
+You are an expert computational chemist and structural diagram recognition AI.
 
 YOUR MISSION:
-Analyze the input image and convert any visual scientific diagrams or chemical structures into an exact structured CamDraw JSON document.
+Analyze the input image and convert any chemical structure, molecular graph, reaction mechanism, coordination complex, or STEM schematic into a canonical, editable CamDraw JSON document.
 
-CRITICAL RULES:
-1. GEOMETRY PRESERVATION (MATCH REFERENCE):
-   - Preserve relative coordinates, bond angles, branching orientation, and layout as closely as possible to the source image.
-   - Do NOT redesign or arbitrarily standardize unless specifically required for clarity.
-2. CHEMICAL FIDELITY & EXACT BRANCH ATTACHMENT:
-   - Identify all atoms and functional groups (C, H, O, N, S, P, halogens, OH, COOH, NH2, CHO, NO2, CH3, CN/NC, CH2, etc.).
-   - FOR BRANCHED ALKANES / ACIDS / IUPAC MOLECULES (e.g. NC — C(CH3)(CHO) — CH2 — CH2 — COOH):
-     * Pay extreme attention to WHICH specific carbon atom in the chain bears the branches.
-     * Attach vertical bonds directly to the specific central carbon atom ('C'), NEVER to adjacent groups like 'CH2'.
-     * Position top substituents (e.g. CH3) vertically above and bottom substituents (e.g. CHO) vertically below that exact atom's (x, y) coordinate.
-   - Identify all bonds (single, double, triple, aromatic, wedge, dash, wavy, coordinate).
-   - Identify ring systems (benzene, cyclohexane, cyclopentane, etc.) and their substituent attachment points.
-   - Identify reaction arrows (forward, reversible, equilibrium, resonance) with exact top reagents (e.g. "KMnO4 / H+") and bottom conditions (e.g. "Δ, 273 K").
-   - Identify curved mechanism arrows for electron movement with accurate start, control (bezier arc), and end points.
-   - Identify formal charges (+, -, δ+, δ-) and lone pair dots.
-3. PHYSICS & STEM DIAGRAMS:
-   - Identify circuits (resistors, capacitors, inductors, batteries, switches, grounds, meters).
-   - Identify ray diagrams (lenses, mirrors, optical axes, rays with arrows, focal points).
-   - Identify mechanics (blocks, pulleys, inclined planes, force vectors with angles).
-   - Identify math graphs (coordinate axes, curves, parabolas, geometric polygons).
-4. CONFIDENCE & WARNINGS:
-   - Return an integer confidence score (0 to 100).
-   - If any label, subscript, or bond order is ambiguous or stereochemistry is uncertain, include explicit warnings in the "warnings" array.
-   - If the image contains ONLY plain text and NO visual diagram/chemical structure, return elements: [] with confidence: 0.
+CRITICAL ARCHITECTURAL RULES:
+1. CHEMICAL MOLECULAR GRAPH & TOPOLOGY FIRST:
+   - Treat structures as structured graphs of atoms (nodes) and bonds (edges) with 2D geometry, NEVER as plain OCR text or flat drawings.
+   - Give each atom a unique ID (e.g. "a_c1", "a_ch3", "a_cho", "a_oh").
+   - Give each bond explicit start and end atomId references (e.g. start: { x: 220, y: 180, atomId: "a_c2" }, end: { x: 220, y: 70, atomId: "a_ch3" }).
 
-OUTPUT FORMAT (JSON ONLY, NO MARKDOWN OUTSIDE THE JSON BLOCK):
+2. EXACT IUPAC BRANCH ATTACHMENT & VERTICAL BONDS:
+   - For branched molecules (e.g. NC — C(CH3)(CHO) — CH2 — CH2 — COOH):
+     * Identify the EXACT carbon atom that carries the substituents.
+     * Place top substituents (e.g. CH3) vertically aligned above that specific carbon atom ('C').
+     * Place bottom substituents (e.g. CHO) vertically aligned below that specific carbon atom ('C').
+     * Attach the vertical bonds directly to that central carbon atom ('C'), NEVER to adjacent groups like 'CH2'.
+     * Maintain straight horizontal chain alignment for the main backbone (NC - C - CH2 - CH2 - COOH).
+
+3. STEREOCHEMISTRY & BONDS:
+   - Solid wedges: bondType = "wedge" (tapered filled triangle pointing toward viewer).
+   - Hashed wedges / dashes: bondType = "dash" (tapered dashed line pointing away).
+   - Wavy / racemic bonds: bondType = "wavy" (unknown stereochemistry).
+   - Double bonds: bondType = "double".
+   - Triple bonds: bondType = "triple".
+   - Coordinate / dative bonds: bondType = "coordinate" (arrow pointing from donor to acceptor).
+
+4. RINGS, FUSED SYSTEMS & HETEROCYCLES:
+   - Identify ring systems (benzene, cyclohexane, cyclopentane, naphthalene, pyridine, pyrrole, furan, indole).
+   - If aromatic, set aromaticCircle: true.
+   - For heteroatoms inside rings (e.g. Pyridine N, Pyrrole NH), include them at their exact ring vertices.
+
+5. COORDINATION COMPLEXES & INORGANIC COMPOUNDS:
+   - Complexes like [Pt(NH3)2Cl2] or [Fe(CN)6]4-:
+     * Identify central metal atom (Pt, Fe, Co, Ni, Cu, etc.) and surrounding ligands.
+     * Enclose the complex in a "bracket" element (bracketType: "square", charge: "2+", "4-", etc.).
+
+6. REACTION MECHANISMS & ARROWS:
+   - Identify reaction arrows (arrowStyle: "forward" | "reversible" | "equilibrium" | "resonance") with topReagents and bottomConditions.
+   - Identify electron movement curved arrows (curved_arrow) with start, control (quadratic arc apex), and end points.
+
+7. GEOMETRY PRESERVATION (MATCH REFERENCE):
+   - Scale canvas coordinates cleanly into an 800 x 500 viewport.
+   - Preserve relative orientations, substituents, and structural layout from the reference image.
+
+OUTPUT SCHEMA (STRICT JSON ONLY):
 {
-  "version": 1,
-  "type": "chemical" | "reaction" | "physics" | "biology" | "math" | "custom",
+  "version": 2,
+  "type": "chemical" | "reaction" | "coordination" | "physics" | "biology" | "math",
   "canvas": {
     "width": 800,
     "height": 500,
     "background": "transparent"
   },
   "elements": [
-    // Array of atoms, bonds, rings, reaction_arrow, curved_arrow, physics_symbol, bio_shape, text, connector
+    // Elements array: AtomElement, BondElement, RingElement, BracketElement, ReactionArrowElement, CurvedArrowElement, etc.
   ],
   "metadata": {
     "confidence": 95,
@@ -79,12 +97,12 @@ export async function recognizeStructureFromImage(
   } = {}
 ): Promise<StructureRecognitionResult> {
   try {
-    // 1. Prepare image payload (either base64 inlineData or fetch from URL)
+    // 1. Prepare image payload
     let inlinePart: { inlineData: { data: string; mimeType: string } };
 
     if (imageSource.startsWith("data:")) {
       const mimeMatch = imageSource.match(/^data:([^;]+);base64,/);
-      const mimeType: string = (mimeMatch && mimeMatch[1]) ? mimeMatch[1] : "image/png";
+      const mimeType: string = mimeMatch && mimeMatch[1] ? mimeMatch[1] : "image/png";
       const base64Data = imageSource.replace(/^data:[^;]+;base64,/, "");
       inlinePart = {
         inlineData: {
@@ -93,7 +111,6 @@ export async function recognizeStructureFromImage(
         },
       };
     } else {
-      // Remote URL — fetch and convert to base64 buffer
       const res = await fetch(imageSource);
       if (!res.ok) {
         throw new Error(`Failed to fetch image from URL: ${res.statusText}`);
@@ -109,21 +126,21 @@ export async function recognizeStructureFromImage(
       };
     }
 
-    const userPrompt = `Analyze this reference question image. Extract any chemical structure, reaction, physics schematic, or math plot into a high-fidelity CamDraw JSON document. Subject hint: ${
-      options.hintSubject || "STEM / Chemistry"
-    }. Match original geometry closely.`;
+    const userPrompt = `Deconstruct this academic reference image into a high-precision chemical molecular graph / CamDraw document.
+Ensure all atoms, bonds, rings, substituents, vertical branches, stereochemistry wedges/dashes, coordination brackets, and reaction conditions are completely extracted with exact connectivity.
+Subject hint: ${options.hintSubject || "Chemistry"}.`;
 
     const rawText = await geminiKeyManager.executeWithRotation(async (client: GoogleGenerativeAI) => {
-      const model = client.getGenerativeModel({ model: "gemini-3.8-flash" });
+      const model = client.getGenerativeModel({ model: "gemini-2.5-flash" });
       const response = await model.generateContent([
-        RECOGNITION_SYSTEM_PROMPT,
+        ADVANCED_CHEMICAL_SYSTEM_PROMPT,
         inlinePart,
         userPrompt,
       ]);
       return response.response?.text() || "";
     });
 
-    // Clean JSON markdown fences if present
+    // Clean JSON markdown fences
     const cleanedJson = rawText
       .replace(/```json/gi, "")
       .replace(/```/g, "")
@@ -132,8 +149,8 @@ export async function recognizeStructureFromImage(
     const parsed = JSON.parse(cleanedJson);
 
     if (parsed && Array.isArray(parsed.elements)) {
-      const doc: CamDrawDocument = {
-        version: parsed.version || 1,
+      const rawDoc: CamDrawDocument = {
+        version: parsed.version || 2,
         type: parsed.type || "chemical",
         canvas: {
           width: parsed.canvas?.width || 800,
@@ -143,7 +160,7 @@ export async function recognizeStructureFromImage(
         },
         elements: parsed.elements as CamDrawElement[],
         metadata: {
-          confidence: parsed.metadata?.confidence ?? 85,
+          confidence: parsed.metadata?.confidence ?? 90,
           matchMode: parsed.metadata?.matchMode || "MATCH_REFERENCE",
           warnings: parsed.metadata?.warnings || [],
           recognizedAt: new Date().toISOString(),
@@ -151,16 +168,33 @@ export async function recognizeStructureFromImage(
         },
       };
 
+      // 2. Post-processing: Normalize topology and center structure
+      const normalizedDoc = normalizeGraphTopology(rawDoc);
+      const finalDoc = centerStructureOnCanvas(normalizedDoc);
+      const validation = validateChemicalDocument(finalDoc);
+
+      const allWarnings = [
+        ...(finalDoc.metadata?.warnings || []),
+        ...validation.warnings,
+      ];
+
       return {
         success: true,
-        document: doc,
-        confidence: doc.metadata?.confidence || 85,
-        warnings: doc.metadata?.warnings || [],
-        detectedType: doc.type,
+        document: {
+          ...finalDoc,
+          metadata: {
+            ...finalDoc.metadata,
+            validationReport: validation,
+            warnings: allWarnings,
+          },
+        },
+        confidence: finalDoc.metadata?.confidence || 90,
+        warnings: allWarnings,
+        detectedType: finalDoc.type,
       };
     }
 
-    throw new Error("Invalid structure returned by recognition model.");
+    throw new Error("Invalid structure format returned by recognition model.");
   } catch (err: any) {
     console.error("[CamDraw Recognition Error]:", err);
     return {
@@ -168,7 +202,7 @@ export async function recognizeStructureFromImage(
       document: createEmptyCamDrawDocument(),
       confidence: 0,
       warnings: ["Unable to reconstruct structure automatically. Please author or adjust manually."],
-      detectedType: "custom",
+      detectedType: "chemical",
       error: err.message || "Recognition failed",
     };
   }

@@ -5,6 +5,7 @@ import {
   AtomElement,
   BondElement,
   RingElement,
+  BracketElement,
   ReactionArrowElement,
   CurvedArrowElement,
   PhysicsSymbolElement,
@@ -24,6 +25,8 @@ export interface CamDrawRendererProps {
   interactive?: boolean;
   selectedElementId?: string | null;
   onElementClick?: (elementId: string) => void;
+  referenceImageUrl?: string | null;
+  referenceOpacity?: number; // 0 to 1 for overlay comparison
 }
 
 /**
@@ -58,6 +61,8 @@ export function CamDrawRenderer({
   interactive = false,
   selectedElementId = null,
   onElementClick,
+  referenceImageUrl,
+  referenceOpacity = 0.35,
 }: CamDrawRendererProps) {
   const doc = parseCamDrawDocument(docProp);
 
@@ -101,7 +106,20 @@ export function CamDrawRenderer({
             <path d="M 0 1 L 10 5 L 0 9 z" fill={defaultStroke} />
           </marker>
 
-          {/* Curved Electron Arrowhead marker */}
+          {/* Coordinate / Dative bond marker */}
+          <marker
+            id={`coord-head-${theme}`}
+            viewBox="0 0 10 10"
+            refX="8"
+            refY="5"
+            markerWidth="5"
+            markerHeight="5"
+            orient="auto-start-reverse"
+          >
+            <path d="M 0 1 L 9 5 L 0 9 z" fill={defaultStroke} />
+          </marker>
+
+          {/* Curved Electron Arrowhead marker (Double Barb) */}
           <marker
             id={`curved-head-${theme}`}
             viewBox="0 0 10 10"
@@ -112,6 +130,19 @@ export function CamDrawRenderer({
             orient="auto-start-reverse"
           >
             <path d="M 0 2 L 8 5 L 0 8 z" fill="#dc2626" />
+          </marker>
+
+          {/* Curved Electron Arrowhead marker (Single Barb / Fish Hook) */}
+          <marker
+            id={`curved-single-head-${theme}`}
+            viewBox="0 0 10 10"
+            refX="8"
+            refY="5"
+            markerWidth="6"
+            markerHeight="6"
+            orient="auto-start-reverse"
+          >
+            <path d="M 0 2 L 8 5 L 4 5 z" fill="#dc2626" />
           </marker>
 
           {/* Vector arrowhead */}
@@ -127,6 +158,20 @@ export function CamDrawRenderer({
             <path d="M 0 1 L 9 5 L 0 9 z" fill={defaultStroke} />
           </marker>
         </defs>
+
+        {/* Optional Reference Image Underlying Overlay for Alignment Verification */}
+        {referenceImageUrl && (
+          <image
+            href={referenceImageUrl}
+            x="0"
+            y="0"
+            width={width}
+            height={height}
+            preserveAspectRatio="xMidYMid meet"
+            opacity={referenceOpacity}
+            style={{ pointerEvents: "none" }}
+          />
+        )}
 
         {/* Render Elements by Layer */}
         {doc.elements.map((el) => (
@@ -220,6 +265,15 @@ function RenderElement({
               {atom.charge}
             </text>
           )}
+          {/* Radical Single Dot */}
+          {atom.radicals ? (
+            <circle
+              cx={0}
+              cy={-fontSize * 0.8}
+              r={2.5}
+              fill="#dc2626"
+            />
+          ) : null}
           {/* Lone Pairs */}
           {atom.lonePairs ? renderLonePairs(atom.lonePairs, fontSize, fillColor) : null}
         </g>
@@ -229,7 +283,7 @@ function RenderElement({
     case "bond": {
       const bond = element as BondElement;
       const thickness = bond.thickness || 2.2;
-      const { start, end, bondType } = bond;
+      const { start, end, bondType, donorAtomId } = bond;
 
       return (
         <g
@@ -237,7 +291,72 @@ function RenderElement({
           className={interactive ? "cursor-pointer hover:opacity-80" : ""}
           onClick={onClick}
         >
-          {renderBond(start, end, bondType, thickness, strokeColor, isSelected)}
+          {renderBond(start, end, bondType, thickness, strokeColor, isSelected, theme)}
+        </g>
+      );
+    }
+
+    case "bracket": {
+      const br = element as BracketElement;
+      const { x, y, width, height, charge, subscript, label, bracketType = "square", thickness = 2.5 } = br;
+      const cap = 14;
+
+      return (
+        <g id={br.id} className={interactive ? "cursor-pointer hover:opacity-80" : ""} onClick={onClick}>
+          {/* Left Bracket */}
+          <path
+            d={`M ${x + cap} ${y} L ${x} ${y} L ${x} ${y + height} L ${x + cap} ${y + height}`}
+            fill="none"
+            stroke={isSelected ? "#3b82f6" : strokeColor}
+            strokeWidth={thickness}
+            strokeLinecap="round"
+          />
+          {/* Right Bracket */}
+          <path
+            d={`M ${x + width - cap} ${y} L ${x + width} ${y} L ${x + width} ${y + height} L ${x + width - cap} ${y + height}`}
+            fill="none"
+            stroke={isSelected ? "#3b82f6" : strokeColor}
+            strokeWidth={thickness}
+            strokeLinecap="round"
+          />
+          {/* Charge Superscript */}
+          {charge && (
+            <text
+              x={x + width + 6}
+              y={y + 16}
+              fontSize={18}
+              fontWeight="bold"
+              fontFamily="system-ui, sans-serif"
+              fill={fillColor}
+            >
+              {charge}
+            </text>
+          )}
+          {/* Subscript (e.g., polymer n) */}
+          {subscript && (
+            <text
+              x={x + width + 6}
+              y={y + height}
+              fontSize={16}
+              fontStyle="italic"
+              fontFamily="system-ui, sans-serif"
+              fill={fillColor}
+            >
+              {subscript}
+            </text>
+          )}
+          {/* Transition State ‡ */}
+          {bracketType === "transition_state" && (
+            <text
+              x={x + width + 6}
+              y={y + 14}
+              fontSize={22}
+              fontWeight="bold"
+              fill="#dc2626"
+            >
+              ‡
+            </text>
+          )}
         </g>
       );
     }
@@ -246,12 +365,16 @@ function RenderElement({
       const ring = element as RingElement;
       const { cx, cy, radius = 55, ringType, aromaticCircle, rotation = 0 } = ring;
       const sides =
-        ringType === "cyclopentane" || ringType === "pyrrole" || ringType === "furan"
+        ringType === "cyclopentane" || ringType === "pyrrole" || ringType === "furan" || ringType === "thiophene" || ringType === "imidazole"
           ? 5
           : ringType === "cyclobutane"
           ? 4
           : ringType === "cyclopropane"
           ? 3
+          : ringType === "cycloheptane"
+          ? 7
+          : ringType === "cyclooctane"
+          ? 8
           : 6;
 
       const points = [];
@@ -353,8 +476,11 @@ function RenderElement({
 
     case "curved_arrow": {
       const curved = element as CurvedArrowElement;
-      const { start, control, end, thickness = 2 } = curved;
+      const { start, control, end, thickness = 2, arrowHead = "double_barb" } = curved;
       const pathData = `M ${start.x} ${start.y} Q ${control.x} ${control.y} ${end.x} ${end.y}`;
+      const headMarker = arrowHead === "single_barb" || arrowHead === "fish_hook"
+        ? `url(#curved-single-head-${theme})`
+        : `url(#curved-head-${theme})`;
 
       return (
         <g
@@ -367,7 +493,7 @@ function RenderElement({
             fill="none"
             stroke={isSelected ? "#3b82f6" : "#dc2626"}
             strokeWidth={thickness}
-            markerEnd={`url(#curved-head-${theme})`}
+            markerEnd={headMarker}
           />
         </g>
       );
@@ -459,7 +585,7 @@ function RenderElement({
 }
 
 /**
- * Renders bonds (Single, Double, Triple, Wedge, Dash, Aromatic)
+ * Renders bonds (Single, Double, Triple, Solid Wedge, Hashed Dash, Coordinate, Wavy)
  */
 function renderBond(
   start: { x: number; y: number },
@@ -467,11 +593,12 @@ function renderBond(
   bondType: string,
   thickness: number,
   strokeColor: string,
-  isSelected: boolean
+  isSelected: boolean,
+  theme: string
 ) {
   const dx = end.x - start.x;
   const dy = end.y - start.y;
-  const len = Math.sqrt(dx * dx + dy * dy);
+  const len = Math.hypot(dx, dy);
   if (len === 0) return null;
 
   const nx = -dy / len;
@@ -533,7 +660,7 @@ function renderBond(
   }
 
   if (bondType === "wedge") {
-    const wedgeW = 7;
+    const wedgeW = 7.5;
     const p1 = `${start.x},${start.y}`;
     const p2 = `${end.x + nx * wedgeW},${end.y + ny * wedgeW}`;
     const p3 = `${end.x - nx * wedgeW},${end.y - ny * wedgeW}`;
@@ -541,6 +668,30 @@ function renderBond(
   }
 
   if (bondType === "dash") {
+    // Hashed wedge dash: series of transverse lines expanding from start to end
+    const dashes = 6;
+    const lines = [];
+    for (let i = 1; i <= dashes; i++) {
+      const frac = i / dashes;
+      const cx = start.x + dx * frac;
+      const cy = start.y + dy * frac;
+      const w = 1.5 + 5.5 * frac;
+      lines.push(
+        <line
+          key={`dash_${i}`}
+          x1={cx + nx * w}
+          y1={cy + ny * w}
+          x2={cx - nx * w}
+          y2={cy - ny * w}
+          stroke={isSelected ? "#3b82f6" : strokeColor}
+          strokeWidth={thickness}
+        />
+      );
+    }
+    return <g>{lines}</g>;
+  }
+
+  if (bondType === "coordinate") {
     return (
       <line
         x1={start.x}
@@ -549,7 +700,30 @@ function renderBond(
         y2={end.y}
         stroke={isSelected ? "#3b82f6" : strokeColor}
         strokeWidth={thickness}
-        strokeDasharray="4,4"
+        markerEnd={`url(#coord-head-${theme})`}
+      />
+    );
+  }
+
+  if (bondType === "wavy") {
+    const steps = 6;
+    let path = `M ${start.x} ${start.y}`;
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      const midT = (i - 0.5) / steps;
+      const sign = i % 2 === 1 ? 1 : -1;
+      const cpX = start.x + dx * midT + nx * 5 * sign;
+      const cpY = start.y + dy * midT + ny * 5 * sign;
+      const pX = start.x + dx * t;
+      const pY = start.y + dy * t;
+      path += ` Q ${cpX} ${cpY} ${pX} ${pY}`;
+    }
+    return (
+      <path
+        d={path}
+        fill="none"
+        stroke={isSelected ? "#3b82f6" : strokeColor}
+        strokeWidth={thickness}
       />
     );
   }
@@ -613,6 +787,11 @@ function renderLonePairs(count: number, fontSize: number, color: string) {
     dots.push(<circle key="lp5" cx={dist} cy={-4} r={r} fill={color} />);
     dots.push(<circle key="lp6" cx={dist} cy={4} r={r} fill={color} />);
   }
+  if (count >= 4) {
+    // Left pair
+    dots.push(<circle key="lp7" cx={-dist} cy={-4} r={r} fill={color} />);
+    dots.push(<circle key="lp8" cx={-dist} cy={4} r={r} fill={color} />);
+  }
 
   return <g>{dots}</g>;
 }
@@ -661,9 +840,7 @@ function renderPhysicsSymbol(
       {symbolType === "battery" && (
         <g>
           <line x1={-width / 2} y1={0} x2={-6} y2={0} stroke={strokeColor} strokeWidth={2} />
-          {/* Long plate (+) */}
           <line x1={-6} y1={-height / 2} x2={-6} y2={height / 2} stroke={strokeColor} strokeWidth={3} />
-          {/* Short plate (-) */}
           <line x1={6} y1={-height / 4} x2={6} y2={height / 4} stroke={strokeColor} strokeWidth={4.5} />
           <line x1={6} y1={0} x2={width / 2} y2={0} stroke={strokeColor} strokeWidth={2} />
         </g>
@@ -690,7 +867,6 @@ function renderPhysicsSymbol(
         />
       )}
 
-      {/* Label */}
       {label && (
         <text
           x={0}
@@ -746,7 +922,6 @@ function renderBioShape(
             stroke={isSelected ? "#3b82f6" : "#6366f1"}
             strokeWidth={2}
           />
-          {/* Nucleolus */}
           <circle cx={0} cy={0} r={width * 0.18} fill="#4f46e5" />
         </g>
       )}
@@ -762,7 +937,6 @@ function renderBioShape(
             stroke="#d97706"
             strokeWidth={2}
           />
-          {/* Inner cristae fold */}
           <path
             d={`M ${-width * 0.3} 0 Q 0 ${-height * 0.3} ${width * 0.3} 0`}
             fill="none"
@@ -806,7 +980,6 @@ function renderMathPlot(
     <g id={math.id} transform={`translate(${cx}, ${cy})`} onClick={onClick}>
       {plotType === "axes" && (
         <g>
-          {/* X Axis */}
           <line
             x1={-width / 2}
             y1={0}
@@ -816,7 +989,6 @@ function renderMathPlot(
             strokeWidth={2}
             markerEnd="url(#vec-head-light)"
           />
-          {/* Y Axis */}
           <line
             x1={0}
             y1={height / 2}
@@ -894,16 +1066,17 @@ export function exportCamDrawToSvgString(
   const height = doc.canvas?.height || 500;
   const bg = theme === "print" ? "#ffffff" : theme === "dark" ? "#0f172a" : doc.canvas?.background || "transparent";
 
-  // Quick serialized SVG header
   let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" style="background-color: ${bg}; font-family: system-ui, -apple-system, sans-serif;">\n`;
 
-  // Defs with markers
   svg += `  <defs>
     <marker id="arr-head-svg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
       <path d="M 0 1 L 10 5 L 0 9 z" fill="#1e293b" />
     </marker>
     <marker id="curved-head-svg" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
       <path d="M 0 2 L 8 5 L 0 8 z" fill="#dc2626" />
+    </marker>
+    <marker id="coord-head-svg" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+      <path d="M 0 1 L 9 5 L 0 9 z" fill="#1e293b" />
     </marker>
   </defs>\n`;
 
@@ -916,7 +1089,26 @@ export function exportCamDrawToSvgString(
   </g>\n`;
     } else if (el.type === "bond") {
       const b = el as BondElement;
-      svg += `  <line x1="${b.start.x}" y1="${b.start.y}" x2="${b.end.x}" y2="${b.end.y}" stroke="${b.color || "#1e293b"}" stroke-width="${b.thickness || 2.2}" stroke-linecap="round" />\n`;
+      if (b.bondType === "wedge") {
+        const dx = b.end.x - b.start.x;
+        const dy = b.end.y - b.start.y;
+        const len = Math.hypot(dx, dy) || 1;
+        const nx = -dy / len;
+        const ny = dx / len;
+        const p1 = `${b.start.x},${b.start.y}`;
+        const p2 = `${b.end.x + nx * 7},${b.end.y + ny * 7}`;
+        const p3 = `${b.end.x - nx * 7},${b.end.y - ny * 7}`;
+        svg += `  <polygon points="${p1} ${p2} ${p3}" fill="${b.color || "#1e293b"}" />\n`;
+      } else {
+        svg += `  <line x1="${b.start.x}" y1="${b.start.y}" x2="${b.end.x}" y2="${b.end.y}" stroke="${b.color || "#1e293b"}" stroke-width="${b.thickness || 2.2}" stroke-linecap="round" />\n`;
+      }
+    } else if (el.type === "bracket") {
+      const br = el as BracketElement;
+      svg += `  <path d="M ${br.x + 12} ${br.y} L ${br.x} ${br.y} L ${br.x} ${br.y + br.height} L ${br.x + 12} ${br.y + br.height}" fill="none" stroke="${br.color || "#1e293b"}" stroke-width="${br.thickness || 2.5}" />\n`;
+      svg += `  <path d="M ${br.x + br.width - 12} ${br.y} L ${br.x + br.width} ${br.y} L ${br.x + br.width} ${br.y + br.height} L ${br.x + br.width - 12} ${br.y + br.height}" fill="none" stroke="${br.color || "#1e293b"}" stroke-width="${br.thickness || 2.5}" />\n`;
+      if (br.charge) {
+        svg += `  <text x="${br.x + br.width + 6}" y="${br.y + 16}" font-size="18" font-weight="bold" fill="#0f172a">${br.charge}</text>\n`;
+      }
     } else if (el.type === "reaction_arrow") {
       const r = el as ReactionArrowElement;
       svg += `  <line x1="${r.start.x}" y1="${r.start.y}" x2="${r.end.x}" y2="${r.end.y}" stroke="${r.color || "#0284c7"}" stroke-width="${r.thickness || 2.5}" marker-end="url(#arr-head-svg)" />\n`;

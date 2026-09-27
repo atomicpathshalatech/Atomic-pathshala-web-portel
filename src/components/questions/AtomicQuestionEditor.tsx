@@ -520,24 +520,7 @@ export function AtomicQuestionEditor({
         }
       }
     }
-
-    // 2. Check for text containing question statement + options
-    const pastedText = e.clipboardData?.getData("text") || "";
-    if (pastedText && pastedText.trim().length > 15) {
-      const hasOptionMarkers =
-        /(?:\([A-D1-4a-dक-घअ-द]\)|\[[A-D1-4a-d]\]|(?:Option\s*[\(:]?\s*[A-D1-4a-d])|\b[A-D][\.\)]|\b[क-घअ-द][\.\)]|(?<=\n)\s*[1-4][\.\)])/i.test(
-          pastedText
-        ) ||
-        pastedText.split("\n").map((l) => l.trim()).filter(Boolean).length >= 5;
-
-      if (hasOptionMarkers) {
-        e.preventDefault();
-        e.stopPropagation();
-        toast.info("✨ Question statement & options detected! Extracting into separate fields...");
-        await handleExtractFromText(pastedText.trim());
-        return;
-      }
-    }
+    // Normal text pasting continues natively into the textarea without overwriting other fields.
   };
 
   // 1-Click Translation Action
