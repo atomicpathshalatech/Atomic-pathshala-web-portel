@@ -8,6 +8,7 @@ import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { configureYouTubeSession, updateBroadcastPhase, extractYouTubeVideoId } from "@/lib/live-class/youtube";
 import { LiveClassPhase, VideoTransport } from "@prisma/client";
 import { pusherServer, sessionChannel, WB_EVENTS } from "@/lib/realtime/pusher-server";
+import { assertCanControlLiveClass } from "@/lib/live-class/ownership";
 
 export async function GET(_request: NextRequest, { params }: { params: { scheduleId: string } }) {
   try {
@@ -15,20 +16,13 @@ export async function GET(_request: NextRequest, { params }: { params: { schedul
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.WHITEBOARD_ACCESS);
 
-    let schedule = await prisma.batchSchedule.findUnique({
-      where: { id: params.scheduleId },
+    const { scheduleId } = await assertCanControlLiveClass(session.user.id, params.scheduleId);
+    if (!scheduleId) return apiError("Scheduled class not found", 404);
+
+    const schedule = await prisma.batchSchedule.findUnique({
+      where: { id: scheduleId },
       include: { liveWhiteboardSession: true, batch: true },
     });
-
-    if (!schedule) {
-      const wb = await prisma.whiteboardSession.findUnique({
-        where: { id: params.scheduleId },
-        include: { batchSchedule: { include: { batch: true } } },
-      });
-      if (wb?.batchSchedule) {
-        schedule = { ...wb.batchSchedule, liveWhiteboardSession: wb as any } as any;
-      }
-    }
 
     if (!schedule) return apiError("Scheduled class not found", 404);
 
@@ -47,28 +41,19 @@ export async function POST(request: NextRequest, { params }: { params: { schedul
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.WHITEBOARD_ACCESS);
 
-    let schedule = await prisma.batchSchedule.findUnique({
-      where: { id: params.scheduleId },
-    });
-    let scheduleId = params.scheduleId;
-
-    if (!schedule) {
-      const wb = await prisma.whiteboardSession.findUnique({
-        where: { id: params.scheduleId },
-      });
-      if (wb?.batchScheduleId) {
-        scheduleId = wb.batchScheduleId;
-        schedule = await prisma.batchSchedule.findUnique({
-          where: { id: scheduleId },
-        });
-      }
-    }
-
-    if (!schedule) return apiError("Scheduled class not found", 404);
+    const { scheduleId } = await assertCanControlLiveClass(session.user.id, params.scheduleId);
+    if (!scheduleId) return apiError("Scheduled class not found", 404);
 
     const body = await request.json();
     const { youtubeVideoId, videoTransport, livePhase } = body;
     const effectivePhase = (livePhase as LiveClassPhase) || LiveClassPhase.LIVE;
+
+    // Ending a class must go through endWhiteboardSession (stops recording,
+    // completes the YouTube broadcast, resolves hand raises, closes quizzes,
+    // finalizes notes). Setting ENDED here skipped all of that.
+    if (effectivePhase === LiveClassPhase.ENDED || effectivePhase === LiveClassPhase.ENDING) {
+      return apiError("Use End Class to end a live class.", 400, { code: "USE_END_ROUTE" });
+    }
     const videoId = youtubeVideoId ? extractYouTubeVideoId(youtubeVideoId) : null;
 
     const wbSession = await configureYouTubeSession({
@@ -82,7 +67,7 @@ export async function POST(request: NextRequest, { params }: { params: { schedul
       where: { id: wbSession.id },
       data: {
         livePhase: effectivePhase,
-        status: effectivePhase === LiveClassPhase.ENDED ? "ENDED" : "ACTIVE",
+        status: "ACTIVE", // ENDED/ENDING are rejected above; ending goes through End Class
         actualStartedAt: effectivePhase === LiveClassPhase.LIVE ? wbSession.actualStartedAt || now : wbSession.actualStartedAt,
         startedAt: effectivePhase === LiveClassPhase.LIVE ? wbSession.startedAt || now : wbSession.startedAt,
       },

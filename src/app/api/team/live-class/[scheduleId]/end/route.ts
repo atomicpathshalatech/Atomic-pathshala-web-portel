@@ -6,6 +6,7 @@ import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { endWhiteboardSession } from "@/lib/whiteboard/lifecycle";
+import { assertCanControlLiveClass } from "@/lib/live-class/ownership";
 
 export async function POST(
   _request: NextRequest,
@@ -16,8 +17,11 @@ export async function POST(
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.WHITEBOARD_ACCESS);
 
+    const { scheduleId } = await assertCanControlLiveClass(session.user.id, params.scheduleId);
+    if (!scheduleId) return apiError("Scheduled class not found", 404);
+
     const schedule = await prisma.batchSchedule.findUnique({
-      where: { id: params.scheduleId },
+      where: { id: scheduleId },
       include: { liveWhiteboardSession: true },
     });
 

@@ -7,6 +7,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { extractYouTubeVideoId } from "@/lib/live-class/youtube";
 import { pusherServer, sessionChannel, WB_EVENTS } from "@/lib/realtime/pusher-server";
+import { assertCanControlLiveClass } from "@/lib/live-class/ownership";
 
 export async function POST(
   request: NextRequest,
@@ -17,8 +18,11 @@ export async function POST(
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.WHITEBOARD_ACCESS);
 
+    const { scheduleId, teacher } = await assertCanControlLiveClass(session.user.id, params.scheduleId);
+    if (!scheduleId || !teacher) return apiError("Scheduled class not found", 404);
+
     const schedule = await prisma.batchSchedule.findUnique({
-      where: { id: params.scheduleId },
+      where: { id: scheduleId },
       include: { liveWhiteboardSession: true, lecture: true },
     });
 
@@ -42,7 +46,7 @@ export async function POST(
     // 1. Update WhiteboardSession & Schedule Status
     const [wbSession] = await Promise.all([
       prisma.whiteboardSession.upsert({
-        where: { batchScheduleId: params.scheduleId },
+        where: { batchScheduleId: scheduleId },
         update: {
           status: "ACTIVE",
           livePhase: "LIVE",
@@ -52,8 +56,8 @@ export async function POST(
           startedAt: schedule.liveWhiteboardSession?.startedAt || now,
         },
         create: {
-          batchScheduleId: params.scheduleId,
-          teacherId: schedule.teacherId || session.user.id,
+          batchScheduleId: scheduleId,
+          teacherId: schedule.teacherId || teacher.id,
           title: schedule.title,
           status: "ACTIVE",
           livePhase: "LIVE",
@@ -72,14 +76,14 @@ export async function POST(
         },
       }),
       prisma.batchSchedule.update({
-        where: { id: params.scheduleId },
+        where: { id: scheduleId },
         data: { status: "LIVE" },
       }),
     ]);
 
     // 2. Invalidate cache so polling students see live state immediately
     const { cache } = await import("@/lib/cache/redis");
-    await cache.del(`wb:schedule:${params.scheduleId}`);
+    await cache.del(`wb:schedule:${scheduleId}`);
 
     // 3. If connected to a Lecture curriculum record, update videoUrl & status
     if (schedule.lectureId) {

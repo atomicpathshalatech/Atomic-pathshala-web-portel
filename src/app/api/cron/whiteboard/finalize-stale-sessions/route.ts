@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { isPastGracePeriod, endWhiteboardSession } from "@/lib/whiteboard/lifecycle";
+import { isPastGracePeriod, effectiveClassEnd, endWhiteboardSession } from "@/lib/whiteboard/lifecycle";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function isAuthorized(req: NextRequest): boolean {
   const secret = process.env.CRON_SECRET;
-  if (!secret) return true;
+  // Fail closed in production: an unset secret must not leave the route open.
+  if (!secret) return process.env.NODE_ENV !== "production";
   const auth = req.headers.get("authorization");
   return auth === `Bearer ${secret}`;
 }
@@ -61,7 +62,7 @@ export async function GET(req: NextRequest) {
 
     let autoEnded = 0;
     for (const s of staleActive) {
-      if (isPastGracePeriod(s.batchSchedule.endsAt)) {
+      if (isPastGracePeriod(effectiveClassEnd(s.batchSchedule.endsAt, s.scheduledEnd))) {
         await endWhiteboardSession(s.id, { endedByUserId: null, reason: "auto_grace_expired" });
         autoEnded++;
       }

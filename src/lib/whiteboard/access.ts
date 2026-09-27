@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db";
-import { isPastGracePeriod, endWhiteboardSession } from "@/lib/whiteboard/lifecycle";
+import { isPastGracePeriod, effectiveClassEnd, endWhiteboardSession } from "@/lib/whiteboard/lifecycle";
 
 export { resolveTeacherForSchedule, resolveStudentForSchedule } from "@/lib/batch/access";
 
@@ -87,7 +87,10 @@ export async function resolveWhiteboardAccess(
   // every route individually. Mutate the local object after ending so this
   // same call returns fresh (ENDED) status instead of the now-stale ACTIVE
   // row it fetched a moment ago.
-  if (wbSession.status === "ACTIVE" && isPastGracePeriod(wbSession.batchSchedule.endsAt)) {
+  if (
+    wbSession.status === "ACTIVE" &&
+    isPastGracePeriod(effectiveClassEnd(wbSession.batchSchedule.endsAt, wbSession.scheduledEnd))
+  ) {
     await endWhiteboardSession(wbSession.id, { endedByUserId: null, reason: "auto_grace_expired" });
     wbSession.status = "ENDED";
     wbSession.livePhase = "ENDED";
