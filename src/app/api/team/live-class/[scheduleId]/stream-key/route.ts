@@ -42,83 +42,45 @@ export async function POST(
     const { teacher } = await assertCanControlLiveClass(session.user.id, schedule.id);
     if (!teacher) return apiError("Teacher profile could not be resolved.", 403);
 
-    // Ensure WhiteboardSession exists
-    let wbSession = schedule.liveWhiteboardSession;
-    const scheduledStart = schedule.startsAt ? new Date(schedule.startsAt) : new Date();
-    const scheduledEnd = schedule.endsAt ? new Date(schedule.endsAt) : new Date(Date.now() + 60 * 60 * 1000);
-
-    if (!wbSession) {
-      wbSession = await prisma.whiteboardSession.create({
+    // Encoder credentials exist only while THIS class holds a stream lease —
+    // i.e. after Start Class, until the class ends. There is no shared master
+    // key and no key before Start. Each hand-out is recorded (EncoderSession).
+    const wbSession = schedule.liveWhiteboardSession;
+    const { encoderCredentialsForSchedule } = await import("@/lib/live-session/app-youtube");
+    const credentials = await encoderCredentialsForSchedule(schedule.id);
+    if (credentials) {
+      await prisma.encoderSession.create({
         data: {
-          batchScheduleId: schedule.id,
-          teacherId: teacher.id,
-          title: schedule.title,
-          status: "ACTIVE",
-          livePhase: "PREPARING",
-          videoTransport: "YOUTUBE",
-          scheduledStart,
-          scheduledEnd,
-          pages: {
-            create: {
-              pageNumber: 1,
-              objects: [],
-            },
-          },
+          liveSessionId: credentials.liveSessionId,
+          userId: session.user.id,
+          credentialsExpireAt: new Date(Date.now() + 60_000),
+          credentialsUsedAt: new Date(),
         },
       });
-    } else {
-      const pageCount = await prisma.whiteboardPage.count({ where: { sessionId: wbSession.id } });
-      if (pageCount === 0) {
-        await prisma.whiteboardPage.create({
-          data: {
-            sessionId: wbSession.id,
-            pageNumber: 1,
-            objects: [],
-          },
-        });
-      }
-    }
-
-    if (!wbSession) {
-      return apiError("Whiteboard session could not be initialized", 500);
-    }
-
-    let activeWbSession = wbSession;
-
-    // Generate or fetch YouTube broadcast credentials
-    let serverUrl = "rtmp://a.rtmp.youtube.com/live2";
-    let streamKey = activeWbSession.youtubeStreamKey || null;
-    let videoId = activeWbSession.youtubeVideoId || null;
-
-    try {
-      const { youtubeLiveConfigured } = await import("@/lib/youtube/live-broadcast");
-      const { ensureYoutubeBroadcastForWhiteboard } = await import("@/lib/live-class/youtube-broadcast");
-
-      if (youtubeLiveConfigured()) {
-        const boundSession = await ensureYoutubeBroadcastForWhiteboard(activeWbSession.id, schedule.title, scheduledStart);
-        activeWbSession = boundSession as any;
-        serverUrl = activeWbSession.youtubeIngestUrl || serverUrl;
-        streamKey = activeWbSession.youtubeStreamKey || streamKey;
-        videoId = activeWbSession.youtubeVideoId || videoId;
-      }
-    } catch (ytErr) {
-      console.warn("[youtube_master_stream_key_fetch_warning]", ytErr);
     }
 
     const { YOUTUBE_OAUTH_PRODUCTION_URL } = await import("@/lib/youtube/oauth-config");
     const broadcastToken = createBroadcastToken(schedule.id, session.user.id);
     const obsBroadcastUrl = `${YOUTUBE_OAUTH_PRODUCTION_URL}/obs-stage/${schedule.id}?token=${broadcastToken}`;
 
-    return apiSuccess({
-      whiteboardSession: activeWbSession,
-      serverUrl,
-      streamKey,
+    const res = apiSuccess({
+      // Only the two fields the OBS setup panel reads — never the stored row.
+      whiteboardSession: {
+        youtubeIngestUrl: credentials?.serverUrl ?? null,
+        youtubeStreamKey: credentials?.streamKey ?? null,
+      },
+      serverUrl: credentials?.serverUrl ?? null,
+      streamKey: credentials?.streamKey ?? null,
+      liveState: credentials?.state ?? null,
+      message: credentials ? null : "Click Start Class first — your class's stream key appears here once the class has a stream slot.",
       obsBroadcastUrl,
-      youtubeVideoId: videoId,
-      videoTransport: activeWbSession.videoTransport,
-      livePhase: activeWbSession.livePhase,
-      isLive: activeWbSession.livePhase === "LIVE",
+      youtubeVideoId: wbSession?.youtubeVideoId ?? null,
+      videoTransport: wbSession?.videoTransport ?? null,
+      livePhase: wbSession?.livePhase ?? null,
+      isLive: wbSession?.livePhase === "LIVE",
     });
+    res.headers.set("Cache-Control", "no-store");
+    return res;
   } catch (error) {
     return handleApiError(error);
   }

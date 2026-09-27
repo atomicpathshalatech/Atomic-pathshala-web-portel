@@ -161,9 +161,22 @@ async function groupOpenSessions(session: LiveSession, db: Db = prisma): Promise
  */
 export async function markLiveSessionLive(liveSessionId: string, startedAt: Date): Promise<LiveSession[]> {
   const session = await prisma.liveSession.findUniqueOrThrow({ where: { id: liveSessionId } });
-  if (session.state === "LIVE") return groupOpenSessions(session);
+  return liftSessionsLive(await groupOpenSessions(session), startedAt);
+}
 
-  const members = await groupOpenSessions(session);
+/**
+ * The group members of an APP_YOUTUBE primary that just reached LIVE through
+ * the YouTube health gate: the other schedules have no stream of their own,
+ * so they go straight STARTING → LIVE alongside it.
+ */
+export async function markGroupMembersLive(liveSessionId: string, startedAt: Date): Promise<LiveSession[]> {
+  const session = await prisma.liveSession.findUniqueOrThrow({ where: { id: liveSessionId } });
+  const members = (await groupOpenSessions(session)).filter((m) => m.id !== session.id);
+  return liftSessionsLive(members, startedAt);
+}
+
+async function liftSessionsLive(members: LiveSession[], startedAt: Date): Promise<LiveSession[]> {
+  if (members.length === 0) return [];
   const out: LiveSession[] = [];
   for (const member of members) {
     if (member.state === "LIVE") {
@@ -320,6 +333,12 @@ export async function syncLiveSessionOnStart(input: {
     plannedEndsAt: effectiveClassEnd(new Date(input.schedule.endsAt), input.wbSession.scheduledEnd ?? null),
     ...delivery,
   });
+  // An APP_YOUTUBE class waiting on YouTube only goes LIVE through the
+  // health gate (src/lib/live-session/app-youtube.ts) — never via a retried
+  // Start or a mapping call.
+  if (open.deliveryMode === "APP_YOUTUBE" && ["STARTING", "YOUTUBE_CONNECTING", "YOUTUBE_ACTIVE"].includes(open.state)) {
+    return [open];
+  }
   await setLiveSessionDelivery(open.id, delivery);
   return markLiveSessionLive(open.id, input.startedAt);
 }

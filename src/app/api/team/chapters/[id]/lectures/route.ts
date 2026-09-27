@@ -208,7 +208,7 @@ export async function POST(
           });
         } else {
           // Scheduled Live Class: create WhiteboardSession and pre-schedule unlisted YouTube broadcast
-          const wb = await prisma.whiteboardSession.upsert({
+          await prisma.whiteboardSession.upsert({
             where: { batchScheduleId: scheduleKey },
             update: {
               title: lecture.title,
@@ -230,14 +230,9 @@ export async function POST(
             },
           });
 
-          const { youtubeLiveClassConfigured, ensureYoutubeBroadcastForWhiteboard } = await import(
-            "@/lib/live-class/youtube-broadcast"
-          );
-          if (youtubeLiveClassConfigured() && !wb.youtubeVideoId) {
-            ensureYoutubeBroadcastForWhiteboard(wb.id, lecture.title, startsAt || new Date()).catch((err) => {
-              console.warn("[LectureSchedule] Auto YouTube broadcast creation warning:", err);
-            });
-          }
+          // No YouTube broadcast is pre-created here: each class gets its own
+          // broadcast + pooled stream slot at Start Class
+          // (src/lib/live-session/app-youtube.ts), never the shared master key.
         }
       };
 

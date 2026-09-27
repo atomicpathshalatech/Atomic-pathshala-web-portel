@@ -95,10 +95,19 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Stream slots held by classes that are over (or past their expiry) go
+    // back to the pool — covers a broadcast-complete call that failed at End.
+    const { sweepStaleLeases } = await import("@/lib/youtube/stream-pool");
+    const releasedLeases = await sweepStaleLeases().catch((err) => {
+      console.error("[cron:whiteboard-finalize] lease sweep failed", err);
+      return 0;
+    });
+
     return NextResponse.json({
       success: true,
       autoEnded,
       retriedFinalization,
+      releasedLeases,
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {

@@ -181,31 +181,10 @@ export async function POST(
       const broadcastToken = createBroadcastToken(schedule.id, session.user.id);
       obsBroadcastUrl = `${getAppBaseUrl()}/obs-stage/${schedule.id}?token=${broadcastToken}`;
 
-      if (!wbSession.youtubeStreamKey && !wbSession.youtubeVideoId) {
-        try {
-          const { youtubeLiveClassConfigured, ensureYoutubeBroadcastForWhiteboard } = await import(
-            "@/lib/live-class/youtube-broadcast"
-          );
-          if (youtubeLiveClassConfigured()) {
-            const withBroadcast = await ensureYoutubeBroadcastForWhiteboard(
-              wbSession.id,
-              schedule.title,
-              sessionStart
-            );
-            Object.assign(wbSession, {
-              youtubeBroadcastId: withBroadcast.youtubeBroadcastId,
-              youtubeStreamId: withBroadcast.youtubeStreamId,
-              youtubeVideoId: withBroadcast.youtubeVideoId,
-              youtubeLiveChatId: withBroadcast.youtubeLiveChatId,
-              youtubeStatus: withBroadcast.youtubeStatus,
-              youtubeIngestUrl: withBroadcast.youtubeIngestUrl,
-              youtubeStreamKey: withBroadcast.youtubeStreamKey,
-            });
-          }
-        } catch (ytErr) {
-          console.warn("[preflight_youtube_init_warning]", ytErr);
-        }
-      }
+      // No YouTube broadcast is created at prepare time any more: each class
+      // gets its own broadcast + a pooled stream slot when Start Class is
+      // pressed (src/lib/live-session/app-youtube.ts), never the old shared
+      // master stream key.
     }
 
     // Notify connected clients of updated pre-flight configuration

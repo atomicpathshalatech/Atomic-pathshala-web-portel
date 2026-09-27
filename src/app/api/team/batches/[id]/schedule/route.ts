@@ -98,7 +98,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }
       if (tid) {
         const videoTransport = input.videoTransport || "YOUTUBE";
-        const wb = await prisma.whiteboardSession.upsert({
+        await prisma.whiteboardSession.upsert({
           where: { batchScheduleId: schedule.id },
           update: {
             videoTransport,
@@ -120,17 +120,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           },
         });
 
-        // Pre-create unlisted broadcast on YouTube and bind to channel master stream key
-        if (videoTransport === "YOUTUBE" && !wb.youtubeVideoId) {
-          const { youtubeLiveClassConfigured, ensureYoutubeBroadcastForWhiteboard } = await import(
-            "@/lib/live-class/youtube-broadcast"
-          );
-          if (youtubeLiveClassConfigured()) {
-            ensureYoutubeBroadcastForWhiteboard(wb.id, schedule.title, schedule.startsAt).catch((err) => {
-              console.warn("[BatchSchedule] Auto YouTube broadcast creation warning:", err);
-            });
-          }
-        }
+        // No YouTube broadcast is pre-created here any more. Each class gets
+        // its own unlisted broadcast and a pooled stream slot at Start Class
+        // (src/lib/live-session/app-youtube.ts) — pre-creating at schedule
+        // time bound every class to one shared master stream key and left
+        // orphan broadcasts behind for cancelled/rescheduled classes.
       }
     }
 

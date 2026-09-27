@@ -48,6 +48,44 @@ export async function GET(
 
     if (!wbSession) return apiError("Live class session not found", 404);
 
+    // YouTube-delivered occurrences: the recording is whatever YouTube has
+    // CONFIRMED processed — nothing is guessed from youtubeVideoId. While
+    // YouTube is still processing, viewers get "processing", not a link to
+    // a video that may not exist yet. Checking YouTube is single-flight (at
+    // most once per 2 minutes per class, however many students ask).
+    const latestLiveSession = await prisma.liveSession.findFirst({
+      where: { whiteboardSessionId: params.id },
+      orderBy: { occurrence: "desc" },
+    });
+    if (
+      latestLiveSession &&
+      ["APP_YOUTUBE", "MAIN_YOUTUBE", "EXTERNAL_YOUTUBE"].includes(latestLiveSession.deliveryMode)
+    ) {
+      let current = latestLiveSession;
+      if (current.state === "RECORDING_PROCESSING") {
+        const { checkRecordingReadiness } = await import("@/lib/live-session/app-youtube");
+        await checkRecordingReadiness(current.id).catch((err) => console.warn("[recording_readiness_check_warning]", err));
+        current = (await prisma.liveSession.findUnique({ where: { id: current.id } })) ?? current;
+      }
+      const ready = Boolean(current.recordingVideoId);
+      return apiSuccess({
+        recordingId: current.id,
+        classId: wbSession.batchScheduleId,
+        liveSessionId: wbSession.id,
+        providerRecordingId: current.recordingVideoId,
+        status: ready ? "READY" : current.state === "FAILED" ? "FAILED" : "PROCESSING",
+        available: ready,
+        url: ready ? `https://www.youtube.com/watch?v=${current.recordingVideoId}` : null,
+        message: ready ? null : current.state === "FAILED" ? "The recording for this class is not available." : "Recording is processing. Please check back in a few minutes.",
+        startedAt: current.actualStartedAt ?? wbSession.actualStartedAt ?? wbSession.startedAt,
+        stoppedAt: current.actualEndedAt ?? wbSession.actualEndedAt ?? wbSession.endedAt,
+        durationSeconds: null,
+        storagePath: null,
+        resourceId: null,
+        createdAt: wbSession.createdAt,
+      });
+    }
+
     // Self-heal a missed egress_ended webhook via LiveKit reconciliation
     const reconciled = await reconcileRecordingStatus({
       id: params.id,

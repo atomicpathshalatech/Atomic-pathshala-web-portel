@@ -19,101 +19,13 @@
  * that database (prisma migrate reset) first — which also proves the full
  * migration history applies cleanly.
  */
-import { execSync } from "node:child_process";
+import { createAsserts, prepareTestDatabase, requireTestDatabase } from "./lib/test-db";
 
-const testUrl = process.env.TEST_DATABASE_URL;
-if (!testUrl) {
-  console.error("TEST_DATABASE_URL is not set.");
-  process.exit(2);
-}
-const parsed = new URL(testUrl);
-const isLocalTestDb = ["localhost", "127.0.0.1", "::1", "[::1]"].includes(parsed.hostname) && /test/i.test(parsed.pathname);
-
-// A separate, throwaway Supabase project is also allowed — but only when
-// explicitly opted in, and never when it is the same project as any
-// DATABASE_URL/DIRECT_URL in this repo's env files (that is production).
-function supabaseIdentity(u: URL): string {
-  return `${u.hostname}|${decodeURIComponent(u.username)}`;
-}
-function productionIdentities(): string[] {
-  const { readFileSync, existsSync } = require("node:fs") as typeof import("node:fs");
-  const ids: string[] = [];
-  for (const file of [".env", ".env.local", ".env.production"]) {
-    if (!existsSync(file)) continue;
-    for (const line of readFileSync(file, "utf8").split(/\r?\n/)) {
-      const m = line.match(/^\s*(DATABASE_URL|DIRECT_URL)\s*=\s*"?([^"\s]+)"?/);
-      if (!m) continue;
-      try {
-        ids.push(supabaseIdentity(new URL(m[2]!)));
-      } catch {
-        // not a URL — ignore
-      }
-    }
-  }
-  return ids;
-}
-const KNOWN_PRODUCTION_PROJECT_REFS = ["nsubtmwavgzfyxuhlmjx"];
-const isOptedInRemoteTestDb =
-  process.env.ALLOW_REMOTE_TEST_DB === "yes" &&
-  !KNOWN_PRODUCTION_PROJECT_REFS.some((ref) => testUrl.includes(ref)) &&
-  !productionIdentities().includes(supabaseIdentity(parsed));
-
-if (!isLocalTestDb && !isOptedInRemoteTestDb) {
-  console.error(
-    `Refusing: TEST_DATABASE_URL must be a localhost database whose name contains "test", ` +
-      `or a separate throwaway project with ALLOW_REMOTE_TEST_DB="yes" (never the production project). Got ${parsed.hostname}${parsed.pathname}.`
-  );
-  process.exit(2);
-}
-process.env.DATABASE_URL = testUrl;
-process.env.DIRECT_URL = testUrl;
-
-let passCount = 0;
-let failCount = 0;
-function assert(condition: boolean, testName: string, detail?: string) {
-  if (condition) {
-    console.log(`✅ PASS: ${testName}`);
-    passCount++;
-  } else {
-    console.error(`❌ FAIL: ${testName}${detail ? ` - ${detail}` : ""}`);
-    failCount++;
-  }
-}
-async function rejects(p: Promise<unknown>, match?: RegExp): Promise<boolean> {
-  try {
-    await p;
-    return false;
-  } catch (err) {
-    return match ? match.test(err instanceof Error ? err.message : String(err)) : true;
-  }
-}
+const { testUrl, parsed } = requireTestDatabase();
+const { assert, rejects, finish } = createAsserts();
 
 async function run() {
-  const env = { ...process.env, DATABASE_URL: testUrl, DIRECT_URL: testUrl };
-  if (process.env.TEST_DB_SETUP === "base-plus-migration") {
-    // The full migration history does not replay on an empty database
-    // (20260911150000 alters a "NotificationType" enum no migration creates
-    // — production got it outside migrations). So build the pre-redesign
-    // schema the way production has it (origin/main's schema.prisma via
-    // db push), then apply ONLY this redesign's migration SQL on top —
-    // exactly what `prisma migrate deploy` will do in production.
-    const { writeFileSync, mkdtempSync } = require("node:fs") as typeof import("node:fs");
-    const { join } = require("node:path") as typeof import("node:path");
-    const { tmpdir } = require("node:os") as typeof import("node:os");
-    const dir = mkdtempSync(join(tmpdir(), "live-session-test-"));
-    const baseSchema = join(dir, "schema.prisma");
-    const baseRef = process.env.TEST_DB_BASE_REF || "origin/main";
-    writeFileSync(baseSchema, execSync(`git show ${baseRef}:prisma/schema.prisma`, { encoding: "utf8" }));
-    console.log(`Rebuilding ${parsed.pathname.slice(1)} from ${baseRef}'s schema, then applying the redesign migration…`);
-    execSync(`npx prisma db push --force-reset --skip-generate --accept-data-loss --schema "${baseSchema}"`, { stdio: "inherit", env });
-    execSync(
-      `npx prisma db execute --url "${testUrl}" --file prisma/migrations/20260927120000_live_session_youtube_delivery/migration.sql`,
-      { stdio: "inherit", env }
-    );
-  } else {
-    console.log(`Resetting ${parsed.pathname.slice(1)} on ${parsed.hostname} and applying all migrations…`);
-    execSync("npx prisma migrate reset --force --skip-seed --skip-generate", { stdio: "inherit", env });
-  }
+  prepareTestDatabase(testUrl, parsed);
 
   const { prisma } = await import("../src/lib/db");
   const svc = await import("../src/lib/live-session/service");
@@ -270,8 +182,7 @@ async function run() {
   assert((await prisma.batchSchedule.findUniqueOrThrow({ where: { id: lone.id } })).status === "SCHEDULED", "An ungrouped sibling schedule is untouched by others starting/ending");
 
   await prisma.$disconnect();
-  console.log(`\n${passCount} passed, ${failCount} failed`);
-  if (failCount > 0) process.exit(1);
+  finish();
 }
 
 run().catch((err) => {

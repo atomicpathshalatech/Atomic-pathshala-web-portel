@@ -73,12 +73,75 @@ export interface CreateLiveBroadcastResult {
   liveChatId: string | null;
 }
 
+/**
+ * liveStreams.insert for the per-class ingest pool: a REUSABLE stream (one
+ * key that can serve many broadcasts over time, one at a time). Prefers the
+ * RTMPS ingest address.
+ */
+export async function createPoolIngestStream(title: string): Promise<CreateLiveStreamResult> {
+  const json = await youtubeApi<{
+    id: string;
+    cdn: { ingestionInfo: { ingestionAddress: string; rtmpsIngestionAddress?: string; streamName: string } };
+  }>(LIVE_CHANNEL, "/liveStreams", {
+    method: "POST",
+    operation: "liveStreams.insert",
+    query: { part: "snippet,cdn,contentDetails,status" },
+    body: {
+      snippet: { title },
+      cdn: { frameRate: "variable", ingestionType: "rtmp", resolution: "variable" },
+      contentDetails: { isReusable: true },
+    },
+  });
+  return {
+    id: json.id,
+    ingestUrl: json.cdn.ingestionInfo.rtmpsIngestionAddress || json.cdn.ingestionInfo.ingestionAddress,
+    streamKey: json.cdn.ingestionInfo.streamName,
+  };
+}
+
+export async function deleteIngestStream(streamId: string): Promise<void> {
+  await youtubeApi(LIVE_CHANNEL, "/liveStreams", { method: "DELETE", operation: "liveStreams.delete", query: { id: streamId } });
+}
+
+export interface StreamHealth {
+  /** created | ready | active | inactive | error */
+  streamStatus: string | null;
+  /** good | ok | bad | noData */
+  healthStatus: string | null;
+}
+
+/** liveStreams.list status for one stream (1 quota unit). */
+export async function getIngestStreamHealth(streamId: string): Promise<StreamHealth | null> {
+  const json = await youtubeApi<{ items?: Array<{ status?: { streamStatus?: string; healthStatus?: { status?: string } } }> }>(
+    LIVE_CHANNEL,
+    "/liveStreams",
+    { operation: "liveStreams.list", query: { part: "status", id: streamId } }
+  );
+  const item = json.items?.[0];
+  if (!item) return null;
+  return { streamStatus: item.status?.streamStatus ?? null, healthStatus: item.status?.healthStatus?.status ?? null };
+}
+
+/** liveBroadcasts.list status for one broadcast (1 quota unit). lifeCycleStatus: created | ready | testing | liveStarting | live | complete | revoked … */
+export async function getBroadcastLifecycle(broadcastId: string): Promise<string | null> {
+  const json = await youtubeApi<{ items?: Array<{ status?: { lifeCycleStatus?: string } }> }>(LIVE_CHANNEL, "/liveBroadcasts", {
+    operation: "liveBroadcasts.list",
+    query: { part: "status", id: broadcastId },
+  });
+  return json.items?.[0]?.status?.lifeCycleStatus ?? null;
+}
+
 /** liveBroadcasts.insert — strictly UNLISTED for batch privacy; Atomic Pathshala is the access-control layer. */
 export async function createLiveBroadcast(
   title: string,
   scheduledStartTime: string,
-  description?: string
+  description?: string,
+  opts: { enableAutoStop?: boolean } = {}
 ): Promise<CreateLiveBroadcastResult> {
+  // Auto-stop ends the broadcast for good the moment the encoder drops — a
+  // teacher's brief network blip would end the class on YouTube. Per-class
+  // broadcasts on the stream pool pass false and are completed explicitly.
+  const enableAutoStop = opts.enableAutoStop ?? true;
   const desc =
     description ||
     `Atomic Pathshala Live Interactive Lecture: ${title}\n\nJoin live for comprehensive concept explanation, doubt clearing, and problem solving sessions.\n\nWebsite: https://atomicpathshala.com`;
@@ -105,7 +168,7 @@ export async function createLiveBroadcast(
       body: {
         snippet: { title: cleanTitle, description: desc, scheduledStartTime: validStartTime },
         status: { privacyStatus: "unlisted", selfDeclaredMadeForKids: false },
-        contentDetails: { enableAutoStart: true, enableAutoStop: true, enableDvr: true, recordFromStart: true, latencyPreference: "low" },
+        contentDetails: { enableAutoStart: true, enableAutoStop, enableDvr: true, recordFromStart: true, latencyPreference: "low" },
       },
     },
     {
@@ -113,7 +176,7 @@ export async function createLiveBroadcast(
       body: {
         snippet: { title: cleanTitle, description: desc, scheduledStartTime: soon() },
         status: { privacyStatus: "unlisted", selfDeclaredMadeForKids: false },
-        contentDetails: { enableAutoStart: true, enableAutoStop: true, enableDvr: true, recordFromStart: true },
+        contentDetails: { enableAutoStart: true, enableAutoStop, enableDvr: true, recordFromStart: true },
       },
     },
     {
@@ -121,7 +184,7 @@ export async function createLiveBroadcast(
       body: {
         snippet: { title: cleanTitle, description: desc, scheduledStartTime: soon() },
         status: { privacyStatus: "unlisted", selfDeclaredMadeForKids: false },
-        contentDetails: { enableAutoStart: true, enableAutoStop: true },
+        contentDetails: { enableAutoStart: true, enableAutoStop },
       },
     },
     {
