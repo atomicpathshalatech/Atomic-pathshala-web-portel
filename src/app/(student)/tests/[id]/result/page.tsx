@@ -18,7 +18,7 @@ export default async function TestResultPage({ params }: { params: { id: string 
     include: { batchSchedule: true, testSeries: true },
   });
   if (!test) notFound();
-  if (!test.batchScheduleId && !test.testSeriesId) redirect("/tests");
+  if (!test.batchScheduleId && !test.testSeriesId && !test.chapterId) redirect("/tests");
 
   const { student } = await resolveStudentForTest(session.user.id, test);
   if (!student) redirect("/tests");

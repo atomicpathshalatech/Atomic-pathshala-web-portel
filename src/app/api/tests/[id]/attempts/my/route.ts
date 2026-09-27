@@ -39,8 +39,8 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
       },
     });
     if (!test) return apiError("Test not found", 404);
-    if (!test.batchScheduleId && !test.testSeriesId) {
-      return apiError("This test isn't linked to a scheduled session or a series.", 400);
+    if (!test.batchScheduleId && !test.testSeriesId && !test.chapterId) {
+      return apiError("This test isn't linked to a scheduled session, series, or chapter.", 400);
     }
 
     const { student } = await resolveStudentForTest(session.user.id, test);

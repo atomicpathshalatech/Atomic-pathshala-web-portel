@@ -382,9 +382,9 @@ export default async function StudentTestsPage() {
       const inProg = attempt?.status === "IN_PROGRESS";
       const openTime = t.openTime ? new Date(t.openTime) : null;
       const closeTime = t.closeTime ? new Date(t.closeTime) : null;
-      const isUpcoming = Boolean((openTime && now < openTime) || (t.status === "DRAFT" && (!openTime || now < openTime)));
+      const isUpcoming = Boolean(openTime && now < openTime);
       const isClosed = Boolean(closeTime && now > closeTime);
-      const canAttempt = !isCompleted && !inProg && !isUpcoming && !isClosed && t.status !== "DRAFT";
+      const canAttempt = !isCompleted && !inProg && !isUpcoming && !isClosed && t.status !== "ARCHIVED";
       const canResume = inProg && !isClosed;
 
       let statusLabel = "Available Now";

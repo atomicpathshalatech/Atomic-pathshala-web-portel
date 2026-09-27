@@ -42,7 +42,7 @@ export async function resolveStudentForSeries(userId: string, testSeriesId: stri
  */
 export async function resolveStudentForTest(
   userId: string,
-  test: { batchScheduleId: string | null; testSeriesId: string | null }
+  test: { batchScheduleId: string | null; testSeriesId: string | null; chapterId?: string | null }
 ): Promise<{ student: { id: string } | null }> {
   if (test.batchScheduleId) {
     const { student } = await resolveStudentForSchedule(userId, test.batchScheduleId);
@@ -50,6 +50,10 @@ export async function resolveStudentForTest(
   }
   if (test.testSeriesId) {
     const { student } = await resolveStudentForSeries(userId, test.testSeriesId);
+    return { student };
+  }
+  const student = await prisma.student.findUnique({ where: { userId } });
+  if (student && student.status === "ACTIVE") {
     return { student };
   }
   return { student: null };

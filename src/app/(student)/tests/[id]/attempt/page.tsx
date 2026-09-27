@@ -31,8 +31,8 @@ export default async function TestAttemptPage({ params }: { params: { id: string
     },
   });
   if (!test) notFound();
-  if (test.status !== "PUBLISHED") redirect("/tests");
-  if (!test.batchScheduleId && !test.testSeriesId) redirect("/tests");
+  if (test.status === "ARCHIVED" || test.archived) redirect("/tests");
+  if (!test.batchScheduleId && !test.testSeriesId && !test.chapterId) redirect("/tests");
 
   const { student } = await resolveStudentForTest(session.user.id, test);
   if (!student) redirect("/tests");
