@@ -6,7 +6,6 @@ import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { assertCanControlLiveClass } from "@/lib/live-class/ownership";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
-import { createBroadcastToken } from "@/lib/live-class/broadcast-token";
 import { getAppBaseUrl } from "@/lib/email/app-url";
 
 export async function POST(
@@ -60,8 +59,9 @@ export async function POST(
     }
 
     const { YOUTUBE_OAUTH_PRODUCTION_URL } = await import("@/lib/youtube/oauth-config");
-    const broadcastToken = createBroadcastToken(schedule.id, session.user.id);
-    const obsBroadcastUrl = `${YOUTUBE_OAUTH_PRODUCTION_URL}/obs-stage/${schedule.id}?token=${broadcastToken}`;
+    const { issueStageToken, stageUrl } = await import("@/lib/live-class/stage-session");
+    const stageToken = await issueStageToken({ batchScheduleId: schedule.id, issuedToUserId: session.user.id });
+    const obsBroadcastUrl = stageToken ? stageUrl(YOUTUBE_OAUTH_PRODUCTION_URL, schedule.id, stageToken) : null;
 
     const res = apiSuccess({
       // Only the two fields the OBS setup panel reads — never the stored row.

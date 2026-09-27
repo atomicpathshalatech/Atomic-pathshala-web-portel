@@ -29,31 +29,19 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
   try {
     const broadcastToken = _request.nextUrl.searchParams.get("broadcast_token");
     if (broadcastToken) {
-      const { verifyBroadcastToken } = await import("@/lib/live-class/broadcast-token");
-      const payload = verifyBroadcastToken(broadcastToken);
-      // The token must belong to the class that owns THIS room — a valid
-      // token for Class A used to hand out a viewer token for any room id.
-      const boundSession = payload
-        ? await prisma.whiteboardSession.findFirst({
-            where: {
-              id: params.id,
-              OR: [{ batchScheduleId: payload.scheduleId }, { batchSchedule: { lectureId: payload.scheduleId } }],
-            },
-            select: { id: true },
-          })
-        : null;
-      if (payload && !boundSession) return apiError("Invalid broadcast token for this class.", 403);
-      if (payload) {
-        const url = process.env.NEXT_PUBLIC_LIVEKIT_URL;
-        if (!url) return apiError("Video calling isn't configured on this server yet.", 503);
-        const roomName = videoRoomName(params.id);
-        const token = await createStudentViewerToken({
-          identity: `OBS:${payload.teacherUserId}`,
-          name: "OBS Stage",
-          roomName,
-        });
-        return apiSuccess({ token, url, identity: `OBS:${payload.teacherUserId}`, role: "OBS" });
+      // OBS stage: a DB-backed stage token for exactly THIS room's current
+      // occurrence (src/lib/live-class/stage-session.ts). Anything else is a
+      // hard 403 — a stage token never falls through to cookie auth.
+      const { verifyStageToken } = await import("@/lib/live-class/stage-session");
+      const stage = await verifyStageToken(broadcastToken);
+      if (!stage || stage.whiteboardSessionId !== params.id) {
+        return apiError("Invalid broadcast token for this class.", 403);
       }
+      const url = process.env.NEXT_PUBLIC_LIVEKIT_URL;
+      if (!url) return apiError("Video calling isn't configured on this server yet.", 503);
+      const identity = `OBS:${stage.liveSessionId}`;
+      const token = await createStudentViewerToken({ identity, name: "OBS Stage", roomName: videoRoomName(params.id) });
+      return apiSuccess({ token, url, identity, role: "OBS" });
     }
 
     const session = await getServerSession(authOptions);

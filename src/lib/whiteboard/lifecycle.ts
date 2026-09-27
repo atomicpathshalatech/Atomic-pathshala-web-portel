@@ -155,6 +155,9 @@ export async function endWhiteboardSession(
       const { markLiveSessionEnded, transitionLiveSession } = await import("@/lib/live-session/service");
       const { finishAppYoutubeBroadcast, PRE_LIVE_YOUTUBE_STATES } = await import("@/lib/live-session/app-youtube");
       const endedBeforeLive = (PRE_LIVE_YOUTUBE_STATES as readonly string[]).includes(openLiveSession.state);
+      // OBS stage links for this occurrence stop working now.
+      const { revokeStageTokens } = await import("@/lib/live-class/stage-session");
+      await revokeStageTokens(openLiveSession.id);
       if (endedBeforeLive) {
         await transitionLiveSession(openLiveSession.id, "FAILED", { failureReason: "ended_before_live", actualEndedAt: now });
       } else if (openLiveSession.state === "LIVE" || openLiveSession.state === "ENDING") {

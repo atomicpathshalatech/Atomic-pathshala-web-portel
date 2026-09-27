@@ -176,10 +176,10 @@ export async function POST(
 
     let obsBroadcastUrl: string | undefined;
     if (wbSession.videoTransport === "YOUTUBE" || wbSession.videoTransport === "BOTH") {
-      const { createBroadcastToken } = await import("@/lib/live-class/broadcast-token");
+      const { issueStageToken, stageUrl } = await import("@/lib/live-class/stage-session");
       const { getAppBaseUrl } = await import("@/lib/email/app-url");
-      const broadcastToken = createBroadcastToken(schedule.id, session.user.id);
-      obsBroadcastUrl = `${getAppBaseUrl()}/obs-stage/${schedule.id}?token=${broadcastToken}`;
+      const stageToken = await issueStageToken({ batchScheduleId: schedule.id, issuedToUserId: session.user.id });
+      if (stageToken) obsBroadcastUrl = stageUrl(getAppBaseUrl(), schedule.id, stageToken);
 
       // No YouTube broadcast is created at prepare time any more: each class
       // gets its own broadcast + a pooled stream slot when Start Class is

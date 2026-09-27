@@ -1,11 +1,11 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
-import { verifyBroadcastToken } from "@/lib/live-class/broadcast-token";
+import { looksLikeStageToken, verifyStageToken } from "@/lib/live-class/stage-session";
 
 /**
  * Token-authenticated (NOT session-authenticated) read endpoint backing the
- * /obs-stage/[scheduleId] broadcast page — see broadcast-token.ts for why
+ * /obs-stage/[scheduleId] broadcast page — see stage-session.ts for why
  * this can't use the normal NextAuth session like every other whiteboard
  * route (OBS's Browser Source carries no cookies). Returns exactly what the
  * broadcast page needs to render: the board's current page and the
@@ -20,39 +20,28 @@ import { verifyBroadcastToken } from "@/lib/live-class/broadcast-token";
  */
 export async function GET(request: NextRequest, { params }: { params: { scheduleId: string } }) {
   try {
+    // DB-backed, revocable stage token bound to exactly this schedule and
+    // its current live occurrence (src/lib/live-class/stage-session.ts). A
+    // token for Class A never opens Class B; a token stops working when the
+    // class ends. Malformed tokens are rejected without a database lookup.
     const token = request.nextUrl.searchParams.get("token");
-    const payload = verifyBroadcastToken(token);
-    // The token is minted for exactly one class (start/stream-key/preflight
-    // sign it with the same id that goes into this URL), so a token for
-    // Class A must never unlock Class B just because B's id is in the path.
-    if (!payload || payload.scheduleId !== params.scheduleId) {
-      return apiError("Invalid or expired broadcast token.", 401);
-    }
+    if (!looksLikeStageToken(token)) return apiError("Invalid or expired broadcast token.", 401);
+    const stage = await verifyStageToken(token, params.scheduleId);
+    if (!stage) return apiError("Invalid or expired broadcast token.", 401);
 
-    const sessionSelect = {
-      id: true,
-      title: true,
-      status: true,
-      livePhase: true,
-      activePageNumber: true,
-      classroomTheme: true,
-      cameraShape: true,
-      cameraPosition: true,
-    } as const;
-
-    // The signed id may be a BatchSchedule id or (from older start calls) a
-    // Lecture id — resolve both, but only ever to that one class.
-    let wbSession = await prisma.whiteboardSession.findUnique({
-      where: { batchScheduleId: payload.scheduleId },
-      select: sessionSelect,
+    const wbSession = await prisma.whiteboardSession.findUnique({
+      where: { id: stage.whiteboardSessionId },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        livePhase: true,
+        activePageNumber: true,
+        classroomTheme: true,
+        cameraShape: true,
+        cameraPosition: true,
+      },
     });
-    if (!wbSession) {
-      const schedule = await prisma.batchSchedule.findFirst({
-        where: { lectureId: payload.scheduleId, liveWhiteboardSession: { isNot: null } },
-        select: { liveWhiteboardSession: { select: sessionSelect } },
-      });
-      wbSession = schedule?.liveWhiteboardSession ?? null;
-    }
 
     if (!wbSession) return apiError("Class session not found.", 404);
 
