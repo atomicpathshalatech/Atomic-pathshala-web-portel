@@ -41,7 +41,7 @@ export function TestPdfDownloadModal({
 
   const handleDownload = (withSolution: boolean) => {
     const type = withSolution ? "with-solution" : "without-solution";
-    const url = `/api/tests/${testId}/export?type=${type}`;
+    const url = `/api/tests/${testId}/export?type=${type}&t=${Date.now()}`;
     window.open(url, "_blank");
   };
 
@@ -192,7 +192,7 @@ export function TestPdfDownloadModal({
                 <div className="pt-1 flex items-center justify-between px-1">
                   <button
                     type="button"
-                    onClick={() => window.open(`/api/tests/${testId}/export?type=cover`, "_blank")}
+                    onClick={() => window.open(`/api/tests/${testId}/export?type=cover&t=${Date.now()}`, "_blank")}
                     className="inline-flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-semibold hover:underline cursor-pointer"
                   >
                     <FileText className="w-3.5 h-3.5" />
