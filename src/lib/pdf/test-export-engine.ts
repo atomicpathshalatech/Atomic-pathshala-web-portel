@@ -244,18 +244,30 @@ export async function fetchCanonicalTestData(testId: string): Promise<FormattedE
       return formattedQ;
     });
 
-    // Extract dynamic syllabus per section from its questions
-    const distinctTopics = Array.from(
-      new Set(
-        questionsToExport
-          .flatMap((sq) => [sq.question.chapter, sq.question.topic, sq.question.subTopic])
-          .filter((t): t is string => Boolean(t && t.trim().length > 0))
-      )
-    );
+    // Extract dynamic syllabus per section from its questions grouped by Chapter
+    const chapterMap = new Map<string, Set<string>>();
+    questionsToExport.forEach((sq) => {
+      const chName = (sq.question.chapter || "").trim();
+      if (!chName) return;
+      if (!chapterMap.has(chName)) chapterMap.set(chName, new Set());
+      const topName = (sq.question.topic || sq.question.subTopic || "").trim();
+      if (topName && topName.toLowerCase() !== chName.toLowerCase()) {
+        chapterMap.get(chName)!.add(topName);
+      }
+    });
 
     let secSyllabus = "";
-    if (distinctTopics.length > 0) {
-      secSyllabus = distinctTopics.join(", ");
+    if (chapterMap.size > 0) {
+      const chapterStrings: string[] = [];
+      chapterMap.forEach((topicsSet, chName) => {
+        const topicsArr = Array.from(topicsSet);
+        if (topicsArr.length > 0) {
+          chapterStrings.push(`${chName} (Topic: ${topicsArr.join(", ")})`);
+        } else {
+          chapterStrings.push(`${chName} (Complete Chapter)`);
+        }
+      });
+      secSyllabus = chapterStrings.join(" | ");
     } else {
       const subjLower = (section.subject || section.name || "").toLowerCase();
       if (subjLower.includes("phys")) {
@@ -269,7 +281,7 @@ export async function fetchCanonicalTestData(testId: string): Promise<FormattedE
       } else if (subjLower.includes("bio")) {
         secSyllabus = "Plant Physiology, Human Physiology, Genetics and Evolution, Ecology and Environment, Cell Structure & Function";
       } else {
-        secSyllabus = `${section.name} Standard Syllabus and Key Conceptual Topics`;
+        secSyllabus = `${section.name} (Complete Chapter)`;
       }
     }
 
@@ -365,7 +377,7 @@ export function generateTestPaperHtml(
       rangeText: `Q ${pad(startQ)}–${pad(endQ)} • ${sectionMarks} M`,
       startQ,
       endQ,
-      syllabus: defaultSyllabus,
+      syllabus: section.syllabus || defaultSyllabus,
       isEven: idx % 2 === 0,
     };
   });
@@ -488,46 +500,45 @@ export function generateTestPaperHtml(
   });
 
   const intermediateRoughCount = 0;
-  const finalRoughCount = 3;
+  const subjectRoughCount = test.sections.length;
+  const finalRoughCount = 1;
   const backCoverCount = 1;
   const solutionsPagesCount = withSolution ? 1 + Math.ceil(test.totalQuestions / 6) : 0;
-  const actualTotalPages = 1 + totalQuestionPagesCount + intermediateRoughCount + finalRoughCount + backCoverCount + solutionsPagesCount;
+  const actualTotalPages = 1 + totalQuestionPagesCount + subjectRoughCount + finalRoughCount + backCoverCount + solutionsPagesCount;
 
-  // Render Front Cover (Exact User-Specified Authentic Layout Matching Screenshot)
+  // Render Front Cover (Exact User-Specified Authentic Layout Matching Requirements)
   const frontCoverHtml = `
     <div class="a4-sheet border-2 border-slate-900 rounded-xs cover-page">
       <div class="cover-border">
         <!-- TOP HEADER ROW -->
         <div class="cover-top-header">
           <div class="cover-top-left">
-            <div class="barcode-pill">(${test.code || "0999DMD310321049"})</div>
-            <div class="barcode-pill font-mono" style="letter-spacing: 1.5px; font-weight: 800;">*${test.code || "0999DMD310321049"}*</div>
+            <img src="${logoUrl}" alt="Atomic Pathshala Logo" class="h-14 w-14 object-contain mx-auto" />
           </div>
           <div class="cover-top-center">
             <div class="brand-logo-text">${brandName}</div>
-            <div class="brand-sub-program">DISTANCE LEARNING PROGRAMME</div>
-            <div class="academic-session">(Academic Session : 2025 - 2026)</div>
+            <div class="brand-sub-program">LEARN • EXPLORE • EXCEL</div>
+            <div class="academic-session font-bold">(Academic Session : 2026 - 2027)</div>
           </div>
           <div class="cover-top-right">
-            <div class="test-pattern-badge">Test Pattern</div>
-            <div class="test-pattern-name">${test.examType || "NEET(UG)"}</div>
-            <div class="test-pattern-type">${test.name.toUpperCase().includes("PART") ? "PART TEST" : test.name.toUpperCase().includes("MAJOR") ? "MAJOR TEST" : "MINOR TEST"}</div>
+            <div class="test-pattern-badge">Test Pattern : <strong>${test.examType || "NEET(UG)"}</strong></div>
+            <div class="test-pattern-name">${test.name.toUpperCase()}</div>
             <div class="test-pattern-date">${currentDateStr}</div>
           </div>
         </div>
 
-        <!-- FULL-WIDTH BLACK HEADER STRIP -->
-        <div class="target-banner">
-          PRE-MEDICAL : LEADER, ACHIEVER &amp; RANK BOOSTER TEST SERIES / JOINT PACKAGE COURSE
+        <!-- FULL-WIDTH BATCH HEADER STRIP (White Background, Black Text) -->
+        <div class="target-banner bg-white border-2 border-black text-black">
+          ${test.batchName || test.seriesName || "Selection Pro Batch Neet"}
         </div>
 
-        <!-- 12th Undergoing/Pass Students -->
-        <div class="candidate-level-pill">
-          12th Undergoing/Pass Students
+        <!-- Dropper / 12th Pass Students (White Background) -->
+        <div class="candidate-level-pill bg-white border border-black text-black font-bold">
+          Dropper / 12th Pass Students
         </div>
 
-        <!-- Test Type Box -->
-        <div class="test-name-box">
+        <!-- Test Type Box (White Background) -->
+        <div class="test-name-box bg-white border-2 border-black">
           <span class="test-type-label">Test Type : </span>
           <span class="test-type-value font-bold">${test.name}</span>
         </div>
@@ -541,38 +552,112 @@ export function generateTestPaperHtml(
           <div class="text-[8pt] text-slate-800">Read carefully the Instructions on the Back Cover of this Test Booklet.</div>
         </div>
 
-        <!-- INSTRUCTIONS BOX TABLE (DUAL COLUMN: LEFT HINDI, RIGHT ENGLISH) -->
+        <!-- INSTRUCTIONS BOX TABLE (POINT-BY-POINT HORIZONTAL BILINGUAL ALIGNMENT) -->
         <div class="instructions-box-table">
-          <!-- Left Column: Hindi Instructions -->
-          <div class="inst-col inst-col-left">
-            <div class="inst-heading">महत्वपूर्ण निर्देश :</div>
-            <ol class="inst-list">
-              <li>उत्तर पत्र के <strong>पृष्ठ-1</strong> एवं <strong>पृष्ठ-2</strong> पर ध्यानपूर्वक केवल <strong>नीले/काले बॉल पॉइंट पेन</strong> से विवरण भरें।</li>
-              <li>परीक्षा की अवधि <strong>${durationHours} घंटे ${durationRemainder > 0 ? `${durationRemainder} मिनट` : ""}</strong> है एवं परीक्षा पुस्तिका में <strong>${test.totalQuestions} प्रश्न</strong> हैं। प्रत्येक प्रश्न <strong>${test.correctMarks} अंक</strong> का है। प्रत्येक सही उत्तर के लिए परीक्षार्थी को <strong>${test.correctMarks} अंक</strong> दिए जाएंगे। प्रत्येक गलत उत्तर के लिए कुल योग में से <strong>${Math.abs(test.incorrectMarks)} अंक</strong> घटाया जाएगा। अधिकतम अंक <strong>${test.totalMarks}</strong> है।</li>
-              <li>इस प्रश्न पत्र के प्रत्येक विषय में 2 खण्ड हैं। खण्ड A में 35 प्रश्न हैं (सभी प्रश्न अनिवार्य हैं) तथा खण्ड B में 15 प्रश्न हैं। परीक्षार्थी इन 15 प्रश्नों में से कोई भी 10 प्रश्न कर सकता है। यदि परीक्षार्थी 10 से अधिक प्रश्न का उत्तर देता है तो हल किये हुए प्रथम 10 प्रश्न ही मान्य होंगे।</li>
-              <li>यदि किसी प्रश्न में एक से अधिक विकल्प सही हों, तो सबसे उचित विकल्प को ही उत्तर माना जायेगा।</li>
-              <li>इस पृष्ठ पर विवरण अंकित करने एवं उत्तर पत्र पर निशान लगाने के लिए <strong>केवल नीले/काले बॉल पॉइंट पेन</strong> का प्रयोग करें।</li>
-              <li>रफ कार्य इस परीक्षा पुस्तिका में निर्धारित स्थान पर ही करें।</li>
-              <li>परीक्षा सम्पन्न होने पर, परीक्षार्थी <strong>कक्ष/हॉल छोड़ने से पूर्व उत्तर पत्र निरीक्षक को अवश्य सौंप दें</strong>। परीक्षार्थी अपने साथ केवल <strong>परीक्षा पुस्तिका को ले जा सकते हैं</strong>।</li>
-              <li>परीक्षार्थी सुनिश्चित करें कि इस उत्तर पत्र को मोड़ा न जाए एवं उस पर कोई अन्य निशान न लगाएं। परीक्षार्थी अपना फॉर्म नम्बर प्रश्न पुस्तिका/उत्तर पत्र में निर्धारित स्थान के अतिरिक्त अन्यत्र न लिखें।</li>
-              <li>उत्तर पत्र पर किसी प्रकार के संशोधन हेतु व्हाइट फ्लूइड के प्रयोग की अनुमति नहीं है।</li>
-            </ol>
+          <div class="inst-header-row">
+            <div class="inst-heading inst-heading-left">महत्वपूर्ण निर्देश :</div>
+            <div class="inst-heading inst-heading-right">Important Instructions :</div>
           </div>
-
-          <!-- Right Column: English Instructions -->
-          <div class="inst-col inst-col-right">
-            <div class="inst-heading">Important Instructions :</div>
-            <ol class="inst-list">
-              <li>On the Answer Sheet, fill in the particulars on <strong>Side-1 and Side-2</strong> carefully with <strong>blue/black ball point pen only</strong>.</li>
-              <li>The test is of <strong>${durationHours} hours ${durationRemainder > 0 ? `${durationRemainder} minutes` : ""}</strong> duration and this Test Booklet contains <strong>${test.totalQuestions} questions</strong>. Each question carries <strong>${test.correctMarks} marks</strong>. For each correct response, the candidate will get <strong>${test.correctMarks} marks</strong>. For each incorrect response, <strong>${Math.abs(test.incorrectMarks)} mark</strong> will be deducted from the total scores. The maximum marks are <strong>${test.totalMarks}</strong>.</li>
-              <li>In this Test Paper, each subject will consist of <strong>two sections</strong>. Section A will consist of 35 questions (all questions are mandatory) and Section B will have 15 questions. Candidate can choose to attempt any 10 question out of these 15 questions. In case if candidate attempts more than 10 questions, first 10 attempted questions will be considered for marking.</li>
-              <li>In case of more than one option correct in any question, the best correct option will be considered as answer.</li>
-              <li>Use <strong>Blue/Black Ball Point Pen only</strong> for writing particulars on this page/marking responses.</li>
-              <li>Rough work is to be done on the space provided for this purpose in the Test Booklet only.</li>
-              <li>On completion of the test, the candidate <strong>must hand over the Answer Sheet to the Invigilator before leaving the Room/Hall</strong>. The candidates are <strong>allowed to take away this Test Booklet with them</strong>.</li>
-              <li>The candidates should ensure that the Answer Sheet is not folded. Do not make any stray marks on the Answer Sheet. Do not write your Form No. anywhere else except in the specified space in the Test Booklet/Answer Sheet.</li>
-              <li>Use of white fluid for correction is <strong>not permissible</strong> on the Answer Sheet.</li>
-            </ol>
+          <div class="inst-points-list">
+            <!-- Point 1 -->
+            <div class="inst-point-row">
+              <div class="inst-point-cell inst-cell-left">
+                <span class="inst-point-num">1.</span>
+                <div class="inst-point-text">उत्तर पत्र के <strong>पृष्ठ-1</strong> एवं <strong>पृष्ठ-2</strong> पर ध्यानपूर्वक केवल <strong>नीले/काले बॉल पॉइंट पेन</strong> से विवरण भरें।</div>
+              </div>
+              <div class="inst-point-cell inst-cell-right">
+                <span class="inst-point-num">1.</span>
+                <div class="inst-point-text">On the Answer Sheet, fill in the particulars on <strong>Side-1 and Side-2</strong> carefully with <strong>blue/black ball point pen only</strong>.</div>
+              </div>
+            </div>
+            <!-- Point 2 -->
+            <div class="inst-point-row">
+              <div class="inst-point-cell inst-cell-left">
+                <span class="inst-point-num">2.</span>
+                <div class="inst-point-text">परीक्षा की अवधि <strong>${durationHours} घंटे ${durationRemainder > 0 ? `${durationRemainder} मिनट` : ""}</strong> है एवं परीक्षा पुस्तिका में <strong>${test.totalQuestions} प्रश्न</strong> हैं। प्रत्येक प्रश्न <strong>${test.correctMarks} अंक</strong> का है। प्रत्येक सही उत्तर के लिए परीक्षार्थी को <strong>${test.correctMarks} अंक</strong> दिए जाएंगे। प्रत्येक गलत उत्तर के लिए कुल योग में से <strong>${Math.abs(test.incorrectMarks)} अंक</strong> घटाया जाएगा। अधिकतम अंक <strong>${test.totalMarks}</strong> है।</div>
+              </div>
+              <div class="inst-point-cell inst-cell-right">
+                <span class="inst-point-num">2.</span>
+                <div class="inst-point-text">The test is of <strong>${durationHours} hours ${durationRemainder > 0 ? `${durationRemainder} minutes` : ""}</strong> duration and this Test Booklet contains <strong>${test.totalQuestions} questions</strong>. Each question carries <strong>${test.correctMarks} marks</strong>. For each correct response, the candidate will get <strong>${test.correctMarks} marks</strong>. For each incorrect response, <strong>${Math.abs(test.incorrectMarks)} mark</strong> will be deducted from the total scores. The maximum marks are <strong>${test.totalMarks}</strong>.</div>
+              </div>
+            </div>
+            <!-- Point 3 -->
+            <div class="inst-point-row">
+              <div class="inst-point-cell inst-cell-left">
+                <span class="inst-point-num">3.</span>
+                <div class="inst-point-text">इस प्रश्न पत्र के प्रत्येक विषय में 2 खण्ड हैं। खण्ड A में 35 प्रश्न हैं (सभी प्रश्न अनिवार्य हैं) तथा खण्ड B में 15 प्रश्न हैं। परीक्षार्थी इन 15 प्रश्नों में से कोई भी 10 प्रश्न कर सकता है। यदि परीक्षार्थी 10 से अधिक प्रश्न का उत्तर देता है तो हल किये हुए प्रथम 10 प्रश्न ही मान्य होंगे।</div>
+              </div>
+              <div class="inst-point-cell inst-cell-right">
+                <span class="inst-point-num">3.</span>
+                <div class="inst-point-text">In this Test Paper, each subject will consist of <strong>two sections</strong>. Section A will consist of 35 questions (all questions are mandatory) and Section B will have 15 questions. Candidate can choose to attempt any 10 question out of these 15 questions. In case if candidate attempts more than 10 questions, first 10 attempted questions will be considered for marking.</div>
+              </div>
+            </div>
+            <!-- Point 4 -->
+            <div class="inst-point-row">
+              <div class="inst-point-cell inst-cell-left">
+                <span class="inst-point-num">4.</span>
+                <div class="inst-point-text">यदि किसी प्रश्न में एक से अधिक विकल्प सही हों, तो सबसे उचित विकल्प को ही उत्तर माना जायेगा।</div>
+              </div>
+              <div class="inst-point-cell inst-cell-right">
+                <span class="inst-point-num">4.</span>
+                <div class="inst-point-text">In case of more than one option correct in any question, the best correct option will be considered as answer.</div>
+              </div>
+            </div>
+            <!-- Point 5 -->
+            <div class="inst-point-row">
+              <div class="inst-point-cell inst-cell-left">
+                <span class="inst-point-num">5.</span>
+                <div class="inst-point-text">इस पृष्ठ पर विवरण अंकित करने एवं उत्तर पत्र पर निशान लगाने के लिए <strong>केवल नीले/काले बॉल पॉइंट पेन</strong> का प्रयोग करें।</div>
+              </div>
+              <div class="inst-point-cell inst-cell-right">
+                <span class="inst-point-num">5.</span>
+                <div class="inst-point-text">Use <strong>Blue/Black Ball Point Pen only</strong> for writing particulars on this page/marking responses.</div>
+              </div>
+            </div>
+            <!-- Point 6 -->
+            <div class="inst-point-row">
+              <div class="inst-point-cell inst-cell-left">
+                <span class="inst-point-num">6.</span>
+                <div class="inst-point-text">रफ कार्य इस परीक्षा पुस्तिका में निर्धारित स्थान पर ही करें।</div>
+              </div>
+              <div class="inst-point-cell inst-cell-right">
+                <span class="inst-point-num">6.</span>
+                <div class="inst-point-text">Rough work is to be done on the space provided for this purpose in the Test Booklet only.</div>
+              </div>
+            </div>
+            <!-- Point 7 -->
+            <div class="inst-point-row">
+              <div class="inst-point-cell inst-cell-left">
+                <span class="inst-point-num">7.</span>
+                <div class="inst-point-text">परीक्षा सम्पन्न होने पर, परीक्षार्थी <strong>कक्ष/हॉल छोड़ने से पूर्व उत्तर पत्र निरीक्षक को अवश्य सौंप दें</strong>। परीक्षार्थी अपने साथ केवल <strong>परीक्षा पुस्तिका को ले जा सकते हैं</strong>।</div>
+              </div>
+              <div class="inst-point-cell inst-cell-right">
+                <span class="inst-point-num">7.</span>
+                <div class="inst-point-text">On completion of the test, the candidate <strong>must hand over the Answer Sheet to the Invigilator before leaving the Room/Hall</strong>. The candidates are <strong>allowed to take away this Test Booklet with them</strong>.</div>
+              </div>
+            </div>
+            <!-- Point 8 -->
+            <div class="inst-point-row">
+              <div class="inst-point-cell inst-cell-left">
+                <span class="inst-point-num">8.</span>
+                <div class="inst-point-text">परीक्षार्थी सुनिश्चित करें कि इस उत्तर पत्र को मोड़ा न जाए एवं उस पर कोई अन्य निशान न लगाएं। परीक्षार्थी अपना फॉर्म नम्बर प्रश्न पुस्तिका/उत्तर पत्र में निर्धारित स्थान के अतिरिक्त अन्यत्र न लिखें।</div>
+              </div>
+              <div class="inst-point-cell inst-cell-right">
+                <span class="inst-point-num">8.</span>
+                <div class="inst-point-text">The candidates should ensure that the Answer Sheet is not folded. Do not make any stray marks on the Answer Sheet. Do not write your Form No. anywhere else except in the specified space in the Test Booklet/Answer Sheet.</div>
+              </div>
+            </div>
+            <!-- Point 9 -->
+            <div class="inst-point-row">
+              <div class="inst-point-cell inst-cell-left">
+                <span class="inst-point-num">9.</span>
+                <div class="inst-point-text">उत्तर पत्र पर किसी प्रकार के संशोधन हेतु व्हाइट फ्लूइड के प्रयोग की अनुमति नहीं है।</div>
+              </div>
+              <div class="inst-point-cell inst-cell-right">
+                <span class="inst-point-num">9.</span>
+                <div class="inst-point-text">Use of white fluid for correction is <strong>not permissible</strong> on the Answer Sheet.</div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -614,13 +699,13 @@ export function generateTestPaperHtml(
           </div>
         </div>
 
-        <!-- BOTTOM TARGET MOTTO -->
-        <div class="bottom-target-motto">
-          YOUR TARGET IS TO SECURE GOOD RANK IN PRE-MEDICAL 2026
+        <!-- BOTTOM TARGET MOTTO (Best Wishes From Atomic Pathshala) -->
+        <div class="bottom-target-motto bg-white border-2 border-black text-black font-extrabold">
+          BEST WISHES FROM ATOMIC PATHSHALA FOR NEET 2027
         </div>
         
         <div class="text-right text-[7.5pt] font-mono-code font-bold mt-1 text-slate-800">
-          LTS / Page 1/${actualTotalPages}
+          Page 1/${actualTotalPages}
         </div>
       </div>
     </div>
@@ -643,6 +728,32 @@ export function generateTestPaperHtml(
       </div>
     `;
   };
+
+  const renderSingleRoughPageHtml = (pNo: number, subjectName?: string) => `
+    <div class="page rough-page">
+      <div class="test-page-header">
+        <div class="test-header-row-1">
+          <div class="test-header-brand">${brandName}</div>
+          <div class="test-header-page-no">${pNo}</div>
+          <div class="test-header-lang-badge">Hindi + English</div>
+        </div>
+        <div class="test-header-subject-row">
+          SPACE FOR ROUGH WORK / रफ कार्य के लिए जगह ${subjectName ? `(${subjectName.toUpperCase()})` : ""}
+        </div>
+        <div class="test-header-divider"></div>
+      </div>
+      <div class="rough-page-content">
+        <div class="rough-watermark">SPACE FOR ROUGH WORK / रफ कार्य के लिए जगह</div>
+        <div class="rough-grid-canvas"></div>
+      </div>
+      <div class="page-running-footer">
+        <div class="flex items-center justify-between text-[8pt] font-bold text-black uppercase w-full">
+          <span>${test.batchName || test.seriesName || "Selection Pro Batch Neet"}</span>
+          <span>Page ${pNo}/${actualTotalPages}</span>
+        </div>
+      </div>
+    </div>
+  `;
 
   test.sections.forEach((section, sIdx) => {
     const pagesForSection = chunkQuestionsIntoPages(section.questions, 4.2);
@@ -725,7 +836,7 @@ export function generateTestPaperHtml(
         `;
       }).join("");
 
-      // Header on Page 1 of section vs subsequent pages
+      // Header on Page 1 of subject vs subsequent pages (Section-A / खण्ड-A boxes REMOVED completely)
       const subjectHeaderHtml = pIdx === 0 ? `
         <div class="test-subject-header-box mb-2">
           <div class="font-heading font-black text-center text-[13pt] text-black tracking-widest uppercase mb-1">${brandName}</div>
@@ -733,17 +844,7 @@ export function generateTestPaperHtml(
             SUBJECT : ${section.subject.toUpperCase()}
           </div>
           <div class="bg-black text-white px-2.5 py-1 text-[8.5pt] font-bold mb-1.5 leading-snug">
-            Topic : ${section.syllabus}
-          </div>
-          <div class="grid grid-cols-2 gap-2">
-            <div class="border border-black rounded-xs p-1 text-center">
-              <div class="font-bold text-[9.5pt] uppercase text-black">SECTION-A</div>
-              <div class="text-red-700 font-bold text-[8pt]">Attempt All ${section.questions.length > 35 ? "35" : section.questions.length} questions</div>
-            </div>
-            <div class="border border-black rounded-xs p-1 text-center font-devanagari">
-              <div class="font-bold text-[9.5pt] uppercase text-black">खण्ड-A</div>
-              <div class="text-red-700 font-bold text-[8pt]">सभी ${section.questions.length > 35 ? "35" : section.questions.length} प्रश्न अनिवार्य हैं</div>
-            </div>
+            Syllabus : ${section.syllabus}
           </div>
         </div>
       ` : `
@@ -765,14 +866,9 @@ export function generateTestPaperHtml(
 
           <!-- Bottom Footer Matching Official Test Booklet -->
           <div class="page-running-footer">
-            <div class="text-center font-bold text-[8pt] text-black py-0.5">Space for Rough Work / रफ कार्य के लिए जगह</div>
-            <div class="border-t border-black pt-1 flex items-center justify-between text-[7.5pt] font-bold text-black uppercase">
-              <span>${test.seriesName || "MAJOR LEADER, ACHIEVER & RANK BOOSTER TEST SERIES - JOINT PACKAGE COURSE"}</span>
-              <span>${test.code || "0999DMD310321049"}</span>
-            </div>
-            <div class="flex items-center justify-between text-[7.5pt] font-bold text-black mt-0.5">
-              <span>LTS / Page ${pageCounter}/${actualTotalPages}</span>
-              <span>${test.examType || "NEET(UG)"} - 2026 / ${currentDateStr}</span>
+            <div class="flex items-center justify-between text-[8pt] font-bold text-black uppercase w-full">
+              <span>${test.batchName || test.seriesName || "Selection Pro Batch Neet"}</span>
+              <span>Page ${pageCounter}/${actualTotalPages}</span>
             </div>
           </div>
         </div>
@@ -780,47 +876,14 @@ export function generateTestPaperHtml(
 
       pageCounter++;
     });
+
+    // Dedicated Rough Page after this subject's questions are finished
+    questionPagesHtml += renderSingleRoughPageHtml(pageCounter++, section.subject);
   });
 
-  // Dedicated End-of-Subject Rough Pages (3 Pages before Answer Key)
-  const roughPage1No = pageCounter++;
-  const roughPage2No = pageCounter++;
-  const roughPage3No = pageCounter++;
+  // Final End Rough Page before Back Cover / Answer Key
+  const finalRoughPagesHtml = renderSingleRoughPageHtml(pageCounter++);
   const backCoverPageNo = pageCounter++;
-
-  const renderSingleRoughPageHtml = (pNo: number) => `
-    <div class="page rough-page">
-      <div class="test-page-header">
-        <div class="test-header-row-1">
-          <div class="test-header-brand">${brandName}</div>
-          <div class="test-header-page-no">${pNo}</div>
-          <div class="test-header-lang-badge">Hindi + English</div>
-        </div>
-        <div class="test-header-subject-row">
-          SPACE FOR ROUGH WORK / रफ कार्य के लिए जगह
-        </div>
-        <div class="test-header-divider"></div>
-      </div>
-      <div class="rough-page-content">
-        <div class="rough-watermark">SPACE FOR ROUGH WORK / रफ कार्य के लिए जगह</div>
-        <div class="rough-grid-canvas"></div>
-      </div>
-      <div class="page-running-footer">
-        <div class="footer-phase-box">PHASE - ALL</div>
-        <div class="footer-meta-row">
-          <span class="footer-barcode">${test.code}</span>
-          <span class="footer-rough-note">SPACE FOR ROUGH WORK</span>
-          <span class="footer-date">${currentDateStr}</span>
-        </div>
-      </div>
-    </div>
-  `;
-
-  const finalRoughPagesHtml = `
-    ${renderSingleRoughPageHtml(roughPage1No)}
-    ${renderSingleRoughPageHtml(roughPage2No)}
-    ${renderSingleRoughPageHtml(roughPage3No)}
-  `;
 
   // Back Cover Page
   const backCoverHtml = `
@@ -1363,36 +1426,63 @@ export function generateTestPaperHtml(
 
     .instructions-box-table {
       border: 1.5px solid #000;
-      border-radius: 10px;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
+      border-radius: 6px;
       margin-bottom: 6px;
       background: #fff;
+      overflow: hidden;
     }
-    .inst-col {
-      padding: 5px 8px;
+    .inst-header-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      border-bottom: 1px solid #000;
+      background: #f8fafc;
     }
-    .inst-col-left {
+    .inst-heading {
+      font-size: 8.5pt;
+      font-weight: 800;
+      padding: 4px 8px;
+    }
+    .inst-heading-left {
       border-right: 1.5px solid #000;
       font-family: 'Noto Sans Devanagari', sans-serif;
     }
-    .inst-col-right {
-      font-family: 'Plus Jakarta Sans', sans-serif;
+    .inst-heading-right {
+      font-family: 'Inter', sans-serif;
     }
-    .inst-heading {
-      font-size: 9pt;
+    .inst-points-list {
+      display: flex;
+      flex-direction: column;
+    }
+    .inst-point-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .inst-point-row:last-child {
+      border-bottom: none;
+    }
+    .inst-point-cell {
+      display: flex;
+      align-items: baseline;
+      padding: 3px 8px;
+      font-size: 7.2pt;
+      line-height: 1.25;
+      gap: 4px;
+    }
+    .inst-cell-left {
+      border-right: 1.5px solid #000;
+      font-family: 'Noto Sans Devanagari', sans-serif;
+    }
+    .inst-cell-right {
+      font-family: 'Inter', sans-serif;
+    }
+    .inst-point-num {
       font-weight: 800;
-      margin-bottom: 4px;
-      text-decoration: underline;
+      min-width: 14px;
+      flex-shrink: 0;
     }
-    .inst-list {
-      margin: 0;
-      padding-left: 14px;
-      font-size: 7.5pt;
-      line-height: 1.3;
-    }
-    .inst-list li {
-      margin-bottom: 3px;
+    .inst-point-text {
+      flex: 1;
     }
 
     .ambiguity-banner {
@@ -1570,8 +1660,8 @@ export function generateTestPaperHtml(
     .opt-value p,
     .opt-value span {
       font-family: 'Times New Roman', 'PT Serif', 'Noto Serif Devanagari', 'Cambria', Georgia, serif !important;
-      font-size: 9.5pt !important;
-      line-height: 1.35 !important;
+      font-size: 10.5pt !important;
+      line-height: 1.42 !important;
       color: #000000 !important;
     }
 
@@ -1608,7 +1698,7 @@ export function generateTestPaperHtml(
 
     .q-num-label {
       font-family: 'Times New Roman', 'PT Serif', serif !important;
-      font-size: 10pt !important;
+      font-size: 10.5pt !important;
       font-weight: 800 !important;
       color: #000000 !important;
       min-width: 18px;
@@ -1640,7 +1730,7 @@ export function generateTestPaperHtml(
 
     .opt-label {
       font-family: 'Times New Roman', 'PT Serif', serif !important;
-      font-size: 10pt !important;
+      font-size: 10.5pt !important;
       font-weight: 700 !important;
       color: #000000 !important;
       min-width: 22px;
