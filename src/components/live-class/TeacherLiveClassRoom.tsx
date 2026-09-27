@@ -38,7 +38,7 @@ import { BroadcastQuizCanvasOverlay } from "@/components/live-class/BroadcastQui
 // Size (px) of the floating self-camera bubble — draggable & resizable (120px to 400px)
 const DEFAULT_FLOAT_CAM_SIZE = 180;
 
-type WhiteboardPage = { id: string; pageNumber: number; objects: StrokeObject[]; background: string };
+type WhiteboardPage = { id: string; pageNumber: number; objects: StrokeObject[]; background: string; version?: number };
 type LivePhase = "SCHEDULED" | "PREPARING" | "LIVE" | "ENDED" | (string & {});
 type WhiteboardSession = {
   id: string;
@@ -318,6 +318,14 @@ export function TeacherLiveClassRoom({
   const engineRef = useRef<CanvasEngine | null>(null);
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingObjectsRef = useRef<StrokeObject[] | null>(null);
+  const boardSaveRef = useRef<{
+    inFlight: boolean;
+    again: boolean;
+    conflictRetries: number;
+    versions: Record<string, number>;
+    lastSavedObjects: StrokeObject[] | null;
+    lastSavedPageId: string | null;
+  }>({ inFlight: false, again: false, conflictRetries: 0, versions: {}, lastSavedObjects: null, lastSavedPageId: null });
   const activeQuizIdRef = useRef<string | null>(null);
   // The canvas engine (and its onCommit closure) is created once per
   // session and persists across page switches — it must always call the
@@ -1017,26 +1025,66 @@ export function TeacherLiveClassRoom({
     if (engineRef.current) engineRef.current.eraserRadius = eraserRadius;
   }, [eraserRadius]);
 
+  // Board saves are single-flight and versioned: at most one save request
+  // is in flight; strokes drawn meanwhile are sent by the next save (with
+  // the newest objects), and every save carries the page version it was
+  // built on. Before this, two overlapping saves could land out of order and
+  // an older one overwrote newer strokes (for students and the recording).
+  // A 409 means the page moved on elsewhere (e.g. a second tab): adopt the
+  // server version and resend what this teacher is actually looking at.
   const flushAutosave = useCallback(async () => {
     if (!wbSession || !pendingObjectsRef.current) return;
+    const sync = boardSaveRef.current;
+    if (sync.inFlight) {
+      sync.again = true;
+      return;
+    }
     const targetPage: WhiteboardPage | null =
       currentPage ?? (wbSession.pages?.[0] ?? null);
     if (!targetPage) return;
 
     const objects = pendingObjectsRef.current;
+    if (sync.lastSavedObjects === objects && sync.lastSavedPageId === targetPage.id) return;
+    const baseVersion = sync.versions[targetPage.id] ?? targetPage.version;
+
+    sync.inFlight = true;
     try {
-      await patchJson(`/api/whiteboard/sessions/${wbSession.id}/pages/${targetPage.id}`, { objects });
-      setSaveState("saved");
+      const res = await fetch(`/api/whiteboard/sessions/${wbSession.id}/pages/${targetPage.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ objects, ...(baseVersion !== undefined && { baseVersion }) }),
+      });
+      const json = await res.json().catch(() => null);
+      if (res.status === 409 && json?.details?.currentVersion != null && sync.conflictRetries < 3) {
+        sync.versions[targetPage.id] = json.details.currentVersion;
+        sync.conflictRetries++;
+        sync.again = true;
+        return;
+      }
+      if (!res.ok || !json?.success) throw new Error(json?.error || "save failed");
+      sync.conflictRetries = 0;
+      sync.versions[targetPage.id] = json.data.page.version;
+      sync.lastSavedObjects = objects;
+      sync.lastSavedPageId = targetPage.id;
+      if (pendingObjectsRef.current === objects) setSaveState("saved");
       setWbSession((prev) =>
         prev
           ? {
               ...prev,
-              pages: prev.pages.map((p) => (p.id === targetPage!.id ? { ...p, objects } : p)),
+              pages: prev.pages.map((p) =>
+                p.id === targetPage!.id ? { ...p, objects, version: json.data.page.version } : p
+              ),
             }
           : prev
       );
     } catch {
       setSaveState("offline");
+    } finally {
+      sync.inFlight = false;
+      if (sync.again) {
+        sync.again = false;
+        setTimeout(() => flushAutosaveRef.current(), 0);
+      }
     }
   }, [wbSession, currentPage]);
 

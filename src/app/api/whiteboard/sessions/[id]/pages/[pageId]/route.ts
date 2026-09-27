@@ -7,6 +7,7 @@ import { UnauthorizedError, ForbiddenError } from "@/lib/rbac/guard";
 import { resolveWhiteboardAccess } from "@/lib/whiteboard/access";
 import { whiteboardPageAutosaveSchema } from "@/lib/validation/whiteboard";
 import { pushBoardUpdated } from "@/lib/whiteboard/board-mirror";
+import { saveWhiteboardPage } from "@/lib/whiteboard/page-save";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { deleteFile, keyFromPublicUrl } from "@/lib/storage";
 
@@ -46,13 +47,23 @@ export async function PATCH(
 
     const input = whiteboardPageAutosaveSchema.parse(await request.json());
 
-    const updated = await prisma.whiteboardPage.update({
-      where: { id: params.pageId },
-      data: {
-        objects: input.objects as Prisma.InputJsonValue,
-        ...(input.background !== undefined && { background: input.background }),
-      },
+    // Compare-and-set on the page version (src/lib/whiteboard/page-save.ts):
+    // a save built on a stale version — an older request that arrived late,
+    // or a second teacher tab — is rejected instead of overwriting newer strokes.
+    const saved = await saveWhiteboardPage({
+      sessionId: params.id,
+      pageId: params.pageId,
+      objects: input.objects as Prisma.InputJsonValue,
+      background: input.background,
+      baseVersion: input.baseVersion,
     });
+    if (!saved.ok) {
+      return apiError("The board changed since this save was prepared.", 409, {
+        code: "BOARD_VERSION_CONFLICT",
+        details: { currentVersion: saved.currentVersion },
+      });
+    }
+    const updated = saved.page;
 
     if (input.background !== undefined && input.background !== page.background) {
       const oldKey = keyFromPublicUrl(page.background);
@@ -68,12 +79,7 @@ export async function PATCH(
       select: { activePageNumber: true },
     });
     if (wbSessionForBroadcast && wbSessionForBroadcast.activePageNumber === updated.pageNumber) {
-      await pushBoardUpdated(
-        params.id,
-        updated.pageNumber,
-        updated.objects as any[],
-        updated.background
-      );
+      await pushBoardUpdated(params.id, updated.pageNumber, updated.version);
     }
 
     return apiSuccess({ page: updated });
@@ -150,7 +156,8 @@ export async function DELETE(
       orderBy: { pageNumber: "asc" },
     });
 
-    await pushBoardUpdated(params.id, newActivePageNumber);
+    const activePage = pages.find((p) => p.pageNumber === newActivePageNumber);
+    await pushBoardUpdated(params.id, newActivePageNumber, activePage?.version ?? 0);
 
     return apiSuccess({ pages, activePageNumber: newActivePageNumber });
   } catch (error) {

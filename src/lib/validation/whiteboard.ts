@@ -43,6 +43,11 @@ export const whiteboardPageAutosaveSchema = z.object({
   // src/lib/storage (whiteboard-backgrounds/ prefix) — the client decides
   // which; this schema just caps length against a runaway value.
   background: z.string().min(1).max(2000).optional(),
+  // Optimistic concurrency: the page version this save was based on. When
+  // present, the save only applies if the stored page is still at exactly
+  // that version (409 otherwise) — an older in-flight save can never
+  // overwrite a newer one. Omitted by older clients (unconditional save).
+  baseVersion: z.number().int().min(0).optional(),
 });
 
 export const quizOptionSchema = z.object({
