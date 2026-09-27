@@ -64,7 +64,7 @@ export function requireTestDatabase(): { testUrl: string; parsed: URL } {
 /**
  * Wipes and rebuilds the test database.
  *   TEST_DB_SETUP=base-plus-migration (recommended): the pre-redesign schema
- *     from TEST_DB_BASE_REF (default origin/main) via db push, then only the
+ *     from TEST_DB_BASE_REF (default: the commit before the redesign migration) via db push, then only the
  *     redesign migration on top — what `prisma migrate deploy` does in prod.
  *     (The full migration history does not replay on an empty DB: migration
  *     20260911150000 alters a "NotificationType" enum no migration creates.)
@@ -75,7 +75,14 @@ export function prepareTestDatabase(testUrl: string, parsed: URL) {
   if (process.env.TEST_DB_SETUP === "base-plus-migration") {
     const dir = mkdtempSync(join(tmpdir(), "live-session-test-"));
     const baseSchema = join(dir, "schema.prisma");
-    const baseRef = process.env.TEST_DB_BASE_REF || "origin/main";
+    // Default base: the commit just before the redesign migration was added
+    // (main already contains it once merged, so "origin/main" can't be the base).
+    const baseRef =
+      process.env.TEST_DB_BASE_REF ||
+      execSync(
+        "git log --diff-filter=A --format=%H -1 -- prisma/migrations/20260927120000_live_session_youtube_delivery/migration.sql",
+        { encoding: "utf8" }
+      ).trim() + "~1"; // "~1", not "^": cmd.exe treats ^ as an escape character
     writeFileSync(baseSchema, execSync(`git show ${baseRef}:prisma/schema.prisma`, { encoding: "utf8" }));
     console.log(`Rebuilding ${parsed.pathname.slice(1)} from ${baseRef}'s schema, then applying the redesign migration…`);
     execSync(`npx prisma db push --force-reset --skip-generate --accept-data-loss --schema "${baseSchema}"`, { stdio: "inherit", env });
