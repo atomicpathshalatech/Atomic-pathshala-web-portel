@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { requirePermission, UnauthorizedError, ForbiddenError } from "@/lib/rbac/guard";
-import { resolveTeacherForSchedule } from "@/lib/batch/access";
+import { assertCanControlLiveClass, assertCanControlLecture } from "@/lib/live-class/ownership";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { pusherServer, sessionChannel, WB_EVENTS } from "@/lib/realtime/pusher-server";
@@ -29,6 +29,8 @@ export async function POST(
       });
 
       if (lecture) {
+        // Ownership is decided before the lecture → schedule upsert below writes anything.
+        await assertCanControlLecture(session.user.id, lecture);
         const defaultBatch =
           (await prisma.batch.findFirst({ where: { status: "ACTIVE" } })) ||
           (await prisma.batch.findFirst());
@@ -71,7 +73,7 @@ export async function POST(
 
     if (!schedule) return apiError("Scheduled class not found", 404);
 
-    const { teacher } = await resolveTeacherForSchedule(session.user.id, schedule.id);
+    const { teacher } = await assertCanControlLiveClass(session.user.id, schedule.id);
     if (!teacher) throw new ForbiddenError("You are not authorized to prepare this live class.");
 
     // Slide/presentation prep is metadata prep, not entering the live room

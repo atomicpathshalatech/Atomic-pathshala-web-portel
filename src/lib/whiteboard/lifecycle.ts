@@ -130,6 +130,21 @@ export async function endWhiteboardSession(
     }),
   ]);
 
+  // Lifecycle row: LIVE → ENDING → RECORDING_PROCESSING (YouTube modes wait
+  // for YouTube to confirm the recording) or COMPLETED, for this occurrence
+  // and its simulcast group — so no grouped sibling schedule stays LIVE.
+  // Non-fatal: students must still be moved out of the class even if this
+  // bookkeeping fails, and the stale-session cron retries the end.
+  try {
+    const { getOpenLiveSession, markLiveSessionEnded } = await import("@/lib/live-session/service");
+    const open = await getOpenLiveSession(existing.batchScheduleId);
+    if (open) {
+      await markLiveSessionEnded(open.id, { endedAt: now, hasLegacyRecording: Boolean(isRecordingActive) });
+    }
+  } catch (err) {
+    console.error("[live_session_end_error]", sessionId, err);
+  }
+
   // Realtime broadcast to transition students immediately to post-class feedback screen
   try {
     await pusherServer.trigger(sessionChannel(sessionId), WB_EVENTS.SESSION_ENDED, {

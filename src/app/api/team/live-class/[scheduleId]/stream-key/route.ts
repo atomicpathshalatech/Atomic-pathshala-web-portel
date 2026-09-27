@@ -2,7 +2,8 @@ import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { requirePermission, UnauthorizedError, ForbiddenError, hasPermission } from "@/lib/rbac/guard";
+import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
+import { assertCanControlLiveClass } from "@/lib/live-class/ownership";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { createBroadcastToken } from "@/lib/live-class/broadcast-token";
@@ -37,40 +38,8 @@ export async function POST(
 
     if (!schedule) return apiError("Scheduled class not found", 404);
 
-    let teacher = await prisma.teacher.findFirst({
-      where: { userId: session.user.id },
-    });
-
-    const isDirectlyAssigned = teacher && schedule.teacherId === teacher.id;
-    const isBatchAssigned =
-      teacher &&
-      (await prisma.batchTeacher.findFirst({
-        where: { batchId: schedule.batchId, teacherId: teacher.id },
-      }));
-    const isAdmin = await hasPermission(session.user.id, PERMISSIONS.BATCH_UPDATE);
-
-    if (!isDirectlyAssigned && !isBatchAssigned && !isAdmin) {
-      throw new ForbiddenError("You are not authorized to access this live class stream key.");
-    }
-
-    if (!teacher && isAdmin) {
-      if (schedule.teacherId) {
-        teacher = await prisma.teacher.findUnique({ where: { id: schedule.teacherId } });
-      }
-      if (!teacher) {
-        const code = Date.now().toString().slice(-6);
-        teacher = await prisma.teacher.create({
-          data: {
-            userId: session.user.id,
-            employeeCode: `ADM-INST-${code}`,
-            department: "Academic Operations",
-            subjects: ["General", "All Subjects"],
-            bio: "Academic Administrator and Instructor",
-          },
-        });
-      }
-    }
-
+    // The schedule's assigned teacher or a LIVE_CLASS_ADMIN only.
+    const { teacher } = await assertCanControlLiveClass(session.user.id, schedule.id);
     if (!teacher) return apiError("Teacher profile could not be resolved.", 403);
 
     // Ensure WhiteboardSession exists

@@ -8,6 +8,7 @@ import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { extractYouTubeVideoId } from "@/lib/live-class/youtube";
 import { pusherServer, sessionChannel, WB_EVENTS } from "@/lib/realtime/pusher-server";
 import { assertCanControlLiveClass } from "@/lib/live-class/ownership";
+import { syncLiveSessionOnStart } from "@/lib/live-session/service";
 
 export async function POST(
   request: NextRequest,
@@ -41,6 +42,38 @@ export async function POST(
 
     const fullYouTubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
+    // MAIN_YOUTUBE: the video must really belong to the MAIN channel (checked
+    // with MAIN's own read-only credentials), and the class only goes LIVE
+    // once YouTube says the broadcast is live — an upcoming broadcast is
+    // mapped but stays not-live. Anything else is EXTERNAL_YOUTUBE: stored
+    // and played, with no ownership claim.
+    const mainChannel = body?.youtubeChannel === "MAIN";
+    if (mainChannel) {
+      const { assertVideoBelongsToChannel } = await import("@/lib/youtube/client");
+      const { describeYoutubeError, classifyYoutubeError } = await import("@/lib/youtube/errors");
+      try {
+        const info = await assertVideoBelongsToChannel("MAIN", videoId);
+        if (info.liveBroadcastContent !== "live") {
+          return apiError(
+            info.liveBroadcastContent === "upcoming"
+              ? "This MAIN-channel broadcast hasn't gone live on YouTube yet. Map it again once it is live."
+              : "This MAIN-channel video is not a live broadcast.",
+            409,
+            { code: "MAIN_BROADCAST_NOT_LIVE" }
+          );
+        }
+      } catch (err) {
+        const kind = classifyYoutubeError(err);
+        return apiError(
+          kind === "CONFIG" || kind === "NOT_FOUND"
+            ? "This video is not on the Atomic MAIN YouTube channel (or the MAIN channel isn't configured)."
+            : describeYoutubeError(err),
+          kind === "CONFIG" || kind === "NOT_FOUND" ? 400 : 502,
+          { code: "MAIN_CHANNEL_VERIFICATION_FAILED" }
+        );
+      }
+    }
+
     const now = new Date();
 
     // 1. Update WhiteboardSession & Schedule Status
@@ -52,6 +85,9 @@ export async function POST(
           livePhase: "LIVE",
           videoTransport: "YOUTUBE",
           youtubeVideoId: videoId,
+          // A mapped video replaces any auto-created APP broadcast for this class.
+          youtubeBroadcastId: null,
+          youtubeStreamId: null,
           actualStartedAt: schedule.liveWhiteboardSession?.actualStartedAt || now,
           startedAt: schedule.liveWhiteboardSession?.startedAt || now,
         },
@@ -80,6 +116,15 @@ export async function POST(
         data: { status: "LIVE" },
       }),
     ]);
+
+    // 1.5. Lifecycle row: this occurrence is LIVE on MAIN_YOUTUBE / EXTERNAL_YOUTUBE.
+    await syncLiveSessionOnStart({
+      schedule,
+      wbSession,
+      teacherId: wbSession.teacherId,
+      startedAt: wbSession.actualStartedAt ?? now,
+      verifiedMainChannel: mainChannel,
+    });
 
     // 2. Invalidate cache so polling students see live state immediately
     const { cache } = await import("@/lib/cache/redis");

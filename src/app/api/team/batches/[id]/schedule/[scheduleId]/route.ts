@@ -78,6 +78,19 @@ export async function PATCH(
       },
     });
 
+    // Lifecycle row: a not-yet-live occurrence moves with the schedule or is
+    // cancelled with it. A live/ended occurrence is never rewritten here — a
+    // re-run of an ended class gets a brand-new occurrence (fresh YouTube and
+    // recording state) the next time the teacher enters/starts it.
+    if (existing.type === "LIVE_CLASS") {
+      const { cancelOpenLiveSession, rescheduleOpenLiveSession } = await import("@/lib/live-session/service");
+      if (input.status === "CANCELLED") {
+        await cancelOpenLiveSession(schedule.id);
+      } else if (isTimeChange) {
+        await rescheduleOpenLiveSession(schedule.id, schedule.startsAt, schedule.endsAt);
+      }
+    }
+
     if (isLiveClassReschedule) {
       await applyLateReschedulePenaltyIfDue({
         scheduleId: schedule.id,

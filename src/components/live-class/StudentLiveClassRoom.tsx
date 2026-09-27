@@ -583,6 +583,10 @@ export function StudentLiveClassRoom({
 }) {
   const [phase, setPhase] = useState<"waiting" | "lobby" | "live" | "ended">("waiting");
   const [wbSession, setWbSession] = useState<WhiteboardSessionData | null>(null);
+  // Server-authoritative lifecycle state (LiveSession.state) from by-schedule.
+  // When present it alone decides "live" — a YouTube id existing does not.
+  // Null only for classes that have no lifecycle row yet (legacy data).
+  const [liveState, setLiveState] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [handRaised, setHandRaised] = useState(false);
@@ -901,6 +905,24 @@ export function StudentLiveClassRoom({
         }
         const wb = json.data.whiteboardSession;
         if (cancelled) return;
+        const serverLiveState: string | null = json.data.liveState ?? null;
+        setLiveState(serverLiveState);
+        if (serverLiveState) {
+          if (wb) setWbSession(wb);
+          if (serverLiveState === "LIVE" || serverLiveState === "ENDING") {
+            setPhase("live");
+            if (!cancelled) timer = setTimeout(poll, 4000);
+            return;
+          }
+          if (["RECORDING_PROCESSING", "RECORDING_READY", "COMPLETED", "CANCELLED", "FAILED"].includes(serverLiveState)) {
+            setPhase("ended");
+            return; // class is over, stop polling
+          }
+          // SCHEDULED … YOUTUBE_ACTIVE: not live yet, even if a broadcast exists.
+          setPhase(wb ? "lobby" : "waiting");
+          if (!cancelled) timer = setTimeout(poll, 2000);
+          return;
+        }
         if (wb && wb.status === "ENDED") {
           setWbSession(wb);
           setPhase("ended");
@@ -1369,11 +1391,15 @@ export function StudentLiveClassRoom({
     ? new Date(wbSession.actualStartedAt).getTime()
     : null;
 
-  const isLive =
-    phase === "live" ||
-    wbSession?.livePhase === "LIVE" ||
-    Boolean(wbSession?.actualStartedAt && wbSession?.livePhase !== "ENDED" && wbSession?.status !== "ENDED" && phase !== "ended") ||
-    (Boolean(wbSession?.youtubeVideoId) && wbSession?.livePhase !== "ENDED" && wbSession?.status !== "ENDED" && phase !== "ended");
+  // With a server lifecycle state, only LIVE/ENDING (or a realtime "went
+  // live" push that already moved `phase`) counts. The youtubeVideoId
+  // heuristic below is kept only for legacy classes without that state.
+  const isLive = liveState
+    ? phase === "live" || liveState === "LIVE" || liveState === "ENDING"
+    : phase === "live" ||
+      wbSession?.livePhase === "LIVE" ||
+      Boolean(wbSession?.actualStartedAt && wbSession?.livePhase !== "ENDED" && wbSession?.status !== "ENDED" && phase !== "ended") ||
+      (Boolean(wbSession?.youtubeVideoId) && wbSession?.livePhase !== "ENDED" && wbSession?.status !== "ENDED" && phase !== "ended");
   const secondsUntilStart = scheduledStartMs > 0 ? Math.floor((scheduledStartMs - currentTimeMs) / 1000) : 0;
   const elapsedSeconds = actualStartedAtMs ? Math.max(0, Math.floor((currentTimeMs - actualStartedAtMs) / 1000)) : 0;
   const remainingSeconds = scheduledEndMs > 0 ? Math.floor((scheduledEndMs - currentTimeMs) / 1000) : 0;

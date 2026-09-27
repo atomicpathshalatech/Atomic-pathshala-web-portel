@@ -5,7 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { requirePermission, hasPermission, ForbiddenError, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
-import { resolveTeacherForSchedule } from "@/lib/whiteboard/access";
+import { assertCanControlLiveClass, assertCanControlLecture } from "@/lib/live-class/ownership";
 import { whiteboardSessionStartSchema } from "@/lib/validation/whiteboard";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { canTeacherEnterClass } from "@/lib/schedule/access-rules";
@@ -35,11 +35,8 @@ export async function POST(request: NextRequest) {
     });
 
     if (existing) {
-      const teacher = await prisma.teacher.findUnique({ where: { userId: session.user.id } });
-      const isAdmin = await hasPermission(session.user.id, PERMISSIONS.BATCH_UPDATE);
-      if (!isAdmin && (!teacher || teacher.id !== existing.teacherId)) {
-        throw new ForbiddenError("Only the teacher who started this class or an administrator can resume it.");
-      }
+      // Only the class's controlling teacher or a LIVE_CLASS_ADMIN.
+      const { teacher: controllingTeacher } = await assertCanControlLiveClass(session.user.id, existing.batchScheduleId);
 
       if (existing.status === "ACTIVE") {
         if (!existing.pages || existing.pages.length === 0) {
@@ -48,6 +45,7 @@ export async function POST(request: NextRequest) {
           });
           existing.pages = [p1];
         }
+        await markLiveSessionReady(existing, existing.batchSchedule, controllingTeacher!.id);
         return apiSuccess({ whiteboardSession: existing, resumed: true });
       }
 
@@ -131,10 +129,27 @@ export async function POST(request: NextRequest) {
           youtubeArchiveThumbnailStatus: "NOT_STARTED",
           youtubeArchiveThumbnailError: null,
           youtubeArchiveMetadataSnapshot: Prisma.JsonNull,
+          // New occurrence: its own YouTube broadcast/video and timing — the
+          // previous run's must not leak in (students were being put back
+          // onto the old, finished broadcast).
+          youtubeBroadcastId: null,
+          youtubeStreamId: null,
+          youtubeVideoId: null,
+          youtubeLiveChatId: null,
+          youtubeStatus: null,
+          youtubeIngestUrl: null,
+          youtubeStreamKey: null,
+          recordingVideoId: null,
+          actualStartedAt: null,
+          scheduledStart: existing.batchSchedule.startsAt,
+          scheduledEnd: existing.batchSchedule.endsAt,
+          totalExtendedMinutes: 0,
+          extensionHistory: Prisma.JsonNull,
           pages: { create: { pageNumber: 1, objects: [], ...(startSlideUrl && { background: startSlideUrl }) } },
         },
         include: { pages: { orderBy: { pageNumber: "asc" } } },
       });
+      await markLiveSessionReady(resumed, existing.batchSchedule, controllingTeacher!.id);
 
       await prisma.auditLog.create({
         data: {
@@ -158,6 +173,8 @@ export async function POST(request: NextRequest) {
         where: { id: input.batchScheduleId },
       });
       if (lecture) {
+        // Ownership is decided before the lecture → schedule upsert below writes anything.
+        await assertCanControlLecture(session.user.id, lecture);
         const defaultBatch =
           (await prisma.batch.findFirst({ where: { status: "ACTIVE" } })) ||
           (await prisma.batch.findFirst());
@@ -222,37 +239,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Resolve teaching claim: assigned teacher first, then an
-    // ACADEMIC_HEAD/admin override (BATCH_UPDATE) stepping in on behalf of
-    // whichever teacher the batch/schedule already names.
-    const { teacher: assignedTeacher } = await resolveTeacherForSchedule(
-      session.user.id,
-      input.batchScheduleId
-    );
-
-    let teacher = assignedTeacher;
-
-    if (!teacher) {
-      const isAdminOverride = await hasPermission(session.user.id, PERMISSIONS.BATCH_UPDATE);
-      if (!isAdminOverride) {
-        throw new ForbiddenError("You are not assigned to teach this batch.");
-      }
-
-      const fallbackTeacherId =
-        schedule.teacherId ??
-        (await prisma.batchTeacher.findFirst({ where: { batchId: schedule.batchId } }))
-          ?.teacherId;
-
-      if (!fallbackTeacherId) {
-        return apiError(
-          "No teacher is assigned to this batch yet — assign one before starting the live class.",
-          400
-        );
-      }
-
-      teacher = await prisma.teacher.findUnique({ where: { id: fallbackTeacherId } });
-      if (!teacher) return apiError("Assigned teacher record could not be found.", 400);
-    }
+    // Teaching claim: the schedule's assigned teacher, or a LIVE_CLASS_ADMIN
+    // acting on the assigned teacher's behalf (src/lib/live-class/ownership.ts).
+    const { teacher } = await assertCanControlLiveClass(session.user.id, schedule.id);
+    if (!teacher) return apiError("Assigned teacher record could not be found.", 400);
 
     // Auto-generated first slide — see the comment on the equivalent block
     // in the "resumed" branch above; this is the brand-new-session path
@@ -279,6 +269,8 @@ export async function POST(request: NextRequest) {
       include: { pages: { orderBy: { pageNumber: "asc" } } },
     });
 
+    await markLiveSessionReady(created, schedule, teacher.id);
+
     await prisma.auditLog.create({
       data: {
         userId: session.user.id,
@@ -292,5 +284,35 @@ export async function POST(request: NextRequest) {
     return apiSuccess({ whiteboardSession: created, resumed: false }, 201);
   } catch (error) {
     return handleApiError(error);
+  }
+}
+
+/**
+ * Teacher entered the room inside the class window: make sure this
+ * occurrence has its LiveSession row and mark it READY. Best-effort — the
+ * teacher must still get into the room if lifecycle bookkeeping fails;
+ * Start Class re-runs the same ensure step and fails loudly there.
+ */
+async function markLiveSessionReady(
+  wb: { id: string; videoTransport: string; youtubeBroadcastId: string | null; youtubeVideoId: string | null; scheduledEnd: Date | null },
+  schedule: { id: string; startsAt: Date; endsAt: Date },
+  teacherId: string
+) {
+  try {
+    const { ensureOpenLiveSession, transitionLiveSession } = await import("@/lib/live-session/service");
+    const { effectiveClassEnd } = await import("@/lib/whiteboard/lifecycle");
+    const open = await ensureOpenLiveSession({
+      batchScheduleId: schedule.id,
+      whiteboardSessionId: wb.id,
+      controllingTeacherId: teacherId,
+      plannedStartsAt: schedule.startsAt,
+      plannedEndsAt: effectiveClassEnd(schedule.endsAt, wb.scheduledEnd),
+      videoTransport: wb.videoTransport,
+      youtubeBroadcastId: wb.youtubeBroadcastId,
+      youtubeVideoId: wb.youtubeVideoId,
+    });
+    if (open.state === "SCHEDULED") await transitionLiveSession(open.id, "READY");
+  } catch (err) {
+    console.error("[live_session_ready_error]", schedule.id, err);
   }
 }

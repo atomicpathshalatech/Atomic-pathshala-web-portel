@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db";
 import { isPastGracePeriod, effectiveClassEnd, endWhiteboardSession } from "@/lib/whiteboard/lifecycle";
+import { authoritativeEndFor } from "@/lib/live-session/service";
 
 export { resolveTeacherForSchedule, resolveStudentForSchedule } from "@/lib/batch/access";
 
@@ -87,9 +88,15 @@ export async function resolveWhiteboardAccess(
   // every route individually. Mutate the local object after ending so this
   // same call returns fresh (ENDED) status instead of the now-stale ACTIVE
   // row it fetched a moment ago.
+  //
+  // The cheap in-memory check runs first (this is the hot path for every
+  // chat/quiz/pusher-auth request); only a class that already looks past
+  // its end asks the LiveSession row for the authoritative end, which an
+  // extension may have pushed later.
   if (
     wbSession.status === "ACTIVE" &&
-    isPastGracePeriod(effectiveClassEnd(wbSession.batchSchedule.endsAt, wbSession.scheduledEnd))
+    isPastGracePeriod(effectiveClassEnd(wbSession.batchSchedule.endsAt, wbSession.scheduledEnd)) &&
+    isPastGracePeriod(await authoritativeEndFor(wbSession))
   ) {
     await endWhiteboardSession(wbSession.id, { endedByUserId: null, reason: "auto_grace_expired" });
     wbSession.status = "ENDED";
@@ -176,10 +183,31 @@ export async function resolveWhiteboardAccess(
       student.id,
       wbSession.batchSchedule.batchId,
       wbSession.batchSchedule.chapterId
-    ))
+    )) &&
+    !(await hasSimulcastGroupAccess(userId, wbSession.id, wbSession.batchSchedule.batchId))
   ) {
     return null;
   }
 
   return { role: "STUDENT", entityId: student.id, name: student.user.name };
+}
+
+/**
+ * A room serving an admin-created simulcast group is also open to students
+ * of the OTHER batches in that group (their schedules have no room of their
+ * own — see src/lib/live-session/simulcast.ts). Same strict entitlement
+ * check, just against those batches. Only runs after the normal checks fail.
+ */
+async function hasSimulcastGroupAccess(userId: string, whiteboardSessionId: string, ownBatchId: string): Promise<boolean> {
+  const { groupBatchIdsForWhiteboardSession } = await import("@/lib/live-session/simulcast");
+  const batchIds = (await groupBatchIdsForWhiteboardSession(whiteboardSessionId)).filter((id) => id !== ownBatchId);
+  if (batchIds.length === 0) return false;
+  const { resolveBatchAccess } = await import("@/lib/batch/entitlement");
+  for (const batchId of batchIds) {
+    const access = await resolveBatchAccess(userId, batchId);
+    if (access.status === "ACTIVE_ENROLLMENT" || access.status === "ACTIVE_SUBSCRIPTION" || access.status === "ADMIN_GRANTED") {
+      return true;
+    }
+  }
+  return false;
 }

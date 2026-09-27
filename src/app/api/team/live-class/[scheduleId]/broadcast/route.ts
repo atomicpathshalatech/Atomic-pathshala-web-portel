@@ -9,6 +9,8 @@ import { configureYouTubeSession, updateBroadcastPhase, extractYouTubeVideoId } 
 import { LiveClassPhase, VideoTransport } from "@prisma/client";
 import { pusherServer, sessionChannel, WB_EVENTS } from "@/lib/realtime/pusher-server";
 import { assertCanControlLiveClass } from "@/lib/live-class/ownership";
+import { ensureOpenLiveSession, setLiveSessionDelivery, syncLiveSessionOnStart } from "@/lib/live-session/service";
+import { effectiveClassEnd } from "@/lib/whiteboard/lifecycle";
 
 export async function GET(_request: NextRequest, { params }: { params: { scheduleId: string } }) {
   try {
@@ -41,8 +43,8 @@ export async function POST(request: NextRequest, { params }: { params: { schedul
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.WHITEBOARD_ACCESS);
 
-    const { scheduleId } = await assertCanControlLiveClass(session.user.id, params.scheduleId);
-    if (!scheduleId) return apiError("Scheduled class not found", 404);
+    const { scheduleId, schedule, teacher } = await assertCanControlLiveClass(session.user.id, params.scheduleId);
+    if (!scheduleId || !schedule || !teacher) return apiError("Scheduled class not found", 404);
 
     const body = await request.json();
     const { youtubeVideoId, videoTransport, livePhase } = body;
@@ -73,11 +75,36 @@ export async function POST(request: NextRequest, { params }: { params: { schedul
       },
     });
 
+    // Lifecycle row. A manually saved id is only this class's own APP
+    // broadcast if it IS the auto-created broadcast; otherwise it's an
+    // EXTERNAL_YOUTUBE video.
+    const delivery = {
+      videoTransport: updatedWbSession.videoTransport,
+      youtubeBroadcastId:
+        updatedWbSession.youtubeBroadcastId && updatedWbSession.youtubeBroadcastId === updatedWbSession.youtubeVideoId
+          ? updatedWbSession.youtubeBroadcastId
+          : null,
+      youtubeVideoId: updatedWbSession.youtubeVideoId,
+      scheduledEnd: updatedWbSession.scheduledEnd,
+    };
     if (effectivePhase === LiveClassPhase.LIVE) {
-      await prisma.batchSchedule.update({
-        where: { id: scheduleId },
-        data: { status: "LIVE" },
-      }).catch(() => null);
+      // Marks this schedule (and only its simulcast group) LIVE.
+      await syncLiveSessionOnStart({
+        schedule,
+        wbSession: { id: updatedWbSession.id, ...delivery },
+        teacherId: teacher.id,
+        startedAt: updatedWbSession.actualStartedAt ?? now,
+      });
+    } else {
+      const open = await ensureOpenLiveSession({
+        batchScheduleId: scheduleId,
+        whiteboardSessionId: updatedWbSession.id,
+        controllingTeacherId: teacher.id,
+        plannedStartsAt: schedule.startsAt,
+        plannedEndsAt: effectiveClassEnd(schedule.endsAt, updatedWbSession.scheduledEnd),
+        ...delivery,
+      });
+      await setLiveSessionDelivery(open.id, delivery);
     }
 
     // Invalidate schedule cache
