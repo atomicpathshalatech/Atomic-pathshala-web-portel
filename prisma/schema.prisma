@@ -1483,7 +1483,7 @@ model WhiteboardSession {
   doubts        Doubt[]
   teacherFeedback TeacherClassFeedback?
   studentFeedbacks StudentClassFeedback[]
-  liveSession   LiveSession?
+  liveSessions  LiveSession[]
 
   @@index([teacherId])
   @@index([status])
@@ -1605,7 +1605,7 @@ model LiveSession {
   id                   String             @id @default(cuid())
   batchScheduleId      String
   occurrence           Int                @default(1)
-  whiteboardSessionId  String?            @unique
+  whiteboardSessionId  String?
   deliveryMode         DeliveryMode
   state                LiveSessionState   @default(SCHEDULED)
   stateChangedAt       DateTime           @default(now())
@@ -1641,6 +1641,7 @@ model LiveSession {
   @@unique([youtubeChannel, youtubeBroadcastId])
   @@index([state, effectiveEndsAt])
   @@index([controllingTeacherId])
+  @@index([whiteboardSessionId])
   @@index([simulcastGroupId])
   @@map("live_sessions")
 }

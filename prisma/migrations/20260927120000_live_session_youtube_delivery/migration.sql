@@ -121,13 +121,13 @@ CREATE UNIQUE INDEX "youtube_ingest_streams_youtubeStreamId_key" ON "youtube_ing
 CREATE INDEX "youtube_ingest_streams_channel_status_idx" ON "youtube_ingest_streams"("channel", "status");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "live_sessions_whiteboardSessionId_key" ON "live_sessions"("whiteboardSessionId");
-
--- CreateIndex
 CREATE INDEX "live_sessions_state_effectiveEndsAt_idx" ON "live_sessions"("state", "effectiveEndsAt");
 
 -- CreateIndex
 CREATE INDEX "live_sessions_controllingTeacherId_idx" ON "live_sessions"("controllingTeacherId");
+
+-- CreateIndex
+CREATE INDEX "live_sessions_whiteboardSessionId_idx" ON "live_sessions"("whiteboardSessionId");
 
 -- CreateIndex
 CREATE INDEX "live_sessions_simulcastGroupId_idx" ON "live_sessions"("simulcastGroupId");
@@ -179,7 +179,6 @@ ALTER TABLE "encoder_sessions" ADD CONSTRAINT "encoder_sessions_liveSessionId_fk
 
 -- AddForeignKey
 ALTER TABLE "broadcast_stage_sessions" ADD CONSTRAINT "broadcast_stage_sessions_liveSessionId_fkey" FOREIGN KEY ("liveSessionId") REFERENCES "live_sessions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
 
 -- ---------------------------------------------------------------------------
 -- Invariants Prisma can't express (live-class redesign, step 2)

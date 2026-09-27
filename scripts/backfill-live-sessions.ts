@@ -47,7 +47,7 @@ async function main() {
   try {
     for (;;) {
       const page = await prisma.whiteboardSession.findMany({
-        where: { isTest: false, liveSession: null },
+        where: { isTest: false, liveSessions: { none: {} } },
         include: { batchSchedule: { select: { id: true, startsAt: true, endsAt: true } } },
         orderBy: { id: "asc" },
         take: PAGE,
