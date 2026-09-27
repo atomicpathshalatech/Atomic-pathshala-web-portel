@@ -7,6 +7,31 @@ import { resolveTeacherForSchedule, resolveStudentForSchedule, hasLenientLiveCla
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { cache } from "@/lib/cache/redis";
 
+// Explicit allowlist — this route is polled by students, so it must never
+// return the whole WhiteboardSession row (youtubeStreamKey, ingest URL,
+// recording/archive internals).
+const STUDENT_SAFE_SESSION_SELECT = {
+  id: true,
+  title: true,
+  status: true,
+  livePhase: true,
+  videoTransport: true,
+  youtubeVideoId: true,
+  startedAt: true,
+  endedAt: true,
+  presentationUrl: true,
+  presentationName: true,
+  presentationType: true,
+  classroomTheme: true,
+  cameraShape: true,
+  cameraPosition: true,
+  scheduledStart: true,
+  scheduledEnd: true,
+  actualStartedAt: true,
+  actualEndedAt: true,
+  totalExtendedMinutes: true,
+} as const;
+
 /**
  * Looks up the live session (if any) for a scheduled class, keyed by
  * BatchSchedule id rather than WhiteboardSession id — this is what a
@@ -55,27 +80,7 @@ export async function GET(
       async () => {
         let ws = await prisma.whiteboardSession.findUnique({
           where: { batchScheduleId: params.batchScheduleId },
-          select: {
-            id: true,
-            title: true,
-            status: true,
-            livePhase: true,
-            videoTransport: true,
-            youtubeVideoId: true,
-            startedAt: true,
-            endedAt: true,
-            presentationUrl: true,
-            presentationName: true,
-            presentationType: true,
-            classroomTheme: true,
-            cameraShape: true,
-            cameraPosition: true,
-            scheduledStart: true,
-            scheduledEnd: true,
-            actualStartedAt: true,
-            actualEndedAt: true,
-            totalExtendedMinutes: true,
-          },
+          select: STUDENT_SAFE_SESSION_SELECT,
         });
 
         if (!ws && schedule.lectureId) {
@@ -84,10 +89,10 @@ export async function GET(
               lectureId: schedule.lectureId,
               liveWhiteboardSession: { isNot: null },
             },
-            include: { liveWhiteboardSession: true },
+            select: { liveWhiteboardSession: { select: STUDENT_SAFE_SESSION_SELECT } },
           });
           if (siblingSchedule?.liveWhiteboardSession) {
-            ws = siblingSchedule.liveWhiteboardSession as any;
+            ws = siblingSchedule.liveWhiteboardSession;
           }
         }
         return ws;
@@ -95,11 +100,10 @@ export async function GET(
       3
     );
 
-    if (wbSession?.youtubeVideoId) {
-      import("@/lib/youtube/live-broadcast")
-        .then(({ ensureBroadcastEmbeddable }) => ensureBroadcastEmbeddable(wbSession.youtubeVideoId!))
-        .catch(() => {});
-    }
+    // No YouTube API call here: this route is polled by every student every
+    // few seconds, and the videos.update (≈50 quota units) that used to run
+    // on each hit could exhaust the whole daily YouTube quota within minutes.
+    // Embeddability is set once when the broadcast is created.
 
     const {
       canStudentJoinClass,

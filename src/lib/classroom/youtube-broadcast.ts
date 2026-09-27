@@ -5,7 +5,6 @@ import {
   createAndBindBroadcast,
   transitionBroadcast as sharedTransitionBroadcast,
   fetchRecordingStatus as sharedFetchRecordingStatus,
-  ensureBroadcastEmbeddable,
 } from "@/lib/youtube/live-broadcast";
 
 /**
@@ -33,7 +32,7 @@ export async function ensureYoutubeBroadcast(classroomSessionId: string, title: 
     },
   });
   if (existing.youtubeBroadcastId && existing.youtubeStreamId && existing.youtubeStreamKey) {
-    ensureBroadcastEmbeddable(existing.youtubeBroadcastId).catch(() => {});
+    // Reuse as-is; no videos.update on every re-entry (~50 quota units each).
     return existing;
   }
 

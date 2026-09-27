@@ -19,6 +19,18 @@ export function youtubeLiveConfigured(): boolean {
   return youtubeArchiveConfigured();
 }
 
+/**
+ * Errors that no variation of the same request can fix — retrying them only
+ * burns more quota (every liveBroadcasts.insert costs ~50 units even when it
+ * fails validation) or hammers an account that lacks permission.
+ */
+export function isNonRetryableYoutubeError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /quotaExceeded|dailyLimitExceeded|insufficientLivePermissions|liveStreamingNotEnabled|invalid_grant|YouTube OAuth credentials are not configured/i.test(
+    msg
+  );
+}
+
 async function youtubeApiFetch<T>(
   path: string,
   init: RequestInit & { query?: Record<string, string> } = {},
@@ -144,6 +156,7 @@ export async function createLiveBroadcast(
       }),
     });
   } catch (err1) {
+    if (isNonRetryableYoutubeError(err1)) throw err1;
     console.warn("[youtube_live_broadcast_fallback_tier1]", err1);
     // Tier 2: Without latency preference
     try {
@@ -166,6 +179,7 @@ export async function createLiveBroadcast(
         }),
       });
     } catch (err2) {
+      if (isNonRetryableYoutubeError(err2)) throw err2;
       console.warn("[youtube_live_broadcast_fallback_tier2]", err2);
       // Tier 3: Minimal contentDetails
       try {
@@ -186,6 +200,7 @@ export async function createLiveBroadcast(
           }),
         });
       } catch (err3) {
+        if (isNonRetryableYoutubeError(err3)) throw err3;
         console.warn("[youtube_live_broadcast_fallback_tier3]", err3);
         // Tier 4: Basic broadcast without contentDetails
         json = await youtubeApiFetch<{ id: string; snippet: { liveChatId?: string } }>("/liveBroadcasts", {
@@ -230,7 +245,7 @@ export async function createLiveBroadcast(
   } catch (err) {
     console.warn("[youtube_video_status_update_warning]", err);
     // Fallback: try status-only if snippet was rejected
-    try {
+    if (!isNonRetryableYoutubeError(err)) try {
       await youtubeApiFetch("/videos", {
         method: "PUT",
         query: { part: "status" },

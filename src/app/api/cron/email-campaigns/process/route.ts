@@ -6,7 +6,8 @@ export const dynamic = "force-dynamic";
 
 function isAuthorized(req: NextRequest): boolean {
   const secret = process.env.CRON_SECRET;
-  if (!secret) return true;
+  // Fail closed in production: an unset secret must not leave the route open.
+  if (!secret) return process.env.NODE_ENV !== "production";
   return req.headers.get("authorization") === `Bearer ${secret}`;
 }
 

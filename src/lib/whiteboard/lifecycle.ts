@@ -10,6 +10,18 @@ export function isPastGracePeriod(endsAt: Date, now: Date = new Date()): boolean
 }
 
 /**
+ * The end time auto-end must honour. "Extend Class" only moves
+ * WhiteboardSession.scheduledEnd, so reading BatchSchedule.endsAt alone
+ * force-ended every extended class at its original time + grace. Interim
+ * fix until the LiveSession.effectiveEndsAt redesign lands: take the later
+ * of the two.
+ */
+export function effectiveClassEnd(scheduleEndsAt: Date, sessionScheduledEnd: Date | null | undefined): Date {
+  if (!sessionScheduledEnd) return scheduleEndsAt;
+  return sessionScheduledEnd.getTime() > scheduleEndsAt.getTime() ? sessionScheduledEnd : scheduleEndsAt;
+}
+
+/**
  * Transitions live class from LIVE -> ENDING.
  *
  * Atomically:

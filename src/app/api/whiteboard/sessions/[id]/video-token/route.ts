@@ -31,6 +31,18 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     if (broadcastToken) {
       const { verifyBroadcastToken } = await import("@/lib/live-class/broadcast-token");
       const payload = verifyBroadcastToken(broadcastToken);
+      // The token must belong to the class that owns THIS room — a valid
+      // token for Class A used to hand out a viewer token for any room id.
+      const boundSession = payload
+        ? await prisma.whiteboardSession.findFirst({
+            where: {
+              id: params.id,
+              OR: [{ batchScheduleId: payload.scheduleId }, { batchSchedule: { lectureId: payload.scheduleId } }],
+            },
+            select: { id: true },
+          })
+        : null;
+      if (payload && !boundSession) return apiError("Invalid broadcast token for this class.", 403);
       if (payload) {
         const url = process.env.NEXT_PUBLIC_LIVEKIT_URL;
         if (!url) return apiError("Video calling isn't configured on this server yet.", 503);

@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db";
-import { youtubeLiveConfigured, createAndBindBroadcast, ensureBroadcastEmbeddable } from "@/lib/youtube/live-broadcast";
+import { youtubeLiveConfigured, createAndBindBroadcast } from "@/lib/youtube/live-broadcast";
 
 /**
  * WhiteboardSession-specific wiring around the shared YouTube Live API
@@ -26,7 +26,9 @@ export async function ensureYoutubeBroadcastForWhiteboard(
     },
   });
   if (existing.youtubeBroadcastId && existing.youtubeStreamId && existing.youtubeStreamKey) {
-    ensureBroadcastEmbeddable(existing.youtubeBroadcastId).catch(() => {});
+    // Reuse as-is. createLiveBroadcast already made it embeddable; calling
+    // videos.update again on every re-entry (the stream-key route runs on
+    // every teacher room mount) cost ~50 quota units each time.
     return existing;
   }
 

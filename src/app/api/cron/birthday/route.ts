@@ -5,10 +5,11 @@ import { sendBirthdayWish } from "@/lib/birthday/send";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Same convention as api/cron/notifications/process — open when CRON_SECRET isn't set (dev), Bearer-gated once it is. */
+/** Same convention as api/cron/notifications/process — open when CRON_SECRET isn't set outside production, Bearer-gated once it is; always closed in production without it. */
 function isAuthorized(req: NextRequest): boolean {
   const secret = process.env.CRON_SECRET;
-  if (!secret) return true;
+  // Fail closed in production: an unset secret must not leave the route open.
+  if (!secret) return process.env.NODE_ENV !== "production";
   return req.headers.get("authorization") === `Bearer ${secret}`;
 }
 

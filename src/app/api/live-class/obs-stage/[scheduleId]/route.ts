@@ -13,88 +13,54 @@ import { verifyBroadcastToken } from "@/lib/live-class/broadcast-token";
  * pushed over Pusher (that channel is presence-based and needs a real
  * session to authorize) — a 1-2s lag composited into a recording/broadcast
  * is unnoticeable, unlike in the interactive student/teacher views.
+ *
+ * Everything returned here ends up in a YouTube video, so the payload is
+ * deliberately minimal: no quiz answer before it is revealed, no student
+ * names or doubt photos.
  */
 export async function GET(request: NextRequest, { params }: { params: { scheduleId: string } }) {
   try {
     const token = request.nextUrl.searchParams.get("token");
     const payload = verifyBroadcastToken(token);
-    // Allow token-authenticated or direct schedule access for OBS Browser Source
-    if (!payload && !params.scheduleId) {
+    // The token is minted for exactly one class (start/stream-key/preflight
+    // sign it with the same id that goes into this URL), so a token for
+    // Class A must never unlock Class B just because B's id is in the path.
+    if (!payload || payload.scheduleId !== params.scheduleId) {
       return apiError("Invalid or expired broadcast token.", 401);
     }
 
+    const sessionSelect = {
+      id: true,
+      title: true,
+      status: true,
+      livePhase: true,
+      activePageNumber: true,
+      classroomTheme: true,
+      cameraShape: true,
+      cameraPosition: true,
+    } as const;
+
+    // The signed id may be a BatchSchedule id or (from older start calls) a
+    // Lecture id — resolve both, but only ever to that one class.
     let wbSession = await prisma.whiteboardSession.findUnique({
-      where: { batchScheduleId: params.scheduleId },
-      select: {
-        id: true,
-        title: true,
-        status: true,
-        livePhase: true,
-        activePageNumber: true,
-        classroomTheme: true,
-        cameraShape: true,
-        cameraPosition: true,
-      },
+      where: { batchScheduleId: payload.scheduleId },
+      select: sessionSelect,
     });
-
-    if (!wbSession) {
-      wbSession = await prisma.whiteboardSession.findUnique({
-        where: { id: params.scheduleId },
-        select: {
-          id: true,
-          title: true,
-          status: true,
-          livePhase: true,
-          activePageNumber: true,
-          classroomTheme: true,
-          cameraShape: true,
-          cameraPosition: true,
-        },
-      });
-    }
-
     if (!wbSession) {
       const schedule = await prisma.batchSchedule.findFirst({
-        where: {
-          OR: [
-            { id: params.scheduleId },
-            { lectureId: params.scheduleId },
-            { liveWhiteboardSession: { id: params.scheduleId } },
-          ],
-        },
-        include: { liveWhiteboardSession: true },
+        where: { lectureId: payload.scheduleId, liveWhiteboardSession: { isNot: null } },
+        select: { liveWhiteboardSession: { select: sessionSelect } },
       });
-      if (schedule?.liveWhiteboardSession) {
-        wbSession = {
-          id: schedule.liveWhiteboardSession.id,
-          title: schedule.liveWhiteboardSession.title,
-          status: schedule.liveWhiteboardSession.status,
-          livePhase: schedule.liveWhiteboardSession.livePhase,
-          activePageNumber: schedule.liveWhiteboardSession.activePageNumber,
-          classroomTheme: schedule.liveWhiteboardSession.classroomTheme,
-          cameraShape: schedule.liveWhiteboardSession.cameraShape,
-          cameraPosition: schedule.liveWhiteboardSession.cameraPosition,
-        };
-      }
+      wbSession = schedule?.liveWhiteboardSession ?? null;
     }
 
     if (!wbSession) return apiError("Class session not found.", 404);
 
-    let page = await prisma.whiteboardPage.findUnique({
+    // Read-only: an unauthenticated OBS poll must never create rows.
+    const page = await prisma.whiteboardPage.findUnique({
       where: { sessionId_pageNumber: { sessionId: wbSession.id, pageNumber: wbSession.activePageNumber } },
       select: { objects: true, background: true },
     });
-
-    if (!page) {
-      page = await prisma.whiteboardPage.create({
-        data: {
-          sessionId: wbSession.id,
-          pageNumber: 1,
-          objects: [],
-        },
-        select: { objects: true, background: true },
-      });
-    }
 
     let parsedObjects: any[] = [];
     if (page && page.objects) {
@@ -142,16 +108,15 @@ export async function GET(request: NextRequest, { params }: { params: { schedule
       quizMetrics = { counts, totalResponses: responses.length };
     }
 
-    // Active hand raise data
+    // Active hand raise — only whether one exists and its type; the student's
+    // identity and any attached doubt photo stay out of the broadcast.
     const activeHandRaise = await prisma.handRaiseEvent.findFirst({
       where: {
         whiteboardSessionId: wbSession.id,
         status: { in: ["PENDING", "APPROVED"] },
       },
       orderBy: { raisedAt: "desc" },
-      include: {
-        student: { include: { user: true } },
-      },
+      select: { id: true, requestType: true, status: true },
     });
 
     return apiSuccess({
@@ -173,7 +138,9 @@ export async function GET(request: NextRequest, { params }: { params: { schedule
             options: (activeQuiz.options as any) || [],
             timeLimitSec: activeQuiz.timeLimitSec,
             status: activeQuiz.status,
-            correctOption: activeQuiz.correctOption,
+            // The answer key only after the teacher reveals it — students
+            // see it at that point anyway.
+            correctOption: activeQuiz.status === "REVEALED" ? activeQuiz.correctOption : null,
             startedAt: activeQuiz.startedAt ? activeQuiz.startedAt.toISOString() : null,
           }
         : null,
@@ -181,10 +148,9 @@ export async function GET(request: NextRequest, { params }: { params: { schedule
       handRaise: activeHandRaise
         ? {
             id: activeHandRaise.id,
-            studentName: activeHandRaise.student?.user?.name || "Student",
+            studentName: "A student",
             requestType: activeHandRaise.requestType,
             status: activeHandRaise.status,
-            imageUrl: activeHandRaise.imageUrl || null,
           }
         : null,
     });
