@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { UnauthorizedError, ForbiddenError } from "@/lib/rbac/guard";
 import { resolveWhiteboardAccess } from "@/lib/whiteboard/access";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { ONLINE_WINDOW_MS } from "@/lib/whiteboard/constants";
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -12,7 +13,8 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     if (!session?.user?.id) throw new UnauthorizedError();
 
     const access = await resolveWhiteboardAccess(session.user.id, params.id);
-    if (!access) throw new ForbiddenError();
+    // Teacher-only: this lists every enrolled student with their email.
+    if (!access || access.role !== "TEACHER") throw new ForbiddenError();
 
     const wbSession = await prisma.whiteboardSession.findUnique({
       where: { id: params.id },
@@ -61,7 +63,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     const enrolledStudents = wbSession.batchSchedule.batch.enrollments.map((e) => {
       const att = attendanceMap.get(e.studentId);
       const isRecentlyActive =
-        att && att.lastSeenAt && Date.now() - new Date(att.lastSeenAt).getTime() < 120_000;
+        att && att.lastSeenAt && Date.now() - new Date(att.lastSeenAt).getTime() < ONLINE_WINDOW_MS;
 
       return {
         id: e.student.id,

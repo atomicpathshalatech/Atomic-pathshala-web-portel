@@ -1147,17 +1147,34 @@ export function TeacherLiveClassRoom({
     };
   }, []);
 
-  // ---- Pusher: roster presence + teacher-only hand-raise/quiz channels ----
+  // ---- Online student count (attendance heartbeats, every 20 s) ----------
+  useEffect(() => {
+    if (!wbSession?.id) return;
+    let cancelled = false;
+    const load = () =>
+      fetch(`/api/whiteboard/sessions/${wbSession.id}/online-count`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((json) => {
+          if (!cancelled && json?.success) setStudentCount(json.data.online ?? 0);
+        })
+        .catch(() => {});
+    load();
+    const id = setInterval(load, 20_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [wbSession?.id]);
+
+  // ---- Pusher: class event channel + teacher-only hand-raise/quiz channels ----
   useEffect(() => {
     if (!wbSession) return;
     const client = getPusherClient();
 
+    // Class event channel (private — see sessionChannel). The student count
+    // comes from attendance heartbeats via the effect below, not from
+    // channel membership.
     const presence = client.subscribe(sessionChannel(wbSession.id));
-    presence.bind("pusher:subscription_succeeded", (members: { count: number }) => {
-      setStudentCount(Math.max(0, members.count - 1)); // exclude the teacher themself
-    });
-    presence.bind("pusher:member_added", () => setStudentCount((c) => c + 1));
-    presence.bind("pusher:member_removed", () => setStudentCount((c) => Math.max(0, c - 1)));
     presence.bind(WB_EVENTS.MESSAGE_SENT, () => {
       // No sound here on purpose — the product owner found a chime on
       // every chat message too disruptive during a live class. Sound is

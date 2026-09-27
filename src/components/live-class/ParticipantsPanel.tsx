@@ -67,7 +67,6 @@ export function ParticipantsPanel({
   const [teacher, setTeacher] = useState<TeacherInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
   const [connections, setConnections] = useState<Record<string, MediaConnectionState>>({});
   const [pendingAction, setPendingAction] = useState<string | null>(null);
@@ -142,20 +141,6 @@ export function ParticipantsPanel({
     const client = getPusherClient();
     const channel = client.subscribe(sessionChannel(whiteboardSessionId));
 
-    const syncMembers = (members: any) => {
-      const ids = new Set<string>();
-      if (members?.each) {
-        members.each((m: any) => {
-          if (m?.id) {
-            // member.id is 'STUDENT:entityId' or 'TEACHER:entityId'
-            const parts = m.id.split(":");
-            ids.add(parts.length > 1 ? parts[1] : m.id);
-          }
-        });
-      }
-      setOnlineUserIds(ids);
-    };
-
     const onTeacherConnectUpdated = (payload: any) => {
       if (!payload?.studentId) return;
       setConnections((prev) => ({
@@ -168,28 +153,10 @@ export function ParticipantsPanel({
     };
     channel.bind(WB_EVENTS.TEACHER_CONNECT_UPDATED, onTeacherConnectUpdated);
 
-    channel.bind("pusher:subscription_succeeded", syncMembers);
-    channel.bind("pusher:member_added", (member: any) => {
-      if (member?.id) {
-        const parts = member.id.split(":");
-        const id = parts.length > 1 ? parts[1] : member.id;
-        setOnlineUserIds((prev) => new Set([...prev, id]));
-      }
-    });
-    channel.bind("pusher:member_removed", (member: any) => {
-      if (member?.id) {
-        const parts = member.id.split(":");
-        const id = parts.length > 1 ? parts[1] : member.id;
-        setOnlineUserIds((prev) => {
-          const next = new Set(prev);
-          next.delete(id);
-          return next;
-        });
-      }
-    });
+    // Online status comes from attendance heartbeats (participants API,
+    // refreshed every 30 s) — the class channel is private, not presence.
 
     return () => {
-      channel.unbind("pusher:subscription_succeeded", syncMembers);
       channel.unbind(WB_EVENTS.TEACHER_CONNECT_UPDATED, onTeacherConnectUpdated);
     };
   }, [whiteboardSessionId]);
@@ -203,8 +170,8 @@ export function ParticipantsPanel({
   }, [participants, searchQuery]);
 
   const onlineCount = useMemo(() => {
-    return participants.filter((p) => onlineUserIds.has(p.id) || p.isRecentlyActive).length;
-  }, [participants, onlineUserIds]);
+    return participants.filter((p) => p.isRecentlyActive).length;
+  }, [participants]);
 
   const isDark = theme === "dark";
 
@@ -283,7 +250,7 @@ export function ParticipantsPanel({
           </p>
         ) : (
           filtered.map((p) => {
-            const isOnline = onlineUserIds.has(p.id) || p.isRecentlyActive;
+            const isOnline = p.isRecentlyActive;
             const initial = p.name.charAt(0).toUpperCase();
 
             return (

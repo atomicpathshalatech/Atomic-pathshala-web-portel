@@ -85,24 +85,11 @@ export function TestLabHarness({
     const channel = client.subscribe(chName);
 
     const onAny = (event: string, data: unknown) => {
-      if (event.startsWith("pusher:") || event.startsWith("pusher_internal:")) {
-        if (event === "pusher:subscription_succeeded") {
-          const count = (channel as unknown as { members?: { count: number } }).members?.count ?? 1;
-          setStudentPresent(count > 1);
-        }
-        return;
-      }
+      if (event.startsWith("pusher:") || event.startsWith("pusher_internal:")) return;
       pushLog(event, summarise(data));
     };
     (channel as unknown as { bind_global: (cb: typeof onAny) => void }).bind_global(onAny);
 
-    const onMemberAdded = () => setStudentPresent(true);
-    const onMemberRemoved = () => {
-      const count = (channel as unknown as { members?: { count: number } }).members?.count ?? 1;
-      setStudentPresent(count > 1);
-    };
-    channel.bind("pusher:member_added", onMemberAdded);
-    channel.bind("pusher:member_removed", onMemberRemoved);
 
     const conn = client.connection;
     const syncConn = () =>
@@ -112,11 +99,28 @@ export function TestLabHarness({
 
     return () => {
       (channel as unknown as { unbind_global: (cb: typeof onAny) => void }).unbind_global(onAny);
-      channel.unbind("pusher:member_added", onMemberAdded);
-      channel.unbind("pusher:member_removed", onMemberRemoved);
       conn.unbind("state_change", syncConn);
     };
   }, [whiteboardSessionId, pushLog]);
+
+  // ---- Student presence: attendance heartbeats, not Pusher presence ------
+  // (the class channel is private — presence capped big classes at 100).
+  useEffect(() => {
+    let cancelled = false;
+    const load = () =>
+      fetch(`/api/whiteboard/sessions/${whiteboardSessionId}/online-count`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((json) => {
+          if (!cancelled && json?.success) setStudentPresent((json.data.online ?? 0) > 0);
+        })
+        .catch(() => {});
+    load();
+    const id = setInterval(load, 10_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [whiteboardSessionId]);
 
   // ---- Real diagnostics -------------------------------------------------
   useEffect(() => {

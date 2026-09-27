@@ -784,17 +784,10 @@ export function YouTubeLivePlayer({
             showControls ? "opacity-100" : "opacity-0"
           }`}
         >
-          {/* Open in Tab Button */}
-          <a
-            href={`https://www.youtube.com/watch?v=${youtubeVideoId}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="pointer-events-auto p-1.5 rounded-lg bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80 transition flex items-center justify-center cursor-pointer shadow-md"
-            title="Open Live Stream in New Tab"
-          >
-            <span className="material-symbols-outlined text-sm">open_in_new</span>
-          </a>
-
+          {/* No "open on YouTube" shortcut: the class is only watchable inside
+              Atomic. (Unlisted is not access control — the id can still be
+              shared — but the app itself shouldn't advertise the raw link.
+              The embed-error fallback above is the one exception.) */}
           {/* Sync Live Badge */}
           <button
             type="button"
@@ -976,16 +969,6 @@ export function YouTubeLivePlayer({
                   </div>
                 )}
               </div>
-
-              <a
-                href={`https://www.youtube.com/watch?v=${youtubeVideoId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition cursor-pointer"
-                title="Open in YouTube"
-              >
-                <span className="material-symbols-outlined text-base">open_in_new</span>
-              </a>
 
               <button
                 type="button"
