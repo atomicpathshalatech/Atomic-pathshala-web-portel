@@ -1105,7 +1105,6 @@ export function generateTestPaperHtml(
   
   <!-- Tailwind CSS Engine for Exact Aesthetic Rendering -->
   <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css" crossorigin="anonymous">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1578,7 +1577,7 @@ export function generateTestPaperHtml(
     }
 
     .test-header-brand {
-      font-family: 'Montserrat', 'Times New Roman', sans-serif;
+      font-family: 'Montserrat', sans-serif;
       font-size: 14pt;
       font-weight: 900;
       letter-spacing: 0.5px;
@@ -1586,7 +1585,7 @@ export function generateTestPaperHtml(
     }
 
     .test-header-page-no {
-      font-family: 'Times New Roman', 'PT Serif', serif;
+      font-family: 'Inter', sans-serif;
       font-size: 13.5pt;
       font-weight: 700;
       color: #000000;
@@ -1595,7 +1594,7 @@ export function generateTestPaperHtml(
     .test-header-lang-badge {
       border: 1px solid #000000;
       padding: 1px 8px;
-      font-family: 'Times New Roman', 'PT Serif', serif;
+      font-family: 'Inter', 'Noto Sans Devanagari', sans-serif;
       font-size: 8pt;
       font-weight: 700;
       color: #000000;
@@ -1604,7 +1603,7 @@ export function generateTestPaperHtml(
 
     .test-header-subject-row {
       text-align: center;
-      font-family: 'Times New Roman', 'PT Serif', serif;
+      font-family: 'Inter', 'Noto Sans Devanagari', sans-serif;
       font-size: 11pt;
       font-weight: 800;
       letter-spacing: 0.5px;
@@ -1781,7 +1780,7 @@ export function generateTestPaperHtml(
     .footer-phase-box {
       border: 1px solid #000000;
       padding: 1px 6px;
-      font-family: 'Times New Roman', serif;
+      font-family: 'Inter', sans-serif;
       font-size: 7.5pt;
       font-weight: 800;
       width: fit-content;
@@ -1794,14 +1793,14 @@ export function generateTestPaperHtml(
       align-items: center;
       border-top: 1px solid #000000;
       padding-top: 2px;
-      font-family: 'Times New Roman', 'JetBrains Mono', serif;
+      font-family: 'Inter', sans-serif;
       font-size: 8pt;
       font-weight: 600;
       color: #000000;
     }
 
     .footer-barcode {
-      font-family: 'JetBrains Mono', 'Times New Roman', monospace;
+      font-family: 'JetBrains Mono', monospace;
       font-weight: 700;
     }
 
@@ -1987,7 +1986,7 @@ export function generateTestPaperHtml(
       margin-bottom: 6px;
     }
     .sol-q-badge {
-      font-family: 'Times New Roman', 'PT Serif', serif;
+      font-family: 'Inter', sans-serif;
       font-size: 9.5pt;
       font-weight: 800;
       background: #0f172a;
@@ -1996,7 +1995,7 @@ export function generateTestPaperHtml(
       border-radius: 3px;
     }
     .sol-correct-badge {
-      font-family: 'Times New Roman', 'PT Serif', serif;
+      font-family: 'Inter', sans-serif;
       font-size: 9.5pt;
       color: #047857;
       font-weight: 700;
@@ -2026,7 +2025,7 @@ export function generateTestPaperHtml(
       padding-left: 14px;
     }
     .sol-stmt-text {
-      font-family: 'Times New Roman', 'PT Serif', 'Noto Serif Devanagari', 'Cambria', Georgia, serif;
+      font-family: 'Inter', 'Noto Sans Devanagari', sans-serif;
       font-size: 9pt;
       line-height: 1.35;
       color: #334155;
@@ -2034,7 +2033,7 @@ export function generateTestPaperHtml(
       text-align: justify;
     }
     .sol-expl-heading {
-      font-family: 'Times New Roman', 'PT Serif', 'Noto Serif Devanagari', 'Cambria', Georgia, serif;
+      font-family: 'Inter', 'Noto Sans Devanagari', sans-serif;
       font-size: 8.5pt;
       font-weight: 700;
       color: #1e40af;
@@ -2042,7 +2041,7 @@ export function generateTestPaperHtml(
       margin-bottom: 3px;
     }
     .sol-body-text {
-      font-family: 'Times New Roman', 'PT Serif', 'Noto Serif Devanagari', 'Cambria', Georgia, serif;
+      font-family: 'Inter', 'Noto Sans Devanagari', sans-serif;
       font-size: 9.5pt;
       line-height: 1.45;
       color: #000000;
@@ -2071,13 +2070,9 @@ export function generateTestPaperHtml(
       <div style="font-size: 11px; opacity: 0.85;">File name: <strong>${test.name} - ${currentDateStr} - ATOMIC PATHSHALA.pdf</strong></div>
     </div>
     <div style="display: flex; align-items: center; gap: 8px;">
-      <button id="direct-download-btn" onclick="downloadDirectPdf()" class="print-bar-btn" style="background: #16a34a;">
-        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-        <span>Direct Download PDF</span>
-      </button>
-      <button onclick="window.print()" class="print-bar-btn" style="background: #4f46e5;">
+      <button onclick="window.print()" class="print-bar-btn" style="background: #16a34a; font-size: 13.5px; padding: 8px 20px;">
         <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
-        <span>Print / Save as PDF</span>
+        <span>Save as PDF (${test.name} - ${currentDateStr} - ATOMIC PATHSHALA.pdf)</span>
       </button>
     </div>
   </div>
@@ -2091,41 +2086,12 @@ export function generateTestPaperHtml(
   </div>
 
   <script>
-    function downloadDirectPdf() {
-      var btn = document.getElementById('direct-download-btn');
-      if (btn) {
-        btn.innerHTML = 'Generating PDF... Please wait';
-        btn.style.opacity = '0.7';
-      }
-      var element = document.querySelector('.doc-container');
-      var opt = {
-        margin: 0,
-        filename: "${test.name} - ${currentDateStr} - ATOMIC PATHSHALA.pdf",
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, logging: false },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['css', 'legacy'] }
-      };
-      if (window.html2pdf) {
-        html2pdf().set(opt).from(element).save().then(function() {
-          if (btn) {
-            btn.innerHTML = 'Direct Download PDF';
-            btn.style.opacity = '1';
-          }
-        }).catch(function(err) {
-          console.error('html2pdf error, falling back to print:', err);
-          window.print();
-        });
-      } else {
+    // Auto-open Save as PDF dialog on load
+    window.addEventListener('load', function() {
+      setTimeout(function() {
         window.print();
-      }
-    }
-
-    if (window.location.search.indexOf('direct=true') !== -1) {
-      window.addEventListener('load', function() {
-        setTimeout(downloadDirectPdf, 700);
-      });
-    }
+      }, 500);
+    });
   </script>
 
 </body>
