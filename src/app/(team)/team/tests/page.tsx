@@ -13,6 +13,7 @@ export const metadata: Metadata = {
 
 import { TestPdfDownloadModal } from "@/components/test-portal/TestPdfDownloadModal";
 import { TestDeleteButton } from "@/components/team-portal/TestDeleteButton";
+import { ShareTestModal } from "@/components/test-portal/ShareTestModal";
 
 const STATUS_STYLES: Record<string, string> = {
   DRAFT: "bg-surface-container-high text-on-surface-variant",
@@ -114,6 +115,24 @@ export default async function TestsListPage() {
                 </Link>
 
                 <div className="flex items-center gap-2">
+                  <ShareTestModal
+                    testId={t.id}
+                    testName={t.name}
+                    testCode={t.code}
+                    durationMin={t.durationMin}
+                    seriesName={t.batchSchedule?.batch?.name}
+                    triggerButton={
+                      <button
+                        type="button"
+                        className="px-3 py-1.5 rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50/80 hover:bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 text-xs font-bold flex items-center gap-1.5 shadow-sm transition"
+                        title="Share Test Link with Students"
+                      >
+                        <span className="material-symbols-outlined text-sm text-blue-600">share</span>
+                        <span>Share</span>
+                      </button>
+                    }
+                  />
+
                   <TestPdfDownloadModal
                     testId={t.id}
                     testName={t.name}

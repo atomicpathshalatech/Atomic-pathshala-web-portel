@@ -4,8 +4,9 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { MoreVertical, Edit2, FileText, Trash2, Download, CheckCircle2, Clock, Award, Plus, Layers, HelpCircle } from "lucide-react";
+import { MoreVertical, Edit2, FileText, Trash2, Download, CheckCircle2, Clock, Award, Plus, Layers, HelpCircle, Share2 } from "lucide-react";
 import { SecureDeleteResourceModal } from "@/components/common/SecureDeleteResourceModal";
+import { ShareTestModal } from "@/components/test-portal/ShareTestModal";
 
 export interface TestItem {
   id: string;
@@ -42,6 +43,7 @@ export function ChapterTestsTab({
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingTest, setEditingTest] = useState<TestItem | null>(null);
   const [deleteModalTest, setDeleteModalTest] = useState<TestItem | null>(null);
+  const [shareModalTest, setShareModalTest] = useState<TestItem | null>(null);
 
   // Form Fields
   const [name, setName] = useState("");
@@ -324,6 +326,16 @@ export function ChapterTestsTab({
                     <span>Manage Questions</span>
                   </Link>
 
+                  {/* Share Test Button (Direct) */}
+                  <button
+                    type="button"
+                    onClick={() => setShareModalTest(t)}
+                    className="w-8 h-8 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-950/40 dark:hover:text-blue-400 flex items-center justify-center text-slate-500 transition"
+                    title="Share Test Link with Students"
+                  >
+                    <Share2 className="w-4 h-4" />
+                  </button>
+
                   {/* 3-Dot Menu Dropdown */}
                   {canEdit && (
                     <div className="relative">
@@ -338,6 +350,19 @@ export function ChapterTestsTab({
 
                       {activeMenuId === t.id && (
                         <div className="absolute right-0 top-full mt-1.5 w-48 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl p-1.5 z-40 space-y-0.5 animate-in fade-in zoom-in-95">
+                          {/* Share Test Link */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveMenuId(null);
+                              setShareModalTest(t);
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-xl text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition text-left"
+                          >
+                            <Share2 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                            <span>Share Test Link</span>
+                          </button>
+
                           <Link
                             href={`/team/tests/${t.id}/author`}
                             className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-xl text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
@@ -635,6 +660,19 @@ export function ChapterTestsTab({
             setDeleteModalTest(null);
             router.refresh();
           }}
+        />
+      )}
+
+      {/* SHARE TEST MODAL */}
+      {shareModalTest && (
+        <ShareTestModal
+          isOpen={Boolean(shareModalTest)}
+          onClose={() => setShareModalTest(null)}
+          testId={shareModalTest.id}
+          testName={shareModalTest.name}
+          testCode={shareModalTest.code}
+          durationMin={shareModalTest.durationMin}
+          seriesName={chapterTitle}
         />
       )}
     </div>

@@ -3,12 +3,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Layers, Plus, Sparkles, CheckCircle2, ArrowRight, Download } from "lucide-react";
+import { Layers, Plus, Sparkles, CheckCircle2, ArrowRight, Download, Share2 } from "lucide-react";
 import { TemplateBuilder } from "@/components/team-portal/TemplateBuilder";
 import { TemplateSummaryCard } from "@/components/team-portal/TemplateSummaryCard";
 import { TestQuestionPicker } from "@/components/team-portal/TestQuestionPicker";
 import { PublishTestButton } from "@/components/team-portal/PublishTestButton";
 import { TestPdfDownloadModal } from "@/components/test-portal/TestPdfDownloadModal";
+import { ShareTestModal } from "@/components/test-portal/ShareTestModal";
 
 interface TestDetailClientProps {
   test: {
@@ -104,6 +105,22 @@ export function TestDetailClient({ test, isDraft, canPublish }: TestDetailClient
         </div>
 
         <div className="flex items-center gap-2">
+          <ShareTestModal
+            testId={test.id}
+            testName={test.name}
+            durationMin={test.durationMin}
+            seriesName={test.batchSchedule?.batch?.name}
+            triggerButton={
+              <button
+                type="button"
+                className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition"
+                title="Share Test Link with Students"
+              >
+                <Share2 className="w-4 h-4" /> Share Test Link
+              </button>
+            }
+          />
+
           <TestPdfDownloadModal
             testId={test.id}
             testName={test.name}

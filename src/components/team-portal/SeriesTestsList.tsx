@@ -13,8 +13,10 @@ import {
   Trash2,
   Calendar,
   RefreshCw,
+  Share2,
 } from "lucide-react";
 import { RescheduleTestModal } from "@/components/team-portal/RescheduleTestModal";
+import { ShareTestModal } from "@/components/test-portal/ShareTestModal";
 
 export interface SeriesTestItem {
   id: string;
@@ -43,6 +45,7 @@ export function SeriesTestsList({
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [rescheduleTest, setRescheduleTest] = useState<SeriesTestItem | null>(null);
   const [recalculatingId, setRecalculatingId] = useState<string | null>(null);
+  const [shareModalTest, setShareModalTest] = useState<SeriesTestItem | null>(null);
 
   const handleDeleteTest = async (testId: string) => {
     setActiveMenuId(null);
@@ -193,6 +196,16 @@ export function SeriesTestsList({
                 </span>
               )}
 
+              {/* Share Test Button (Direct) */}
+              <button
+                type="button"
+                onClick={() => setShareModalTest(t)}
+                className="w-8 h-8 rounded-full hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-950/60 dark:hover:text-blue-400 flex items-center justify-center text-slate-500 dark:text-slate-400 transition"
+                title="Share Test Link with Students"
+              >
+                <Share2 className="w-4 h-4" />
+              </button>
+
               {/* 3-Dots Action Menu */}
               <div className="relative">
                 <button
@@ -206,6 +219,19 @@ export function SeriesTestsList({
 
                 {activeMenuId === t.id && (
                   <div className="absolute right-0 top-full mt-1 w-60 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl p-1.5 z-50 space-y-0.5 animate-in fade-in zoom-in-95">
+                    {/* Share Test Link */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveMenuId(null);
+                        setShareModalTest(t);
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-xl text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/50 transition text-left"
+                    >
+                      <Share2 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                      <span>Share Test Link</span>
+                    </button>
+
                     {/* Add / Author Questions */}
                     <Link
                       href={`/team/tests/${t.id}/author`}
@@ -303,6 +329,18 @@ export function SeriesTestsList({
           initialDurationMin={rescheduleTest.durationMin}
           isOpen={Boolean(rescheduleTest)}
           onClose={() => setRescheduleTest(null)}
+        />
+      )}
+
+      {/* Share Test Modal */}
+      {shareModalTest && (
+        <ShareTestModal
+          isOpen={Boolean(shareModalTest)}
+          onClose={() => setShareModalTest(null)}
+          testId={shareModalTest.id}
+          testName={shareModalTest.name}
+          testCode={shareModalTest.code}
+          durationMin={shareModalTest.durationMin}
         />
       )}
     </div>

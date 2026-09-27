@@ -16,8 +16,10 @@ import {
   Copy,
   Check,
   RefreshCw,
+  Share2,
 } from "lucide-react";
 import { formatISTDateTime } from "@/lib/date-utils";
+import { ShareTestModal } from "@/components/test-portal/ShareTestModal";
 
 interface BatchTestSeriesManagerProps {
   batchId: string;
@@ -272,6 +274,23 @@ export function BatchTestSeriesManager({
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
+                    <ShareTestModal
+                      testId={series.id}
+                      testName={series.name}
+                      testCode={series.code}
+                      type="series"
+                      triggerButton={
+                        <button
+                          type="button"
+                          className="px-3 py-1.5 rounded-xl border border-blue-200 dark:border-blue-900 bg-blue-50/70 hover:bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 text-xs font-bold flex items-center gap-1 transition"
+                          title="Share Test Series Link"
+                        >
+                          <Share2 className="w-3.5 h-3.5" />
+                          <span>Share Series</span>
+                        </button>
+                      }
+                    />
+
                     <Link
                       href={`/team/test-series/${series.id}`}
                       target="_blank"
@@ -364,14 +383,33 @@ export function BatchTestSeriesManager({
                           </div>
 
                           <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto flex-wrap">
+                            {/* Share Test Link */}
+                            <ShareTestModal
+                              testId={test.id}
+                              testName={test.name}
+                              testCode={test.code}
+                              durationMin={test.durationMin}
+                              seriesName={series.name}
+                              triggerButton={
+                                <button
+                                  type="button"
+                                  className="px-3 py-1.5 rounded-xl border border-blue-200 dark:border-blue-900 text-blue-700 dark:text-blue-300 bg-blue-50/60 dark:bg-blue-950/40 text-xs font-bold flex items-center gap-1.5 hover:bg-blue-100 transition cursor-pointer"
+                                  title="Share Test Link with Students"
+                                >
+                                  <Share2 className="w-3.5 h-3.5" />
+                                  <span>Share Link</span>
+                                </button>
+                              }
+                            />
+
                             {/* Syllabus PDF Viewer */}
                             <a
                               href={`/api/tests/${test.id}/syllabus-pdf?batchId=${batchId}`}
                               target="_blank"
                               rel="noreferrer"
-                              className="px-3 py-1.5 rounded-xl border border-blue-200 dark:border-blue-900 text-blue-700 dark:text-blue-300 bg-blue-50/60 dark:bg-blue-950/40 text-xs font-bold flex items-center gap-1.5 hover:bg-blue-100 transition"
+                              className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 text-xs font-bold flex items-center gap-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 transition"
                             >
-                              <FileText className="w-3.5 h-3.5" />
+                              <FileText className="w-3.5 h-3.5 text-slate-500" />
                               <span>Syllabus PDF</span>
                             </a>
 

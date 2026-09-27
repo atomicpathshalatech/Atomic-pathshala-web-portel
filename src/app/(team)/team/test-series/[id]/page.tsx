@@ -8,6 +8,8 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { SeriesTestCreateForm } from "@/components/team-portal/SeriesTestCreateForm";
 import { SeriesTestsList } from "@/components/team-portal/SeriesTestsList";
 import { TestSeriesEditModal } from "@/components/team-portal/TestSeriesEditModal";
+import { ShareTestModal } from "@/components/test-portal/ShareTestModal";
+import { Share2 } from "lucide-react";
 import { cleanBatchName, formatDescriptionText } from "@/lib/academic/canonical-courses";
 
 export const dynamic = "force-dynamic";
@@ -73,6 +75,23 @@ export default async function TestSeriesDetailPage({ params }: { params: { id: s
           )}
         </div>
         <div className="flex items-center gap-2.5 self-start">
+          <ShareTestModal
+            testId={series.id}
+            testName={cleanedName}
+            testCode={series.code}
+            type="series"
+            triggerButton={
+              <button
+                type="button"
+                className="px-3.5 py-1.5 rounded-full border border-blue-200 dark:border-blue-900 bg-blue-50/80 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 text-xs font-extrabold flex items-center gap-1.5 transition shadow-2xs cursor-pointer"
+                title="Share Test Series Link with Students"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                <span>Share Series Link</span>
+              </button>
+            }
+          />
+
           <span
             className={`px-3.5 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-wider ${
               series.visibility === "PUBLIC"
