@@ -721,14 +721,26 @@ export function generateTestPaperHtml(
     `;
   };
 
-  const renderSingleRoughPageHtml = (pNo: number, subjectName?: string) => `
+  const renderSingleRoughPageHtml = (pNo: number, subjectName?: string) => {
+    const isEven = pNo % 2 === 0;
+    const headerRow1 = isEven ? `
+      <div class="test-header-row-1">
+        <div class="test-header-brand">${brandName}</div>
+        <div class="test-header-page-no">${pNo}</div>
+        <div class="test-header-lang-badge">Hindi + English</div>
+      </div>
+    ` : `
+      <div class="test-header-row-1">
+        <div class="test-header-lang-badge">Hindi + English</div>
+        <div class="test-header-page-no">${pNo}</div>
+        <div class="test-header-brand">${brandName}</div>
+      </div>
+    `;
+
+    return `
     <div class="page rough-page">
       <div class="test-page-header">
-        <div class="test-header-row-1">
-          <div class="test-header-brand">${brandName}</div>
-          <div class="test-header-page-no">${pNo}</div>
-          <div class="test-header-lang-badge">Hindi + English</div>
-        </div>
+        ${headerRow1}
         <div class="test-header-subject-row">
           SPACE FOR ROUGH WORK / रफ कार्य के लिए जगह ${subjectName ? `(${subjectName.toUpperCase()})` : ""}
         </div>
@@ -736,16 +748,17 @@ export function generateTestPaperHtml(
       </div>
       <div class="rough-page-content">
         <div class="rough-watermark">SPACE FOR ROUGH WORK / रफ कार्य के लिए जगह</div>
-        <div class="rough-grid-canvas"></div>
       </div>
       <div class="page-running-footer">
-        <div class="flex items-center justify-between text-[8pt] font-bold text-black uppercase w-full">
-          <span>${test.batchName || test.seriesName || "Selection Pro Batch Neet"}</span>
-          <span>Page ${pNo}/${actualTotalPages}</span>
+        <div class="footer-phase-box">${test.batchName || "PHASE - ALL"}</div>
+        <div class="footer-meta-row">
+          <span class="footer-barcode">${test.code || "9610WMD801490250051"}</span>
+          <span class="footer-date">${currentDateStr}</span>
         </div>
       </div>
     </div>
   `;
+  };
 
   test.sections.forEach((section, sIdx) => {
     const pagesForSection = chunkQuestionsIntoPages(section.questions);
@@ -802,18 +815,7 @@ export function generateTestPaperHtml(
 
         return `
           <div class="q-row-item" id="q-${q.number}">
-            <!-- Left Column: English -->
-            <div class="q-side q-side-en">
-              <div class="q-head-statement">
-                <span class="q-num-label">${q.number}.</span>
-                <div class="q-statement-body">${statementEnHtml}</div>
-              </div>
-              ${diagramEn}
-              <div class="q-opts-wrapper">
-                ${optionsEnHtml}
-              </div>
-            </div>
-            <!-- Right Column: Hindi -->
+            <!-- Left Column: Hindi -->
             <div class="q-side q-side-hi">
               <div class="q-head-statement">
                 <span class="q-num-label">${q.number}.</span>
@@ -824,24 +826,47 @@ export function generateTestPaperHtml(
                 ${optionsHiHtml}
               </div>
             </div>
+            <!-- Right Column: English -->
+            <div class="q-side q-side-en">
+              <div class="q-head-statement">
+                <span class="q-num-label">${q.number}.</span>
+                <div class="q-statement-body">${statementEnHtml}</div>
+              </div>
+              ${diagramEn}
+              <div class="q-opts-wrapper">
+                ${optionsEnHtml}
+              </div>
+            </div>
           </div>
         `;
       }).join("");
 
-      // Header on Page 1 of subject vs subsequent pages (Section-A / खण्ड-A boxes REMOVED completely)
-      const subjectHeaderHtml = pIdx === 0 ? `
-        <div class="test-subject-header-box mb-2">
-          <div class="font-heading font-black text-center text-[13pt] text-black tracking-widest uppercase mb-1">${brandName}</div>
-          <div class="border border-black text-center py-1 font-bold text-[10.5pt] uppercase tracking-wider bg-white mb-1">
-            SUBJECT : ${section.subject.toUpperCase()}
-          </div>
-          <div class="bg-black text-white px-2.5 py-1 text-[8.5pt] font-bold mb-1.5 leading-snug">
-            Syllabus : ${section.syllabus}
-          </div>
+      const isEven = pageCounter % 2 === 0;
+      const headerRow1 = isEven ? `
+        <div class="test-header-row-1">
+          <div class="test-header-brand">${brandName}</div>
+          <div class="test-header-page-no">${pageCounter}</div>
+          <div class="test-header-lang-badge">Hindi + English</div>
         </div>
       ` : `
-        <div class="font-heading font-black text-center text-[13pt] text-black tracking-widest uppercase mb-1.5 pb-0.5 border-b border-black">
-          ${brandName}
+        <div class="test-header-row-1">
+          <div class="test-header-lang-badge">Hindi + English</div>
+          <div class="test-header-page-no">${pageCounter}</div>
+          <div class="test-header-brand">${brandName}</div>
+        </div>
+      `;
+
+      const subjectRowHtml = (pIdx === 0) ? `
+        <div class="test-header-subject-row">
+          SUBJECT : ${section.subject.toUpperCase()}
+        </div>
+      ` : "";
+
+      const pageHeaderHtml = `
+        <div class="test-page-header">
+          ${headerRow1}
+          ${subjectRowHtml}
+          <div class="test-header-divider"></div>
         </div>
       `;
 
@@ -852,7 +877,7 @@ export function generateTestPaperHtml(
             <div class="watermark-text">${brandName}</div>
           </div>
 
-          ${subjectHeaderHtml}
+          ${pageHeaderHtml}
           
           <!-- Content Body Starts Directly With ZERO Gap -->
           <div class="content-body">
@@ -861,11 +886,12 @@ export function generateTestPaperHtml(
             </div>
           </div>
 
-          <!-- Bottom Footer Matching Official Test Booklet -->
+          <!-- Bottom Footer Matching Allen Booklet Standard -->
           <div class="page-running-footer">
-            <div class="flex items-center justify-between text-[8pt] font-bold text-black uppercase w-full">
-              <span>${test.batchName || test.seriesName || "Selection Pro Batch Neet"}</span>
-              <span>Page ${pageCounter}/${actualTotalPages}</span>
+            <div class="footer-phase-box">${test.batchName || "PHASE - ALL"}</div>
+            <div class="footer-meta-row">
+              <span class="footer-barcode">${test.code || "9610WMD801490250051"}</span>
+              <span class="footer-date">${currentDateStr}</span>
             </div>
           </div>
         </div>
@@ -1108,7 +1134,7 @@ export function generateTestPaperHtml(
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css" crossorigin="anonymous">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Montserrat:wght@600;700;800;900&family=Noto+Sans+Devanagari:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=PT+Serif:ital,wght@0,400;0,700;1,400;1,700&family=Noto+Serif+Devanagari:wght@400;500;600;700;800&family=Montserrat:wght@700;800;900&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet">
 
   <style>
     @page {
@@ -1126,10 +1152,10 @@ export function generateTestPaperHtml(
       margin: 0;
       padding: 24px 0;
       background: #f1f5f9;
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-      color: #0f172a;
-      font-size: 11pt;
-      line-height: 1.4;
+      font-family: 'Times New Roman', 'PT Serif', 'Noto Serif Devanagari', 'Mangal', serif;
+      color: #000000;
+      font-size: 10.5pt;
+      line-height: 1.36;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -1189,7 +1215,7 @@ export function generateTestPaperHtml(
     .page {
       width: 794px;
       min-height: 1123px;
-      padding: 24px 34px;
+      padding: 20px 32px 16px 32px;
       position: relative;
       background: white;
       page-break-after: always;
@@ -1221,10 +1247,10 @@ export function generateTestPaperHtml(
     }
 
     .watermark-text {
-      font-family: 'Montserrat', 'Inter', sans-serif;
+      font-family: 'Montserrat', 'PT Serif', sans-serif;
       font-size: 42pt;
       font-weight: 900;
-      color: rgba(0, 0, 0, 0.038);
+      color: rgba(0, 0, 0, 0.035);
       letter-spacing: 6px;
       text-transform: uppercase;
     }
@@ -1243,7 +1269,7 @@ export function generateTestPaperHtml(
         box-shadow: none;
         width: 100%;
         min-height: 100vh;
-        padding: 20px 24px;
+        padding: 16px 28px 14px 28px;
         margin-bottom: 0;
         border: none;
       }
@@ -1274,7 +1300,7 @@ export function generateTestPaperHtml(
       letter-spacing: 0.5px;
     }
     .print-bar-btn {
-      background: #4f46e5;
+      background: #16a34a;
       color: white;
       border: none;
       padding: 8px 18px;
@@ -1288,7 +1314,7 @@ export function generateTestPaperHtml(
       transition: background 0.15s;
     }
     .print-bar-btn:hover {
-      background: #4338ca;
+      background: #15803d;
     }
 
     .page-running-header {
@@ -1301,17 +1327,6 @@ export function generateTestPaperHtml(
       font-size: 8.5pt;
       text-transform: uppercase;
       letter-spacing: 0.5px;
-    }
-    .page-running-footer {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      border-top: 1.5px solid #0f172a;
-      padding-top: 4px;
-      margin-top: 8px;
-      font-size: 8pt;
-      color: #334155;
-      font-weight: 600;
     }
 
     .cover-page {
@@ -1462,10 +1477,10 @@ export function generateTestPaperHtml(
     }
     .inst-heading-left {
       border-right: 1.5px solid #000;
-      font-family: 'Noto Sans Devanagari', sans-serif;
+      font-family: 'Noto Serif Devanagari', sans-serif;
     }
     .inst-heading-right {
-      font-family: 'Inter', sans-serif;
+      font-family: 'Times New Roman', 'PT Serif', serif;
     }
     .inst-points-list {
       display: flex;
@@ -1483,16 +1498,16 @@ export function generateTestPaperHtml(
       display: flex;
       align-items: baseline;
       padding: 3px 8px;
-      font-size: 7.2pt;
+      font-size: 7.5pt;
       line-height: 1.25;
       gap: 4px;
     }
     .inst-cell-left {
       border-right: 1.5px solid #000;
-      font-family: 'Noto Sans Devanagari', sans-serif;
+      font-family: 'Noto Serif Devanagari', sans-serif;
     }
     .inst-cell-right {
-      font-family: 'Inter', sans-serif;
+      font-family: 'Times New Roman', 'PT Serif', serif;
     }
     .inst-point-num {
       font-weight: 800;
@@ -1562,7 +1577,7 @@ export function generateTestPaperHtml(
       margin-top: 6px;
     }
 
-    /* Authentic Academic Exam Typesetting (Matching ALLEN / NTA Official Standards) */
+    /* Authentic Academic Exam Typesetting (Matching ALLEN Official Standard) */
     .test-page-header {
       width: 100%;
       margin-bottom: 0px;
@@ -1585,8 +1600,8 @@ export function generateTestPaperHtml(
     }
 
     .test-header-page-no {
-      font-family: 'Inter', sans-serif;
-      font-size: 13.5pt;
+      font-family: 'Times New Roman', 'PT Serif', serif;
+      font-size: 12.5pt;
       font-weight: 700;
       color: #000000;
     }
@@ -1594,7 +1609,7 @@ export function generateTestPaperHtml(
     .test-header-lang-badge {
       border: 1px solid #000000;
       padding: 1px 8px;
-      font-family: 'Inter', 'Noto Sans Devanagari', sans-serif;
+      font-family: 'Times New Roman', 'PT Serif', serif;
       font-size: 8pt;
       font-weight: 700;
       color: #000000;
@@ -1603,20 +1618,20 @@ export function generateTestPaperHtml(
 
     .test-header-subject-row {
       text-align: center;
-      font-family: 'Inter', 'Noto Sans Devanagari', sans-serif;
+      font-family: 'Times New Roman', 'PT Serif', serif;
       font-size: 11pt;
-      font-weight: 800;
+      font-weight: 700;
       letter-spacing: 0.5px;
       color: #000000;
       margin-top: 1px;
-      margin-bottom: 3px;
+      margin-bottom: 2px;
     }
 
     .test-header-divider {
       height: 1.5px;
       background: #000000;
       width: 100%;
-      margin-bottom: 3px;
+      margin-bottom: 2px;
     }
 
     .content-body {
@@ -1640,7 +1655,6 @@ export function generateTestPaperHtml(
       display: grid;
       grid-template-columns: 1fr 1fr;
       padding: 4px 0 6px 0;
-      border-bottom: 1px solid #cbd5e1;
       page-break-inside: avoid;
       break-inside: avoid;
       position: relative;
@@ -1652,13 +1666,13 @@ export function generateTestPaperHtml(
       flex-direction: column;
     }
 
-    .q-side-en {
-      padding-right: 16px;
+    .q-side-hi {
+      padding-right: 14px;
       border-right: 1.5px solid #000000;
     }
 
-    .q-side-hi {
-      padding-left: 16px;
+    .q-side-en {
+      padding-left: 14px;
     }
 
     .q-head-statement {
@@ -1672,57 +1686,41 @@ export function generateTestPaperHtml(
       flex: 1;
     }
 
-    /* UNIFIED MODERN EXAM FONT & EXACT SAME FONT SIZE FOR BOTH HINDI & ENGLISH */
+    /* EXACT EXAM SERIF FONTS MATCHING ALLEN PDF */
+    .q-side-en,
+    .q-side-en .q-statement-body,
+    .q-side-en .opt-value,
+    .q-side-en p,
+    .q-side-en span {
+      font-family: 'Times New Roman', 'PT Serif', 'Nimbus Roman No9 L', 'FreeSerif', 'Liberation Serif', serif !important;
+    }
+
+    .q-side-hi,
+    .q-side-hi .q-statement-body,
+    .q-side-hi .opt-value,
+    .q-side-hi p,
+    .q-side-hi span {
+      font-family: 'Noto Serif Devanagari', 'Mangal', 'Kokila', 'Times New Roman', 'PT Serif', serif !important;
+    }
+
     .q-statement-body,
     .q-statement-body p,
     .q-statement-body span,
     .opt-value,
     .opt-value p,
     .opt-value span {
-      font-family: 'Inter', 'Noto Sans Devanagari', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
       font-size: 10pt !important;
-      font-weight: 500 !important;
-      line-height: 1.45 !important;
+      font-weight: 400 !important;
+      line-height: 1.36 !important;
       color: #000000 !important;
-    }
-
-    /* Compact KaTeX Display & Mathematical Tables */
-    .katex-display {
-      margin: 2px 0 !important;
-      max-width: 100% !important;
-      overflow-x: auto !important;
-    }
-    .katex {
-      font-size: 9.5pt !important;
-      line-height: 1.25 !important;
-    }
-    .katex-display > .katex {
-      text-align: center !important;
-    }
-    .katex .mtable {
-      border-collapse: collapse !important;
-      margin: 0 auto !important;
-    }
-    .q-statement-body table {
-      width: 100% !important;
-      border-collapse: collapse !important;
-      font-size: 8.5pt !important;
-      margin: 3px 0 !important;
-      line-height: 1.25 !important;
-    }
-    .q-statement-body table th,
-    .q-statement-body table td {
-      border: 1px solid #94a3b8 !important;
-      padding: 2px 4px !important;
-      text-align: left !important;
     }
 
     .q-num-label {
-      font-family: 'Inter', 'Noto Sans Devanagari', sans-serif !important;
+      font-family: 'Times New Roman', 'PT Serif', serif !important;
       font-size: 10.5pt !important;
-      font-weight: 800 !important;
+      font-weight: 700 !important;
       color: #000000 !important;
-      min-width: 20px;
+      min-width: 22px;
       flex-shrink: 0;
     }
 
@@ -1750,9 +1748,9 @@ export function generateTestPaperHtml(
     }
 
     .opt-label {
-      font-family: 'Inter', 'Noto Sans Devanagari', sans-serif !important;
+      font-family: 'Times New Roman', 'PT Serif', serif !important;
       font-size: 10pt !important;
-      font-weight: 700 !important;
+      font-weight: 400 !important;
       color: #000000 !important;
       min-width: 22px;
       flex-shrink: 0;
@@ -1760,29 +1758,67 @@ export function generateTestPaperHtml(
 
     .q-diagram-wrap {
       text-align: center;
-      margin: 2px 0 2px 0;
+      margin: 3px 0;
     }
 
     .q-diagram-img {
-      max-width: 88%;
-      max-height: 105px;
+      max-width: 90%;
+      max-height: 110px;
       object-fit: contain;
       display: inline-block;
     }
 
-    /* Footer Styles */
+    /* KaTeX Display in questions */
+    .katex-display {
+      margin: 2px 0 !important;
+      max-width: 100% !important;
+      overflow-x: auto !important;
+    }
+    .katex {
+      font-size: 9.5pt !important;
+      line-height: 1.25 !important;
+    }
+    .katex-display > .katex {
+      text-align: center !important;
+    }
+    .katex .mtable {
+      border-collapse: collapse !important;
+      margin: 0 auto !important;
+    }
+
+    /* Match the Column / Table Styling */
+    .q-statement-body table {
+      width: 100% !important;
+      border-collapse: collapse !important;
+      border: 1.5px solid #000000 !important;
+      font-size: 8.5pt !important;
+      margin: 4px 0 !important;
+      line-height: 1.25 !important;
+    }
+    .q-statement-body table th,
+    .q-statement-body table td {
+      border: 1px solid #000000 !important;
+      padding: 3px 6px !important;
+      text-align: left !important;
+    }
+    .q-statement-body table th {
+      font-weight: 700 !important;
+      text-align: center !important;
+    }
+
+    /* Running Footer Matching Allen */
     .page-running-footer {
       margin-top: auto;
-      padding-top: 4px;
+      padding-top: 2px;
       width: 100%;
     }
 
     .footer-phase-box {
       border: 1px solid #000000;
       padding: 1px 6px;
-      font-family: 'Inter', sans-serif;
+      font-family: 'Times New Roman', 'PT Serif', serif;
       font-size: 7.5pt;
-      font-weight: 800;
+      font-weight: 700;
       width: fit-content;
       margin-bottom: 2px;
     }
@@ -1791,17 +1827,24 @@ export function generateTestPaperHtml(
       display: flex;
       justify-content: space-between;
       align-items: center;
-      border-top: 1px solid #000000;
+      border-top: 1.5px solid #000000;
       padding-top: 2px;
-      font-family: 'Inter', sans-serif;
+      font-family: 'Times New Roman', 'PT Serif', serif;
       font-size: 8pt;
-      font-weight: 600;
+      font-weight: 700;
       color: #000000;
     }
 
     .footer-barcode {
       font-family: 'JetBrains Mono', monospace;
       font-weight: 700;
+      font-size: 8.5pt;
+    }
+
+    .footer-date {
+      font-family: 'Times New Roman', 'PT Serif', serif;
+      font-weight: 700;
+      font-size: 8.5pt;
     }
 
     .rough-page {
@@ -1849,7 +1892,10 @@ export function generateTestPaperHtml(
     }
     .back-col-hi {
       border-right: 1.5px solid #000;
-      font-family: 'Noto Sans Devanagari', sans-serif;
+      font-family: 'Noto Serif Devanagari', 'Mangal', serif;
+    }
+    .back-col-en {
+      font-family: 'Times New Roman', 'PT Serif', serif;
     }
     .back-heading {
       font-size: 11pt;
@@ -1986,7 +2032,7 @@ export function generateTestPaperHtml(
       margin-bottom: 6px;
     }
     .sol-q-badge {
-      font-family: 'Inter', sans-serif;
+      font-family: 'Times New Roman', 'PT Serif', serif;
       font-size: 9.5pt;
       font-weight: 800;
       background: #0f172a;
@@ -1995,7 +2041,7 @@ export function generateTestPaperHtml(
       border-radius: 3px;
     }
     .sol-correct-badge {
-      font-family: 'Inter', sans-serif;
+      font-family: 'Times New Roman', 'PT Serif', serif;
       font-size: 9.5pt;
       color: #047857;
       font-weight: 700;
@@ -2025,7 +2071,7 @@ export function generateTestPaperHtml(
       padding-left: 14px;
     }
     .sol-stmt-text {
-      font-family: 'Inter', 'Noto Sans Devanagari', sans-serif;
+      font-family: 'Noto Serif Devanagari', 'Mangal', 'Times New Roman', serif;
       font-size: 9pt;
       line-height: 1.35;
       color: #334155;
@@ -2033,7 +2079,7 @@ export function generateTestPaperHtml(
       text-align: justify;
     }
     .sol-expl-heading {
-      font-family: 'Inter', 'Noto Sans Devanagari', sans-serif;
+      font-family: 'Noto Serif Devanagari', 'Mangal', 'Times New Roman', serif;
       font-size: 8.5pt;
       font-weight: 700;
       color: #1e40af;
@@ -2041,7 +2087,7 @@ export function generateTestPaperHtml(
       margin-bottom: 3px;
     }
     .sol-body-text {
-      font-family: 'Inter', 'Noto Sans Devanagari', sans-serif;
+      font-family: 'Noto Serif Devanagari', 'Mangal', 'Times New Roman', serif;
       font-size: 9.5pt;
       line-height: 1.45;
       color: #000000;
@@ -2058,7 +2104,7 @@ export function generateTestPaperHtml(
       display: inline-block;
     }
     .font-devanagari {
-      font-family: 'Noto Sans Devanagari', 'Inter', sans-serif !important;
+      font-family: 'Noto Serif Devanagari', 'Mangal', 'Times New Roman', serif !important;
     }
   </style>
 </head>
