@@ -1,4 +1,4 @@
-﻿import { NextRequest } from "next/server";
+import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -107,7 +107,8 @@ export async function POST(request: NextRequest) {
             subTopic: subTopic.trim() || existing.subTopic,
             type: mapQuestionType(type),
             difficulty: mapDifficulty(difficulty),
-            imageUrl: refImg || existing.imageUrl,
+            referenceImageUrl: refImg || existing.referenceImageUrl,
+            imageUrl: figureUrl && figureUrl !== referenceImageUrl ? figureUrl : null,
             solution: solutionEn.trim() || solutionHi.trim() || existing.solution,
             status: "DRAFT",
             editedById: session.user.id,
@@ -197,7 +198,8 @@ export async function POST(request: NextRequest) {
         category: categoryName,
         status: "DRAFT",
         isPublished: false,
-        imageUrl: refImg,
+        referenceImageUrl: refImg,
+        imageUrl: figureUrl && figureUrl !== referenceImageUrl ? figureUrl : null,
         solution: solutionEn.trim() || solutionHi.trim() || null,
         tags: autoTags,
         createdById: session.user.id,

@@ -32,7 +32,14 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
           include: {
             questions: {
               orderBy: { order: "asc" },
-              include: { question: { include: { translations: true } } },
+              include: {
+                question: {
+                  include: {
+                    translations: true,
+                    assets: { orderBy: { order: "asc" } },
+                  },
+                },
+              },
             },
           },
         },
@@ -98,10 +105,26 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
         const enOpts = (enTrans?.options as Record<string, string>) || {};
         const hiOpts = (hiTrans?.options as Record<string, string>) || {};
 
+        const q = sq.question;
+        const diagramAsset = q.assets?.find((a) => a.type === "DIAGRAM" || a.type === "FIGURE");
+        const hasReferenceAsset = q.assets?.some((a) => a.type === "REFERENCE" && a.publicUrl === q.imageUrl);
+        const isReferenceImage =
+          Boolean(q.imageUrl) &&
+          (hasReferenceAsset ||
+            q.imageUrl === q.referenceImageUrl ||
+            q.tags?.includes("Extracted") ||
+            q.tags?.includes("AI_AUTO_DRAFT") ||
+            q.imageUrl?.includes("/questions/q_") ||
+            q.category?.includes("AI_DRAFT") ||
+            q.category?.includes("Source:") ||
+            q.category?.includes("PYQ"));
+
+        const validDiagramUrl = diagramAsset?.publicUrl || (isReferenceImage ? null : q.imageUrl);
+
         return {
-          id: sq.question.id,
+          id: q.id,
           order: sq.order,
-          subject: sq.sectionSubject || sq.question.subject || test.batchSchedule?.subject || "General",
+          subject: sq.sectionSubject || q.subject || test.batchSchedule?.subject || "General",
           body: enTrans?.statement || legacy.body,
           type: legacy.type,
           optionA: enOpts.A || legacy.optionA,
@@ -113,9 +136,9 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
           optionBHi: hiOpts.B || null,
           optionCHi: hiOpts.C || null,
           optionDHi: hiOpts.D || null,
-          imageUrl: (sq.question as any).imageUrl || null,
-          camDrawData: (sq.question as any).camDrawData || null,
-          mySelection: answerByQuestion.get(sq.question.id) ?? null,
+          imageUrl: validDiagramUrl || null,
+          camDrawData: (q as any).camDrawData || null,
+          mySelection: answerByQuestion.get(q.id) ?? null,
         };
       }),
     });

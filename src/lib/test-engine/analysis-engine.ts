@@ -228,7 +228,10 @@ export async function calculateAndStoreTestAnalysis(
                 orderBy: { order: "asc" },
                 include: {
                   question: {
-                    include: { translations: true },
+                    include: {
+                      translations: true,
+                      assets: { orderBy: { order: "asc" } },
+                    },
                   },
                 },
               },
@@ -425,7 +428,21 @@ export async function calculateAndStoreTestAnalysis(
       optionsHi: (hiTrans?.options as Record<string, string>) || {},
       solutionEn: enTrans?.solution || q.solution,
       solutionHi: hiTrans?.solution,
-      imageUrl: q.imageUrl || null,
+      imageUrl: (() => {
+        const diagramAsset = (q as any).assets?.find((a: any) => a.type === "DIAGRAM" || a.type === "FIGURE");
+        const hasReferenceAsset = (q as any).assets?.some((a: any) => a.type === "REFERENCE" && a.publicUrl === q.imageUrl);
+        const isReferenceImage =
+          Boolean(q.imageUrl) &&
+          (hasReferenceAsset ||
+            q.imageUrl === (q as any).referenceImageUrl ||
+            q.tags?.includes("Extracted") ||
+            q.tags?.includes("AI_AUTO_DRAFT") ||
+            q.imageUrl?.includes("/questions/q_") ||
+            q.category?.includes("AI_DRAFT") ||
+            q.category?.includes("Source:") ||
+            q.category?.includes("PYQ"));
+        return diagramAsset?.publicUrl || (isReferenceImage ? null : q.imageUrl) || null;
+      })(),
       camDrawData: (q as any).camDrawData || null,
       ncertReference: {
         book: q.ncertBook,

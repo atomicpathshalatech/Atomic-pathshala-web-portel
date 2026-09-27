@@ -504,15 +504,17 @@ export function ExamRunner({
   // ==========================================
   if (phase === "INSTRUCTIONS") {
     return (
-      <ExamInstructionsView
-        testId={testId}
-        testTitle={data?.test.title || "Test"}
-        durationMin={data?.test.durationMin || 180}
-        totalQuestions={data?.questions.length || 187}
-        targetExam={data?.test.targetExam}
-        defaultLanguage={defaultLanguage}
-        onProceed={handleProceedToFullscreenExam}
-      />
+      <div className="fixed inset-0 overflow-y-auto bg-slate-100 dark:bg-slate-950 p-4 sm:p-6 lg:p-8 z-50">
+        <ExamInstructionsView
+          testId={testId}
+          testTitle={data?.test.title || "Test"}
+          durationMin={data?.test.durationMin || 180}
+          totalQuestions={data?.questions.length || 187}
+          targetExam={data?.test.targetExam}
+          defaultLanguage={defaultLanguage}
+          onProceed={handleProceedToFullscreenExam}
+        />
+      </div>
     );
   }
 

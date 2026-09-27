@@ -24,7 +24,14 @@ export default async function TestAttemptPage({ params }: { params: { id: string
         include: {
           questions: {
             orderBy: { order: "asc" },
-            include: { question: { include: { translations: true } } },
+            include: {
+              question: {
+                include: {
+                  translations: true,
+                  assets: { orderBy: { order: "asc" } },
+                },
+              },
+            },
           },
         },
       },
@@ -85,10 +92,26 @@ export default async function TestAttemptPage({ params }: { params: { id: string
     const enOpts = (enTrans?.options as Record<string, string>) || {};
     const hiOpts = (hiTrans?.options as Record<string, string>) || {};
 
+    const q = sq.question;
+    const diagramAsset = q.assets?.find((a) => a.type === "DIAGRAM" || a.type === "FIGURE");
+    const hasReferenceAsset = q.assets?.some((a) => a.type === "REFERENCE" && a.publicUrl === q.imageUrl);
+    const isReferenceImage =
+      Boolean(q.imageUrl) &&
+      (hasReferenceAsset ||
+        q.imageUrl === q.referenceImageUrl ||
+        q.tags?.includes("Extracted") ||
+        q.tags?.includes("AI_AUTO_DRAFT") ||
+        q.imageUrl?.includes("/questions/q_") ||
+        q.category?.includes("AI_DRAFT") ||
+        q.category?.includes("Source:") ||
+        q.category?.includes("PYQ"));
+
+    const validDiagramUrl = diagramAsset?.publicUrl || (isReferenceImage ? null : q.imageUrl);
+
     return {
-      id: sq.question.id,
+      id: q.id,
       order: sq.order,
-      subject: sq.question.subject || test.batchSchedule?.subject || "General",
+      subject: q.subject || test.batchSchedule?.subject || "General",
       body: enTrans?.statement || legacy.body,
       type: legacy.type,
       optionA: enOpts.A || legacy.optionA,
@@ -100,9 +123,9 @@ export default async function TestAttemptPage({ params }: { params: { id: string
       optionBHi: hiOpts.B || null,
       optionCHi: hiOpts.C || null,
       optionDHi: hiOpts.D || null,
-      imageUrl: sq.question.imageUrl || null,
-      camDrawData: (sq.question as any).camDrawData || null,
-      mySelection: answersMap.get(sq.question.id) ?? null,
+      imageUrl: validDiagramUrl || null,
+      camDrawData: (q as any).camDrawData || null,
+      mySelection: answersMap.get(q.id) ?? null,
     };
   });
 
