@@ -33,6 +33,8 @@ import { PageThumbnail } from "@/components/live-class/PageThumbnail";
 import { GRACE_PERIOD_MINUTES, END_WARNING_MINUTES } from "@/lib/whiteboard/constants";
 import { playHandRaiseChime, playCallConnectedChime, unlockAudioForNotifications } from "@/lib/live-class/live-sound-effects";
 import { extractYouTubeVideoId } from "@/lib/live-class/youtube";
+import { StagePreview } from "@/components/live-class/StagePreview";
+import { getDesktopBridge } from "@/lib/desktop/bridge";
 import { BroadcastQuizCanvasOverlay } from "@/components/live-class/BroadcastQuizCanvasOverlay";
 
 // Size (px) of the floating self-camera bubble — draggable & resizable (120px to 400px)
@@ -551,6 +553,15 @@ export function TeacherLiveClassRoom({
   const floatCamDraggingRef = useRef(false);
   const floatCamDragOffsetRef = useRef({ x: 0, y: 0 });
   const stageContainerRef = useRef<HTMLDivElement>(null);
+  // Stage preview (the composed class video): always offered in the desktop
+  // app; in a browser only with ?stagePreview=1 (for testing).
+  const [stagePreviewAvailable, setStagePreviewAvailable] = useState(false);
+  const [stagePreviewOpen, setStagePreviewOpen] = useState(false);
+  useEffect(() => {
+    setStagePreviewAvailable(
+      Boolean(getDesktopBridge()) || new URLSearchParams(window.location.search).has("stagePreview")
+    );
+  }, []);
 
   function clampToStage(x: number, y: number, size = floatCamSize): { x: number; y: number } {
     const maxX = Math.max(8, stageDimensions.width - size - 8);
@@ -2843,6 +2854,19 @@ export function TeacherLiveClassRoom({
             </button>
           )}
 
+          {stagePreviewAvailable && (
+            <button
+              type="button"
+              onClick={() => setStagePreviewOpen((o) => !o)}
+              className={`text-xs font-semibold border px-3 py-1.5 rounded-md transition ${
+                stagePreviewOpen ? "text-white border-sky-500 bg-sky-900/40" : "text-gray-300 border-gray-600 hover:bg-gray-700"
+              }`}
+              title="Show exactly what the class video (YouTube) shows"
+            >
+              STAGE PREVIEW
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() => setSettingsOpen(true)}
@@ -4330,6 +4354,18 @@ export function TeacherLiveClassRoom({
           batchScheduleId={batchScheduleId}
           sessionTitle={scheduleTitle}
           onClose={() => setShowPostClassModal(false)}
+        />
+      )}
+
+      {stagePreviewOpen && (
+        <StagePreview
+          baseCanvas={baseCanvasRef}
+          activeCanvas={activeCanvasRef}
+          stageContainer={stageContainerRef}
+          background={currentPage?.background}
+          cameraShape={wbSession?.cameraShape}
+          cameraPosition={wbSession?.cameraPosition}
+          onClose={() => setStagePreviewOpen(false)}
         />
       )}
 

@@ -33,6 +33,7 @@
     "_import-test-portal",
     "_import_atomic-ai-chat",
     "_import_white-board",
-    "atomic-ops"
+    "atomic-ops",
+    "desktop"
   ]
 }
