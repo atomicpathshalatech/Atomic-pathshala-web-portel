@@ -11,6 +11,85 @@ interface EquationLivePreviewProps {
   alwaysShow?: boolean;
 }
 
+function getBracedArg(str: string, pos: number): { arg: string; nextPos: number } | null {
+  if (pos >= str.length || str[pos] !== "{") return null;
+  let depth = 0;
+  const start = pos + 1;
+  for (let i = pos; i < str.length; i++) {
+    if (str[i] === "{") depth++;
+    else if (str[i] === "}") {
+      depth--;
+      if (depth === 0) return { arg: str.slice(start, i), nextPos: i + 1 };
+    }
+  }
+  return null;
+}
+
+/**
+ * Enhances chemical structures in LaTeX (e.g. \underset{\text{CHO}}{\overset{\text{CH}_3}{\text{C}}})
+ * by automatically adding authentic vertical bond lines (|) so branches are visually and structurally connected.
+ */
+function enhanceChemicalBonds(latex: string): string {
+  let result = "";
+  let i = 0;
+  while (i < latex.length) {
+    if (latex.startsWith("\\underset", i)) {
+      const p1 = i + 8;
+      const b1 = getBracedArg(latex, p1);
+      if (b1) {
+        const b2 = getBracedArg(latex, b1.nextPos);
+        if (b2) {
+          const inner = b2.arg.trim();
+          if (inner.startsWith("\\overset")) {
+            const topArg = getBracedArg(inner, 7);
+            if (topArg) {
+              const centerArg = getBracedArg(inner, topArg.nextPos);
+              if (centerArg) {
+                const bottom = b1.arg;
+                const top = topArg.arg;
+                const center = centerArg.arg;
+                if (!bottom.includes("|") && !top.includes("|")) {
+                  result += `\\underset{\\begin{subarray}{c}|\\\\[-1pt]${bottom}\\end{subarray}}{\\overset{\\begin{subarray}{c}${top}\\\\[-1pt]|\\end{subarray}}{${center}}}`;
+                  i = b2.nextPos;
+                  continue;
+                }
+              }
+            }
+          }
+        }
+      }
+    } else if (latex.startsWith("\\overset", i)) {
+      const p1 = i + 7;
+      const b1 = getBracedArg(latex, p1);
+      if (b1) {
+        const b2 = getBracedArg(latex, b1.nextPos);
+        if (b2) {
+          const inner = b2.arg.trim();
+          if (inner.startsWith("\\underset")) {
+            const botArg = getBracedArg(inner, 8);
+            if (botArg) {
+              const centerArg = getBracedArg(inner, botArg.nextPos);
+              if (centerArg) {
+                const top = b1.arg;
+                const bottom = botArg.arg;
+                const center = centerArg.arg;
+                if (!bottom.includes("|") && !top.includes("|")) {
+                  result += `\\underset{\\begin{subarray}{c}|\\\\[-1pt]${bottom}\\end{subarray}}{\\overset{\\begin{subarray}{c}${top}\\\\[-1pt]|\\end{subarray}}{${center}}}`;
+                  i = b2.nextPos;
+                  continue;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    result += latex[i];
+    i++;
+  }
+  return result;
+}
+
 /**
  * Parses mixed text and math/chemistry into rendered KaTeX segments
  */
@@ -38,7 +117,7 @@ function renderMathAndText(text: string): string {
     });
 
     try {
-      return katex.renderToString(mathExpr, {
+      return katex.renderToString(enhanceChemicalBonds(mathExpr), {
         throwOnError: false,
         displayMode: false,
       });
@@ -53,10 +132,10 @@ function renderMathAndText(text: string): string {
     return parts
       .map((part) => {
         if (part.startsWith("$$") && part.endsWith("$$")) {
-          const math = part.slice(2, -2).trim();
+          const math = enhanceChemicalBonds(part.slice(2, -2).trim());
           return katex.renderToString(math, { throwOnError: false, displayMode: true });
         } else if (part.startsWith("$") && part.endsWith("$")) {
-          const math = part.slice(1, -1).trim();
+          const math = enhanceChemicalBonds(part.slice(1, -1).trim());
           return katex.renderToString(math, { throwOnError: false, displayMode: false });
         } else {
           // Normal text: handle embedded markdown images ![width](url)

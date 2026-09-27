@@ -130,8 +130,8 @@ YOUR TASK (ALL-IN-ONE INGESTION IN A SINGLE RESPONSE):
    - CRITICAL: CHEMICAL STRUCTURES & BRANCHING FIDELITY (ORGANIC CHEMISTRY / IUPAC):
      * When extracting branched chemical structures (e.g. IUPAC naming questions), trace EVERY carbon atom in the chain and determine EXACTLY which carbon atom has vertical/diagonal branches attached.
      * NEVER misalign substituents or attach them to adjacent carbons! (For example, in $\\text{NC}-\\text{C}(\\text{CH}_3)(\\text{CHO})-\\text{CH}_2-\\text{CH}_2-\\text{COOH}$, the $\\text{CH}_3$ on top and $\\text{CHO}$ on bottom are bonded directly to the carbon atom $\\text{C}$, NOT to $\\text{CH}_2$!).
-     * Format branched chemical structures using LaTeX KaTeX:
-       $$\\text{NC}-\\underset{\\text{CHO}}{\\overset{\\text{CH}_3}{\\text{C}}}-\\text{CH}_2-\\text{CH}_2-\\text{COOH}$$
+     * Format branched chemical structures using LaTeX KaTeX with vertical bond lines:
+       $$\\text{NC}-\\underset{\\begin{subarray}{c}|\\\\[-1pt]\\text{CHO}\\end{subarray}}{\\overset{\\begin{subarray}{c}\\text{CH}_3\\\\[-1pt]|\\end{subarray}}{\\text{C}}}-\\text{CH}_2-\\text{CH}_2-\\text{COOH}$$
        or condensed structural formula $\\text{NC}-\\text{C}(\\text{CH}_3)(\\text{CHO})-\\text{CH}_2-\\text{CH}_2-\\text{COOH}$
        or perfectly column-aligned monospace lines.
 
@@ -292,7 +292,7 @@ YOUR TASK (ALL-IN-ONE INGESTION IN A SINGLE RESPONSE):
    - If Hindi only: Extract Hindi AND generate authentic NCERT English translation for statementEn and optionsEn.
    - If bilingual: Extract both with 1:1 option alignment.
    - Convert math and equations to standard LaTeX ($...$).
-   - CHEMICAL STRUCTURES & BRANCHING: Preserve exact carbon chain connectivity and branch attachment points. Use KaTeX $\\text{NC}-\\underset{\\text{CHO}}{\\overset{\\text{CH}_3}{\\text{C}}}-\\text{CH}_2-\\text{CH}_2-\\text{COOH}$ or clean monospace alignment.
+   - CHEMICAL STRUCTURES & BRANCHING: Preserve exact carbon chain connectivity and branch attachment points. Use KaTeX $\\text{NC}-\\underset{\\begin{subarray}{c}|\\\\[-1pt]\\text{CHO}\\end{subarray}}{\\overset{\\begin{subarray}{c}\\text{CH}_3\\\\[-1pt]|\\end{subarray}}{\\text{C}}}-\\text{CH}_2-\\text{CH}_2-\\text{COOH}$ or clean monospace alignment.
 
 2. DEDUCE CORRECT ANSWER:
    - Identify or deduce the 100% scientifically correct option in "correctAnswer": ["A"].
