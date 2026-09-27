@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { TestPdfDownloadModal } from "@/components/test-portal/TestPdfDownloadModal";
+import { ShareTestModal } from "@/components/test-portal/ShareTestModal";
 import { BATCH_GRADIENT_THEMES } from "@/components/course-platform/CourseCard";
 
 const getBatchTheme = (idx: number) => {
@@ -114,6 +115,18 @@ export function AtomicPracticeTestArena({
 
   // Test series category state
   const [seriesSearch, setSeriesSearch] = useState("");
+
+  // Auto-navigate to test series if linked via URL query ?series=[id]
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const seriesParam = params.get("series");
+      if (seriesParam) {
+        setSelectedSeriesId(seriesParam);
+        setCurrentView("TEST_SERIES_DETAIL");
+      }
+    }
+  }, []);
 
   const activeSubjectData = subjectTests.find((s) => s.name === selectedSubject) || subjectTests[0];
 
@@ -706,6 +719,25 @@ export function AtomicPracticeTestArena({
                                       />
                                     )}
 
+                                    {/* Share Test Link */}
+                                    <ShareTestModal
+                                      testId={test.id}
+                                      testName={test.name}
+                                      durationMin={test.durationMin}
+                                      seriesName={activeSubjectData?.name}
+                                      triggerButton={
+                                        <button
+                                          type="button"
+                                          title="Share Test Link"
+                                          className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-blue-600 text-xs font-bold flex items-center justify-center transition cursor-pointer"
+                                        >
+                                          <span className="material-symbols-outlined text-[15px]">
+                                            share
+                                          </span>
+                                        </button>
+                                      }
+                                    />
+
                                     {test.status === "COMPLETED" ? (
                                       <Link
                                         href={`/tests/${test.id}/result`}
@@ -989,6 +1021,24 @@ export function AtomicPracticeTestArena({
                           Code: {activeSeries.code}
                         </span>
                       )}
+
+                      {/* Share Series Button */}
+                      <ShareTestModal
+                        testId={activeSeries.id}
+                        testName={activeSeries.name}
+                        testCode={activeSeries.code}
+                        type="series"
+                        triggerButton={
+                          <button
+                            type="button"
+                            className="px-2.5 py-0.5 rounded-full border border-blue-200 bg-white hover:bg-blue-50 text-blue-700 text-[11px] font-bold flex items-center gap-1 transition shadow-2xs cursor-pointer"
+                            title="Share this Test Series with Friends"
+                          >
+                            <span className="material-symbols-outlined text-[14px]">share</span>
+                            <span>Share Series</span>
+                          </button>
+                        }
+                      />
                     </div>
                     <h1 className="text-base sm:text-xl font-black text-slate-900">
                       {activeSeries.name}
@@ -1117,8 +1167,28 @@ export function AtomicPracticeTestArena({
                     </div>
                   </div>
 
-                  {/* Actions: Download PDF & Start/Resume/Result */}
+                  {/* Actions: Download PDF, Share Test & Start/Resume/Result */}
                   <div className="shrink-0 flex items-center gap-2 self-end sm:self-auto">
+                    {/* Share Test Link */}
+                    <ShareTestModal
+                      testId={t.id}
+                      testName={t.name}
+                      durationMin={t.durationMin}
+                      seriesName={activeSeries.name}
+                      triggerButton={
+                        <button
+                          type="button"
+                          title="Share Test Link"
+                          className="px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition shadow-2xs cursor-pointer"
+                        >
+                          <span className="material-symbols-outlined text-[17px] text-blue-600">
+                            share
+                          </span>
+                          <span className="hidden sm:inline">Share</span>
+                        </button>
+                      }
+                    />
+
                     {(t.canViewResult || t.isClosed) && (
                       <TestPdfDownloadModal
                         testId={t.id}
