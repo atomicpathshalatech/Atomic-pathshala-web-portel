@@ -13,7 +13,7 @@ import { videoRoomName } from "@/lib/livekit/server";
 import { startRoomRecording, recordingStorageKey } from "@/lib/livekit/egress";
 import { canTeacherStartClass } from "@/lib/schedule/access-rules";
 import { extractYouTubeVideoId } from "@/lib/live-class/youtube";
-import { createBroadcastToken } from "@/lib/live-class/broadcast-token";
+import { issueStageToken, stageUrl } from "@/lib/live-class/stage-session";
 import { YOUTUBE_OAUTH_PRODUCTION_URL } from "@/lib/youtube/oauth-config";
 
 export async function POST(
@@ -402,10 +402,6 @@ export async function POST(
         );
       }
     }
-    if (requestedTransport === "BOTH" || requestedTransport === "YOUTUBE" || effectiveTransport === "LIVEKIT") {
-      const broadcastToken = createBroadcastToken(params.scheduleId, session.user.id);
-      obsBroadcastUrl = `${YOUTUBE_OAUTH_PRODUCTION_URL}/obs-stage/${params.scheduleId}?token=${broadcastToken}`;
-    }
 
     // 5. Start Room Recording (Room Composite Egress -> R2) for LIVEKIT-only
     // classes. BOTH and YOUTUBE both skip this now (see 4.5's comment) —
@@ -479,6 +475,13 @@ export async function POST(
         youtubeVideoId: requestedYouTubeId || wbSession.youtubeVideoId || null,
         startedAt: wbSession.actualStartedAt || now,
       });
+    }
+
+    // OBS Browser Source URL: a revocable stage token for this occurrence
+    // (issued now that the occurrence's LiveSession row exists).
+    if (requestedTransport === "BOTH" || requestedTransport === "YOUTUBE") {
+      const stageToken = await issueStageToken({ batchScheduleId: schedule.id, issuedToUserId: session.user.id });
+      if (stageToken) obsBroadcastUrl = stageUrl(YOUTUBE_OAUTH_PRODUCTION_URL, schedule.id, stageToken);
     }
 
     return apiSuccess({
