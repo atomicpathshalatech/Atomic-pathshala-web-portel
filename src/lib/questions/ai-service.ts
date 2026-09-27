@@ -256,11 +256,11 @@ export async function extractFromImage(
   const cleanBase64 = imageBase64.replace(/^data:image\/[a-z]+;base64,/, "");
 
   return geminiKeyManager.executeWithRotation(async (client: GoogleGenerativeAI) => {
-    const model = client.getGenerativeModel({ model: "gemini-3.8-flash" });
+    const model = client.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     const prompt = `You are an expert exam question digitizer for Indian national competitive exams (NEET, JEE Main, CBSE).
 Analyze the provided question image and extract all elements with high precision.
-For chemical structures with branches (e.g. IUPAC molecules): Carefully identify the exact carbon atom where branches connect. Do not shift branches to adjacent carbons. Use LaTeX KaTeX $\\text{NC}-\\underset{\\begin{subarray}{c}|\\\\[-1pt]\\text{CHO}\\end{subarray}}{\\overset{\\begin{subarray}{c}\\text{CH}_3\\\\[-1pt]|\\end{subarray}}{\\text{C}}}-\\text{CH}_2-\\text{CH}_2-\\text{COOH}$ or clean monospace alignment.
+CRITICAL: NEVER output placeholders like "[Structure given in figure]" or "[चित्र में दी गई संरचना]". You MUST extract and write out the actual chemical formula/structure in LaTeX KaTeX format (e.g. $\\text{NC}-\\underset{\\begin{subarray}{c}|\\[-1pt]\\text{CHO}\\end{subarray}}{\\overset{\\begin{subarray}{c}\\text{CH}_3\\[-1pt]|\\end{subarray}}{\\text{C}}}-\\text{CH}_2-\\text{CH}_2-\\text{COOH}$ or $\\text{CH}_3-\\text{C}(\\text{CH}_3)=\\text{CH}-\\text{CH}_3$ or $\\text{C}_6\\text{H}_5-\\text{OH}$).
 Return a STRICT JSON object with these exact keys:
 {
   "statementEn": "Complete question text in English. Use standard LaTeX syntax for mathematical/scientific formulas enclosed in $...$ or $$...$$.",
@@ -343,7 +343,7 @@ export async function generateEducationalTranslation(
 
   try {
     return await geminiKeyManager.executeWithRotation(async (client: GoogleGenerativeAI) => {
-      const model = client.getGenerativeModel({ model: "gemini-3.8-flash" });
+      const model = client.getGenerativeModel({ model: "gemini-2.5-flash" });
       const targetLang = sourceLanguage === "ENGLISH" ? "Hindi (Devanagari)" : "English";
 
       const prompt = `Translate the following scientific / mathematical exam content from ${sourceLanguage} to ${targetLang}.
@@ -394,7 +394,7 @@ export async function verifyTranslation(
 
   try {
     return await geminiKeyManager.executeWithRotation(async (client: GoogleGenerativeAI) => {
-      const model = client.getGenerativeModel({ model: "gemini-3.8-flash" });
+      const model = client.getGenerativeModel({ model: "gemini-2.5-flash" });
       const prompt = `You are an NCERT Bilingual Examination Quality Auditor.
 Compare the English question and Hindi translation:
 English: "${englishText}"

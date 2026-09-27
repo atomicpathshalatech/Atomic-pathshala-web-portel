@@ -19,7 +19,6 @@ export async function DELETE(
     const test = await getTestOr404(params.id);
     if (!test) return apiError("Test not found", 404);
     if (!(await canManageTest(session.user.id, test.batchScheduleId))) throw new ForbiddenError();
-    if (test.status !== "DRAFT") return apiError("Only draft tests can have questions removed.", 409);
 
     // params.testQuestionId can be SectionQuestion.id or Question.id — scope the delete
     // through the section's testId so a stray id from another test can't

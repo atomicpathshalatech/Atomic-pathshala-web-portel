@@ -91,12 +91,42 @@ function enhanceChemicalBonds(latex: string): string {
 }
 
 /**
+ * Sanitizes LaTeX formulas, tables, and environments
+ */
+function sanitizeLatexFormulas(input: string): string {
+  if (!input) return "";
+  let text = input;
+
+  // 1. Fix single backslash line breaks in array/matrix/tabular/aligned/cases environments
+  text = text.replace(
+    /\\begin\{(array|matrix|pmatrix|bmatrix|vmatrix|tabular|aligned|cases)\}([\s\S]*?)\\end\{\1\}/g,
+    (match, env, inner) => {
+      let cleanedInner = inner;
+      cleanedInner = cleanedInner.replace(/(?<!\\)\\\s*\\hline/g, "\\\\ \\hline");
+      cleanedInner = cleanedInner.replace(/([^\\])\s*\\hline/g, "$1 \\\\ \\hline");
+      cleanedInner = cleanedInner.replace(/\\\\{3,}/g, "\\\\");
+      return `\\begin{${env}}${cleanedInner}\\end{${env}}`;
+    }
+  );
+
+  // 2. Wrap bare \begin{array}...\end{array} or \begin{matrix} in $$ if not already inside $$ or $
+  text = text.replace(
+    /(?<!\$)(?:\\begin\{(array|matrix|pmatrix|bmatrix|vmatrix|tabular|aligned|cases)\}[\s\S]*?\\end\{\1\})(?!\$)/g,
+    (match) => {
+      return `\n$$\n${match}\n$$\n`;
+    }
+  );
+
+  return text;
+}
+
+/**
  * Parses mixed text and math/chemistry into rendered KaTeX segments
  */
 function renderMathAndText(text: string): string {
   if (!text || !text.trim()) return "";
 
-  let processed = text.trim();
+  let processed = sanitizeLatexFormulas(text.trim());
 
   // If text has raw exponents or subscripts without $ (e.g. {GSHSAU}^2 or H_2SO_4 or 1/2), prepare for KaTeX
   const hasUnwrappedMath =

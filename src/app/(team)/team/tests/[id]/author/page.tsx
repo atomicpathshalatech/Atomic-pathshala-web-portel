@@ -45,10 +45,10 @@ export default async function TestAuthorPage({ params }: { params: { id: string 
   const subjects = test.sections.map((sec) => {
     const isBio = sec.name?.toLowerCase().includes("bio") || sec.subject?.toLowerCase().includes("bio");
     const baseTarget = sec.targetCount && sec.targetCount > 0 ? sec.targetCount : isBio ? 90 : 45;
-    const totalCount = Math.max(sec.questions.length, baseTarget);
+    const totalCount = baseTarget;
     return {
       name: sec.name || sec.subject || "Section",
-      count: sec.questions.length,
+      count: Math.min(sec.questions.length, totalCount),
       total: totalCount,
       sectionId: sec.id,
     };
@@ -63,7 +63,7 @@ export default async function TestAuthorPage({ params }: { params: { id: string 
     if (!sec || !secObj) continue;
     const sectionStart = currentSectionOffset;
 
-    sec.questions.forEach((sq, qIdx) => {
+    sec.questions.slice(0, secObj.total).forEach((sq, qIdx) => {
       const q = sq.question;
       const trEn = q.translations.find((t) => t.language === "ENGLISH");
       const trHi = q.translations.find((t) => t.language === "HINDI");
@@ -71,7 +71,9 @@ export default async function TestAuthorPage({ params }: { params: { id: string 
       const optHi = (trHi?.options as any) || {};
       const correct = (trEn?.correctOptionIds as any)?.[0] || (trHi?.correctOptionIds as any)?.[0] || "A";
 
-      const slotNumber = sectionStart + (typeof sq.order === "number" && sq.order > 0 ? sq.order - 1 : qIdx);
+      const slotOffset = typeof sq.order === "number" && sq.order > 0 ? sq.order - 1 : qIdx;
+      if (slotOffset >= secObj.total) return;
+      const slotNumber = sectionStart + slotOffset;
 
       const refAsset = q.assets?.find((a: any) => a.type === "REFERENCE" || a.type === "FIGURE");
       const resolvedImg = q.imageUrl || refAsset?.publicUrl || undefined;

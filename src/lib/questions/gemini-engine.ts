@@ -41,6 +41,7 @@ export interface ExtractedQuestionData {
 
 // Cost-effective and ultra-fast Gemini Flash model hierarchy
 const GEMINI_MODELS = [
+  "gemini-2.5-flash",
   "gemini-3.8-flash",
   "gemini-3.5-flash",
   "gemini-3.1-flash-lite",
@@ -127,13 +128,20 @@ YOUR TASK (ALL-IN-ONE INGESTION IN A SINGLE RESPONSE):
      * If the image is Hindi-only: Extract Hindi AND generate authentic NCERT English translation for "statementEn" and "optionsEn" { A, B, C, D }.
      * If the image contains both: Extract both versions with 1:1 option alignment (Option 1 ↔ A, Option 2 ↔ B, etc.).
    - Standard LaTeX notation $...$ for all inline math, equations, symbols, fractions, powers, and chemical formulas (e.g. $\\text{H}_2\\text{SO}_4$, $\\text{Ca}^{2+}$).
-   - CRITICAL: CHEMICAL STRUCTURES & BRANCHING FIDELITY (ORGANIC CHEMISTRY / IUPAC):
-     * When extracting branched chemical structures (e.g. IUPAC naming questions), trace EVERY carbon atom in the chain and determine EXACTLY which carbon atom has vertical/diagonal branches attached.
-     * NEVER misalign substituents or attach them to adjacent carbons! (For example, in $\\text{NC}-\\text{C}(\\text{CH}_3)(\\text{CHO})-\\text{CH}_2-\\text{CH}_2-\\text{COOH}$, the $\\text{CH}_3$ on top and $\\text{CHO}$ on bottom are bonded directly to the carbon atom $\\text{C}$, NOT to $\\text{CH}_2$!).
-     * Format branched chemical structures using LaTeX KaTeX with vertical bond lines:
-       $$\\text{NC}-\\underset{\\begin{subarray}{c}|\\\\[-1pt]\\text{CHO}\\end{subarray}}{\\overset{\\begin{subarray}{c}\\text{CH}_3\\\\[-1pt]|\\end{subarray}}{\\text{C}}}-\\text{CH}_2-\\text{CH}_2-\\text{COOH}$$
-       or condensed structural formula $\\text{NC}-\\text{C}(\\text{CH}_3)(\\text{CHO})-\\text{CH}_2-\\text{CH}_2-\\text{COOH}$
-       or perfectly column-aligned monospace lines.
+    - CRITICAL: CHEMICAL STRUCTURES, MOLECULES & ZERO-PLACEHOLDER RULE:
+      * ABSOLUTELY NEVER OUTPUT LAZY PLACEHOLDERS LIKE "[Structure given in figure]", "[चित्र में दी गई संरचना]", "[See diagram]", "[Image]", "[Diagram]", "[चित्र]"!
+      * You MUST extract, convert, and fully write out the actual chemical structure directly in "statementEn" and "statementHi"!
+      * For Branched Organic Molecules (e.g. IUPAC questions):
+        Identify which exact carbon atom has vertical/diagonal branches attached. NEVER shift branches to adjacent carbons.
+        Format using LaTeX KaTeX:
+        $\\text{NC}-\\underset{\\begin{subarray}{c}|\\[-1pt]\\text{CHO}\\end{subarray}}{\\overset{\\begin{subarray}{c}\\text{CH}_3\\[-1pt]|\\end{subarray}}{\\text{C}}}-\\text{CH}_2-\\text{CH}_2-\\text{COOH}$
+        or condensed structural formula $\text{NC}-\text{C}(\text{CH}_3)(\text{CHO})-\text{CH}_2-\text{CH}_2-\text{COOH}$.
+      * For Skeletal Line-Angle Formulas (zig-zag bond lines):
+        Count all vertices/carbons and double/triple bonds, and convert the drawing into its complete chemical structural formula (e.g. $\text{CH}_3-\text{C}(\text{CH}_3)=\text{CH}-\text{CH}_2-\text{CH}_3$).
+      * For Rings & Heterocycles:
+        Write the full condensed or IUPAC representation (e.g. $\text{C}_6\text{H}_5-\text{OH}$, $\text{p-NO}_2-\text{C}_6\text{H}_4-\text{COOH}$, Cyclohex-2-en-1-ol: $\text{C}_6\text{H}_9\text{OH}$).
+      * For Coordination Complexes & Inorganics:
+        Write full coordination formula with brackets, e.g. $[\text{Pt}(\text{NH}_3)_2\text{Cl}_2]$ or $[\text{Fe}(\text{CN})_6]^{4-}$.
 
 2. SCIENTIFICALLY VERIFIED CORRECT ANSWER:
    - Identify visibly marked answer or deduce the 100% scientifically correct option ("A", "B", "C", or "D"). Put in "correctAnswer": ["A"].
