@@ -37,6 +37,7 @@ export function YouTubeLivePlayer({
 
   const [isStreamLive, setIsStreamLive] = useState(false);
   const [isPlaying, setIsPlaying] = useState(true);
+  const [hasStartedPlaying, setHasStartedPlaying] = useState(false);
   const [hasEmbedError, setHasEmbedError] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
@@ -48,12 +49,18 @@ export function YouTubeLivePlayer({
   const [duration, setDuration] = useState(0);
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
 
+  const ytPlayerElementId = useMemo(
+    () => "atomic-yt-live-" + Math.random().toString(36).substring(2, 9),
+    []
+  );
+
   const hideControlsTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Reset embed error when video changes
   useEffect(() => {
     setHasEmbedError(false);
     setIsStreamLive(false);
+    setHasStartedPlaying(false);
     setCurrentTime(0);
     setDuration(0);
     setIsLiveEdge(true);
@@ -204,35 +211,46 @@ export function YouTubeLivePlayer({
     window.addEventListener("message", handleMessage);
 
     const attachPlayer = () => {
-      if (cancelled || !iframeRef.current || !(window as any).YT?.Player) return;
-      player = new (window as any).YT.Player(iframeRef.current, {
-        events: {
-          onReady: () => {
-            playerRef.current = player;
-            player.playVideo?.();
-            setIsPlaying(true);
-          },
-          onStateChange: (e: any) => {
-            const YT = (window as any).YT;
-            if (e.data === YT.PlayerState.PLAYING || e.data === YT.PlayerState.BUFFERING) {
-              setIsStreamLive(true);
-              setHasEmbedError(false);
+      if (cancelled || !(window as any).YT?.Player) return;
+      const targetEl = document.getElementById(ytPlayerElementId) || iframeRef.current;
+      if (!targetEl) return;
+
+      try {
+        player = new (window as any).YT.Player(targetEl, {
+          events: {
+            onReady: (e: any) => {
+              playerRef.current = e.target;
+              try {
+                e.target.seekTo?.(999999, true);
+                e.target.playVideo?.();
+              } catch {}
               setIsPlaying(true);
-            } else if (e.data === YT.PlayerState.PAUSED) {
-              setIsPlaying(false);
-            }
+            },
+            onStateChange: (e: any) => {
+              const YT = (window as any).YT;
+              if (e.data === YT.PlayerState.PLAYING || e.data === YT.PlayerState.BUFFERING) {
+                setIsStreamLive(true);
+                setHasEmbedError(false);
+                setIsPlaying(true);
+                setHasStartedPlaying(true);
+              } else if (e.data === YT.PlayerState.PAUSED) {
+                setIsPlaying(false);
+              }
+            },
+            onError: (e: any) => {
+              console.warn("[YouTubeLivePlayer] Player error code:", e.data);
+              if (e.data === 150 || e.data === 101 || e.data === 100 || e.data === 5) {
+                setHasEmbedError(true);
+              }
+            },
+            onPlaybackRateChange: (e: any) => {
+              if (typeof e.data === "number") setPlaybackSpeed(e.data);
+            },
           },
-          onError: (e: any) => {
-            console.warn("[YouTubeLivePlayer] Player error code:", e.data);
-            if (e.data === 150 || e.data === 101 || e.data === 100 || e.data === 5) {
-              setHasEmbedError(true);
-            }
-          },
-          onPlaybackRateChange: (e: any) => {
-            if (typeof e.data === "number") setPlaybackSpeed(e.data);
-          },
-        },
-      });
+        });
+      } catch (err) {
+        console.warn("[YouTubeLivePlayer] Player init error:", err);
+      }
     };
 
     if ((window as any).YT?.Player) {
@@ -393,8 +411,8 @@ export function YouTubeLivePlayer({
   const embedUrl = useMemo(() => {
     if (!youtubeVideoId) return "";
     const origin = typeof window !== "undefined" && window.location.origin ? window.location.origin : "";
-    const originParam = origin ? `&origin=${encodeURIComponent(origin)}&widget_referrer=${encodeURIComponent(origin)}` : "";
-    return `https://www.youtube-nocookie.com/embed/${youtubeVideoId}?autoplay=1&mute=1&enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&fs=0${originParam}`;
+    const originParam = origin ? `&origin=${encodeURIComponent(origin)}` : "";
+    return `https://www.youtube.com/embed/${youtubeVideoId}?enablejsapi=1&autoplay=1&mute=1&controls=0&rel=0&modestbranding=1&playsinline=1&fs=0&live=1${originParam}`;
   }, [youtubeVideoId]);
 
   if (!youtubeVideoId || livePhase === "SCHEDULED") {
@@ -462,23 +480,63 @@ export function YouTubeLivePlayer({
       {/* ----------------- 1. HEADLESS YOUTUBE IFRAME (Background) ----------------- */}
       <div className="w-full h-full relative overflow-hidden flex items-center justify-center bg-black">
         <iframe
+          id={ytPlayerElementId}
           ref={iframeRef}
           src={embedUrl}
           title={title}
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
           allowFullScreen
           referrerPolicy="no-referrer-when-downgrade"
+          onLoad={() => {
+            try {
+              iframeRef.current?.contentWindow?.postMessage(
+                JSON.stringify({ event: "listening", id: ytPlayerElementId }),
+                "*"
+              );
+            } catch {}
+          }}
           className="w-[102%] h-[124%] max-w-none border-0 pointer-events-none scale-[1.12] transition-transform duration-300"
         />
 
         {/* Interaction transparent shield: intercepts user clicks so they NEVER open or redirect to YouTube */}
         <div
           onClick={() => {
+            if (!hasStartedPlaying || !isPlaying) {
+              setHasStartedPlaying(true);
+              sendYouTubeCommand("playVideo");
+              sendYouTubeCommand("seekTo", [999999, true]);
+              setIsPlaying(true);
+              setIsStreamLive(true);
+            }
             setShowControls((prev) => !prev);
             resetControlsTimer();
           }}
           className="absolute inset-0 z-10 cursor-pointer bg-transparent"
         />
+
+        {/* Big Center Play / Tap to Watch Live Button if autoplay is waiting */}
+        {!hasStartedPlaying && (
+          <div
+            onClick={(e) => {
+              e.stopPropagation();
+              setHasStartedPlaying(true);
+              sendYouTubeCommand("playVideo");
+              sendYouTubeCommand("seekTo", [999999, true]);
+              sendYouTubeCommand("unMute");
+              setIsMuted(false);
+              setIsPlaying(true);
+              setIsStreamLive(true);
+            }}
+            className="absolute inset-0 z-15 flex flex-col items-center justify-center bg-black/40 backdrop-blur-xs cursor-pointer group transition-all"
+          >
+            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-red-600/95 group-hover:bg-red-500 text-white flex items-center justify-center shadow-2xl group-hover:scale-110 transition-transform duration-200 ring-4 ring-white/30 animate-pulse">
+              <span className="material-symbols-outlined text-3xl sm:text-4xl ml-1">play_arrow</span>
+            </div>
+            <span className="mt-3 px-3.5 py-1 rounded-full bg-slate-900/90 text-white text-xs font-bold border border-slate-700 shadow-lg">
+              Click to Start Live Stream
+            </span>
+          </div>
+        )}
       </div>
 
       {/* ----------------- 2. EMBED RESTRICTION FALLBACK CARD ----------------- */}

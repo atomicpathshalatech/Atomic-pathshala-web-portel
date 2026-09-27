@@ -809,6 +809,7 @@ export function StudentLiveClassRoom({
   const [boardEmpty, setBoardEmpty] = useState(true);
   const [boardBackground, setBoardBackground] = useState<string>("blank");
   const [boardObjects, setBoardObjects] = useState<StrokeObject[]>([]);
+  const [activeViewMode, setActiveViewMode] = useState<"STREAM" | "WHITEBOARD">("STREAM");
 
   // Keep local clock ticking with server offset
   useEffect(() => {
@@ -1720,10 +1721,44 @@ export function StudentLiveClassRoom({
         <div className="flex-1 min-w-0 h-full flex flex-col bg-[#10121d] rounded-2xl border border-slate-800/80 overflow-hidden relative shadow-2xl">
           {/* Presentation Title Banner */}
           <div className="flex items-center justify-between px-4 py-2 bg-[#0a0b12] border-b border-slate-800 text-xs text-slate-400 shrink-0">
-            <span className="flex items-center gap-2 font-medium text-slate-300">
-              <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-              <span>{isYouTube ? "Live Stream Broadcast" : "Live Whiteboard & Presentation Stage"}</span>
-            </span>
+            <div className="flex items-center gap-3">
+              <span className="flex items-center gap-2 font-medium text-slate-300">
+                <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                <span>{isYouTube && activeViewMode === "STREAM" ? "Live Stream Broadcast" : "Live Whiteboard & Presentation Stage"}</span>
+              </span>
+
+              {/* View Mode Switcher for YouTube Classes */}
+              {isYouTube && (
+                <div className="flex items-center rounded-lg bg-slate-900 border border-slate-700/80 p-0.5 shadow-xs">
+                  <button
+                    type="button"
+                    onClick={() => setActiveViewMode("STREAM")}
+                    className={`flex items-center gap-1 px-2.5 py-0.5 rounded text-[11px] font-semibold transition cursor-pointer ${
+                      activeViewMode === "STREAM"
+                        ? "bg-red-600 text-white shadow-sm"
+                        : "text-slate-400 hover:text-white"
+                    }`}
+                    title="Watch OBS YouTube Live Stream"
+                  >
+                    <span className="material-symbols-outlined text-xs">smart_display</span>
+                    <span>Live Stream</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveViewMode("WHITEBOARD")}
+                    className={`flex items-center gap-1 px-2.5 py-0.5 rounded text-[11px] font-semibold transition cursor-pointer ${
+                      activeViewMode === "WHITEBOARD"
+                        ? "bg-blue-600 text-white shadow-sm"
+                        : "text-slate-400 hover:text-white"
+                    }`}
+                    title="Switch to Interactive Whiteboard Canvas"
+                  >
+                    <span className="material-symbols-outlined text-xs">draw</span>
+                    <span>Whiteboard</span>
+                  </button>
+                </div>
+              )}
+            </div>
             <div className="flex items-center gap-2">
               {wbSession?.presentationName && (
                 <span className="text-[11px] font-mono text-blue-300 bg-blue-950/60 border border-blue-500/30 px-2 py-0.5 rounded">
@@ -1757,7 +1792,7 @@ export function StudentLiveClassRoom({
             ref={stageContainerRef}
             className="flex-1 min-h-0 w-full relative flex items-center justify-center p-2 bg-[#0d0e16] overflow-hidden"
           >
-            {isYouTube ? (
+            {isYouTube && activeViewMode === "STREAM" ? (
               <div className="w-full h-full max-w-full max-h-full aspect-video flex items-center justify-center">
                 <YouTubeLivePlayer
                   youtubeVideoId={wbSession?.youtubeVideoId ?? null}
@@ -1888,7 +1923,37 @@ export function StudentLiveClassRoom({
             <span className="hidden xs:inline">{isFullscreen ? "Exit" : "Full Screen"}</span>
           </button>
 
-          {isYouTube ? (
+          {/* View Mode Switcher on Mobile for YouTube classes */}
+          {isYouTube && (
+            <div className="absolute top-2 left-2 z-20 flex items-center rounded-lg bg-black/80 border border-white/20 p-0.5 shadow-lg backdrop-blur-xs">
+              <button
+                type="button"
+                onClick={() => setActiveViewMode("STREAM")}
+                className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold transition cursor-pointer ${
+                  activeViewMode === "STREAM"
+                    ? "bg-red-600 text-white shadow-sm"
+                    : "text-slate-300 hover:text-white"
+                }`}
+              >
+                <span className="material-symbols-outlined text-xs">smart_display</span>
+                <span>Stream</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveViewMode("WHITEBOARD")}
+                className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold transition cursor-pointer ${
+                  activeViewMode === "WHITEBOARD"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-300 hover:text-white"
+                }`}
+              >
+                <span className="material-symbols-outlined text-xs">draw</span>
+                <span>Board</span>
+              </button>
+            </div>
+          )}
+
+          {isYouTube && activeViewMode === "STREAM" ? (
             <div className="relative w-full h-full">
               <YouTubeLivePlayer
                 youtubeVideoId={wbSession?.youtubeVideoId ?? null}
