@@ -44,6 +44,7 @@ export interface FormattedExportSection {
   targetCount: number;
   marksPerQuestion: number;
   negativeMarks: number;
+  syllabus: string;
   questions: FormattedExportQuestion[];
 }
 
@@ -241,6 +242,35 @@ export async function fetchCanonicalTestData(testId: string): Promise<FormattedE
       return formattedQ;
     });
 
+    // Extract dynamic syllabus per section from its questions
+    const distinctTopics = Array.from(
+      new Set(
+        questionsToExport
+          .flatMap((sq) => [sq.question.chapter, sq.question.topic, sq.question.subTopic])
+          .filter((t): t is string => Boolean(t && t.trim().length > 0))
+      )
+    );
+
+    let secSyllabus = "";
+    if (distinctTopics.length > 0) {
+      secSyllabus = distinctTopics.join(", ");
+    } else {
+      const subjLower = (section.subject || section.name || "").toLowerCase();
+      if (subjLower.includes("phys")) {
+        secSyllabus = "Ray optics and optical Instruments, Wave optics, Modern Physics, Semiconductor and Digital Electronics";
+      } else if (subjLower.includes("chem")) {
+        secSyllabus = "Halogen derivatives, Oxygen containing organic compounds, Nitrogen containing organic compounds, Biomolecules, polymers and chemistry in everyday life";
+      } else if (subjLower.includes("bot")) {
+        secSyllabus = "Organisms and Populations, Ecosystem, Biodiversity and Conservation, Environmental Issues, Demography";
+      } else if (subjLower.includes("zoo")) {
+        secSyllabus = "Biology In Human Welfare : Human Health and Disease, Strategies For Enhancement In Food Production (Animal Breeding)";
+      } else if (subjLower.includes("bio")) {
+        secSyllabus = "Plant Physiology, Human Physiology, Genetics and Evolution, Ecology and Environment, Cell Structure & Function";
+      } else {
+        secSyllabus = `${section.name} Standard Syllabus and Key Conceptual Topics`;
+      }
+    }
+
     return {
       id: section.id,
       name: section.name,
@@ -249,6 +279,7 @@ export async function fetchCanonicalTestData(testId: string): Promise<FormattedE
       targetCount: section.targetCount || questions.length,
       marksPerQuestion: section.marksPerQuestion ?? test.correctMarks ?? 4,
       negativeMarks: section.negativeMarks ?? Math.abs(test.incorrectMarks ?? 1),
+      syllabus: secSyllabus,
       questions,
     };
   });
@@ -350,21 +381,87 @@ export function generateTestPaperHtml(
   const enSectionRange = sectionBreakdowns.map((sb) => `${sb.name}: ${sb.startQ}-${sb.endQ}`).join(", ") || `Physics: 1-45, Chemistry: 46-90, Biology: 91-180`;
   const hiSectionRange = sectionBreakdowns.map((sb) => `${sb.name}: ${sb.startQ} से ${sb.endQ}`).join(", ") || `भौतिक विज्ञान: 1 से 45, रसायन विज्ञान: 46 से 90, जीव विज्ञान: 91 से 180`;
 
-  // Helper to chunk questions into authentic exam pages (5-6 questions per page standard)
-  function chunkQuestionsIntoPages(questions: FormattedExportQuestion[], maxWeight = 5.2): FormattedExportQuestion[][] {
+  // Helper to compute question vertical height weight accurately
+  function computeQuestionWeight(q: FormattedExportQuestion): number {
+    let weight = 0.85; // Base statement + options height
+
+    const textEn = q.statementEn || "";
+    const textHi = q.statementHi || "";
+    const combinedText = textEn + " " + textHi;
+
+    // 1. Diagrams / CamDraw / Inline Images
+    if (q.imageUrl) {
+      weight += 1.4;
+    }
+    if (q.camDrawSvg) {
+      weight += 1.3;
+    }
+    const inlineImgCount = (combinedText.match(/!\[.*?\]\(.*?\)/g) || []).length;
+    if (inlineImgCount > 0) {
+      weight += Math.min(inlineImgCount * 1.0, 2.5);
+    }
+
+    // 2. LaTeX Arrays / Matrices / Tabular / HTML Tables
+    const hasArrayOrMatrix = /\\begin\{(array|matrix|pmatrix|bmatrix|vmatrix|tabular|cases|aligned)\}/i.test(combinedText);
+    const hasHtmlTable = /<table/i.test(combinedText);
+    const hasMarkdownTable = /\|.*?\|.*?\|/g.test(combinedText);
+
+    if (hasArrayOrMatrix || hasHtmlTable || hasMarkdownTable) {
+      const latexRows = (combinedText.match(/\\\\/g) || []).length;
+      const htmlRows = (combinedText.match(/<tr/gi) || []).length;
+      const mdRows = (combinedText.match(/\n\s*\|/g) || []).length;
+      const maxRows = Math.max(latexRows, htmlRows, mdRows, 3);
+      weight += 1.1 + Math.min(maxRows * 0.28, 2.2);
+    }
+
+    // 3. Match List / Column Format
+    const isMatchList = /(List|Column|कॉलम|सूची)\s*[-–—I1]/i.test(combinedText);
+    if (isMatchList && !hasArrayOrMatrix) {
+      weight += 0.85;
+    }
+
+    // 4. Multi-statement / Assertion-Reason
+    const isStatementOrAssertion = /(Statement\s*[-–—I1]|कथन\s*[-–—I1]|Assertion|अभिकथन)/i.test(combinedText);
+    if (isStatementOrAssertion) {
+      weight += 0.45;
+    }
+
+    // 5. Statement Length & Line Breaks
+    const maxLen = Math.max(textEn.length, textHi.length);
+    if (maxLen > 400) weight += 0.8;
+    else if (maxLen > 250) weight += 0.5;
+    else if (maxLen > 140) weight += 0.25;
+
+    const lineBreaks = Math.max(
+      (textEn.match(/\n|<br\s*\/?>/gi) || []).length,
+      (textHi.match(/\n|<br\s*\/?>/gi) || []).length
+    );
+    if (lineBreaks > 3) weight += Math.min(lineBreaks * 0.14, 0.9);
+
+    // 6. Options height: Stacked vs 2x2 Grid
+    const isShortOptions = q.options.every((opt) => {
+      const lEn = (opt.textEn || "").length;
+      const lHi = (opt.textHi || opt.textEn || "").length;
+      return lEn <= 24 && lHi <= 24;
+    });
+
+    if (!isShortOptions || q.options.length > 4) {
+      weight += 0.45;
+      const hasLongOpt = q.options.some((opt) => (opt.textEn || "").length > 60 || (opt.textHi || "").length > 60);
+      if (hasLongOpt) weight += 0.4;
+    }
+
+    return weight;
+  }
+
+  // Helper to chunk questions into authentic exam pages (ensuring ZERO page overflow)
+  function chunkQuestionsIntoPages(questions: FormattedExportQuestion[], maxWeight = 4.2): FormattedExportQuestion[][] {
     const chunks: FormattedExportQuestion[][] = [];
     let currentChunk: FormattedExportQuestion[] = [];
     let currentWeight = 0;
 
     for (const q of questions) {
-      let weight = 0.9;
-      if (q.imageUrl) weight += 1.0;
-      const maxLen = Math.max((q.statementEn || "").length, (q.statementHi || "").length);
-      if (maxLen > 240) weight += 0.4;
-      else if (maxLen > 140) weight += 0.2;
-      
-      const hasLongOptions = q.options.some((opt) => (opt.textEn || "").length > 30 || (opt.textHi || "").length > 30);
-      if (hasLongOptions) weight += 0.3;
+      const weight = computeQuestionWeight(q);
 
       if (currentChunk.length > 0 && currentWeight + weight > maxWeight) {
         chunks.push(currentChunk);
@@ -383,7 +480,7 @@ export function generateTestPaperHtml(
 
   let totalQuestionPagesCount = 0;
   test.sections.forEach((sec) => {
-    totalQuestionPagesCount += chunkQuestionsIntoPages(sec.questions, 5.2).length;
+    totalQuestionPagesCount += chunkQuestionsIntoPages(sec.questions, 4.2).length;
   });
 
   const intermediateRoughCount = 0;
@@ -640,7 +737,7 @@ export function generateTestPaperHtml(
   };
 
   test.sections.forEach((section, sIdx) => {
-    const pagesForSection = chunkQuestionsIntoPages(section.questions, 5.2);
+    const pagesForSection = chunkQuestionsIntoPages(section.questions, 4.2);
 
     pagesForSection.forEach((questionsInPage) => {
       const questionsChunkHtml = questionsInPage.map((q) => {
@@ -1118,8 +1215,8 @@ export function generateTestPaperHtml(
 
     /* Content Page: Strictly Aligned At The Top, Zero Gap */
     .page.content-page {
-      padding: 18px 26px 14px 26px !important;
-      justify-content: flex-start !important;
+      padding: 14px 24px 10px 24px !important;
+      justify-content: space-between !important;
     }
 
     @media print {
@@ -1505,7 +1602,7 @@ export function generateTestPaperHtml(
     .q-row-item {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      padding: 6px 0 8px 0;
+      padding: 4px 0 6px 0;
       border-bottom: 1px solid #cbd5e1;
       page-break-inside: avoid;
       break-inside: avoid;
@@ -1545,8 +1642,39 @@ export function generateTestPaperHtml(
     .opt-value span {
       font-family: 'Times New Roman', 'PT Serif', 'Noto Serif Devanagari', 'Cambria', Georgia, serif !important;
       font-size: 10pt !important;
-      line-height: 1.38 !important;
+      line-height: 1.35 !important;
       color: #000000 !important;
+    }
+
+    /* Compact KaTeX Display & Mathematical Tables */
+    .katex-display {
+      margin: 2px 0 !important;
+      max-width: 100% !important;
+      overflow-x: auto !important;
+    }
+    .katex {
+      font-size: 9.5pt !important;
+      line-height: 1.25 !important;
+    }
+    .katex-display > .katex {
+      text-align: center !important;
+    }
+    .katex .mtable {
+      border-collapse: collapse !important;
+      margin: 0 auto !important;
+    }
+    .q-statement-body table {
+      width: 100% !important;
+      border-collapse: collapse !important;
+      font-size: 8.5pt !important;
+      margin: 3px 0 !important;
+      line-height: 1.25 !important;
+    }
+    .q-statement-body table th,
+    .q-statement-body table td {
+      border: 1px solid #94a3b8 !important;
+      padding: 2px 4px !important;
+      text-align: left !important;
     }
 
     .q-num-label {
@@ -1559,20 +1687,20 @@ export function generateTestPaperHtml(
     }
 
     .q-opts-wrapper {
-      margin-top: 4px;
+      margin-top: 3px;
     }
 
     .opts-grid-2 {
       display: grid;
       grid-template-columns: 1fr 1fr;
       column-gap: 12px;
-      row-gap: 3px;
+      row-gap: 2px;
     }
 
     .opts-stacked {
       display: flex;
       flex-direction: column;
-      gap: 3px;
+      gap: 2px;
     }
 
     .opt-box {
@@ -1592,12 +1720,12 @@ export function generateTestPaperHtml(
 
     .q-diagram-wrap {
       text-align: center;
-      margin: 4px 0 2px 0;
+      margin: 2px 0 2px 0;
     }
 
     .q-diagram-img {
       max-width: 88%;
-      max-height: 120px;
+      max-height: 105px;
       object-fit: contain;
       display: inline-block;
     }
