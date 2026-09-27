@@ -231,7 +231,7 @@ export function StudentShell({
 
   if (isExamAttempt || isLiveClass) {
     return (
-      <div className="fixed inset-0 overflow-hidden bg-[#0b0d14]">
+      <div className="fixed inset-0 overflow-y-auto bg-[#0b0d14] overscroll-contain">
         {children}
       </div>
     );

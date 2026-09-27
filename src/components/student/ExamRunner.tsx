@@ -541,7 +541,7 @@ export function ExamRunner({
   };
 
   return (
-    <div className="min-h-screen-safe w-full bg-[#f8fafc] dark:bg-slate-950 text-slate-900 dark:text-white flex flex-col justify-between select-none">
+    <div className="w-full min-h-screen bg-[#f8fafc] dark:bg-slate-950 text-slate-900 dark:text-white flex flex-col justify-between select-none">
       {/* 1. TOP HEADER (Matches Screenshot media_1788449327614.png) */}
       <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 sm:px-6 py-2.5 sticky top-0 z-40 shadow-sm">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
@@ -615,7 +615,7 @@ export function ExamRunner({
       </header>
 
       {/* 2. MAIN EXAM BODY */}
-      <main className="max-w-7xl mx-auto w-full p-3 sm:p-6 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      <main className="max-w-7xl mx-auto w-full p-3 sm:p-6 pb-28 sm:pb-20 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* LEFT COLUMN: Question Display & Subject Tabs (8 Cols) */}
         <div className="lg:col-span-8 space-y-4">
           {/* Question Counter & Subject Tabs */}
