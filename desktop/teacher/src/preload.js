@@ -19,8 +19,12 @@ if (window.location.origin === trustedOrigin) {
       probe: () => ipcRenderer.invoke("encoder:probe"),
       /** Opens an encoder run for a class; resolves with a run id. */
       start: (opts) => ipcRenderer.invoke("encoder:start", opts),
-      /** Sends one chunk of the stage recording (ArrayBuffer) to the encoder. */
-      push: (runId, chunk) => ipcRenderer.send("encoder:chunk", runId, chunk),
+      /**
+       * Sends one chunk of the stage recording (ArrayBuffer). `generation`
+       * is the encoder restart counter from the latest status: after a
+       * reconnect the page starts a fresh recorder for the new generation.
+       */
+      push: (runId, generation, chunk) => ipcRenderer.send("encoder:chunk", runId, generation, chunk),
       stop: (runId) => ipcRenderer.invoke("encoder:stop", runId),
       status: (runId) => ipcRenderer.invoke("encoder:status", runId),
       onStatus: (listener) => {
