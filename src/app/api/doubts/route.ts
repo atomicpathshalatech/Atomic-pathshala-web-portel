@@ -40,16 +40,6 @@ export async function POST(request: Request) {
 
     const body = doubtCreateSchema.parse(await request.json());
 
-    // A classroomSessionId is only ever trusted after confirming this
-    // student actually has resolveClassroomAccess to that session — never
-    // taken as-is from the request body.
-    let classroomSessionId: string | null = null;
-    if (body.classroomSessionId) {
-      const { resolveClassroomAccess } = await import("@/lib/classroom/access");
-      const access = await resolveClassroomAccess(session.user.id, body.classroomSessionId);
-      if (access?.role === "STUDENT") classroomSessionId = body.classroomSessionId;
-    }
-
     const doubt = await prisma.doubt.create({
       data: {
         studentId: student.id,
@@ -57,7 +47,6 @@ export async function POST(request: Request) {
         body: body.body,
         priority: body.priority,
         attachmentUrl: body.attachmentUrl || null,
-        classroomSessionId,
       },
     });
 

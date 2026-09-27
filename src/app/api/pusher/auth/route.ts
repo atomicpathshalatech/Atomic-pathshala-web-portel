@@ -4,7 +4,6 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { pusherServer } from "@/lib/realtime/pusher-server";
 import { resolveWhiteboardAccess } from "@/lib/whiteboard/access";
-import { resolveClassroomAccess } from "@/lib/classroom/access";
 import { apiError } from "@/lib/api/response";
 
 /**
@@ -26,8 +25,6 @@ export async function POST(request: NextRequest) {
   const presenceMatch = channelName.match(/^presence-wb-session-(.+)$/);
   const teacherMatch = channelName.match(/^private-wb-teacher-(.+)$/);
   const doubtBookingMatch = channelName.match(/^private-doubt-booking-(.+)$/);
-  const classroomPresenceMatch = channelName.match(/^presence-classroom-(.+)$/);
-  const classroomTeacherMatch = channelName.match(/^private-classroom-teacher-(.+)$/);
 
   try {
     // 1. OBS broadcast stage (no cookie): a DB-backed stage token for THIS
@@ -83,25 +80,6 @@ export async function POST(request: NextRequest) {
 
     if (teacherMatch) {
       const access = await resolveWhiteboardAccess(session.user.id, teacherMatch[1]!);
-      if (!access || access.role !== "TEACHER") return apiError("Forbidden", 403);
-
-      const authResponse = pusherServer.authorizeChannel(socketId, channelName);
-      return Response.json(authResponse);
-    }
-
-    if (classroomPresenceMatch) {
-      const access = await resolveClassroomAccess(session.user.id, classroomPresenceMatch[1]!);
-      if (!access) return apiError("Forbidden", 403);
-
-      const authResponse = pusherServer.authorizeChannel(socketId, channelName, {
-        user_id: `${access.role}:${access.entityId}`,
-        user_info: { name: access.name, role: access.role },
-      });
-      return Response.json(authResponse);
-    }
-
-    if (classroomTeacherMatch) {
-      const access = await resolveClassroomAccess(session.user.id, classroomTeacherMatch[1]!);
       if (!access || access.role !== "TEACHER") return apiError("Forbidden", 403);
 
       const authResponse = pusherServer.authorizeChannel(socketId, channelName);

@@ -13,11 +13,6 @@ interface NextClassCardProps {
   teacherName: string | null;
   startsAtIso: string;
   initialStatus: LiveCardStatus;
-  // Whether a ClassroomSession (the new, YouTube-Live module) has been
-  // configured for this schedule — shown as a second, independent entry
-  // point alongside the existing Whiteboard Join Class button below, never
-  // replacing it.
-  hasClassroom?: boolean;
 }
 
 function formatAbsoluteTime(iso: string) {
@@ -57,7 +52,6 @@ export function NextClassCard({
   teacherName,
   startsAtIso,
   initialStatus,
-  hasClassroom,
 }: NextClassCardProps) {
   const [status, setStatus] = useState<LiveCardStatus>(initialStatus);
   const [timeLabel, setTimeLabel] = useState<string | null>(null);
@@ -181,15 +175,6 @@ export function NextClassCard({
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
-          {isLiveClassType && hasClassroom && (
-            <Link
-              href={`/classroom/${scheduleId}`}
-              className="shrink-0 rounded-xl bg-indigo-600 px-3 py-2 text-xs font-bold text-white transition-all hover:bg-indigo-500 active:scale-95"
-              title="Application Class (Private Unlisted Stream)"
-            >
-              Application Class
-            </Link>
-          )}
           {buttonDisabled ? (
             <button
               type="button"
