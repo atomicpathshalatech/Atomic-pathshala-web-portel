@@ -658,7 +658,7 @@ export function ExamRunner({
             <div className="space-y-2">
               <FormulaText
                 text={statement || "No statement available."}
-                className="text-sm sm:text-base font-bold text-slate-900 dark:text-white leading-relaxed block"
+                className="text-sm sm:text-base font-normal text-slate-900 dark:text-white leading-relaxed block"
               />
 
               {/* CamDraw Universal Vector Structure */}

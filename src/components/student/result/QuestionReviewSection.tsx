@@ -147,7 +147,7 @@ export function QuestionReviewSection({
               <div>
                 <FormulaText
                   text={statement}
-                  className="text-sm sm:text-base font-bold text-slate-900 dark:text-white leading-relaxed block"
+                  className="text-sm sm:text-base font-normal text-slate-900 dark:text-white leading-relaxed block"
                 />
 
                 {/* CamDraw Universal Vector Structure */}

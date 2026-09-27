@@ -91,6 +91,13 @@ export function cleanOcrArtifacts(input: string): string {
   text = text.replace(/'oसन/g, "श्वसन");
   text = text.replace(/ik'oZ/g, "पार्श्व");
 
+  // 4. Clean stray asterisks and OCR artifact marks
+  text = text.replace(/(^|\n|\r)\s*\*\s+/g, "$1");
+  text = text.replace(/\s+\*\s*$/g, "");
+  text = text.replace(/(\s)\*(\s)/g, "$1$2");
+  text = text.replace(/\\\*/g, "*");
+  text = text.replace(/^\s*\*\*([\s\S]+?)\*\*\s*$/, "$1");
+
   return text;
 }
 
