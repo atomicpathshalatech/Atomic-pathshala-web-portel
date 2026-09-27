@@ -54,7 +54,18 @@ export async function POST(request: NextRequest) {
     if (!session?.user?.id) return apiError("Unauthorized", 401);
 
     if (sessionEventMatch) {
-      const access = await resolveWhiteboardAccess(session.user.id, sessionEventMatch[1]!);
+      // Clients also subscribe under the SCHEDULE id (the start route
+      // announces "class is live" on both) — authorise that alias against
+      // the schedule's own whiteboard session instead of refusing it.
+      const channelId = sessionEventMatch[1]!;
+      let access = await resolveWhiteboardAccess(session.user.id, channelId);
+      if (!access) {
+        const wbForSchedule = await prisma.whiteboardSession.findUnique({
+          where: { batchScheduleId: channelId },
+          select: { id: true },
+        });
+        if (wbForSchedule) access = await resolveWhiteboardAccess(session.user.id, wbForSchedule.id);
+      }
       if (!access) return apiError("Forbidden", 403);
       return Response.json(pusherServer.authorizeChannel(socketId, channelName));
     }

@@ -2594,10 +2594,20 @@ export function TeacherLiveClassRoom({
           {/* Authoritative Live Status & Timers */}
           {isClassLive ? (
             <div className="flex items-center gap-2">
-              <span className="flex items-center gap-1.5 text-xs font-bold text-red-400 border border-red-500/40 bg-red-950/40 px-3 py-1 rounded-full">
-                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                LIVE
-              </span>
+              {youtubeGateActive ? (
+                <span
+                  className="flex items-center gap-1.5 text-xs font-bold text-sky-300 border border-sky-500/40 bg-sky-950/40 px-3 py-1 rounded-full"
+                  title="Students will see the class once YouTube receives your OBS stream"
+                >
+                  <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
+                  CONNECTING TO YOUTUBE
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5 text-xs font-bold text-red-400 border border-red-500/40 bg-red-950/40 px-3 py-1 rounded-full">
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                  LIVE
+                </span>
+              )}
 
               {/* Elapsed Time */}
               <span
@@ -2694,7 +2704,7 @@ export function TeacherLiveClassRoom({
               ) : null}
 
               {/* YouTube Live Stream Indicator when running on YouTube (or simulcasting alongside the interactive room) */}
-              {(wbSession?.videoTransport === "YOUTUBE" || wbSession?.videoTransport === "BOTH") && wbSession?.youtubeVideoId && (
+              {(wbSession?.videoTransport === "YOUTUBE" || wbSession?.videoTransport === "BOTH") && wbSession?.youtubeVideoId && !youtubeGateActive && (
                 <a
                   href={`https://www.youtube.com/watch?v=${wbSession.youtubeVideoId}`}
                   target="_blank"
@@ -4341,7 +4351,11 @@ export function TeacherLiveClassRoom({
                     OBS Studio &amp; Live Streaming Setup
                   </h3>
                   <p className="text-[11px] text-slate-400">
-                    {isClassLive ? "🔴 Class is currently Live on stream" : "Step 1: Start OBS stream → Step 2: Click Go Live"}
+                    {youtubeGateActive
+                      ? "Waiting for YouTube to receive your OBS stream"
+                      : isClassLive
+                      ? "🔴 Class is currently Live on stream"
+                      : "Step 1: Click Start Class → Step 2: Start streaming in OBS"}
                   </p>
                 </div>
               </div>
@@ -4411,12 +4425,13 @@ export function TeacherLiveClassRoom({
                   <input
                     type="text"
                     readOnly
-                    value={wbSession?.youtubeIngestUrl || "rtmp://a.rtmp.youtube.com/live2"}
+                    value={wbSession?.youtubeIngestUrl || "Available after you click Start Class"}
                     className="flex-1 px-3 py-2 text-xs font-mono rounded-xl bg-[#0a0b12] border border-slate-700 text-slate-200 select-all"
                   />
                   <button
                     type="button"
-                    onClick={() => copyToClipboard(wbSession?.youtubeIngestUrl || "rtmp://a.rtmp.youtube.com/live2", "serverUrl")}
+                    disabled={!wbSession?.youtubeIngestUrl}
+                    onClick={() => copyToClipboard(wbSession?.youtubeIngestUrl || "", "serverUrl")}
                     className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold transition shrink-0 flex items-center gap-1"
                   >
                     <span className="material-symbols-outlined text-sm">
