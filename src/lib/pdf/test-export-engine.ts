@@ -1101,7 +1101,7 @@ export function generateTestPaperHtml(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${test.name} - ${test.code} | ${brandName}</title>
+  <title>${test.name} - ${currentDateStr} - ATOMIC PATHSHALA</title>
   
   <!-- Tailwind CSS Engine for Exact Aesthetic Rendering -->
   <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
@@ -2065,8 +2065,8 @@ export function generateTestPaperHtml(
 
   <div class="print-bar no-print">
     <div>
-      <h1>${brandName} — ${test.name}</h1>
-      <div style="font-size: 11px; opacity: 0.8;">${test.code} · ${withSolution ? "With Complete Solutions & Answer Key" : "Without Solution (Exam Paper)"}</div>
+      <h1>${test.name} — ${brandName}</h1>
+      <div style="font-size: 11px; opacity: 0.85;">Saving as: <strong>${test.name} - ${currentDateStr} - ATOMIC PATHSHALA.pdf</strong></div>
     </div>
     <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
       <button onclick="window.print()" class="print-bar-btn">

@@ -3,9 +3,7 @@ import katex from "katex";
 type Segment = { type: "text" | "inline" | "block" | "image" | "bold"; content: string; width?: string };
 
 /**
- * Sanitizes LaTeX formulas, tables, and environments
- * - Fixes single backslash line breaks before \hline in array/matrix/tabular environments
- * - Ensures unwrapped \begin{array}...\end{array} or matrices are wrapped in block math $$...$$
+ * Sanitizes LaTeX formulas, tables, vector notations, and environments
  */
 export function sanitizeLatexFormulas(input: string): string {
   if (!input) return "";
@@ -32,6 +30,30 @@ export function sanitizeLatexFormulas(input: string): string {
     (match) => {
       return `\n$$\n${match}\n$$\n`;
     }
+  );
+
+  // 3. Fix OCR blackboard bold misinterpretation for vectors:
+  // e.g. \mathbb{A}, \mathbb{B}, \mathbb{a}, \mathbb{b} -> \vec{A}, \vec{B}, \vec{a}, \vec{b}
+  text = text.replace(/\\mathbb\{([A-Za-z])\}/g, "\\vec{$1}");
+
+  // 4. Fix OCR underline misinterpretation for vectors:
+  // e.g. \underline{a}, \underline{b}, \underline{v} -> \vec{a}, \vec{b}, \vec{v}
+  text = text.replace(/\\underline\{([A-Za-z])\}/g, "\\vec{$1}");
+  text = text.replace(/\\underline\{\s*([A-Za-z])\s*([\+\-])\s*([A-Za-z])\s*\}/g, "\\vec{$1} $2 \\vec{$3}");
+
+  // 5. Convert raw match-the-following LaTeX arrows:
+  // e.g. (A)\rightarrow Q, (B)\rightarrow P -> (A) → Q, (B) → P
+  text = text.replace(/\\rightarrow(?![a-zA-Z])/g, " → ");
+  text = text.replace(/\\leftarrow(?![a-zA-Z])/g, " ← ");
+  text = text.replace(/\\Rightarrow(?![a-zA-Z])/g, " ⇒ ");
+  text = text.replace(/\\Leftarrow(?![a-zA-Z])/g, " ⇐ ");
+  text = text.replace(/\\leftrightarrow(?![a-zA-Z])/g, " ↔ ");
+  text = text.replace(/\\to(?![a-zA-Z])/g, " → ");
+
+  // 6. Automatically wrap unwrapped math equations like |a + b| = \sqrt{2}|a - b| into $...$
+  text = text.replace(
+    /(?<!\$)(?:\|\s*\\vec\{[A-Za-z]\}\s*[\+\-]\s*\\vec\{[A-Za-z]\}\s*\|\s*=\s*[^,\n\$\.]+?)(?=\s*(?:where|then|तो|\,|$|\n))/gi,
+    (match) => `$${match.trim()}$`
   );
 
   return text;
@@ -74,6 +96,45 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#039;");
 }
 
+/**
+ * Renders any residual inline LaTeX expressions inside plain text chunks
+ */
+function renderResidualLatexInText(text: string): string {
+  // Check if text has any LaTeX commands like \frac, \sqrt, \hat, \vec, \cos, \sin, \tan, etc.
+  if (!/\\[a-zA-Z]+|\^\{?[0-9a-zA-Z\+\-]+\}?|_\{?[0-9a-zA-Z\+\-]+\}?/.test(text)) {
+    return escapeHtml(text).replace(/\n/g, "<br/>");
+  }
+
+  // Regex to identify inline math chunks
+  const mathPattern = /(\\[a-zA-Z]+(?:\{[^{}]*\}|\[[^\[\]]*\]|\^[a-zA-Z0-9{}]+|_[a-zA-Z0-9{}]+)*[\w\s\+\-\*\/\=\<\>\(\)\|\,\.\^\_\{\}\\]*|\b[a-zA-Z0-9]+\^[0-9a-zA-Z{}]+|\b[a-zA-Z0-9]+_[0-9a-zA-Z{}]+)/g;
+
+  let result = "";
+  let lastIdx = 0;
+  let m: RegExpExecArray | null;
+
+  while ((m = mathPattern.exec(text)) !== null) {
+    if (m.index > lastIdx) {
+      result += escapeHtml(text.slice(lastIdx, m.index)).replace(/\n/g, "<br/>");
+    }
+    const mathCandidate = m[0].trim();
+    if (/\\[a-zA-Z]+|\^|_/.test(mathCandidate)) {
+      try {
+        result += katex.renderToString(mathCandidate, { throwOnError: false, displayMode: false });
+      } catch {
+        result += escapeHtml(mathCandidate);
+      }
+    } else {
+      result += escapeHtml(mathCandidate);
+    }
+    lastIdx = mathPattern.lastIndex;
+  }
+  if (lastIdx < text.length) {
+    result += escapeHtml(text.slice(lastIdx)).replace(/\n/g, "<br/>");
+  }
+
+  return result;
+}
+
 export function renderFormulaContent(input: string): string {
   if (!input) return "";
   const segments = parseSegments(input);
@@ -91,7 +152,7 @@ export function renderFormulaContent(input: string): string {
             // Fallback
           }
         }
-        return escapeHtml(seg.content).replace(/\n/g, "<br/>");
+        return renderResidualLatexInText(seg.content);
       }
       if (seg.type === "bold") {
         return `<strong>${escapeHtml(seg.content).replace(/\n/g, "<br/>")}</strong>`;
@@ -118,3 +179,4 @@ export function renderFormulaContent(input: string): string {
     })
     .join("");
 }
+

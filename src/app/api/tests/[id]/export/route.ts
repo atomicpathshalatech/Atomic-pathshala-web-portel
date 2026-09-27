@@ -81,9 +81,16 @@ export async function GET(
           testPattern: testData.examType,
         });
 
+    const currentDateStr = new Intl.DateTimeFormat("en-IN", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    }).format(testData.createdAt || new Date()).replace(/[/\\?%*:|"<>]/g, "-");
+
+    const safeTestName = (testData.name || "Test").replace(/[/\\?%*:|"<>]/g, "_").trim();
     const filename = isCoverOnly
-      ? `Atomic_Pathshala_${testData.code.replace(/[^a-zA-Z0-9_-]/g, "_")}_COVER.html`
-      : `Atomic_Pathshala_${testData.code.replace(/[^a-zA-Z0-9_-]/g, "_")}_${withSolution ? "WITH_SOLUTIONS" : "QUESTION_PAPER"}.html`;
+      ? `${safeTestName} - ${currentDateStr} - ATOMIC PATHSHALA - COVER.html`
+      : `${safeTestName} - ${currentDateStr} - ATOMIC PATHSHALA${withSolution ? " (Solutions)" : ""}.html`;
 
     const headers: Record<string, string> = {
       "Content-Type": "text/html; charset=utf-8",
