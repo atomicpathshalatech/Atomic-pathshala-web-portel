@@ -3,15 +3,17 @@ import { getServerSession } from "next-auth";
 import { Prisma } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { requirePermission, UnauthorizedError, ForbiddenError } from "@/lib/rbac/guard";
+import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
+import { assertCanControlLiveClass } from "@/lib/live-class/ownership";
+import { syncLiveSessionOnStart } from "@/lib/live-session/service";
+import { announceClassLive } from "@/lib/live-session/announce";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
-import { pusherServer, sessionChannel, WB_EVENTS } from "@/lib/realtime/pusher-server";
 import { videoRoomName } from "@/lib/livekit/server";
 import { startRoomRecording, recordingStorageKey } from "@/lib/livekit/egress";
 import { canTeacherStartClass } from "@/lib/schedule/access-rules";
 import { extractYouTubeVideoId } from "@/lib/live-class/youtube";
-import { createBroadcastToken } from "@/lib/live-class/broadcast-token";
+import { issueStageToken, stageUrl } from "@/lib/live-class/stage-session";
 import { YOUTUBE_OAUTH_PRODUCTION_URL } from "@/lib/youtube/oauth-config";
 
 export async function POST(
@@ -59,11 +61,24 @@ export async function POST(
         ? schedule.liveWhiteboardSession.videoTransport
         : "LIVEKIT";
 
-    const requestedYouTubeId = body?.youtubeVideoId
-      ? extractYouTubeVideoId(String(body.youtubeVideoId))
-      : schedule.liveWhiteboardSession?.youtubeVideoId
-      ? schedule.liveWhiteboardSession.youtubeVideoId
-      : null;
+    // WhiteboardSession is @unique on batchScheduleId - a rescheduled or
+    // re-run class NEVER gets a new row, it's the same row reused across
+    // every occurrence. Any livePhase other than LIVE reaching this point
+    // with actualStartedAt set means a previous occurrence genuinely ran and
+    // ended (a merely prepared, never-live session has no actualStartedAt -
+    // see the "Prepare Slides" note further down).
+    const existingSession = schedule.liveWhiteboardSession;
+    const isNewOccurrence =
+      Boolean(existingSession) &&
+      existingSession!.livePhase !== "LIVE" &&
+      Boolean(existingSession!.actualStartedAt);
+
+    // A new occurrence must never inherit the previous run's YouTube video —
+    // only an id sent with THIS request counts. (Falling back to the stored
+    // id used to put students of a re-run class onto the old, finished
+    // broadcast.)
+    const bodyYouTubeId = body?.youtubeVideoId ? extractYouTubeVideoId(String(body.youtubeVideoId)) : null;
+    const requestedYouTubeId = bodyYouTubeId ?? (isNewOccurrence ? null : existingSession?.youtubeVideoId ?? null);
 
     const now = new Date();
 
@@ -85,41 +100,9 @@ export async function POST(
       );
     }
 
-    // 2. Authoritative Teacher Authorization
-    let teacher = await prisma.teacher.findFirst({
-      where: { userId: session.user.id },
-    });
-
-    const isDirectlyAssigned = teacher && (schedule.teacherId === teacher.id);
-    const isBatchAssigned = teacher && (await prisma.batchTeacher.findFirst({
-      where: { batchId: schedule.batchId, teacherId: teacher.id },
-    }));
-
-    const { hasPermission } = await import("@/lib/rbac/guard");
-    const isAdmin = await hasPermission(session.user.id, PERMISSIONS.BATCH_UPDATE);
-
-    if (!isDirectlyAssigned && !isBatchAssigned && !isAdmin) {
-      throw new ForbiddenError("You are not authorized to start this live class.");
-    }
-
-    if (!teacher && isAdmin) {
-      if (schedule.teacherId) {
-        teacher = await prisma.teacher.findUnique({ where: { id: schedule.teacherId } });
-      }
-      if (!teacher) {
-        const code = Date.now().toString().slice(-6);
-        teacher = await prisma.teacher.create({
-          data: {
-            userId: session.user.id,
-            employeeCode: `ADM-INST-${code}`,
-            department: "Academic Operations",
-            subjects: ["General", "All Subjects"],
-            bio: "Academic Administrator and Instructor",
-          },
-        });
-      }
-    }
-
+    // 2. Authoritative Teacher Authorization — the schedule's assigned
+    // teacher or a LIVE_CLASS_ADMIN (see src/lib/live-class/ownership.ts).
+    const { teacher } = await assertCanControlLiveClass(session.user.id, schedule.id);
     if (!teacher) return apiError("Teacher profile could not be resolved.", 403);
 
     // 3. Duplicate Start Protection / Idempotency Check
@@ -129,12 +112,36 @@ export async function POST(
       Boolean(schedule.liveWhiteboardSession?.actualStartedAt);
 
     if (isAlreadyLive && schedule.liveWhiteboardSession) {
-      return apiSuccess({
-        message: "Class is already LIVE.",
-        whiteboardSession: schedule.liveWhiteboardSession,
-        serverTime: now.toISOString(),
-        alreadyLive: true,
+      // A retry after a partial failure: make sure the lifecycle row caught up too.
+      // (An APP_YOUTUBE class still connecting to YouTube stays connecting.)
+      const [current] = await syncLiveSessionOnStart({
+        schedule,
+        wbSession: schedule.liveWhiteboardSession,
+        teacherId: teacher.id,
+        startedAt: schedule.liveWhiteboardSession.actualStartedAt ?? now,
       });
+      const { youtubeStreamKey: _key, youtubeIngestUrl: _url, ...safeSession } = schedule.liveWhiteboardSession;
+      return apiSuccess({
+        message: current?.state === "LIVE" ? "Class is already LIVE." : "Class is starting — waiting for YouTube to receive the stream.",
+        whiteboardSession: safeSession,
+        serverTime: now.toISOString(),
+        alreadyLive: current?.state === "LIVE",
+        liveState: current?.state ?? "LIVE",
+        youtubeConnecting: current?.state !== "LIVE",
+      });
+    }
+
+    // 3.5. Simulcast group: one group = one room. If another member schedule
+    // of this group is already running the room, this one must not open a
+    // second room — its students are already watching that one.
+    const { groupRoomRunByAnotherSchedule } = await import("@/lib/live-session/simulcast");
+    const roomElsewhere = await groupRoomRunByAnotherSchedule(schedule.id);
+    if (roomElsewhere) {
+      return apiError(
+        "This class is taught together with another batch's class that is already running. Open that class instead.",
+        409,
+        { code: "SIMULCAST_ROOM_ELSEWHERE", details: { scheduleId: roomElsewhere } }
+      );
     }
 
     // 4. Atomic Transition to LIVE using Database Transaction
@@ -162,13 +169,8 @@ export async function POST(
     // re-uploads page-by-page on every restart." The correct signal for "a
     // previous occurrence genuinely happened and ended" is whether the
     // session was EVER actually started before (actualStartedAt set) - a
-    // merely-prepared, never-yet-live session has none.
-    const existingSession = schedule.liveWhiteboardSession;
-    const isNewOccurrence =
-      Boolean(existingSession) &&
-      existingSession!.livePhase !== "LIVE" &&
-      Boolean(existingSession!.actualStartedAt);
-
+    // merely-prepared, never-yet-live session has none. (existingSession /
+    // isNewOccurrence are computed at the top of this handler.)
     if (isNewOccurrence && (existingSession!.pdfStatus === "GENERATING" || existingSession!.pptxStatus === "GENERATING")) {
       return apiError(
         "The previous class's recording/notes are still being finalized. Please try Start Class again in a minute.",
@@ -193,7 +195,7 @@ export async function POST(
     if (willCreatePage1) {
       try {
         const { generateCreative } = await import("@/lib/creative/engine");
-        const result = await generateCreative("LECTURE_START_SLIDE", params.scheduleId);
+        const result = await generateCreative("LECTURE_START_SLIDE", schedule.id);
         if (result.ok) startSlideUrl = result.assetUrl;
       } catch (slideErr) {
         console.error("[live_class_start_slide_error]", slideErr);
@@ -202,7 +204,7 @@ export async function POST(
 
     const transactionOps: any[] = [
       prisma.batchSchedule.update({
-        where: { id: params.scheduleId },
+        where: { id: schedule.id },
         data: { status: "LIVE" },
       }),
     ];
@@ -251,6 +253,19 @@ export async function POST(
             youtubeArchiveThumbnailStatus: "NOT_STARTED",
             youtubeArchiveThumbnailError: null,
             youtubeArchiveMetadataSnapshot: Prisma.JsonNull,
+            // A new occurrence gets its own YouTube broadcast/stream and
+            // recording — nothing from the previous run carries over.
+            youtubeBroadcastId: null,
+            youtubeStreamId: null,
+            youtubeLiveChatId: null,
+            youtubeStatus: null,
+            youtubeIngestUrl: null,
+            youtubeStreamKey: null,
+            recordingVideoId: null,
+            scheduledStart,
+            scheduledEnd,
+            totalExtendedMinutes: 0,
+            extensionHistory: Prisma.JsonNull,
             pages: { create: { pageNumber: 1, objects: [], ...(startSlideUrl && { background: startSlideUrl }) } },
           }),
         },
@@ -287,18 +302,11 @@ export async function POST(
     const updatedSchedule = txResults[0];
     const wbSession = txResults[txResults.length - 1];
 
-    // Synchronize all sibling BatchSchedules for this same lecture (across other batches) to LIVE
-    if (schedule.lectureId) {
-      await prisma.batchSchedule
-        .updateMany({
-          where: {
-            lectureId: schedule.lectureId,
-            id: { not: schedule.id },
-          },
-          data: { status: "LIVE" },
-        })
-        .catch((err) => console.error("[multi_batch_sync_live_error]", err));
-    }
+    // Sibling batches are NOT flipped LIVE here any more. Each schedule has
+    // its own lifecycle; schedules only move together when an admin put
+    // them in the same simulcast group (handled by markLiveSessionLive
+    // below). The old implicit "same lectureId → LIVE" sync also left those
+    // siblings stuck LIVE forever, since End Class never completed them.
 
     // Late-start compliance penalty — only on the genuine first transition
     // to LIVE for this occurrence (existingSession.actualStartedAt was
@@ -310,7 +318,7 @@ export async function POST(
       await import("@/lib/batch/late-start-penalty")
         .then(({ applyLateStartPenaltyIfDue }) =>
           applyLateStartPenaltyIfDue({
-            scheduleId: params.scheduleId,
+            scheduleId: schedule.id,
             teacherId: teacher.id,
             scheduledStartsAt: new Date(schedule.startsAt!),
             actualStartedAt: now,
@@ -336,64 +344,63 @@ export async function POST(
     let obsBroadcastUrl: string | undefined;
     let effectiveTransport = requestedTransport;
 
-    const existingYtId =
-      requestedYouTubeId ||
-      existingSession?.youtubeVideoId ||
-      schedule.liveWhiteboardSession?.youtubeVideoId ||
-      null;
+    // wbSession is the post-upsert row: for a new occurrence its YouTube
+    // fields were just reset, so only this request's id (if any) counts.
+    const existingYtId = requestedYouTubeId || wbSession.youtubeVideoId || null;
 
+    // 4.5. APP_YOUTUBE: a per-class stream from the pool + this occurrence's
+    // own unlisted broadcast (no shared master stream key any more). The
+    // class is NOT live yet: it waits in YOUTUBE_CONNECTING until YouTube
+    // actually receives the teacher's stream (see the stream-status route),
+    // and only then do students see it live and get notified.
+    let appYoutubeConnecting = false;
     if ((requestedTransport === "BOTH" || requestedTransport === "YOUTUBE") && !existingYtId) {
+      const fallBack = async (warning: string) => {
+        youtubeSimulcastWarning = warning;
+        if (requestedTransport === "BOTH") {
+          effectiveTransport = "LIVEKIT";
+          await prisma.whiteboardSession.update({ where: { id: wbSession.id }, data: { videoTransport: "LIVEKIT" } }).catch(() => null);
+          wbSession.videoTransport = "LIVEKIT";
+        }
+      };
       try {
-        const { youtubeLiveClassConfigured, ensureYoutubeBroadcastForWhiteboard } = await import(
-          "@/lib/live-class/youtube-broadcast"
-        );
-        if (!youtubeLiveClassConfigured()) {
-          if (requestedTransport === "YOUTUBE") {
-            youtubeSimulcastWarning = "YouTube automated broadcast isn't configured on server. Please paste your YouTube Live stream link in OBS Setup.";
-          } else {
-            youtubeSimulcastWarning = "YouTube isn't configured on this environment — class started on the interactive room only.";
-            effectiveTransport = "LIVEKIT";
-          }
+        const { youtubeLiveClassConfigured } = await import("@/lib/live-class/youtube-broadcast");
+        const { appYoutubePoolConfigured, beginAppYoutubeStart } = await import("@/lib/live-session/app-youtube");
+        if (!youtubeLiveClassConfigured() || !(await appYoutubePoolConfigured())) {
+          await fallBack(
+            requestedTransport === "YOUTUBE"
+              ? "YouTube class streaming isn't set up on this server yet (no stream slots). Paste your YouTube Live link in OBS Setup, or ask an admin to set up stream slots."
+              : "YouTube class streaming isn't set up on this server yet — class started on the interactive room only."
+          );
         } else {
-          const withBroadcast = await ensureYoutubeBroadcastForWhiteboard(wbSession.id, schedule.title, scheduledStart);
-          // Merge the newly-created broadcast fields in so the response
-          // (and the teacher UI's "also live on YouTube" indicator, plus the
-          // Server URL/Stream Key display for YOUTUBE mode) reflects them
-          // immediately, rather than the stale pre-broadcast wbSession.
-          Object.assign(wbSession, {
-            youtubeBroadcastId: withBroadcast.youtubeBroadcastId,
-            youtubeStreamId: withBroadcast.youtubeStreamId,
-            youtubeVideoId: withBroadcast.youtubeVideoId,
-            youtubeLiveChatId: withBroadcast.youtubeLiveChatId,
-            youtubeStatus: withBroadcast.youtubeStatus,
-            youtubeIngestUrl: withBroadcast.youtubeIngestUrl,
-            youtubeStreamKey: withBroadcast.youtubeStreamKey,
+          const teacherName = (await prisma.user.findFirst({ where: { teacher: { id: teacher.id } }, select: { name: true } }))?.name;
+          const began = await beginAppYoutubeStart({
+            schedule: { id: schedule.id, title: schedule.title, startsAt: new Date(schedule.startsAt), endsAt: new Date(schedule.endsAt) },
+            wbSession: { id: wbSession.id, scheduledEnd: wbSession.scheduledEnd ?? null },
+            teacherId: teacher.id,
+            broadcastTitle: `${schedule.title}${teacherName ? ` | ${teacherName}` : ""} | Atomic Pathshala`,
           });
+          Object.assign(wbSession, {
+            youtubeBroadcastId: began.youtubeBroadcastId,
+            youtubeVideoId: began.youtubeBroadcastId,
+            youtubeIngestUrl: null,
+            youtubeStreamKey: null,
+          });
+          effectiveTransport = requestedTransport;
+          appYoutubeConnecting = began.liveSession.state !== "LIVE";
         }
       } catch (youtubeError) {
         console.error("[live_class_youtube_broadcast_error]", youtubeError);
         const { describeYoutubeError } = await import("@/lib/youtube/errors");
-        const reason = describeYoutubeError(youtubeError);
-
-        if (requestedTransport === "YOUTUBE") {
-          // Keep YOUTUBE transport so students watch via YouTube player
-          effectiveTransport = "YOUTUBE";
-          youtubeSimulcastWarning = `Could not auto-create YouTube broadcast. ${reason} You can paste your stream link in OBS Setup.`;
-        } else {
-          // Fallback to LIVEKIT for BOTH mode when auto-broadcast fails and no manual YouTube ID is supplied
-          youtubeSimulcastWarning = `Could not create YouTube stream. ${reason} Interactive App Class is active for all students.`;
-          effectiveTransport = "LIVEKIT";
-          await prisma.whiteboardSession.update({
-            where: { id: wbSession.id },
-            data: { videoTransport: "LIVEKIT" },
-          }).catch(() => null);
-          wbSession.videoTransport = "LIVEKIT";
-        }
+        const { NoIngestCapacityError } = await import("@/lib/youtube/stream-pool");
+        const reason =
+          youtubeError instanceof NoIngestCapacityError ? youtubeError.message : describeYoutubeError(youtubeError);
+        await fallBack(
+          requestedTransport === "YOUTUBE"
+            ? `Could not set up the YouTube broadcast. ${reason} You can paste your stream link in OBS Setup.`
+            : `Could not set up the YouTube broadcast. ${reason} Interactive App Class is active for all students.`
+        );
       }
-    }
-    if (requestedTransport === "BOTH" || requestedTransport === "YOUTUBE" || effectiveTransport === "LIVEKIT") {
-      const broadcastToken = createBroadcastToken(params.scheduleId, session.user.id);
-      obsBroadcastUrl = `${YOUTUBE_OAUTH_PRODUCTION_URL}/obs-stage/${params.scheduleId}?token=${broadcastToken}`;
     }
 
     // 5. Start Room Recording (Room Composite Egress -> R2) for LIVEKIT-only
@@ -446,63 +453,35 @@ export async function POST(
       }
     }
 
-    // 6. Realtime Broadcast State Change
-    const effectiveYouTubeId = requestedYouTubeId || wbSession.youtubeVideoId || null;
-    const livePhasePayload = {
-      phase: "LIVE",
-      livePhase: "LIVE",
-      videoTransport: effectiveTransport,
-      youtubeVideoId: effectiveYouTubeId,
-      actualStartedAt: (wbSession.actualStartedAt || now).toISOString(),
-      serverTime: now.toISOString(),
-    };
-    const configPayload = {
-      videoTransport: effectiveTransport,
-      youtubeVideoId: effectiveYouTubeId,
-    };
-    try {
-      await pusherServer.trigger(sessionChannel(wbSession.id), WB_EVENTS.LIVE_PHASE_CHANGED, livePhasePayload);
-      await pusherServer.trigger(sessionChannel(wbSession.id), WB_EVENTS.CONFIG_UPDATED, configPayload);
-      if (params.scheduleId && params.scheduleId !== wbSession.id) {
-        await pusherServer.trigger(sessionChannel(params.scheduleId), WB_EVENTS.LIVE_PHASE_CHANGED, livePhasePayload);
-        await pusherServer.trigger(sessionChannel(params.scheduleId), WB_EVENTS.CONFIG_UPDATED, configPayload);
-      }
-    } catch (pushErr) {
-      console.warn("Realtime broadcast warning:", pushErr);
+    // 5.5 + 6 + 7. Lifecycle row, realtime state, "Live Now" notification.
+    // APP_YOUTUBE classes skip all three here: they are still connecting to
+    // YouTube, and the stream-status route does this once YouTube actually
+    // receives the stream. Everything else is live right now.
+    let liveState: string = "LIVE";
+    if (appYoutubeConnecting) {
+      liveState = "YOUTUBE_CONNECTING";
+    } else {
+      await syncLiveSessionOnStart({
+        schedule,
+        wbSession: { ...wbSession, videoTransport: effectiveTransport },
+        teacherId: teacher.id,
+        startedAt: wbSession.actualStartedAt ?? now,
+      });
+      await announceClassLive({
+        schedule,
+        whiteboardSessionId: wbSession.id,
+        aliasChannelId: params.scheduleId,
+        videoTransport: effectiveTransport,
+        youtubeVideoId: requestedYouTubeId || wbSession.youtubeVideoId || null,
+        startedAt: wbSession.actualStartedAt || now,
+      });
     }
 
-    // 7. Dispatch LIVE_CLASS_STARTED notification event to enrolled students
-    try {
-      const { triggerNotificationEvent } = await import("@/lib/notifications/engine");
-      const { cancelScheduledNotifications } = await import("@/lib/notifications/scheduler");
-      const { NotificationType, NotificationCategory, NotificationPriority } = await import("@/lib/notifications/types");
-
-      // Cancel any future scheduled start alert or 15m reminder to prevent duplicates
-      await cancelScheduledNotifications(NotificationType.CLASS_STARTED, schedule.id).catch(() => {});
-      await cancelScheduledNotifications(NotificationType.CLASS_REMINDER_15_MIN, schedule.id).catch(() => {});
-
-      await triggerNotificationEvent({
-        eventType: NotificationType.LIVE_CLASS_STARTED,
-        category: NotificationCategory.CLASSES,
-        priority: NotificationPriority.HIGH,
-        entityId: schedule.id,
-        classId: schedule.id,
-        batchId: schedule.batchId,
-        title: `🔴 Live Now: ${schedule.title}`,
-        body: `Your live class has started. Tap to join now!`,
-        deepLink: `/live-class/${schedule.id}`,
-        actionType: "JOIN_CLASS",
-        actionUrl: `/live-class/${schedule.id}`,
-        metadata: {
-          classId: schedule.id,
-          className: schedule.title,
-          liveStartedAt: (wbSession.actualStartedAt || now).toISOString(),
-          batchId: schedule.batchId,
-        },
-        idempotencyKey: `class-live:${schedule.id}`,
-      });
-    } catch (err) {
-      console.error("[LIVE_CLASS_STARTED notification error]", err);
+    // OBS Browser Source URL: a revocable stage token for this occurrence
+    // (issued now that the occurrence's LiveSession row exists).
+    if (requestedTransport === "BOTH" || requestedTransport === "YOUTUBE") {
+      const stageToken = await issueStageToken({ batchScheduleId: schedule.id, issuedToUserId: session.user.id });
+      if (stageToken) obsBroadcastUrl = stageUrl(YOUTUBE_OAUTH_PRODUCTION_URL, schedule.id, stageToken);
     }
 
     return apiSuccess({
@@ -514,8 +493,11 @@ export async function POST(
       recordingWarning,
       youtubeSimulcastWarning,
       obsBroadcastUrl,
+      liveState,
+      youtubeConnecting: appYoutubeConnecting,
     });
   } catch (error) {
     return handleApiError(error);
   }
 }
+

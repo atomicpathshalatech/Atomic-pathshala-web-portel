@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { requirePermission, UnauthorizedError, ForbiddenError } from "@/lib/rbac/guard";
-import { resolveTeacherForSchedule } from "@/lib/batch/access";
+import { assertCanControlLiveClass, assertCanControlLecture } from "@/lib/live-class/ownership";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { pusherServer, sessionChannel, WB_EVENTS } from "@/lib/realtime/pusher-server";
@@ -29,6 +29,8 @@ export async function POST(
       });
 
       if (lecture) {
+        // Ownership is decided before the lecture → schedule upsert below writes anything.
+        await assertCanControlLecture(session.user.id, lecture);
         const defaultBatch =
           (await prisma.batch.findFirst({ where: { status: "ACTIVE" } })) ||
           (await prisma.batch.findFirst());
@@ -71,7 +73,7 @@ export async function POST(
 
     if (!schedule) return apiError("Scheduled class not found", 404);
 
-    const { teacher } = await resolveTeacherForSchedule(session.user.id, schedule.id);
+    const { teacher } = await assertCanControlLiveClass(session.user.id, schedule.id);
     if (!teacher) throw new ForbiddenError("You are not authorized to prepare this live class.");
 
     // Slide/presentation prep is metadata prep, not entering the live room
@@ -174,36 +176,15 @@ export async function POST(
 
     let obsBroadcastUrl: string | undefined;
     if (wbSession.videoTransport === "YOUTUBE" || wbSession.videoTransport === "BOTH") {
-      const { createBroadcastToken } = await import("@/lib/live-class/broadcast-token");
+      const { issueStageToken, stageUrl } = await import("@/lib/live-class/stage-session");
       const { getAppBaseUrl } = await import("@/lib/email/app-url");
-      const broadcastToken = createBroadcastToken(schedule.id, session.user.id);
-      obsBroadcastUrl = `${getAppBaseUrl()}/obs-stage/${schedule.id}?token=${broadcastToken}`;
+      const stageToken = await issueStageToken({ batchScheduleId: schedule.id, issuedToUserId: session.user.id });
+      if (stageToken) obsBroadcastUrl = stageUrl(getAppBaseUrl(), schedule.id, stageToken);
 
-      if (!wbSession.youtubeStreamKey && !wbSession.youtubeVideoId) {
-        try {
-          const { youtubeLiveClassConfigured, ensureYoutubeBroadcastForWhiteboard } = await import(
-            "@/lib/live-class/youtube-broadcast"
-          );
-          if (youtubeLiveClassConfigured()) {
-            const withBroadcast = await ensureYoutubeBroadcastForWhiteboard(
-              wbSession.id,
-              schedule.title,
-              sessionStart
-            );
-            Object.assign(wbSession, {
-              youtubeBroadcastId: withBroadcast.youtubeBroadcastId,
-              youtubeStreamId: withBroadcast.youtubeStreamId,
-              youtubeVideoId: withBroadcast.youtubeVideoId,
-              youtubeLiveChatId: withBroadcast.youtubeLiveChatId,
-              youtubeStatus: withBroadcast.youtubeStatus,
-              youtubeIngestUrl: withBroadcast.youtubeIngestUrl,
-              youtubeStreamKey: withBroadcast.youtubeStreamKey,
-            });
-          }
-        } catch (ytErr) {
-          console.warn("[preflight_youtube_init_warning]", ytErr);
-        }
-      }
+      // No YouTube broadcast is created at prepare time any more: each class
+      // gets its own broadcast + a pooled stream slot when Start Class is
+      // pressed (src/lib/live-session/app-youtube.ts), never the old shared
+      // master stream key.
     }
 
     // Notify connected clients of updated pre-flight configuration

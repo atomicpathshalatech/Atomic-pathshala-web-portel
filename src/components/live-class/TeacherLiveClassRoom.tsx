@@ -38,7 +38,7 @@ import { BroadcastQuizCanvasOverlay } from "@/components/live-class/BroadcastQui
 // Size (px) of the floating self-camera bubble — draggable & resizable (120px to 400px)
 const DEFAULT_FLOAT_CAM_SIZE = 180;
 
-type WhiteboardPage = { id: string; pageNumber: number; objects: StrokeObject[]; background: string };
+type WhiteboardPage = { id: string; pageNumber: number; objects: StrokeObject[]; background: string; version?: number };
 type LivePhase = "SCHEDULED" | "PREPARING" | "LIVE" | "ENDED" | (string & {});
 type WhiteboardSession = {
   id: string;
@@ -318,6 +318,14 @@ export function TeacherLiveClassRoom({
   const engineRef = useRef<CanvasEngine | null>(null);
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingObjectsRef = useRef<StrokeObject[] | null>(null);
+  const boardSaveRef = useRef<{
+    inFlight: boolean;
+    again: boolean;
+    conflictRetries: number;
+    versions: Record<string, number>;
+    lastSavedObjects: StrokeObject[] | null;
+    lastSavedPageId: string | null;
+  }>({ inFlight: false, again: false, conflictRetries: 0, versions: {}, lastSavedObjects: null, lastSavedPageId: null });
   const activeQuizIdRef = useRef<string | null>(null);
   // The canvas engine (and its onCommit closure) is created once per
   // session and persists across page switches — it must always call the
@@ -744,13 +752,71 @@ export function TeacherLiveClassRoom({
     }
   }, [batchScheduleId]);
 
+  // Load the OBS panel's data once per mount. The stream key only exists
+  // after Start Class (the class leases its own stream slot then), so an
+  // empty key before that is expected — it must not trigger refetching.
   useEffect(() => {
-    if (wbSession?.videoTransport === "YOUTUBE" || wbSession?.videoTransport === "BOTH") {
-      if (!wbSession.youtubeStreamKey || !obsBroadcastUrl) {
-        fetchStreamKey();
-      }
+    if ((wbSession?.videoTransport === "YOUTUBE" || wbSession?.videoTransport === "BOTH") && !obsBroadcastUrl) {
+      fetchStreamKey();
     }
-  }, [wbSession?.videoTransport, wbSession?.youtubeStreamKey, obsBroadcastUrl, fetchStreamKey]);
+  }, [wbSession?.videoTransport, obsBroadcastUrl, fetchStreamKey]);
+
+  // YouTube health gate for App YouTube classes: after Start Class the class
+  // waits (YOUTUBE_CONNECTING) until YouTube actually receives the stream
+  // from OBS; students see it live only then. Only this teacher client polls
+  // the server — students never touch the YouTube API.
+  const [youtubeGate, setYoutubeGate] = useState<{
+    state: string;
+    streamStatus: string | null;
+    healthStatus: string | null;
+    error?: string | null;
+  } | null>(null);
+  const youtubeGateActive =
+    youtubeGate?.state === "STARTING" || youtubeGate?.state === "YOUTUBE_CONNECTING" || youtubeGate?.state === "YOUTUBE_ACTIVE";
+
+  useEffect(() => {
+    if (!batchScheduleId || !youtubeGateActive) return;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const res = await fetch(`/api/team/live-class/${batchScheduleId}/stream-status`, { cache: "no-store" });
+        const json = await res.json();
+        if (cancelled) return;
+        if (!res.ok || !json.success) {
+          setYoutubeGate((prev) => (prev ? { ...prev, error: json.error || "Could not check the YouTube stream." } : prev));
+          return;
+        }
+        const d = json.data;
+        setYoutubeGate({ state: d.state, streamStatus: d.streamStatus ?? null, healthStatus: d.healthStatus ?? null, error: null });
+        if (d.state === "LIVE") setYoutubeSimulcastWarning(null);
+      } catch {
+        // transient — keep polling
+      }
+    };
+    tick();
+    const id = setInterval(tick, 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [batchScheduleId, youtubeGateActive]);
+
+  // After a page refresh mid-connect, pick the gate back up.
+  useEffect(() => {
+    if (!batchScheduleId) return;
+    if (!(wbSession?.videoTransport === "YOUTUBE" || wbSession?.videoTransport === "BOTH") || wbSession?.livePhase !== "LIVE") return;
+    fetch(`/api/team/live-class/${batchScheduleId}/stream-status`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((json) => {
+        const s = json?.data?.state;
+        if (s === "STARTING" || s === "YOUTUBE_CONNECTING" || s === "YOUTUBE_ACTIVE") {
+          setYoutubeGate({ state: s, streamStatus: json.data.streamStatus ?? null, healthStatus: json.data.healthStatus ?? null });
+          fetchStreamKey();
+        }
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [batchScheduleId, wbSession?.id]);
 
   // Start Class Mode (defaults to scheduled mode)
   const [selectedStartMode, setSelectedStartMode] = useState<"LIVEKIT" | "YOUTUBE" | "BOTH">("LIVEKIT");
@@ -959,26 +1025,66 @@ export function TeacherLiveClassRoom({
     if (engineRef.current) engineRef.current.eraserRadius = eraserRadius;
   }, [eraserRadius]);
 
+  // Board saves are single-flight and versioned: at most one save request
+  // is in flight; strokes drawn meanwhile are sent by the next save (with
+  // the newest objects), and every save carries the page version it was
+  // built on. Before this, two overlapping saves could land out of order and
+  // an older one overwrote newer strokes (for students and the recording).
+  // A 409 means the page moved on elsewhere (e.g. a second tab): adopt the
+  // server version and resend what this teacher is actually looking at.
   const flushAutosave = useCallback(async () => {
     if (!wbSession || !pendingObjectsRef.current) return;
+    const sync = boardSaveRef.current;
+    if (sync.inFlight) {
+      sync.again = true;
+      return;
+    }
     const targetPage: WhiteboardPage | null =
       currentPage ?? (wbSession.pages?.[0] ?? null);
     if (!targetPage) return;
 
     const objects = pendingObjectsRef.current;
+    if (sync.lastSavedObjects === objects && sync.lastSavedPageId === targetPage.id) return;
+    const baseVersion = sync.versions[targetPage.id] ?? targetPage.version;
+
+    sync.inFlight = true;
     try {
-      await patchJson(`/api/whiteboard/sessions/${wbSession.id}/pages/${targetPage.id}`, { objects });
-      setSaveState("saved");
+      const res = await fetch(`/api/whiteboard/sessions/${wbSession.id}/pages/${targetPage.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ objects, ...(baseVersion !== undefined && { baseVersion }) }),
+      });
+      const json = await res.json().catch(() => null);
+      if (res.status === 409 && json?.details?.currentVersion != null && sync.conflictRetries < 3) {
+        sync.versions[targetPage.id] = json.details.currentVersion;
+        sync.conflictRetries++;
+        sync.again = true;
+        return;
+      }
+      if (!res.ok || !json?.success) throw new Error(json?.error || "save failed");
+      sync.conflictRetries = 0;
+      sync.versions[targetPage.id] = json.data.page.version;
+      sync.lastSavedObjects = objects;
+      sync.lastSavedPageId = targetPage.id;
+      if (pendingObjectsRef.current === objects) setSaveState("saved");
       setWbSession((prev) =>
         prev
           ? {
               ...prev,
-              pages: prev.pages.map((p) => (p.id === targetPage!.id ? { ...p, objects } : p)),
+              pages: prev.pages.map((p) =>
+                p.id === targetPage!.id ? { ...p, objects, version: json.data.page.version } : p
+              ),
             }
           : prev
       );
     } catch {
       setSaveState("offline");
+    } finally {
+      sync.inFlight = false;
+      if (sync.again) {
+        sync.again = false;
+        setTimeout(() => flushAutosaveRef.current(), 0);
+      }
     }
   }, [wbSession, currentPage]);
 
@@ -1089,17 +1195,34 @@ export function TeacherLiveClassRoom({
     };
   }, []);
 
-  // ---- Pusher: roster presence + teacher-only hand-raise/quiz channels ----
+  // ---- Online student count (attendance heartbeats, every 20 s) ----------
+  useEffect(() => {
+    if (!wbSession?.id) return;
+    let cancelled = false;
+    const load = () =>
+      fetch(`/api/whiteboard/sessions/${wbSession.id}/online-count`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((json) => {
+          if (!cancelled && json?.success) setStudentCount(json.data.online ?? 0);
+        })
+        .catch(() => {});
+    load();
+    const id = setInterval(load, 20_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [wbSession?.id]);
+
+  // ---- Pusher: class event channel + teacher-only hand-raise/quiz channels ----
   useEffect(() => {
     if (!wbSession) return;
     const client = getPusherClient();
 
+    // Class event channel (private — see sessionChannel). The student count
+    // comes from attendance heartbeats via the effect below, not from
+    // channel membership.
     const presence = client.subscribe(sessionChannel(wbSession.id));
-    presence.bind("pusher:subscription_succeeded", (members: { count: number }) => {
-      setStudentCount(Math.max(0, members.count - 1)); // exclude the teacher themself
-    });
-    presence.bind("pusher:member_added", () => setStudentCount((c) => c + 1));
-    presence.bind("pusher:member_removed", () => setStudentCount((c) => Math.max(0, c - 1)));
     presence.bind(WB_EVENTS.MESSAGE_SENT, () => {
       // No sound here on purpose — the product owner found a chime on
       // every chat message too disruptive during a live class. Sound is
@@ -1962,6 +2085,13 @@ export function TeacherLiveClassRoom({
       if (data.recordingWarning) setRecordingWarning(data.recordingWarning);
       if (data.youtubeSimulcastWarning) setYoutubeSimulcastWarning(data.youtubeSimulcastWarning);
       if (data.obsBroadcastUrl) setObsBroadcastUrl(data.obsBroadcastUrl);
+      if (data.youtubeConnecting) {
+        // The class now holds its own stream slot: show the OBS panel with
+        // this class's key and wait for YouTube to receive the stream.
+        setYoutubeGate({ state: data.liveState || "YOUTUBE_CONNECTING", streamStatus: null, healthStatus: null });
+        setShowObsStreamInfo(true);
+        fetchStreamKey();
+      }
     } catch (err) {
       setStartClassError(err instanceof Error ? err.message : "Could not start the class.");
     } finally {
@@ -2667,6 +2797,19 @@ export function TeacherLiveClassRoom({
               <span className="material-symbols-outlined text-sm">warning</span>
               {youtubeSimulcastWarning}
             </div>
+          )}
+          {youtubeGateActive && (
+            <button
+              type="button"
+              onClick={() => setShowObsStreamInfo(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-sky-500/15 border border-sky-500/40 px-3 py-1.5 text-xs font-semibold text-sky-200 hover:bg-sky-500/25 transition"
+              title="Open OBS setup"
+            >
+              <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
+              {youtubeGate?.state === "YOUTUBE_ACTIVE"
+                ? "YouTube is receiving your stream — going live…"
+                : "Waiting for your OBS stream — students will see the class once YouTube receives it"}
+            </button>
           )}
           {/* OBS Stream Key & Setup Button (shown whenever mode is YOUTUBE or BOTH) */}
           {(wbSession?.videoTransport === "YOUTUBE" || wbSession?.videoTransport === "BOTH") && (
@@ -4220,17 +4363,44 @@ export function TeacherLiveClassRoom({
                   <span>How to Stream with OBS Studio</span>
                 </div>
                 <ol className="list-decimal list-inside space-y-1 text-slate-300 text-[11px] leading-relaxed">
-                  <li>Open OBS Studio → <strong>Settings → Stream → Service: Custom</strong>.</li>
-                  <li>Paste the <strong>Server URL</strong> and <strong>Stream Key</strong> below.</li>
-                  <li>Add a <strong>Browser Source</strong> in OBS using the URL below (Resolution: 1920×1080).</li>
-                  <li>Click <strong>&quot;Start Streaming&quot;</strong> in OBS Studio.</li>
                   {!isClassLive && (
                     <li className="text-emerald-400 font-semibold">
-                      Once OBS shows active stream, click <strong>&quot;Start Class (Go Live)&quot;</strong> below to start for students!
+                      Click <strong>&quot;Start Class&quot;</strong> first — this class then gets its own stream key.
                     </li>
                   )}
+                  <li>Open OBS Studio → <strong>Settings → Stream → Service: Custom</strong>.</li>
+                  <li>Paste this class&apos;s <strong>Server URL</strong> and <strong>Stream Key</strong> below.</li>
+                  <li>Add a <strong>Browser Source</strong> in OBS using the URL below (Resolution: 1920×1080).</li>
+                  <li>Click <strong>&quot;Start Streaming&quot;</strong> in OBS. The class goes live for students automatically once YouTube receives the stream.</li>
                 </ol>
+                <p className="text-[10px] text-slate-400">
+                  The key belongs to this class only, and stops working for you when the class ends. Don&apos;t share it.
+                </p>
               </div>
+
+              {youtubeGate && (
+                <div
+                  className={`p-3 rounded-xl border text-[11px] font-semibold flex items-center gap-2 ${
+                    youtubeGate.state === "LIVE"
+                      ? "bg-emerald-950/40 border-emerald-700/60 text-emerald-300"
+                      : "bg-sky-950/40 border-sky-800/60 text-sky-200"
+                  }`}
+                >
+                  <span className={`material-symbols-outlined text-sm ${youtubeGate.state === "LIVE" ? "" : "animate-spin"}`}>
+                    {youtubeGate.state === "LIVE" ? "check_circle" : "progress_activity"}
+                  </span>
+                  <span>
+                    {youtubeGate.state === "LIVE"
+                      ? "You are live on YouTube — students can see the class."
+                      : youtubeGate.state === "YOUTUBE_ACTIVE"
+                      ? "YouTube is receiving your stream. Going live…"
+                      : youtubeGate.state === "FAILED"
+                      ? "The YouTube broadcast ended before going live. End the class and start again."
+                      : `Waiting for OBS… (YouTube stream: ${youtubeGate.streamStatus ?? "not receiving"})`}
+                    {youtubeGate.error ? ` — ${youtubeGate.error}` : ""}
+                  </span>
+                </div>
+              )}
 
               {/* 1. Server URL */}
               <div className="space-y-1.5">
@@ -4275,7 +4445,7 @@ export function TeacherLiveClassRoom({
                     <input
                       type={streamKeyVisible ? "text" : "password"}
                       readOnly
-                      value={wbSession?.youtubeStreamKey || (loadingStreamKey ? "Generating key..." : "Key ready")}
+                      value={wbSession?.youtubeStreamKey || (loadingStreamKey ? "Fetching key..." : "Available after you click Start Class")}
                       className="w-full px-3 py-2 pr-10 text-xs font-mono rounded-xl bg-[#0a0b12] border border-slate-700 text-slate-200 select-all"
                     />
                     <button

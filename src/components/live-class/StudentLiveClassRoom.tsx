@@ -4,6 +4,7 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState }
 import Link from "next/link";
 import { getPusherClient } from "@/lib/realtime/pusher-client";
 import { sessionChannel, WB_EVENTS } from "@/lib/realtime/events";
+import { STUDENT_HEARTBEAT_MS } from "@/lib/whiteboard/constants";
 import { CanvasEngine, type StrokeObject } from "@/lib/canvas/canvas-engine";
 import { MessagesPanel } from "@/components/live-class/MessagesPanel";
 import { YouTubeLivePlayer } from "@/components/live-class/YouTubeLivePlayer";
@@ -53,6 +54,11 @@ interface WhiteboardSessionData {
 // teacher's Material & Setup camera shape is Circular — see floatCamPos
 // in StudentLiveClassRoom.
 const FLOAT_CAM_SIZE = 128;
+
+/** base ± spread ms — spreads 500 students' fallback polls instead of synchronising them. */
+function jitter(baseMs: number, spreadMs: number) {
+  return baseMs - spreadMs + Math.round(Math.random() * 2 * spreadMs);
+}
 
 function isBackgroundImageUrl(background: string | null | undefined): background is string {
   if (typeof background !== "string" || !background.trim()) return false;
@@ -583,6 +589,10 @@ export function StudentLiveClassRoom({
 }) {
   const [phase, setPhase] = useState<"waiting" | "lobby" | "live" | "ended">("waiting");
   const [wbSession, setWbSession] = useState<WhiteboardSessionData | null>(null);
+  // Server-authoritative lifecycle state (LiveSession.state) from by-schedule.
+  // When present it alone decides "live" — a YouTube id existing does not.
+  // Null only for classes that have no lifecycle row yet (legacy data).
+  const [liveState, setLiveState] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [handRaised, setHandRaised] = useState(false);
@@ -881,7 +891,7 @@ export function StudentLiveClassRoom({
                 : "Could not connect to this class. Please refresh the page."
             );
           }
-          if (!cancelled) timer = setTimeout(poll, 3000);
+          if (!cancelled) timer = setTimeout(poll, jitter(15_000, 5_000));
           return;
         }
         consecutiveFailures = 0;
@@ -901,6 +911,24 @@ export function StudentLiveClassRoom({
         }
         const wb = json.data.whiteboardSession;
         if (cancelled) return;
+        const serverLiveState: string | null = json.data.liveState ?? null;
+        setLiveState(serverLiveState);
+        if (serverLiveState) {
+          if (wb) setWbSession(wb);
+          if (serverLiveState === "LIVE" || serverLiveState === "ENDING") {
+            setPhase("live");
+            if (!cancelled) timer = setTimeout(poll, jitter(60_000, 15_000));
+            return;
+          }
+          if (["RECORDING_PROCESSING", "RECORDING_READY", "COMPLETED", "CANCELLED", "FAILED"].includes(serverLiveState)) {
+            setPhase("ended");
+            return; // class is over, stop polling
+          }
+          // SCHEDULED … YOUTUBE_ACTIVE: not live yet, even if a broadcast exists.
+          setPhase(wb ? "lobby" : "waiting");
+          if (!cancelled) timer = setTimeout(poll, jitter(15_000, 5_000));
+          return;
+        }
         if (wb && wb.status === "ENDED") {
           setWbSession(wb);
           setPhase("ended");
@@ -912,7 +940,7 @@ export function StudentLiveClassRoom({
           if (wb.livePhase === "LIVE" || json.data.schedule?.status === "LIVE" || hasYouTubeStream) {
             setPhase("live");
             // Keep polling at a slower rate to catch ENDED state
-            if (!cancelled) timer = setTimeout(poll, 4000);
+            if (!cancelled) timer = setTimeout(poll, jitter(60_000, 15_000));
             return;
           }
           setPhase("lobby");
@@ -923,7 +951,7 @@ export function StudentLiveClassRoom({
       } catch {
         // Network error — keep retrying silently
       }
-      if (!cancelled) timer = setTimeout(poll, 2000);
+      if (!cancelled) timer = setTimeout(poll, jitter(15_000, 5_000));
     }
 
     poll();
@@ -941,14 +969,37 @@ export function StudentLiveClassRoom({
     // Periodic attendance heartbeat while viewing class
     const hbInterval = setInterval(() => {
       fetch(`/api/whiteboard/sessions/${wbSession.id}/heartbeat`, { method: "POST" }).catch(() => {});
-    }, 25000);
+    }, STUDENT_HEARTBEAT_MS);
     return () => clearInterval(hbInterval);
   }, [wbSession?.id]);
 
 
-  // Board mirror refresh
+  // Board mirror refresh. When the class video comes from YouTube the
+  // board is already IN the video, so students don't fetch it at all (500
+  // students × a 2.5 s poll was ~200 requests/second for nothing). For the
+  // legacy room view it is coalesced: at most one request in flight and at
+  // most one per second, however many "board changed" signals arrive.
+  const youtubeCarriesBoard =
+    (wbSession?.videoTransport === "YOUTUBE" || wbSession?.videoTransport === "BOTH") && Boolean(wbSession?.youtubeVideoId);
+  const youtubeCarriesBoardRef = useRef(youtubeCarriesBoard);
+  youtubeCarriesBoardRef.current = youtubeCarriesBoard;
+  const boardFetchRef = useRef<{ inFlight: boolean; lastAt: number; pending: boolean }>({ inFlight: false, lastAt: 0, pending: false });
+
   async function refreshBoard() {
-    if (!wbSession?.id) return;
+    if (!wbSession?.id || youtubeCarriesBoardRef.current) return;
+    const gate = boardFetchRef.current;
+    if (gate.inFlight || Date.now() - gate.lastAt < 1000) {
+      if (!gate.pending) {
+        gate.pending = true;
+        setTimeout(() => {
+          gate.pending = false;
+          refreshBoard();
+        }, 1000);
+      }
+      return;
+    }
+    gate.inFlight = true;
+    gate.lastAt = Date.now();
     try {
       const res = await fetch(`/api/whiteboard/sessions/${wbSession.id}/board`);
       const json = await res.json();
@@ -959,6 +1010,8 @@ export function StudentLiveClassRoom({
       setBoardBackground(json.data.page?.background ?? "blank");
     } catch {
       // best effort
+    } finally {
+      boardFetchRef.current.inFlight = false;
     }
   }
 
@@ -971,12 +1024,13 @@ export function StudentLiveClassRoom({
 
   // Periodic fallback sync while live to ensure board stays 100% synchronized
   useEffect(() => {
-    if (phase !== "live" || !wbSession?.id) return;
+    if (phase !== "live" || !wbSession?.id || youtubeCarriesBoard) return;
     const interval = setInterval(() => {
       refreshBoard();
-    }, 2500);
+    }, 10_000);
     return () => clearInterval(interval);
-  }, [phase, wbSession?.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, wbSession?.id, youtubeCarriesBoard]);
 
   // Subscribe to realtime Pusher session events
   useEffect(() => {
@@ -1369,11 +1423,15 @@ export function StudentLiveClassRoom({
     ? new Date(wbSession.actualStartedAt).getTime()
     : null;
 
-  const isLive =
-    phase === "live" ||
-    wbSession?.livePhase === "LIVE" ||
-    Boolean(wbSession?.actualStartedAt && wbSession?.livePhase !== "ENDED" && wbSession?.status !== "ENDED" && phase !== "ended") ||
-    (Boolean(wbSession?.youtubeVideoId) && wbSession?.livePhase !== "ENDED" && wbSession?.status !== "ENDED" && phase !== "ended");
+  // With a server lifecycle state, only LIVE/ENDING (or a realtime "went
+  // live" push that already moved `phase`) counts. The youtubeVideoId
+  // heuristic below is kept only for legacy classes without that state.
+  const isLive = liveState
+    ? phase === "live" || liveState === "LIVE" || liveState === "ENDING"
+    : phase === "live" ||
+      wbSession?.livePhase === "LIVE" ||
+      Boolean(wbSession?.actualStartedAt && wbSession?.livePhase !== "ENDED" && wbSession?.status !== "ENDED" && phase !== "ended") ||
+      (Boolean(wbSession?.youtubeVideoId) && wbSession?.livePhase !== "ENDED" && wbSession?.status !== "ENDED" && phase !== "ended");
   const secondsUntilStart = scheduledStartMs > 0 ? Math.floor((scheduledStartMs - currentTimeMs) / 1000) : 0;
   const elapsedSeconds = actualStartedAtMs ? Math.max(0, Math.floor((currentTimeMs - actualStartedAtMs) / 1000)) : 0;
   const remainingSeconds = scheduledEndMs > 0 ? Math.floor((scheduledEndMs - currentTimeMs) / 1000) : 0;

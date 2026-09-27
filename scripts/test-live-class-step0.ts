@@ -26,7 +26,7 @@ function assert(condition: boolean, testName: string, detail?: string) {
 async function run() {
   const { effectiveClassEnd, isPastGracePeriod } = await import("../src/lib/whiteboard/lifecycle");
   const { isNonRetryableYoutubeError } = await import("../src/lib/youtube/live-broadcast");
-  const { createBroadcastToken, verifyBroadcastToken } = await import("../src/lib/live-class/broadcast-token");
+  const { looksLikeStageToken } = await import("../src/lib/live-class/stage-session");
   const { GET: obsStageGET } = await import("../src/app/api/live-class/obs-stage/[scheduleId]/route");
   const { NextRequest } = await import("next/server");
 
@@ -66,8 +66,7 @@ async function run() {
   assert(!isNonRetryableYoutubeError(invalidErr), "Validation errors still fall through to the next config tier");
 
   // ---- OBS stage token binding (rejected before any DB access) -----------
-  const tokenA = createBroadcastToken("schedule-A", "teacher-user-1");
-  assert(verifyBroadcastToken(tokenA)?.scheduleId === "schedule-A", "Token verifies for the class it was minted for");
+  assert(!looksLikeStageToken("garbage.token") && !looksLikeStageToken(null) && looksLikeStageToken("A".repeat(43)), "Stage token shape check");
 
   const call = (scheduleId: string, token: string | null) =>
     obsStageGET(
@@ -81,10 +80,8 @@ async function run() {
   assert(noToken.status === 401, "Stage without a token is rejected (was: served board + quiz answers)", `got ${noToken.status}`);
 
   const badToken = await call("schedule-A", "garbage.token");
-  assert(badToken.status === 401, "Stage with a forged token is rejected", `got ${badToken.status}`);
-
-  const crossClass = await call("schedule-B", tokenA);
-  assert(crossClass.status === 401, "Class A token used on Class B is rejected", `got ${crossClass.status}`);
+  assert(badToken.status === 401, "Stage with a malformed token is rejected (no DB lookup)", `got ${badToken.status}`);
+  // Class A token on Class B, revoked and expired tokens: scripts/test-live-class-step5-db.ts (needs a DB).
 
   console.log(`\n${passCount} passed, ${failCount} failed`);
   if (failCount > 0) process.exit(1);

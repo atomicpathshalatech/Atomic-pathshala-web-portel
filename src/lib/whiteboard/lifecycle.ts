@@ -46,11 +46,21 @@ export async function endWhiteboardSession(
 
   const now = new Date();
 
-  // Stop LiveKit Room Recording if active. waitUntil() keeps this function
-  // alive past the HTTP response — a bare fire-and-forget import().then()
-  // has no guarantee of completing on Vercel serverless once the response
-  // is sent (this was silently losing the recording on every "End Class"
-  // click before this fix).
+  // The occurrence's lifecycle row decides how the video/recording side is
+  // wound down. With a YouTube delivery mode, the recording is confirmed
+  // later by asking YouTube (checkRecordingReadiness) — never marked READY,
+  // and the lecture link never published, just because class ended.
+  const { getOpenLiveSession } = await import("@/lib/live-session/service");
+  const openLiveSession = await getOpenLiveSession(existing.batchScheduleId).catch((err) => {
+    console.error("[live_session_lookup_error]", sessionId, err);
+    return null;
+  });
+  const youtubeManaged =
+    openLiveSession !== null &&
+    (openLiveSession.deliveryMode === "APP_YOUTUBE" ||
+      openLiveSession.deliveryMode === "MAIN_YOUTUBE" ||
+      openLiveSession.deliveryMode === "EXTERNAL_YOUTUBE");
+
   // Stop LiveKit Room Recording if active. waitUntil() keeps this function
   // alive past the HTTP response — a bare fire-and-forget import().then()
   // has no guarantee of completing on Vercel serverless once the response
@@ -69,28 +79,29 @@ export async function endWhiteboardSession(
     );
   }
 
-  // Complete YouTube Live Broadcast if class was streamed to YouTube
-  if (existing.youtubeBroadcastId) {
-    waitUntil(
-      import("@/lib/youtube/live-broadcast")
-        .then(({ transitionBroadcast }) => transitionBroadcast(existing.youtubeBroadcastId!, "complete"))
-        .catch((err) => console.warn("[youtube_transition_complete_warning]", err))
-    );
-  }
-
-  // Link YouTube live recording to the scheduled lecture so students immediately see the recording
-  if (existing.batchSchedule?.lectureId && existing.youtubeVideoId) {
-    waitUntil(
-      prisma.lecture
-        .update({
-          where: { id: existing.batchSchedule.lectureId },
-          data: {
-            videoUrl: `https://www.youtube.com/watch?v=${existing.youtubeVideoId}`,
-            status: "PUBLISHED",
-          },
-        })
-        .catch((err) => console.warn("[lecture_videoUrl_update_error]", err))
-    );
+  // Legacy path only (a session with no lifecycle row yet): the old
+  // behaviour of completing the broadcast and linking the lecture at once.
+  if (!openLiveSession) {
+    if (existing.youtubeBroadcastId) {
+      waitUntil(
+        import("@/lib/youtube/live-broadcast")
+          .then(({ transitionBroadcast }) => transitionBroadcast(existing.youtubeBroadcastId!, "complete"))
+          .catch((err) => console.warn("[youtube_transition_complete_warning]", err))
+      );
+    }
+    if (existing.batchSchedule?.lectureId && existing.youtubeVideoId) {
+      waitUntil(
+        prisma.lecture
+          .update({
+            where: { id: existing.batchSchedule.lectureId },
+            data: {
+              videoUrl: `https://www.youtube.com/watch?v=${existing.youtubeVideoId}`,
+              status: "PUBLISHED",
+            },
+          })
+          .catch((err) => console.warn("[lecture_videoUrl_update_error]", err))
+      );
+    }
   }
 
   const isRecordingActive =
@@ -108,10 +119,12 @@ export async function endWhiteboardSession(
         endedAt: existing.endedAt || now,
         actualEndedAt: existing.actualEndedAt || now,
         ...(isRecordingActive && { recordingStatus: "PROCESSING" }),
-        ...(existing.youtubeVideoId && {
-          recordingVideoId: existing.youtubeVideoId,
-          recordingStatus: "READY",
-        }),
+        ...(youtubeManaged && existing.youtubeVideoId && { recordingStatus: "PROCESSING", recordingVideoId: null }),
+        ...(!openLiveSession &&
+          existing.youtubeVideoId && {
+            recordingVideoId: existing.youtubeVideoId,
+            recordingStatus: "READY",
+          }),
       },
     }),
 
@@ -129,6 +142,39 @@ export async function endWhiteboardSession(
       data: { status: "CLOSED" },
     }),
   ]);
+
+  // Lifecycle row: LIVE → ENDING → RECORDING_PROCESSING (YouTube modes wait
+  // for YouTube to confirm the recording) or COMPLETED, for this occurrence
+  // and its simulcast group — so no grouped sibling schedule stays LIVE. A
+  // class ended before YouTube ever went live → FAILED (its unused broadcast
+  // is deleted). APP_YOUTUBE then completes its broadcast and returns its
+  // stream to the pool. Non-fatal: students must still be moved out of the
+  // class even if this bookkeeping fails; the stale-lease sweep cleans up.
+  if (openLiveSession) {
+    try {
+      const { markLiveSessionEnded, transitionLiveSession } = await import("@/lib/live-session/service");
+      const { finishAppYoutubeBroadcast, PRE_LIVE_YOUTUBE_STATES } = await import("@/lib/live-session/app-youtube");
+      const endedBeforeLive = (PRE_LIVE_YOUTUBE_STATES as readonly string[]).includes(openLiveSession.state);
+      // OBS stage links for this occurrence stop working now.
+      const { revokeStageTokens } = await import("@/lib/live-class/stage-session");
+      await revokeStageTokens(openLiveSession.id);
+      if (endedBeforeLive) {
+        await transitionLiveSession(openLiveSession.id, "FAILED", { failureReason: "ended_before_live", actualEndedAt: now });
+      } else if (openLiveSession.state === "LIVE" || openLiveSession.state === "ENDING") {
+        await markLiveSessionEnded(openLiveSession.id, { endedAt: now, hasLegacyRecording: Boolean(isRecordingActive) });
+      }
+      if (openLiveSession.deliveryMode === "APP_YOUTUBE") {
+        waitUntil(
+          finishAppYoutubeBroadcast(openLiveSession.id, endedBeforeLive).catch((err) =>
+            console.warn("[app_youtube_finish_warning]", sessionId, err)
+          )
+        );
+      }
+    } catch (err) {
+      console.error("[live_session_end_error]", sessionId, err);
+    }
+  }
+
 
   // Realtime broadcast to transition students immediately to post-class feedback screen
   try {

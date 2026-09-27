@@ -71,7 +71,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     const updated = await prisma.whiteboardPage.update({
       where: { id: params.pageId },
-      data: { background },
+      // A new background changes what's on the board: bump the version so
+      // a stroke save still based on the old version can't overwrite it.
+      data: { background, version: { increment: 1 } },
     });
 
     const previousKey = keyFromPublicUrl(page.background);
@@ -91,12 +93,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       select: { activePageNumber: true },
     });
     if (wbSession && wbSession.activePageNumber === updated.pageNumber) {
-      await pushBoardUpdated(
-        params.id,
-        updated.pageNumber,
-        updated.objects as any[],
-        updated.background
-      );
+      await pushBoardUpdated(params.id, updated.pageNumber, updated.version);
     }
 
     return apiSuccess({ page: updated });

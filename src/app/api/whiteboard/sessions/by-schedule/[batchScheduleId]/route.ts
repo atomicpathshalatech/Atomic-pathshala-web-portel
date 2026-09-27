@@ -83,22 +83,38 @@ export async function GET(
           select: STUDENT_SAFE_SESSION_SELECT,
         });
 
-        if (!ws && schedule.lectureId) {
-          const siblingSchedule = await prisma.batchSchedule.findFirst({
-            where: {
-              lectureId: schedule.lectureId,
-              liveWhiteboardSession: { isNot: null },
-            },
-            select: { liveWhiteboardSession: { select: STUDENT_SAFE_SESSION_SELECT } },
-          });
-          if (siblingSchedule?.liveWhiteboardSession) {
-            ws = siblingSchedule.liveWhiteboardSession;
+        // Batches share a room ONLY through an admin-created simulcast group
+        // — never implicitly because two schedules happen to share a lecture.
+        if (!ws) {
+          const { resolveGroupWhiteboardSessionId } = await import("@/lib/live-session/simulcast");
+          const groupRoomId = await resolveGroupWhiteboardSessionId(params.batchScheduleId);
+          if (groupRoomId) {
+            ws = await prisma.whiteboardSession.findUnique({ where: { id: groupRoomId }, select: STUDENT_SAFE_SESSION_SELECT });
           }
         }
         return ws;
       },
       3
     );
+
+    // Authoritative lifecycle state for THIS schedule's occurrence. Clients
+    // decide "live" from this, never from the presence of a YouTube id.
+    const liveState = await cache.getOrSet(
+      `live:state:${params.batchScheduleId}`,
+      async () => {
+        const { getOpenLiveSession, getLatestLiveSession } = await import("@/lib/live-session/service");
+        const row = (await getOpenLiveSession(params.batchScheduleId)) ?? (await getLatestLiveSession(params.batchScheduleId));
+        return row?.state ?? null;
+      },
+      3
+    );
+
+    // Students only get the video id while the class is actually live (or
+    // ending) — a pre-created or already-finished broadcast is not "live".
+    // Sessions with no lifecycle row yet (not backfilled) keep old behaviour.
+    if (!teacher && wbSession && liveState && liveState !== "LIVE" && liveState !== "ENDING") {
+      wbSession = { ...wbSession, youtubeVideoId: null };
+    }
 
     // No YouTube API call here: this route is polled by every student every
     // few seconds, and the videos.update (≈50 quota units) that used to run
@@ -128,6 +144,7 @@ export async function GET(
 
     return apiSuccess({
       whiteboardSession: wbSession ?? null,
+      liveState,
       serverTime: now.toISOString(),
       serverTimeMs: now.getTime(),
       schedule: {

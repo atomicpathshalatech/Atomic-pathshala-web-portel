@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { isPastGracePeriod, effectiveClassEnd, endWhiteboardSession } from "@/lib/whiteboard/lifecycle";
+import { authoritativeEndFor } from "@/lib/live-session/service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,13 +57,16 @@ export async function GET(req: NextRequest) {
   try {
     const staleActive = await prisma.whiteboardSession.findMany({
       where: { status: "ACTIVE" },
-      include: { batchSchedule: { select: { endsAt: true } } },
+      include: { batchSchedule: { select: { id: true, endsAt: true } } },
       take: 50,
     });
 
     let autoEnded = 0;
     for (const s of staleActive) {
-      if (isPastGracePeriod(effectiveClassEnd(s.batchSchedule.endsAt, s.scheduledEnd))) {
+      if (
+        isPastGracePeriod(effectiveClassEnd(s.batchSchedule.endsAt, s.scheduledEnd)) &&
+        isPastGracePeriod(await authoritativeEndFor(s))
+      ) {
         await endWhiteboardSession(s.id, { endedByUserId: null, reason: "auto_grace_expired" });
         autoEnded++;
       }
@@ -91,10 +95,19 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Stream slots held by classes that are over (or past their expiry) go
+    // back to the pool — covers a broadcast-complete call that failed at End.
+    const { sweepStaleLeases } = await import("@/lib/youtube/stream-pool");
+    const releasedLeases = await sweepStaleLeases().catch((err) => {
+      console.error("[cron:whiteboard-finalize] lease sweep failed", err);
+      return 0;
+    });
+
     return NextResponse.json({
       success: true,
       autoEnded,
       retriedFinalization,
+      releasedLeases,
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {

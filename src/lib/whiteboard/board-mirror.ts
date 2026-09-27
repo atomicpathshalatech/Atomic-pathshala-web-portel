@@ -10,17 +10,15 @@ import { pusherServer, sessionChannel, WB_EVENTS } from "@/lib/realtime/pusher-s
  * that decides how "board changed" gets announced.
  */
 
-export async function pushBoardUpdated(
-  whiteboardSessionId: string,
-  pageNumber: number,
-  objects?: any[],
-  background?: string
-) {
+export async function pushBoardUpdated(whiteboardSessionId: string, pageNumber: number, version: number) {
+  // Signal only — { pageNumber, version }, well under 100 bytes. The full
+  // objects array used to be sent here, which failed silently past Pusher's
+  // 10 KB message limit on any real board (and fanned the whole board out
+  // to every student). Listeners that need the board re-fetch it.
   try {
     await pusherServer.trigger(sessionChannel(whiteboardSessionId), WB_EVENTS.BOARD_UPDATED, {
       pageNumber,
-      objects,
-      background,
+      version,
     });
   } catch (err) {
     console.error("[pusher_trigger_error]", err);

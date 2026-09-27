@@ -7,6 +7,8 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { pusherServer, sessionChannel, WB_EVENTS } from "@/lib/realtime/pusher-server";
 import { assertCanControlLiveClass } from "@/lib/live-class/ownership";
+import { getOpenLiveSession, extendLiveSession } from "@/lib/live-session/service";
+import { effectiveClassEnd } from "@/lib/whiteboard/lifecycle";
 
 export async function POST(
   request: NextRequest,
@@ -47,14 +49,25 @@ export async function POST(
       teacherUserId: session.user.id,
     };
 
-    const newTotalExtended = (wbSession.totalExtendedMinutes || 0) + addedMinutes;
-    const currentScheduledEnd = wbSession.scheduledEnd
-      ? new Date(wbSession.scheduledEnd)
-      : schedule.endsAt
-      ? new Date(schedule.endsAt)
-      : new Date(Date.now() + 60 * 60 * 1000);
-
-    const newScheduledEnd = new Date(currentScheduledEnd.getTime() + addedMinutes * 60 * 1000);
+    // The authoritative end lives on the open LiveSession: extending moves it
+    // (and the simulcast group's, and any stream lease expiry) and mirrors
+    // it onto WhiteboardSession.scheduledEnd. Auto-end, the cron and the
+    // client countdown all follow it, so the class is no longer cut off at
+    // its original end time.
+    const openLiveSession = await getOpenLiveSession(schedule.id);
+    let newScheduledEnd: Date;
+    let newTotalExtended: number;
+    if (openLiveSession) {
+      const extended = await extendLiveSession(openLiveSession.id, addedMinutes);
+      const own = extended.find((s) => s.id === openLiveSession.id)!;
+      newScheduledEnd = own.effectiveEndsAt;
+      newTotalExtended = own.totalExtendedMinutes;
+    } else {
+      // Session from before the LiveSession backfill: legacy fields only.
+      newTotalExtended = (wbSession.totalExtendedMinutes || 0) + addedMinutes;
+      const currentScheduledEnd = effectiveClassEnd(schedule.endsAt, wbSession.scheduledEnd);
+      newScheduledEnd = new Date(currentScheduledEnd.getTime() + addedMinutes * 60 * 1000);
+    }
 
     const updatedSession = await prisma.whiteboardSession.update({
       where: { id: wbSession.id },

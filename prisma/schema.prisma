@@ -376,6 +376,7 @@ model Teacher {
   scheduleSessions BatchSchedule[]
   liveWhiteboardSessions WhiteboardSession[]
   classroomSessions ClassroomSession[]
+  controlledLiveSessions LiveSession[]
   lectures         Lecture[]
   followers        TeacherFollow[]
   badges           TeacherBadge[]
@@ -743,6 +744,10 @@ model BatchSchedule {
 
   liveWhiteboardSession WhiteboardSession?
   classroomSession      ClassroomSession?
+  // One row per live occurrence (a reschedule/re-run starts a new one) —
+  // see LiveSession. At most one is non-terminal at a time (partial unique
+  // index in the migration).
+  liveSessions          LiveSession[]
   test                  Test?
 
   @@index([batchId])
@@ -1478,6 +1483,7 @@ model WhiteboardSession {
   doubts        Doubt[]
   teacherFeedback TeacherClassFeedback?
   studentFeedbacks StudentClassFeedback[]
+  liveSessions  LiveSession[]
 
   @@index([teacherId])
   @@index([status])
@@ -1510,12 +1516,218 @@ enum VideoTransport {
   BOTH
 }
 
+// ----------------------------------------------------------------------------
+// YOUTUBE-FIRST LIVE DELIVERY (live-class redesign, step 2)
+//
+// YouTube carries video + recording; Atomic owns class state. These models
+// hold the video/lifecycle side of a class, separate from WhiteboardSession
+// (which stays the interaction container: pages, chat, quiz, hand raise).
+//
+// Invariants enforced in SQL (see the migration — Prisma can't express them):
+//   - at most one non-terminal StreamLease per ingest stream   (no two classes on one stream)
+//   - at most one non-terminal StreamLease per LiveSession
+//   - at most one open LiveSession per BatchSchedule
+//   - deliveryMode ↔ youtubeChannel must match (APP_YOUTUBE→APP, MAIN_YOUTUBE→MAIN)
+// ----------------------------------------------------------------------------
+
+/// Which of Atomic's two YouTube channels a resource lives on. Credentials,
+/// broadcasts and streams of the two are never mixed (src/lib/youtube/channels.ts).
+enum YoutubeChannelKey {
+  APP
+  MAIN
+}
+
+enum DeliveryMode {
+  APP_YOUTUBE      // Atomic whiteboard → local encoder → APP channel (unlisted)
+  MAIN_YOUTUBE     // teacher streams on the MAIN channel; Atomic maps + verifies it
+  EXTERNAL_YOUTUBE // admin-pasted URL/video id, no ownership check
+  LEGACY_LIVEKIT   // pre-redesign LiveKit room video (read-only history)
+}
+
+/// Authoritative class lifecycle. Students render from this — never from
+/// "a youtubeVideoId exists". Transitions are compare-and-set.
+enum LiveSessionState {
+  SCHEDULED
+  READY
+  STARTING
+  YOUTUBE_CONNECTING
+  YOUTUBE_ACTIVE
+  LIVE
+  ENDING
+  RECORDING_PROCESSING
+  RECORDING_READY
+  COMPLETED
+  CANCELLED
+  FAILED
+}
+
+enum IngestStreamStatus {
+  AVAILABLE
+  LEASED
+  DISABLED
+  RETIRED
+}
+
+enum StreamLeaseState {
+  RESERVED
+  BOUND
+  ACTIVE
+  RELEASING
+  RELEASED
+  FAILED
+}
+
+/// A long-lived YouTube liveStream (RTMP ingest) owned by the APP channel,
+/// leased to at most one class at a time. The stream name (key) is stored
+/// encrypted and is never returned to a browser.
+model YoutubeIngestStream {
+  id              String             @id @default(cuid())
+  channel         YoutubeChannelKey
+  youtubeStreamId String             @unique
+  ingestAddress   String
+  streamNameEnc   String             @db.Text
+  keyRotatedAt    DateTime?
+  status          IngestStreamStatus @default(AVAILABLE)
+  lastReleasedAt  DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  leases StreamLease[]
+
+  @@index([channel, status])
+  @@map("youtube_ingest_streams")
+}
+
+/// One live occurrence of a scheduled class. A reschedule/re-run creates a
+/// new row (occurrence + 1), so YouTube/recording state of an earlier run can
+/// never leak into a later one.
+model LiveSession {
+  id                   String             @id @default(cuid())
+  batchScheduleId      String
+  occurrence           Int                @default(1)
+  whiteboardSessionId  String?
+  deliveryMode         DeliveryMode
+  state                LiveSessionState   @default(SCHEDULED)
+  stateChangedAt       DateTime           @default(now())
+  failureReason        String?
+  controllingTeacherId String
+  plannedStartsAt      DateTime
+  /// THE authoritative end. "Extend class" updates only this; auto-end,
+  /// cron and client countdowns all read it.
+  effectiveEndsAt      DateTime
+  totalExtendedMinutes Int                @default(0)
+  actualStartedAt      DateTime?
+  actualEndedAt        DateTime?
+  youtubeChannel       YoutubeChannelKey?
+  youtubeBroadcastId   String?
+  youtubeVideoId       String?
+  /// Raw YouTube lifecycle string, audit only — `state` is what code branches on.
+  youtubeLifecycle     String?
+  recordingVideoId     String?
+  recordingCheckedAt   DateTime?
+  simulcastGroupId     String?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  batchSchedule      BatchSchedule           @relation(fields: [batchScheduleId], references: [id], onDelete: Cascade)
+  whiteboardSession  WhiteboardSession?      @relation(fields: [whiteboardSessionId], references: [id], onDelete: SetNull)
+  controllingTeacher Teacher                 @relation(fields: [controllingTeacherId], references: [id], onDelete: Cascade)
+  simulcastGroup     SimulcastGroup?         @relation(fields: [simulcastGroupId], references: [id], onDelete: SetNull)
+  leases             StreamLease[]
+  stageSessions      BroadcastStageSession[]
+  encoderSessions    EncoderSession[]
+
+  @@unique([batchScheduleId, occurrence])
+  @@unique([youtubeChannel, youtubeBroadcastId])
+  @@index([state, effectiveEndsAt])
+  @@index([controllingTeacherId])
+  @@index([whiteboardSessionId])
+  @@index([simulcastGroupId])
+  @@map("live_sessions")
+}
+
+/// Exclusive, time-bound use of one ingest stream by one LiveSession.
+model StreamLease {
+  id            String           @id @default(cuid())
+  streamId      String
+  liveSessionId String
+  state         StreamLeaseState @default(RESERVED)
+  acquiredAt    DateTime         @default(now())
+  /// effectiveEndsAt + 30 min; pushed forward when the class is extended.
+  expiresAt     DateTime
+  releasedAt    DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  stream      YoutubeIngestStream @relation(fields: [streamId], references: [id], onDelete: Restrict)
+  liveSession LiveSession         @relation(fields: [liveSessionId], references: [id], onDelete: Cascade)
+
+  @@index([streamId, state])
+  @@index([liveSessionId])
+  @@index([state, expiresAt])
+  @@map("stream_leases")
+}
+
+/// One run of the teacher's local encoder for a LiveSession. Encoder
+/// credentials (RTMP URL + key) are handed out once, short-lived.
+model EncoderSession {
+  id                  String    @id @default(cuid())
+  liveSessionId       String
+  userId              String
+  credentialsExpireAt DateTime
+  credentialsUsedAt   DateTime?
+  lastHeartbeatAt     DateTime?
+  stoppedAt           DateTime?
+  createdAt           DateTime  @default(now())
+
+  liveSession LiveSession @relation(fields: [liveSessionId], references: [id], onDelete: Cascade)
+
+  @@index([liveSessionId])
+  @@map("encoder_sessions")
+}
+
+/// Revocable token for the (fallback) OBS broadcast stage, bound to exactly
+/// one schedule and one LiveSession. Only the SHA-256 of the token is stored.
+model BroadcastStageSession {
+  id              String    @id @default(cuid())
+  liveSessionId   String
+  batchScheduleId String
+  issuedToUserId  String
+  tokenHash       String    @unique
+  expiresAt       DateTime
+  revokedAt       DateTime?
+  createdAt       DateTime  @default(now())
+
+  liveSession LiveSession @relation(fields: [liveSessionId], references: [id], onDelete: Cascade)
+
+  @@index([liveSessionId])
+  @@map("broadcast_stage_sessions")
+}
+
+/// Explicit, admin-created link that lets one live occurrence serve several
+/// batch schedules together (starting/ending moves all of them). Without a
+/// group, every schedule has its own independent LiveSession.
+model SimulcastGroup {
+  id          String   @id @default(cuid())
+  createdById String
+  note        String?
+  createdAt   DateTime @default(now())
+
+  liveSessions LiveSession[]
+
+  @@map("simulcast_groups")
+}
+
 model WhiteboardPage {
   id         String   @id @default(cuid())
   sessionId  String
   pageNumber Int
   background String   @default("blank")
   objects    Json
+  // Optimistic-concurrency version: every successful save increments it and
+  // a save carrying a stale baseVersion is rejected, so an older in-flight
+  // autosave can never overwrite a newer one.
+  version    Int      @default(0)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 

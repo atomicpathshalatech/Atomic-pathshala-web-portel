@@ -80,6 +80,10 @@ export const PERMISSIONS = {
   // Classroom (YouTube-Live based live class module, independent of Whiteboard)
   CLASSROOM_ACCESS: "classroom.access",
 
+  // Operate ANY live class (start/end/extend/map) regardless of who teaches
+  // it. Plain teachers only control classes they are assigned to.
+  LIVE_CLASS_ADMIN: "live_class.admin",
+
   // Batch System
   BATCH_READ: "batch.read",
   BATCH_CREATE: "batch.create",
@@ -399,6 +403,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PermissionCode[]> = {
     PERMISSIONS.BATCH_READ,
     PERMISSIONS.BATCH_CREATE,
     PERMISSIONS.BATCH_UPDATE,
+    PERMISSIONS.LIVE_CLASS_ADMIN,
     PERMISSIONS.BATCH_DELETE,
     PERMISSIONS.BATCH_ENROLLMENT_MANAGE,
     PERMISSIONS.BATCH_SCHEDULE_MANAGE,
@@ -501,6 +506,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PermissionCode[]> = {
     PERMISSIONS.BATCH_READ,
     PERMISSIONS.BATCH_CREATE,
     PERMISSIONS.BATCH_UPDATE,
+    PERMISSIONS.LIVE_CLASS_ADMIN,
     PERMISSIONS.BATCH_DELETE,
     PERMISSIONS.TEST_READ,
     PERMISSIONS.TEST_CREATE,

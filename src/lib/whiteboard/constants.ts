@@ -11,3 +11,10 @@ export const GRACE_PERIOD_MINUTES = 10;
 
 // How far before `endsAt` the teacher-only "wrap up soon" warning appears.
 export const END_WARNING_MINUTES = 5;
+
+// Student attendance heartbeat interval, and how recently a heartbeat must
+// have arrived for a student to count as "online". Online status comes from
+// these heartbeats (not Pusher presence, which caps at 100 members). 60 s
+// keeps a 500-student class at ~8 heartbeat requests/second in total.
+export const STUDENT_HEARTBEAT_MS = 60_000;
+export const ONLINE_WINDOW_MS = 150_000;

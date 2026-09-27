@@ -9,9 +9,15 @@
  */
 
 /** One channel per live-teaching session. Everyone subscribed (teacher +
- * enrolled students currently viewing) gets these events. */
+ * enrolled students currently viewing) gets these events.
+ *
+ * PRIVATE, not presence: Pusher caps presence channels at 100 members, so
+ * in a 500-student class most students silently never received chat, quiz
+ * or class-state events. Who is online now comes from attendance
+ * heartbeats (see /api/whiteboard/sessions/[id]/online-count), not from
+ * channel membership. */
 export function sessionChannel(sessionId: string) {
-  return `presence-wb-session-${sessionId}`;
+  return `private-wb-session-${sessionId}`;
 }
 
 /** Teacher-only channel — hand-raise queue and per-option response counts.

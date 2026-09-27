@@ -5,7 +5,6 @@ import { prisma } from "@/lib/db";
 import { pusherServer } from "@/lib/realtime/pusher-server";
 import { resolveWhiteboardAccess } from "@/lib/whiteboard/access";
 import { resolveClassroomAccess } from "@/lib/classroom/access";
-import { verifyBroadcastToken } from "@/lib/live-class/broadcast-token";
 import { apiError } from "@/lib/api/response";
 
 /**
@@ -20,6 +19,10 @@ export async function POST(request: NextRequest) {
   const broadcastToken = params.get("broadcast_token") || request.nextUrl.searchParams.get("broadcast_token");
   if (!socketId || !channelName) return apiError("Missing socket_id/channel_name", 400);
 
+  // Live-class events go out on a PRIVATE channel (no member cap — presence
+  // channels are limited to 100 members, which silently cut off students in
+  // big classes). The presence form is still accepted for older clients.
+  const sessionEventMatch = channelName.match(/^private-wb-session-(.+)$/);
   const presenceMatch = channelName.match(/^presence-wb-session-(.+)$/);
   const teacherMatch = channelName.match(/^private-wb-teacher-(.+)$/);
   const doubtBookingMatch = channelName.match(/^private-doubt-booking-(.+)$/);
@@ -27,41 +30,34 @@ export async function POST(request: NextRequest) {
   const classroomTeacherMatch = channelName.match(/^private-classroom-teacher-(.+)$/);
 
   try {
-    // 1. Check Broadcast Token (OBS Browser Source / Headless ingest)
-    if (broadcastToken && (presenceMatch || teacherMatch)) {
-      const payload = verifyBroadcastToken(broadcastToken);
-      if (payload) {
-        const targetSessionId = (presenceMatch ? presenceMatch[1] : teacherMatch?.[1])!;
-        const wbSession = await prisma.whiteboardSession.findFirst({
-          where: {
-            id: targetSessionId,
-            OR: [
-              { id: payload.scheduleId },
-              { batchScheduleId: payload.scheduleId },
-              { batchSchedule: { id: payload.scheduleId } },
-              { batchSchedule: { lectureId: payload.scheduleId } },
-            ],
-          },
-          select: { id: true },
-        });
-        if (wbSession) {
-          if (presenceMatch) {
-            const authResponse = pusherServer.authorizeChannel(socketId, channelName, {
-              user_id: `OBS:${payload.teacherUserId}`,
-              user_info: { name: "OBS Stage", role: "OBS" },
-            });
-            return Response.json(authResponse);
-          } else {
-            const authResponse = pusherServer.authorizeChannel(socketId, channelName);
-            return Response.json(authResponse);
-          }
-        }
+    // 1. OBS broadcast stage (no cookie): a DB-backed stage token for THIS
+    // class's current occurrence, and only its public event channel — never
+    // the teacher channel, which carries the hand-raise queue with names.
+    if (broadcastToken && (sessionEventMatch || presenceMatch)) {
+      const { verifyStageToken } = await import("@/lib/live-class/stage-session");
+      const stage = await verifyStageToken(broadcastToken);
+      const targetSessionId = (sessionEventMatch ?? presenceMatch)![1];
+      if (!stage || stage.whiteboardSessionId !== targetSessionId) return apiError("Forbidden", 403);
+      if (presenceMatch) {
+        return Response.json(
+          pusherServer.authorizeChannel(socketId, channelName, {
+            user_id: `OBS:${stage.liveSessionId}`,
+            user_info: { name: "OBS Stage", role: "OBS" },
+          })
+        );
       }
+      return Response.json(pusherServer.authorizeChannel(socketId, channelName));
     }
 
     // 2. Standard Session Authorization
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) return apiError("Unauthorized", 401);
+
+    if (sessionEventMatch) {
+      const access = await resolveWhiteboardAccess(session.user.id, sessionEventMatch[1]!);
+      if (!access) return apiError("Forbidden", 403);
+      return Response.json(pusherServer.authorizeChannel(socketId, channelName));
+    }
 
     if (presenceMatch) {
       const access = await resolveWhiteboardAccess(session.user.id, presenceMatch[1]!);
