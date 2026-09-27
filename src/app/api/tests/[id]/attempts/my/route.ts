@@ -69,7 +69,19 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
       ])
     );
 
-    const sectionQuestions = test.sections.flatMap((s) => s.questions);
+    const sectionQuestions = test.sections.flatMap((s) => {
+      const isBio =
+        s.name?.toLowerCase().includes("bio") ||
+        s.subject?.toLowerCase().includes("bio") ||
+        s.name?.toLowerCase().includes("botany") ||
+        s.name?.toLowerCase().includes("zoology");
+      const target = s.targetCount && s.targetCount > 0 ? s.targetCount : isBio ? 90 : 45;
+      const secSubject = s.subject || (isBio ? "Biology" : s.name);
+      return s.questions.slice(0, target).map((sq) => ({
+        ...sq,
+        sectionSubject: secSubject,
+      }));
+    });
 
     return apiSuccess({
       attempt: {
@@ -89,7 +101,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
         return {
           id: sq.question.id,
           order: sq.order,
-          subject: sq.question.subject || test.batchSchedule?.subject || "General",
+          subject: sq.sectionSubject || sq.question.subject || test.batchSchedule?.subject || "General",
           body: enTrans?.statement || legacy.body,
           type: legacy.type,
           optionA: enOpts.A || legacy.optionA,
@@ -101,6 +113,8 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
           optionBHi: hiOpts.B || null,
           optionCHi: hiOpts.C || null,
           optionDHi: hiOpts.D || null,
+          imageUrl: (sq.question as any).imageUrl || null,
+          camDrawData: (sq.question as any).camDrawData || null,
           mySelection: answerByQuestion.get(sq.question.id) ?? null,
         };
       }),

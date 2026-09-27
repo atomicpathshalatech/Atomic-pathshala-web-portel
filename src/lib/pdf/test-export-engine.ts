@@ -182,7 +182,14 @@ export async function fetchCanonicalTestData(testId: string): Promise<FormattedE
   const allQuestions: FormattedExportQuestion[] = [];
 
   const formattedSections: FormattedExportSection[] = test.sections.map((section) => {
-    const questions: FormattedExportQuestion[] = section.questions.map((sq) => {
+    const isBio =
+      section.name?.toLowerCase().includes("bio") ||
+      section.subject?.toLowerCase().includes("bio") ||
+      section.name?.toLowerCase().includes("botany") ||
+      section.name?.toLowerCase().includes("zoology");
+    const target = section.targetCount && section.targetCount > 0 ? section.targetCount : isBio ? 90 : 45;
+    const questionsToExport = section.questions.slice(0, target);
+    const questions: FormattedExportQuestion[] = questionsToExport.map((sq) => {
       globalQuestionNumber++;
       const q = sq.question;
       const enTrans = q.translations.find((t) => t.language === "ENGLISH" || t.language === "en") || q.translations[0];

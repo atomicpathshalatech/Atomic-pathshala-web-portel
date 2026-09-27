@@ -619,7 +619,7 @@ export function ExamRunner({
           {/* Question Counter & Subject Tabs */}
           <div className="space-y-3">
             <div className="flex items-center justify-between text-xs font-bold text-slate-500">
-              <span>Q{currentIndex + 1}/{data?.questions.length || 187}</span>
+              <span>Q{currentIndex + 1}/{data?.questions.length || 180}</span>
             </div>
 
             {/* Subject Tabs (Biology 97, Chemistry 45, Physics 45) */}

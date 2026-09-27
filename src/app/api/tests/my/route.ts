@@ -30,7 +30,7 @@ export async function GET() {
             where: { status: "PUBLISHED", batchSchedule: { batchId: { in: batchIds } } },
             include: {
               batchSchedule: true,
-              sections: { select: { _count: { select: { questions: true } } } },
+              sections: { select: { name: true, subject: true, targetCount: true, _count: { select: { questions: true } } } },
               attempts: { where: { studentId: student.id }, select: { status: true, score: true } },
             },
             orderBy: { batchSchedule: { startsAt: "asc" } },
@@ -39,7 +39,7 @@ export async function GET() {
         where: { status: "PUBLISHED", testSeriesId: { not: null }, batchScheduleId: null },
         include: {
           testSeries: true,
-          sections: { select: { _count: { select: { questions: true } } } },
+          sections: { select: { name: true, subject: true, targetCount: true, _count: { select: { questions: true } } } },
           attempts: { where: { studentId: student.id }, select: { status: true, score: true } },
         },
         orderBy: { createdAt: "desc" },
@@ -53,6 +53,14 @@ export async function GET() {
       if (eligible) eligibleStandalone.push(t);
     }
 
+    const calcTotalQuestions = (sections: Array<{ name: string; subject: string | null; targetCount: number | null; _count: { questions: number } }>) => {
+      return sections.reduce((sum, s) => {
+        const isBio = s.name?.toLowerCase().includes("bio") || s.subject?.toLowerCase().includes("bio") || s.name?.toLowerCase().includes("botany") || s.name?.toLowerCase().includes("zoology");
+        const target = s.targetCount && s.targetCount > 0 ? s.targetCount : isBio ? 90 : 45;
+        return sum + Math.min(s._count.questions, target);
+      }, 0);
+    };
+
     return apiSuccess({
       tests: [
         ...batchTests
@@ -62,7 +70,7 @@ export async function GET() {
             title: t.name,
             kind: "SCHEDULED" as const,
             durationMin: t.durationMin,
-            questionCount: t.sections.reduce((sum, s) => sum + s._count.questions, 0),
+            questionCount: calcTotalQuestions(t.sections),
             startsAt: t.batchSchedule!.startsAt,
             endsAt: t.batchSchedule!.endsAt,
             myAttempt: t.attempts[0] ?? null,
@@ -72,7 +80,7 @@ export async function GET() {
           title: t.name,
           kind: "STANDALONE" as const,
           durationMin: t.durationMin,
-          questionCount: t.sections.reduce((sum, s) => sum + s._count.questions, 0),
+          questionCount: calcTotalQuestions(t.sections),
           seriesName: t.testSeries?.name ?? null,
           startsAt: null,
           endsAt: null,

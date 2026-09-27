@@ -44,7 +44,15 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     }
 
     const answerByQuestion = new Map(attempt.answers.map((a) => [a.questionId, a]));
-    const sectionQuestions = test.sections.flatMap((s) => s.questions.map((sq) => ({ ...sq, section: s })));
+    const sectionQuestions = test.sections.flatMap((s) => {
+      const isBio =
+        s.name?.toLowerCase().includes("bio") ||
+        s.subject?.toLowerCase().includes("bio") ||
+        s.name?.toLowerCase().includes("botany") ||
+        s.name?.toLowerCase().includes("zoology");
+      const target = s.targetCount && s.targetCount > 0 ? s.targetCount : isBio ? 90 : 45;
+      return s.questions.slice(0, target).map((sq) => ({ ...sq, section: s }));
+    });
     const totalMarks = sectionQuestions.reduce(
       (sum, sq) => sum + (sq.marksOverride ?? sq.section.marksPerQuestion ?? test.correctMarks),
       0

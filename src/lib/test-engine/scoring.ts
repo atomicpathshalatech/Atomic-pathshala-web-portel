@@ -84,7 +84,14 @@ export async function finalizeAttempt(attemptId: string, isLate: boolean) {
   const { extractCorrectOptionKeys, isAnswerCorrect } = await import("./answer-evaluator");
 
   for (const section of attempt.test.sections) {
-    for (const sq of section.questions) {
+    const isBio =
+      section.name?.toLowerCase().includes("bio") ||
+      section.subject?.toLowerCase().includes("bio") ||
+      section.name?.toLowerCase().includes("botany") ||
+      section.name?.toLowerCase().includes("zoology");
+    const target = section.targetCount && section.targetCount > 0 ? section.targetCount : isBio ? 90 : 45;
+    const questionsToScore = section.questions.slice(0, target);
+    for (const sq of questionsToScore) {
       const ans = answerMap.get(sq.questionId);
       if (!ans) continue;
 
