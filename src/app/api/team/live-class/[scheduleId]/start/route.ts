@@ -336,14 +336,24 @@ export async function POST(
     let obsBroadcastUrl: string | undefined;
     let effectiveTransport = requestedTransport;
 
-    if ((requestedTransport === "BOTH" || requestedTransport === "YOUTUBE") && !requestedYouTubeId) {
+    const existingYtId =
+      requestedYouTubeId ||
+      existingSession?.youtubeVideoId ||
+      schedule.liveWhiteboardSession?.youtubeVideoId ||
+      null;
+
+    if ((requestedTransport === "BOTH" || requestedTransport === "YOUTUBE") && !existingYtId) {
       try {
         const { youtubeLiveClassConfigured, ensureYoutubeBroadcastForWhiteboard } = await import(
           "@/lib/live-class/youtube-broadcast"
         );
         if (!youtubeLiveClassConfigured()) {
-          youtubeSimulcastWarning = "YouTube isn't configured on this environment — class started on the interactive room only.";
-          effectiveTransport = "LIVEKIT";
+          if (requestedTransport === "YOUTUBE") {
+            youtubeSimulcastWarning = "YouTube automated broadcast isn't configured on server. Please paste your YouTube Live stream link in OBS Setup.";
+          } else {
+            youtubeSimulcastWarning = "YouTube isn't configured on this environment — class started on the interactive room only.";
+            effectiveTransport = "LIVEKIT";
+          }
         } else {
           const withBroadcast = await ensureYoutubeBroadcastForWhiteboard(wbSession.id, schedule.title, scheduledStart);
           // Merge the newly-created broadcast fields in so the response
@@ -375,18 +385,25 @@ export async function POST(
           // ignore json parse error
         }
         const hint = /quota/i.test(reason)
-          ? " YouTube API daily quota is exhausted — students will join via interactive in-app live classroom."
+          ? " YouTube API daily quota is exhausted."
           : /invalid_grant|unauthorized|401|insufficient/i.test(reason)
-          ? " YouTube authorization expired — students will join via interactive in-app live classroom."
+          ? " YouTube authorization expired — please re-authorize channel in Admin settings."
           : "";
-        youtubeSimulcastWarning = `Could not create YouTube stream (${reason.slice(0, 90)}).${hint} Interactive App Class is active for all students.`;
-        // Fallback to LIVEKIT so students receive live whiteboard and camera
-        effectiveTransport = "LIVEKIT";
-        await prisma.whiteboardSession.update({
-          where: { id: wbSession.id },
-          data: { videoTransport: "LIVEKIT" },
-        }).catch(() => null);
-        wbSession.videoTransport = "LIVEKIT";
+
+        if (requestedTransport === "YOUTUBE") {
+          // Keep YOUTUBE transport so students watch via YouTube player
+          effectiveTransport = "YOUTUBE";
+          youtubeSimulcastWarning = `Could not auto-create YouTube broadcast (${reason.slice(0, 80)}).${hint} You can paste your stream link in OBS Setup.`;
+        } else {
+          // Fallback to LIVEKIT for BOTH mode when auto-broadcast fails and no manual YouTube ID is supplied
+          youtubeSimulcastWarning = `Could not create YouTube stream (${reason.slice(0, 80)}).${hint} Interactive App Class is active for all students.`;
+          effectiveTransport = "LIVEKIT";
+          await prisma.whiteboardSession.update({
+            where: { id: wbSession.id },
+            data: { videoTransport: "LIVEKIT" },
+          }).catch(() => null);
+          wbSession.videoTransport = "LIVEKIT";
+        }
       }
     }
     if (requestedTransport === "BOTH" || requestedTransport === "YOUTUBE" || effectiveTransport === "LIVEKIT") {

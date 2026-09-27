@@ -669,6 +669,52 @@ export function TeacherLiveClassRoom({
   const [copiedKeyField, setCopiedKeyField] = useState<string | null>(null);
   const [streamKeyVisible, setStreamKeyVisible] = useState(false);
   const [slideTemplatesOpen, setSlideTemplatesOpen] = useState(false);
+  const [manualObsYtLink, setManualObsYtLink] = useState("");
+  const [savingManualObsYt, setSavingManualObsYt] = useState(false);
+  const [manualObsYtMsg, setManualObsYtMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (wbSession?.youtubeVideoId && !manualObsYtLink) {
+      setManualObsYtLink(`https://www.youtube.com/watch?v=${wbSession.youtubeVideoId}`);
+    }
+  }, [wbSession?.youtubeVideoId, manualObsYtLink]);
+
+  const handleSaveManualObsYt = async () => {
+    const raw = manualObsYtLink.trim();
+    if (!raw) return;
+    const extracted = extractYouTubeVideoId(raw);
+    if (!extracted) {
+      setManualObsYtMsg("Please enter a valid YouTube link or 11-character video ID.");
+      return;
+    }
+    setSavingManualObsYt(true);
+    setManualObsYtMsg(null);
+    try {
+      const res = await fetch(`/api/team/live-class/${batchScheduleId}/broadcast`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          youtubeVideoId: extracted,
+          videoTransport: "YOUTUBE",
+          livePhase: wbSession?.livePhase || "PREPARING",
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setManualObsYtMsg("YouTube stream linked successfully! Students will watch this stream.");
+        setWbSession((prev) =>
+          prev ? { ...prev, youtubeVideoId: extracted, videoTransport: "YOUTUBE" } : prev
+        );
+        setYoutubeSimulcastWarning(null);
+      } else {
+        setManualObsYtMsg(data.error || "Failed to link YouTube stream.");
+      }
+    } catch {
+      setManualObsYtMsg("Network error linking YouTube stream.");
+    } finally {
+      setSavingManualObsYt(false);
+    }
+  };
 
   const copyToClipboard = (text: string, fieldId: string) => {
     if (typeof navigator !== "undefined" && navigator.clipboard) {
@@ -1889,7 +1935,7 @@ export function TeacherLiveClassRoom({
       mode === "YOUTUBE" || mode === "BOTH"
         ? ytVideoIdOverride !== undefined
           ? ytVideoIdOverride
-          : wbSession?.youtubeVideoId || extractYouTubeVideoId(youtubeInputUrl)
+          : wbSession?.youtubeVideoId || extractYouTubeVideoId(manualObsYtLink) || extractYouTubeVideoId(youtubeInputUrl)
         : null;
 
     // A manual URL/Video ID is now optional for YOUTUBE mode (same as BOTH)
@@ -4285,20 +4331,53 @@ export function TeacherLiveClassRoom({
                 </div>
               )}
 
-              {/* 4. YouTube Link */}
-              {wbSession?.youtubeVideoId && (
-                <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
-                  <a
-                    href={`https://www.youtube.com/watch?v=${wbSession.youtubeVideoId}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-xs text-red-400 hover:underline flex items-center gap-1.5 font-semibold"
-                  >
-                    <span className="material-symbols-outlined text-sm">smart_display</span>
-                    <span>Open Live Video Page on YouTube</span>
-                  </a>
+              {/* 4. YouTube Link / Manual Stream Link */}
+              <div className="space-y-2 pt-2 border-t border-slate-800">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-red-400 flex items-center gap-1">
+                    <span className="material-symbols-outlined text-xs">smart_display</span>
+                    4. YouTube Video Link / ID (Students Watch Stream)
+                  </label>
+                  {wbSession?.youtubeVideoId && (
+                    <a
+                      href={`https://www.youtube.com/watch?v=${wbSession.youtubeVideoId}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[11px] text-red-400 hover:underline flex items-center gap-1 font-semibold"
+                    >
+                      <span>Open on YouTube ↗</span>
+                    </a>
+                  )}
                 </div>
-              )}
+                <p className="text-[11px] text-slate-400 leading-tight">
+                  If you created a live stream directly on YouTube Studio or want to connect a custom link, paste the YouTube Live URL or Video ID below:
+                </p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="https://youtube.com/live/xxxx or 11-char Video ID"
+                    value={manualObsYtLink}
+                    onChange={(e) => {
+                      setManualObsYtLink(e.target.value);
+                      setManualObsYtMsg(null);
+                    }}
+                    className="flex-1 px-3 py-2 text-xs rounded-xl bg-[#0a0b12] border border-slate-700 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-red-500 font-mono"
+                  />
+                  <button
+                    type="button"
+                    disabled={savingManualObsYt || !manualObsYtLink.trim()}
+                    onClick={handleSaveManualObsYt}
+                    className="px-3.5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-semibold transition shrink-0 flex items-center gap-1 disabled:opacity-50 cursor-pointer text-xs"
+                  >
+                    <span>{savingManualObsYt ? "Saving..." : "Save Link"}</span>
+                  </button>
+                </div>
+                {manualObsYtMsg && (
+                  <p className={`text-[11px] font-medium ${manualObsYtMsg.includes("success") || manualObsYtMsg.includes("linked") ? "text-emerald-400" : "text-amber-400"}`}>
+                    {manualObsYtMsg}
+                  </p>
+                )}
+              </div>
             </div>
 
             {/* Footer */}
