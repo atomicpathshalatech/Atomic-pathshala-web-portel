@@ -372,31 +372,16 @@ export async function POST(
         }
       } catch (youtubeError) {
         console.error("[live_class_youtube_broadcast_error]", youtubeError);
-        let reason = youtubeError instanceof Error ? youtubeError.message : String(youtubeError);
-        try {
-          const jsonMatch = reason.match(/\{[\s\S]*\}/);
-          if (jsonMatch) {
-            const parsed = JSON.parse(jsonMatch[0]);
-            if (parsed?.error?.message) {
-              reason = parsed.error.message;
-            }
-          }
-        } catch {
-          // ignore json parse error
-        }
-        const hint = /quota/i.test(reason)
-          ? " YouTube API daily quota is exhausted."
-          : /invalid_grant|unauthorized|401|insufficient/i.test(reason)
-          ? " YouTube authorization expired — please re-authorize channel in Admin settings."
-          : "";
+        const { describeYoutubeError } = await import("@/lib/youtube/errors");
+        const reason = describeYoutubeError(youtubeError);
 
         if (requestedTransport === "YOUTUBE") {
           // Keep YOUTUBE transport so students watch via YouTube player
           effectiveTransport = "YOUTUBE";
-          youtubeSimulcastWarning = `Could not auto-create YouTube broadcast (${reason.slice(0, 80)}).${hint} You can paste your stream link in OBS Setup.`;
+          youtubeSimulcastWarning = `Could not auto-create YouTube broadcast. ${reason} You can paste your stream link in OBS Setup.`;
         } else {
           // Fallback to LIVEKIT for BOTH mode when auto-broadcast fails and no manual YouTube ID is supplied
-          youtubeSimulcastWarning = `Could not create YouTube stream (${reason.slice(0, 80)}).${hint} Interactive App Class is active for all students.`;
+          youtubeSimulcastWarning = `Could not create YouTube stream. ${reason} Interactive App Class is active for all students.`;
           effectiveTransport = "LIVEKIT";
           await prisma.whiteboardSession.update({
             where: { id: wbSession.id },

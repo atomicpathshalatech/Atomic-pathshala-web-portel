@@ -1,4 +1,12 @@
 import "server-only";
+import {
+  type YoutubeChannelKey,
+  clearCachedYoutubeToken,
+  ensureYoutubeChannelIdentity,
+  getYoutubeChannelAccessToken,
+  youtubeChannelConfigured,
+} from "@/lib/youtube/channels";
+import { isTransientYoutubeError } from "@/lib/youtube/errors";
 
 /**
  * Low-level YouTube Data API v3 client for the recording-archive pipeline —
@@ -16,60 +24,20 @@ const YOUTUBE_THUMBNAIL_ENDPOINT = "https://www.googleapis.com/upload/youtube/v3
 // exact multiple (16 MiB / 256 KiB = 64).
 export const YOUTUBE_UPLOAD_CHUNK_SIZE = 16 * 1024 * 1024;
 
-interface CachedToken {
-  accessToken: string;
-  expiresAt: number;
-}
+// Recordings are archived to the APP channel only — never MAIN. Token
+// caching, per-channel credentials and channel-identity verification live in
+// ./channels.ts.
+const ARCHIVE_CHANNEL: YoutubeChannelKey = "APP";
 
-// Module-scope cache: reused across chunk-upload calls within the SAME
-// invocation only — a fresh serverless invocation gets a cold module and
-// refreshes again, which is fine since a refresh-token exchange is cheap
-// and this is never on a per-request hot path.
-let cachedToken: CachedToken | null = null;
-
-export function clearCachedYoutubeToken(): void {
-  cachedToken = null;
-}
-
-export class YoutubeNotConfiguredError extends Error {
-  constructor() {
-    super("YouTube OAuth credentials are not configured (YOUTUBE_CLIENT_ID / YOUTUBE_CLIENT_SECRET / YOUTUBE_REFRESH_TOKEN).");
-    this.name = "YoutubeNotConfiguredError";
-  }
-}
+export { clearCachedYoutubeToken };
 
 export function youtubeArchiveConfigured(): boolean {
-  return Boolean(process.env.YOUTUBE_CLIENT_ID && process.env.YOUTUBE_CLIENT_SECRET && process.env.YOUTUBE_REFRESH_TOKEN);
+  return youtubeChannelConfigured(ARCHIVE_CHANNEL);
 }
 
 export async function getYoutubeAccessToken(forceFresh = false): Promise<string> {
-  if (!forceFresh && cachedToken && cachedToken.expiresAt > Date.now() + 30_000) {
-    return cachedToken.accessToken;
-  }
-
-  const clientId = process.env.YOUTUBE_CLIENT_ID;
-  const clientSecret = process.env.YOUTUBE_CLIENT_SECRET;
-  const refreshToken = process.env.YOUTUBE_REFRESH_TOKEN;
-  if (!clientId || !clientSecret || !refreshToken) throw new YoutubeNotConfiguredError();
-
-  const res = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      refresh_token: refreshToken,
-      grant_type: "refresh_token",
-    }),
-  });
-  const json: { access_token?: string; expires_in?: number; error?: string; error_description?: string } = await res.json();
-
-  if (!res.ok || !json.access_token) {
-    throw new Error(`YouTube token refresh failed (${res.status}): ${json.error || "unknown"} ${json.error_description || ""}`.trim());
-  }
-
-  cachedToken = { accessToken: json.access_token, expiresAt: Date.now() + (json.expires_in ?? 3600) * 1000 };
-  return cachedToken.accessToken;
+  await ensureYoutubeChannelIdentity(ARCHIVE_CHANNEL);
+  return getYoutubeChannelAccessToken(ARCHIVE_CHANNEL, forceFresh);
 }
 
 export interface InitiateUploadParams {
@@ -187,10 +155,8 @@ export async function setThumbnail(videoId: string, imageBuffer: Buffer, content
   }
 }
 
-/** Transient/retryable Google API or network errors — matched against the
- * error message since these calls throw plain Errors rather than a typed
- * error hierarchy. */
+/** Transient/retryable Google API or network errors (rate limit, 5xx,
+ * network) — quota, permission and auth-revoked errors are never retryable. */
 export function isRetryableYoutubeError(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message : String(err);
-  return /\((429|500|502|503|504)\)/.test(msg) || /timeout|ETIMEDOUT|ECONNRESET|fetch failed/i.test(msg);
+  return isTransientYoutubeError(err);
 }

@@ -4,90 +4,78 @@ import { authOptions } from "@/lib/auth";
 import { requirePermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { handleApiError } from "@/lib/api/response";
+import {
+  YOUTUBE_CHANNEL_KEYS,
+  clearCachedYoutubeToken,
+  fetchAuthorizedChannel,
+  getYoutubeChannelConfig,
+  youtubeChannelMisconfiguration,
+} from "@/lib/youtube/channels";
+import { classifyYoutubeError, describeYoutubeError } from "@/lib/youtube/errors";
 
 /**
- * Admin-only diagnostic: confirms YOUTUBE_CLIENT_ID/SECRET/REFRESH_TOKEN are
- * actually configured and the refresh token actually works, WITHOUT ever
- * returning the token/secret values themselves — only booleans, Google's own
- * error code on failure, and (on success) the non-sensitive channel
- * name/id the token resolves to, so whoever authorized it can literally
- * confirm it's the right channel. Nothing here touches the upload feature
- * (not built yet) or the live-class streaming/recording pipeline.
+ * Admin-only diagnostic for BOTH YouTube channels (APP and MAIN): confirms
+ * each channel's credentials are configured, its refresh token works, and
+ * the token resolves to the channel id configured for it — WITHOUT ever
+ * returning a token or secret. Only env var names, booleans, Google's error
+ * reason, and the non-sensitive channel name/id.
+ *
+ * Costs 1 quota unit per configured channel (channels.list?mine=true).
  */
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
     await requirePermission(session?.user?.id, PERMISSIONS.SECURITY_CONFIG_MANAGE);
 
-    const clientId = process.env.YOUTUBE_CLIENT_ID;
-    const clientSecret = process.env.YOUTUBE_CLIENT_SECRET;
-    const refreshToken = process.env.YOUTUBE_REFRESH_TOKEN;
+    const channels = await Promise.all(
+      YOUTUBE_CHANNEL_KEYS.map(async (key) => {
+        const cfg = getYoutubeChannelConfig(key);
+        const configured = {
+          clientId: Boolean(cfg.clientId),
+          clientSecret: Boolean(cfg.clientSecret),
+          refreshToken: Boolean(cfg.refreshToken),
+          refreshTokenEnv: cfg.refreshTokenEnv,
+          expectedChannelId: cfg.expectedChannelId ?? null,
+          channelIdEnv: cfg.channelIdEnv,
+        };
+        if (!cfg.clientId || !cfg.clientSecret || !cfg.refreshToken) {
+          return { channel: key, ok: false, configured, error: "Not configured." };
+        }
+        try {
+          clearCachedYoutubeToken(key); // always test a fresh token exchange
+          const authorized = await fetchAuthorizedChannel(key);
+          const identityMatches = Boolean(authorized && cfg.expectedChannelId && authorized.id === cfg.expectedChannelId);
+          return {
+            channel: key,
+            ok: identityMatches,
+            configured,
+            refreshTokenValid: true,
+            authorizedChannel: authorized,
+            identityMatches,
+            ...(cfg.expectedChannelId
+              ? identityMatches
+                ? {}
+                : { error: `Token belongs to ${authorized?.id ?? "no channel"}, but ${cfg.channelIdEnv} is ${cfg.expectedChannelId}.` }
+              : { error: `${cfg.channelIdEnv} is not set, so the server cannot verify this channel's identity.` }),
+          };
+        } catch (err) {
+          return {
+            channel: key,
+            ok: false,
+            configured,
+            refreshTokenValid: classifyYoutubeError(err) !== "AUTH_REVOKED",
+            errorKind: classifyYoutubeError(err),
+            error: describeYoutubeError(err),
+          };
+        }
+      })
+    );
 
-    const configured = {
-      YOUTUBE_CLIENT_ID: Boolean(clientId),
-      YOUTUBE_CLIENT_SECRET: Boolean(clientSecret),
-      YOUTUBE_REFRESH_TOKEN: Boolean(refreshToken),
-    };
-
-    if (!clientId || !clientSecret || !refreshToken) {
-      return NextResponse.json({ success: false, configured, error: "One or more required env vars are missing." }, { status: 500 });
-    }
-
-    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: clientId,
-        client_secret: clientSecret,
-        refresh_token: refreshToken,
-        grant_type: "refresh_token",
-      }),
-    });
-    const tokenJson: { access_token?: string; scope?: string; error?: string; error_description?: string } = await tokenRes.json();
-
-    if (!tokenRes.ok || !tokenJson.access_token) {
-      console.error("[youtube_oauth_verify_error]", tokenJson.error, tokenJson.error_description);
-      return NextResponse.json(
-        { success: false, configured, refreshTokenValid: false, googleError: tokenJson.error, googleErrorDescription: tokenJson.error_description },
-        { status: 400 }
-      );
-    }
-
-    // Diagnostics for the "token is valid but no channel comes back" case —
-    // this can legitimately happen (channels.list(mine=true) resolves to
-    // whatever channel the authorizing Google account's default identity is,
-    // which is NOT necessarily a Brand Account channel that account merely
-    // manages) so the raw HTTP status + Google's own error object (never a
-    // secret — channel metadata isn't sensitive) are surfaced instead of
-    // silently returning an empty object.
-    let channel: { id?: string; title?: string } = {};
-    let channelApiStatus: number | null = null;
-    let channelApiError: unknown = null;
-    let channelApiRawItemCount: number | null = null;
-    try {
-      const channelRes = await fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true", {
-        headers: { Authorization: `Bearer ${tokenJson.access_token}` },
-      });
-      channelApiStatus = channelRes.status;
-      const channelJson = await channelRes.json();
-      channelApiError = channelJson?.error ?? null;
-      channelApiRawItemCount = Array.isArray(channelJson?.items) ? channelJson.items.length : null;
-      const item = channelJson?.items?.[0];
-      if (item) channel = { id: item.id, title: item.snippet?.title };
-    } catch (err) {
-      console.error("[youtube_oauth_verify_channel_lookup_error]", err instanceof Error ? err.message : err);
-      channelApiError = err instanceof Error ? err.message : String(err);
-    }
-
+    const misconfiguration = youtubeChannelMisconfiguration();
     return NextResponse.json({
-      success: true,
-      configured,
-      refreshTokenValid: true,
-      grantedScope: tokenJson.scope,
-      channel,
-      channelApiStatus,
-      channelApiError,
-      channelApiRawItemCount,
+      success: !misconfiguration && channels.every((c) => c.ok || !c.configured.refreshToken),
+      misconfiguration,
+      channels,
     });
   } catch (error) {
     return handleApiError(error);

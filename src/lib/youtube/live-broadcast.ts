@@ -1,5 +1,7 @@
 import "server-only";
-import { getYoutubeAccessToken, clearCachedYoutubeToken, youtubeArchiveConfigured, isRetryableYoutubeError } from "@/lib/youtube/upload-client";
+import { youtubeApi } from "@/lib/youtube/client";
+import { youtubeChannelConfigured, type YoutubeChannelKey } from "@/lib/youtube/channels";
+import { classifyYoutubeError, isTerminalYoutubeError } from "@/lib/youtube/errors";
 
 /**
  * Schema-agnostic YouTube Live Streaming API (Data API v3) client — the pure
@@ -8,15 +10,20 @@ import { getYoutubeAccessToken, clearCachedYoutubeToken, youtubeArchiveConfigure
  * Class + YouTube" simulcast (src/lib/live-class/youtube-broadcast.ts).
  * Neither caller's DB writes live here — this file only talks to Google.
  *
+ * Every resource-creating/changing call here runs on the APP channel only:
+ * the MAIN channel is read-only for Atomic (see src/lib/youtube/client.ts).
+ * Read helpers take an optional channel so MAIN-mapped videos are read with
+ * MAIN's own credentials.
+ *
  * Deliberately independent from src/lib/live-class/youtube.ts, which is
  * Whiteboard's older manual videoId-mapping code (paste an externally
  * already-live YouTube URL) and never calls this API at all.
  */
 
-const YOUTUBE_API_BASE = "https://www.googleapis.com/youtube/v3";
+const LIVE_CHANNEL: YoutubeChannelKey = "APP";
 
 export function youtubeLiveConfigured(): boolean {
-  return youtubeArchiveConfigured();
+  return youtubeChannelConfigured(LIVE_CHANNEL);
 }
 
 /**
@@ -25,62 +32,12 @@ export function youtubeLiveConfigured(): boolean {
  * fails validation) or hammers an account that lacks permission.
  */
 export function isNonRetryableYoutubeError(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message : String(err);
-  return /quotaExceeded|dailyLimitExceeded|insufficientLivePermissions|liveStreamingNotEnabled|invalid_grant|YouTube OAuth credentials are not configured/i.test(
-    msg
-  );
+  return isTerminalYoutubeError(err);
 }
 
-async function youtubeApiFetch<T>(
-  path: string,
-  init: RequestInit & { query?: Record<string, string> } = {},
-  retries = 2
-): Promise<T> {
-  const { query, ...rest } = init;
-  const url = new URL(`${YOUTUBE_API_BASE}${path}`);
-  for (const [key, value] of Object.entries(query ?? {})) url.searchParams.set(key, value);
-
-  let lastError: Error | null = null;
-
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      const accessToken = await getYoutubeAccessToken(attempt > 0);
-      const res = await fetch(url.toString(), {
-        ...rest,
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-          ...(rest.headers ?? {}),
-        },
-      });
-
-      if (res.status === 401 && attempt < retries) {
-        clearCachedYoutubeToken();
-        await new Promise((r) => setTimeout(r, 600));
-        continue;
-      }
-
-      if ((res.status === 429 || res.status >= 500) && attempt < retries) {
-        await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
-        continue;
-      }
-
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(`YouTube API ${path} failed (${res.status}): ${text}`);
-      }
-      if (res.status === 204) return undefined as T;
-      return res.json() as Promise<T>;
-    } catch (err: any) {
-      lastError = err instanceof Error ? err : new Error(String(err));
-      if (attempt >= retries || !isRetryableYoutubeError(err)) {
-        throw lastError;
-      }
-      await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
-    }
-  }
-
-  throw lastError || new Error(`YouTube API ${path} failed after retries`);
+/** Only a validation rejection (400) of one config variant is worth trying a simpler variant for. */
+function shouldTryNextVariant(err: unknown): boolean {
+  return classifyYoutubeError(err) === "INVALID_REQUEST";
 }
 
 export interface CreateLiveStreamResult {
@@ -91,16 +48,17 @@ export interface CreateLiveStreamResult {
 
 /** liveStreams.insert — the RTMP ingest endpoint whatever pushes video (LiveKit Egress, a relay, or an external encoder) publishes into. */
 export async function createLiveStream(title: string): Promise<CreateLiveStreamResult> {
-  const json = await youtubeApiFetch<{
+  const json = await youtubeApi<{
     id: string;
     cdn: { ingestionInfo: { ingestionAddress: string; streamName: string } };
-  }>("/liveStreams", {
+  }>(LIVE_CHANNEL, "/liveStreams", {
     method: "POST",
+    operation: "liveStreams.insert",
     query: { part: "snippet,cdn,status" },
-    body: JSON.stringify({
+    body: {
       snippet: { title },
       cdn: { frameRate: "variable", ingestionType: "rtmp", resolution: "variable" },
-    }),
+    },
   });
 
   return {
@@ -135,87 +93,60 @@ export async function createLiveBroadcast(
   const validStartTime = new Date(
     Math.max(nowMs + 15_000, isNaN(inputTimeMs) ? nowMs + 15_000 : inputTimeMs)
   ).toISOString();
+  const soon = () => new Date(Date.now() + 30_000).toISOString();
 
-  let json: { id: string; snippet: { liveChatId?: string } } | undefined;
-
-  // Tier 1: Full broadcast config with DVR and auto-start (NO enableEmbed, which is invalid on standard channels)
-  try {
-    json = await youtubeApiFetch<{ id: string; snippet: { liveChatId?: string } }>("/liveBroadcasts", {
-      method: "POST",
-      query: { part: "snippet,status,contentDetails" },
-      body: JSON.stringify({
+  // Config variants, richest first. A variant is only abandoned for the next
+  // one when YouTube rejects it as invalid (400) — never for quota,
+  // permission, auth or transient errors, which a simpler body can't fix.
+  // (NO enableEmbed: it is rejected on standard channels.)
+  const variants: Array<{ part: string; body: Record<string, unknown> }> = [
+    {
+      part: "snippet,status,contentDetails",
+      body: {
         snippet: { title: cleanTitle, description: desc, scheduledStartTime: validStartTime },
         status: { privacyStatus: "unlisted", selfDeclaredMadeForKids: false },
-        contentDetails: {
-          enableAutoStart: true,
-          enableAutoStop: true,
-          enableDvr: true,
-          recordFromStart: true,
-          latencyPreference: "low",
-        },
-      }),
-    });
-  } catch (err1) {
-    if (isNonRetryableYoutubeError(err1)) throw err1;
-    console.warn("[youtube_live_broadcast_fallback_tier1]", err1);
-    // Tier 2: Without latency preference
+        contentDetails: { enableAutoStart: true, enableAutoStop: true, enableDvr: true, recordFromStart: true, latencyPreference: "low" },
+      },
+    },
+    {
+      part: "snippet,status,contentDetails",
+      body: {
+        snippet: { title: cleanTitle, description: desc, scheduledStartTime: soon() },
+        status: { privacyStatus: "unlisted", selfDeclaredMadeForKids: false },
+        contentDetails: { enableAutoStart: true, enableAutoStop: true, enableDvr: true, recordFromStart: true },
+      },
+    },
+    {
+      part: "snippet,status,contentDetails",
+      body: {
+        snippet: { title: cleanTitle, description: desc, scheduledStartTime: soon() },
+        status: { privacyStatus: "unlisted", selfDeclaredMadeForKids: false },
+        contentDetails: { enableAutoStart: true, enableAutoStop: true },
+      },
+    },
+    {
+      part: "snippet,status",
+      body: {
+        snippet: { title: cleanTitle, description: desc, scheduledStartTime: soon() },
+        status: { privacyStatus: "unlisted", selfDeclaredMadeForKids: false },
+      },
+    },
+  ];
+
+  let json: { id: string; snippet?: { liveChatId?: string } } | undefined;
+  for (let i = 0; i < variants.length; i++) {
+    const variant = variants[i]!;
     try {
-      json = await youtubeApiFetch<{ id: string; snippet: { liveChatId?: string } }>("/liveBroadcasts", {
+      json = await youtubeApi(LIVE_CHANNEL, "/liveBroadcasts", {
         method: "POST",
-        query: { part: "snippet,status,contentDetails" },
-        body: JSON.stringify({
-          snippet: {
-            title: cleanTitle,
-            description: desc,
-            scheduledStartTime: new Date(Date.now() + 30_000).toISOString(),
-          },
-          status: { privacyStatus: "unlisted", selfDeclaredMadeForKids: false },
-          contentDetails: {
-            enableAutoStart: true,
-            enableAutoStop: true,
-            enableDvr: true,
-            recordFromStart: true,
-          },
-        }),
+        operation: "liveBroadcasts.insert",
+        query: { part: variant.part },
+        body: variant.body,
       });
-    } catch (err2) {
-      if (isNonRetryableYoutubeError(err2)) throw err2;
-      console.warn("[youtube_live_broadcast_fallback_tier2]", err2);
-      // Tier 3: Minimal contentDetails
-      try {
-        json = await youtubeApiFetch<{ id: string; snippet: { liveChatId?: string } }>("/liveBroadcasts", {
-          method: "POST",
-          query: { part: "snippet,status,contentDetails" },
-          body: JSON.stringify({
-            snippet: {
-              title: cleanTitle,
-              description: desc,
-              scheduledStartTime: new Date(Date.now() + 30_000).toISOString(),
-            },
-            status: { privacyStatus: "unlisted", selfDeclaredMadeForKids: false },
-            contentDetails: {
-              enableAutoStart: true,
-              enableAutoStop: true,
-            },
-          }),
-        });
-      } catch (err3) {
-        if (isNonRetryableYoutubeError(err3)) throw err3;
-        console.warn("[youtube_live_broadcast_fallback_tier3]", err3);
-        // Tier 4: Basic broadcast without contentDetails
-        json = await youtubeApiFetch<{ id: string; snippet: { liveChatId?: string } }>("/liveBroadcasts", {
-          method: "POST",
-          query: { part: "snippet,status" },
-          body: JSON.stringify({
-            snippet: {
-              title: cleanTitle,
-              description: desc,
-              scheduledStartTime: new Date(Date.now() + 30_000).toISOString(),
-            },
-            status: { privacyStatus: "unlisted", selfDeclaredMadeForKids: false },
-          }),
-        });
-      }
+      break;
+    } catch (err) {
+      if (i === variants.length - 1 || !shouldTryNextVariant(err)) throw err;
+      console.warn(`[youtube_live_broadcast_fallback_tier${i + 1}]`, err);
     }
   }
 
@@ -223,43 +154,33 @@ export async function createLiveBroadcast(
     throw new Error("Failed to create YouTube Live Broadcast across all configuration tiers.");
   }
 
-  // Explicitly mark video status unlisted & embeddable on YouTube
+  // Explicitly mark video status unlisted & embeddable on YouTube. Best
+  // effort: the broadcast already exists and is unlisted either way.
   try {
-    await youtubeApiFetch("/videos", {
+    await youtubeApi(LIVE_CHANNEL, "/videos", {
       method: "PUT",
+      operation: "videos.update",
       query: { part: "status,snippet" },
-      body: JSON.stringify({
+      body: {
         id: json.id,
-        snippet: {
-          title: cleanTitle,
-          categoryId: "27", // Education category
-          description: desc,
-        },
-        status: {
-          privacyStatus: "unlisted",
-          embeddable: true,
-          selfDeclaredMadeForKids: false,
-        },
-      }),
+        snippet: { title: cleanTitle, categoryId: "27", description: desc }, // 27 = Education
+        status: { privacyStatus: "unlisted", embeddable: true, selfDeclaredMadeForKids: false },
+      },
     });
   } catch (err) {
     console.warn("[youtube_video_status_update_warning]", err);
-    // Fallback: try status-only if snippet was rejected
-    if (!isNonRetryableYoutubeError(err)) try {
-      await youtubeApiFetch("/videos", {
-        method: "PUT",
-        query: { part: "status" },
-        body: JSON.stringify({
-          id: json.id,
-          status: {
-            privacyStatus: "unlisted",
-            embeddable: true,
-            selfDeclaredMadeForKids: false,
-          },
-        }),
-      });
-    } catch (fallbackErr) {
-      console.warn("[youtube_video_status_fallback_warning]", fallbackErr);
+    // Fallback: status-only, but only if the snippet was what got rejected.
+    if (shouldTryNextVariant(err)) {
+      try {
+        await youtubeApi(LIVE_CHANNEL, "/videos", {
+          method: "PUT",
+          operation: "videos.update",
+          query: { part: "status" },
+          body: { id: json.id, status: { privacyStatus: "unlisted", embeddable: true, selfDeclaredMadeForKids: false } },
+        });
+      } catch (fallbackErr) {
+        console.warn("[youtube_video_status_fallback_warning]", fallbackErr);
+      }
     }
   }
 
@@ -271,20 +192,15 @@ export async function updateLiveBroadcast(
   updates: { title?: string; scheduledStartTime?: string; description?: string }
 ): Promise<void> {
   try {
-    const body: Record<string, any> = { id: broadcastId, snippet: {} };
-    if (updates.title) {
-      body.snippet.title = updates.title.replace(/[<>{}]/g, "").trim().slice(0, 92);
-    }
-    if (updates.scheduledStartTime) {
-      body.snippet.scheduledStartTime = updates.scheduledStartTime;
-    }
-    if (updates.description) {
-      body.snippet.description = updates.description;
-    }
-    await youtubeApiFetch("/liveBroadcasts", {
+    const snippet: Record<string, string> = {};
+    if (updates.title) snippet.title = updates.title.replace(/[<>{}]/g, "").trim().slice(0, 92);
+    if (updates.scheduledStartTime) snippet.scheduledStartTime = updates.scheduledStartTime;
+    if (updates.description) snippet.description = updates.description;
+    await youtubeApi(LIVE_CHANNEL, "/liveBroadcasts", {
       method: "PUT",
+      operation: "liveBroadcasts.update",
       query: { part: "snippet" },
-      body: JSON.stringify(body),
+      body: { id: broadcastId, snippet },
     });
   } catch (err) {
     console.warn("[updateLiveBroadcast warning]", err);
@@ -293,8 +209,9 @@ export async function updateLiveBroadcast(
 
 export async function deleteLiveBroadcast(broadcastId: string): Promise<void> {
   try {
-    await youtubeApiFetch("/liveBroadcasts", {
+    await youtubeApi(LIVE_CHANNEL, "/liveBroadcasts", {
       method: "DELETE",
+      operation: "liveBroadcasts.delete",
       query: { id: broadcastId },
     });
   } catch (err) {
@@ -303,21 +220,17 @@ export async function deleteLiveBroadcast(broadcastId: string): Promise<void> {
 }
 
 /**
- * Ensures an existing broadcast has embedding explicitly enabled and remains unlisted on YouTube
+ * Ensures an existing broadcast has embedding explicitly enabled and remains
+ * unlisted on YouTube. Costs ~50 quota units (videos.update) — call it only
+ * from an explicit teacher/admin action, never from a polled route.
  */
 export async function ensureBroadcastEmbeddable(broadcastId: string): Promise<void> {
   try {
-    await youtubeApiFetch("/videos", {
+    await youtubeApi(LIVE_CHANNEL, "/videos", {
       method: "PUT",
+      operation: "videos.update",
       query: { part: "status" },
-      body: JSON.stringify({
-        id: broadcastId,
-        status: {
-          embeddable: true,
-          privacyStatus: "unlisted",
-          selfDeclaredMadeForKids: false,
-        },
-      }),
+      body: { id: broadcastId, status: { embeddable: true, privacyStatus: "unlisted", selfDeclaredMadeForKids: false } },
     });
   } catch (err) {
     console.warn("[ensureBroadcastEmbeddable error]", err);
@@ -325,24 +238,27 @@ export async function ensureBroadcastEmbeddable(broadcastId: string): Promise<vo
 }
 
 export async function bindBroadcastToStream(broadcastId: string, streamId: string): Promise<void> {
-  try {
-    await youtubeApiFetch(`/liveBroadcasts/bind`, {
+  const bind = () =>
+    youtubeApi(LIVE_CHANNEL, "/liveBroadcasts/bind", {
       method: "POST",
+      operation: "liveBroadcasts.bind",
       query: { id: broadcastId, streamId, part: "id" },
     });
+  const isAlreadyBound = (err: unknown) => /alreadyBound|redundant/i.test(err instanceof Error ? err.message : String(err));
+
+  try {
+    await bind();
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    if (/alreadyBound|redundant/i.test(message)) return;
-    // Retry once after brief pause if stream was freshly created
+    if (isAlreadyBound(err)) return;
+    // A freshly created stream is occasionally not bindable for a moment —
+    // retry once, but only for that case (an invalid request), never for
+    // quota/permission errors.
+    if (!shouldTryNextVariant(err)) throw err;
     await new Promise((r) => setTimeout(r, 1200));
     try {
-      await youtubeApiFetch(`/liveBroadcasts/bind`, {
-        method: "POST",
-        query: { id: broadcastId, streamId, part: "id" },
-      });
+      await bind();
     } catch (retryErr) {
-      const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
-      if (/alreadyBound|redundant/i.test(retryMsg)) return;
+      if (isAlreadyBound(retryErr)) return;
       throw retryErr;
     }
   }
@@ -350,8 +266,9 @@ export async function bindBroadcastToStream(broadcastId: string, streamId: strin
 
 export async function transitionBroadcast(youtubeBroadcastId: string, status: "live" | "complete"): Promise<void> {
   try {
-    await youtubeApiFetch(`/liveBroadcasts/transition`, {
+    await youtubeApi(LIVE_CHANNEL, "/liveBroadcasts/transition", {
       method: "POST",
+      operation: "liveBroadcasts.transition",
       query: { broadcastStatus: status, id: youtubeBroadcastId, part: "status" },
     });
   } catch (err) {
@@ -359,11 +276,8 @@ export async function transitionBroadcast(youtubeBroadcastId: string, status: "l
     // YouTube itself transitions it the moment it detects (or loses) an
     // active incoming stream — often before our own explicit transition call
     // lands. YouTube rejects that as "redundant," which is not a failure
-    // here: the broadcast is already in (or moving to) the requested state
-    // either way (confirmed live against a real OBS stream during Classroom
-    // testing), so this is safe to treat as success.
-    const message = err instanceof Error ? err.message : String(err);
-    if (/redundantTransition/i.test(message)) return;
+    // here: the broadcast is already in (or moving to) the requested state.
+    if (classifyYoutubeError(err) === "REDUNDANT_TRANSITION") return;
     throw err;
   }
 }
@@ -374,15 +288,18 @@ export interface RecordingStatusResult {
 }
 
 /** videos.list — polled after transition(complete) to find out when the VOD is watchable. */
-export async function fetchRecordingStatus(youtubeVideoId: string): Promise<RecordingStatusResult> {
-  const json = await youtubeApiFetch<{
+export async function fetchRecordingStatus(
+  youtubeVideoId: string,
+  channel: YoutubeChannelKey = LIVE_CHANNEL
+): Promise<RecordingStatusResult> {
+  const json = await youtubeApi<{
     items: Array<{ id: string; status?: { uploadStatus?: string }; processingDetails?: { processingStatus?: string } }>;
-  }>("/videos", {
-    method: "GET",
+  }>(channel, "/videos", {
+    operation: "videos.list",
     query: { part: "status,processingDetails,recordingDetails", id: youtubeVideoId },
   });
 
-  const item = json.items[0];
+  const item = json.items?.[0];
   if (!item) return { recordingVideoId: null, recordingStatus: "NOT_AVAILABLE" };
 
   const uploadStatus = item.status?.uploadStatus;
@@ -395,7 +312,8 @@ export async function fetchRecordingStatus(youtubeVideoId: string): Promise<Reco
   return { recordingVideoId: null, recordingStatus: "PROCESSING" };
 }
 
-// Cache the master stream in memory so we reuse the single channel stream key across all classes
+// Cache the master stream in memory so we reuse the single channel stream key across all classes.
+// TODO(live-class step 4): replaced by the per-class ingest stream pool.
 let cachedMasterStream: CreateLiveStreamResult | null = null;
 
 /**
@@ -419,15 +337,15 @@ export async function getOrCreateMasterLiveStream(): Promise<CreateLiveStreamRes
 
   // 2. Check if a master stream already exists on the YouTube channel
   try {
-    const listRes = await youtubeApiFetch<{
+    const listRes = await youtubeApi<{
       items?: Array<{
         id: string;
         snippet?: { title?: string };
         cdn?: { ingestionInfo?: { ingestionAddress?: string; streamName?: string } };
         status?: { streamStatus?: string };
       }>;
-    }>("/liveStreams", {
-      method: "GET",
+    }>(LIVE_CHANNEL, "/liveStreams", {
+      operation: "liveStreams.list",
       query: { part: "snippet,cdn,status", mine: "true", maxResults: "10" },
     });
 
@@ -450,6 +368,9 @@ export async function getOrCreateMasterLiveStream(): Promise<CreateLiveStreamRes
       }
     }
   } catch (err) {
+    // Quota/permission/config problems will fail the insert below too —
+    // surface them now instead of spending another 50 units finding out.
+    if (isTerminalYoutubeError(err)) throw err;
     console.warn("[getOrCreateMasterLiveStream list warning]", err);
   }
 
@@ -478,28 +399,23 @@ export interface YouTubeLiveChatMessage {
 
 export async function fetchLiveChatMessages(
   liveChatId: string,
-  pageToken?: string
+  pageToken?: string,
+  channel: YoutubeChannelKey = LIVE_CHANNEL
 ): Promise<{
   messages: YouTubeLiveChatMessage[];
   nextPageToken?: string;
   pollingIntervalMillis?: number;
 }> {
-  const json = await youtubeApiFetch<{
+  const json = await youtubeApi<{
     items?: Array<{
       id: string;
-      snippet: {
-        displayMessage: string;
-        publishedAt: string;
-      };
-      authorDetails: {
-        displayName: string;
-        profileImageUrl: string;
-      };
+      snippet: { displayMessage: string; publishedAt: string };
+      authorDetails: { displayName: string; profileImageUrl: string };
     }>;
     nextPageToken?: string;
     pollingIntervalMillis?: number;
-  }>("/liveChat/messages", {
-    method: "GET",
+  }>(channel, "/liveChat/messages", {
+    operation: "liveChatMessages.list",
     query: {
       liveChatId,
       part: "snippet,authorDetails",
@@ -521,12 +437,15 @@ export async function fetchLiveChatMessages(
   };
 }
 
-export async function getLiveChatIdForVideo(videoId: string): Promise<string | null> {
+export async function getLiveChatIdForVideo(
+  videoId: string,
+  channel: YoutubeChannelKey = LIVE_CHANNEL
+): Promise<string | null> {
   try {
-    const json = await youtubeApiFetch<{
+    const json = await youtubeApi<{
       items?: Array<{ liveStreamingDetails?: { activeLiveChatId?: string } }>;
-    }>("/videos", {
-      method: "GET",
+    }>(channel, "/videos", {
+      operation: "videos.list",
       query: { part: "liveStreamingDetails", id: videoId },
     });
     return json.items?.[0]?.liveStreamingDetails?.activeLiveChatId ?? null;
@@ -534,4 +453,3 @@ export async function getLiveChatIdForVideo(videoId: string): Promise<string | n
     return null;
   }
 }
-

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import crypto from "crypto";
 import { getServerSession } from "next-auth";
@@ -7,6 +7,7 @@ import { requirePermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { handleApiError } from "@/lib/api/response";
 import { YOUTUBE_OAUTH_REDIRECT_URI } from "@/lib/youtube/oauth-config";
+import type { YoutubeChannelKey } from "@/lib/youtube/channels";
 
 /**
  * Step 1 of the one-time, admin-only YouTube channel authorization flow —
@@ -23,10 +24,18 @@ import { YOUTUBE_OAUTH_REDIRECT_URI } from "@/lib/youtube/oauth-config";
  * "authorization code" flow (defense in depth alongside the callback's own
  * permission check).
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     await requirePermission(session?.user?.id, PERMISSIONS.SECURITY_CONFIG_MANAGE);
+
+    // ?channel=APP (default) or ?channel=MAIN — which channel's refresh
+    // token this run produces. Carried to the callback in its own cookie.
+    const channelParam = (request.nextUrl.searchParams.get("channel") || "APP").toUpperCase();
+    if (channelParam !== "APP" && channelParam !== "MAIN") {
+      return NextResponse.json({ success: false, error: "channel must be APP or MAIN." }, { status: 400 });
+    }
+    const channel = channelParam as YoutubeChannelKey;
 
     const clientId = process.env.YOUTUBE_CLIENT_ID;
     if (!clientId) {
@@ -42,6 +51,13 @@ export async function GET() {
       secure: true,
       sameSite: "lax",
       maxAge: 600, // 10 minutes — this is a short, interactive, one-time admin flow
+      path: "/api/team/youtube/oauth",
+    });
+    cookies().set("yt_oauth_channel", channel, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      maxAge: 600,
       path: "/api/team/youtube/oauth",
     });
 
@@ -72,13 +88,20 @@ export async function GET() {
     // must be re-authorized here to pick up Classroom's Live Streaming
     // access — the archive-upload feature keeps working unchanged either way
     // since `youtube` is a superset of `youtube.upload`.
+    //
+    // The MAIN channel only ever gets youtube.readonly: Atomic just reads it
+    // (verify + map existing videos, read live chat), so its token cannot
+    // create, edit or stream anything there even if code tried to.
     url.searchParams.set(
       "scope",
-      [
-        "https://www.googleapis.com/auth/youtube",
-        "https://www.googleapis.com/auth/youtube.upload",
-        "https://www.googleapis.com/auth/youtube.readonly",
-      ].join(" ")
+      (channel === "MAIN"
+        ? ["https://www.googleapis.com/auth/youtube.readonly"]
+        : [
+            "https://www.googleapis.com/auth/youtube",
+            "https://www.googleapis.com/auth/youtube.upload",
+            "https://www.googleapis.com/auth/youtube.readonly",
+          ]
+      ).join(" ")
     );
     url.searchParams.set("state", state);
 

@@ -6,7 +6,6 @@ import Link from "next/link";
 import { Layers, Plus, Sparkles, CheckCircle2, ArrowRight, Download, Share2 } from "lucide-react";
 import { TemplateBuilder } from "@/components/team-portal/TemplateBuilder";
 import { TemplateSummaryCard } from "@/components/team-portal/TemplateSummaryCard";
-import { TestQuestionPicker } from "@/components/team-portal/TestQuestionPicker";
 import { PublishTestButton } from "@/components/team-portal/PublishTestButton";
 import { TestPdfDownloadModal } from "@/components/test-portal/TestPdfDownloadModal";
 import { ShareTestModal } from "@/components/test-portal/ShareTestModal";
@@ -193,37 +192,31 @@ export function TestDetailClient({ test, isDraft, canPublish }: TestDetailClient
         />
       )}
 
-      {/* Question Management Picker */}
-      {hasTemplate && (
-        <section className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-sm font-bold text-slate-900">Assigned Questions</h3>
-              <p className="text-xs text-slate-500">Pick from Question Bank or open Author Studio</p>
+      {/* Quick Action Card for Question Authoring Studio */}
+      {hasTemplate && isDraft && (
+        <div className="bg-gradient-to-r from-blue-50/80 via-white to-slate-50 rounded-2xl border border-blue-200/80 p-5 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xs">
+          <div className="flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-blue-500/20">
+              <Sparkles className="w-5 h-5" />
             </div>
-            {isDraft && (
-              <Link
-                href={`/team/tests/${test.id}/author`}
-                className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
-              >
-                Open Dual-Column Question Studio <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            )}
+            <div>
+              <h4 className="text-sm font-bold text-slate-900">Dual-Column Question Authoring Studio</h4>
+              <p className="text-xs text-slate-500">
+                {totalQuestions > 0
+                  ? `${totalQuestions} questions currently configured in this test.`
+                  : "Start authoring or extracting questions for this test blueprint."}
+              </p>
+            </div>
           </div>
 
-          <TestQuestionPicker
-            testId={test.id}
-            editable={isDraft}
-            current={sectionQuestions.map((sq) => ({
-              id: sq.id,
-              order: sq.order,
-              question: {
-                id: sq.question.id,
-                statement: questionStatement(sq.question.translations),
-              },
-            }))}
-          />
-        </section>
+          <Link
+            href={`/team/tests/${test.id}/author`}
+            className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-md shadow-blue-500/20 transition whitespace-nowrap"
+          >
+            <span>Open Author Studio</span>
+            <ArrowRight className="w-4 h-4" />
+          </Link>
+        </div>
       )}
 
       {/* Template Modal */}

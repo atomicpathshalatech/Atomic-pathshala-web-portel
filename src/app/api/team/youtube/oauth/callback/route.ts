@@ -5,6 +5,11 @@ import { authOptions } from "@/lib/auth";
 import { requirePermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { YOUTUBE_OAUTH_REDIRECT_URI } from "@/lib/youtube/oauth-config";
+import { getYoutubeChannelConfig, type YoutubeChannelKey } from "@/lib/youtube/channels";
+
+function escapeHtml(s: string) {
+  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+}
 
 function htmlPage(bodyHtml: string, status = 200) {
   return new NextResponse(
@@ -36,13 +41,15 @@ export async function GET(request: NextRequest) {
 
   const googleError = searchParams.get("error");
   if (googleError) {
-    return htmlPage(`<h1>Authorization declined</h1><p>Google returned: <code>${googleError}</code>. No changes were made.</p>`, 400);
+    return htmlPage(`<h1>Authorization declined</h1><p>Google returned: <code>${escapeHtml(googleError)}</code>. No changes were made.</p>`, 400);
   }
 
   const code = searchParams.get("code");
   const state = searchParams.get("state");
   const expectedState = cookies().get("yt_oauth_state")?.value;
   cookies().delete("yt_oauth_state");
+  const channel: YoutubeChannelKey = cookies().get("yt_oauth_channel")?.value === "MAIN" ? "MAIN" : "APP";
+  cookies().delete("yt_oauth_channel");
 
   if (!code || !state || !expectedState || state !== expectedState) {
     return htmlPage(
@@ -76,7 +83,7 @@ export async function GET(request: NextRequest) {
       // parameters. Log only Google's own error code/description.
       console.error("[youtube_oauth_callback_error]", tokenJson.error, tokenJson.error_description);
       return htmlPage(
-        `<h1>Token exchange failed</h1><p>Google said: <code>${tokenJson.error ?? "unknown_error"}</code> — ${tokenJson.error_description ?? ""}</p>`,
+        `<h1>Token exchange failed</h1><p>Google said: <code>${escapeHtml(tokenJson.error ?? "unknown_error")}</code> — ${escapeHtml(tokenJson.error_description ?? "")}</p>`,
         400
       );
     }
@@ -96,12 +103,41 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  // Resolve which channel this Google account actually granted, so the admin
+  // can confirm it before pasting — and so the matching *_CHANNEL_ID can be
+  // set, which is what lets the server refuse a token for the wrong channel.
+  let authorizedChannel: { id?: string; title?: string } = {};
+  if (tokenJson.access_token) {
+    try {
+      const channelRes = await fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true", {
+        headers: { Authorization: `Bearer ${tokenJson.access_token}` },
+      });
+      const item = (await channelRes.json())?.items?.[0];
+      if (item) authorizedChannel = { id: item.id, title: item.snippet?.title };
+    } catch (err) {
+      console.error("[youtube_oauth_callback_channel_lookup_error]", err instanceof Error ? err.message : err);
+    }
+  }
+
+  const refreshTokenEnv = channel === "MAIN" ? "YOUTUBE_MAIN_REFRESH_TOKEN" : "YOUTUBE_APP_REFRESH_TOKEN";
+  const channelIdEnv = channel === "MAIN" ? "YOUTUBE_MAIN_CHANNEL_ID" : "YOUTUBE_APP_CHANNEL_ID";
+  const otherConfiguredId = getYoutubeChannelConfig(channel === "MAIN" ? "APP" : "MAIN").expectedChannelId;
+  const collides = Boolean(authorizedChannel.id && otherConfiguredId && authorizedChannel.id === otherConfiguredId);
+  const esc = escapeHtml;
+
   return htmlPage(
-    "<h1>YouTube channel authorized</h1>" +
-      "<p>Copy the value below into this environment's <code>YOUTUBE_REFRESH_TOKEN</code> secret, then close this page. " +
-      "It will not be shown again — if lost, just restart this flow.</p>" +
+    `<h1>${channel} YouTube channel authorized</h1>` +
+      (authorizedChannel.id
+        ? `<p>This token belongs to <b>${esc(authorizedChannel.title ?? "(untitled channel)")}</b> — channel id <code>${esc(authorizedChannel.id)}</code>.</p>`
+        : "<p style=\"color:#b42318\">Could not look up which channel this token belongs to. Check it with the verify endpoint before using it.</p>") +
+      (collides
+        ? `<p style="color:#b42318"><b>Stop:</b> this is the channel already configured as the ${channel === "MAIN" ? "APP" : "MAIN"} channel. The two channels must be different Google/Brand accounts. Do not save this token.</p>`
+        : "") +
+      `<p>Copy the value below into this environment's <code>${refreshTokenEnv}</code> secret` +
+      (authorizedChannel.id ? ` and set <code>${channelIdEnv}</code> to <code>${esc(authorizedChannel.id)}</code>` : "") +
+      ", then close this page. It will not be shown again — if lost, just restart this flow.</p>" +
       `<pre style="background:#f4f4f5;border:1px solid #ddd;border-radius:8px;padding:16px;white-space:pre-wrap;word-break:break-all;user-select:all">${tokenJson.refresh_token}</pre>` +
       "<p style=\"color:#666;font-size:14px\">Granted scope: " +
-      `<code>${tokenJson.scope ?? "unknown"}</code></p>`
+      `<code>${esc(tokenJson.scope ?? "unknown")}</code></p>`
   );
 }
