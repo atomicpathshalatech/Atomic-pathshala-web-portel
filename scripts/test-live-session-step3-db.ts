@@ -89,11 +89,31 @@ async function rejects(p: Promise<unknown>, match?: RegExp): Promise<boolean> {
 }
 
 async function run() {
-  console.log(`Resetting ${parsed.pathname.slice(1)} on ${parsed.hostname} and applying all migrations…`);
-  execSync("npx prisma migrate reset --force --skip-seed --skip-generate", {
-    stdio: "inherit",
-    env: { ...process.env, DATABASE_URL: testUrl, DIRECT_URL: testUrl },
-  });
+  const env = { ...process.env, DATABASE_URL: testUrl, DIRECT_URL: testUrl };
+  if (process.env.TEST_DB_SETUP === "base-plus-migration") {
+    // The full migration history does not replay on an empty database
+    // (20260911150000 alters a "NotificationType" enum no migration creates
+    // — production got it outside migrations). So build the pre-redesign
+    // schema the way production has it (origin/main's schema.prisma via
+    // db push), then apply ONLY this redesign's migration SQL on top —
+    // exactly what `prisma migrate deploy` will do in production.
+    const { writeFileSync, mkdtempSync } = require("node:fs") as typeof import("node:fs");
+    const { join } = require("node:path") as typeof import("node:path");
+    const { tmpdir } = require("node:os") as typeof import("node:os");
+    const dir = mkdtempSync(join(tmpdir(), "live-session-test-"));
+    const baseSchema = join(dir, "schema.prisma");
+    const baseRef = process.env.TEST_DB_BASE_REF || "origin/main";
+    writeFileSync(baseSchema, execSync(`git show ${baseRef}:prisma/schema.prisma`, { encoding: "utf8" }));
+    console.log(`Rebuilding ${parsed.pathname.slice(1)} from ${baseRef}'s schema, then applying the redesign migration…`);
+    execSync(`npx prisma db push --force-reset --skip-generate --accept-data-loss --schema "${baseSchema}"`, { stdio: "inherit", env });
+    execSync(
+      `npx prisma db execute --url "${testUrl}" --file prisma/migrations/20260927120000_live_session_youtube_delivery/migration.sql`,
+      { stdio: "inherit", env }
+    );
+  } else {
+    console.log(`Resetting ${parsed.pathname.slice(1)} on ${parsed.hostname} and applying all migrations…`);
+    execSync("npx prisma migrate reset --force --skip-seed --skip-generate", { stdio: "inherit", env });
+  }
 
   const { prisma } = await import("../src/lib/db");
   const svc = await import("../src/lib/live-session/service");
