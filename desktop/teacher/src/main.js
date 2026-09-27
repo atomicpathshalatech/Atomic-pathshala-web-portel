@@ -29,6 +29,11 @@ const SMOKE = process.argv.includes("--smoke") || process.argv.includes("--smoke
 // desktop bridge is NOT exposed there.
 const SMOKE_UNTRUSTED = process.argv.includes("--smoke-untrusted");
 const ALLOWED_PERMISSIONS = new Set(["media", "fullscreen", "clipboard-sanitized-write"]);
+// Test hooks (used by scripts/test-desktop-e2e.mjs, never set in normal use):
+//   ATOMIC_START_PATH       page to open instead of /team
+//   ATOMIC_DENY_MEDIA=1     refuse camera/mic (tests must not switch on the real webcam)
+//   ATOMIC_SMOKE_WAIT_FOR   global the page sets when its self-test is done
+const DENY_MEDIA = process.env.ATOMIC_DENY_MEDIA === "1";
 
 if (!SMOKE && !app.requestSingleInstanceLock()) {
   app.quit();
@@ -44,15 +49,17 @@ function trustedSender(event) {
 function hardenSession(ses) {
   ses.setPermissionRequestHandler((webContents, permission, callback, details) => {
     const origin = details.requestingUrl || webContents.getURL();
+    if (DENY_MEDIA && permission === "media") return callback(false);
     callback(ALLOWED_PERMISSIONS.has(permission) && isTrustedUrl(origin));
   });
   ses.setPermissionCheckHandler((_webContents, permission, requestingOrigin) => {
+    if (DENY_MEDIA && permission === "media") return false;
     return ALLOWED_PERMISSIONS.has(permission) && isTrustedUrl(requestingOrigin);
   });
 }
 
 function createWindow() {
-  const start = SMOKE_UNTRUSTED ? "data:text/html,<h1>untrusted</h1>" : new URL("/team", appUrl()).toString();
+  const start = SMOKE_UNTRUSTED ? "data:text/html,<h1>untrusted</h1>" : new URL(process.env.ATOMIC_START_PATH || "/team", appUrl()).toString();
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -131,6 +138,16 @@ async function runSmoke() {
     });
     result.loaded = true;
     result.url = wc.getURL();
+    const waitFor = process.env.ATOMIC_SMOKE_WAIT_FOR;
+    if (waitFor && /^[A-Za-z_$][\w$]*$/.test(waitFor)) {
+      const deadline = Date.now() + 120_000;
+      while (Date.now() < deadline) {
+        const done = await wc.executeJavaScript(`typeof window[${JSON.stringify(waitFor)}] !== "undefined"`);
+        if (done) break;
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      result.selftest = await wc.executeJavaScript(`window[${JSON.stringify(waitFor)}] ?? null`);
+    }
     result.bridge = await wc.executeJavaScript(
       "(async () => window.atomicDesktop ? { isDesktop: window.atomicDesktop.isDesktop, info: await window.atomicDesktop.info(), encoder: await window.atomicDesktop.encoder.probe() } : null)()"
     );

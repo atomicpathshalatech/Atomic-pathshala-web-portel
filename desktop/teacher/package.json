@@ -8,6 +8,10 @@
   "scripts": {
     "start": "electron .",
     "smoke": "electron . --smoke",
+    "fetch-ffmpeg": "node scripts/fetch-ffmpeg.mjs",
+    "test:encoder": "node scripts/test-encoder.mjs",
+    "test:e2e": "node scripts/test-desktop-e2e.mjs",
+    "predist": "node scripts/fetch-ffmpeg.mjs",
     "dist": "electron-builder --win nsis"
   },
   "devDependencies": {
@@ -17,9 +21,33 @@
   "build": {
     "appId": "in.atomicpathshala.teacher",
     "productName": "Atomic Pathshala Teacher",
-    "directories": { "output": "dist" },
-    "files": ["src/**/*", "package.json"],
-    "win": { "target": ["nsis"] },
-    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true, "perMachine": false }
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false
+    },
+    "extraResources": [
+      {
+        "from": "vendor/ffmpeg",
+        "to": "ffmpeg",
+        "filter": [
+          "ffmpeg.exe",
+          "LICENSE.txt",
+          "SOURCE.txt"
+        ]
+      }
+    ]
   }
 }

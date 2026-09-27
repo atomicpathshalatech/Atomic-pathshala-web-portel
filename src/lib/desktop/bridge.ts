@@ -6,12 +6,19 @@
 export interface DesktopEncoderProbe {
   available: boolean;
   reason?: string;
+  /** Working hardware encoders on this machine (NVENC / QSV / AMF / MF). */
   hardwareEncoders?: string[];
+  encoders?: string[];
+  chosen?: string;
 }
 
 export interface DesktopEncoderStatus {
   runId?: string;
   state: "unavailable" | "starting" | "streaming" | "reconnecting" | "stopped" | "failed";
+  /** Encoder restart counter — the page records a fresh stream per generation. */
+  generation?: number;
+  encoder?: string;
+  restarts?: number;
   bitrateKbps?: number;
   fps?: number;
   droppedFrames?: number;
@@ -23,8 +30,8 @@ export interface AtomicDesktopBridge {
   info(): Promise<{ appVersion: string; electron: string; platform: string; arch: string }>;
   encoder: {
     probe(): Promise<DesktopEncoderProbe>;
-    start(opts: { liveSessionId: string; serverUrl: string; streamKey: string; width: number; height: number; fps: number; mimeType: string }): Promise<{ runId: string }>;
-    push(runId: string, chunk: ArrayBuffer): void;
+    start(opts: { serverUrl: string; streamKey: string; fps: number; profile: "1080p" | "720p" }): Promise<{ runId: string; encoder: string }>;
+    push(runId: string, generation: number, chunk: ArrayBuffer): void;
     stop(runId: string): Promise<{ stopped: boolean }>;
     status(runId: string): Promise<DesktopEncoderStatus>;
     onStatus(listener: (status: DesktopEncoderStatus) => void): () => void;
