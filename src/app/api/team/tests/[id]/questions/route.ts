@@ -57,10 +57,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const existingIds = new Set(existingLinks.map((l) => l.questionId));
     const foundIds = new Set(candidates.map((q) => q.id));
     const missing = input.questionIds.filter((id) => !foundIds.has(id));
-    const notVerified = candidates.filter((q) => !q.isPublished).map((q) => q.id);
     const alreadyAdded = input.questionIds.filter((id) => existingIds.has(id));
 
-    const toAdd = candidates.filter((q) => q.isPublished && !existingIds.has(q.id));
+    const toAdd = candidates.filter((q) => !existingIds.has(q.id));
 
     let nextOrder = await nextSectionQuestionOrder(section.id);
     if (toAdd.length > 0) {
@@ -81,7 +80,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     return apiSuccess({
       added: toAdd.length,
-      rejected: { missing, notVerified, alreadyAdded },
+      rejected: { missing, notVerified: [], alreadyAdded },
     });
   } catch (error) {
     return handleApiError(error);

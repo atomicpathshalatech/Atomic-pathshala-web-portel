@@ -50,15 +50,20 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
       );
     }
 
-    // Validation 2: Verify all assigned questions are published/verified
+    // Validation 2 / Auto-promotion: Automatically verify and publish all assigned questions on test publish
     const unverifiedQuestions = test.sections.flatMap((s) =>
-      s.questions.filter((sq) => !sq.question.isPublished).map((sq) => sq.questionId)
+      s.questions.filter((sq) => !sq.question.isPublished || sq.question.status !== "PUBLISHED").map((sq) => sq.questionId)
     );
     if (unverifiedQuestions.length > 0) {
-      return apiError(
-        `Cannot publish test: ${unverifiedQuestions.length} assigned question(s) are still in DRAFT status and not yet verified.`,
-        400
-      );
+      await prisma.question.updateMany({
+        where: { id: { in: unverifiedQuestions } },
+        data: {
+          isPublished: true,
+          status: "PUBLISHED",
+          publishedAt: new Date(),
+          publishedById: session.user.id,
+        },
+      });
     }
 
     const updated = await prisma.test.update({
