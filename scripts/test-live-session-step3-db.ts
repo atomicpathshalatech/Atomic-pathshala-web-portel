@@ -7,9 +7,17 @@
  *   TEST_DATABASE_URL="postgresql://postgres:<pw>@localhost:5432/atomic_test" \
  *     npx tsx --conditions=react-server scripts/test-live-session-step3-db.ts
  *
- * Safety: refuses to run unless the host is localhost and the database name
- * contains "test". It RESETS that database (prisma migrate reset) first —
- * which also proves the full migration history applies cleanly.
+ * Or, with a separate throwaway Supabase project (put both lines in .env.test):
+ *   TEST_DATABASE_URL="<that project's session-pooler URL>"
+ *   ALLOW_REMOTE_TEST_DB="yes"
+ *   npx tsx --env-file=.env.test --conditions=react-server scripts/test-live-session-step3-db.ts
+ *
+ * Safety: refuses unless the target is a localhost database whose name
+ * contains "test", or an explicitly opted-in remote project that is NOT the
+ * production project (checked against the known project ref and every
+ * DATABASE_URL/DIRECT_URL in .env, .env.local, .env.production). It RESETS
+ * that database (prisma migrate reset) first — which also proves the full
+ * migration history applies cleanly.
  */
 import { execSync } from "node:child_process";
 
@@ -19,8 +27,42 @@ if (!testUrl) {
   process.exit(2);
 }
 const parsed = new URL(testUrl);
-if (!["localhost", "127.0.0.1", "::1", "[::1]"].includes(parsed.hostname) || !/test/i.test(parsed.pathname)) {
-  console.error(`Refusing: TEST_DATABASE_URL must point at localhost and a database whose name contains "test" (got ${parsed.hostname}${parsed.pathname}).`);
+const isLocalTestDb = ["localhost", "127.0.0.1", "::1", "[::1]"].includes(parsed.hostname) && /test/i.test(parsed.pathname);
+
+// A separate, throwaway Supabase project is also allowed — but only when
+// explicitly opted in, and never when it is the same project as any
+// DATABASE_URL/DIRECT_URL in this repo's env files (that is production).
+function supabaseIdentity(u: URL): string {
+  return `${u.hostname}|${decodeURIComponent(u.username)}`;
+}
+function productionIdentities(): string[] {
+  const { readFileSync, existsSync } = require("node:fs") as typeof import("node:fs");
+  const ids: string[] = [];
+  for (const file of [".env", ".env.local", ".env.production"]) {
+    if (!existsSync(file)) continue;
+    for (const line of readFileSync(file, "utf8").split(/\r?\n/)) {
+      const m = line.match(/^\s*(DATABASE_URL|DIRECT_URL)\s*=\s*"?([^"\s]+)"?/);
+      if (!m) continue;
+      try {
+        ids.push(supabaseIdentity(new URL(m[2]!)));
+      } catch {
+        // not a URL — ignore
+      }
+    }
+  }
+  return ids;
+}
+const KNOWN_PRODUCTION_PROJECT_REFS = ["nsubtmwavgzfyxuhlmjx"];
+const isOptedInRemoteTestDb =
+  process.env.ALLOW_REMOTE_TEST_DB === "yes" &&
+  !KNOWN_PRODUCTION_PROJECT_REFS.some((ref) => testUrl.includes(ref)) &&
+  !productionIdentities().includes(supabaseIdentity(parsed));
+
+if (!isLocalTestDb && !isOptedInRemoteTestDb) {
+  console.error(
+    `Refusing: TEST_DATABASE_URL must be a localhost database whose name contains "test", ` +
+      `or a separate throwaway project with ALLOW_REMOTE_TEST_DB="yes" (never the production project). Got ${parsed.hostname}${parsed.pathname}.`
+  );
   process.exit(2);
 }
 process.env.DATABASE_URL = testUrl;
