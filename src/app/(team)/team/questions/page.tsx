@@ -19,6 +19,7 @@ export default async function QuestionBankPage({
   searchParams: {
     search?: string;
     subject?: string;
+    chapter?: string;
     topic?: string;
     subTopic?: string;
     difficulty?: string;
@@ -57,6 +58,10 @@ export default async function QuestionBankPage({
 
   if (searchParams.subject && searchParams.subject !== "ALL") {
     where.subject = { equals: searchParams.subject, mode: "insensitive" };
+  }
+
+  if (searchParams.chapter && searchParams.chapter !== "ALL") {
+    where.chapter = { contains: searchParams.chapter, mode: "insensitive" };
   }
 
   if (searchParams.topic && searchParams.topic !== "ALL") {
