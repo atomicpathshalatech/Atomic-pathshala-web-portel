@@ -1105,10 +1105,11 @@ export function generateTestPaperHtml(
   
   <!-- Tailwind CSS Engine for Exact Aesthetic Rendering -->
   <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css" crossorigin="anonymous">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Montserrat:wght@600;700;800;900&family=JetBrains+Mono:wght@500;600;700&family=Noto+Serif+Devanagari:wght@400;500;600;700;800&family=PT+Serif:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Montserrat:wght@600;700;800;900&family=Noto+Sans+Devanagari:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
 
   <style>
     @page {
@@ -1672,16 +1673,17 @@ export function generateTestPaperHtml(
       flex: 1;
     }
 
-    /* UNIFIED SERIF FONT & EXACT SAME FONT SIZE FOR BOTH HINDI & ENGLISH */
+    /* UNIFIED MODERN EXAM FONT & EXACT SAME FONT SIZE FOR BOTH HINDI & ENGLISH */
     .q-statement-body,
     .q-statement-body p,
     .q-statement-body span,
     .opt-value,
     .opt-value p,
     .opt-value span {
-      font-family: 'Times New Roman', 'PT Serif', 'Noto Serif Devanagari', 'Cambria', Georgia, serif !important;
-      font-size: 10.5pt !important;
-      line-height: 1.42 !important;
+      font-family: 'Inter', 'Noto Sans Devanagari', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
+      font-size: 10pt !important;
+      font-weight: 500 !important;
+      line-height: 1.45 !important;
       color: #000000 !important;
     }
 
@@ -1717,11 +1719,11 @@ export function generateTestPaperHtml(
     }
 
     .q-num-label {
-      font-family: 'Times New Roman', 'PT Serif', serif !important;
+      font-family: 'Inter', 'Noto Sans Devanagari', sans-serif !important;
       font-size: 10.5pt !important;
       font-weight: 800 !important;
       color: #000000 !important;
-      min-width: 18px;
+      min-width: 20px;
       flex-shrink: 0;
     }
 
@@ -1749,8 +1751,8 @@ export function generateTestPaperHtml(
     }
 
     .opt-label {
-      font-family: 'Times New Roman', 'PT Serif', serif !important;
-      font-size: 10.5pt !important;
+      font-family: 'Inter', 'Noto Sans Devanagari', sans-serif !important;
+      font-size: 10pt !important;
       font-weight: 700 !important;
       color: #000000 !important;
       min-width: 22px;
@@ -2057,7 +2059,7 @@ export function generateTestPaperHtml(
       display: inline-block;
     }
     .font-devanagari {
-      font-family: 'Times New Roman', 'PT Serif', 'Noto Serif Devanagari', 'Cambria', Georgia, serif !important;
+      font-family: 'Noto Sans Devanagari', 'Inter', sans-serif !important;
     }
   </style>
 </head>
@@ -2066,14 +2068,17 @@ export function generateTestPaperHtml(
   <div class="print-bar no-print">
     <div>
       <h1>${test.name} — ${brandName}</h1>
-      <div style="font-size: 11px; opacity: 0.85;">Saving as: <strong>${test.name} - ${currentDateStr} - ATOMIC PATHSHALA.pdf</strong></div>
+      <div style="font-size: 11px; opacity: 0.85;">File name: <strong>${test.name} - ${currentDateStr} - ATOMIC PATHSHALA.pdf</strong></div>
     </div>
-    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
-      <button onclick="window.print()" class="print-bar-btn">
-        <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
-        <span>Save as PDF</span>
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <button id="direct-download-btn" onclick="downloadDirectPdf()" class="print-bar-btn" style="background: #16a34a;">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+        <span>Direct Download PDF</span>
       </button>
-      <div style="font-size: 10px; opacity: 0.75;">In the dialog choose destination &ldquo;Save as PDF&rdquo; — no printer needed.</div>
+      <button onclick="window.print()" class="print-bar-btn" style="background: #4f46e5;">
+        <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
+        <span>Print / Save as PDF</span>
+      </button>
     </div>
   </div>
 
@@ -2084,6 +2089,44 @@ export function generateTestPaperHtml(
     ${backCoverHtml}
     ${solutionsSectionHtml}
   </div>
+
+  <script>
+    function downloadDirectPdf() {
+      var btn = document.getElementById('direct-download-btn');
+      if (btn) {
+        btn.innerHTML = 'Generating PDF... Please wait';
+        btn.style.opacity = '0.7';
+      }
+      var element = document.querySelector('.doc-container');
+      var opt = {
+        margin: 0,
+        filename: "${test.name} - ${currentDateStr} - ATOMIC PATHSHALA.pdf",
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, logging: false },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['css', 'legacy'] }
+      };
+      if (window.html2pdf) {
+        html2pdf().set(opt).from(element).save().then(function() {
+          if (btn) {
+            btn.innerHTML = 'Direct Download PDF';
+            btn.style.opacity = '1';
+          }
+        }).catch(function(err) {
+          console.error('html2pdf error, falling back to print:', err);
+          window.print();
+        });
+      } else {
+        window.print();
+      }
+    }
+
+    if (window.location.search.indexOf('direct=true') !== -1) {
+      window.addEventListener('load', function() {
+        setTimeout(downloadDirectPdf, 700);
+      });
+    }
+  </script>
 
 </body>
 </html>`;

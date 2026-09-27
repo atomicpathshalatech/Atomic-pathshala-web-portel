@@ -41,7 +41,7 @@ export function TestPdfDownloadModal({
 
   const handleDownload = (withSolution: boolean) => {
     const type = withSolution ? "with-solution" : "without-solution";
-    const url = `/api/tests/${testId}/export?type=${type}&t=${Date.now()}`;
+    const url = `/api/tests/${testId}/export?type=${type}&direct=true&t=${Date.now()}`;
     window.open(url, "_blank");
   };
 
