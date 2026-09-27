@@ -40,8 +40,13 @@ export async function POST(request: NextRequest) {
 
       if (existing.status === "ACTIVE") {
         if (!existing.pages || existing.pages.length === 0) {
-          const p1 = await prisma.whiteboardPage.create({
-            data: { sessionId: existing.id, pageNumber: 1, objects: [] },
+          // upsert, not create: two concurrent room loads (a refresh, a
+          // second tab, React's double effect in dev) both reach this point
+          // and a plain create made the loser fail with a unique violation.
+          const p1 = await prisma.whiteboardPage.upsert({
+            where: { sessionId_pageNumber: { sessionId: existing.id, pageNumber: 1 } },
+            update: {},
+            create: { sessionId: existing.id, pageNumber: 1, objects: [] },
           });
           existing.pages = [p1];
         }

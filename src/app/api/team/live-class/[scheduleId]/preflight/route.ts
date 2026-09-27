@@ -7,6 +7,7 @@ import { assertCanControlLiveClass, assertCanControlLecture } from "@/lib/live-c
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { pusherServer, sessionChannel, WB_EVENTS } from "@/lib/realtime/pusher-server";
+import { appYoutubeAvailable, pickVideoTransport } from "@/lib/live-session/delivery-options";
 
 export async function POST(
   request: NextRequest,
@@ -106,9 +107,14 @@ export async function POST(
       classroomTheme = "LIGHT",
       cameraShape = "SQUARE",
       cameraPosition = "UPPER_RIGHT",
-      videoTransport,
+      videoTransport: requestedTransport,
       youtubeVideoId,
     } = body;
+    // Only persist a transport when one was sent; LIVEKIT becomes an App
+    // YouTube class whenever App YouTube is available.
+    const videoTransport = requestedTransport
+      ? pickVideoTransport(requestedTransport, null, await appYoutubeAvailable().catch(() => false))
+      : undefined;
 
     const sessionStart = schedule.startsAt ? new Date(schedule.startsAt) : new Date();
     const sessionEnd = schedule.endsAt ? new Date(schedule.endsAt) : new Date(Date.now() + 60 * 60 * 1000);
@@ -142,7 +148,8 @@ export async function POST(
         // route is also called mid-class (theme/camera changes), and
         // resetting scheduledEnd to schedule.endsAt silently discarded any
         // "Extend Class" minutes already added.
-        ...(videoTransport ? { videoTransport } : {}),
+        // Never switch transport under a class that is already live.
+        ...(videoTransport && schedule.liveWhiteboardSession?.livePhase !== "LIVE" ? { videoTransport } : {}),
         ...(youtubeVideoId !== undefined ? { youtubeVideoId: youtubeVideoId || null } : {}),
       },
       create: {
@@ -151,7 +158,7 @@ export async function POST(
         title: schedule.title,
         status: "ACTIVE",
         livePhase: "PREPARING",
-        videoTransport: videoTransport === "YOUTUBE" ? "YOUTUBE" : "LIVEKIT",
+        videoTransport: videoTransport ?? pickVideoTransport(null, null, await appYoutubeAvailable().catch(() => false)),
         youtubeVideoId: youtubeVideoId || null,
         presentationUrl: presentationUrl || null,
         presentationName: presentationName || null,

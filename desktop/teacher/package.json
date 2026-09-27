@@ -1,0 +1,53 @@
+{
+  "name": "atomic-teacher-desktop",
+  "productName": "Atomic Pathshala Teacher",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Windows app for Atomic Pathshala teachers: the live classroom plus a built-in YouTube encoder.",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "smoke": "electron . --smoke",
+    "fetch-ffmpeg": "node scripts/fetch-ffmpeg.mjs",
+    "test:encoder": "node scripts/test-encoder.mjs",
+    "test:e2e": "node scripts/test-desktop-e2e.mjs",
+    "predist": "node scripts/fetch-ffmpeg.mjs",
+    "dist": "electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "44.4.5",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "in.atomicpathshala.teacher",
+    "productName": "Atomic Pathshala Teacher",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false
+    },
+    "extraResources": [
+      {
+        "from": "vendor/ffmpeg",
+        "to": "ffmpeg",
+        "filter": [
+          "ffmpeg.exe",
+          "LICENSE.txt",
+          "SOURCE.txt"
+        ]
+      }
+    ]
+  }
+}

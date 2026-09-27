@@ -2447,6 +2447,10 @@ enum ClassroomStreamMethod {
   EXTERNAL_ENCODER // teacher pushes RTMP directly to YouTube from OBS/a phone streaming app
 }
 
+// LEGACY — the standalone Classroom module (and its WHIP media relay) was
+// removed from the app; live classes run through LiveSession now. The table
+// is kept only so existing rows (and Doubt.classroomSessionId) stay intact.
+// Nothing writes to it any more. Drop it in a later migration after export.
 model ClassroomSession {
   id              String         @id @default(cuid())
   batchScheduleId String         @unique

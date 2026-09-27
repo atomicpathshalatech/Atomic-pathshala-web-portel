@@ -33,6 +33,9 @@ import { PageThumbnail } from "@/components/live-class/PageThumbnail";
 import { GRACE_PERIOD_MINUTES, END_WARNING_MINUTES } from "@/lib/whiteboard/constants";
 import { playHandRaiseChime, playCallConnectedChime, unlockAudioForNotifications } from "@/lib/live-class/live-sound-effects";
 import { extractYouTubeVideoId } from "@/lib/live-class/youtube";
+import { StagePreview } from "@/components/live-class/StagePreview";
+import { getDesktopBridge, type DesktopEncoderStatus } from "@/lib/desktop/bridge";
+import { DesktopClassStreamer } from "@/lib/live-class/desktop-streamer";
 import { BroadcastQuizCanvasOverlay } from "@/components/live-class/BroadcastQuizCanvasOverlay";
 
 // Size (px) of the floating self-camera bubble — draggable & resizable (120px to 400px)
@@ -551,6 +554,15 @@ export function TeacherLiveClassRoom({
   const floatCamDraggingRef = useRef(false);
   const floatCamDragOffsetRef = useRef({ x: 0, y: 0 });
   const stageContainerRef = useRef<HTMLDivElement>(null);
+  // Stage preview (the composed class video): always offered in the desktop
+  // app; in a browser only with ?stagePreview=1 (for testing).
+  const [stagePreviewAvailable, setStagePreviewAvailable] = useState(false);
+  const [stagePreviewOpen, setStagePreviewOpen] = useState(false);
+  useEffect(() => {
+    setStagePreviewAvailable(
+      Boolean(getDesktopBridge()) || new URLSearchParams(window.location.search).has("stagePreview")
+    );
+  }, []);
 
   function clampToStage(x: number, y: number, size = floatCamSize): { x: number; y: number } {
     const maxX = Math.max(8, stageDimensions.width - size - 8);
@@ -801,6 +813,64 @@ export function TeacherLiveClassRoom({
     };
   }, [batchScheduleId, youtubeGateActive]);
 
+  // ---- Built-in encoder (Atomic Pathshala Teacher desktop app) -----------
+  // In the desktop app the class is sent to YouTube automatically: stage
+  // compositor → local encoder → this class's own stream slot. No OBS, no
+  // key to copy. In a browser this stays off and the OBS panel is used.
+  const desktopStreamerRef = useRef<DesktopClassStreamer | null>(null);
+  const stageInfoRef = useRef<{ background?: string; cameraShape?: string | null; cameraPosition?: string | null }>({});
+  const [desktopStream, setDesktopStream] = useState<(DesktopEncoderStatus & { warnings?: string[] }) | null>(null);
+  const [desktopStreamError, setDesktopStreamError] = useState<string | null>(null);
+
+  const readStageSources = useCallback(() => {
+    const container = stageContainerRef.current;
+    const bgColor = container ? getComputedStyle(container).backgroundColor : null;
+    const bg = stageInfoRef.current.background;
+    return {
+      boardLayers: [baseCanvasRef.current, activeCanvasRef.current].filter((c): c is HTMLCanvasElement => Boolean(c)),
+      backgroundColor: bgColor && bgColor !== "rgba(0, 0, 0, 0)" ? bgColor : "#ffffff",
+      backgroundImageUrl: bg && /^https?:\/\//.test(bg) ? bg : null,
+      cameraShape: stageInfoRef.current.cameraShape === "SQUARE" ? ("SQUARE" as const) : ("CIRCULAR" as const),
+      cameraPosition: stageInfoRef.current.cameraPosition || "UPPER_RIGHT",
+      showCamera: true,
+    };
+  }, []);
+
+  /** Starts the built-in encoder for this class. Returns false when it can't (browser, no encoder, no stream slot). */
+  const startDesktopStreaming = useCallback(async (): Promise<boolean> => {
+    const bridge = getDesktopBridge();
+    if (!bridge || !batchScheduleId) return false;
+    if (desktopStreamerRef.current?.running) return true;
+    try {
+      const probe = await bridge.encoder.probe();
+      if (!probe.available) {
+        setDesktopStreamError(probe.reason || "The built-in encoder isn't available on this computer.");
+        return false;
+      }
+      const creds = await postJson(`/api/team/live-class/${batchScheduleId}/stream-key`, {});
+      if (!creds?.serverUrl || !creds?.streamKey) return false;
+      const streamer = new DesktopClassStreamer(bridge, readStageSources, (status) => setDesktopStream(status));
+      desktopStreamerRef.current = streamer;
+      await streamer.start({ serverUrl: creds.serverUrl, streamKey: creds.streamKey });
+      setDesktopStreamError(null);
+      return true;
+    } catch (err) {
+      await desktopStreamerRef.current?.stop().catch(() => undefined);
+      desktopStreamerRef.current = null;
+      setDesktopStreamError(err instanceof Error ? err.message : "Could not start sending the class to YouTube.");
+      return false;
+    }
+  }, [batchScheduleId, readStageSources]);
+
+  const stopDesktopStreaming = useCallback(async () => {
+    const streamer = desktopStreamerRef.current;
+    desktopStreamerRef.current = null;
+    await streamer?.stop().catch(() => undefined);
+    setDesktopStream(null);
+  }, []);
+
+  useEffect(() => () => void desktopStreamerRef.current?.stop(), []);
+
   // After a page refresh mid-connect, pick the gate back up.
   useEffect(() => {
     if (!batchScheduleId) return;
@@ -809,9 +879,15 @@ export function TeacherLiveClassRoom({
       .then((r) => r.json())
       .then((json) => {
         const s = json?.data?.state;
-        if (s === "STARTING" || s === "YOUTUBE_CONNECTING" || s === "YOUTUBE_ACTIVE") {
+        const connecting = s === "STARTING" || s === "YOUTUBE_CONNECTING" || s === "YOUTUBE_ACTIVE";
+        if (connecting) {
           setYoutubeGate({ state: s, streamStatus: json.data.streamStatus ?? null, healthStatus: json.data.healthStatus ?? null });
           fetchStreamKey();
+        }
+        // Desktop app: the encoder stopped with the old page — resume sending
+        // (the YouTube broadcast has auto-stop off, so it picks straight up).
+        if ((connecting || s === "LIVE") && json?.data?.deliveryMode === "APP_YOUTUBE") {
+          startDesktopStreaming();
         }
       })
       .catch(() => {});
@@ -854,6 +930,11 @@ export function TeacherLiveClassRoom({
   const [launchingQuiz, setLaunchingQuiz] = useState(false);
 
   const currentPage = wbSession?.pages.find((p) => p.pageNumber === wbSession.activePageNumber) ?? null;
+  stageInfoRef.current = {
+    background: currentPage?.background,
+    cameraShape: wbSession?.cameraShape,
+    cameraPosition: wbSession?.cameraPosition,
+  };
 
   // Read inside the Pusher handler below, which is bound once per session
   // (not re-bound on every tab change) — a ref keeps it seeing the latest
@@ -2089,8 +2170,13 @@ export function TeacherLiveClassRoom({
         // The class now holds its own stream slot: show the OBS panel with
         // this class's key and wait for YouTube to receive the stream.
         setYoutubeGate({ state: data.liveState || "YOUTUBE_CONNECTING", streamStatus: null, healthStatus: null });
-        setShowObsStreamInfo(true);
-        fetchStreamKey();
+        // Desktop app: send the class automatically. Browser (or no
+        // encoder): fall back to the OBS panel with this class's key.
+        const sending = await startDesktopStreaming();
+        if (!sending) {
+          setShowObsStreamInfo(true);
+          fetchStreamKey();
+        }
       }
     } catch (err) {
       setStartClassError(err instanceof Error ? err.message : "Could not start the class.");
@@ -2191,6 +2277,7 @@ export function TeacherLiveClassRoom({
     setEnding(true);
     try {
       await postJson(`/api/whiteboard/sessions/${wbSession.id}/end`);
+      await stopDesktopStreaming();
       setWbSession((prev) => (prev ? { ...prev, status: "ENDED", livePhase: "ENDED" } : prev));
       setShowPostClassModal(true);
     } catch (err) {
@@ -2594,10 +2681,20 @@ export function TeacherLiveClassRoom({
           {/* Authoritative Live Status & Timers */}
           {isClassLive ? (
             <div className="flex items-center gap-2">
-              <span className="flex items-center gap-1.5 text-xs font-bold text-red-400 border border-red-500/40 bg-red-950/40 px-3 py-1 rounded-full">
-                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                LIVE
-              </span>
+              {youtubeGateActive ? (
+                <span
+                  className="flex items-center gap-1.5 text-xs font-bold text-sky-300 border border-sky-500/40 bg-sky-950/40 px-3 py-1 rounded-full"
+                  title="Students will see the class once YouTube receives your OBS stream"
+                >
+                  <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
+                  CONNECTING TO YOUTUBE
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5 text-xs font-bold text-red-400 border border-red-500/40 bg-red-950/40 px-3 py-1 rounded-full">
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                  LIVE
+                </span>
+              )}
 
               {/* Elapsed Time */}
               <span
@@ -2694,7 +2791,7 @@ export function TeacherLiveClassRoom({
               ) : null}
 
               {/* YouTube Live Stream Indicator when running on YouTube (or simulcasting alongside the interactive room) */}
-              {(wbSession?.videoTransport === "YOUTUBE" || wbSession?.videoTransport === "BOTH") && wbSession?.youtubeVideoId && (
+              {(wbSession?.videoTransport === "YOUTUBE" || wbSession?.videoTransport === "BOTH") && wbSession?.youtubeVideoId && !youtubeGateActive && (
                 <a
                   href={`https://www.youtube.com/watch?v=${wbSession.youtubeVideoId}`}
                   target="_blank"
@@ -2798,6 +2895,27 @@ export function TeacherLiveClassRoom({
               {youtubeSimulcastWarning}
             </div>
           )}
+          {(desktopStream || desktopStreamError) && (
+            <span
+              className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold ${
+                desktopStreamError || desktopStream?.state === "reconnecting" || desktopStream?.state === "failed"
+                  ? "bg-amber-500/15 border-amber-500/40 text-amber-200"
+                  : "bg-emerald-500/15 border-emerald-500/40 text-emerald-200"
+              }`}
+              title={desktopStream?.warnings?.join(" · ") || undefined}
+            >
+              <span className="material-symbols-outlined text-sm">
+                {desktopStreamError ? "error" : desktopStream?.state === "streaming" ? "cast_connected" : "sync"}
+              </span>
+              {desktopStreamError
+                ? `Built-in encoder: ${desktopStreamError}`
+                : desktopStream?.state === "streaming"
+                ? `Sending to YouTube · ${Math.round(desktopStream.bitrateKbps ?? 0)} kbps${desktopStream.encoder ? ` · ${desktopStream.encoder.replace("h264_", "").toUpperCase()}` : ""}`
+                : desktopStream?.state === "reconnecting"
+                ? "Connection to YouTube dropped — reconnecting…"
+                : "Starting the built-in encoder…"}
+            </span>
+          )}
           {youtubeGateActive && (
             <button
               type="button"
@@ -2830,6 +2948,19 @@ export function TeacherLiveClassRoom({
             >
               <span className="material-symbols-outlined text-sm text-red-400">sensors</span>
               <span>OBS Stream Key</span>
+            </button>
+          )}
+
+          {stagePreviewAvailable && (
+            <button
+              type="button"
+              onClick={() => setStagePreviewOpen((o) => !o)}
+              className={`text-xs font-semibold border px-3 py-1.5 rounded-md transition ${
+                stagePreviewOpen ? "text-white border-sky-500 bg-sky-900/40" : "text-gray-300 border-gray-600 hover:bg-gray-700"
+              }`}
+              title="Show exactly what the class video (YouTube) shows"
+            >
+              STAGE PREVIEW
             </button>
           )}
 
@@ -4323,6 +4454,18 @@ export function TeacherLiveClassRoom({
         />
       )}
 
+      {stagePreviewOpen && (
+        <StagePreview
+          baseCanvas={baseCanvasRef}
+          activeCanvas={activeCanvasRef}
+          stageContainer={stageContainerRef}
+          background={currentPage?.background}
+          cameraShape={wbSession?.cameraShape}
+          cameraPosition={wbSession?.cameraPosition}
+          onClose={() => setStagePreviewOpen(false)}
+        />
+      )}
+
       {/* OBS Studio Live Streaming Setup Modal */}
       {showObsStreamInfo && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
@@ -4341,7 +4484,11 @@ export function TeacherLiveClassRoom({
                     OBS Studio &amp; Live Streaming Setup
                   </h3>
                   <p className="text-[11px] text-slate-400">
-                    {isClassLive ? "🔴 Class is currently Live on stream" : "Step 1: Start OBS stream → Step 2: Click Go Live"}
+                    {youtubeGateActive
+                      ? "Waiting for YouTube to receive your OBS stream"
+                      : isClassLive
+                      ? "🔴 Class is currently Live on stream"
+                      : "Step 1: Click Start Class → Step 2: Start streaming in OBS"}
                   </p>
                 </div>
               </div>
@@ -4411,12 +4558,13 @@ export function TeacherLiveClassRoom({
                   <input
                     type="text"
                     readOnly
-                    value={wbSession?.youtubeIngestUrl || "rtmp://a.rtmp.youtube.com/live2"}
+                    value={wbSession?.youtubeIngestUrl || "Available after you click Start Class"}
                     className="flex-1 px-3 py-2 text-xs font-mono rounded-xl bg-[#0a0b12] border border-slate-700 text-slate-200 select-all"
                   />
                   <button
                     type="button"
-                    onClick={() => copyToClipboard(wbSession?.youtubeIngestUrl || "rtmp://a.rtmp.youtube.com/live2", "serverUrl")}
+                    disabled={!wbSession?.youtubeIngestUrl}
+                    onClick={() => copyToClipboard(wbSession?.youtubeIngestUrl || "", "serverUrl")}
                     className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold transition shrink-0 flex items-center gap-1"
                   >
                     <span className="material-symbols-outlined text-sm">

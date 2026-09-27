@@ -8,7 +8,7 @@ import { STUDENT_HEARTBEAT_MS } from "@/lib/whiteboard/constants";
 import { CanvasEngine, type StrokeObject } from "@/lib/canvas/canvas-engine";
 import { MessagesPanel } from "@/components/live-class/MessagesPanel";
 import { YouTubeLivePlayer } from "@/components/live-class/YouTubeLivePlayer";
-import { VideoPollOverlay, type VideoPollData } from "@/components/classroom/VideoPollOverlay";
+import { VideoPollOverlay, type VideoPollData } from "@/components/live-class/VideoPollOverlay";
 import { VideoStrip } from "@/components/live-class/VideoStrip";
 import { RecordingPlayer } from "@/components/live-class/RecordingPlayer";
 import { StudentPostClassFeedback } from "@/components/live-class/StudentPostClassFeedback";

@@ -15,6 +15,7 @@ import { canTeacherStartClass } from "@/lib/schedule/access-rules";
 import { extractYouTubeVideoId } from "@/lib/live-class/youtube";
 import { issueStageToken, stageUrl } from "@/lib/live-class/stage-session";
 import { YOUTUBE_OAUTH_PRODUCTION_URL } from "@/lib/youtube/oauth-config";
+import { appYoutubeAvailable, pickVideoTransport } from "@/lib/live-session/delivery-options";
 
 export async function POST(
   request: NextRequest,
@@ -50,16 +51,14 @@ export async function POST(
       return apiError("Only Live Class sessions can be transitioned to LIVE.", 400);
     }
 
-    const requestedTransport =
-      body?.videoTransport === "YOUTUBE"
-        ? "YOUTUBE"
-        : body?.videoTransport === "BOTH"
-        ? "BOTH"
-        : body?.videoTransport === "LIVEKIT"
-        ? "LIVEKIT"
-        : schedule.liveWhiteboardSession?.videoTransport === "YOUTUBE" || schedule.liveWhiteboardSession?.videoTransport === "BOTH"
-        ? schedule.liveWhiteboardSession.videoTransport
-        : "LIVEKIT";
+    // App class = this class's own unlisted YouTube stream. The LiveKit room
+    // is only a fallback while App YouTube isn't set up on this server (see
+    // src/lib/live-session/delivery-options.ts).
+    const requestedTransport = pickVideoTransport(
+      body?.videoTransport,
+      schedule.liveWhiteboardSession?.videoTransport,
+      await appYoutubeAvailable().catch(() => false)
+    );
 
     // WhiteboardSession is @unique on batchScheduleId - a rescheduled or
     // re-run class NEVER gets a new row, it's the same row reused across

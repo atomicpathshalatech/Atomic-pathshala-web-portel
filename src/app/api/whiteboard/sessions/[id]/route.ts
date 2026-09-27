@@ -149,8 +149,10 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         existing.recordingStatus === "STARTING" ||
         Boolean(existing.recordingEgressId);
 
-      // Auto-start LiveKit room recording if LiveKit video is enabled
-      if (!isAlreadyRecording && (existing.videoTransport === "LIVEKIT" || existing.videoTransport === "BOTH")) {
+      // LiveKit room recording only for a LiveKit-fallback class. YouTube
+      // classes (incl. BOTH) are recorded by YouTube's own archive — a room
+      // recording there never showed the board and only cost Egress minutes.
+      if (!isAlreadyRecording && existing.videoTransport === "LIVEKIT") {
         try {
           const { videoRoomName } = await import("@/lib/livekit/server");
           const roomName = videoRoomName(existing.id);

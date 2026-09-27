@@ -5,10 +5,9 @@ import { classifyYoutubeError, isTerminalYoutubeError } from "@/lib/youtube/erro
 
 /**
  * Schema-agnostic YouTube Live Streaming API (Data API v3) client — the pure
- * API-call layer shared by both the standalone Classroom module
- * (src/lib/classroom/youtube-broadcast.ts) and Whiteboard's "Application
- * Class + YouTube" simulcast (src/lib/live-class/youtube-broadcast.ts).
- * Neither caller's DB writes live here — this file only talks to Google.
+ * API-call layer behind the live-class YouTube broadcast
+ * (src/lib/live-class/youtube-broadcast.ts, src/lib/live-session/*).
+ * No DB writes live here — this file only talks to Google.
  *
  * Every resource-creating/changing call here runs on the APP channel only:
  * the MAIN channel is read-only for Atomic (see src/lib/youtube/client.ts).

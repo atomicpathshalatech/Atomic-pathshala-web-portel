@@ -63,6 +63,7 @@ export default async function TeacherMySchedulePage({
             id: true,
             status: true,
             livePhase: true,
+            videoTransport: true,
             recordingStatus: true,
             recordingStorageKey: true,
             recordingEgressId: true,
@@ -73,7 +74,6 @@ export default async function TeacherMySchedulePage({
             youtubeVideoId: true,
           },
         },
-        classroomSession: { select: { id: true, phase: true } },
       },
     }),
     prisma.doubtBooking.findMany({
@@ -167,6 +167,7 @@ export default async function TeacherMySchedulePage({
           id: s.liveWhiteboardSession.id,
           status: s.liveWhiteboardSession.status,
           livePhase: s.liveWhiteboardSession.livePhase,
+          videoTransport: s.liveWhiteboardSession.videoTransport,
           recordingStatus: s.liveWhiteboardSession.recordingStatus,
           recordingStorageKey: s.liveWhiteboardSession.recordingStorageKey,
           pdfStatus: s.liveWhiteboardSession.pdfStatus,
@@ -176,7 +177,6 @@ export default async function TeacherMySchedulePage({
           youtubeVideoId: s.liveWhiteboardSession.youtubeVideoId,
         }
       : null,
-    classroomSession: s.classroomSession ? { id: s.classroomSession.id, phase: s.classroomSession.phase } : null,
   }));
 
   const doubtScheduleItems: ScheduleItem[] = doubtBookings.map((b) => ({

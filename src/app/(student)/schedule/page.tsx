@@ -48,7 +48,6 @@ export default async function SchedulePage({
                     youtubeVideoId: true,
                   },
                 },
-                classroomSession: { select: { id: true, phase: true } },
               },
             },
           },
@@ -169,7 +168,6 @@ export default async function SchedulePage({
           youtubeVideoId: s.liveWhiteboardSession.youtubeVideoId,
         }
       : null,
-    classroomSession: s.classroomSession ? { id: s.classroomSession.id, phase: s.classroomSession.phase } : null,
   }));
 
   const doubtScheduleItems: ScheduleItem[] = doubtBookings.map((b) => ({

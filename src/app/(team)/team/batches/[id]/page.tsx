@@ -44,9 +44,6 @@ export default async function BatchDetailPage({ params }: { params: { id: string
         include: {
           teacher: { include: { user: true } },
           liveWhiteboardSession: true,
-          classroomSession: {
-            select: { id: true, phase: true, streamMethod: true, recordingStatus: true },
-          },
           chapter: {
             select: {
               id: true,
@@ -201,14 +198,6 @@ export default async function BatchDetailPage({ params }: { params: { id: string
               livePhase: s.liveWhiteboardSession.livePhase,
               actualStartedAt: s.liveWhiteboardSession.actualStartedAt?.toISOString() ?? null,
               actualEndedAt: s.liveWhiteboardSession.actualEndedAt?.toISOString() ?? null,
-            }
-          : null,
-        classroomSession: s.classroomSession
-          ? {
-              id: s.classroomSession.id,
-              phase: s.classroomSession.phase,
-              streamMethod: s.classroomSession.streamMethod,
-              recordingStatus: s.classroomSession.recordingStatus,
             }
           : null,
         chapter: s.chapter

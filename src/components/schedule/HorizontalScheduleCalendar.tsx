@@ -61,12 +61,6 @@ export interface ScheduleItem {
   } | null;
   bookingId?: string | null;
   studentName?: string | null;
-  // New, independent YouTube-Live Classroom module — present only once a
-  // teacher/admin has configured it for this schedule.
-  classroomSession?: {
-    id: string;
-    phase: string;
-  } | null;
 }
 
 export interface BatchOption {
