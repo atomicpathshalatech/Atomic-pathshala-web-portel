@@ -2110,20 +2110,21 @@ export function generateTestPaperHtml(
 </head>
 <body>
 
-  <div class="print-bar no-print">
-    <div>
-      <h1>${test.name} — ${brandName}</h1>
-      <div style="font-size: 11px; opacity: 0.85;">File name: <strong>${test.name} - ${currentDateStr} - ATOMIC PATHSHALA.pdf</strong></div>
-    </div>
-    <div style="display: flex; align-items: center; gap: 8px;">
-      <button onclick="window.print()" class="print-bar-btn" style="background: #16a34a; font-size: 13.5px; padding: 8px 20px;">
-        <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
-        <span>Save as PDF (${test.name} - ${currentDateStr} - ATOMIC PATHSHALA.pdf)</span>
-      </button>
+  <div id="pdf-download-overlay" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.96); z-index: 999999; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; backdrop-filter: blur(8px);">
+    <div style="background: #1e293b; padding: 36px 40px; border-radius: 24px; border: 1px solid #334155; text-align: center; max-width: 440px; width: 90%; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
+      <div style="font-size: 42px; margin-bottom: 12px; animation: bounce 1s infinite alternate;">📥</div>
+      <h2 style="margin: 0 0 6px 0; font-size: 19px; font-weight: 800; color: #ffffff;">Downloading Test Booklet PDF...</h2>
+      <p style="margin: 0 0 16px 0; font-size: 12px; color: #94a3b8; line-height: 1.4;">${test.name}</p>
+      
+      <div style="width: 100%; height: 10px; background: #0f172a; border-radius: 999px; overflow: hidden; margin-bottom: 12px; border: 1px solid #334155;">
+        <div id="pdf-progress-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #3b82f6, #10b981); transition: width 0.12s ease;"></div>
+      </div>
+      <div id="pdf-progress-text" style="font-size: 12px; font-weight: 700; color: #60a5fa;">Preparing booklet pages (0%)...</div>
+      <div style="font-size: 10.5px; color: #64748b; margin-top: 10px;">File name: ${test.name} - ${currentDateStr} - ATOMIC PATHSHALA.pdf</div>
     </div>
   </div>
 
-  <div class="doc-container">
+  <div class="doc-container" id="doc-container">
     ${frontCoverHtml}
     ${questionPagesHtml}
     ${finalRoughPagesHtml}
@@ -2131,12 +2132,83 @@ export function generateTestPaperHtml(
     ${solutionsSectionHtml}
   </div>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
   <script>
-    // Auto-open Save as PDF dialog on load
+    async function autoCompileAndDownloadPdf() {
+      try {
+        if (!window.jspdf || !window.html2canvas) {
+          console.error("PDF libraries not loaded yet, retrying...");
+          setTimeout(autoCompileAndDownloadPdf, 500);
+          return;
+        }
+
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF({
+          orientation: 'portrait',
+          unit: 'mm',
+          format: 'a4',
+          compress: true
+        });
+
+        const pages = document.querySelectorAll('.a4-sheet, .page');
+        const total = pages.length;
+        const progressBar = document.getElementById('pdf-progress-bar');
+        const progressText = document.getElementById('pdf-progress-text');
+
+        for (let i = 0; i < total; i++) {
+          const pageEl = pages[i];
+          const pct = Math.round(((i + 1) / total) * 100);
+          if (progressBar) progressBar.style.width = pct + '%';
+          if (progressText) progressText.innerText = 'Processing Page ' + (i + 1) + ' of ' + total + ' (' + pct + '%)...';
+
+          const canvas = await html2canvas(pageEl, {
+            scale: 1.6, // crisp resolution while keeping file size ~2-3 MB (<5MB)
+            useCORS: true,
+            logging: false,
+            backgroundColor: '#ffffff'
+          });
+
+          const imgData = canvas.toDataURL('image/jpeg', 0.90);
+          if (i > 0) {
+            pdf.addPage('a4', 'portrait');
+          }
+          pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
+        }
+
+        if (progressText) progressText.innerText = '✅ Saving PDF file...';
+
+        const safeTitle = "${test.name}".replace(/[/\\\\?%*:|"<>]/g, '-').trim();
+        const fileName = safeTitle + " - ${currentDateStr} - ATOMIC PATHSHALA${withSolution ? ' (Solutions)' : ''}.pdf";
+        pdf.save(fileName);
+
+        setTimeout(function() {
+          const overlay = document.getElementById('pdf-download-overlay');
+          if (overlay) {
+            overlay.innerHTML = '<div style="background: #1e293b; padding: 28px 36px; border-radius: 24px; text-align: center; border: 1.5px solid #10b981; max-width: 420px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">' +
+              '<div style="font-size: 38px; margin-bottom: 8px;">✅</div>' +
+              '<h3 style="margin:0; color:#34d399; font-size:18px; font-weight:800;">PDF Downloaded Successfully!</h3>' +
+              '<p style="margin:8px 0 16px 0; font-size:12px; color:#94a3b8; word-break:break-all;">' + fileName + '</p>' +
+              '<div style="display:flex; justify-content:center; gap:10px;">' +
+                '<button onclick="autoCompileAndDownloadPdf()" style="background:#334155; hover:bg:#475569; color:white; border:none; padding:8px 16px; border-radius:10px; cursor:pointer; font-weight:700; font-size:12px;">Re-Download</button>' +
+                '<button onclick="window.close()" style="background:#10b981; color:white; border:none; padding:8px 20px; border-radius:10px; cursor:pointer; font-weight:700; font-size:12px;">Close</button>' +
+              '</div>' +
+            '</div>';
+          }
+        }, 500);
+      } catch (err) {
+        console.error("PDF generation error:", err);
+        const progressText = document.getElementById('pdf-progress-text');
+        if (progressText) {
+          progressText.innerText = "⚠️ Generation error. Click Re-Download to retry.";
+        }
+      }
+    }
+
+    // Auto-trigger direct PDF compilation immediately after fonts and KaTeX render
     window.addEventListener('load', function() {
-      setTimeout(function() {
-        window.print();
-      }, 500);
+      setTimeout(autoCompileAndDownloadPdf, 400);
     });
   </script>
 
