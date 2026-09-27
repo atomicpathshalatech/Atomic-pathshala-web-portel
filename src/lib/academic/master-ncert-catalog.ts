@@ -114,6 +114,17 @@ export function getMasterNcertChapters(subjectName: string): MasterNcertChapter[
 }
 
 /**
+ * Returns all NCERT chapters grouped by subject
+ */
+export function getAllMasterNcertChapters(): { subject: string; chapters: MasterNcertChapter[] }[] {
+  const primarySubjects = ["Physics", "Chemistry", "Biology", "Mathematics"];
+  return primarySubjects.map((sub) => ({
+    subject: sub,
+    chapters: getMasterNcertChapters(sub),
+  }));
+}
+
+/**
  * Returns all NCERT topics for a given subject and chapter
  */
 export function getMasterNcertTopics(

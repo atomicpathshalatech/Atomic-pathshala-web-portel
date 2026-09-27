@@ -31,6 +31,10 @@ import {
 import { FormulaText } from "@/components/test-portal/FormulaText";
 import { SecureDeleteResourceModal } from "@/components/common/SecureDeleteResourceModal";
 import { CamDrawRenderer } from "@/components/camdraw/CamDrawRenderer";
+import {
+  getMasterNcertChapters,
+  getAllMasterNcertChapters,
+} from "@/lib/academic/master-ncert-catalog";
 
 export interface QuestionRow {
   id: string;
@@ -124,6 +128,7 @@ export function QuestionManagementTable({
   // Filters State
   const [search, setSearch] = useState(searchParams.get("search") || "");
   const [subject, setSubject] = useState(searchParams.get("subject") || "");
+  const [chapter, setChapter] = useState(searchParams.get("chapter") || "");
   const [topic, setTopic] = useState(searchParams.get("topic") || "");
   const [subTopic, setSubTopic] = useState(searchParams.get("subTopic") || "");
   const [difficulty, setDifficulty] = useState(searchParams.get("difficulty") || "");
@@ -167,6 +172,7 @@ export function QuestionManagementTable({
     const params = new URLSearchParams();
     if (search.trim()) params.set("search", search.trim());
     if (subject) params.set("subject", subject);
+    if (chapter.trim()) params.set("chapter", chapter.trim());
     if (topic.trim()) params.set("topic", topic.trim());
     if (subTopic.trim()) params.set("subTopic", subTopic.trim());
     if (difficulty) params.set("difficulty", difficulty);
@@ -184,6 +190,7 @@ export function QuestionManagementTable({
   const resetFilters = () => {
     setSearch("");
     setSubject("");
+    setChapter("");
     setTopic("");
     setSubTopic("");
     setDifficulty("");
@@ -419,8 +426,16 @@ export function QuestionManagementTable({
           <div>
             <select
               value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 outline-none focus:border-blue-500"
+              onChange={(e) => {
+                const newSubject = e.target.value;
+                setSubject(newSubject);
+                if (newSubject) {
+                  const chaptersForSub = getMasterNcertChapters(newSubject);
+                  const exists = chaptersForSub.some((c) => c.title === chapter);
+                  if (!exists) setChapter("");
+                }
+              }}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 outline-none focus:border-blue-500 font-medium"
             >
               <option value="">All Subjects</option>
               <option value="Physics">Physics</option>
@@ -431,22 +446,40 @@ export function QuestionManagementTable({
             </select>
           </div>
 
+          {/* Chapter Dropdown (Dynamic per Subject) */}
           <div>
-            <input
-              type="text"
-              placeholder="Topic / Chapter..."
-              value={topic}
-              onChange={(e) => setTopic(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 outline-none focus:border-blue-500"
-            />
+            <select
+              value={chapter}
+              onChange={(e) => setChapter(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 outline-none focus:border-blue-500 font-medium"
+            >
+              <option value="">All Chapters</option>
+              {subject ? (
+                getMasterNcertChapters(subject).map((ch) => (
+                  <option key={ch.id} value={ch.title}>
+                    {ch.displayTitle}
+                  </option>
+                ))
+              ) : (
+                getAllMasterNcertChapters().map((group) => (
+                  <optgroup key={group.subject} label={`— ${group.subject} —`}>
+                    {group.chapters.map((ch) => (
+                      <option key={ch.id} value={ch.title}>
+                        {ch.displayTitle}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))
+              )}
+            </select>
           </div>
 
           <div>
             <input
               type="text"
-              placeholder="Sub-topic..."
-              value={subTopic}
-              onChange={(e) => setSubTopic(e.target.value)}
+              placeholder="Topic / Sub-topic..."
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
               className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 outline-none focus:border-blue-500"
             />
           </div>
