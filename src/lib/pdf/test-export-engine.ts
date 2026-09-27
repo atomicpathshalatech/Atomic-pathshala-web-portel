@@ -399,7 +399,7 @@ export function generateTestPaperHtml(
 
   // Helper to compute question vertical height weight accurately
   function computeQuestionWeight(q: FormattedExportQuestion): number {
-    let weight = 0.85; // Base statement + options height
+    let weight = 1.0; // Base question statement + 2x2 short options
 
     const textEn = q.statementEn || "";
     const textHi = q.statementHi || "";
@@ -407,54 +407,44 @@ export function generateTestPaperHtml(
 
     // 1. Diagrams / CamDraw / Inline Images
     if (q.imageUrl) {
-      weight += 1.4;
+      weight += 1.0;
     }
     if (q.camDrawSvg) {
-      weight += 1.3;
+      weight += 0.9;
     }
     const inlineImgCount = (combinedText.match(/!\[.*?\]\(.*?\)/g) || []).length;
     if (inlineImgCount > 0) {
-      weight += Math.min(inlineImgCount * 1.0, 2.5);
+      weight += Math.min(inlineImgCount * 0.7, 1.6);
     }
 
-    // 2. LaTeX Arrays / Matrices / Tabular / HTML Tables
-    const hasArrayOrMatrix = /\\begin\{(array|matrix|pmatrix|bmatrix|vmatrix|tabular|cases|aligned)\}/i.test(combinedText);
+    // 2. HTML Tables / Markdown Tables
     const hasHtmlTable = /<table/i.test(combinedText);
     const hasMarkdownTable = /\|.*?\|.*?\|/g.test(combinedText);
-
-    if (hasArrayOrMatrix || hasHtmlTable || hasMarkdownTable) {
-      const latexRows = (combinedText.match(/\\\\/g) || []).length;
+    if (hasHtmlTable || hasMarkdownTable) {
       const htmlRows = (combinedText.match(/<tr/gi) || []).length;
       const mdRows = (combinedText.match(/\n\s*\|/g) || []).length;
-      const maxRows = Math.max(latexRows, htmlRows, mdRows, 3);
-      weight += 1.1 + Math.min(maxRows * 0.28, 2.2);
+      const maxRows = Math.max(htmlRows, mdRows, 2);
+      weight += 0.4 + Math.min(maxRows * 0.18, 1.0);
     }
 
     // 3. Match List / Column Format
-    const isMatchList = /(List|Column|कॉलम|सूची)\s*[-–—I1]/i.test(combinedText);
-    if (isMatchList && !hasArrayOrMatrix) {
-      weight += 0.85;
+    const isMatchList = /(List\s*[-–—I1]|Column\s*[-–—I1]|कॉलम\s*[-–—I1]|सूची\s*[-–—I1])/i.test(combinedText);
+    if (isMatchList && !hasHtmlTable && !hasMarkdownTable) {
+      weight += 0.35;
     }
 
-    // 4. Multi-statement / Assertion-Reason
-    const isStatementOrAssertion = /(Statement\s*[-–—I1]|कथन\s*[-–—I1]|Assertion|अभिकथन)/i.test(combinedText);
-    if (isStatementOrAssertion) {
-      weight += 0.45;
-    }
-
-    // 5. Statement Length & Line Breaks
+    // 4. Statement Length & Line Breaks
     const maxLen = Math.max(textEn.length, textHi.length);
-    if (maxLen > 400) weight += 0.8;
-    else if (maxLen > 250) weight += 0.5;
-    else if (maxLen > 140) weight += 0.25;
+    if (maxLen > 450) weight += 0.5;
+    else if (maxLen > 250) weight += 0.25;
 
     const lineBreaks = Math.max(
       (textEn.match(/\n|<br\s*\/?>/gi) || []).length,
       (textHi.match(/\n|<br\s*\/?>/gi) || []).length
     );
-    if (lineBreaks > 3) weight += Math.min(lineBreaks * 0.14, 0.9);
+    if (lineBreaks > 4) weight += Math.min(lineBreaks * 0.1, 0.4);
 
-    // 6. Options height: Stacked vs 2x2 Grid
+    // 5. Options height: Stacked vs 2x2 Grid
     const isShortOptions = q.options.every((opt) => {
       const lEn = (opt.textEn || "").length;
       const lHi = (opt.textHi || opt.textEn || "").length;
@@ -462,24 +452,26 @@ export function generateTestPaperHtml(
     });
 
     if (!isShortOptions || q.options.length > 4) {
-      weight += 0.45;
+      weight += 0.35;
       const hasLongOpt = q.options.some((opt) => (opt.textEn || "").length > 60 || (opt.textHi || "").length > 60);
-      if (hasLongOpt) weight += 0.4;
+      if (hasLongOpt) weight += 0.3;
     }
 
     return weight;
   }
 
-  // Helper to chunk questions into authentic exam pages (ensuring ZERO page overflow)
-  function chunkQuestionsIntoPages(questions: FormattedExportQuestion[], maxWeight = 4.2): FormattedExportQuestion[][] {
+  // Helper to chunk questions into authentic exam pages (filling pages sequentially without large empty space)
+  function chunkQuestionsIntoPages(questions: FormattedExportQuestion[]): FormattedExportQuestion[][] {
     const chunks: FormattedExportQuestion[][] = [];
     let currentChunk: FormattedExportQuestion[] = [];
     let currentWeight = 0;
 
     for (const q of questions) {
       const weight = computeQuestionWeight(q);
+      const isFirstPage = chunks.length === 0;
+      const maxPageCapacity = isFirstPage ? 6.0 : 7.4;
 
-      if (currentChunk.length > 0 && currentWeight + weight > maxWeight) {
+      if (currentChunk.length > 0 && currentWeight + weight > maxPageCapacity) {
         chunks.push(currentChunk);
         currentChunk = [q];
         currentWeight = weight;
@@ -496,7 +488,7 @@ export function generateTestPaperHtml(
 
   let totalQuestionPagesCount = 0;
   test.sections.forEach((sec) => {
-    totalQuestionPagesCount += chunkQuestionsIntoPages(sec.questions, 4.2).length;
+    totalQuestionPagesCount += chunkQuestionsIntoPages(sec.questions).length;
   });
 
   const intermediateRoughCount = 0;
@@ -756,7 +748,7 @@ export function generateTestPaperHtml(
   `;
 
   test.sections.forEach((section, sIdx) => {
-    const pagesForSection = chunkQuestionsIntoPages(section.questions, 4.2);
+    const pagesForSection = chunkQuestionsIntoPages(section.questions);
 
     pagesForSection.forEach((questionsInPage, pIdx) => {
       const questionsChunkHtml = questionsInPage.map((q) => {
@@ -855,6 +847,11 @@ export function generateTestPaperHtml(
 
       questionPagesHtml += `
         <div class="page content-page">
+          <!-- Light Subtle Background Watermark -->
+          <div class="page-watermark">
+            <div class="watermark-text">${brandName}</div>
+          </div>
+
           ${subjectHeaderHtml}
           
           <!-- Content Body Starts Directly With ZERO Gap -->
@@ -1178,7 +1175,7 @@ export function generateTestPaperHtml(
       width: 794px;
       min-height: 1123px;
       background: #ffffff;
-      padding: 28px 32px;
+      padding: 28px 36px;
       box-sizing: border-box;
       box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
       display: flex;
@@ -1192,7 +1189,7 @@ export function generateTestPaperHtml(
     .page {
       width: 794px;
       min-height: 1123px;
-      padding: 24px 28px;
+      padding: 24px 34px;
       position: relative;
       background: white;
       page-break-after: always;
@@ -1203,12 +1200,33 @@ export function generateTestPaperHtml(
       box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
       margin-bottom: 24px;
       box-sizing: border-box;
+      overflow: hidden;
     }
 
-    /* Content Page: Strictly Aligned At The Top, Zero Gap */
+    /* Content Page: Strictly Aligned At The Top, Zero Gap, Generous Margins */
     .page.content-page {
-      padding: 14px 24px 10px 24px !important;
+      padding: 16px 32px 14px 32px !important;
       justify-content: space-between !important;
+    }
+
+    .page-watermark {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(-32deg);
+      pointer-events: none;
+      z-index: 0;
+      user-select: none;
+      white-space: nowrap;
+    }
+
+    .watermark-text {
+      font-family: 'Montserrat', 'Inter', sans-serif;
+      font-size: 42pt;
+      font-weight: 900;
+      color: rgba(0, 0, 0, 0.038);
+      letter-spacing: 6px;
+      text-transform: uppercase;
     }
 
     @media print {
@@ -1625,6 +1643,8 @@ export function generateTestPaperHtml(
       border-bottom: 1px solid #cbd5e1;
       page-break-inside: avoid;
       break-inside: avoid;
+      position: relative;
+      z-index: 1;
     }
 
     .q-side {
@@ -1633,12 +1653,12 @@ export function generateTestPaperHtml(
     }
 
     .q-side-en {
-      padding-right: 14px;
+      padding-right: 16px;
       border-right: 1.5px solid #000000;
     }
 
     .q-side-hi {
-      padding-left: 14px;
+      padding-left: 16px;
     }
 
     .q-head-statement {
