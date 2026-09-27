@@ -393,8 +393,8 @@ export function YouTubeLivePlayer({
   const embedUrl = useMemo(() => {
     if (!youtubeVideoId) return "";
     const origin = typeof window !== "undefined" && window.location.origin ? window.location.origin : "";
-    const originParam = origin ? `&origin=${encodeURIComponent(origin)}` : "";
-    return `https://www.youtube.com/embed/${youtubeVideoId}?autoplay=1&mute=1&enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&fs=0${originParam}`;
+    const originParam = origin ? `&origin=${encodeURIComponent(origin)}&widget_referrer=${encodeURIComponent(origin)}` : "";
+    return `https://www.youtube-nocookie.com/embed/${youtubeVideoId}?autoplay=1&mute=1&enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&fs=0${originParam}`;
   }, [youtubeVideoId]);
 
   if (!youtubeVideoId || livePhase === "SCHEDULED") {
@@ -467,7 +467,7 @@ export function YouTubeLivePlayer({
           title={title}
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
           allowFullScreen
-          referrerPolicy="strict-origin-when-cross-origin"
+          referrerPolicy="no-referrer-when-downgrade"
           className="w-[102%] h-[124%] max-w-none border-0 pointer-events-none scale-[1.12] transition-transform duration-300"
         />
 

@@ -39,6 +39,7 @@ export const WB_EVENTS = {
   QUIZ_METRICS: "quiz-metrics",
   QUIZ_REVEALED: "quiz-revealed",
   QUIZ_CLOSED: "quiz-closed",
+  QUIZ_LEADERBOARD_PUBLISHED: "quiz-leaderboard-published",
   SESSION_ENDED: "session-ended",
   // Board mirroring (Test/Video update): both carry only an id/number, never
   // the stroke payload itself — Pusher is a "something changed, go re-fetch"

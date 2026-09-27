@@ -110,29 +110,27 @@ export async function POST(
       }
     }
 
+    if (!wbSession) {
+      return apiError("Whiteboard session could not be initialized", 500);
+    }
+
+    let activeWbSession = wbSession;
+
     // Generate or fetch YouTube broadcast credentials
     let serverUrl = "rtmp://a.rtmp.youtube.com/live2";
-    let streamKey = wbSession.youtubeStreamKey || null;
-    let videoId = wbSession.youtubeVideoId || null;
+    let streamKey = activeWbSession.youtubeStreamKey || null;
+    let videoId = activeWbSession.youtubeVideoId || null;
 
     try {
-      const { youtubeLiveConfigured, getOrCreateMasterLiveStream } = await import(
-        "@/lib/youtube/live-broadcast"
-      );
-      if (youtubeLiveConfigured()) {
-        const masterStream = await getOrCreateMasterLiveStream();
-        serverUrl = masterStream.ingestUrl || serverUrl;
-        streamKey = masterStream.streamKey || streamKey;
+      const { youtubeLiveConfigured } = await import("@/lib/youtube/live-broadcast");
+      const { ensureYoutubeBroadcastForWhiteboard } = await import("@/lib/live-class/youtube-broadcast");
 
-        if (wbSession.youtubeStreamKey !== streamKey || wbSession.youtubeIngestUrl !== serverUrl) {
-          wbSession = await prisma.whiteboardSession.update({
-            where: { id: wbSession.id },
-            data: {
-              youtubeIngestUrl: serverUrl,
-              youtubeStreamKey: streamKey,
-            },
-          });
-        }
+      if (youtubeLiveConfigured()) {
+        const boundSession = await ensureYoutubeBroadcastForWhiteboard(activeWbSession.id, schedule.title, scheduledStart);
+        activeWbSession = boundSession as any;
+        serverUrl = activeWbSession.youtubeIngestUrl || serverUrl;
+        streamKey = activeWbSession.youtubeStreamKey || streamKey;
+        videoId = activeWbSession.youtubeVideoId || videoId;
       }
     } catch (ytErr) {
       console.warn("[youtube_master_stream_key_fetch_warning]", ytErr);
@@ -143,14 +141,14 @@ export async function POST(
     const obsBroadcastUrl = `${YOUTUBE_OAUTH_PRODUCTION_URL}/obs-stage/${schedule.id}?token=${broadcastToken}`;
 
     return apiSuccess({
-      whiteboardSession: wbSession,
+      whiteboardSession: activeWbSession,
       serverUrl,
       streamKey,
       obsBroadcastUrl,
       youtubeVideoId: videoId,
-      videoTransport: wbSession.videoTransport,
-      livePhase: wbSession.livePhase,
-      isLive: wbSession.livePhase === "LIVE",
+      videoTransport: activeWbSession.videoTransport,
+      livePhase: activeWbSession.livePhase,
+      isLive: activeWbSession.livePhase === "LIVE",
     });
   } catch (error) {
     return handleApiError(error);

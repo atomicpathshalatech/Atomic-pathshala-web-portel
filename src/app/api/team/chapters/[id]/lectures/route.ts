@@ -206,6 +206,38 @@ export async function POST(
               pages: { create: { pageNumber: 1, objects: [] } },
             },
           });
+        } else {
+          // Scheduled Live Class: create WhiteboardSession and pre-schedule unlisted YouTube broadcast
+          const wb = await prisma.whiteboardSession.upsert({
+            where: { batchScheduleId: scheduleKey },
+            update: {
+              title: lecture.title,
+              teacherId: lecture.teacherId,
+              videoTransport: "YOUTUBE",
+              scheduledStart: startsAt,
+              scheduledEnd: endsAt,
+            },
+            create: {
+              batchScheduleId: scheduleKey,
+              teacherId: lecture.teacherId,
+              title: lecture.title,
+              status: "ACTIVE",
+              livePhase: "SCHEDULED",
+              videoTransport: "YOUTUBE",
+              scheduledStart: startsAt,
+              scheduledEnd: endsAt,
+              pages: { create: { pageNumber: 1, objects: [] } },
+            },
+          });
+
+          const { youtubeLiveClassConfigured, ensureYoutubeBroadcastForWhiteboard } = await import(
+            "@/lib/live-class/youtube-broadcast"
+          );
+          if (youtubeLiveClassConfigured() && !wb.youtubeVideoId) {
+            ensureYoutubeBroadcastForWhiteboard(wb.id, lecture.title, startsAt || new Date()).catch((err) => {
+              console.warn("[LectureSchedule] Auto YouTube broadcast creation warning:", err);
+            });
+          }
         }
       };
 

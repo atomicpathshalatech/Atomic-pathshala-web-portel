@@ -196,3 +196,193 @@ export async function GET(
     return handleApiError(error);
   }
 }
+
+/**
+ * POST /api/whiteboard/sessions/[id]/quiz/leaderboard
+ * Teacher publishes the current real-time ranked leaderboard to all connected students.
+ * Broadcasts via Pusher with a 30-second display timer and dismiss button.
+ */
+export async function POST(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) throw new UnauthorizedError();
+
+    const access = await resolveWhiteboardAccess(session.user.id, params.id);
+    if (!access || access.role !== "TEACHER") throw new ForbiddenError();
+
+    const body = await request.json().catch(() => ({}));
+    const scope = body?.scope === "chapter" ? "chapter" : "session";
+    const durationSec = typeof body?.durationSec === "number" && body.durationSec > 0 ? body.durationSec : 30;
+
+    const wbSession = await prisma.whiteboardSession.findUnique({
+      where: { id: params.id },
+      include: {
+        batchSchedule: {
+          select: {
+            id: true,
+            batchId: true,
+            chapterId: true,
+            lectureId: true,
+          },
+        },
+      },
+    });
+
+    if (!wbSession) return apiError("Whiteboard session not found", 404);
+
+    let sessionIds: string[] = [params.id];
+
+    if (scope === "chapter" && wbSession.batchSchedule?.chapterId) {
+      const chapterSchedules = await prisma.batchSchedule.findMany({
+        where: {
+          chapterId: wbSession.batchSchedule.chapterId,
+          batchId: wbSession.batchSchedule.batchId,
+        },
+        select: {
+          liveWhiteboardSession: {
+            select: { id: true },
+          },
+        },
+      });
+
+      const ids = chapterSchedules
+        .map((s) => s.liveWhiteboardSession?.id)
+        .filter((id): id is string => Boolean(id));
+
+      if (ids.length > 0) {
+        sessionIds = Array.from(new Set([...sessionIds, ...ids]));
+      }
+    }
+
+    const quizzes = await prisma.quizSession.findMany({
+      where: {
+        whiteboardSessionId: { in: sessionIds },
+      },
+      include: {
+        responses: {
+          include: {
+            student: {
+              include: {
+                user: {
+                  select: {
+                    name: true,
+                    photoUrl: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { startedAt: "asc" },
+    });
+
+    const studentMap: Record<
+      string,
+      {
+        studentId: string;
+        name: string;
+        photoUrl: string | null;
+        totalAttempted: number;
+        correctCount: number;
+        totalResponseTimeMs: number;
+      }
+    > = {};
+
+    for (const quiz of quizzes) {
+      for (const resp of quiz.responses) {
+        const studentId = resp.studentId;
+        const studentName = resp.student.user?.name || `Student ${resp.student.studentIdCode || ""}`.trim() || "Student";
+        const photoUrl = resp.student.user?.photoUrl || null;
+
+        if (!studentMap[studentId]) {
+          studentMap[studentId] = {
+            studentId,
+            name: studentName,
+            photoUrl,
+            totalAttempted: 0,
+            correctCount: 0,
+            totalResponseTimeMs: 0,
+          };
+        }
+
+        const entry = studentMap[studentId];
+        entry.totalAttempted += 1;
+        entry.totalResponseTimeMs += Math.max(0, resp.responseTimeMs || 0);
+
+        const isCorrect =
+          resp.isCorrect === true ||
+          (Boolean(quiz.correctOption) && resp.selectedOption === quiz.correctOption);
+
+        if (isCorrect) {
+          entry.correctCount += 1;
+        }
+      }
+    }
+
+    const studentList = Object.values(studentMap).map((s) => {
+      const accuracyPct = s.totalAttempted > 0 ? Math.round((s.correctCount / s.totalAttempted) * 100) : 0;
+      const avgResponseTimeMs = s.totalAttempted > 0 ? Math.round(s.totalResponseTimeMs / s.totalAttempted) : 0;
+      return {
+        studentId: s.studentId,
+        name: s.name,
+        photoUrl: s.photoUrl,
+        totalAttempted: s.totalAttempted,
+        correctCount: s.correctCount,
+        accuracyPct,
+        avgResponseTimeMs,
+        rank: 0,
+      };
+    });
+
+    studentList.sort((a, b) => {
+      if (b.accuracyPct !== a.accuracyPct) return b.accuracyPct - a.accuracyPct;
+      if (b.correctCount !== a.correctCount) return b.correctCount - a.correctCount;
+      if (a.avgResponseTimeMs !== b.avgResponseTimeMs) return a.avgResponseTimeMs - b.avgResponseTimeMs;
+      return b.totalAttempted - a.totalAttempted;
+    });
+
+    const rankings: StudentLeaderboardEntry[] = studentList.map((entry, index) => ({
+      ...entry,
+      rank: index + 1,
+    }));
+
+    const totalParticipants = rankings.length;
+    const totalPolls = quizzes.length;
+    const averageAccuracy =
+      totalParticipants > 0
+        ? Math.round(rankings.reduce((sum, r) => sum + r.accuracyPct, 0) / totalParticipants)
+        : 0;
+
+    const payload = {
+      scope,
+      stats: {
+        totalParticipants,
+        totalPolls,
+        averageAccuracy,
+      },
+      rankings: rankings.slice(0, 10), // Top 10 ranks for students
+      durationSec,
+      publishedAt: new Date().toISOString(),
+    };
+
+    // Broadcast to all students in the class
+    try {
+      const { pusherServer, sessionChannel, WB_EVENTS } = await import("@/lib/realtime/pusher-server");
+      await pusherServer.trigger(sessionChannel(params.id), WB_EVENTS.QUIZ_LEADERBOARD_PUBLISHED, payload);
+    } catch (pushErr) {
+      console.error("[publish_leaderboard_pusher_error]", pushErr);
+    }
+
+    return apiSuccess({
+      message: "Leaderboard published to students successfully",
+      ...payload,
+    });
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+

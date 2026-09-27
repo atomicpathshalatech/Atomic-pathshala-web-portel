@@ -488,6 +488,41 @@ export function TeacherLiveClassRoom({
 
   // Camera layout mode: on the PPT/Whiteboard slide canvas by default
   const [cameraDocked, setCameraDocked] = useState<boolean>(false);
+  const [cameraHidden, setCameraHidden] = useState<boolean>(false);
+  const [chromaKeyEnabled, setChromaKeyEnabled] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("atomic_teacher_chroma_key") === "true";
+    }
+    return false;
+  });
+
+  // Toggle Camera Shortcut (Ctrl + X / Cmd + X)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "x") {
+        const target = e.target as HTMLElement;
+        if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable) {
+          return;
+        }
+        e.preventDefault();
+        setCameraHidden((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  const toggleChromaKey = useCallback(() => {
+    setChromaKeyEnabled((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("atomic_teacher_chroma_key", String(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, []);
 
   const [floatCamPos, setFloatCamPos] = useState<{ x: number; y: number }>(() => {
     if (typeof window !== "undefined") {
@@ -2339,6 +2374,36 @@ export function TeacherLiveClassRoom({
         <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
           <SaveIndicator state={saveState} />
 
+          {/* Quick Camera Toggle (Ctrl+X) */}
+          <button
+            type="button"
+            onClick={() => setCameraHidden((prev) => !prev)}
+            className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border transition ${
+              cameraHidden
+                ? "bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30"
+                : "bg-slate-800/80 text-slate-300 border-slate-700/80 hover:bg-slate-700 hover:text-white"
+            }`}
+            title="Toggle Teacher Camera overlay (Shortcut: Ctrl + X)"
+          >
+            <span className="material-symbols-outlined text-sm">{cameraHidden ? "videocam_off" : "videocam"}</span>
+            <span className="hidden sm:inline">{cameraHidden ? "Show Cam (Ctrl+X)" : "Cam (Ctrl+X)"}</span>
+          </button>
+
+          {/* Chroma Key Green Screen Toggle */}
+          <button
+            type="button"
+            onClick={toggleChromaKey}
+            className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border transition ${
+              chromaKeyEnabled
+                ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30 shadow-xs"
+                : "bg-slate-800/80 text-slate-400 border-slate-700/80 hover:bg-slate-700 hover:text-white"
+            }`}
+            title="Toggle Chroma Key Green Screen Removal on Teacher Camera"
+          >
+            <span className="material-symbols-outlined text-sm">filter_vintage</span>
+            <span className="hidden md:inline">{chromaKeyEnabled ? "Chroma ON" : "Chroma Key"}</span>
+          </button>
+
           {/* Pre-Flight Wizard Trigger */}
           <button
             type="button"
@@ -3000,7 +3065,7 @@ export function TeacherLiveClassRoom({
           )}
 
           {/* Teacher's Camera Overlay directly on PPT / Whiteboard Slide */}
-          {!cameraDocked && (
+          {!cameraDocked && !cameraHidden && (
             <div
               onPointerDown={handleFloatCamPointerDown}
               onPointerMove={handleFloatCamPointerMove}
@@ -3015,9 +3080,9 @@ export function TeacherLiveClassRoom({
                 touchAction: "none",
                 zIndex: 35,
               }}
-              className={`overflow-hidden border-2 border-slate-700/80 hover:border-blue-500 shadow-2xl bg-black cursor-grab active:cursor-grabbing select-none group/cam transition-[border-color] ${
-                isCameraCircle ? "rounded-full" : "rounded-2xl"
-              }`}
+              className={`overflow-hidden border-0 shadow-2xl cursor-grab active:cursor-grabbing select-none group/cam ${
+                chromaKeyEnabled ? "bg-transparent" : "bg-black"
+              } ${isCameraCircle ? "rounded-full" : "rounded-2xl"}`}
             >
               <VideoStrip
                 whiteboardSessionId={wbSession.id}
@@ -3026,6 +3091,8 @@ export function TeacherLiveClassRoom({
                 connectedStudents={connectedStudents}
                 onDisconnectStudent={handleDisconnectStudent}
                 compact={isCameraCircle}
+                cleanOverlay={true}
+                chromaKey={chromaKeyEnabled}
                 forceLocalOnly={
                   wbSession?.videoTransport === "YOUTUBE" &&
                   Boolean(wbSession?.youtubeVideoId) &&
@@ -3033,18 +3100,93 @@ export function TeacherLiveClassRoom({
                 }
               />
 
-              {/* Dock to Sidebar Button */}
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setCameraDocked(true);
-                }}
-                className="absolute top-2 right-2 bg-black/80 hover:bg-blue-600 text-white p-1 rounded-lg text-xs opacity-0 group-hover/cam:opacity-100 transition shadow z-50 flex items-center justify-center gap-1"
-                title="Dock camera to sidebar"
-              >
-                <span className="material-symbols-outlined text-xs">dock_to_right</span>
-              </button>
+              {/* Quick Hover Controls for Teacher */}
+              <div className="absolute top-2 left-2 flex items-center gap-1 opacity-0 group-hover/cam:opacity-100 transition shadow z-50">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setFloatCamSize(180);
+                    setFloatCamPos((pos) => clampToStage(pos.x, pos.y, 180));
+                    try { localStorage.setItem("atomic_teacher_floating_cam_size", "180"); } catch {}
+                  }}
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                    floatCamSize <= 200 ? "bg-blue-600 text-white" : "bg-black/75 text-slate-300 hover:text-white"
+                  }`}
+                  title="Small size (180px)"
+                >
+                  S
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setFloatCamSize(260);
+                    setFloatCamPos((pos) => clampToStage(pos.x, pos.y, 260));
+                    try { localStorage.setItem("atomic_teacher_floating_cam_size", "260"); } catch {}
+                  }}
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                    floatCamSize > 200 && floatCamSize <= 300 ? "bg-blue-600 text-white" : "bg-black/75 text-slate-300 hover:text-white"
+                  }`}
+                  title="Medium size (260px)"
+                >
+                  M
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setFloatCamSize(340);
+                    setFloatCamPos((pos) => clampToStage(pos.x, pos.y, 340));
+                    try { localStorage.setItem("atomic_teacher_floating_cam_size", "340"); } catch {}
+                  }}
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                    floatCamSize > 300 ? "bg-blue-600 text-white" : "bg-black/75 text-slate-300 hover:text-white"
+                  }`}
+                  title="Large size (340px)"
+                >
+                  L
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleChromaKey();
+                  }}
+                  className={`p-1 rounded text-xs transition ${
+                    chromaKeyEnabled ? "bg-emerald-600 text-white" : "bg-black/75 text-slate-300 hover:text-white"
+                  }`}
+                  title="Toggle Chroma Key (Green Screen Removal)"
+                >
+                  <span className="material-symbols-outlined text-xs">filter_vintage</span>
+                </button>
+              </div>
+
+              {/* Top Right Controls: Hide Camera (Ctrl+X) and Dock to Sidebar */}
+              <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover/cam:opacity-100 transition shadow z-50">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCameraHidden(true);
+                  }}
+                  className="bg-black/80 hover:bg-amber-600 text-white p-1 rounded-lg text-xs transition cursor-pointer"
+                  title="Hide camera (Shortcut: Ctrl + X)"
+                >
+                  <span className="material-symbols-outlined text-xs">videocam_off</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCameraDocked(true);
+                  }}
+                  className="bg-black/80 hover:bg-blue-600 text-white p-1 rounded-lg text-xs transition cursor-pointer"
+                  title="Dock camera to sidebar"
+                >
+                  <span className="material-symbols-outlined text-xs">dock_to_right</span>
+                </button>
+              </div>
 
               {/* Corner Resize Handle */}
               <div
@@ -4931,6 +5073,30 @@ function PollModal({
     };
   } | null>(null);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+  const [publishingLeaderboard, setPublishingLeaderboard] = useState(false);
+  const [publishSuccessMessage, setPublishSuccessMessage] = useState<string | null>(null);
+
+  const handlePublishLeaderboard = async () => {
+    if (!sessionId) return;
+    setPublishingLeaderboard(true);
+    setPublishSuccessMessage(null);
+    try {
+      const res = await fetch(`/api/whiteboard/sessions/${sessionId}/quiz/leaderboard`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope: leaderboardScope, durationSec: 30 }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setPublishSuccessMessage("Leaderboard published to students (30s)!");
+        setTimeout(() => setPublishSuccessMessage(null), 6000);
+      }
+    } catch (err) {
+      console.error("Leaderboard publish failed:", err);
+    } finally {
+      setPublishingLeaderboard(false);
+    }
+  };
 
   useEffect(() => {
     if (pollModalTab === "ranks" && sessionId) {
@@ -5121,6 +5287,32 @@ function PollModal({
                       </div>
                     );
                   })}
+                </div>
+              )}
+
+              {/* Publish to Students Action */}
+              {leaderboardData?.rankings && leaderboardData.rankings.length > 0 && (
+                <div className="pt-2 border-t border-[#252836] space-y-1.5">
+                  <button
+                    type="button"
+                    disabled={publishingLeaderboard}
+                    onClick={handlePublishLeaderboard}
+                    className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs shadow-lg transition flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-sm">campaign</span>
+                    <span>
+                      {publishingLeaderboard
+                        ? "Publishing to Students..."
+                        : publishSuccessMessage
+                        ? publishSuccessMessage
+                        : "Publish Leaderboard to Students (30s)"}
+                    </span>
+                  </button>
+                  {publishSuccessMessage && (
+                    <p className="text-[11px] text-emerald-400 text-center font-medium">
+                      ✓ Students are now viewing this leaderboard with a 30s timer
+                    </p>
+                  )}
                 </div>
               )}
             </div>

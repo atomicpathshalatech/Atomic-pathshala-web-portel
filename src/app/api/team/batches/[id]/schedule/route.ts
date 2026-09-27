@@ -85,31 +85,43 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       },
     });
 
-    // Initialize WhiteboardSession for LIVE_CLASS with selected transport
+    // Initialize WhiteboardSession for LIVE_CLASS with selected transport (Default: YOUTUBE Unlisted OBS)
     if (input.type === "LIVE_CLASS") {
       let tid = input.teacherId;
       if (!tid) {
         const t = await prisma.teacher.findFirst({ where: { userId: session.user.id } });
         tid = t?.id;
       }
+      if (!tid) {
+        const fallbackTeacher = await prisma.teacher.findFirst();
+        tid = fallbackTeacher?.id;
+      }
       if (tid) {
+        const videoTransport = input.videoTransport || "YOUTUBE";
         const wb = await prisma.whiteboardSession.upsert({
           where: { batchScheduleId: schedule.id },
           update: {
-            videoTransport: input.videoTransport || "LIVEKIT",
+            videoTransport,
             youtubeVideoId: input.youtubeVideoId || null,
+            scheduledStart: schedule.startsAt,
+            scheduledEnd: schedule.endsAt,
           },
           create: {
             batchScheduleId: schedule.id,
             teacherId: tid,
             title: schedule.title,
-            videoTransport: input.videoTransport || "LIVEKIT",
+            status: "ACTIVE",
+            livePhase: "SCHEDULED",
+            videoTransport,
             youtubeVideoId: input.youtubeVideoId || null,
+            scheduledStart: schedule.startsAt,
+            scheduledEnd: schedule.endsAt,
+            pages: { create: { pageNumber: 1, objects: [] } },
           },
         });
 
-        // For Model 1 (Application Class streaming to YouTube): pre-create unlisted broadcast if YouTube is configured
-        if (wb.videoTransport === "YOUTUBE" && !wb.youtubeVideoId) {
+        // Pre-create unlisted broadcast on YouTube and bind to channel master stream key
+        if (videoTransport === "YOUTUBE" && !wb.youtubeVideoId) {
           const { youtubeLiveClassConfigured, ensureYoutubeBroadcastForWhiteboard } = await import(
             "@/lib/live-class/youtube-broadcast"
           );

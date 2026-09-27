@@ -39,6 +39,11 @@ export async function endWhiteboardSession(
   // has no guarantee of completing on Vercel serverless once the response
   // is sent (this was silently losing the recording on every "End Class"
   // click before this fix).
+  // Stop LiveKit Room Recording if active. waitUntil() keeps this function
+  // alive past the HTTP response — a bare fire-and-forget import().then()
+  // has no guarantee of completing on Vercel serverless once the response
+  // is sent (this was silently losing the recording on every "End Class"
+  // click before this fix).
   if (
     existing.recordingEgressId &&
     (existing.recordingStatus === "RECORDING" ||
@@ -49,6 +54,30 @@ export async function endWhiteboardSession(
       import("@/lib/livekit/egress")
         .then(({ stopRoomRecording }) => stopRoomRecording(existing.recordingEgressId!))
         .catch((err) => console.warn("[stopRoomRecording_on_end_error]", err))
+    );
+  }
+
+  // Complete YouTube Live Broadcast if class was streamed to YouTube
+  if (existing.youtubeBroadcastId) {
+    waitUntil(
+      import("@/lib/youtube/live-broadcast")
+        .then(({ transitionBroadcast }) => transitionBroadcast(existing.youtubeBroadcastId!, "complete"))
+        .catch((err) => console.warn("[youtube_transition_complete_warning]", err))
+    );
+  }
+
+  // Link YouTube live recording to the scheduled lecture so students immediately see the recording
+  if (existing.batchSchedule?.lectureId && existing.youtubeVideoId) {
+    waitUntil(
+      prisma.lecture
+        .update({
+          where: { id: existing.batchSchedule.lectureId },
+          data: {
+            videoUrl: `https://www.youtube.com/watch?v=${existing.youtubeVideoId}`,
+            status: "PUBLISHED",
+          },
+        })
+        .catch((err) => console.warn("[lecture_videoUrl_update_error]", err))
     );
   }
 
@@ -67,6 +96,10 @@ export async function endWhiteboardSession(
         endedAt: existing.endedAt || now,
         actualEndedAt: existing.actualEndedAt || now,
         ...(isRecordingActive && { recordingStatus: "PROCESSING" }),
+        ...(existing.youtubeVideoId && {
+          recordingVideoId: existing.youtubeVideoId,
+          recordingStatus: "READY",
+        }),
       },
     }),
 

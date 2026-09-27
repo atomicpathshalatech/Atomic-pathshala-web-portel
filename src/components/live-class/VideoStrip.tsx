@@ -71,6 +71,8 @@ export interface VideoStripProps {
   // LocalWebcamPreview only ever appeared as an accidental error fallback;
   // this reaches the same component on purpose.
   forceLocalOnly?: boolean;
+  cleanOverlay?: boolean;
+  chromaKey?: boolean;
 }
 
 export function VideoStrip({
@@ -91,6 +93,8 @@ export function VideoStrip({
   classSpeaker = null,
   compact = false,
   forceLocalOnly = false,
+  cleanOverlay = false,
+  chromaKey = false,
 }: VideoStripProps) {
   const [creds, setCreds] = useState<{ token: string; url: string } | null>(null);
   const [tokenError, setTokenError] = useState<string | null>(null);
@@ -133,7 +137,15 @@ export function VideoStrip({
   }, [whiteboardSessionId, role, forceLocalOnly]);
 
   if ((forceLocalOnly || useFallbackCamera) && role === "TEACHER") {
-    return <LocalWebcamPreview variant={variant} teacherName={teacherName} compact={compact} />;
+    return (
+      <LocalWebcamPreview
+        variant={variant}
+        teacherName={teacherName}
+        compact={compact}
+        cleanOverlay={cleanOverlay}
+        chromaKey={chromaKey}
+      />
+    );
   }
 
   if (tokenError && role === "STUDENT") {
@@ -188,6 +200,8 @@ export function VideoStrip({
         onEndCall={onEndCall}
         classSpeaker={classSpeaker}
         compact={compact}
+        cleanOverlay={cleanOverlay}
+        chromaKey={chromaKey}
       />
     </LiveKitRoom>
   );
@@ -210,6 +224,8 @@ function VideoStripInner({
   onEndCall,
   classSpeaker = null,
   compact = false,
+  cleanOverlay = false,
+  chromaKey = false,
 }: {
   variant: "header" | "panel";
   role?: "TEACHER" | "STUDENT";
@@ -224,6 +240,8 @@ function VideoStripInner({
   onEndCall?: () => Promise<void> | void;
   classSpeaker?: { studentUserId: string; studentName: string } | null;
   compact?: boolean;
+  cleanOverlay?: boolean;
+  chromaKey?: boolean;
 }) {
   const connectionState = useConnectionState();
   const tracks = useTracks([Track.Source.Camera, Track.Source.Microphone], { onlySubscribed: false });
@@ -405,7 +423,12 @@ function VideoStripInner({
   // ===========================================================================
   if (role === "TEACHER") {
     return (
-      <div ref={containerRef} className="relative w-full h-full bg-[#0a0b12] rounded-xl overflow-hidden border border-[#252836] flex items-center justify-center group">
+      <div
+        ref={containerRef}
+        className={`relative w-full h-full overflow-hidden flex items-center justify-center group ${
+          cleanOverlay ? "border-0 bg-transparent" : "bg-[#0a0b12] rounded-xl border border-[#252836]"
+        }`}
+      >
         {/* Audio Renderer for any approved student speakers */}
         <RoomAudioRenderer />
 
@@ -450,9 +473,8 @@ function VideoStripInner({
         )}
 
         {/* Top Badges: Connection Quality & Role — omitted entirely in
-            compact mode (the floating circular bubble), where there's no
-            room for them and they aren't reachable anyway. */}
-        {!compact && (
+            compact mode or cleanOverlay mode (clean feed for OBS Window Capture). */}
+        {!compact && !cleanOverlay && (
           <div className="absolute top-2 left-2 flex items-center gap-1.5 z-20">
             <div className="bg-black/75 px-2 py-0.5 rounded-md text-[10px] text-white backdrop-blur-sm border border-white/10 font-bold flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -464,8 +486,8 @@ function VideoStripInner({
           </div>
         )}
 
-        {/* Bottom Controls Bar — same reasoning, hidden in compact mode. */}
-        {!compact && (
+        {/* Bottom Controls Bar — hidden in compact mode or cleanOverlay mode. */}
+        {!compact && !cleanOverlay && (
           <div className="absolute bottom-2 inset-x-2 flex items-center justify-between z-20">
             {/* Status info */}
             <div className="flex items-center gap-1">
@@ -787,6 +809,62 @@ function TeacherDeviceSettingsPopover({
   );
 }
 
+function ChromaKeyVideoCanvas({
+  videoRef,
+  className,
+}: {
+  videoRef: React.RefObject<HTMLVideoElement>;
+  className?: string;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    let animId: number;
+    let isRunning = true;
+
+    const render = () => {
+      if (!isRunning) return;
+      const canvas = canvasRef.current;
+      const video = videoRef.current;
+      if (canvas && video && video.readyState >= 2 && !video.paused && !video.ended) {
+        const vw = video.videoWidth || 640;
+        const vh = video.videoHeight || 480;
+        if (canvas.width !== vw || canvas.height !== vh) {
+          canvas.width = vw;
+          canvas.height = vh;
+        }
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        if (ctx) {
+          ctx.drawImage(video, 0, 0, vw, vh);
+          const imgData = ctx.getImageData(0, 0, vw, vh);
+          const d = imgData.data;
+
+          // Key out green background pixels with threshold
+          for (let i = 0; i < d.length; i += 4) {
+            const r = d[i] ?? 0;
+            const g = d[i + 1] ?? 0;
+            const b = d[i + 2] ?? 0;
+            // Green screen formula: dominant green channel with threshold
+            if (g > 75 && g > r * 1.35 && g > b * 1.35) {
+              d[i + 3] = 0; // Alpha 0 (transparent)
+            }
+          }
+          ctx.putImageData(imgData, 0, 0);
+        }
+      }
+      animId = requestAnimationFrame(render);
+    };
+
+    animId = requestAnimationFrame(render);
+    return () => {
+      isRunning = false;
+      cancelAnimationFrame(animId);
+    };
+  }, [videoRef]);
+
+  return <canvas ref={canvasRef} className={className} />;
+}
+
 /**
  * Fallback direct webcam preview for teacher if LiveKit cloud connection is unconfigured
  */
@@ -794,10 +872,14 @@ function LocalWebcamPreview({
   variant,
   teacherName,
   compact = false,
+  cleanOverlay = false,
+  chromaKey = false,
 }: {
   variant: "header" | "panel";
   teacherName?: string | null;
   compact?: boolean;
+  cleanOverlay?: boolean;
+  chromaKey?: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [cameraActive, setCameraActive] = useState(true);
@@ -861,9 +943,27 @@ function LocalWebcamPreview({
   }
 
   return (
-    <div className="relative w-full h-full bg-[#0a0b12] rounded-xl overflow-hidden border border-[#252836] flex items-center justify-center">
+    <div
+      className={`relative w-full h-full overflow-hidden flex items-center justify-center ${
+        cleanOverlay ? "border-0 bg-transparent" : "bg-[#0a0b12] rounded-xl border border-[#252836]"
+      }`}
+    >
       {cameraActive && !camError ? (
-        <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover transform scale-x-[-1]" />
+        <>
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className={chromaKey ? "hidden" : "w-full h-full object-cover transform scale-x-[-1]"}
+          />
+          {chromaKey && (
+            <ChromaKeyVideoCanvas
+              videoRef={videoRef}
+              className="w-full h-full object-cover transform scale-x-[-1]"
+            />
+          )}
+        </>
       ) : (
         <div className="flex flex-col items-center justify-center gap-2 text-gray-500 p-4 text-center">
           <span className="material-symbols-outlined text-4xl">videocam_off</span>
@@ -871,14 +971,14 @@ function LocalWebcamPreview({
         </div>
       )}
 
-      {!compact && (
+      {!compact && !cleanOverlay && (
         <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/70 px-2.5 py-1 rounded-lg text-xs font-bold text-white backdrop-blur-sm border border-white/10">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
           {teacherName || "Educator"} (Local Preview)
         </div>
       )}
 
-      {!compact && (
+      {!compact && !cleanOverlay && (
         <div className="absolute bottom-2 right-2 flex items-center gap-1.5">
           <button
             type="button"

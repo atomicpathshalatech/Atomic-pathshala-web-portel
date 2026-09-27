@@ -212,9 +212,14 @@ export async function createLiveBroadcast(
   try {
     await youtubeApiFetch("/videos", {
       method: "PUT",
-      query: { part: "status" },
+      query: { part: "status,snippet" },
       body: JSON.stringify({
         id: json.id,
+        snippet: {
+          title: cleanTitle,
+          categoryId: "27", // Education category
+          description: desc,
+        },
         status: {
           privacyStatus: "unlisted",
           embeddable: true,
@@ -224,6 +229,23 @@ export async function createLiveBroadcast(
     });
   } catch (err) {
     console.warn("[youtube_video_status_update_warning]", err);
+    // Fallback: try status-only if snippet was rejected
+    try {
+      await youtubeApiFetch("/videos", {
+        method: "PUT",
+        query: { part: "status" },
+        body: JSON.stringify({
+          id: json.id,
+          status: {
+            privacyStatus: "unlisted",
+            embeddable: true,
+            selfDeclaredMadeForKids: false,
+          },
+        }),
+      });
+    } catch (fallbackErr) {
+      console.warn("[youtube_video_status_fallback_warning]", fallbackErr);
+    }
   }
 
   return { id: json.id, liveChatId: json.snippet?.liveChatId ?? null };
