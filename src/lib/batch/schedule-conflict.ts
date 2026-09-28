@@ -65,6 +65,7 @@ export async function checkScheduleConflict({
     where: {
       batchId,
       status: { not: "CANCELLED" },
+      isTest: false,
       ...(excludeScheduleId ? { id: { not: excludeScheduleId } } : {}),
       startsAt: { lt: endsAt },
       endsAt: { gt: startsAt },
@@ -91,6 +92,9 @@ export async function checkScheduleConflict({
       where: {
         teacherId,
         status: { not: "CANCELLED" },
+        // A Whiteboard Test Lab room is a practice room open from the far
+        // past to the far future — never a real class, never a conflict.
+        isTest: false,
         ...(excludeScheduleId ? { id: { not: excludeScheduleId } } : {}),
         startsAt: { lt: endsAt },
         endsAt: { gt: startsAt },

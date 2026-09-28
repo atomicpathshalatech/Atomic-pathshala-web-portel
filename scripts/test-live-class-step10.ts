@@ -91,6 +91,28 @@ async function run() {
   await slot("s6", "AVAILABLE");
   assert((await appYoutubeAvailable()) === true, "Credentials + an APP slot → available");
 
+  // ---- 4. A teacher's Whiteboard Test Lab room is never a schedule conflict ----
+  const { checkScheduleConflict } = await import("../src/lib/batch/schedule-conflict");
+  const user = await prisma.user.create({ data: { email: "moaz@test.local", passwordHash: "x", name: "Test Teacher" } });
+  const teacher = await prisma.teacher.create({ data: { userId: user.id, employeeCode: "T-10", department: "Biology" } });
+  const lab = await prisma.batch.create({ data: { name: "Whiteboard Test Lab", code: "LAB", createdById: user.id, status: "ARCHIVED" } });
+  const real = await prisma.batch.create({ data: { name: "Real", code: "REAL", createdById: user.id } });
+  await prisma.batchSchedule.create({
+    data: { batchId: lab.id, teacherId: teacher.id, title: "Whiteboard Test Lab", type: "LIVE_CLASS", status: "LIVE", isTest: true, startsAt: new Date("2020-01-01T00:00:00Z"), endsAt: new Date("2099-01-01T00:00:00Z"), createdById: user.id },
+  });
+  const slotStart = new Date("2026-09-28T15:05:00Z");
+  const slotEnd = new Date("2026-09-28T15:35:00Z");
+  const free = await checkScheduleConflict({ batchId: real.id, teacherId: teacher.id, startsAt: slotStart, endsAt: slotEnd });
+  assert(!free.hasConflict, "A teacher who opened the Test Lab can still be scheduled", free.message);
+  const labBatch = await checkScheduleConflict({ batchId: lab.id, teacherId: null, startsAt: slotStart, endsAt: slotEnd });
+  assert(!labBatch.hasConflict, "The Test Lab room doesn't block its own batch either");
+  await prisma.batchSchedule.create({
+    data: { batchId: real.id, teacherId: teacher.id, title: "Physics", type: "LIVE_CLASS", startsAt: new Date("2026-09-28T15:20:00Z"), endsAt: new Date("2026-09-28T15:50:00Z"), createdById: user.id },
+  });
+  const other = await prisma.batch.create({ data: { name: "Other", code: "OTH", createdById: user.id } });
+  const busy = await checkScheduleConflict({ batchId: other.id, teacherId: teacher.id, startsAt: slotStart, endsAt: slotEnd });
+  assert(busy.hasConflict && busy.conflictType === "TEACHER", "A real overlapping class is still a teacher conflict");
+
   await prisma.$disconnect();
 }
 
