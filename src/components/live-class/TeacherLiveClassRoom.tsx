@@ -801,6 +801,11 @@ export function TeacherLiveClassRoom({
         const d = json.data;
         setYoutubeGate({ state: d.state, streamStatus: d.streamStatus ?? null, healthStatus: d.healthStatus ?? null, error: null });
         if (d.state === "LIVE") setYoutubeSimulcastWarning(null);
+        if (d.embedBlocked) {
+          setYoutubeSimulcastWarning(
+            "YouTube kept embedding OFF for this class, so students can't watch inside the app (they only get a 'watch on YouTube' button). Fix: YouTube Studio → this live video → Details → Show more → tick 'Allow embedding' → Save; students then tap Retry."
+          );
+        }
       } catch {
         // transient — keep polling
       }

@@ -61,6 +61,7 @@ export async function GET(_request: NextRequest, { params }: { params: { schedul
       healthStatus: status.healthStatus,
       broadcastLifecycle: status.broadcastLifecycle,
       becameLive: status.becameLive,
+      embedBlocked: status.embedBlocked,
     });
   } catch (error) {
     const { classifyYoutubeError, describeYoutubeError } = await import("@/lib/youtube/errors");

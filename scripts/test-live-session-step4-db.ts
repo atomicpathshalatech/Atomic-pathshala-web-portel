@@ -32,6 +32,10 @@ const fake = {
   streamStatus: new Map<string, string>(),
   lifecycle: new Map<string, string>(),
   video: new Map<string, { uploadStatus: string; liveBroadcastContent: string }>(),
+  // Embedding per broadcast. Starts OFF: the creation-time videos.update
+  // (part=status,snippet) is refused below, like it silently was in production.
+  embeddable: new Map<string, boolean>(),
+  refuseEmbed: false,
 };
 globalThis.fetch = (async (input: any, init?: any) => {
   const url = new URL(String(input));
@@ -55,6 +59,7 @@ globalThis.fetch = (async (input: any, init?: any) => {
   if (path === "/liveBroadcasts" && method === "POST") {
     const id = `BCAST${String(++fake.broadcastSeq).padStart(6, "0")}`;
     fake.lifecycle.set(id, "created");
+    fake.embeddable.set(id, false);
     return json(200, { id, snippet: { liveChatId: `chat-${id}` } });
   }
   if (path === "/liveBroadcasts" && method === "GET") {
@@ -70,11 +75,18 @@ globalThis.fetch = (async (input: any, init?: any) => {
     fake.lifecycle.set(url.searchParams.get("id")!, url.searchParams.get("broadcastStatus")!);
     return json(200, {});
   }
-  if (path === "/videos" && method === "PUT") return json(200, {});
+  if (path === "/videos" && method === "PUT") {
+    const refuse = { error: { code: 403, errors: [{ reason: "forbidden" }] } };
+    if (String(url.searchParams.get("part")).includes("snippet") || fake.refuseEmbed) return json(403, refuse);
+    if (body?.status?.embeddable === true) fake.embeddable.set(body.id, true);
+    return json(200, {});
+  }
   if (path === "/videos" && method === "GET") {
     const id = url.searchParams.get("id")!;
     const v = fake.video.get(id);
-    return json(200, v ? { items: [{ id, snippet: { channelId: "UC_APP", liveBroadcastContent: v.liveBroadcastContent }, status: { uploadStatus: v.uploadStatus } }] } : { items: [] });
+    const embeddable = fake.embeddable.get(id);
+    if (v) return json(200, { items: [{ id, snippet: { channelId: "UC_APP", liveBroadcastContent: v.liveBroadcastContent }, status: { uploadStatus: v.uploadStatus, embeddable } }] });
+    return json(200, embeddable !== undefined ? { items: [{ id, snippet: { channelId: "UC_APP", liveBroadcastContent: "upcoming" }, status: { embeddable } }] } : { items: [] });
   }
   return json(404, { error: { errors: [{ reason: "notFound" }] } });
 }) as typeof fetch;
@@ -156,12 +168,15 @@ async function run() {
   fake.streamStatus.set(leaseA!.stream.youtubeStreamId, "active");
   st = await app.pollAppYoutubeStatus(ra.liveSession.id);
   assert(st.state === "YOUTUBE_ACTIVE" && !st.becameLive, "Stream active but broadcast not live → YOUTUBE_ACTIVE (students still not live)");
+  assert(!st.embedBlocked && fake.embeddable.get(ra.youtubeBroadcastId) === true, "Embedding left OFF by creation → turned ON before students are let in");
+  const embedPuts = calls.filter((c) => c.method === "PUT" && c.path === "/videos" && c.query.get("part") === "status").length;
   await prisma.liveSession.update({ where: { id: ra.liveSession.id }, data: { stateChangedAt: new Date(Date.now() - 20_000) } });
   st = await app.pollAppYoutubeStatus(ra.liveSession.id);
   const transitionLive = calls.filter((c) => c.path === "/liveBroadcasts/transition" && c.query.get("broadcastStatus") === "live");
   assert(transitionLive.length === 1 && transitionLive[0]!.query.get("id") === ra.youtubeBroadcastId, "Auto-start didn't fire in 15s → one explicit go-live for the RIGHT broadcast");
   st = await app.pollAppYoutubeStatus(ra.liveSession.id);
   assert(st.state === "LIVE" && st.becameLive, "Broadcast live on YouTube → class LIVE");
+  assert(!st.embedBlocked && calls.filter((c) => c.method === "PUT" && c.path === "/videos" && c.query.get("part") === "status").length === embedPuts, "Going LIVE re-checks embedding (1 unit) without another update when it's already ON");
   assert((await prisma.batchSchedule.findUniqueOrThrow({ where: { id: A.schedule.id } })).status === "LIVE", "Schedule A LIVE");
   const bSession = await prisma.liveSession.findUniqueOrThrow({ where: { id: rb.liveSession.id } });
   assert(bSession.state === "YOUTUBE_CONNECTING", "Class B unaffected by Class A going live");
@@ -185,6 +200,13 @@ async function run() {
   const leaseC = await pool.getActiveLease(rc.liveSession.id);
   assert(leaseC?.streamId === leaseA!.streamId, "Freed stream is reused by the next class (no new stream, no extra quota)");
   assert(count("POST", "/liveStreams") === createCalls, "No liveStreams.insert per class — streams come from the pool");
+
+  // ---- YouTube refuses to enable embedding: class continues, teacher is told ---
+  fake.refuseEmbed = true;
+  fake.streamStatus.set(leaseC!.stream.youtubeStreamId, "active");
+  const stC = await app.pollAppYoutubeStatus(rc.liveSession.id);
+  assert(stC.state === "YOUTUBE_ACTIVE" && stC.embedBlocked, "YouTube refuses embedding → class still proceeds, embedBlocked reported to the teacher");
+  fake.refuseEmbed = false;
 
   // ---- End before ever going live -------------------------------------------
   await svc.transitionLiveSession(rb.liveSession.id, "FAILED", { failureReason: "ended_before_live" });

@@ -144,9 +144,35 @@ export type AppYoutubeStatus = {
   healthStatus: string | null;
   broadcastLifecycle: string | null;
   becameLive: boolean;
+  /** Students can't watch inside the app: YouTube kept embedding off for this broadcast. */
+  embedBlocked: boolean;
 };
 
 const EXPLICIT_GO_LIVE_AFTER_MS = 15_000;
+
+/**
+ * The student app plays the class in an embedded YouTube player, so the
+ * broadcast MUST allow embedding. Creation already asks for it, but that
+ * update can fail silently (e.g. issued before YouTube finished creating the
+ * video) — and a non-embeddable video shows students only a "watch on
+ * YouTube" fallback. Checked (1 unit) at the two gate steps; fixed (~50
+ * units) only when off. Returns false when embedding is still off.
+ */
+async function ensureEmbeddable(broadcastId: string): Promise<boolean> {
+  const { getYoutubeVideoInfo } = await import("@/lib/youtube/client");
+  try {
+    const before = await getYoutubeVideoInfo("APP", broadcastId);
+    if (before?.embeddable === true) return true;
+    const { ensureBroadcastEmbeddable } = await import("@/lib/youtube/live-broadcast");
+    await ensureBroadcastEmbeddable(broadcastId);
+    const after = await getYoutubeVideoInfo("APP", broadcastId);
+    if (after?.embeddable === true) return true;
+    console.error("[app_youtube_embed_still_off]", broadcastId, { embeddable: after?.embeddable ?? null });
+  } catch (err) {
+    console.error("[app_youtube_embed_error]", broadcastId, err);
+  }
+  return false;
+}
 
 /**
  * One health-gate step, driven by the teacher client polling every few
@@ -158,7 +184,7 @@ const EXPLICIT_GO_LIVE_AFTER_MS = 15_000;
 export async function pollAppYoutubeStatus(liveSessionId: string): Promise<AppYoutubeStatus> {
   const { getIngestStreamHealth, getBroadcastLifecycle, transitionBroadcast } = await import("@/lib/youtube/live-broadcast");
   let session = await prisma.liveSession.findUniqueOrThrow({ where: { id: liveSessionId } });
-  const out: AppYoutubeStatus = { state: session.state, streamStatus: null, healthStatus: null, broadcastLifecycle: null, becameLive: false };
+  const out: AppYoutubeStatus = { state: session.state, streamStatus: null, healthStatus: null, broadcastLifecycle: null, becameLive: false, embedBlocked: false };
   if (session.deliveryMode !== "APP_YOUTUBE" || !session.youtubeBroadcastId) return out;
   if (!["YOUTUBE_CONNECTING", "YOUTUBE_ACTIVE"].includes(session.state)) return out;
 
@@ -174,6 +200,8 @@ export async function pollAppYoutubeStatus(liveSessionId: string): Promise<AppYo
     session = await transitionLiveSession(session.id, "YOUTUBE_ACTIVE");
     await markLease(lease.id, "ACTIVE");
     out.state = session.state;
+    // Before any student is let in: the in-app player needs embedding on.
+    out.embedBlocked = !(await ensureEmbeddable(session.youtubeBroadcastId!));
   }
 
   const lifecycle = await getBroadcastLifecycle(session.youtubeBroadcastId!);
@@ -196,6 +224,9 @@ export async function pollAppYoutubeStatus(liveSessionId: string): Promise<AppYo
   }
 
   const now = new Date();
+  // Second (last) check as students are let in — covers a first attempt
+  // that ran before YouTube had the video ready.
+  out.embedBlocked = !(await ensureEmbeddable(session.youtubeBroadcastId!));
   session = await transitionLiveSession(session.id, "LIVE", { actualStartedAt: session.actualStartedAt ?? now });
   await markGroupMembersLive(session.id, now);
   await prisma.batchSchedule.update({ where: { id: session.batchScheduleId }, data: { status: "LIVE" } });

@@ -282,21 +282,18 @@ export async function deleteLiveBroadcast(broadcastId: string): Promise<void> {
 }
 
 /**
- * Ensures an existing broadcast has embedding explicitly enabled and remains
- * unlisted on YouTube. Costs ~50 quota units (videos.update) — call it only
- * from an explicit teacher/admin action, never from a polled route.
+ * Turns embedding on for an existing broadcast (keeps it unlisted). Costs ~50
+ * quota units (videos.update) — call it only when a videos.list check showed
+ * embedding is off, never from a per-poll path. Throws YouTube's error so the
+ * caller can log/surface the real reason.
  */
 export async function ensureBroadcastEmbeddable(broadcastId: string): Promise<void> {
-  try {
-    await youtubeApi(LIVE_CHANNEL, "/videos", {
-      method: "PUT",
-      operation: "videos.update",
-      query: { part: "status" },
-      body: { id: broadcastId, status: { embeddable: true, privacyStatus: "unlisted", selfDeclaredMadeForKids: false } },
-    });
-  } catch (err) {
-    console.warn("[ensureBroadcastEmbeddable error]", err);
-  }
+  await youtubeApi(LIVE_CHANNEL, "/videos", {
+    method: "PUT",
+    operation: "videos.update",
+    query: { part: "status" },
+    body: { id: broadcastId, status: { embeddable: true, privacyStatus: "unlisted", selfDeclaredMadeForKids: false } },
+  });
 }
 
 export async function bindBroadcastToStream(broadcastId: string, streamId: string): Promise<void> {
