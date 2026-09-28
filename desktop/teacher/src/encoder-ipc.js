@@ -15,7 +15,8 @@
  * close on a laptop teaching from a second screen).
  */
 
-const { app, powerSaveBlocker } = require("electron");
+const { app, BrowserWindow, powerSaveBlocker } = require("electron");
+const { isTrustedUrl } = require("./config");
 const { existsSync } = require("node:fs");
 const path = require("node:path");
 const { randomUUID } = require("node:crypto");
@@ -29,6 +30,9 @@ function ffmpegPath() {
 }
 
 let probeCache = null;
+// ATOMIC_STAGE_LOG=1: once a second, how many chunk bytes reached the encoder (tests/support).
+let chunkBytes = 0;
+if (process.env.ATOMIC_STAGE_LOG === "1") setInterval(() => { console.log(`[stage] ipc ${chunkBytes} B/s`); chunkBytes = 0; }, 1000).unref?.();
 let current = null; // { run, sender, blockerId }
 
 function probe() {
@@ -75,8 +79,14 @@ function registerEncoderIpc({ ipcMain, trustedSender }) {
       profile: opts.profile === "720p" ? "720p" : "1080p",
     });
     const sender = event.sender;
+    // Every Atomic window hears the status: the run belongs to the offscreen
+    // stage window, but the teacher's window shows "Sending to YouTube".
     run.on("status", (status) => {
-      if (!sender.isDestroyed()) sender.send("encoder:status-changed", status);
+      if (process.env.ATOMIC_STAGE_LOG === "1") console.log(`[stage] status ${status.state} ${status.bitrateKbps ?? ""}kbps fps=${status.fps ?? ""}${status.error ? " error=" + status.error : ""}`);
+      for (const win of BrowserWindow.getAllWindows()) {
+        const wc = win.webContents;
+        if (!wc.isDestroyed() && isTrustedUrl(wc.getURL())) wc.send("encoder:status-changed", status);
+      }
     });
     const blockerId = powerSaveBlocker.start("prevent-app-suspension");
     current = { run, sender, blockerId };
@@ -91,6 +101,7 @@ function registerEncoderIpc({ ipcMain, trustedSender }) {
   ipcMain.on("encoder:chunk", (event, runId, generation, chunk) => {
     if (!trustedSender(event)) return;
     if (!current || current.run.runId !== runId) return;
+    chunkBytes += chunk?.byteLength ?? 0;
     current.run.write(generation, chunk);
   });
 

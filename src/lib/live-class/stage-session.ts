@@ -73,9 +73,13 @@ export async function verifyStageToken(token: string | null | undefined, expecte
   if (!looksLikeStageToken(token)) return null;
   const row = await prisma.broadcastStageSession.findUnique({
     where: { tokenHash: hashToken(token) },
-    include: { liveSession: { select: { state: true, whiteboardSessionId: true } } },
+    include: { liveSession: { select: { state: true, whiteboardSessionId: true, effectiveEndsAt: true } } },
   });
-  if (!row || row.revokedAt || row.expiresAt.getTime() <= Date.now()) return null;
+  if (!row || row.revokedAt) return null;
+  // The token lives until the class's CURRENT end (+30 min) — an "Extend
+  // class" must not cut the stage off mid-class — but never past 12 h.
+  const followsClassEnd = Math.min(row.liveSession.effectiveEndsAt.getTime() + AFTER_END_MS, row.createdAt.getTime() + MAX_TTL_MS);
+  if (Math.max(row.expiresAt.getTime(), followsClassEnd) <= Date.now()) return null;
   if (expectedScheduleId && row.batchScheduleId !== expectedScheduleId) return null;
   if (!OPEN_STATES.includes(row.liveSession.state as (typeof OPEN_STATES)[number])) return null;
   if (!row.liveSession.whiteboardSessionId) return null;

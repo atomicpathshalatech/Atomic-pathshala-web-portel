@@ -822,7 +822,9 @@ export function TeacherLiveClassRoom({
   // In the desktop app the class is sent to YouTube automatically: stage
   // compositor → local encoder → this class's own stream slot. No OBS, no
   // key to copy. In a browser this stays off and the OBS panel is used.
-  const desktopStreamerRef = useRef<DesktopClassStreamer | null>(null);
+  // Either the app's offscreen stage window (current app) or, on an older
+  // app build, a streamer running inside this page.
+  const desktopStreamerRef = useRef<{ running: boolean; stop: () => Promise<void>; offscreen?: boolean } | null>(null);
   const stageInfoRef = useRef<{ background?: string; cameraShape?: string | null; cameraPosition?: string | null }>({});
   const [desktopStream, setDesktopStream] = useState<(DesktopEncoderStatus & { warnings?: string[] }) | null>(null);
   const [desktopStreamError, setDesktopStreamError] = useState<string | null>(null);
@@ -854,6 +856,29 @@ export function TeacherLiveClassRoom({
       }
       const creds = await postJson(`/api/team/live-class/${batchScheduleId}/stream-key`, {});
       if (!creds?.serverUrl || !creds?.streamKey) return false;
+
+      // Preferred: the stage runs in the app's hidden offscreen window, which
+      // Windows can't pause when this window is minimised or covered (a
+      // paused page = "No data" on YouTube). It mirrors the board exactly
+      // like the OBS stage page, with this PC's camera + mic.
+      const stageUrl = typeof creds.obsBroadcastUrl === "string" ? new URL(creds.obsBroadcastUrl) : null;
+      if (bridge.stage && stageUrl) {
+        const unsubscribe = bridge.encoder.onStatus((status) => setDesktopStream(status));
+        await bridge.stage.open({ stagePath: stageUrl.pathname + stageUrl.search, serverUrl: creds.serverUrl, streamKey: creds.streamKey });
+        const stage = bridge.stage;
+        desktopStreamerRef.current = {
+          running: true,
+          offscreen: true,
+          stop: async () => {
+            unsubscribe();
+            await stage.close();
+          },
+        };
+        setDesktopStream((prev) => prev ?? { state: "starting" });
+        setDesktopStreamError(null);
+        return true;
+      }
+
       const streamer = new DesktopClassStreamer(bridge, readStageSources, (status) => setDesktopStream(status));
       desktopStreamerRef.current = streamer;
       await streamer.start({ serverUrl: creds.serverUrl, streamKey: creds.streamKey });
@@ -874,7 +899,15 @@ export function TeacherLiveClassRoom({
     setDesktopStream(null);
   }, []);
 
-  useEffect(() => () => void desktopStreamerRef.current?.stop(), []);
+  // Leaving/refreshing this page: an in-page streamer dies with the page; the
+  // offscreen stage keeps the class on air (the next page reuses it).
+  useEffect(
+    () => () => {
+      const streamer = desktopStreamerRef.current;
+      if (streamer && !streamer.offscreen) void streamer.stop();
+    },
+    []
+  );
 
   // After a page refresh mid-connect, pick the gate back up.
   useEffect(() => {

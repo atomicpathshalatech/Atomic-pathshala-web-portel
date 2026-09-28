@@ -105,6 +105,16 @@ export class StageCompositor {
   private mediaStreams: MediaStream[] = [];
   private timer: ReturnType<typeof setInterval> | null = null;
   private output: MediaStream | null = null;
+  // Explicit frame push (Chromium's MediaStreamTrackGenerator): each drawn
+  // frame is handed to the video track directly. canvas.captureStream()
+  // instead depends on the page being painted, and Windows stops painting a
+  // minimised/covered window — the class then sent NO video to YouTube
+  // ("No data", 11 s keyframes) while the teacher looked at another app.
+  private frameWriter: WritableStreamDefaultWriter<unknown> | null = null;
+  private framePending = false;
+  // Frame timestamps count from the stage start (not page load): a stream that
+  // began minutes into the page would otherwise make the encoder pad the gap.
+  private frameEpoch = 0;
 
   constructor(opts: StageCompositorOptions = {}) {
     this.width = opts.width ?? 1920;
@@ -137,7 +147,16 @@ export class StageCompositor {
    */
   async start(media: { camera: boolean; microphone: boolean; cameraDeviceId?: string; microphoneDeviceId?: string }) {
     if (this.output) return this.output;
-    const output = this.canvas.captureStream(this.fps);
+    const Generator = (globalThis as { MediaStreamTrackGenerator?: new (init: { kind: "video" }) => MediaStreamTrack & { writable: WritableStream } }).MediaStreamTrackGenerator;
+    let output: MediaStream;
+    if (typeof Generator === "function" && typeof VideoFrame === "function") {
+      const track = new Generator({ kind: "video" });
+      this.frameWriter = track.writable.getWriter();
+      this.frameEpoch = performance.now();
+      output = new MediaStream([track]);
+    } else {
+      output = this.canvas.captureStream(this.fps);
+    }
 
     if (media.camera && navigator.mediaDevices?.getUserMedia) {
       try {
@@ -180,15 +199,37 @@ export class StageCompositor {
       }
     }
 
-    this.drawFrame();
-    this.timer = setInterval(() => this.drawFrame(), Math.round(1000 / this.fps));
+    this.tick();
+    this.timer = setInterval(() => this.tick(), Math.round(1000 / this.fps));
     this.output = output;
     return output;
+  }
+
+  private tick() {
+    this.drawFrame();
+    const writer = this.frameWriter;
+    if (!writer || this.framePending) return; // encoder busy: drop this frame rather than queue
+    let frame: VideoFrame;
+    try {
+      frame = new VideoFrame(this.canvas, { timestamp: Math.round((performance.now() - this.frameEpoch) * 1000) });
+    } catch {
+      return;
+    }
+    this.framePending = true;
+    writer
+      .write(frame)
+      .catch(() => undefined)
+      .finally(() => {
+        frame.close();
+        this.framePending = false;
+      });
   }
 
   stop() {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    this.frameWriter?.close().catch(() => undefined);
+    this.frameWriter = null;
     for (const s of this.mediaStreams) s.getTracks().forEach((t) => t.stop());
     this.mediaStreams = [];
     this.output?.getTracks().forEach((t) => t.stop());

@@ -23,6 +23,7 @@ const { app, BrowserWindow, ipcMain, session, shell, Menu } = require("electron"
 const path = require("node:path");
 const { appUrl, isTrustedUrl } = require("./config");
 const { registerEncoderIpc } = require("./encoder-ipc");
+const { registerStageIpc, closeStage } = require("./stage-window");
 
 const SMOKE = process.argv.includes("--smoke") || process.argv.includes("--smoke-untrusted");
 // --smoke-untrusted: loads a page from another origin and passes only if the
@@ -33,7 +34,19 @@ const ALLOWED_PERMISSIONS = new Set(["media", "fullscreen", "clipboard-sanitized
 //   ATOMIC_START_PATH       page to open instead of /team
 //   ATOMIC_DENY_MEDIA=1     refuse camera/mic (tests must not switch on the real webcam)
 //   ATOMIC_SMOKE_WAIT_FOR   global the page sets when its self-test is done
+//   ATOMIC_SMOKE_MINIMIZE=1|late  show the window, then minimise it at load (1) or 4 s into streaming (late)
 const DENY_MEDIA = process.env.ATOMIC_DENY_MEDIA === "1";
+const SMOKE_MINIMIZE = process.env.ATOMIC_SMOKE_MINIMIZE === "1" || process.env.ATOMIC_SMOKE_MINIMIZE === "late";
+
+// A class must keep streaming while the teacher switches to another app or
+// minimises this window. backgroundThrottling:false (below) only covers
+// timers; Chromium also stops painting occluded/minimised windows — the
+// stage canvas then yields NO frames and YouTube reports "No data" /
+// 11-second keyframes (seen in the first real test class).
+app.commandLine.appendSwitch("disable-renderer-backgrounding");
+app.commandLine.appendSwitch("disable-background-timer-throttling");
+app.commandLine.appendSwitch("disable-backgrounding-occluded-windows");
+app.commandLine.appendSwitch("disable-features", "CalculateNativeWinOcclusion,IntensiveWakeUpThrottling");
 
 if (!SMOKE && !app.requestSingleInstanceLock()) {
   app.quit();
@@ -65,7 +78,7 @@ function createWindow() {
     height: 900,
     minWidth: 1100,
     minHeight: 700,
-    show: !SMOKE,
+    show: !SMOKE || SMOKE_MINIMIZE,
     title: "Atomic Pathshala Teacher",
     backgroundColor: "#0b0d14",
     webPreferences: {
@@ -98,6 +111,7 @@ function createWindow() {
   mainWindow.loadURL(start);
   mainWindow.on("closed", () => {
     mainWindow = null;
+    closeStage(); // the offscreen stage never outlives the teacher's window
   });
   return mainWindow;
 }
@@ -118,6 +132,7 @@ function registerIpc() {
     event.returnValue = appUrl().origin;
   });
   registerEncoderIpc({ ipcMain, trustedSender });
+  registerStageIpc({ ipcMain, trustedSender, preloadPath: path.join(__dirname, "preload.js") });
 }
 
 async function runSmoke() {
@@ -138,6 +153,7 @@ async function runSmoke() {
     });
     result.loaded = true;
     result.url = wc.getURL();
+    if (SMOKE_MINIMIZE) setTimeout(() => win.minimize(), process.env.ATOMIC_SMOKE_MINIMIZE === "late" ? 4000 : 0);
     const waitFor = process.env.ATOMIC_SMOKE_WAIT_FOR;
     if (waitFor && /^[A-Za-z_$][\w$]*$/.test(waitFor)) {
       const deadline = Date.now() + 120_000;

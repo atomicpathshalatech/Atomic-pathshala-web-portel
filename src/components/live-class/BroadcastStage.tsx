@@ -5,6 +5,8 @@ import PusherClient from "pusher-js";
 import { CanvasEngine, type StrokeObject } from "@/lib/canvas/canvas-engine";
 import { sessionChannel, teacherChannel, WB_EVENTS } from "@/lib/realtime/events";
 import { BroadcastQuizCanvasOverlay, type BroadcastQuizData } from "@/components/live-class/BroadcastQuizCanvasOverlay";
+import { DesktopStageStreamer } from "@/components/live-class/DesktopStageStreamer";
+import { getDesktopBridge } from "@/lib/desktop/bridge";
 
 type StageData = {
   sessionId?: string;
@@ -29,6 +31,8 @@ type StageData = {
 export interface BoardMirrorHandle {
   setRemoteLaserActive: (points: { x: number; y: number }[]) => void;
   pushRemoteLaserStroke: (points: { x: number; y: number }[]) => void;
+  /** The mirror's container and board canvases (the desktop stage encodes these). */
+  getBoard: () => { container: HTMLElement | null; layers: HTMLCanvasElement[] };
 }
 
 const CAMERA_SIZE = 220;
@@ -303,6 +307,10 @@ const BoardMirror = forwardRef<
     pushRemoteLaserStroke: (points) => {
       engineRef.current?.pushRemoteLaserStroke(points);
     },
+    getBoard: () => ({
+      container: containerRef.current,
+      layers: [baseRef.current, activeRef.current].filter((c): c is HTMLCanvasElement => Boolean(c)),
+    }),
   }));
 
   useEffect(() => {
@@ -405,6 +413,10 @@ export function BroadcastStage({ scheduleId, token }: { scheduleId: string; toke
   const [error, setError] = useState<string | null>(null);
   const [stageDimensions, setStageDimensions] = useState({ width: 1920, height: 1080 });
   const mirrorRef = useRef<BoardMirrorHandle | null>(null);
+  // Inside the desktop app's offscreen stage window this page is the encoder
+  // source itself (see DesktopStageStreamer) — it opens the camera there, so
+  // the DOM camera overlay (and its LiveKit connection) is skipped.
+  const [isDesktopStage] = useState(() => Boolean(getDesktopBridge()?.stage?.isStage));
 
   const fetchStage = async () => {
     try {
@@ -576,14 +588,23 @@ export function BroadcastStage({ scheduleId, token }: { scheduleId: string; toke
       )}
 
       {/* Teacher Camera Overlay on Stage */}
-      <div className="absolute z-30" style={cameraCornerStyle(data.cameraPosition)}>
-        <BroadcastCamera
-          sessionId={data.sessionId}
-          token={token}
-          shape={data.cameraShape}
-          title={data.title}
+      {!isDesktopStage && (
+        <div className="absolute z-30" style={cameraCornerStyle(data.cameraPosition)}>
+          <BroadcastCamera
+            sessionId={data.sessionId}
+            token={token}
+            shape={data.cameraShape}
+            title={data.title}
+          />
+        </div>
+      )}
+
+      {isDesktopStage && (
+        <DesktopStageStreamer
+          getBoard={() => mirrorRef.current?.getBoard() ?? { container: null, layers: [] }}
+          look={{ background: data.page?.background ?? null, cameraShape: data.cameraShape, cameraPosition: data.cameraPosition }}
         />
-      </div>
+      )}
     </div>
   );
 }

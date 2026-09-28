@@ -73,8 +73,14 @@ async function run() {
   assert((await call(A.schedule.id, tokenA)).status === 401, "Revoked token → stage route 401");
 
   const tokenB = (await stage.issueStageToken({ batchScheduleId: B.schedule.id, issuedToUserId: user.id }))!;
+  // Its issue-time expiry has passed, but the class was EXTENDED: it keeps working.
   await prisma.broadcastStageSession.updateMany({ where: { liveSessionId: B.live.id }, data: { expiresAt: new Date(Date.now() - 1000) } });
+  await prisma.liveSession.update({ where: { id: B.live.id }, data: { effectiveEndsAt: new Date(Date.now() + 40 * 60_000) } });
+  assert((await stage.verifyStageToken(tokenB, B.schedule.id)) !== null, "Extended class: stage token keeps working past its issue-time expiry");
+  // Class end (+30 min) really passed too → expired.
+  await prisma.liveSession.update({ where: { id: B.live.id }, data: { plannedStartsAt: new Date(Date.now() - 120 * 60_000), effectiveEndsAt: new Date(Date.now() - 31 * 60_000) } });
   assert((await stage.verifyStageToken(tokenB, B.schedule.id)) === null, "Expired token no longer verifies");
+  await prisma.liveSession.update({ where: { id: B.live.id }, data: { plannedStartsAt: start, effectiveEndsAt: end } });
 
   const tokenB2 = (await stage.issueStageToken({ batchScheduleId: B.schedule.id, issuedToUserId: user.id }))!;
   await svc.markLiveSessionLive(B.live.id, new Date());

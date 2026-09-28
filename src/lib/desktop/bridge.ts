@@ -36,6 +36,19 @@ export interface AtomicDesktopBridge {
     status(runId: string): Promise<DesktopEncoderStatus>;
     onStatus(listener: (status: DesktopEncoderStatus) => void): () => void;
   };
+  /**
+   * The class stage runs in a hidden offscreen window of the app (it can't be
+   * minimised or covered, so the stream never pauses). Absent in app builds
+   * older than this feature.
+   */
+  stage?: {
+    /** True only inside that offscreen stage window. */
+    isStage: boolean;
+    open(opts: { stagePath: string; serverUrl: string; streamKey: string; profile?: "1080p" | "720p" }): Promise<{ opened: boolean; reused: boolean }>;
+    close(): Promise<{ closed: boolean }>;
+    /** Stage window only: what to send where. */
+    job(): Promise<{ serverUrl: string; streamKey: string; profile: "1080p" | "720p" } | null>;
+  };
 }
 
 export function getDesktopBridge(): AtomicDesktopBridge | null {

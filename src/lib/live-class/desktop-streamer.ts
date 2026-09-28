@@ -110,6 +110,9 @@ export class DesktopClassStreamer {
     const osc = ctx.createOscillator();
     osc.connect(gain).connect(dest);
     osc.start();
+    // Started explicitly: with no visible app window Chromium may leave it
+    // suspended — the recorder then waits for audio and sends NOTHING.
+    void ctx.resume().catch(() => undefined);
     return dest.stream.getAudioTracks()[0]!;
   }
 

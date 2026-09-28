@@ -43,6 +43,12 @@ teacher room (board + slide + camera + mic)
   → rtmp(s) → this class's own YouTube stream slot
 ```
 
+- The stage runs in a hidden **offscreen window** of the app (`src/stage-window.js`)
+  that loads the class's `/obs-stage` page. Windows pauses minimised or covered
+  windows; an offscreen window is never either, so the teacher can switch apps
+  or minimise the app mid-class without YouTube losing the stream (seen as
+  "No data" / 11 s keyframes in the first real test class, before this change).
+  Refreshing the teacher page reuses the running stage — the stream doesn't stop.
 - When the teacher presses **Start class**, the app fetches the class's stream key
   itself; the teacher never sees OBS, a URL or a key. In a plain browser the
   OBS panel is shown instead.
@@ -70,6 +76,8 @@ ATOMIC_APP_URL=http://localhost:3217 npx electron . --smoke            # bridge 
 ATOMIC_APP_URL=http://localhost:3217 npx electron . --smoke-untrusted  # bridge absent anywhere else
 npm run test:encoder   # encoder → local RTMP ingest: format, keyframes, drop + reconnect, key redaction
 npm run test:e2e       # real app + real streamer → local RTMP ingest; camera/mic denied, board checked in the video
+E2E_MINIMIZE=late npm run test:e2e   # same, with the teacher window minimised mid-stream
+E2E_MODE=inpage npm run test:e2e     # older in-page streamer path
 ```
 
 Neither test touches YouTube or the real webcam/mic.

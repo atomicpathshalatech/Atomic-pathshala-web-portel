@@ -33,5 +33,16 @@ if (window.location.origin === trustedOrigin) {
         return () => ipcRenderer.removeListener("encoder:status-changed", handler);
       },
     },
+    /**
+     * The class stage runs in a hidden offscreen window (never minimised or
+     * covered, so the stream never pauses). The teacher window opens/closes
+     * it; the stage page itself sees isStage=true and asks for its job.
+     */
+    stage: {
+      isStage: ipcRenderer.sendSync("desktop:is-stage"),
+      open: (opts) => ipcRenderer.invoke("stage:open", opts),
+      close: () => ipcRenderer.invoke("stage:close"),
+      job: () => ipcRenderer.invoke("stage:job"),
+    },
   });
 }
