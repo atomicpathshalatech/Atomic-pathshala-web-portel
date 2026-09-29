@@ -103,6 +103,7 @@ function parseProgressBlock(text) {
     fps: out.fps !== undefined ? Number(out.fps) : undefined,
     bitrateKbps: Number.isFinite(kbps) ? kbps : undefined,
     droppedFrames: out.drop_frames !== undefined ? Number(out.drop_frames) : undefined,
+    dupFrames: out.dup_frames !== undefined ? Number(out.dup_frames) : undefined,
     outTimeMs: out.out_time_us !== undefined ? Math.round(Number(out.out_time_us) / 1000) : undefined,
     speed: out.speed,
     ended: out.progress === "end",
@@ -183,7 +184,7 @@ class EncoderRun extends EventEmitter {
         const block = progressBuf.slice(0, end);
         progressBuf = progressBuf.slice(end);
         const p = parseProgressBlock(block);
-        this.stats = { fps: p.fps, bitrateKbps: p.bitrateKbps, droppedFrames: p.droppedFrames };
+        this.stats = { fps: p.fps, bitrateKbps: p.bitrateKbps, droppedFrames: p.droppedFrames, dupFrames: p.dupFrames, speed: p.speed };
         if (p.outTimeMs !== undefined && p.outTimeMs > 0 && p.outTimeMs !== this.lastOutTimeMs) {
           this.lastOutTimeMs = p.outTimeMs;
           this.lastProgressAt = Date.now();

@@ -36,6 +36,7 @@ import { extractYouTubeVideoId } from "@/lib/live-class/youtube";
 import { StagePreview } from "@/components/live-class/StagePreview";
 import { getDesktopBridge, type DesktopEncoderStatus } from "@/lib/desktop/bridge";
 import { DesktopClassStreamer } from "@/lib/live-class/desktop-streamer";
+import { formatFreeCameraLayout } from "@/lib/live-class/stage-compositor";
 import { BroadcastQuizCanvasOverlay } from "@/components/live-class/BroadcastQuizCanvasOverlay";
 
 // Size (px) of the floating self-camera bubble — draggable & resizable (120px to 400px)
@@ -586,6 +587,31 @@ export function TeacherLiveClassRoom({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stageDimensions.width, stageDimensions.height, floatCamSize]);
 
+  // Once per class going live: the bubble the teacher sees is the one students see.
+  const cameraLayoutSentRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (wbSession?.livePhase !== "LIVE" || !wbSession.id || cameraLayoutSentRef.current === wbSession.id) return;
+    if (!isCameraCircle || cameraDocked || cameraHidden) return;
+    cameraLayoutSentRef.current = wbSession.id;
+    pushCameraLayout(floatCamPos, floatCamSize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wbSession?.livePhase, wbSession?.id, isCameraCircle, cameraDocked, cameraHidden]);
+
+  // The bubble's layout is shared with the class video (stage/OBS/YouTube):
+  // sent when a drag or resize ends, as fractions of the board.
+  function pushCameraLayout(pos: { x: number; y: number }, size: number) {
+    const id = wbSession?.id;
+    const { width, height } = stageDimensions;
+    if (!id || width <= 0 || height <= 0) return;
+    const layout = formatFreeCameraLayout(pos.x / width, pos.y / height, size / height);
+    setWbSession((prev) => (prev ? { ...prev, cameraPosition: layout } : prev));
+    fetch(`/api/whiteboard/sessions/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cameraLayout: layout }),
+    }).catch(() => undefined);
+  }
+
   function handleFloatCamPointerDown(e: React.PointerEvent<HTMLDivElement>) {
     if (e.button !== 0) return;
     const target = e.target as HTMLElement;
@@ -625,6 +651,7 @@ export function TeacherLiveClassRoom({
       }
       return pos;
     });
+    pushCameraLayout(floatCamPos, floatCamSize);
   }
 
   function handleFloatCamResizePointerDown(e: React.PointerEvent<HTMLDivElement>) {
@@ -659,6 +686,7 @@ export function TeacherLiveClassRoom({
     } catch {
       // ignore
     }
+    pushCameraLayout(floatCamPos, floatCamSize);
   }
 
   const [openPopup, setOpenPopup] = useState<PopupId>(null);
@@ -961,7 +989,8 @@ export function TeacherLiveClassRoom({
     isQuickQuiz: true,
     questionText: "",
     options: ["Option A", "Option B", "Option C", "Option D"],
-    correctOption: "A",
+    // No default answer: nothing may look "correct" before the teacher reveals.
+    correctOption: "",
     timeLimitSec: 45,
   });
   const [quizError, setQuizError] = useState<string | null>(null);
@@ -2644,7 +2673,7 @@ export function TeacherLiveClassRoom({
       </aside>
 
       {/* Header */}
-      <header className="live-header flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 sm:gap-x-4 px-3 sm:px-4 lg:px-6 py-1.5 border-b border-[#2d2e3b] bg-[#1a1b23] min-w-0">
+      <header className="live-header teacher-compact-header flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 sm:gap-x-4 px-3 sm:px-4 lg:px-6 py-1.5 border-b border-[#2d2e3b] bg-[#1a1b23] min-w-0">
         <div className="min-w-0 flex flex-wrap items-center gap-x-3 gap-y-1">
           <div className="min-w-0">
             <p className="text-[11px] text-gray-500 truncate">{batchName}</p>
@@ -2687,7 +2716,7 @@ export function TeacherLiveClassRoom({
             title="Toggle Teacher Camera overlay (Shortcut: Ctrl + X)"
           >
             <span className="material-symbols-outlined text-sm">{cameraHidden ? "videocam_off" : "videocam"}</span>
-            <span className="hidden sm:inline">{cameraHidden ? "Show Cam (Ctrl+X)" : "Cam (Ctrl+X)"}</span>
+            <span className="hidden xl:inline">{cameraHidden ? "Show cam" : "Cam"}</span>
           </button>
 
           {/* Chroma Key Green Screen Toggle */}
@@ -2702,7 +2731,7 @@ export function TeacherLiveClassRoom({
             title="Toggle Chroma Key Green Screen Removal on Teacher Camera"
           >
             <span className="material-symbols-outlined text-sm">filter_vintage</span>
-            <span className="hidden md:inline">{chromaKeyEnabled ? "Chroma ON" : "Chroma Key"}</span>
+            <span className="hidden xl:inline">{chromaKeyEnabled ? "Chroma on" : "Chroma"}</span>
           </button>
 
           {/* Pre-Flight Wizard Trigger */}
@@ -2713,7 +2742,7 @@ export function TeacherLiveClassRoom({
             title="Configure Teaching Material, Theme, and Video Devices"
           >
             <span className="material-symbols-outlined text-sm">tune</span>
-            <span className="hidden sm:inline">Material &amp; Setup</span>
+            <span className="hidden xl:inline">Setup</span>
           </button>
 
           {/* Authoritative Live Status & Timers */}
@@ -2725,7 +2754,7 @@ export function TeacherLiveClassRoom({
                   title="Students will see the class once YouTube receives your OBS stream"
                 >
                   <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
-                  CONNECTING TO YOUTUBE
+                  Connecting…
                 </span>
               ) : (
                 <span className="flex items-center gap-1.5 text-xs font-bold text-red-400 border border-red-500/40 bg-red-950/40 px-3 py-1 rounded-full">
@@ -2739,7 +2768,7 @@ export function TeacherLiveClassRoom({
                 className="text-xs font-mono font-semibold text-gray-300 bg-black/40 border border-gray-700/60 px-2.5 py-1 rounded-md"
                 title={`Class runtime: ${formatDurationFriendly(elapsedSeconds)} since start`}
               >
-                Elapsed: {formatHms(elapsedSeconds)} <span className="text-[10px] text-gray-400 font-normal">({formatDurationFriendly(elapsedSeconds)})</span>
+                {formatHms(elapsedSeconds)}
               </span>
 
               {/* Remaining / Grace Period Timer */}
@@ -2792,8 +2821,7 @@ export function TeacherLiveClassRoom({
                     title={`Time left until scheduled end (${new Date(scheduledEndMs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})`}
                   >
                     <span className="material-symbols-outlined text-xs">timer</span>
-                    {remainingSeconds <= 300 ? "5m Warning: " : "Time Left: "}
-                    {formatHms(remainingSeconds)} <span className="text-[10px] text-gray-400 font-normal">({formatDurationFriendly(remainingSeconds)} left)</span>
+                    {formatHms(remainingSeconds)} left
                   </span>
                   {/* Add Time Menu Button */}
                   <div className="relative">
@@ -2838,7 +2866,7 @@ export function TeacherLiveClassRoom({
                   title="Open YouTube Live Broadcast in new tab"
                 >
                   <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                  <span>YouTube Live Active</span>
+                  <span>YouTube</span>
                   <span className="material-symbols-outlined text-xs">open_in_new</span>
                 </a>
               )}
@@ -2948,13 +2976,13 @@ export function TeacherLiveClassRoom({
               {desktopStreamError
                 ? `Built-in encoder: ${desktopStreamError}`
                 : desktopStream?.state === "streaming"
-                ? `Sending to YouTube · ${Math.round(desktopStream.bitrateKbps ?? 0)} kbps${desktopStream.encoder ? ` · ${desktopStream.encoder.replace("h264_", "").toUpperCase()}` : ""}`
+                ? `On air · ${Math.round(desktopStream.bitrateKbps ?? 0)} kbps`
                 : desktopStream?.state === "reconnecting"
-                ? "Connection to YouTube dropped — reconnecting…"
-                : "Starting the built-in encoder…"}
+                ? "Reconnecting to YouTube…"
+                : "Starting…"}
             </span>
           )}
-          {youtubeGateActive && (
+          {youtubeGateActive && !desktopStream && (
             <button
               type="button"
               onClick={() => setShowObsStreamInfo(true)}
@@ -2968,7 +2996,7 @@ export function TeacherLiveClassRoom({
             </button>
           )}
           {/* OBS Stream Key & Setup Button (shown whenever mode is YOUTUBE or BOTH) */}
-          {(wbSession?.videoTransport === "YOUTUBE" || wbSession?.videoTransport === "BOTH") && (
+          {(wbSession?.videoTransport === "YOUTUBE" || wbSession?.videoTransport === "BOTH") && !desktopStream && (
             <button
               type="button"
               onClick={() => {
@@ -2985,7 +3013,7 @@ export function TeacherLiveClassRoom({
               title="Open OBS Studio Stream Key, RTMP URL & Browser Source URL"
             >
               <span className="material-symbols-outlined text-sm text-red-400">sensors</span>
-              <span>OBS Stream Key</span>
+              <span>OBS key</span>
             </button>
           )}
 
@@ -2998,7 +3026,7 @@ export function TeacherLiveClassRoom({
               }`}
               title="Show exactly what the class video (YouTube) shows"
             >
-              STAGE PREVIEW
+              Preview
             </button>
           )}
 
@@ -3007,7 +3035,7 @@ export function TeacherLiveClassRoom({
             onClick={() => setSettingsOpen(true)}
             className="text-xs font-semibold text-gray-300 border border-gray-600 px-3 py-1.5 rounded-md hover:bg-gray-700 transition"
           >
-            SETTINGS
+            Settings
           </button>
 
           {isClassLive && (!confirmingEnd ? (
@@ -3016,7 +3044,7 @@ export function TeacherLiveClassRoom({
               onClick={() => setConfirmingEnd(true)}
               className="text-xs font-semibold text-red-400 border border-red-900/50 px-3.5 py-1.5 rounded-md hover:bg-red-950/40 transition"
             >
-              END CLASS
+              End class
             </button>
           ) : (
             <div className="flex items-center gap-2">
@@ -5798,7 +5826,7 @@ function QuizPanel({
   setPollType: (t: "mcq4" | "yesno") => void;
 }) {
   const [selectedRevealOption, setSelectedRevealOption] = useState<string>(
-    activeQuiz?.correctOption || form.correctOption || "A"
+    activeQuiz?.correctOption || form.correctOption || ""
   );
 
   useEffect(() => {
@@ -5829,7 +5857,7 @@ function QuizPanel({
                 <span className="material-symbols-outlined text-xs text-amber-400">check_circle</span>
                 SET CORRECT ANSWER FOR REVEAL:
               </span>
-              <span className="text-emerald-400 font-mono font-bold">Option {selectedRevealOption}</span>
+              <span className="text-slate-200 font-mono font-bold">{selectedRevealOption ? `Option ${selectedRevealOption}` : "Pick one"}</span>
             </div>
             <div className="grid grid-cols-4 gap-1.5">
               {activeQuiz.options.map((o) => (
@@ -5839,11 +5867,11 @@ function QuizPanel({
                   onClick={() => setSelectedRevealOption(o.key)}
                   className={`py-1.5 rounded-lg text-xs font-bold font-mono transition border ${
                     selectedRevealOption === o.key
-                      ? "bg-emerald-600 text-white border-emerald-400 shadow-md shadow-emerald-600/30"
-                      : "bg-[#171924] text-gray-300 border-[#2b2d3c] hover:border-emerald-500/50"
+                      ? "bg-slate-600 text-white border-slate-300"
+                      : "bg-[#171924] text-gray-300 border-[#2b2d3c] hover:border-slate-400"
                   }`}
                 >
-                  {o.key} {selectedRevealOption === o.key ? "✓" : ""}
+                  {o.key}
                 </button>
               ))}
             </div>
@@ -5907,9 +5935,10 @@ function QuizPanel({
             <button
               type="button"
               onClick={() => onReveal(selectedRevealOption)}
-              className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 rounded-xl text-xs font-bold transition shadow-md shadow-emerald-600/30"
+              disabled={!selectedRevealOption}
+              className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-400 disabled:cursor-not-allowed text-white py-2.5 rounded-xl text-xs font-bold transition"
             >
-              Reveal Answer ({selectedRevealOption})
+              {selectedRevealOption ? `Reveal Answer (${selectedRevealOption})` : "Pick the answer to reveal"}
             </button>
             <button
               type="button"
@@ -5948,7 +5977,7 @@ function QuizPanel({
             setForm((f) => ({
               ...f,
               options: ["YES", "NO"],
-              correctOption: "A",
+              correctOption: "",
             }));
           }}
           className={`py-1.5 rounded-lg text-xs font-bold transition ${
@@ -5966,7 +5995,7 @@ function QuizPanel({
             setForm((f) => ({
               ...f,
               options: ["Option A", "Option B", "Option C", "Option D"],
-              correctOption: "A",
+              correctOption: "",
             }));
           }}
           className={`py-1.5 rounded-lg text-xs font-bold transition ${

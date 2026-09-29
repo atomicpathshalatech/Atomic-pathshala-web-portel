@@ -44,7 +44,9 @@ export function YouTubeLivePlayer({
   const [isLiveEdge, setIsLiveEdge] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
-  const [isMuted, setIsMuted] = useState(false);
+  // The embed autoplays with mute=1 (browsers only allow muted autoplay), so
+  // the player starts muted; unmuteNow() lifts it on the first possible moment.
+  const [isMuted, setIsMuted] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
@@ -56,6 +58,12 @@ export function YouTubeLivePlayer({
 
   const hideControlsTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // An embed opened while the broadcast was still "upcoming" only notices it
+  // went live after YouTube polls again (often 30-60 s) — students sat on the
+  // waiting screen after the class had started. Remount the player the moment
+  // the class goes LIVE so the live video loads straight away.
+  const playerKey = `${youtubeVideoId ?? ""}:${livePhase === "LIVE" ? "live" : "pre"}`;
+
   // Reset embed error when video changes
   useEffect(() => {
     setHasEmbedError(false);
@@ -64,7 +72,7 @@ export function YouTubeLivePlayer({
     setCurrentTime(0);
     setDuration(0);
     setIsLiveEdge(true);
-  }, [youtubeVideoId]);
+  }, [playerKey]);
 
   // Dispatch a control action through the real YT.Player instance
   const sendYouTubeCommand = useCallback((func: string, args: unknown[] = []) => {
@@ -223,8 +231,16 @@ export function YouTubeLivePlayer({
               try {
                 e.target.seekTo?.(999999, true);
                 e.target.playVideo?.();
+                e.target.unMute?.();
+                e.target.setVolume?.(100);
               } catch {}
               setIsPlaying(true);
+              // The browser may refuse sound without a tap on this page: read back the truth.
+              setTimeout(() => {
+                try {
+                  setIsMuted(Boolean(e.target.isMuted?.()));
+                } catch {}
+              }, 800);
             },
             onStateChange: (e: any) => {
               const YT = (window as any).YT;
@@ -279,7 +295,7 @@ export function YouTubeLivePlayer({
         // no-op
       }
     };
-  }, [youtubeVideoId]);
+  }, [playerKey]);
 
   // Periodically nudge playback until the live stream is confirmed playing
   useEffect(() => {
@@ -357,6 +373,12 @@ export function YouTubeLivePlayer({
     return `${mins < 10 ? "0" : ""}${mins}:${secs < 10 ? "0" : ""}${secs}`;
   };
 
+  const unmuteNow = () => {
+    sendYouTubeCommand("unMute");
+    sendYouTubeCommand("setVolume", [100]);
+    setIsMuted(false);
+  };
+
   const toggleMute = () => {
     if (isMuted) {
       sendYouTubeCommand("unMute");
@@ -413,7 +435,7 @@ export function YouTubeLivePlayer({
     const origin = typeof window !== "undefined" && window.location.origin ? window.location.origin : "";
     const originParam = origin ? `&origin=${encodeURIComponent(origin)}` : "";
     return `https://www.youtube.com/embed/${youtubeVideoId}?enablejsapi=1&autoplay=1&mute=1&controls=0&rel=0&modestbranding=1&playsinline=1&fs=0&live=1${originParam}`;
-  }, [youtubeVideoId]);
+  }, [playerKey]);
 
   if (!youtubeVideoId || livePhase === "SCHEDULED") {
     return (
@@ -480,6 +502,7 @@ export function YouTubeLivePlayer({
       {/* ----------------- 1. HEADLESS YOUTUBE IFRAME (Background) ----------------- */}
       <div className="w-full h-full relative overflow-hidden flex items-center justify-center bg-black">
         <iframe
+          key={playerKey}
           id={ytPlayerElementId}
           ref={iframeRef}
           src={embedUrl}
@@ -501,6 +524,7 @@ export function YouTubeLivePlayer({
         {/* Interaction transparent shield: intercepts user clicks so they NEVER open or redirect to YouTube */}
         <div
           onClick={() => {
+            if (isMuted) unmuteNow();
             if (!hasStartedPlaying || !isPlaying) {
               setHasStartedPlaying(true);
               sendYouTubeCommand("playVideo");
@@ -748,237 +772,93 @@ export function YouTubeLivePlayer({
         </div>
       )}
 
-      {/* ----------------- 4. PERMANENT BRANDING WATERMARK (Always on live stream) ----------------- */}
-      {isStreamLive && (
-        <div className="absolute top-3 sm:top-4 left-3 sm:left-4 z-20 pointer-events-none select-none flex items-center gap-2.5 animate-in fade-in duration-200">
-          <div className="w-8 h-8 rounded-xl bg-white/10 backdrop-blur-md p-1 border border-white/20 flex items-center justify-center shrink-0 shadow-md">
-            <img
-              src="/brand/logo.png"
-              alt="Atomic Pathshala"
-              className="w-full h-full object-contain"
-            />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs sm:text-sm font-bold text-white tracking-wide drop-shadow leading-tight">
-                Atomic Pathshala
-              </span>
-              <span className="px-1.5 py-0.2 rounded-full bg-rose-600 text-white text-[9px] font-black uppercase tracking-wider flex items-center gap-1 shadow-xs">
-                <span className="w-1 h-1 rounded-full bg-white animate-pulse" />
-                LIVE
-              </span>
-            </div>
-            {subject && (
-              <p className="text-[10px] sm:text-[11px] text-slate-300 font-medium truncate leading-tight mt-0.5">
-                {subject} {educatorName ? `• ${educatorName}` : ""}
-              </p>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ----------------- 5. FLOATING TOP HEADER INFO (Fades with controls) ----------------- */}
-      {isStreamLive && (
-        <div
-          className={`absolute top-0 left-0 right-0 p-3 sm:p-4 bg-gradient-to-b from-black/85 via-black/40 to-transparent flex items-start justify-end gap-2 pointer-events-none transition-opacity duration-300 z-20 ${
-            showControls ? "opacity-100" : "opacity-0"
-          }`}
+      {/* ----------------- 4. SOUND: the embed autoplays MUTED (browser rule) ----------------- */}
+      {/* A clear "tap for sound" pill whenever the player is actually muted —
+          students previously heard nothing while the icon said "volume on". */}
+      {isStreamLive && isMuted && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            unmuteNow();
+          }}
+          className="absolute top-2 left-2 z-30 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/70 text-white text-[11px] font-semibold backdrop-blur-sm border border-white/20 cursor-pointer"
         >
-          {/* No "open on YouTube" shortcut: the class is only watchable inside
-              Atomic. (Unlisted is not access control — the id can still be
-              shared — but the app itself shouldn't advertise the raw link.
-              The embed-error fallback above is the one exception.) */}
-          {/* Sync Live Badge */}
-          <button
-            type="button"
-            onClick={handleGoLive}
-            className={`pointer-events-auto flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black transition-all shadow-md cursor-pointer ${
-              isLiveEdge
-                ? "bg-rose-600 text-white shadow-rose-600/50 ring-2 ring-white/20"
-                : "bg-slate-800/90 hover:bg-rose-700 text-slate-300 hover:text-white border border-slate-700"
-            }`}
-            title="Click to sync directly to live edge"
-          >
-            <span
-              className={`w-2 h-2 rounded-full ${
-                isLiveEdge ? "bg-white animate-pulse" : "bg-slate-400"
-              }`}
-            />
-            <span>{isLiveEdge ? "SYNCED LIVE" : "GO LIVE"}</span>
-          </button>
-        </div>
+          <span className="material-symbols-outlined text-sm">volume_off</span>
+          <span>Tap for sound</span>
+        </button>
       )}
 
-      {/* ----------------- 6. BOTTOM CONTROL BAR & TIMELINE OVERLAY ----------------- */}
+      {/* ----------------- 5. SLIM CONTROL STRIP (transparent, fades out) ----------------- */}
       {isStreamLive && (
         <div
-          className={`absolute bottom-2 left-2 right-2 p-2 bg-[#0e111d]/95 backdrop-blur-md rounded-xl border border-slate-700/80 flex flex-col gap-2 shadow-2xl transition-opacity duration-300 z-20 ${
+          className={`absolute bottom-0 left-0 right-0 z-20 px-2 pb-1 pt-4 bg-gradient-to-t from-black/60 to-transparent transition-opacity duration-300 ${
             showControls ? "opacity-100" : "opacity-0 pointer-events-none"
           }`}
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Timeline Scrubber Bar */}
-          <div className="flex items-center gap-2.5 px-1 pt-0.5">
-            <span className="text-[11px] font-mono text-slate-300 select-none shrink-0 font-medium">
-              {formatDisplayTime(currentTime)}
-            </span>
-
-            <div className="relative flex-1 flex items-center group/slider py-1">
-              <input
-                type="range"
-                min={0}
-                max={Math.max(duration, currentTime, 1)}
-                step={1}
-                value={currentTime}
-                onChange={(e) => handleSliderSeek(Number(e.target.value))}
-                className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-red-500 hover:h-2 transition-all focus:outline-none"
-              />
-            </div>
-
-            <div className="flex items-center gap-1.5 shrink-0 select-none">
-              {isLiveEdge ? (
-                <span className="flex items-center gap-1 text-[10px] font-bold text-rose-400 uppercase tracking-wider bg-rose-950/60 border border-rose-800/60 px-2 py-0.5 rounded-full">
-                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
-                  LIVE
-                </span>
-              ) : (
+          {/* Thin progress line */}
+          <input
+            type="range"
+            min={0}
+            max={Math.max(duration, currentTime, 1)}
+            step={1}
+            value={currentTime}
+            onChange={(e) => handleSliderSeek(Number(e.target.value))}
+            aria-label="Seek"
+            className="block w-full h-[3px] appearance-none cursor-pointer bg-white/25 rounded-full accent-red-500 focus:outline-none"
+          />
+          <div className="mt-0.5 flex items-center justify-between text-white/90">
+            <div className="flex items-center">
+              <button type="button" onClick={togglePlayPause} className="p-1 cursor-pointer" title={isPlaying ? "Pause" : "Play"}>
+                <span className="material-symbols-outlined text-[18px]">{isPlaying ? "pause" : "play_arrow"}</span>
+              </button>
+              <button type="button" onClick={() => handleSeek(-10)} className="p-1 cursor-pointer" title="Back 10 seconds">
+                <span className="material-symbols-outlined text-[18px]">replay_10</span>
+              </button>
+              <button type="button" onClick={() => handleSeek(10)} className="p-1 cursor-pointer" title="Forward 10 seconds">
+                <span className="material-symbols-outlined text-[18px]">forward_10</span>
+              </button>
+              <button type="button" onClick={toggleMute} className="p-1 cursor-pointer" title={isMuted ? "Unmute" : "Mute"}>
+                <span className="material-symbols-outlined text-[18px]">{isMuted ? "volume_off" : "volume_up"}</span>
+              </button>
+              <span className="ml-1 text-[10px] font-mono text-white/70 select-none">{formatDisplayTime(currentTime)}</span>
+              {!isLiveEdge && (
                 <button
                   type="button"
                   onClick={handleGoLive}
-                  className="flex items-center gap-1 text-[10px] font-bold text-amber-300 uppercase tracking-wider bg-amber-950/60 border border-amber-800/60 px-2 py-0.5 rounded-full hover:bg-rose-600 hover:text-white transition cursor-pointer"
-                  title="Click to jump to live edge"
+                  className="ml-2 text-[10px] font-semibold text-white/80 hover:text-white underline underline-offset-2 cursor-pointer"
+                  title="Jump to the live moment"
                 >
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                  <span>-{formatDisplayTime(Math.max(0, duration - currentTime))}</span>
+                  Go live
                 </button>
               )}
             </div>
-          </div>
-
-          {/* Controls Row */}
-          <div className="flex items-center justify-between gap-2">
-            {/* Left Controls: Play/Pause, Rewind, Forward, Sync Live */}
-            <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-              {/* Play / Pause Toggle */}
+            <div className="relative flex items-center">
               <button
                 type="button"
-                onClick={togglePlayPause}
-                className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition flex items-center justify-center cursor-pointer"
-                title={isPlaying ? "Pause" : "Play"}
+                onClick={() => setShowSpeedMenu((v) => !v)}
+                className="px-1 text-[11px] font-mono cursor-pointer"
+                title="Playback speed"
               >
-                <span className="material-symbols-outlined text-base">
-                  {isPlaying ? "pause" : "play_arrow"}
-                </span>
+                {playbackSpeed}x
               </button>
-
-              {/* Rewind 10s */}
-              <button
-                type="button"
-                onClick={() => handleSeek(-10)}
-                className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition text-xs font-semibold flex items-center gap-0.5 cursor-pointer"
-                title="Rewind 10 seconds"
-              >
-                <span className="material-symbols-outlined text-base">replay_10</span>
-                <span className="hidden sm:inline text-[11px]">-10s</span>
-              </button>
-
-              {/* Rewind 30s */}
-              <button
-                type="button"
-                onClick={() => handleSeek(-30)}
-                className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition text-xs font-semibold flex items-center gap-0.5 cursor-pointer hidden md:flex"
-                title="Rewind 30 seconds"
-              >
-                <span className="material-symbols-outlined text-base">replay_30</span>
-                <span className="text-[11px]">-30s</span>
-              </button>
-
-              {/* Forward 10s */}
-              <button
-                type="button"
-                onClick={() => handleSeek(10)}
-                className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition text-xs font-semibold flex items-center gap-0.5 cursor-pointer"
-                title="Forward 10 seconds"
-              >
-                <span className="material-symbols-outlined text-base">forward_10</span>
-                <span className="hidden sm:inline text-[11px]">+10s</span>
-              </button>
-
-              {/* Sync Live Button */}
-              <button
-                type="button"
-                onClick={handleGoLive}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ml-1 ${
-                  isLiveEdge
-                    ? "bg-rose-600/20 text-rose-400 border border-rose-500/40"
-                    : "bg-rose-600 hover:bg-rose-500 text-white shadow-sm ring-2 ring-rose-400/50 animate-pulse"
-                }`}
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
-                <span>{isLiveEdge ? "Live Edge" : "Catch Up Live"}</span>
-              </button>
-
-              {/* Mute / Unmute Button */}
-              <button
-                type="button"
-                onClick={toggleMute}
-                className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition text-xs font-semibold flex items-center cursor-pointer ml-0.5"
-                title={isMuted ? "Unmute" : "Mute"}
-              >
-                <span className="material-symbols-outlined text-base">
-                  {isMuted ? "volume_off" : "volume_up"}
-                </span>
-              </button>
-            </div>
-
-            {/* Right Controls: Speed Selector, Popout, Fullscreen */}
-            <div className="flex items-center gap-1.5 sm:gap-2 relative">
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setShowSpeedMenu((v) => !v)}
-                  className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono font-bold flex items-center gap-1 border border-slate-700 transition cursor-pointer"
-                  title="Playback Speed"
-                >
-                  <span className="material-symbols-outlined text-sm">speed</span>
-                  <span>{playbackSpeed}x</span>
-                </button>
-
-                {showSpeedMenu && (
-                  <div className="absolute bottom-full right-0 mb-2 w-28 bg-[#141726] border border-slate-700 rounded-xl p-1 shadow-2xl z-30 space-y-0.5 animate-in fade-in zoom-in-95 duration-150">
-                    <div className="text-[10px] uppercase font-bold text-slate-400 px-2 py-1 border-b border-slate-800">
-                      Playback Speed
-                    </div>
-                    {SPEED_OPTIONS.map((rate) => (
-                      <button
-                        key={rate}
-                        type="button"
-                        onClick={() => handleSpeedChange(rate)}
-                        className={`w-full text-left px-2 py-1.5 rounded-lg text-xs font-medium flex items-center justify-between transition cursor-pointer ${
-                          playbackSpeed === rate
-                            ? "bg-blue-600 text-white font-bold"
-                            : "text-slate-300 hover:bg-slate-800"
-                        }`}
-                      >
-                        <span>{rate}x</span>
-                        {playbackSpeed === rate && (
-                          <span className="material-symbols-outlined text-xs">check</span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <button
-                type="button"
-                onClick={toggleFullscreen}
-                className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition cursor-pointer"
-                title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
-              >
-                <span className="material-symbols-outlined text-base">
-                  {isFullscreen ? "fullscreen_exit" : "fullscreen"}
-                </span>
+              {showSpeedMenu && (
+                <div className="absolute bottom-full right-0 mb-1 w-20 bg-black/85 rounded-lg p-1 z-30 backdrop-blur-sm">
+                  {SPEED_OPTIONS.map((rate) => (
+                    <button
+                      key={rate}
+                      type="button"
+                      onClick={() => handleSpeedChange(rate)}
+                      className={`w-full text-left px-2 py-1 rounded text-[11px] cursor-pointer ${playbackSpeed === rate ? "bg-white/20 font-bold" : "hover:bg-white/10"}`}
+                    >
+                      {rate}x
+                    </button>
+                  ))}
+                </div>
+              )}
+              <button type="button" onClick={toggleFullscreen} className="p-1 cursor-pointer" title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}>
+                <span className="material-symbols-outlined text-[18px]">{isFullscreen ? "fullscreen_exit" : "fullscreen"}</span>
               </button>
             </div>
           </div>

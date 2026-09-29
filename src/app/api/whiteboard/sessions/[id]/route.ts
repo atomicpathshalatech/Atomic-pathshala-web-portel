@@ -182,6 +182,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         ...(input.title !== undefined && { title: input.title }),
         ...(input.chatEnabled !== undefined && { chatEnabled: input.chatEnabled }),
         ...(input.handRaiseEnabled !== undefined && { handRaiseEnabled: input.handRaiseEnabled }),
+        ...(input.cameraLayout !== undefined && { cameraPosition: input.cameraLayout }),
         ...(input.livePhase !== undefined && {
           livePhase: input.livePhase,
           ...(input.livePhase === "LIVE" && !existing.actualStartedAt && { actualStartedAt: new Date() }),

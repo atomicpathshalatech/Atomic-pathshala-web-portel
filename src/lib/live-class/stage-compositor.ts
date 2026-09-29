@@ -69,7 +69,36 @@ export function coverCrop(srcW: number, srcH: number, dstW: number, dstH: number
 }
 
 /** Camera box on the stage for a corner position. */
+/**
+ * The teacher can drag/resize their camera bubble anywhere on the board. That
+ * layout travels as the session's cameraPosition "FREE:x,y,size" — fractions
+ * of the board (x, y = top-left; size = diameter / board height) — so the
+ * stage, OBS and students show the camera exactly where the teacher put it.
+ */
+export function parseFreeCameraLayout(position: string | null | undefined): { x: number; y: number; size: number } | null {
+  const m = /^FREE:([0-9.]+),([0-9.]+),([0-9.]+)$/.exec(position ?? "");
+  if (!m) return null;
+  const [x, y, size] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  if (![x, y, size].every((n) => Number.isFinite(n) && n >= 0 && n <= 1) || size < 0.05) return null;
+  return { x, y, size };
+}
+
+export function formatFreeCameraLayout(x: number, y: number, size: number): string {
+  const f = (n: number) => Math.min(1, Math.max(0, n)).toFixed(3);
+  return `FREE:${f(x)},${f(y)},${f(size)}`;
+}
+
 export function cameraRect(position: string, stageW: number, stageH: number, size: number, margin: number): Rect {
+  const free = parseFreeCameraLayout(position);
+  if (free) {
+    const s = Math.round(free.size * stageH);
+    return {
+      x: Math.min(Math.max(0, Math.round(free.x * stageW)), stageW - s),
+      y: Math.min(Math.max(0, Math.round(free.y * stageH)), stageH - s),
+      w: s,
+      h: s,
+    };
+  }
   const left = position.endsWith("LEFT");
   const top = position.startsWith("UPPER");
   return {

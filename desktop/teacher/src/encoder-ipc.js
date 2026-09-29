@@ -30,6 +30,24 @@ function ffmpegPath() {
 }
 
 let probeCache = null;
+
+// Encoder log (support): userData/logs/encoder-YYYY-MM-DD.log — every 10 s the
+// encoder's real fps / speed (1x = real time) / dup+drop frames / bitrate,
+// plus every state change and FFmpeg's last lines on exit. Stream keys never
+// appear (statuses are already redacted). Needed to diagnose YouTube's
+// "not enough video" / "keyframe every N s" reports from real classes.
+const fs = require("node:fs");
+function encoderLog(line) {
+  try {
+    const dir = path.join(app.getPath("userData"), "logs");
+    fs.mkdirSync(dir, { recursive: true });
+    const day = new Date().toISOString().slice(0, 10);
+    fs.appendFileSync(path.join(dir, `encoder-${day}.log`), `${new Date().toISOString()} ${line}
+`);
+  } catch {
+    // logging must never break streaming
+  }
+}
 // ATOMIC_STAGE_LOG=1: once a second, how many chunk bytes reached the encoder (tests/support).
 let chunkBytes = 0;
 if (process.env.ATOMIC_STAGE_LOG === "1") setInterval(() => { console.log(`[stage] ipc ${chunkBytes} B/s`); chunkBytes = 0; }, 1000).unref?.();
@@ -81,7 +99,16 @@ function registerEncoderIpc({ ipcMain, trustedSender }) {
     const sender = event.sender;
     // Every Atomic window hears the status: the run belongs to the offscreen
     // stage window, but the teacher's window shows "Sending to YouTube".
+    let lastState = null;
+    let lastLogAt = 0;
+    encoderLog(`start run=${run.runId} encoder=${p.chosen} profile=${opts.profile === "720p" ? "720p" : "1080p"} server=${(() => { try { return new URL(opts.serverUrl).host; } catch { return "?"; } })()}`);
     run.on("status", (status) => {
+      const now = Date.now();
+      if (status.state !== lastState || now - lastLogAt >= 10_000) {
+        lastState = status.state;
+        lastLogAt = now;
+        encoderLog(`${status.state} gen=${status.generation ?? 0} fps=${status.fps ?? "-"} speed=${status.speed ?? "-"} kbps=${status.bitrateKbps ?? "-"} dup=${status.dupFrames ?? "-"} drop=${status.droppedFrames ?? "-"} restarts=${status.restarts ?? 0}${status.error ? " error=" + String(status.error).slice(0, 300) : ""}`);
+      }
       if (process.env.ATOMIC_STAGE_LOG === "1") console.log(`[stage] status ${status.state} ${status.bitrateKbps ?? ""}kbps fps=${status.fps ?? ""}${status.error ? " error=" + status.error : ""}`);
       for (const win of BrowserWindow.getAllWindows()) {
         const wc = win.webContents;

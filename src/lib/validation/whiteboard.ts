@@ -15,6 +15,9 @@ export const whiteboardSessionPatchSchema = z
     // value is server-driven (session create/resume/end) — see
     // POST /api/whiteboard/sessions and .../end, not this route.
     livePhase: z.literal("LIVE").optional(),
+    // Teacher's camera bubble as fractions of the board (see
+    // parseFreeCameraLayout) — mirrored on the stage/YouTube video.
+    cameraLayout: z.string().regex(/^FREE:[01](.d{1,4})?,[01](.d{1,4})?,[01](.d{1,4})?$/).optional(),
   })
   .refine(
     (d) =>
@@ -22,7 +25,8 @@ export const whiteboardSessionPatchSchema = z
       d.title !== undefined ||
       d.chatEnabled !== undefined ||
       d.handRaiseEnabled !== undefined ||
-      d.livePhase !== undefined,
+      d.livePhase !== undefined ||
+      d.cameraLayout !== undefined,
     { message: "Provide at least one field to update" }
   );
 

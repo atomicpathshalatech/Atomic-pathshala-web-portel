@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatISTTime } from "@/lib/date-utils";
 import type { CommandCenterData } from "@/lib/teacher-dashboard/analytics";
 
 // ---------------------------------------------------------------------------
@@ -119,7 +120,7 @@ export function TeacherCommandCenter({ data }: { data: CommandCenterData }) {
                     <p className="font-label-md text-label-md text-on-surface truncate">{c.title}</p>
                     <p className="text-label-sm text-on-surface-variant">
                       {c.batchName} ·{" "}
-                      {c.startsAt.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })} · {c.status}
+                      {formatISTTime(c.startsAt)} · {c.status}
                     </p>
                   </li>
                 ))}

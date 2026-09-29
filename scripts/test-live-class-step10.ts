@@ -31,6 +31,21 @@ assert(pickVideoTransport("YOUTUBE", "LIVEKIT", false) === "YOUTUBE", "An explic
 assert(pickVideoTransport("BOTH", null, true) === "BOTH", "BOTH is kept as-is");
 assert(pickVideoTransport("junk", "YOUTUBE", false) === "YOUTUBE", "Junk request falls back to the stored choice");
 
+// ---- 1b. Teacher camera layout reaches the class video ---------------------------
+{
+  const { parseFreeCameraLayout, formatFreeCameraLayout, cameraRect } = require("../src/lib/live-class/stage-compositor") as typeof import("../src/lib/live-class/stage-compositor");
+  const enc = formatFreeCameraLayout(0.7, 0.05, 0.3);
+  assert(enc === "FREE:0.700,0.050,0.300", "Free camera layout encodes as fractions of the board", enc);
+  assert(JSON.stringify(parseFreeCameraLayout(enc)) === JSON.stringify({ x: 0.7, y: 0.05, size: 0.3 }), "…and parses back");
+  assert(parseFreeCameraLayout("UPPER_RIGHT") === null && parseFreeCameraLayout("FREE:2,0,0.3") === null, "Corner names / junk are not free layouts");
+  const box = cameraRect(enc, 1920, 1080, 280, 38);
+  assert(box.x === 1344 && box.y === 54 && box.w === 324 && box.h === 324, "Stage draws the camera where and as big as the teacher placed it", JSON.stringify(box));
+  const corner = cameraRect("LOWER_LEFT", 1920, 1080, 280, 38);
+  assert(corner.x === 38 && corner.y === 1080 - 38 - 280, "Corner layouts still work");
+  const edge = cameraRect("FREE:0.990,0.990,0.300", 1920, 1080, 280, 38);
+  assert(edge.x + edge.w <= 1920 && edge.y + edge.h <= 1080, "A bubble dragged to the edge stays inside the video");
+}
+
 // ---- 2. Static: removed code is gone and nothing points at it ------------------
 for (const p of [
   "src/components/classroom",

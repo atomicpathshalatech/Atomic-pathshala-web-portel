@@ -687,7 +687,8 @@ export function StudentLiveClassRoom({
   const [activeTab, setActiveTab] = useState<"chat" | "questions">("chat");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showChat, setShowChat] = useState(true);
-  const [mobileLandscapeShowChat, setMobileLandscapeShowChat] = useState(false);
+  // Landscape phone: chat sits BESIDE the video like YouTube, open by default; the student can hide it.
+  const [mobileLandscapeShowChat, setMobileLandscapeShowChat] = useState(true);
   const [mobileCamCorner, setMobileCamCorner] = useState<"top-left" | "top-right" | "bottom-right" | "bottom-left">("top-right");
 
   const toggleMobileCamCorner = (e: React.MouseEvent) => {
@@ -1682,12 +1683,8 @@ export function StudentLiveClassRoom({
 
         <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
           {/* Status Badge */}
-          {isLive ? (
-            <span className="flex items-center gap-1.5 text-[11px] sm:text-xs font-black text-rose-400 border border-rose-500/40 bg-rose-950/60 px-2.5 sm:px-3 py-1 rounded-full shadow-sm shadow-rose-950">
-              <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
-              LIVE
-            </span>
-          ) : (
+          {/* No LIVE pill while live — the video itself shows it's live. */}
+          {isLive ? null : (
             <span className="flex items-center gap-1 text-[10px] sm:text-xs font-bold text-amber-400 border border-amber-500/40 bg-amber-950/60 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
               CONNECTING
@@ -1967,7 +1964,7 @@ export function StudentLiveClassRoom({
       {/* ========================================================================= */}
       <div className="lg:hidden flex-1 min-h-0 flex flex-col landscape:flex-row overflow-hidden bg-[#0b0d14] relative">
         {/* Mobile Media Area: In portrait takes top 40-45dvh; in LANDSCAPE takes 100% FULL SCREEN */}
-        <div className="w-full aspect-video max-h-[40dvh] sm:max-h-[45dvh] landscape:w-full landscape:h-full landscape:max-h-full landscape:aspect-auto shrink-0 bg-black relative flex items-center justify-center overflow-hidden border-b landscape:border-0 border-slate-800/80">
+        <div className="w-full aspect-video max-h-[40dvh] sm:max-h-[45dvh] landscape:w-auto landscape:flex-1 landscape:min-w-0 landscape:h-full landscape:max-h-full landscape:aspect-auto shrink-0 bg-black relative flex items-center justify-center overflow-hidden border-b landscape:border-0 border-slate-800/80">
           {/* Quick Fullscreen Rotate overlay button on top right of video in mobile */}
           <button
             type="button"
@@ -2118,7 +2115,8 @@ export function StudentLiveClassRoom({
             </div>
           ) : null}
 
-          {/* Floating pill in Landscape mode to open Chat/Polls without resizing the 100% video */}
+          {/* Landscape with the chat hidden: a small pill brings it back */}
+          {!mobileLandscapeShowChat && (
           <button
             type="button"
             onClick={() => setMobileLandscapeShowChat(true)}
@@ -2130,13 +2128,14 @@ export function StudentLiveClassRoom({
               <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
             )}
           </button>
+          )}
         </div>
 
         {/* In portrait: normal bottom half console. In landscape: floating slide-in drawer when requested */}
         <div
           className={`flex-1 min-h-0 bg-[#10121d] overflow-hidden ${
             mobileLandscapeShowChat
-              ? "landscape:absolute landscape:right-0 landscape:top-0 landscape:bottom-0 landscape:w-80 landscape:max-w-[85vw] landscape:z-40 landscape:shadow-2xl landscape:border-l landscape:border-slate-700 flex flex-col"
+              ? "landscape:w-72 landscape:max-w-[40vw] landscape:shrink-0 landscape:border-l landscape:border-slate-800 flex flex-col"
               : "portrait:flex landscape:hidden"
           }`}
         >
@@ -2150,7 +2149,7 @@ export function StudentLiveClassRoom({
               type="button"
               onClick={() => setMobileLandscapeShowChat(false)}
               className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition cursor-pointer"
-              title="Close chat drawer"
+              title="Hide chat"
             >
               <span className="material-symbols-outlined text-sm">close</span>
             </button>

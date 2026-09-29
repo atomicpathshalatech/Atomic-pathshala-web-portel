@@ -7,6 +7,7 @@ import { sessionChannel, teacherChannel, WB_EVENTS } from "@/lib/realtime/events
 import { BroadcastQuizCanvasOverlay, type BroadcastQuizData } from "@/components/live-class/BroadcastQuizCanvasOverlay";
 import { DesktopStageStreamer } from "@/components/live-class/DesktopStageStreamer";
 import { getDesktopBridge } from "@/lib/desktop/bridge";
+import { parseFreeCameraLayout } from "@/lib/live-class/stage-compositor";
 
 type StageData = {
   sessionId?: string;
@@ -111,6 +112,8 @@ function slideBackgroundStyle(background: string | null | undefined): React.CSSP
 
 function cameraCornerStyle(position: string | null | undefined): React.CSSProperties {
   const inset = 24;
+  const free = parseFreeCameraLayout(position);
+  if (free) return { left: `${free.x * 100}%`, top: `${free.y * 100}%` };
   switch (position) {
     case "UPPER_LEFT":
       return { top: inset, left: inset };

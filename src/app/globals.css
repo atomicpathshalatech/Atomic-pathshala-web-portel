@@ -478,3 +478,23 @@
 .ai-chat-scope .message-assistant {
   @apply bg-slate-100 text-slate-800 dark:bg-atomic-slate dark:text-slate-100;
 }
+
+/* Teacher live-class header: one slim, professional row of small controls
+   (the default pills were oversized). Scoped to the header only. */
+.teacher-compact-header :is(button, a, span.rounded-full, span.rounded-md, span.rounded-lg) {
+  font-size: 11px !important;
+  line-height: 16px !important;
+  padding: 3px 8px !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  animation: none !important;
+}
+/* status dots stay dots */
+.teacher-compact-header span:empty {
+  padding: 0 !important;
+}
+.teacher-compact-header .material-symbols-outlined {
+  font-size: 15px !important;
+  padding: 0 !important;
+}
+.teacher-compact-header h1 { font-size: 13px; }
