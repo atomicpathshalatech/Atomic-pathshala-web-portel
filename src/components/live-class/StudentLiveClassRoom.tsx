@@ -1659,7 +1659,8 @@ export function StudentLiveClassRoom({
       className={`fixed inset-0 w-full flex flex-col overflow-hidden select-none z-50 ${isThemeDark ? "bg-[#0b0d14] text-white" : "bg-slate-900 text-slate-100"}`}
     >
       {/* Top Authoritative Studio Header */}
-      <header className="h-12 sm:h-14 px-3 sm:px-4 shrink-0 flex items-center justify-between border-b border-slate-800/80 bg-[#10131d] z-20">
+      {/* Phones/tablets: no header — the class video gets the room (hand raise is in the panel below, rotate/fullscreen in the player strip). */}
+      <header className="h-12 sm:h-14 px-3 sm:px-4 shrink-0 hidden lg:flex items-center justify-between border-b border-slate-800/80 bg-[#10131d] z-20">
         <div className="flex items-center gap-2.5 min-w-0">
           <Link
             href="/schedule"
@@ -1850,6 +1851,7 @@ export function StudentLiveClassRoom({
             {isYouTube && activeViewMode === "STREAM" ? (
               <div className="w-full h-full max-w-full max-h-full aspect-video flex items-center justify-center">
                 <YouTubeLivePlayer
+                shareUrl={typeof window !== "undefined" ? `${window.location.origin}/live-class/${batchScheduleId}` : undefined}
                   youtubeVideoId={wbSession?.youtubeVideoId ?? null}
                   title={scheduleTitle}
                   subject={subject || batchName}
@@ -1964,53 +1966,12 @@ export function StudentLiveClassRoom({
       {/* ========================================================================= */}
       <div className="lg:hidden flex-1 min-h-0 flex flex-col landscape:flex-row overflow-hidden bg-[#0b0d14] relative">
         {/* Mobile Media Area: In portrait takes top 40-45dvh; in LANDSCAPE takes 100% FULL SCREEN */}
-        <div className="w-full aspect-video max-h-[40dvh] sm:max-h-[45dvh] landscape:w-auto landscape:flex-1 landscape:min-w-0 landscape:h-full landscape:max-h-full landscape:aspect-auto shrink-0 bg-black relative flex items-center justify-center overflow-hidden border-b landscape:border-0 border-slate-800/80">
-          {/* Quick Fullscreen Rotate overlay button on top right of video in mobile */}
-          <button
-            type="button"
-            onClick={toggleMobileOrientation}
-            className="absolute top-2 right-2 z-20 px-2 py-1 rounded-lg bg-black/60 hover:bg-black/80 active:scale-95 text-white/90 hover:text-white border border-white/20 flex items-center gap-1 text-[11px] font-bold shadow-lg backdrop-blur-xs transition cursor-pointer"
-            title="Toggle Landscape Fullscreen"
-          >
-            <span className="material-symbols-outlined text-sm">
-              {isFullscreen ? "fullscreen_exit" : "screen_rotation"}
-            </span>
-            <span className="hidden xs:inline">{isFullscreen ? "Exit" : "Full Screen"}</span>
-          </button>
-
-          {/* View Mode Switcher on Mobile for YouTube classes */}
-          {isYouTube && (
-            <div className="absolute top-2 left-2 z-20 flex items-center rounded-lg bg-black/80 border border-white/20 p-0.5 shadow-lg backdrop-blur-xs">
-              <button
-                type="button"
-                onClick={() => setActiveViewMode("STREAM")}
-                className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold transition cursor-pointer ${
-                  activeViewMode === "STREAM"
-                    ? "bg-red-600 text-white shadow-sm"
-                    : "text-slate-300 hover:text-white"
-                }`}
-              >
-                <span className="material-symbols-outlined text-xs">smart_display</span>
-                <span>Stream</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveViewMode("WHITEBOARD")}
-                className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold transition cursor-pointer ${
-                  activeViewMode === "WHITEBOARD"
-                    ? "bg-blue-600 text-white shadow-sm"
-                    : "text-slate-300 hover:text-white"
-                }`}
-              >
-                <span className="material-symbols-outlined text-xs">draw</span>
-                <span>Board</span>
-              </button>
-            </div>
-          )}
-
-          {isYouTube && activeViewMode === "STREAM" ? (
+        <div className="w-full aspect-video max-h-[45vh] landscape:w-auto landscape:flex-1 landscape:min-w-0 landscape:h-full landscape:max-h-full landscape:aspect-auto shrink-0 bg-black relative flex items-center justify-center overflow-hidden border-b landscape:border-0 border-slate-800/80">
+          {isYouTube ? (
             <div className="relative w-full h-full">
               <YouTubeLivePlayer
+                shareUrl={typeof window !== "undefined" ? `${window.location.origin}/live-class/${batchScheduleId}` : undefined}
+                onFullscreen={toggleMobileOrientation}
                 youtubeVideoId={wbSession?.youtubeVideoId ?? null}
                 title={scheduleTitle}
                 subject={subject || batchName}

@@ -405,6 +405,19 @@ export function MessagesPanel({
               hash = (hash + m.authorUserId.charCodeAt(i)) % avatarBgColors.length;
             }
             const avatarBg = isTeacher ? "bg-[#a33900]" : mine ? "bg-blue-600" : avatarBgColors[hash];
+            // Name colours come from this panel's own theme (the live rooms are
+            // dark regardless of the site's dark-mode class, so "dark:" variants
+            // left names near-black on a dark panel — unreadable, esp. for the
+            // teacher). Each student gets a distinct, high-contrast colour.
+            const dark = theme === "dark";
+            const studentNameColors = dark
+              ? ["text-sky-300", "text-emerald-300", "text-amber-300", "text-pink-300", "text-violet-300", "text-lime-300", "text-cyan-300"]
+              : ["text-sky-700", "text-emerald-700", "text-amber-700", "text-pink-700", "text-violet-700", "text-lime-700", "text-cyan-700"];
+            const nameColor = isTeacher
+              ? dark ? "text-orange-300" : "text-[#992600]"
+              : mine
+              ? dark ? "text-blue-300" : "text-blue-700"
+              : studentNameColors[hash % studentNameColors.length];
 
             const timeStr = m.createdAt
               ? new Date(m.createdAt).toLocaleTimeString([], {
@@ -436,15 +449,7 @@ export function MessagesPanel({
                 <div className="flex-1 min-w-0">
                   {/* Name line with WCAG high contrast */}
                   <div className="flex items-center gap-1.5 leading-none">
-                    <span
-                      className={`text-xs font-bold truncate ${
-                        isTeacher
-                          ? "text-[#992600] dark:text-orange-400"
-                          : mine
-                          ? "text-blue-700 dark:text-blue-400"
-                          : "text-slate-900 dark:text-slate-100"
-                      }`}
-                    >
+                    <span className={`text-xs font-bold truncate ${nameColor}`}>
                       {m.authorName}
                     </span>
 
@@ -468,7 +473,7 @@ export function MessagesPanel({
                     )}
 
                     {timeStr && (
-                      <span className="text-[10px] text-slate-400 dark:text-slate-500 ml-auto tabular-nums">
+                      <span className={`text-[10px] ml-auto tabular-nums ${dark ? "text-slate-500" : "text-slate-400"}`}>
                         {timeStr}
                       </span>
                     )}
@@ -491,9 +496,13 @@ export function MessagesPanel({
                   <div
                     className={`mt-1.5 rounded-2xl px-3.5 py-2 text-xs sm:text-sm break-words leading-relaxed shadow-xs ${
                       isTeacher
-                        ? "bg-orange-50/80 dark:bg-orange-950/30 border border-orange-200/80 dark:border-orange-900/50 text-slate-900 dark:text-slate-100 rounded-tl-sm"
+                        ? dark
+                          ? "bg-orange-950/30 border border-orange-900/50 text-slate-100 rounded-tl-sm"
+                          : "bg-orange-50/80 border border-orange-200/80 text-slate-900 rounded-tl-sm"
                         : mine
-                        ? "bg-blue-50/80 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-900/50 text-slate-900 dark:text-slate-100 rounded-tl-sm"
+                        ? dark
+                          ? "bg-blue-950/30 border border-blue-900/50 text-slate-100 rounded-tl-sm"
+                          : "bg-blue-50/80 border border-blue-200/80 text-slate-900 rounded-tl-sm"
                         : theme === "dark"
                         ? "bg-[#181a24] border border-[#2d2e3b] text-slate-200 rounded-tl-sm"
                         : "bg-slate-100/90 border border-slate-200/90 text-slate-800 rounded-tl-sm"

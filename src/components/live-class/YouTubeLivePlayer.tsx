@@ -11,6 +11,10 @@ export type YouTubeLivePlayerProps = {
   livePhase: string;
   isTeacher?: boolean;
   onRefresh?: () => void;
+  /** Host-provided fullscreen (e.g. the student room: whole page + landscape, so chat can sit beside the video). */
+  onFullscreen?: () => void;
+  /** Link to this class on Atomic's own domain (never YouTube) — offered in the ⋮ menu. */
+  shareUrl?: string;
   className?: string;
   children?: React.ReactNode;
 };
@@ -26,6 +30,8 @@ export function YouTubeLivePlayer({
   livePhase,
   isTeacher,
   onRefresh,
+  onFullscreen,
+  shareUrl,
   className = "",
   children,
 }: YouTubeLivePlayerProps) {
@@ -41,6 +47,24 @@ export function YouTubeLivePlayer({
   const [hasEmbedError, setHasEmbedError] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [shareNote, setShareNote] = useState<string | null>(null);
+
+  const shareClass = async () => {
+    setShowMoreMenu(false);
+    if (!shareUrl) return;
+    try {
+      if (typeof navigator !== "undefined" && navigator.share) {
+        await navigator.share({ title, text: `Join the live class: ${title}`, url: shareUrl });
+        return;
+      }
+      await navigator.clipboard.writeText(shareUrl);
+      setShareNote("Class link copied");
+    } catch {
+      setShareNote(shareUrl);
+    }
+    setTimeout(() => setShareNote(null), 3000);
+  };
   const [isLiveEdge, setIsLiveEdge] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
@@ -518,7 +542,10 @@ export function YouTubeLivePlayer({
               );
             } catch {}
           }}
-          className="w-[102%] h-[124%] max-w-none border-0 pointer-events-none scale-[1.12] transition-transform duration-300"
+          // Taller than 16:9 at full width: YouTube letterboxes the video in the
+          // middle and puts its own title/share/logo on the black bands, which
+          // the container crops. (The old zoom-crop cut the edges of the board.)
+          className="w-full h-[160%] max-w-none shrink-0 border-0 pointer-events-none"
         />
 
         {/* Interaction transparent shield: intercepts user clicks so they NEVER open or redirect to YouTube */}
@@ -789,6 +816,12 @@ export function YouTubeLivePlayer({
         </button>
       )}
 
+      {shareNote && (
+        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-30 px-3 py-1 rounded-full bg-black/80 text-white text-[11px] max-w-[90%] truncate">
+          {shareNote}
+        </div>
+      )}
+
       {/* ----------------- 5. SLIM CONTROL STRIP (transparent, fades out) ----------------- */}
       {isStreamLive && (
         <div
@@ -857,7 +890,22 @@ export function YouTubeLivePlayer({
                   ))}
                 </div>
               )}
-              <button type="button" onClick={toggleFullscreen} className="p-1 cursor-pointer" title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}>
+              {shareUrl && (
+                <div className="relative">
+                  <button type="button" onClick={() => setShowMoreMenu((v) => !v)} className="p-1 cursor-pointer" title="More">
+                    <span className="material-symbols-outlined text-[18px]">more_vert</span>
+                  </button>
+                  {showMoreMenu && (
+                    <div className="absolute bottom-full right-0 mb-1 w-36 bg-black/85 rounded-lg p-1 z-30 backdrop-blur-sm">
+                      <button type="button" onClick={shareClass} className="w-full flex items-center gap-1.5 text-left px-2 py-1.5 rounded text-[11px] hover:bg-white/10 cursor-pointer">
+                        <span className="material-symbols-outlined text-[15px]">share</span>
+                        Share class
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+              <button type="button" onClick={onFullscreen ?? toggleFullscreen} className="p-1 cursor-pointer" title={isFullscreen ? "Exit fullscreen" : "Fullscreen / rotate"}>
                 <span className="material-symbols-outlined text-[18px]">{isFullscreen ? "fullscreen_exit" : "fullscreen"}</span>
               </button>
             </div>
