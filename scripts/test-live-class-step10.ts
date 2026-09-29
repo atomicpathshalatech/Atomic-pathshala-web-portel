@@ -56,6 +56,20 @@ assert(pickVideoTransport("junk", "YOUTUBE", false) === "YOUTUBE", "Junk request
   assert(ck.detectKeyColor(grey, 100, 60) === null, "Auto-detect refuses a grey wall (no screen)");
   const bad = ck.sanitizeChroma({ enabled: 1, keyColor: "red", similarity: 9, gamma: -3, denoise: 7.6 });
   assert(bad.enabled === true && bad.keyColor === ck.DEFAULT_CHROMA.keyColor && bad.similarity === 1 && bad.gamma === 0.5 && bad.denoise === 3, "Chroma settings from storage/IPC are clamped to safe ranges");
+  const vfm = require("../src/lib/live-class/voice-filter") as typeof import("../src/lib/live-class/voice-filter");
+  const P = vfm.DEFAULT_GATE;
+  const run = (levels: number[], start = { open: false, holdLeftMs: 0, gain: Math.pow(10, P.floorDb / 20) }) =>
+    levels.reduce((st, db) => vfm.gateStep(st, db, 10, P), start);
+  const speaking = run(Array(30).fill(-25));
+  assert(speaking.open && speaking.gain > 0.95, "Close-talk voice (-25 dBFS) opens the gate fully");
+  const roomNoise = run(Array(100).fill(-55));
+  assert(!roomNoise.open && roomNoise.gain < 0.03, "Room noise ~1 m away (-55 dBFS) stays gated down (~-32 dB)");
+  const pause = run(Array(15).fill(-60), speaking);
+  assert(pause.open && pause.gain > 0.9, "Short pause between words (150 ms) doesn't chop the voice (hold)");
+  const quiet = run(Array(90).fill(-60), speaking);
+  assert(!quiet.open && quiet.gain < 0.1, "After speech ends the gate closes smoothly within ~0.9 s (hold + soft fade, no background hiss)");
+  const soft = run(Array(60).fill(-46), speaking);
+  assert(soft.open, "Softer trailing words (between close and open levels) keep the gate open");
   const edge = cameraRect("FREE:0.990,0.990,0.300", 1920, 1080, 280, 38);
   assert(edge.x + edge.w <= 1920 && edge.y + edge.h <= 1080, "A bubble dragged to the edge stays inside the video");
 }

@@ -40,6 +40,42 @@ writeFileSync(
   entry,
   `import { DesktopClassStreamer } from ${JSON.stringify(join(repo, "src", "lib", "live-class", "desktop-streamer.ts").replace(/\\/g, "/"))};
 (window as any).DesktopClassStreamer = DesktopClassStreamer;
+import { createVoiceFilter } from ${JSON.stringify(join(repo, "src", "lib", "live-class", "voice-filter.ts").replace(/\\/g, "/"))};
+// Voice filter check (real AudioWorklet in real Electron): loud close-talk
+// "voice" passes, quiet ~1 m "room noise" is pulled down.
+(window as any).voiceCheck = async () => {
+  const measure = async (amp: number) => {
+    const gen = new AudioContext({ sampleRate: 48000 });
+    await gen.resume();
+    const osc = gen.createOscillator();
+    osc.frequency.value = 440;
+    const g = gen.createGain();
+    g.gain.value = amp;
+    const d = gen.createMediaStreamDestination();
+    osc.connect(g).connect(d);
+    osc.start();
+    const vf = await createVoiceFilter(d.stream.getAudioTracks()[0]!);
+    const meter = new AudioContext({ sampleRate: 48000 });
+    await meter.resume();
+    const an = meter.createAnalyser();
+    an.fftSize = 2048;
+    meter.createMediaStreamSource(new MediaStream([vf.track])).connect(an);
+    await new Promise((r) => setTimeout(r, 1500));
+    const buf = new Float32Array(an.fftSize);
+    an.getFloatTimeDomainData(buf);
+    let s = 0;
+    for (const x of buf) s += x * x;
+    const rms = Math.sqrt(s / buf.length);
+    osc.stop();
+    await vf.stop();
+    await gen.close();
+    await meter.close();
+    return { filtered: vf.filtered, outDb: 20 * Math.log10(rms + 1e-9), inDb: 20 * Math.log10(amp / Math.SQRT2) };
+  };
+  const voice = await measure(0.3);
+  const noise = await measure(0.004);
+  return { voice, noise };
+};
 import { ChromaKeyer, DEFAULT_CHROMA } from ${JSON.stringify(join(repo, "src", "lib", "live-class", "chroma-key.ts").replace(/\\/g, "/"))};
 // Chroma check (real GPU keyer in real Electron): green screen + dim, grainy
 // green (low light / cheap camera) must go transparent; the "teacher" stays.
@@ -121,6 +157,7 @@ const teacherHtml =
     const bridge = window.atomicDesktop;
     const isStage = bridge.stage.isStage;
     const chroma = window.chromaCheck ? window.chromaCheck() : null;
+    const voice = window.voiceCheck ? await window.voiceCheck() : null;
     let firstStreamingAt = null;
     bridge.encoder.onStatus((st) => { statuses.push(st); if (st.state === "streaming" && !firstStreamingAt) firstStreamingAt = Date.now(); });
     const first = await bridge.stage.open({ stagePath: "/stage.html", serverUrl: "${RTMP_URL}", streamKey: "${KEY}" });
@@ -132,7 +169,7 @@ const teacherHtml =
     const streamedSeconds = firstStreamingAt ? (Date.now() - firstStreamingAt) / 1000 : 0;
     await bridge.stage.close();
     const withEncoder = statuses.find((x) => x.encoder);
-    window.__selftest = { ok: true, statuses, streamedSeconds, control, chroma, isStage, reused: again.reused, firstReused: first.reused, encoder: withEncoder ? withEncoder.encoder : null };
+    window.__selftest = { ok: true, statuses, streamedSeconds, control, chroma, voice, isStage, reused: again.reused, firstReused: first.reused, encoder: withEncoder ? withEncoder.encoder : null };
   } catch (e) {
     window.__selftest = { ok: false, error: String((e && e.message) || e), statuses };
   }
@@ -213,6 +250,9 @@ else {
   assert(ch?.screen === 0 && ch?.dimScreen <= 10, "Green screen AND dim/grainy green (low light, cheap camera) removed", JSON.stringify(ch));
   assert(ch?.teacher === 255, "Teacher kept fully opaque", JSON.stringify(ch));
   assert(ch?.black === 255 && ch?.grey === 255, "Black hair / grey clothes never keyed out", JSON.stringify(ch));
+  const vc = self?.voice;
+  assert(vc?.voice?.filtered === true && vc.voice.outDb > vc.voice.inDb - 12, "Voice filter runs (AudioWorklet) and close-talk voice passes", JSON.stringify(vc));
+  assert(vc && vc.noise.outDb < vc.noise.inDb - 20, "Quiet room noise (~1 m away) pulled down by 20+ dB", JSON.stringify(vc));
   assert(self?.reused === true, "Re-opening the same stage (teacher page refresh) reuses it — stream not restarted");
 }
 assert(!JSON.stringify(self ?? {}).includes(KEY), "Stream key not echoed back to the page in any status");

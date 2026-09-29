@@ -20,6 +20,7 @@
  */
 
 import { ChromaKeyer, type ChromaSettings } from "@/lib/live-class/chroma-key";
+import { MIC_CONSTRAINTS, createVoiceFilter } from "@/lib/live-class/voice-filter";
 
 export type CameraShape = "CIRCULAR" | "SQUARE";
 
@@ -243,6 +244,7 @@ export class StageCompositor {
   private cameraVideo: HTMLVideoElement | null = null;
   private logoImage: HTMLImageElement | null = null;
   private keyer: ChromaKeyer | null = null;
+  private stopVoiceFilter: (() => Promise<void>) | null = null;
 
   /** The real Atomic Pathshala logo for the brand band (same origin: never taints the canvas). */
   private brandLogo(): HTMLImageElement | null {
@@ -336,15 +338,20 @@ export class StageCompositor {
       try {
         const mic = await navigator.mediaDevices.getUserMedia({
           audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
+            ...MIC_CONSTRAINTS,
             ...(media.microphoneDeviceId ? { deviceId: { exact: media.microphoneDeviceId } } : {}),
           },
           video: false,
         });
         this.mediaStreams.push(mic);
-        for (const track of mic.getAudioTracks()) output.addTrack(track);
+        // Voice filter: rumble/hiss filters, close-talk noise gate, compressor.
+        const raw = mic.getAudioTracks()[0];
+        if (raw) {
+          const vf = await createVoiceFilter(raw);
+          this.stopVoiceFilter = vf.stop;
+          if (!vf.filtered) this.warnings.push("Voice filter unavailable — sending the microphone unfiltered.");
+          output.addTrack(vf.track);
+        }
       } catch (err) {
         this.warnings.push(`Microphone unavailable: ${err instanceof Error ? err.message : String(err)}`);
       }
@@ -379,6 +386,8 @@ export class StageCompositor {
   stop() {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    void this.stopVoiceFilter?.();
+    this.stopVoiceFilter = null;
     this.frameWriter?.close().catch(() => undefined);
     this.frameWriter = null;
     for (const s of this.mediaStreams) s.getTracks().forEach((t) => t.stop());
