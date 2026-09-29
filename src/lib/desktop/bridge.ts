@@ -25,6 +25,11 @@ export interface DesktopEncoderStatus {
   error?: string;
 }
 
+export interface StageControl {
+  cameraOff: boolean;
+  micMuted: boolean;
+}
+
 export interface AtomicDesktopBridge {
   isDesktop: true;
   info(): Promise<{ appVersion: string; electron: string; platform: string; arch: string }>;
@@ -47,7 +52,11 @@ export interface AtomicDesktopBridge {
     open(opts: { stagePath: string; serverUrl: string; streamKey: string; profile?: "1080p" | "720p" }): Promise<{ opened: boolean; reused: boolean }>;
     close(): Promise<{ closed: boolean }>;
     /** Stage window only: what to send where. */
-    job(): Promise<{ serverUrl: string; streamKey: string; profile: "1080p" | "720p" } | null>;
+    job(): Promise<{ serverUrl: string; streamKey: string; profile: "1080p" | "720p"; control?: StageControl } | null>;
+    /** Teacher window: switch the camera off / mute the mic in the class stream. */
+    control?(state: Partial<StageControl>): Promise<StageControl>;
+    /** Stage window: listen for those switches. */
+    onControl?(listener: (state: StageControl) => void): () => void;
   };
 }
 

@@ -42,6 +42,12 @@ assert(pickVideoTransport("junk", "YOUTUBE", false) === "YOUTUBE", "Junk request
   assert(box.x === 1344 && box.y === 54 && box.w === 324 && box.h === 324, "Stage draws the camera where and as big as the teacher placed it", JSON.stringify(box));
   const corner = cameraRect("LOWER_LEFT", 1920, 1080, 280, 38);
   assert(corner.x === 38 && corner.y === 1080 - 38 - 280, "Corner layouts still work");
+  const { isBrandedTemplate } = require("../src/lib/live-class/stage-compositor") as typeof import("../src/lib/live-class/stage-compositor");
+  assert(isBrandedTemplate("atomic_white") && isBrandedTemplate("atomic_dark") && isBrandedTemplate(null), "Atomic slides (and the default) carry the logo band");
+  assert(!isBrandedTemplate("blank") && !isBrandedTemplate("black") && !isBrandedTemplate("grid") && !isBrandedTemplate("dotted"), "Blank / black / grid / dots stay completely clean");
+  const { INBUILT_SLIDE_TEMPLATES } = require("../src/lib/whiteboard/templates") as typeof import("../src/lib/whiteboard/templates");
+  const ids = INBUILT_SLIDE_TEMPLATES.map((t) => t.id);
+  assert(["blank", "light", "black", "ruled", "grid", "dotted"].every((id) => ids.includes(id)), "Template picker offers blank, white, black, lines, square grid and dots", ids.join(","));
   const edge = cameraRect("FREE:0.990,0.990,0.300", 1920, 1080, 280, 38);
   assert(edge.x + edge.w <= 1920 && edge.y + edge.h <= 1080, "A bubble dragged to the edge stays inside the video");
 }

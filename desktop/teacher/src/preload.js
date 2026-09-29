@@ -43,6 +43,14 @@ if (window.location.origin === trustedOrigin) {
       open: (opts) => ipcRenderer.invoke("stage:open", opts),
       close: () => ipcRenderer.invoke("stage:close"),
       job: () => ipcRenderer.invoke("stage:job"),
+      /** Teacher window: camera off / mic muted in the class stream. */
+      control: (state) => ipcRenderer.invoke("stage:control", state),
+      /** Stage window: hear those switches. */
+      onControl: (listener) => {
+        const handler = (_event, state) => listener(state);
+        ipcRenderer.on("stage:control", handler);
+        return () => ipcRenderer.removeListener("stage:control", handler);
+      },
     },
   });
 }

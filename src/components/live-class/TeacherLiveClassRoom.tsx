@@ -36,7 +36,7 @@ import { extractYouTubeVideoId } from "@/lib/live-class/youtube";
 import { StagePreview } from "@/components/live-class/StagePreview";
 import { getDesktopBridge, type DesktopEncoderStatus } from "@/lib/desktop/bridge";
 import { DesktopClassStreamer } from "@/lib/live-class/desktop-streamer";
-import { formatFreeCameraLayout } from "@/lib/live-class/stage-compositor";
+import { formatFreeCameraLayout, isBrandedTemplate } from "@/lib/live-class/stage-compositor";
 import { BroadcastQuizCanvasOverlay } from "@/components/live-class/BroadcastQuizCanvasOverlay";
 
 // Size (px) of the floating self-camera bubble — draggable & resizable (120px to 400px)
@@ -236,8 +236,11 @@ function slideBackgroundStyle(background: string | undefined): React.CSSProperti
         backgroundImage: "radial-gradient(#9ca3af 1.5px, transparent 1.5px)",
         backgroundSize: "20px 20px",
       };
-    case "light":
+    case "black":
+      return { backgroundColor: "#000000" };
     case "blank":
+      return { backgroundColor: "#f8fafc" };
+    case "light":
     default:
       return { backgroundColor: "#ffffff" };
   }
@@ -501,6 +504,8 @@ export function TeacherLiveClassRoom({
   // Camera layout mode: on the PPT/Whiteboard slide canvas by default
   const [cameraDocked, setCameraDocked] = useState<boolean>(false);
   const [cameraHidden, setCameraHidden] = useState<boolean>(false);
+  // Emergency mic mute for the CLASS STREAM (what students hear).
+  const [streamMicMuted, setStreamMicMuted] = useState<boolean>(false);
   const [chromaKeyEnabled, setChromaKeyEnabled] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("atomic_teacher_chroma_key") === "true";
@@ -865,6 +870,7 @@ export function TeacherLiveClassRoom({
       boardLayers: [baseCanvasRef.current, activeCanvasRef.current].filter((c): c is HTMLCanvasElement => Boolean(c)),
       backgroundColor: bgColor && bgColor !== "rgba(0, 0, 0, 0)" ? bgColor : "#ffffff",
       backgroundImageUrl: bg && /^https?:\/\//.test(bg) ? bg : null,
+      backgroundTemplate: bg && !/^https?:\/\//.test(bg) ? bg : null,
       cameraShape: stageInfoRef.current.cameraShape === "SQUARE" ? ("SQUARE" as const) : ("CIRCULAR" as const),
       cameraPosition: stageInfoRef.current.cameraPosition || "UPPER_RIGHT",
       showCamera: true,
@@ -926,6 +932,18 @@ export function TeacherLiveClassRoom({
     await streamer?.stop().catch(() => undefined);
     setDesktopStream(null);
   }, []);
+
+  // Cam / Mic switches reach the class stream itself: the app's offscreen
+  // stage (current app) or an in-page streamer (older app).
+  useEffect(() => {
+    const bridge = getDesktopBridge();
+    bridge?.stage?.control?.({ cameraOff: cameraHidden, micMuted: streamMicMuted }).catch(() => undefined);
+    const inPage = desktopStreamerRef.current as unknown as { offscreen?: boolean; setCameraOff?: (v: boolean) => void; setMicMuted?: (v: boolean) => void } | null;
+    if (inPage && !inPage.offscreen) {
+      inPage.setCameraOff?.(cameraHidden);
+      inPage.setMicMuted?.(streamMicMuted);
+    }
+  }, [cameraHidden, streamMicMuted, desktopStream?.runId]);
 
   // Leaving/refreshing this page: an in-page streamer dies with the page; the
   // offscreen stage keeps the class on air (the next page reuses it).
@@ -2673,8 +2691,8 @@ export function TeacherLiveClassRoom({
       </aside>
 
       {/* Header */}
-      <header className="live-header teacher-compact-header flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 sm:gap-x-4 px-3 sm:px-4 lg:px-6 py-1.5 border-b border-[#2d2e3b] bg-[#1a1b23] min-w-0">
-        <div className="min-w-0 flex flex-wrap items-center gap-x-3 gap-y-1">
+      <header className="live-header teacher-compact-header flex flex-nowrap items-center justify-between gap-x-2 sm:gap-x-3 px-3 sm:px-4 lg:px-6 py-1.5 border-b border-[#2d2e3b] bg-[#1a1b23] min-w-0">
+        <div className="min-w-0 shrink flex flex-nowrap items-center gap-x-3">
           <div className="min-w-0">
             <p className="text-[11px] text-gray-500 truncate">{batchName}</p>
             <h1 className="text-sm font-medium text-gray-200 truncate">{scheduleTitle}</h1>
@@ -2701,10 +2719,26 @@ export function TeacherLiveClassRoom({
           ) : null}
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+        {/* One line always — before and after Start (it used to wrap to two). Overflow scrolls sideways. */}
+        <div className="flex flex-nowrap items-center gap-1.5 min-w-0 overflow-x-auto teacher-header-scroll">
           <SaveIndicator state={saveState} />
 
-          {/* Quick Camera Toggle (Ctrl+X) */}
+          {/* Stream mic mute (students stop hearing the teacher) */}
+          <button
+            type="button"
+            onClick={() => setStreamMicMuted((m) => !m)}
+            className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border transition ${
+              streamMicMuted
+                ? "bg-rose-500/20 text-rose-300 border-rose-500/40 hover:bg-rose-500/30"
+                : "bg-slate-800/80 text-slate-300 border-slate-700/80 hover:bg-slate-700 hover:text-white"
+            }`}
+            title={streamMicMuted ? "Unmute microphone for students" : "Mute microphone for students"}
+          >
+            <span className="material-symbols-outlined text-sm">{streamMicMuted ? "mic_off" : "mic"}</span>
+            <span className="hidden xl:inline">{streamMicMuted ? "Muted" : "Mic"}</span>
+          </button>
+
+          {/* Quick Camera Toggle (Ctrl+X) — also takes the camera out of the class video */}
           <button
             type="button"
             onClick={() => setCameraHidden((prev) => !prev)}
@@ -3297,13 +3331,13 @@ export function TeacherLiveClassRoom({
             ...(isBackgroundImageUrl(currentPage?.background) ? undefined : slideBackgroundStyle(currentPage?.background)),
           }}
         >
-          {/* Atomic Pathshala Sleek Brand Header */}
-          {!isBackgroundImageUrl(currentPage?.background) && (
+          {/* Atomic Pathshala brand band — only on the Atomic slides; plain
+              templates (blank, white, black, lines, grid, dots) stay clean. */}
+          {!isBackgroundImageUrl(currentPage?.background) && isBrandedTemplate(currentPage?.background) && (
             <div className="absolute top-1.5 left-3 right-3 z-10 flex items-center justify-between pointer-events-none select-none opacity-90">
               {/* Atomic Logo Icon */}
-              <div className="w-6 h-6 bg-white/95 rounded-lg shadow-sm border border-slate-200 flex items-center justify-center">
-                <span className="text-orange-500 font-black text-xs tracking-tighter">A</span>
-              </div>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/brand/logo.png" alt="Atomic Pathshala" className="h-6 w-auto object-contain" />
 
               {/* Horizontal Accent Line */}
               <div className="flex-1 mx-3 h-[2px] bg-gradient-to-r from-orange-500 via-slate-800 to-transparent rounded-full opacity-60" />
@@ -3387,10 +3421,14 @@ export function TeacherLiveClassRoom({
                       top: `${(cursorPos.y / VIRTUAL_HEIGHT) * 100}%`,
                       width: `${(diameterVirtualPx / VIRTUAL_WIDTH) * 100}%`,
                       height: `${(diameterVirtualPx / VIRTUAL_HEIGHT) * 100}%`,
+                      // Never smaller than 10 px, with a dark+white double ring:
+                      // a thin pen used to give a speck you could not find.
+                      minWidth: 10,
+                      minHeight: 10,
                       transform: "translate(-50%, -50%)",
-                      border: isEraser ? "1.5px solid rgba(30,30,30,0.65)" : "1px solid rgba(255,255,255,0.7)",
+                      border: isEraser ? "1.5px solid rgba(30,30,30,0.65)" : "none",
                       backgroundColor: isEraser ? "rgba(255,255,255,0.35)" : color,
-                      boxShadow: isEraser ? "0 0 0 1px rgba(255,255,255,0.5)" : "none",
+                      boxShadow: isEraser ? "0 0 0 1px rgba(255,255,255,0.5)" : "0 0 0 1.5px rgba(0,0,0,0.7), 0 0 0 3px rgba(255,255,255,0.9)",
                     }}
                   />
                 );

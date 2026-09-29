@@ -1410,26 +1410,42 @@ export class CanvasEngine {
   private drawLaser(pts: { x: number; y: number }[], opacity: number): void {
     if (pts.length < 1 || opacity <= 0) return;
     const ctx = this.activeCtx;
+    // Sized to the board (a fixed 16 px vanished once the board was scaled
+    // down for phones / the class video) and drawn normally: the old additive
+    // ("lighter") mode turned red + white into white, so on white slides the
+    // pointer was nearly invisible.
+    const k = Math.max(1, ctx.canvas.width / 960);
     ctx.save();
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    ctx.globalCompositeOperation = "lighter"; // additive => bright on white
-    ctx.shadowColor = "rgba(255,60,60,0.95)";
-    // outer halo
-    ctx.strokeStyle = `rgba(255,80,80,${0.35 * opacity})`;
-    ctx.shadowBlur = 26;
-    ctx.lineWidth = 16;
+    ctx.globalCompositeOperation = "source-over";
+    ctx.shadowColor = `rgba(255,30,30,${0.9 * opacity})`;
+    // soft red glow
+    ctx.strokeStyle = `rgba(255,40,40,${0.28 * opacity})`;
+    ctx.shadowBlur = 18 * k;
+    ctx.lineWidth = 22 * k;
     this.laserPath(ctx, pts);
-    // mid glow
-    ctx.strokeStyle = `rgba(255,120,120,${0.6 * opacity})`;
-    ctx.shadowBlur = 14;
-    ctx.lineWidth = 8;
+    // solid red body
+    ctx.strokeStyle = `rgba(235,20,20,${0.95 * opacity})`;
+    ctx.shadowBlur = 8 * k;
+    ctx.lineWidth = 7 * k;
     this.laserPath(ctx, pts);
     // bright core
-    ctx.strokeStyle = `rgba(255,255,255,${0.95 * opacity})`;
-    ctx.shadowBlur = 6;
-    ctx.lineWidth = 3;
+    ctx.strokeStyle = `rgba(255,235,235,${0.95 * opacity})`;
+    ctx.shadowBlur = 0;
+    ctx.lineWidth = 2.5 * k;
     this.laserPath(ctx, pts);
+    // the tip: a clear dot so the exact position is never in doubt
+    const tip = pts[pts.length - 1]!;
+    ctx.shadowBlur = 14 * k;
+    ctx.fillStyle = `rgba(235,20,20,${opacity})`;
+    ctx.beginPath();
+    ctx.arc(tip.x, tip.y, 9 * k, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.lineWidth = 2 * k;
+    ctx.strokeStyle = `rgba(255,255,255,${opacity})`;
+    ctx.stroke();
     ctx.restore();
   }
 

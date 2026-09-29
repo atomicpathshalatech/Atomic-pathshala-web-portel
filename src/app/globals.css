@@ -498,3 +498,7 @@
   padding: 0 !important;
 }
 .teacher-compact-header h1 { font-size: 13px; }
+
+.teacher-compact-header > * { white-space: nowrap; }
+.teacher-header-scroll { scrollbar-width: none; }
+.teacher-header-scroll::-webkit-scrollbar { display: none; }

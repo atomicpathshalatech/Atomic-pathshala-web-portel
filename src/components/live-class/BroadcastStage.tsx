@@ -7,7 +7,7 @@ import { sessionChannel, teacherChannel, WB_EVENTS } from "@/lib/realtime/events
 import { BroadcastQuizCanvasOverlay, type BroadcastQuizData } from "@/components/live-class/BroadcastQuizCanvasOverlay";
 import { DesktopStageStreamer } from "@/components/live-class/DesktopStageStreamer";
 import { getDesktopBridge } from "@/lib/desktop/bridge";
-import { parseFreeCameraLayout } from "@/lib/live-class/stage-compositor";
+import { isBrandedTemplate, parseFreeCameraLayout } from "@/lib/live-class/stage-compositor";
 
 type StageData = {
   sessionId?: string;
@@ -104,6 +104,10 @@ function slideBackgroundStyle(background: string | null | undefined): React.CSSP
         backgroundImage: "radial-gradient(#9ca3af 1.5px, transparent 1.5px)",
         backgroundSize: "20px 20px",
       };
+    case "black":
+      return { backgroundColor: "#000000" };
+    case "blank":
+      return { backgroundColor: "#f8fafc" };
     case "light":
     default:
       return { backgroundColor: "#ffffff" };
@@ -372,11 +376,10 @@ const BoardMirror = forwardRef<
       }}
     >
       {/* Atomic Pathshala Sleek Brand Header on canvas */}
-      {!isBackgroundImageUrl(background) && (
+      {!isBackgroundImageUrl(background) && isBrandedTemplate(background) && (
         <div className="absolute top-1.5 left-3 right-3 z-10 flex items-center justify-between pointer-events-none select-none opacity-90">
-          <div className="w-6 h-6 bg-white/95 rounded-lg shadow-sm border border-slate-200 flex items-center justify-center">
-            <span className="text-orange-500 font-black text-xs tracking-tighter">A</span>
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/logo.png" alt="Atomic Pathshala" className="h-6 w-auto object-contain" />
           <div className="flex-1 mx-3 h-[2px] bg-gradient-to-r from-orange-500 via-slate-800 to-transparent rounded-full opacity-60" />
           <div className="flex items-center gap-1.5 pr-0.5">
             <span className="text-[10px] font-black tracking-widest text-slate-800 leading-none">ATOMIC</span>
@@ -605,7 +608,11 @@ export function BroadcastStage({ scheduleId, token }: { scheduleId: string; toke
       {isDesktopStage && (
         <DesktopStageStreamer
           getBoard={() => mirrorRef.current?.getBoard() ?? { container: null, layers: [] }}
-          look={{ background: data.page?.background ?? null, cameraShape: data.cameraShape, cameraPosition: data.cameraPosition }}
+          look={{
+            background: data.page?.background || (data.classroomTheme === "DARK" ? "atomic_dark" : "atomic_white"),
+            cameraShape: data.cameraShape,
+            cameraPosition: data.cameraPosition,
+          }}
         />
       )}
     </div>

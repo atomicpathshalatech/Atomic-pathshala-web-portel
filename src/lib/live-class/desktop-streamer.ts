@@ -14,9 +14,17 @@ import { StageCompositor, type StageSources } from "@/lib/live-class/stage-compo
 
 const RECORDER_TYPES = ["video/webm;codecs=h264,opus", "video/webm;codecs=vp8,opus", "video/webm"];
 
-export function pickRecorderMimeType(isTypeSupported: (t: string) => boolean = (t) => MediaRecorder.isTypeSupported(t)): string {
-  return RECORDER_TYPES.find((t) => isTypeSupported(t)) ?? "video/webm";
+export function pickRecorderMimeType(
+  isTypeSupported: (t: string) => boolean = (t) => MediaRecorder.isTypeSupported(t),
+  skip = 0
+): string {
+  return RECORDER_TYPES.filter((t) => isTypeSupported(t))[skip] ?? "video/webm";
 }
+
+// A recorder that hasn't produced any data this long after start is stuck
+// (seen: the H.264 recorder in the offscreen stage never starting while the
+// hardware encoder was busy) — fall back to the next format (VP8, CPU).
+const RECORDER_STALL_MS = 8000;
 
 export class DesktopClassStreamer {
   private compositor: StageCompositor | null = null;
@@ -29,6 +37,32 @@ export class DesktopClassStreamer {
   private sourceTimer: ReturnType<typeof setInterval> | null = null;
   private silentAudio: AudioContext | null = null;
   encoderName: string | null = null;
+  private cameraOff = false;
+  private micMuted = false;
+
+  /** Teacher's emergency switches: take the camera out of the video / mute the mic in the stream. */
+  setCameraOff(off: boolean) {
+    this.cameraOff = off;
+    this.compositor?.setSources(this.currentSources());
+  }
+
+  setMicMuted(muted: boolean) {
+    this.micMuted = muted;
+    this.applyMicMute();
+  }
+
+  private applyMicMute() {
+    for (const t of this.stream?.getAudioTracks() ?? []) {
+      if (t !== this.silentTrack) t.enabled = !this.micMuted;
+    }
+  }
+
+  private currentSources() {
+    const s = this.readSources();
+    return this.cameraOff ? { ...s, showCamera: false } : s;
+  }
+
+  private silentTrack: MediaStreamTrack | null = null;
 
   constructor(
     private readonly bridge: AtomicDesktopBridge,
@@ -44,13 +78,17 @@ export class DesktopClassStreamer {
     if (this.runId) return;
     const compositor = new StageCompositor({ width: 1920, height: 1080, fps: 30 });
     this.compositor = compositor;
-    compositor.setSources(this.readSources());
+    compositor.setSources(this.currentSources());
     const stream = await compositor.start({ camera: true, microphone: true });
-    if (stream.getAudioTracks().length === 0) stream.addTrack(this.silentAudioTrack());
+    if (stream.getAudioTracks().length === 0) {
+      this.silentTrack = this.silentAudioTrack();
+      stream.addTrack(this.silentTrack);
+    }
     this.stream = stream;
+    this.applyMicMute();
 
     // Keep the stage in step with the board (page changes, theme, camera layout).
-    this.sourceTimer = setInterval(() => this.compositor?.setSources(this.readSources()), 1000);
+    this.sourceTimer = setInterval(() => this.compositor?.setSources(this.currentSources()), 1000);
 
     const { runId, encoder } = await this.bridge.encoder.start({
       serverUrl: opts.serverUrl,
@@ -74,21 +112,28 @@ export class DesktopClassStreamer {
     this.onStatus({ runId, state: "starting", encoder, warnings: [...compositor.warnings] });
   }
 
+  private recorderFallback = 0;
+  private recorderWatchdog: ReturnType<typeof setTimeout> | null = null;
+
   private startRecorder() {
     if (!this.stream || !this.runId) return;
+    if (this.recorderWatchdog) clearTimeout(this.recorderWatchdog);
     if (this.recorder && this.recorder.state !== "inactive") {
       this.recorder.ondataavailable = null;
       this.recorder.stop();
     }
     const runId = this.runId;
     const generation = this.generation;
+    const mimeType = pickRecorderMimeType(undefined, this.recorderFallback);
+    let gotData = false;
     const recorder = new MediaRecorder(this.stream, {
-      mimeType: pickRecorderMimeType(),
+      mimeType,
       videoBitsPerSecond: 8_000_000,
       audioBitsPerSecond: 128_000,
     });
     recorder.ondataavailable = (e) => {
       if (!e.data || e.data.size === 0) return;
+      gotData = true;
       // Keep chunk order: arrayBuffer() is async, so serialise the pushes.
       this.chain = this.chain
         .then(() => e.data.arrayBuffer())
@@ -99,6 +144,14 @@ export class DesktopClassStreamer {
     };
     recorder.start(250);
     this.recorder = recorder;
+    this.recorderWatchdog = setTimeout(() => {
+      if (gotData || this.recorder !== recorder || this.runId !== runId) return;
+      const next = this.recorderFallback + 1;
+      if (pickRecorderMimeType(undefined, next) === mimeType) return; // nothing else to try
+      console.warn(`[desktop_streamer] ${mimeType} recorder produced nothing in ${RECORDER_STALL_MS} ms — switching format`);
+      this.recorderFallback = next;
+      this.startRecorder();
+    }, RECORDER_STALL_MS);
   }
 
   private silentAudioTrack(): MediaStreamTrack {
@@ -117,6 +170,8 @@ export class DesktopClassStreamer {
   }
 
   async stop() {
+    if (this.recorderWatchdog) clearTimeout(this.recorderWatchdog);
+    this.recorderWatchdog = null;
     const runId = this.runId;
     this.runId = null;
     if (this.sourceTimer) clearInterval(this.sourceTimer);

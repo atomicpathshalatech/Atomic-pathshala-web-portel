@@ -76,6 +76,10 @@ const stageHtml = `<!doctype html><html><body style="margin:0;background:#111">
 (async () => {
   const bridge = window.atomicDesktop;
   if (!bridge || !bridge.stage || !bridge.stage.isStage) return;
+  const MR = window.MediaRecorder;
+  window.MediaRecorder = class extends MR { constructor(st, o) { super(st, o); console.log("MR new", o && o.mimeType, st.getTracks().map((t) => t.kind + ":" + t.readyState + ":" + t.enabled).join(",")); this.addEventListener("error", (e) => console.log("MR error", e.error && e.error.message)); this.addEventListener("start", () => console.log("MR start")); let n = 0; this.addEventListener("dataavailable", (e) => { if (n++ < 3) console.log("MR data", e.data.size); }); } };
+  window.MediaRecorder.isTypeSupported = MR.isTypeSupported.bind(MR);
+  setTimeout(() => console.log("AC probe", typeof AudioContext), 0);
   const job = await bridge.stage.job();
   const s = new window.DesktopClassStreamer(bridge, sources, () => {});
   await s.start({ serverUrl: job.serverUrl, streamKey: job.streamKey, profile: job.profile });
@@ -95,13 +99,14 @@ const teacherHtml =
     bridge.encoder.onStatus((st) => { statuses.push(st); if (st.state === "streaming" && !firstStreamingAt) firstStreamingAt = Date.now(); });
     const first = await bridge.stage.open({ stagePath: "/stage.html", serverUrl: "${RTMP_URL}", streamKey: "${KEY}" });
     await new Promise((r) => setTimeout(r, 5000));
+    const control = await bridge.stage.control({ cameraOff: true, micMuted: true });
     // A teacher-page refresh re-opens the same stage: it must be reused, not restarted.
     const again = await bridge.stage.open({ stagePath: "/stage.html", serverUrl: "${RTMP_URL}", streamKey: "${KEY}" });
     await new Promise((r) => setTimeout(r, 7000));
     const streamedSeconds = firstStreamingAt ? (Date.now() - firstStreamingAt) / 1000 : 0;
     await bridge.stage.close();
     const withEncoder = statuses.find((x) => x.encoder);
-    window.__selftest = { ok: true, statuses, streamedSeconds, isStage, reused: again.reused, firstReused: first.reused, encoder: withEncoder ? withEncoder.encoder : null };
+    window.__selftest = { ok: true, statuses, streamedSeconds, control, isStage, reused: again.reused, firstReused: first.reused, encoder: withEncoder ? withEncoder.encoder : null };
   } catch (e) {
     window.__selftest = { ok: false, error: String((e && e.message) || e), statuses };
   }
@@ -176,6 +181,7 @@ const warn = (self?.statuses ?? []).flatMap((s) => s.warnings ?? []);
 if (MODE === "inpage") assert(warn.some((w) => /Camera unavailable/.test(w)), "Denied camera → warning, stream continues (board only)");
 else {
   assert(self?.isStage === false && self?.firstReused === false, "Teacher window is not the stage; the stage window was opened fresh");
+  assert(self?.control?.cameraOff === true && self?.control?.micMuted === true, "Teacher Cam/Mic switches reach the stage (control round-trip)");
   assert(self?.reused === true, "Re-opening the same stage (teacher page refresh) reuses it — stream not restarted");
 }
 assert(!JSON.stringify(self ?? {}).includes(KEY), "Stream key not echoed back to the page in any status");

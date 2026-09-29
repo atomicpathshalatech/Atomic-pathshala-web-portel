@@ -28,10 +28,116 @@ export interface StageSources {
   backgroundColor: string | null;
   /** Uploaded slide / PDF page image, if the page has one. */
   backgroundImageUrl: string | null;
+  /** Named slide template (atomic_white, ruled, grid, dotted, black, ...) — drawn into the video. */
+  backgroundTemplate?: string | null;
   cameraShape: CameraShape;
   /** UPPER_RIGHT | UPPER_LEFT | LOWER_RIGHT | LOWER_LEFT */
   cameraPosition: string;
   showCamera: boolean;
+}
+
+/** Templates that carry the Atomic Pathshala brand band (logo + name). */
+export function isBrandedTemplate(template: string | null | undefined): boolean {
+  return !template || template.startsWith("atomic_");
+}
+
+/**
+ * Draws a named slide template exactly like the teacher's board CSS does, so
+ * students on YouTube see the same page (before this, the video showed a
+ * flat colour: no brand band, lines, grid or dots). Pattern sizes follow the
+ * teacher's 960x540 board, scaled to the video.
+ */
+export function drawSlideTemplate(
+  ctx: CanvasRenderingContext2D,
+  template: string | null | undefined,
+  W: number,
+  H: number,
+  logo: HTMLImageElement | null
+) {
+  const s = H / 540;
+  const fill = (c: string) => {
+    ctx.fillStyle = c;
+    ctx.fillRect(0, 0, W, H);
+  };
+  const lines = (step: number, color: string, vertical: boolean, horizontal: boolean, from = 0) => {
+    ctx.fillStyle = color;
+    const px = Math.max(1, Math.round(s));
+    if (horizontal) for (let y = from + step * s - px; y < H; y += step * s) ctx.fillRect(0, Math.round(y), W, px);
+    if (vertical) for (let x = step * s - px; x < W; x += step * s) ctx.fillRect(Math.round(x), from, px, H - from);
+  };
+  const band = (bandColor: string, textColor: string) => {
+    const bh = 36 * s;
+    ctx.fillStyle = bandColor;
+    ctx.fillRect(0, 0, W, bh);
+    ctx.fillStyle = "#ea580c";
+    ctx.fillRect(0, bh, W, 2 * s);
+    if (logo && logo.complete && logo.naturalWidth > 0) {
+      const lh = 26 * s;
+      const lw = (logo.naturalWidth / logo.naturalHeight) * lh;
+      ctx.drawImage(logo, 12 * s, (bh - lh) / 2, lw, lh);
+    }
+    ctx.textBaseline = "middle";
+    ctx.textAlign = "right";
+    ctx.font = `800 ${Math.round(11 * s)}px system-ui, sans-serif`;
+    ctx.fillStyle = "#ea580c";
+    ctx.fillText("PATHSHALA", W - 14 * s, bh / 2);
+    const pw = ctx.measureText("PATHSHALA").width;
+    ctx.fillStyle = textColor;
+    ctx.fillText("ATOMIC", W - 20 * s - pw, bh / 2);
+    return bh + 2 * s;
+  };
+  switch (template) {
+    case "atomic_dark":
+      fill("#0d0f17");
+      band("#171924", "#e2e8f0");
+      return;
+    case "atomic_ruled": {
+      fill("#ffffff");
+      const top = band("#fff7ed", "#1e293b");
+      lines(28, "#e2e8f0", false, true, top);
+      return;
+    }
+    case "ruled":
+    case "notebook":
+      fill("#ffffff");
+      lines(28, "#e2e8f0", false, true);
+      return;
+    case "grid":
+      fill("#ffffff");
+      lines(20, "#9ca3af", true, true);
+      return;
+    case "coordinate":
+      fill("#ffffff");
+      lines(20, "#d1d5db", true, true);
+      ctx.fillStyle = "rgba(59,130,246,0.7)";
+      ctx.fillRect(0, H / 2 - s, W, 2 * s);
+      ctx.fillRect(W / 2 - s, 0, 2 * s, H);
+      return;
+    case "dotted": {
+      fill("#ffffff");
+      ctx.fillStyle = "#9ca3af";
+      const step = 20 * s;
+      const r = 1.5 * s;
+      for (let y = step / 2; y < H; y += step) for (let x = step / 2; x < W; x += step) ctx.fillRect(x - r, y - r, 2 * r, 2 * r);
+      return;
+    }
+    case "dark":
+      fill("#1a1b23");
+      return;
+    case "black":
+      fill("#000000");
+      return;
+    case "blank":
+      fill("#f8fafc");
+      return;
+    case "light":
+      fill("#ffffff");
+      return;
+    case "atomic_white":
+    default:
+      fill("#ffffff");
+      band("#fff7ed", "#1e293b");
+  }
 }
 
 export interface StageCompositorOptions {
@@ -131,6 +237,17 @@ export class StageCompositor {
   private warnedTaintedLayer = false;
   private readonly probe: CanvasRenderingContext2D | null;
   private cameraVideo: HTMLVideoElement | null = null;
+  private logoImage: HTMLImageElement | null = null;
+
+  /** The real Atomic Pathshala logo for the brand band (same origin: never taints the canvas). */
+  private brandLogo(): HTMLImageElement | null {
+    if (!this.logoImage && typeof Image !== "undefined") {
+      const img = new Image();
+      img.src = "/brand/logo.png";
+      this.logoImage = img;
+    }
+    return this.logoImage;
+  }
   private mediaStreams: MediaStream[] = [];
   private timer: ReturnType<typeof setInterval> | null = null;
   private output: MediaStream | null = null;
@@ -272,8 +389,12 @@ export class StageCompositor {
     const { ctx, width: W, height: H } = this;
     const stage: Rect = { x: 0, y: 0, w: W, h: H };
 
-    ctx.fillStyle = this.sources.backgroundColor || "#ffffff";
-    ctx.fillRect(0, 0, W, H);
+    if (this.sources.backgroundTemplate !== undefined && !(this.bgImage && this.bgImageReady)) {
+      drawSlideTemplate(ctx, this.sources.backgroundTemplate, W, H, this.brandLogo());
+    } else {
+      ctx.fillStyle = this.sources.backgroundColor || "#ffffff";
+      ctx.fillRect(0, 0, W, H);
+    }
 
     if (this.bgImage && this.bgImageReady) {
       const r = containRect(this.bgImage.naturalWidth, this.bgImage.naturalHeight, stage);

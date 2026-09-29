@@ -27,6 +27,9 @@ const { appUrl, isTrustedUrl } = require("./config");
 
 const FRAME_RATE = 30;
 let stage = null; // { win, stagePath, job }
+// Teacher's live switches for the class stream (camera off / mic muted). Kept
+// here so a (re)started stage applies them from its first frame.
+let control = { cameraOff: false, micMuted: false };
 
 function isStageSender(event) {
   return Boolean(stage && !stage.win.isDestroyed() && event.sender.id === stage.win.webContents.id);
@@ -35,6 +38,7 @@ function isStageSender(event) {
 function closeStage() {
   const s = stage;
   stage = null;
+  control = { cameraOff: false, micMuted: false };
   if (s && !s.win.isDestroyed()) s.win.destroy(); // encoder-ipc stops the run when its sender goes away
 }
 
@@ -108,7 +112,19 @@ function registerStageIpc({ ipcMain, trustedSender, preloadPath }) {
 
   ipcMain.handle("stage:job", (event) => {
     guard(event);
-    return isStageSender(event) ? stage.job : null;
+    return isStageSender(event) ? { ...stage.job, control } : null;
+  });
+
+  // Teacher window → stage: camera off / mic mute in the class stream.
+  ipcMain.handle("stage:control", (event, next) => {
+    guard(event);
+    if (isStageSender(event)) throw new Error("The stage can't control itself.");
+    control = {
+      cameraOff: typeof next?.cameraOff === "boolean" ? next.cameraOff : control.cameraOff,
+      micMuted: typeof next?.micMuted === "boolean" ? next.micMuted : control.micMuted,
+    };
+    if (stage && !stage.win.isDestroyed()) stage.win.webContents.send("stage:control", control);
+    return control;
   });
 
   ipcMain.handle("stage:close", (event) => {

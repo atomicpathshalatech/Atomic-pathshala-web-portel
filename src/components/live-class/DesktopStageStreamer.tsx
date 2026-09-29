@@ -35,6 +35,7 @@ export function DesktopStageStreamer({
     if (!bridge?.stage?.isStage) return;
     let cancelled = false;
     let streamer: DesktopClassStreamer | null = null;
+    let unsubscribeControl: (() => void) | null = null;
 
     const readSources = () => {
       const { container, layers } = getBoardRef.current();
@@ -44,6 +45,7 @@ export function DesktopStageStreamer({
         boardLayers: layers,
         backgroundColor: bgColor && bgColor !== "rgba(0, 0, 0, 0)" ? bgColor : "#ffffff",
         backgroundImageUrl: bg && /^https?:\/\//.test(bg) ? bg : null,
+        backgroundTemplate: bg && !/^https?:\/\//.test(bg) ? bg : null,
         cameraShape: lookRef.current.cameraShape === "SQUARE" ? ("SQUARE" as const) : ("CIRCULAR" as const),
         cameraPosition: lookRef.current.cameraPosition || "UPPER_RIGHT",
         showCamera: true,
@@ -54,6 +56,14 @@ export function DesktopStageStreamer({
       const job = await bridge.stage!.job();
       if (cancelled || !job) return;
       streamer = new DesktopClassStreamer(bridge, readSources, () => undefined);
+      if (job.control) {
+        streamer.setCameraOff(job.control.cameraOff);
+        streamer.setMicMuted(job.control.micMuted);
+      }
+      unsubscribeControl = bridge.stage!.onControl?.((c) => {
+        streamer?.setCameraOff(c.cameraOff);
+        streamer?.setMicMuted(c.micMuted);
+      }) ?? null;
       try {
         await streamer.start({ serverUrl: job.serverUrl, streamKey: job.streamKey, profile: job.profile });
       } catch (err) {
@@ -64,6 +74,7 @@ export function DesktopStageStreamer({
 
     return () => {
       cancelled = true;
+      unsubscribeControl?.();
       void streamer?.stop();
     };
   }, []);
