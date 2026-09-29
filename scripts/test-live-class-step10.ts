@@ -113,6 +113,27 @@ async function run() {
   const busy = await checkScheduleConflict({ batchId: other.id, teacherId: teacher.id, startsAt: slotStart, endsAt: slotEnd });
   assert(busy.hasConflict && busy.conflictType === "TEACHER", "A real overlapping class is still a teacher conflict");
 
+  // ---- 5. Reschedule moves a room opened earlier (it auto-ended the class otherwise) ----
+  const svc = await import("../src/lib/live-session/service");
+  const oldStart = new Date(Date.now() - 3 * 60 * 60_000); // e.g. 11:00, now long past
+  const oldEnd = new Date(oldStart.getTime() + 30 * 60_000);
+  const mkRoom = async (title: string, livePhase: "PREPARING" | "LIVE") => {
+    const sched = await prisma.batchSchedule.create({ data: { batchId: real.id, teacherId: teacher.id, title, type: "LIVE_CLASS", startsAt: oldStart, endsAt: oldEnd, createdById: user.id } });
+    const wb = await prisma.whiteboardSession.create({ data: { batchScheduleId: sched.id, teacherId: teacher.id, title, livePhase, scheduledStart: oldStart, scheduledEnd: oldEnd } });
+    return { sched, wb };
+  };
+  const opened = await mkRoom("Opened before reschedule", "PREPARING");
+  const newStart = new Date(Date.now() + 5 * 60_000);
+  const newEnd = new Date(newStart.getTime() + 30 * 60_000);
+  await svc.rescheduleOpenLiveSession(opened.sched.id, newStart, newEnd);
+  const movedWb = await prisma.whiteboardSession.findUniqueOrThrow({ where: { id: opened.wb.id } });
+  assert(movedWb.scheduledStart?.getTime() === newStart.getTime() && movedWb.scheduledEnd?.getTime() === newEnd.getTime(), "Reschedule moves the room's own clock too (no instant auto-end on Start)");
+  const live = await mkRoom("Live right now", "LIVE");
+  await svc.rescheduleOpenLiveSession(live.sched.id, newStart, newEnd);
+  assert((await prisma.whiteboardSession.findUniqueOrThrow({ where: { id: live.wb.id } })).scheduledEnd?.getTime() === oldEnd.getTime(), "A class that is live is not moved under the teacher");
+  const startSrc = read("src/app/api/team/live-class/[scheduleId]/start/route.ts");
+  assert(startSrc.includes("!isNewOccurrence && !schedule.liveWhiteboardSession?.actualStartedAt && { scheduledStart, scheduledEnd }"), "First Start takes the room's times from the schedule as it is now");
+
   await prisma.$disconnect();
 }
 

@@ -284,9 +284,19 @@ export async function authoritativeEndFor(wb: {
 
 /** Reschedule: a not-yet-live occurrence moves with the schedule. A live or ended one is left alone. */
 export async function rescheduleOpenLiveSession(batchScheduleId: string, startsAt: Date, endsAt: Date) {
+  const end = endsAt.getTime() > startsAt.getTime() ? endsAt : new Date(startsAt.getTime() + 60 * 60_000);
+  // The room's own clock (countdown + auto-end) reads the whiteboard
+  // session's scheduledStart/End. A room opened before the reschedule kept
+  // the OLD times, so the class was auto-ended the moment it started (the
+  // old end had passed) — seen in the second real test class. Move it too,
+  // unless the class is actually live right now.
+  await prisma.whiteboardSession.updateMany({
+    where: { batchScheduleId, livePhase: { not: "LIVE" } },
+    data: { scheduledStart: startsAt, scheduledEnd: end, totalExtendedMinutes: 0 },
+  });
   return prisma.liveSession.updateMany({
     where: { batchScheduleId, state: { in: [...PRE_LIVE_STATES] } },
-    data: { plannedStartsAt: startsAt, effectiveEndsAt: endsAt.getTime() > startsAt.getTime() ? endsAt : new Date(startsAt.getTime() + 60 * 60_000) },
+    data: { plannedStartsAt: startsAt, effectiveEndsAt: end },
   });
 }
 

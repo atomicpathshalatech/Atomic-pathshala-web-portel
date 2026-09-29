@@ -223,6 +223,10 @@ export async function POST(
           actualStartedAt: schedule.liveWhiteboardSession?.actualStartedAt || now,
           startedAt: schedule.liveWhiteboardSession?.startedAt || now,
           activePageNumber: 1,
+          // First start of a room that was opened earlier (e.g. before a
+          // reschedule): its clock must follow the schedule as it is NOW,
+          // or the room auto-ends the class against a stale end time.
+          ...(!isNewOccurrence && !schedule.liveWhiteboardSession?.actualStartedAt && { scheduledStart, scheduledEnd }),
           ...(isNewOccurrence && {
             endedAt: null,
             actualEndedAt: null,
