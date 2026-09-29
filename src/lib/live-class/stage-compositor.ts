@@ -350,6 +350,7 @@ export class StageCompositor {
           const vf = await createVoiceFilter(raw);
           this.stopVoiceFilter = vf.stop;
           if (!vf.filtered) this.warnings.push("Voice filter unavailable — sending the microphone unfiltered.");
+          else if (!vf.rnnoise) this.warnings.push("AI noise suppression unavailable — using the basic voice filter.");
           output.addTrack(vf.track);
         }
       } catch (err) {

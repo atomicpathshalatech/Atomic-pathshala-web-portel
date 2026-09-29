@@ -44,17 +44,50 @@ import { createVoiceFilter } from ${JSON.stringify(join(repo, "src", "lib", "liv
 // Voice filter check (real AudioWorklet in real Electron): loud close-talk
 // "voice" passes, quiet ~1 m "room noise" is pulled down.
 (window as any).voiceCheck = async () => {
-  const measure = async (amp: number) => {
+  const measure = async (amp: number, kind: "tone" | "noise" | "speech" = "tone", rnnoise = false) => {
     const gen = new AudioContext({ sampleRate: 48000 });
     await gen.resume();
-    const osc = gen.createOscillator();
-    osc.frequency.value = 440;
+    let osc: AudioScheduledSourceNode;
+    if (kind === "tone") {
+      const o = gen.createOscillator();
+      o.frequency.value = 440;
+      osc = o;
+    } else if (kind === "speech") {
+      // Speech-like: 120 Hz glottal pulses through vowel formants, syllable-rate AM.
+      const b = gen.createBuffer(1, 96000, 48000);
+      const ch = b.getChannelData(0);
+      const f = [700, 1200, 2600], bw = [110, 120, 160];
+      const st = f.map(() => [0, 0]);
+      for (let i = 0; i < ch.length; i++) {
+        const t = i / 48000;
+        const pulse = i % 400 === 0 ? 1 : 0;
+        let y = 0;
+        f.forEach((fr, k) => {
+          const rr = Math.exp(-Math.PI * bw[k] / 48000), th = 2 * Math.PI * fr / 48000;
+          const out = pulse + 2 * rr * Math.cos(th) * st[k][0] - rr * rr * st[k][1];
+          st[k][1] = st[k][0]; st[k][0] = out; y += out;
+        });
+        ch[i] = y * 0.02 * (0.55 + 0.45 * Math.sin(2 * Math.PI * 4 * t));
+      }
+      const src = gen.createBufferSource();
+      src.buffer = b;
+      src.loop = true;
+      osc = src;
+    } else {
+      const b = gen.createBuffer(1, 48000, 48000);
+      const ch = b.getChannelData(0);
+      for (let i = 0; i < ch.length; i++) ch[i] = Math.random() * 2 - 1;
+      const src = gen.createBufferSource();
+      src.buffer = b;
+      src.loop = true;
+      osc = src;
+    }
     const g = gen.createGain();
     g.gain.value = amp;
     const d = gen.createMediaStreamDestination();
     osc.connect(g).connect(d);
     osc.start();
-    const vf = await createVoiceFilter(d.stream.getAudioTracks()[0]!);
+    const vf = await createVoiceFilter(d.stream.getAudioTracks()[0]!, undefined, { rnnoise });
     const meter = new AudioContext({ sampleRate: 48000 });
     await meter.resume();
     const an = meter.createAnalyser();
@@ -70,11 +103,16 @@ import { createVoiceFilter } from ${JSON.stringify(join(repo, "src", "lib", "liv
     await vf.stop();
     await gen.close();
     await meter.close();
-    return { filtered: vf.filtered, outDb: 20 * Math.log10(rms + 1e-9), inDb: 20 * Math.log10(amp / Math.SQRT2) };
+    return { filtered: vf.filtered, rnnoise: vf.rnnoise, outDb: 20 * Math.log10(rms + 1e-9), inDb: 20 * Math.log10(amp / Math.SQRT2) };
   };
   const voice = await measure(0.3);
   const noise = await measure(0.004);
-  return { voice, noise };
+  // Steady hiss (fan / AC) loud enough to open the gate: RNNoise must remove it.
+  const hissPlain = await measure(0.2, "noise", false);
+  const hissAi = await measure(0.2, "noise", true);
+  const speechPlain = await measure(1, "speech", false);
+  const speechAi = await measure(1, "speech", true);
+  return { voice, noise, hissPlain, hissAi, speechPlain, speechAi };
 };
 import { ChromaKeyer, DEFAULT_CHROMA } from ${JSON.stringify(join(repo, "src", "lib", "live-class", "chroma-key.ts").replace(/\\/g, "/"))};
 // Chroma check (real GPU keyer in real Electron): green screen + dim, grainy
@@ -253,6 +291,9 @@ else {
   const vc = self?.voice;
   assert(vc?.voice?.filtered === true && vc.voice.outDb > vc.voice.inDb - 12, "Voice filter runs (AudioWorklet) and close-talk voice passes", JSON.stringify(vc));
   assert(vc && vc.noise.outDb < vc.noise.inDb - 20, "Quiet room noise (~1 m away) pulled down by 20+ dB", JSON.stringify(vc));
+  assert(vc?.hissAi?.rnnoise === true, "RNNoise (AI noise suppression) runs in the app", JSON.stringify(vc?.hissAi));
+  assert(vc && vc.speechAi.outDb > -60 && vc.speechAi.outDb > vc.speechPlain.outDb - 20, `RNNoise keeps speech-like sound (${vc?.speechPlain?.outDb?.toFixed(1)} → ${vc?.speechAi?.outDb?.toFixed(1)} dB)`, JSON.stringify({ sp: vc?.speechPlain, sa: vc?.speechAi }));
+  assert(vc && vc.hissAi.outDb < vc.hissPlain.outDb - 15, `RNNoise removes loud steady hiss (${vc?.hissPlain?.outDb?.toFixed(1)} → ${vc?.hissAi?.outDb?.toFixed(1)} dB)`, JSON.stringify(vc));
   assert(self?.reused === true, "Re-opening the same stage (teacher page refresh) reuses it — stream not restarted");
 }
 assert(!JSON.stringify(self ?? {}).includes(KEY), "Stream key not echoed back to the page in any status");

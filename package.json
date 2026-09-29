@@ -41,6 +41,7 @@
     "@hookform/resolvers": "3.9.0",
     "@livekit/components-react": "^2.9.24",
     "@prisma/client": "5.17.0",
+    "@shiguredo/noise-suppression": "2025.1.0",
     "@types/katex": "^0.16.8",
     "@vercel/analytics": "^2.0.1",
     "@vercel/functions": "^3.9.7",
