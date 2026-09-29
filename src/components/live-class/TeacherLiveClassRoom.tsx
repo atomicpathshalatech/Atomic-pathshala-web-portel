@@ -37,6 +37,8 @@ import { StagePreview } from "@/components/live-class/StagePreview";
 import { getDesktopBridge, type DesktopEncoderStatus } from "@/lib/desktop/bridge";
 import { DesktopClassStreamer } from "@/lib/live-class/desktop-streamer";
 import { formatFreeCameraLayout, isBrandedTemplate } from "@/lib/live-class/stage-compositor";
+import { loadSavedChroma, saveChroma, type ChromaSettings } from "@/lib/live-class/chroma-key";
+import { ChromaKeyPanel } from "@/components/live-class/ChromaKeyPanel";
 import { BroadcastQuizCanvasOverlay } from "@/components/live-class/BroadcastQuizCanvasOverlay";
 
 // Size (px) of the floating self-camera bubble — draggable & resizable (120px to 400px)
@@ -506,12 +508,15 @@ export function TeacherLiveClassRoom({
   const [cameraHidden, setCameraHidden] = useState<boolean>(false);
   // Emergency mic mute for the CLASS STREAM (what students hear).
   const [streamMicMuted, setStreamMicMuted] = useState<boolean>(false);
-  const [chromaKeyEnabled, setChromaKeyEnabled] = useState<boolean>(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("atomic_teacher_chroma_key") === "true";
-    }
-    return false;
-  });
+  // Green screen: full settings (saved on this device), applied to the class
+  // video AND the teacher's own preview — see ChromaKeyPanel.
+  const [chromaSettings, setChromaSettings] = useState<ChromaSettings>(() => loadSavedChroma());
+  const [chromaPanelOpen, setChromaPanelOpen] = useState(false);
+  const chromaKeyEnabled = chromaSettings.enabled;
+  const updateChroma = useCallback((next: ChromaSettings) => {
+    setChromaSettings(next);
+    saveChroma(next);
+  }, []);
 
   // Toggle Camera Shortcut (Ctrl + X / Cmd + X)
   useEffect(() => {
@@ -529,17 +534,7 @@ export function TeacherLiveClassRoom({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  const toggleChromaKey = useCallback(() => {
-    setChromaKeyEnabled((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem("atomic_teacher_chroma_key", String(next));
-      } catch {
-        // ignore
-      }
-      return next;
-    });
-  }, []);
+  const toggleChromaKey = useCallback(() => setChromaPanelOpen(true), []);
 
   const [floatCamPos, setFloatCamPos] = useState<{ x: number; y: number }>(() => {
     if (typeof window !== "undefined") {
@@ -937,13 +932,19 @@ export function TeacherLiveClassRoom({
   // stage (current app) or an in-page streamer (older app).
   useEffect(() => {
     const bridge = getDesktopBridge();
-    bridge?.stage?.control?.({ cameraOff: cameraHidden, micMuted: streamMicMuted }).catch(() => undefined);
-    const inPage = desktopStreamerRef.current as unknown as { offscreen?: boolean; setCameraOff?: (v: boolean) => void; setMicMuted?: (v: boolean) => void } | null;
+    bridge?.stage?.control?.({ cameraOff: cameraHidden, micMuted: streamMicMuted, chroma: chromaSettings }).catch(() => undefined);
+    const inPage = desktopStreamerRef.current as unknown as {
+      offscreen?: boolean;
+      setCameraOff?: (v: boolean) => void;
+      setMicMuted?: (v: boolean) => void;
+      setChroma?: (v: unknown) => void;
+    } | null;
     if (inPage && !inPage.offscreen) {
       inPage.setCameraOff?.(cameraHidden);
       inPage.setMicMuted?.(streamMicMuted);
+      inPage.setChroma?.(chromaSettings);
     }
-  }, [cameraHidden, streamMicMuted, desktopStream?.runId]);
+  }, [cameraHidden, streamMicMuted, chromaSettings, desktopStream?.runId]);
 
   // Leaving/refreshing this page: an in-page streamer dies with the page; the
   // offscreen stage keeps the class on air (the next page reuses it).
@@ -4556,6 +4557,10 @@ export function TeacherLiveClassRoom({
           sessionTitle={scheduleTitle}
           onClose={() => setShowPostClassModal(false)}
         />
+      )}
+
+      {chromaPanelOpen && (
+        <ChromaKeyPanel value={chromaSettings} onChange={updateChroma} onClose={() => setChromaPanelOpen(false)} />
       )}
 
       {stagePreviewOpen && (

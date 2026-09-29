@@ -1,5 +1,6 @@
 "use client";
 
+import { ChromaKeyer, loadSavedChroma, onChromaChange } from "@/lib/live-class/chroma-key";
 import React, { useEffect, useRef, useState, type RefObject } from "react";
 import {
   LiveKitRoom,
@@ -818,9 +819,17 @@ function ChromaKeyVideoCanvas({
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  // Same GPU keyer + saved settings as the class video, so the teacher's
+  // preview matches what students see (the old per-pixel JS threshold was
+  // slow and cut holes in the teacher on dim / grainy cameras).
   useEffect(() => {
     let animId: number;
     let isRunning = true;
+    const keyer = new ChromaKeyer();
+    let settings = loadSavedChroma();
+    const off = onChromaChange((next) => {
+      settings = next;
+    });
 
     const render = () => {
       if (!isRunning) return;
@@ -833,23 +842,12 @@ function ChromaKeyVideoCanvas({
           canvas.width = vw;
           canvas.height = vh;
         }
-        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        const ctx = canvas.getContext("2d");
         if (ctx) {
-          ctx.drawImage(video, 0, 0, vw, vh);
-          const imgData = ctx.getImageData(0, 0, vw, vh);
-          const d = imgData.data;
-
-          // Key out green background pixels with threshold
-          for (let i = 0; i < d.length; i += 4) {
-            const r = d[i] ?? 0;
-            const g = d[i + 1] ?? 0;
-            const b = d[i + 2] ?? 0;
-            // Green screen formula: dominant green channel with threshold
-            if (g > 75 && g > r * 1.35 && g > b * 1.35) {
-              d[i + 3] = 0; // Alpha 0 (transparent)
-            }
-          }
-          ctx.putImageData(imgData, 0, 0);
+          ctx.clearRect(0, 0, vw, vh);
+          keyer.setSettings({ ...settings, enabled: true });
+          const keyed = keyer.supported ? keyer.process(video, vw, vh) : null;
+          ctx.drawImage(keyed ?? video, 0, 0, vw, vh);
         }
       }
       animId = requestAnimationFrame(render);
@@ -858,6 +856,7 @@ function ChromaKeyVideoCanvas({
     animId = requestAnimationFrame(render);
     return () => {
       isRunning = false;
+      off();
       cancelAnimationFrame(animId);
     };
   }, [videoRef]);

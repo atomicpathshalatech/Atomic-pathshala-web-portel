@@ -48,6 +48,14 @@ assert(pickVideoTransport("junk", "YOUTUBE", false) === "YOUTUBE", "Junk request
   const { INBUILT_SLIDE_TEMPLATES } = require("../src/lib/whiteboard/templates") as typeof import("../src/lib/whiteboard/templates");
   const ids = INBUILT_SLIDE_TEMPLATES.map((t) => t.id);
   assert(["blank", "light", "black", "ruled", "grid", "dotted"].every((id) => ids.includes(id)), "Template picker offers blank, white, black, lines, square grid and dots", ids.join(","));
+  const ck = require("../src/lib/live-class/chroma-key") as typeof import("../src/lib/live-class/chroma-key");
+  const frame = new Uint8ClampedArray(100 * 60 * 4);
+  for (let i = 0; i < frame.length; i += 4) { frame[i] = 10; frame[i + 1] = 170; frame[i + 2] = 60; frame[i + 3] = 255; }
+  assert(ck.detectKeyColor(frame, 100, 60) === "#0aaa3c", "Auto-detect reads the screen colour from the frame edges");
+  const grey = new Uint8ClampedArray(100 * 60 * 4).fill(128);
+  assert(ck.detectKeyColor(grey, 100, 60) === null, "Auto-detect refuses a grey wall (no screen)");
+  const bad = ck.sanitizeChroma({ enabled: 1, keyColor: "red", similarity: 9, gamma: -3, denoise: 7.6 });
+  assert(bad.enabled === true && bad.keyColor === ck.DEFAULT_CHROMA.keyColor && bad.similarity === 1 && bad.gamma === 0.5 && bad.denoise === 3, "Chroma settings from storage/IPC are clamped to safe ranges");
   const edge = cameraRect("FREE:0.990,0.990,0.300", 1920, 1080, 280, 38);
   assert(edge.x + edge.w <= 1920 && edge.y + edge.h <= 1080, "A bubble dragged to the edge stays inside the video");
 }

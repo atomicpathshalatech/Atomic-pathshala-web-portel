@@ -59,10 +59,12 @@ export function DesktopStageStreamer({
       if (job.control) {
         streamer.setCameraOff(job.control.cameraOff);
         streamer.setMicMuted(job.control.micMuted);
+        streamer.setChroma(job.control.chroma ?? null);
       }
       unsubscribeControl = bridge.stage!.onControl?.((c) => {
         streamer?.setCameraOff(c.cameraOff);
         streamer?.setMicMuted(c.micMuted);
+        streamer?.setChroma(c.chroma ?? null);
       }) ?? null;
       try {
         await streamer.start({ serverUrl: job.serverUrl, streamKey: job.streamKey, profile: job.profile });

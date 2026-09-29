@@ -39,7 +39,32 @@ const entry = join(work, "entry.ts");
 writeFileSync(
   entry,
   `import { DesktopClassStreamer } from ${JSON.stringify(join(repo, "src", "lib", "live-class", "desktop-streamer.ts").replace(/\\/g, "/"))};
-(window as any).DesktopClassStreamer = DesktopClassStreamer;`
+(window as any).DesktopClassStreamer = DesktopClassStreamer;
+import { ChromaKeyer, DEFAULT_CHROMA } from ${JSON.stringify(join(repo, "src", "lib", "live-class", "chroma-key.ts").replace(/\\/g, "/"))};
+// Chroma check (real GPU keyer in real Electron): green screen + dim, grainy
+// green (low light / cheap camera) must go transparent; the "teacher" stays.
+(window as any).chromaCheck = () => {
+  const c = document.createElement("canvas");
+  c.width = 160; c.height = 90;
+  const g = c.getContext("2d")!;
+  g.fillStyle = "#00b140"; g.fillRect(0, 0, 80, 90);
+  for (let y = 0; y < 90; y++) for (let x = 80; x < 120; x++) {
+    const n = (Math.sin(x * 12.9898 + y * 78.233) * 43758.5453) % 1;
+    g.fillStyle = "rgb(" + Math.round(10 + 12 * n) + "," + Math.round(70 + 25 * n) + "," + Math.round(30 + 12 * n) + ")";
+    g.fillRect(x, y, 1, 1);
+  }
+  g.fillStyle = "#c0392b"; g.fillRect(120, 0, 40, 90); // the teacher (skin/shirt-ish)
+  g.fillStyle = "#161616"; g.fillRect(60, 0, 20, 45); // black hair / clothes
+  g.fillStyle = "#5a5f5a"; g.fillRect(60, 45, 20, 45); // grey shirt
+  const k = new ChromaKeyer();
+  if (!k.supported) return { supported: false };
+  k.setSettings({ ...DEFAULT_CHROMA, enabled: true, similarity: 0.45, gamma: 1.6, denoise: 2 });
+  const out = k.process(c, 160, 90)!;
+  const o = document.createElement("canvas"); o.width = 160; o.height = 90;
+  const og = o.getContext("2d")!; og.drawImage(out, 0, 0);
+  const a = (x: number, y: number) => og.getImageData(x, y, 1, 1).data[3];
+  return { supported: true, screen: a(40, 45), dimScreen: a(100, 45), teacher: a(140, 45), black: a(70, 20), grey: a(70, 70) };
+};`
 );
 const bundle = await esbuild.build({
   entryPoints: [entry],
@@ -89,12 +114,13 @@ const stageHtml = `<!doctype html><html><body style="margin:0;background:#111">
 // Teacher page: in stage mode it only opens/closes the stage and listens.
 const teacherHtml =
   MODE === "stage"
-    ? `<!doctype html><html><body><script>
+    ? `<!doctype html><html><body><script src="/streamer.js"></script><script>
 (async () => {
   const statuses = [];
   try {
     const bridge = window.atomicDesktop;
     const isStage = bridge.stage.isStage;
+    const chroma = window.chromaCheck ? window.chromaCheck() : null;
     let firstStreamingAt = null;
     bridge.encoder.onStatus((st) => { statuses.push(st); if (st.state === "streaming" && !firstStreamingAt) firstStreamingAt = Date.now(); });
     const first = await bridge.stage.open({ stagePath: "/stage.html", serverUrl: "${RTMP_URL}", streamKey: "${KEY}" });
@@ -106,7 +132,7 @@ const teacherHtml =
     const streamedSeconds = firstStreamingAt ? (Date.now() - firstStreamingAt) / 1000 : 0;
     await bridge.stage.close();
     const withEncoder = statuses.find((x) => x.encoder);
-    window.__selftest = { ok: true, statuses, streamedSeconds, control, isStage, reused: again.reused, firstReused: first.reused, encoder: withEncoder ? withEncoder.encoder : null };
+    window.__selftest = { ok: true, statuses, streamedSeconds, control, chroma, isStage, reused: again.reused, firstReused: first.reused, encoder: withEncoder ? withEncoder.encoder : null };
   } catch (e) {
     window.__selftest = { ok: false, error: String((e && e.message) || e), statuses };
   }
@@ -182,6 +208,11 @@ if (MODE === "inpage") assert(warn.some((w) => /Camera unavailable/.test(w)), "D
 else {
   assert(self?.isStage === false && self?.firstReused === false, "Teacher window is not the stage; the stage window was opened fresh");
   assert(self?.control?.cameraOff === true && self?.control?.micMuted === true, "Teacher Cam/Mic switches reach the stage (control round-trip)");
+  const ch = self?.chroma;
+  assert(ch?.supported === true, "Chroma key runs on the GPU (WebGL) in the app", JSON.stringify(ch));
+  assert(ch?.screen === 0 && ch?.dimScreen <= 10, "Green screen AND dim/grainy green (low light, cheap camera) removed", JSON.stringify(ch));
+  assert(ch?.teacher === 255, "Teacher kept fully opaque", JSON.stringify(ch));
+  assert(ch?.black === 255 && ch?.grey === 255, "Black hair / grey clothes never keyed out", JSON.stringify(ch));
   assert(self?.reused === true, "Re-opening the same stage (teacher page refresh) reuses it — stream not restarted");
 }
 assert(!JSON.stringify(self ?? {}).includes(KEY), "Stream key not echoed back to the page in any status");

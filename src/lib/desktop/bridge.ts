@@ -28,6 +28,8 @@ export interface DesktopEncoderStatus {
 export interface StageControl {
   cameraOff: boolean;
   micMuted: boolean;
+  /** Chroma key settings for the class video (validated on the stage side). */
+  chroma?: unknown;
 }
 
 export interface AtomicDesktopBridge {

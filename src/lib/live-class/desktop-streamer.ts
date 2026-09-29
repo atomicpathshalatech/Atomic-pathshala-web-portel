@@ -11,6 +11,7 @@
  */
 import type { AtomicDesktopBridge, DesktopEncoderStatus } from "@/lib/desktop/bridge";
 import { StageCompositor, type StageSources } from "@/lib/live-class/stage-compositor";
+import { sanitizeChroma, type ChromaSettings } from "@/lib/live-class/chroma-key";
 
 const RECORDER_TYPES = ["video/webm;codecs=h264,opus", "video/webm;codecs=vp8,opus", "video/webm"];
 
@@ -57,8 +58,16 @@ export class DesktopClassStreamer {
     }
   }
 
+  private chroma: ChromaSettings | null = null;
+
+  /** Green/blue screen removal for the camera in the class video. */
+  setChroma(settings: unknown) {
+    this.chroma = settings ? sanitizeChroma(settings) : null;
+    this.compositor?.setSources(this.currentSources());
+  }
+
   private currentSources() {
-    const s = this.readSources();
+    const s = { ...this.readSources(), chroma: this.chroma };
     return this.cameraOff ? { ...s, showCamera: false } : s;
   }
 

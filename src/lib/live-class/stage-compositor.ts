@@ -19,6 +19,8 @@
  * running.
  */
 
+import { ChromaKeyer, type ChromaSettings } from "@/lib/live-class/chroma-key";
+
 export type CameraShape = "CIRCULAR" | "SQUARE";
 
 export interface StageSources {
@@ -34,6 +36,8 @@ export interface StageSources {
   /** UPPER_RIGHT | UPPER_LEFT | LOWER_RIGHT | LOWER_LEFT */
   cameraPosition: string;
   showCamera: boolean;
+  /** Green/blue screen removal for the camera (teacher cut out over the board). */
+  chroma?: ChromaSettings | null;
 }
 
 /** Templates that carry the Atomic Pathshala brand band (logo + name). */
@@ -238,6 +242,7 @@ export class StageCompositor {
   private readonly probe: CanvasRenderingContext2D | null;
   private cameraVideo: HTMLVideoElement | null = null;
   private logoImage: HTMLImageElement | null = null;
+  private keyer: ChromaKeyer | null = null;
 
   /** The real Atomic Pathshala logo for the brand band (same origin: never taints the canvas). */
   private brandLogo(): HTMLImageElement | null {
@@ -412,6 +417,22 @@ export class StageCompositor {
       const size = Math.round(H * 0.26);
       const box = cameraRect(this.sources.cameraPosition, W, H, size, Math.round(H * 0.035));
       const crop = coverCrop(video.videoWidth, video.videoHeight, box.w, box.h);
+      const chroma = this.sources.chroma;
+      if (chroma?.enabled) {
+        this.keyer ??= new ChromaKeyer();
+        if (this.keyer.supported) {
+          this.keyer.setSettings(chroma);
+          const keyed = this.keyer.process(video, video.videoWidth, video.videoHeight);
+          if (keyed) {
+            // Keyed teacher: no bubble, no ring — just the person over the board.
+            ctx.drawImage(keyed, crop.x, crop.y, crop.w, crop.h, box.x, box.y, box.w, box.h);
+            return this.drawChannelMark();
+          }
+        } else if (!this.warnedChroma) {
+          this.warnedChroma = true;
+          this.warnings.push("Chroma key needs WebGL, which isn't available here — camera shown without it.");
+        }
+      }
       ctx.save();
       ctx.beginPath();
       if (this.sources.cameraShape === "CIRCULAR") {
@@ -435,6 +456,13 @@ export class StageCompositor {
       ctx.restore();
     }
 
+    this.drawChannelMark();
+  }
+
+  private warnedChroma = false;
+
+  private drawChannelMark() {
+    const { ctx, width: W, height: H } = this;
     // Small, unobtrusive channel mark so a clipped recording is attributable.
     ctx.save();
     ctx.font = `600 ${Math.round(H * 0.018)}px system-ui, sans-serif`;
