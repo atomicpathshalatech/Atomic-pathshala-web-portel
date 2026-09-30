@@ -55,6 +55,11 @@ export default async function TestAttemptPage({ params }: { params: { id: string
   });
 
   if (!attempt) {
+    // Can't start a paper that isn't published or has no questions yet (a DPP
+    // must be published after its questions are added).
+    const hasQuestions = test.sections.some((s) => s.questions.length > 0);
+    const published = test.batchSchedule?.type === "DPP" ? test.status === "PUBLISHED" : !["DRAFT", "PENDING_APPROVAL", "UNDER_REVIEW"].includes(test.status);
+    if (!hasQuestions || !published) redirect(test.batchSchedule?.type === "DPP" ? "/dpp" : "/tests");
     if (test.batchSchedule && now > test.batchSchedule.endsAt) redirect("/tests");
     if (test.closeTime && now > test.closeTime) redirect("/tests");
     attempt = await prisma.attempt.create({

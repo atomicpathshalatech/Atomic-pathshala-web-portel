@@ -6,6 +6,7 @@ import { UnauthorizedError, ForbiddenError } from "@/lib/rbac/guard";
 import { resolveStudentForTest } from "@/lib/test-series/access";
 import { getStoredTestAnalysis } from "@/lib/test-engine/analysis-engine";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { areResultsReleased, resultsReleaseAt } from "@/lib/tests/schedule-rules";
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -27,6 +28,9 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     if (!attempt) return apiError("You haven't attempted this test yet.", 404);
     if (attempt.status === "IN_PROGRESS") {
       return apiError("Test attempt is still in progress.", 400);
+    }
+    if (!areResultsReleased(test)) {
+      return apiError(`Results open for everyone after the test time is over (${resultsReleaseAt(test)?.toISOString()}).`, 403);
     }
 
     const analysis = await getStoredTestAnalysis(attempt.id);

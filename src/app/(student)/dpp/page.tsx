@@ -85,6 +85,7 @@ export default async function DppPortalPage() {
                 where: { studentId: student.id },
                 select: { id: true, status: true, score: true },
               },
+              sections: { select: { targetCount: true, marksPerQuestion: true, _count: { select: { questions: true } } } },
             },
           },
         },
@@ -163,7 +164,9 @@ export default async function DppPortalPage() {
         : "COMPLETED"
       : "PENDING";
 
-    const qCount = d.questions?.length || d.questionTargetCount || 15;
+    // Attempt/download only once questions are added (the DPP itself is already published here).
+    const addedCount = d.questions?.length || 0;
+    const qCount = addedCount || d.questionTargetCount || 15;
     const cMarks = d.correctMarks || 4;
 
     subjectMap[subjName]![chapterName]!.push({
@@ -178,6 +181,7 @@ export default async function DppPortalPage() {
       totalMarks: qCount * cMarks,
       status,
       score: latestAttempt?.score ?? null,
+      ready: addedCount > 0,
     });
   }
 
@@ -209,6 +213,17 @@ export default async function DppPortalPage() {
       ? "UPCOMING"
       : "PENDING";
 
+    // Real counts from the DPP's test; attempt/download only once it has
+    // questions and is published (they used to show on an empty draft).
+    const sections: any[] = b.test?.sections ?? [];
+    const addedCount = sections.reduce((n, s) => n + (s._count?.questions || 0), 0);
+    const questionCount = sections.reduce((n, s) => n + Math.min(s.targetCount > 0 ? s.targetCount : Infinity, s._count?.questions || 0), 0);
+    const totalMarks = sections.reduce(
+      (n, s) => n + Math.min(s.targetCount > 0 ? s.targetCount : Infinity, s._count?.questions || 0) * (s.marksPerQuestion ?? b.test?.correctMarks ?? 4),
+      0
+    );
+    const ready = Boolean(b.test && b.test.status === "PUBLISHED" && !b.test.archived && addedCount > 0);
+
     subjectMap[subjName]![chapterName]!.push({
       id: b.id,
       code: b.id.slice(-6).toUpperCase(),
@@ -216,9 +231,10 @@ export default async function DppPortalPage() {
       subject: subjName,
       chapter: chapterName,
       difficulty: "STANDARD",
-      questionCount: 15,
-      durationMins: 45,
-      totalMarks: 60,
+      questionCount,
+      durationMins: b.test?.durationMin || 45,
+      totalMarks,
+      ready,
       status,
       score: attempt?.score ?? null,
       testId: b.test?.id,

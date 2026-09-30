@@ -6,6 +6,7 @@ import { UnauthorizedError, ForbiddenError } from "@/lib/rbac/guard";
 import { resolveStudentForSchedule } from "@/lib/batch/access";
 import { toLegacyQuestion } from "@/lib/questions/legacy";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { areResultsReleased, resultsReleaseAt } from "@/lib/tests/schedule-rules";
 
 /** Full review — correctOption/explanation only ever appear here, and only
  * once the attempt is actually finalized. */
@@ -17,6 +18,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     const test = await prisma.test.findUnique({
       where: { id: params.id },
       include: {
+        batchSchedule: true,
         sections: {
           orderBy: { order: "asc" },
           include: {
@@ -41,6 +43,9 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     if (!attempt) return apiError("You haven't attempted this test.", 404);
     if (attempt.status === "IN_PROGRESS") {
       return apiError("Submit the test before viewing your result.", 409);
+    }
+    if (!areResultsReleased(test)) {
+      return apiError(`Results open for everyone after the test time is over (${resultsReleaseAt(test)?.toISOString()}).`, 403);
     }
 
     const answerByQuestion = new Map(attempt.answers.map((a) => [a.questionId, a]));

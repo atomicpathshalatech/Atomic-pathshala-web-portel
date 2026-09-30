@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { UnauthorizedError } from "@/lib/rbac/guard";
+import { areResultsReleased } from "@/lib/tests/schedule-rules";
 
 /**
  * Test-score leaderboard — same shape and pinned-"me" behavior as
@@ -33,11 +34,31 @@ export async function GET(request: NextRequest) {
     const window = request.nextUrl.searchParams.get("window") === "7d" ? "7d" : "all";
     const since = window === "7d" ? new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) : undefined;
 
+    // Tests whose results aren't open yet (window not over) don't count yet.
+    const now = new Date();
+    const recentTests = await prisma.test.findMany({
+      where: {
+        OR: [
+          { closeTime: { gt: now } },
+          { openTime: { gt: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000) } },
+          { batchSchedule: { endsAt: { gt: now } } },
+        ],
+      },
+      select: {
+        id: true,
+        openTime: true,
+        closeTime: true,
+        durationMin: true,
+        batchSchedule: { select: { startsAt: true, endsAt: true, type: true } },
+      },
+    });
+    const heldTestIds = recentTests.filter((t) => !areResultsReleased(t, now)).map((t) => t.id);
+
     const grouped = await prisma.attempt.groupBy({
       by: ["studentId"],
       where: {
         status: { in: ["SUBMITTED", "AUTO_SUBMITTED"] },
-        testId: { not: null },
+        testId: heldTestIds.length ? { not: null, notIn: heldTestIds } : { not: null },
         ...(since ? { submittedAt: { gte: since } } : {}),
       },
       _sum: { score: true },

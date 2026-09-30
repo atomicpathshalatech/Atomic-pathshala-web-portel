@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { apiSuccess, handleApiError } from "@/lib/api/response";
+import { POPUP_LEAD_MS, isDppTest, isInUpcomingPopupWindow, testWindowStart } from "@/lib/tests/schedule-rules";
 
 export const dynamic = "force-dynamic";
 
@@ -52,89 +53,47 @@ export async function GET(_request: NextRequest) {
     const seriesToBatchMap = new Map(importedSeries.map((i) => [i.testSeriesId, i.batchId]));
     const importedSeriesIds = importedSeries.map((i) => i.testSeriesId);
 
-    // 3. Query upcoming tests
+    // 3. The test to announce: only from 24 h before it opens until its window
+    // ends (it used to fall back to the newest test even after it was over).
     const now = new Date();
-    // Allow tests scheduled in the future, or scheduled within the last 4 hours (still active)
-    const threshold = new Date(now.getTime() - 4 * 3600 * 1000);
+    const horizon = new Date(now.getTime() + POPUP_LEAD_MS);
+    const lookBack = new Date(now.getTime() - 2 * 24 * 3600 * 1000);
 
-    const tests = await prisma.test.findMany({
+    const candidates = await prisma.test.findMany({
       where: {
         archived: false,
-        openTime: { gte: threshold },
-        OR: [
-          { testSeriesId: { in: importedSeriesIds } },
-          { batchSchedule: { batchId: { in: batchIds } } },
+        AND: [
+          {
+            OR: [
+              { testSeriesId: { in: importedSeriesIds } },
+              { batchSchedule: { batchId: { in: batchIds } } },
+            ],
+          },
+          {
+            OR: [
+              { openTime: { gte: lookBack, lte: horizon } },
+              { openTime: null, batchSchedule: { startsAt: { gte: lookBack, lte: horizon } } },
+            ],
+          },
         ],
       },
       orderBy: { openTime: "asc" },
-      take: 1,
+      take: 20,
       include: {
         testSeries: { select: { id: true, name: true, code: true } },
-        batchSchedule: { select: { batchId: true, batch: { select: { name: true } } } },
+        batchSchedule: { select: { batchId: true, startsAt: true, endsAt: true, type: true, batch: { select: { name: true } } } },
+        attempts: { where: { studentId: student.id }, select: { status: true } },
       },
     });
 
+    const tests = candidates
+      .filter((t) => !isDppTest(t) && isInUpcomingPopupWindow(t, now))
+      // Already submitted: nothing left to announce.
+      .filter((t) => !t.attempts.some((a) => a.status === "SUBMITTED" || a.status === "AUTO_SUBMITTED"))
+      .sort((x, y) => (testWindowStart(x)?.getTime() ?? 0) - (testWindowStart(y)?.getTime() ?? 0));
+
     if (tests.length === 0) {
-      // Fallback: If no upcoming test by openTime, check if any test exists in the imported test series
-      const anyTest = await prisma.test.findFirst({
-        where: {
-          archived: false,
-          OR: [
-            { testSeriesId: { in: importedSeriesIds } },
-            { batchSchedule: { batchId: { in: batchIds } } },
-          ],
-        },
-        orderBy: { createdAt: "desc" },
-        include: {
-          testSeries: { select: { id: true, name: true, code: true } },
-          batchSchedule: { select: { batchId: true, batch: { select: { name: true } } } },
-        },
-      });
-
-      if (!anyTest) {
-        return NextResponse.json({ success: true, data: { upcomingTest: null } });
-      }
-
-      const assignedBatchId: string =
-        anyTest.batchSchedule?.batchId ||
-        (anyTest.testSeriesId ? seriesToBatchMap.get(anyTest.testSeriesId) : defaultBatchId) ||
-        defaultBatchId;
-      const assignedBatchName =
-        anyTest.batchSchedule?.batch?.name ||
-        batchMap.get(assignedBatchId) ||
-        "Enrolled Batch";
-
-      let chapters: any[] = [];
-      if (anyTest.syllabus) {
-        try {
-          const raw =
-            typeof anyTest.syllabus === "string"
-              ? JSON.parse(anyTest.syllabus)
-              : anyTest.syllabus;
-          chapters = raw?.chapters || raw || [];
-        } catch {}
-      }
-
-      return NextResponse.json({
-        success: true,
-        data: {
-          upcomingTest: {
-            id: anyTest.id,
-            name: anyTest.name,
-            code: anyTest.code,
-            testType: anyTest.testType || "Test",
-            examType: anyTest.examType || "NEET",
-            durationMin: anyTest.durationMin,
-            scheduledAt: anyTest.openTime,
-            batchId: assignedBatchId,
-            batchName: assignedBatchName,
-            chaptersCount: chapters.length,
-            chapters: chapters,
-            syllabusPdfUrl: `/api/tests/${anyTest.id}/syllabus-pdf?batchId=${assignedBatchId}`,
-            syllabusPdfDownloadUrl: `/api/tests/${anyTest.id}/syllabus-pdf?batchId=${assignedBatchId}&download=true`,
-          },
-        },
-      });
+      return NextResponse.json({ success: true, data: { upcomingTest: null } });
     }
 
     const test = tests[0];
@@ -170,7 +129,7 @@ export async function GET(_request: NextRequest) {
           testType: test.testType || "Test",
           examType: test.examType || "NEET",
           durationMin: test.durationMin,
-          scheduledAt: test.openTime,
+          scheduledAt: testWindowStart(test),
           batchId: assignedBatchId,
           batchName: assignedBatchName,
           chaptersCount: chapters.length,

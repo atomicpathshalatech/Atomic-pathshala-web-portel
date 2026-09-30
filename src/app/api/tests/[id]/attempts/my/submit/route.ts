@@ -6,6 +6,7 @@ import { UnauthorizedError, ForbiddenError } from "@/lib/rbac/guard";
 import { resolveStudentForTest } from "@/lib/test-series/access";
 import { computeDeadlineMs, finalizeAttempt } from "@/lib/test-engine/scoring";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { areResultsReleased, resultsReleaseAt } from "@/lib/tests/schedule-rules";
 
 export async function POST(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -30,7 +31,12 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
     if (!attempt) return apiError("You haven't started this test yet.", 404);
 
     if (attempt.status !== "IN_PROGRESS") {
-      return apiSuccess({ attempt }); // already finalized — idempotent
+      // already finalized — idempotent
+      if (!areResultsReleased(test)) {
+        const { score: _score, ...withoutScore } = attempt;
+        return apiSuccess({ attempt: withoutScore, resultsReleaseAt: resultsReleaseAt(test) });
+      }
+      return apiSuccess({ attempt });
     }
 
     const deadlineMs = computeDeadlineMs(attempt.startedAt, test.durationMin, test.batchSchedule?.endsAt);
@@ -48,6 +54,11 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
       },
     });
 
+    // Until results are released, don't hand the score back with the submit.
+    if (!areResultsReleased(test) && finalized) {
+      const { score: _score, ...withoutScore } = finalized as typeof finalized & { score?: unknown };
+      return apiSuccess({ attempt: withoutScore, resultsReleaseAt: resultsReleaseAt(test) });
+    }
     return apiSuccess({ attempt: finalized });
   } catch (error) {
     return handleApiError(error);

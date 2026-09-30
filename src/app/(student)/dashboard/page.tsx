@@ -14,6 +14,7 @@ import { StudentBannerCarousel, type StudentBanner } from "@/components/student/
 import { EducatorsShowcase, type EducatorItem } from "@/components/student/home/EducatorsShowcase";
 import { StudentFeedbackSection, type StudentFeedbackItem } from "@/components/student/home/StudentFeedbackSection";
 import { UpcomingTestCard, type UpcomingTestItem } from "@/components/student/home/UpcomingTestCard";
+import { isDppTest, testWindowEnd } from "@/lib/tests/schedule-rules";
 
 export const metadata: Metadata = {
   title: "Home — Atomic Pathshala",
@@ -89,10 +90,12 @@ export default async function StudentDashboardPage() {
     prisma.test.count({
       where: {
         archived: false,
-        status: { in: ["PUBLISHED", "DRAFT", "APPROVED"] },
+        // Only published tests of this student's own batches / imported series
+        // (drafts and every other series' tests used to show up here).
+        status: { in: ["PUBLISHED", "APPROVED"] },
         OR: [
           { batchSchedule: { batchId: { in: enrolledBatchIds } } },
-          { testSeries: { isNot: null } },
+          { testSeries: { batchImports: { some: { batchId: { in: enrolledBatchIds } } } } },
         ],
       },
     }),
@@ -184,13 +187,12 @@ export default async function StudentDashboardPage() {
               { openTime: { gte: now } },
               { closeTime: { gte: now } },
               { batchSchedule: { endsAt: { gte: now } } },
-              { status: "DRAFT" },
             ],
           },
         ],
       },
       include: {
-        batchSchedule: { select: { startsAt: true, endsAt: true, title: true } },
+        batchSchedule: { select: { startsAt: true, endsAt: true, title: true, type: true } },
         testSeries: { select: { id: true, name: true, examType: true } },
         sections: {
           select: {
@@ -225,7 +227,11 @@ export default async function StudentDashboardPage() {
 
   // Process Upcoming Tests for student
   const pendingUpcomingTests = upcomingTestsDb.filter(
-    (t: any) => !t.attempts?.some((a: any) => a.status === "SUBMITTED" || a.status === "AUTO_SUBMITTED")
+    (t: any) =>
+      !isDppTest(t) &&
+      // Over (window ended) — no longer "upcoming".
+      !((testWindowEnd(t)?.getTime() ?? Infinity) < now.getTime()) &&
+      !t.attempts?.some((a: any) => a.status === "SUBMITTED" || a.status === "AUTO_SUBMITTED")
   );
   const primaryUpcomingTest = pendingUpcomingTests[0] ?? null;
 

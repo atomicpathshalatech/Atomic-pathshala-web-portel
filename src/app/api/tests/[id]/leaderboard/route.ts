@@ -6,6 +6,7 @@ import { UnauthorizedError, ForbiddenError } from "@/lib/rbac/guard";
 import { resolveStudentForTest } from "@/lib/test-series/access";
 import { getPrivacySafeLeaderboard } from "@/lib/test-engine/analysis-engine";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { areResultsReleased, resultsReleaseAt } from "@/lib/tests/schedule-rules";
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -20,6 +21,10 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
 
     const { student } = await resolveStudentForTest(session.user.id, test);
     if (!student) throw new ForbiddenError();
+
+    if (!areResultsReleased(test)) {
+      return apiError(`Results open for everyone after the test time is over (${resultsReleaseAt(test)?.toISOString()}).`, 403);
+    }
 
     const leaderboardData = await getPrivacySafeLeaderboard(test.id, student.id);
     return apiSuccess(leaderboardData);

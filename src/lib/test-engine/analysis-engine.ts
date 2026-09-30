@@ -1053,15 +1053,66 @@ export async function getStoredTestAnalysis(
     return calculateAndStoreTestAnalysis(attemptId);
   }
 
-  // Get total participants
-  const totalParticipants = await prisma.attempt.count({
-    where: { testId: analysis.testId, status: { in: ["SUBMITTED", "AUTO_SUBMITTED"] } },
-  });
+  // Rank, percentile and topper are computed now, from everyone who has
+  // submitted — the stored values were frozen at the moment this student
+  // submitted (so an early finisher saw "Rank 1 · 100 percentile" for ever).
+  const finalizedScores = (
+    await prisma.attempt.findMany({
+      where: { testId: analysis.testId, status: { in: ["SUBMITTED", "AUTO_SUBMITTED"] } },
+      select: { score: true },
+    })
+  ).map((a) => a.score ?? 0);
+  const myScore = analysis.score;
+  const totalParticipants = Math.max(finalizedScores.length, 1);
+  const liveRank = finalizedScores.filter((s) => s > myScore).length + 1;
+  const liveTopperScore = Math.max(myScore, ...finalizedScores);
+  const livePercentile =
+    totalParticipants <= 1 ? 100 : Math.round(((totalParticipants - liveRank) / (totalParticipants - 1)) * 10000) / 100;
+
+  // Question text, options and solutions as they are now — a question
+  // corrected after the test shows its corrected version in the review.
+  const storedReviews = ((analysis.questionReviews as any[]) || []).map((r) => ({ ...r }));
+  const reviewIds = storedReviews.map((r) => r.questionId).filter(Boolean);
+  if (reviewIds.length) {
+    const liveTranslations = await prisma.questionTranslation.findMany({
+      where: { questionId: { in: reviewIds } },
+      select: { questionId: true, language: true, statement: true, options: true, solution: true },
+    });
+    const byQuestion = new Map<string, typeof liveTranslations>();
+    for (const t of liveTranslations) byQuestion.set(t.questionId, [...(byQuestion.get(t.questionId) ?? []), t]);
+    for (const r of storedReviews) {
+      const ts = byQuestion.get(r.questionId);
+      if (!ts?.length) continue;
+      const en = ts.find((t) => t.language === "ENGLISH") ?? ts[0];
+      const hi = ts.find((t) => t.language === "HINDI");
+      if (en) {
+        r.statementEn = en.statement || r.statementEn;
+        r.optionsEn = (en.options as Record<string, string>) || r.optionsEn;
+        r.solutionEn = en.solution || r.solutionEn;
+      }
+      if (hi) {
+        r.statementHi = hi.statement || r.statementHi;
+        r.optionsHi = (hi.options as Record<string, string>) || r.optionsHi;
+        r.solutionHi = hi.solution || r.solutionHi;
+      }
+    }
+  }
 
   const questionTypeStats = (analysis.questionTypeStats as any[]) || [];
   const chapterStats = (analysis.chapterStats as any[]) || [];
 
-  // Generate losing mark areas from stored stats
+  // Where marks were lost: each wrong answer costs its own marks + its
+  // negative marking (was a flat 5 per wrong answer whatever the scheme).
+  const lostOn = (r: any) => (Number(r.maxMarks) || 0) + Math.abs(Number(r.negativeMarks) || 0);
+  const wrong = storedReviews.filter((r) => r.isAnswered && r.isCorrect === false);
+  const lostBy = (key: (r: any) => string) => {
+    const m = new Map<string, number>();
+    for (const r of wrong) m.set(key(r), (m.get(key(r)) ?? 0) + lostOn(r));
+    return m;
+  };
+  // Same keys as the stored stats (a missing type/chapter falls back the same way).
+  const lostByType = lostBy((r) => String(r.questionType || "SINGLE_CORRECT"));
+  const lostByChapter = lostBy((r) => `${r.subject}::${r.chapter === "General Topic" ? "General Fundamentals" : r.chapter}`);
   const losingMarkAreas: LosingMarkArea[] = [];
   for (const qt of questionTypeStats) {
     if (qt.incorrect > 0) {
@@ -1069,7 +1120,7 @@ export async function getStoredTestAnalysis(
         area: `${qt.label} Questions`,
         category: "QUESTION_TYPE",
         errorRate: qt.errorRate,
-        marksLost: qt.incorrect * 5,
+        marksLost: lostByType.get(String(qt.type)) ?? qt.incorrect * 5,
         impactLevel: qt.errorRate >= 40 ? "HIGH" : "MEDIUM",
         recommendation: `Solve 10 targeted ${qt.label} questions to eliminate recurring patterns.`,
       });
@@ -1081,7 +1132,7 @@ export async function getStoredTestAnalysis(
         area: `${ch.subject}: ${ch.chapter}`,
         category: "CHAPTER",
         errorRate: ch.errorRate,
-        marksLost: ch.incorrect * 5,
+        marksLost: lostByChapter.get(`${ch.subject}::${ch.chapter}`) ?? ch.incorrect * 5,
         impactLevel: ch.errorRate >= 40 ? "HIGH" : "MEDIUM",
         recommendation: `Revisit NCERT chapter notes for ${ch.chapter}.`,
       });
@@ -1106,11 +1157,11 @@ export async function getStoredTestAnalysis(
     percentage: analysis.percentage,
     accuracy: analysis.accuracy,
     timeTakenSec: analysis.timeTakenSec,
-    rank: analysis.rank ?? 1,
-    totalParticipants: Math.max(totalParticipants, analysis.totalTestParticipants ?? 1),
-    topperScore: analysis.topperScore ?? analysis.score,
-    gapTopperMarks: analysis.gapTopperMarks ?? 0,
-    percentile: analysis.percentile ?? 100,
+    rank: liveRank,
+    totalParticipants,
+    topperScore: liveTopperScore,
+    gapTopperMarks: Math.max(0, liveTopperScore - myScore),
+    percentile: livePercentile,
     neetEquivalentScore: analysis.neetEquivalentScore,
     estimatedNeetAir: analysis.estimatedNeetAir,
     estimatedNeetAirMin: analysis.estimatedNeetAirMin,
@@ -1129,7 +1180,7 @@ export async function getStoredTestAnalysis(
     topicStats: (analysis.conceptStats as any) || [],
     ncertPlan: (analysis.ncertPlan as any) || [],
     actionPlan: (analysis.actionPlan as any) || [],
-    questionReviews: (analysis.questionReviews as any) || [],
+    questionReviews: storedReviews,
   };
 }
 

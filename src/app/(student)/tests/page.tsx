@@ -4,6 +4,8 @@ import { format } from "date-fns";
 import { requireStudentSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { NCERT_CHAPTERS } from "@/lib/ai-chat/ncertChapters";
+import { areResultsReleased, resultsReleaseAt } from "@/lib/tests/schedule-rules";
+import { formatISTDateTime } from "@/lib/date-utils";
 import {
   AtomicPracticeTestArena,
   type SubjectChapterwiseTests,
@@ -386,12 +388,16 @@ export default async function StudentTestsPage() {
       const isClosed = Boolean(closeTime && now > closeTime);
       const canAttempt = !isCompleted && !inProg && !isUpcoming && !isClosed && t.status !== "ARCHIVED";
       const canResume = inProg && !isClosed;
+      const schedule = { openTime: t.openTime, closeTime: t.closeTime, durationMin: t.durationMin, batchSchedule: t.batchSchedule };
+      const released = areResultsReleased(schedule, now);
 
       let statusLabel = "Available Now";
       let tone = "bg-emerald-500/15 text-emerald-600 border border-emerald-500/30";
 
       if (isCompleted) {
-        statusLabel = `Completed · ${attempt.score ?? 0} Marks`;
+        statusLabel = released
+          ? `Completed · ${attempt.score ?? 0} Marks`
+          : `Submitted · Result ${formatISTDateTime(resultsReleaseAt(schedule))}`;
         tone = "bg-primary/15 text-primary border border-primary/30";
       } else if (inProg) {
         statusLabel = "In Progress";
@@ -427,7 +433,7 @@ export default async function StudentTestsPage() {
         canViewResult: Boolean(isCompleted),
         isClosed,
         isUpcoming,
-        score: attempt?.score ?? null,
+        score: released ? attempt?.score ?? null : null,
         startsAt: openTime ? openTime.toISOString() : null,
         endsAt: closeTime ? closeTime.toISOString() : null,
       };
@@ -482,12 +488,16 @@ export default async function StudentTestsPage() {
     const isClosed = now > bs.endsAt;
     const canAttempt = !isCompleted && !inProg && now >= bs.startsAt && now <= bs.endsAt;
     const canResume = inProg && now <= bs.endsAt;
+    const schedule = { openTime: t.openTime, closeTime: t.closeTime, durationMin: t.durationMin, batchSchedule: bs };
+    const released = areResultsReleased(schedule, now);
 
     let statusLabel = "Live Now";
     let tone = "bg-emerald-500/15 text-emerald-600 border border-emerald-500/30";
 
     if (isCompleted) {
-      statusLabel = `Completed · ${attempt.score ?? 0} Marks`;
+      statusLabel = released
+          ? `Completed · ${attempt.score ?? 0} Marks`
+          : `Submitted · Result ${formatISTDateTime(resultsReleaseAt(schedule))}`;
       tone = "bg-primary/15 text-primary border border-primary/30";
     } else if (inProg) {
       statusLabel = "In Progress";
@@ -513,7 +523,7 @@ export default async function StudentTestsPage() {
       canViewResult: Boolean(isCompleted),
       isClosed,
       isUpcoming,
-      score: attempt?.score ?? null,
+      score: released ? attempt?.score ?? null : null,
       startsAt: bs.startsAt?.toISOString(),
       endsAt: bs.endsAt?.toISOString(),
     });
