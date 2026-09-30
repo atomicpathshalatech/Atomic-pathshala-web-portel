@@ -9,6 +9,7 @@ import React, {
 } from "react";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
+import { useWatchHeartbeat } from "@/lib/video/use-watch-heartbeat";
 
 export interface LectureVideoPlayerProps {
   mode?: "recorded" | "live";
@@ -23,6 +24,8 @@ export interface LectureVideoPlayerProps {
   watermarkText?: string;
   onClose?: () => void;
   onTimeUpdate?: (currentTime: number, duration: number) => void;
+  /** "lecture:<id>" | "schedule:<id>" — records this student's real watch time for the class. */
+  watchContentKey?: string;
   onEnded?: () => void;
   onProgressPercentage?: (percent: number) => void;
   onBookmarkAdd?: (timestamp: number) => void;
@@ -105,6 +108,7 @@ export function LectureVideoPlayer({
   watermarkText,
   onClose,
   onTimeUpdate,
+  watchContentKey,
   onEnded,
   onProgressPercentage,
   onBookmarkAdd,
@@ -129,6 +133,7 @@ export function LectureVideoPlayer({
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  useWatchHeartbeat(mode === "recorded" ? watchContentKey : null, currentTime, duration);
   const [bufferedEnd, setBufferedEnd] = useState(0);
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);

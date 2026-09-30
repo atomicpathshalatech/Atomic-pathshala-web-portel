@@ -326,7 +326,12 @@ export async function getTeacherCommandCenterData(teacherId: string): Promise<Co
     }),
   ]);
   const completedInPeriod = scheduledInPeriod.filter((s) => s.status === "COMPLETED");
-  const teachingHours = completedInPeriod.reduce((sum, s) => sum + (s.endsAt.getTime() - s.startsAt.getTime()) / 3_600_000, 0);
+  // Hours actually taught (real start → real end, recorded classes by video
+  // length) — not the scheduled slots, which counted a class that ran 20 min
+  // as the full hour it was booked for.
+  const { computeTeachingStats } = await import("@/lib/teaching/stats");
+  const actual = (await computeTeachingStats({ teacherIds: [teacherId], from: periodStart, to: now })).get(teacherId);
+  const teachingHours = (actual?.totalMinutes ?? 0) / 60;
   // Previous-period hours only needs the count for a rough hours trend —
   // computing exact prior-period hours would need a second full fetch for
   // one KPI's delta, so that delta is intentionally left null (better than

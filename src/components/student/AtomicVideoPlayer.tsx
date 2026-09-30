@@ -7,6 +7,8 @@ import { LectureVideoPlayer } from "@/components/video-player/LectureVideoPlayer
 
 export interface VideoPlayerProps {
   lectureId?: string;
+  /** "lecture:<id>" | "schedule:<id>" for watch-time tracking; omitted = not tracked (demos). */
+  watchContentKey?: string;
   title: string;
   subtitle?: string;
   subjectTitle?: string;
@@ -23,6 +25,7 @@ export interface VideoPlayerProps {
 
 export function AtomicVideoPlayer({
   lectureId = "demo-lec-1",
+  watchContentKey,
   title = "Thermodynamics & Heat Transfer: Lecture 01",
   subtitle = "First Law of Thermodynamics, Work Done in Isothermal & Adiabatic Processes",
   subjectTitle = "Physics",
@@ -283,6 +286,7 @@ export function AtomicVideoPlayer({
             <LectureVideoPlayer
               mode="recorded"
               lectureId={lectureId}
+              watchContentKey={watchContentKey}
               title={title}
               subjectTitle={subjectTitle}
               educatorName={educatorName}

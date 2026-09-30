@@ -7,6 +7,8 @@ import { UserProfileHeaderCard } from "@/components/team-portal/UserProfileHeade
 import { SelfProfileForm } from "@/components/team-portal/SelfProfileForm";
 import { ProfileImagesSection } from "@/components/team-portal/ProfileImagesSection";
 import { TeacherProfileChaptersSection } from "@/components/team-portal/TeacherProfileChaptersSection";
+import { TeachingStatsCard, sumTeachingStats } from "@/components/team-portal/TeachingStatsCard";
+import { computeTeachingStats, type TeacherTeachingStats } from "@/lib/teaching/stats";
 
 export const metadata: Metadata = {
   title: "My Profile",
@@ -27,6 +29,25 @@ export default async function MyProfilePage() {
   if (!user) redirect("/login");
 
   const roleName = user.role?.name || (session.user as any)?.role || "TEAM_MEMBER";
+
+  // Actual teaching time + views: a teacher sees their own; the Super Admin
+  // (and Founder) sees the whole team's total, with the per-teacher board one click away.
+  const isTopAdmin = user.status === "ACTIVE" && (user.role?.name === "SUPER_ADMIN" || user.role?.name === "FOUNDER");
+  const istNow = new Date(Date.now() + 5.5 * 3_600_000);
+  const monthStart = new Date(Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), 1) - 5.5 * 3_600_000);
+  let myTeaching: { allTime: TeacherTeachingStats; thisMonth: TeacherTeachingStats } | null = null;
+  if (user.teacher) {
+    const [all, month] = await Promise.all([
+      computeTeachingStats({ teacherIds: [user.teacher.id] }),
+      computeTeachingStats({ teacherIds: [user.teacher.id], from: monthStart }),
+    ]);
+    myTeaching = { allTime: all.get(user.teacher.id)!, thisMonth: month.get(user.teacher.id)! };
+  }
+  let teamTeaching: { allTime: TeacherTeachingStats; thisMonth: TeacherTeachingStats } | null = null;
+  if (isTopAdmin) {
+    const [all, month] = await Promise.all([computeTeachingStats(), computeTeachingStats({ from: monthStart })]);
+    teamTeaching = { allTime: sumTeachingStats(Array.from(all.values())), thisMonth: sumTeachingStats(Array.from(month.values())) };
+  }
 
   let teacherChaptersData: any[] = [];
   if (user.teacher) {
@@ -97,8 +118,18 @@ export default async function MyProfilePage() {
         }}
       />
 
+      {teamTeaching && (
+        <TeachingStatsCard
+          title="Team teaching (all teachers)"
+          allTime={teamTeaching.allTime}
+          thisMonth={teamTeaching.thisMonth}
+          footerLink={{ href: "/team/performance", label: "Every teacher, staff member and student" }}
+        />
+      )}
+
       {user.teacher ? (
         <div className="space-y-6 pt-4 border-t border-slate-200 dark:border-slate-800">
+          {myTeaching && <TeachingStatsCard title="My teaching" allTime={myTeaching.allTime} thisMonth={myTeaching.thisMonth} />}
           <TeacherProfileChaptersSection chapters={teacherChaptersData} />
 
           <h2 className="font-headline-md text-headline-md text-[#031635] dark:text-white font-bold pt-4 border-t border-slate-200 dark:border-slate-800">

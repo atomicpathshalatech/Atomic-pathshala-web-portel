@@ -7,7 +7,8 @@ import { TeamShell, type TeamNavSection } from "@/components/team-portal/TeamShe
  * "Contracts" is strictly an Admin/HR management tool (CONTRACT_READ_ANY)
  * placed under "People", completely hidden from educator self profiles.
  */
-const NAV_SECTIONS: { title?: string; items: { href: string; label: string; icon: string; permission: string }[] }[] = [
+// superAdminOnly: Super Admin / Founder only — ADMIN passes every permission, so a permission can't express it.
+const NAV_SECTIONS: { title?: string; items: { href: string; label: string; icon: string; permission: string; superAdminOnly?: boolean }[] }[] = [
   {
     items: [
       { href: "/team", label: "Dashboard", icon: "space_dashboard", permission: PERMISSIONS.TEAM_PORTAL_ACCESS },
@@ -89,6 +90,7 @@ const NAV_SECTIONS: { title?: string; items: { href: string; label: string; icon
       { href: "/team/finance", label: "Finance", icon: "payments", permission: PERMISSIONS.FINANCE_READ },
       { href: "/team/subscriptions", label: "Subscriptions", icon: "workspace_premium", permission: PERMISSIONS.FINANCE_READ },
       { href: "/team/analytics", label: "Analytics", icon: "analytics", permission: PERMISSIONS.ANALYTICS_VIEW },
+      { href: "/team/performance", label: "Performance Boards", icon: "monitoring", permission: PERMISSIONS.TEAM_PORTAL_ACCESS, superAdminOnly: true },
       { href: "/team/security", label: "Security Center", icon: "security", permission: PERMISSIONS.SECURITY_CONFIG_MANAGE },
       { href: "/team/predictor", label: "Rank/College Predictor", icon: "insights", permission: PERMISSIONS.PREDICTOR_DATA_MANAGE },
     ],
@@ -108,11 +110,12 @@ export default async function TeamPortalLayout({ children }: { children: React.R
   // — this layout makes zero additional DB round trips.
   const { user, permissions } = await requireTeamSession();
   const hasTeacherProfile = Boolean(user.teacher);
+  const superAdmin = user.role?.name === "SUPER_ADMIN" || user.role?.name === "FOUNDER";
 
   const visibleSections: TeamNavSection[] = NAV_SECTIONS.map((section) => ({
     title: section.title,
     items: section.items
-      .filter((item) => permissions.has(item.permission as (typeof PERMISSIONS)[keyof typeof PERMISSIONS]))
+      .filter((item) => (!item.superAdminOnly || superAdmin) && permissions.has(item.permission as (typeof PERMISSIONS)[keyof typeof PERMISSIONS]))
       .map(({ href, label, icon }) => ({ href, label, icon })),
   })).filter((section) => section.items.length > 0);
 

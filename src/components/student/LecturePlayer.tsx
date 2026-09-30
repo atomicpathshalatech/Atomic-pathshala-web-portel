@@ -544,6 +544,7 @@ export function LecturePlayer({
             <LectureVideoPlayer
               mode="recorded"
               lectureId={lectureId}
+              watchContentKey={`lecture:${lectureId}`}
               title={title}
               subjectTitle={subjectTitle}
               educatorName={teacherName}

@@ -173,6 +173,7 @@ export default async function WatchLecturePage({ params }: { params?: { lectureI
       return (
         <AtomicVideoPlayer
           lectureId={schedule.id}
+          watchContentKey={`schedule:${schedule.id}`}
           title={schedule.title}
           subjectTitle={schedule.subject || schedule.chapter?.subject?.title || "Live Class"}
           chapterTitle={schedule.chapter?.title || "Class Recording"}

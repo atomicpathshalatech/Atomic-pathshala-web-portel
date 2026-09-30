@@ -7,6 +7,8 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiError, apiSuccess, handleApiError } from "@/lib/api/response";
 import { pastClassCreateSchema } from "@/lib/validation/batch";
 import { PastClassError, createPastClass, pastClassOptions } from "@/lib/batch/past-classes";
+import { parseYouTubeVideoId } from "@/lib/youtube/video-link";
+import { refreshYoutubeVideoStats } from "@/lib/youtube/video-stats";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,6 +48,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     } catch (err) {
       if (err instanceof PastClassError) return apiError(err.message, err.status);
       throw err;
+    }
+
+    // The video's real length is this class's teaching time — fetch it now
+    // (the daily refresh would pick it up anyway if YouTube is slow).
+    const videoId = parseYouTubeVideoId(created.videoUrl);
+    if (videoId) {
+      await refreshYoutubeVideoStats([videoId]).catch((err) => console.warn("[past_class_video_stats]", err instanceof Error ? err.message : err));
     }
 
     await prisma.auditLog
