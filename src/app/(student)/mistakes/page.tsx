@@ -3,6 +3,7 @@ import Link from "next/link";
 import { requireStudentSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { toLegacyQuestion } from "@/lib/questions/legacy";
+import { FormulaText } from "@/components/test-portal/FormulaText";
 
 export const metadata: Metadata = {
   title: "Mistake Book",
@@ -294,9 +295,9 @@ export default async function MistakeBookPage({
                 </span>
               </div>
 
-              <p className="font-body-md text-body-md text-on-surface whitespace-pre-wrap leading-relaxed">
-                {item.body}
-              </p>
+              <div className="font-body-md text-body-md text-on-surface leading-relaxed min-w-0">
+                <FormulaText text={item.body} />
+              </div>
 
               {/* Options Review */}
               {item.options.length > 0 && (
@@ -304,7 +305,7 @@ export default async function MistakeBookPage({
                   {item.options.map((opt) => (
                     <div
                       key={opt.key}
-                      className={`px-4 py-2.5 rounded-xl text-xs flex items-center justify-between border ${
+                      className={`px-4 py-2.5 rounded-xl text-xs flex items-start justify-between gap-2 min-w-0 border ${
                         opt.isCorrect
                           ? "border-secondary bg-secondary/10 text-secondary font-semibold"
                           : opt.isStudentChoice
@@ -312,17 +313,17 @@ export default async function MistakeBookPage({
                           : "border-outline-variant/30 text-on-surface-variant"
                       }`}
                     >
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold">{opt.key}.</span>
-                        <span>{opt.label}</span>
+                      <div className="flex items-start gap-2 min-w-0 flex-1">
+                        <span className="font-bold shrink-0">{opt.key}.</span>
+                        <FormulaText text={opt.label} className="min-w-0" />
                       </div>
                       {opt.isCorrect && (
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-secondary">
+                        <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-secondary">
                           ✓ Correct Answer
                         </span>
                       )}
                       {opt.isStudentChoice && (
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-error">
+                        <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-error">
                           ✗ Your Mistake
                         </span>
                       )}
@@ -338,9 +339,9 @@ export default async function MistakeBookPage({
                     <span className="material-symbols-outlined text-sm">lightbulb</span>
                     Correct Derivation &amp; Conceptual Fix
                   </p>
-                  <p className="text-xs text-on-surface-variant leading-relaxed whitespace-pre-wrap">
-                    {item.explanation}
-                  </p>
+                  <div className="text-xs text-on-surface-variant leading-relaxed min-w-0">
+                    <FormulaText text={item.explanation} />
+                  </div>
                 </div>
               )}
             </div>
