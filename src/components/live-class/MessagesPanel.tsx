@@ -357,26 +357,22 @@ export function MessagesPanel({
           messages.map((m) => {
             if (m.isSystemMessage) {
               const isJoin = m.body.toLowerCase().includes("joined");
-              const initial = (m.authorName || "S").trim().charAt(0).toUpperCase();
+              const joinedAt = m.createdAt
+                ? new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                : "";
 
               return (
-                <div key={m.id} className="flex justify-center my-2">
+                <div key={m.id} className={`flex justify-center ${isJoin ? "my-0.5" : "my-2"}`}>
                   {isJoin ? (
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-emerald-900 dark:text-emerald-300 shadow-2xs">
-                      {m.authorPhotoUrl ? (
-                        <img
-                          src={m.authorPhotoUrl}
-                          alt={m.authorName}
-                          className="w-4 h-4 rounded-full object-cover shrink-0"
-                        />
-                      ) : (
-                        <div className="w-4 h-4 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[9px] font-bold shrink-0">
-                          {initial}
-                        </div>
-                      )}
-                      <span>{m.body}</span>
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-                    </div>
+                    // One quiet line, no box: a class with many students joining
+                    // must not bury the actual chat under big cards.
+                    <p className={`flex items-center gap-1.5 max-w-full text-[11px] leading-4 ${t.empty}`}>
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                      <span className="truncate">
+                        <span className="font-semibold text-emerald-500">{m.authorName}</span> joined
+                      </span>
+                      {joinedAt && <span className="shrink-0 tabular-nums opacity-80">· {joinedAt}</span>}
+                    </p>
                   ) : (
                     <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium bg-slate-100 dark:bg-slate-800/70 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                       <span className="material-symbols-outlined text-[13px]">info</span>

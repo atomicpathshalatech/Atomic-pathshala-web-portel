@@ -247,6 +247,12 @@ async function run() {
   assert(board?.stats.totalParticipants === 3 && board.stats.totalPolls === 1, "Leaderboard stats include YouTube participants");
   assert(yv.addCounts({ A: 2, B: 1 }, { B: 4, C: 1 }).B === 5, "App + YouTube counts add up");
 
+  // ---- 8. Chat join lines + always-reachable leaderboard publish ----
+  const chatPanel = read("src/components/live-class/MessagesPanel.tsx");
+  assert(!chatPanel.includes("rounded-full text-xs font-semibold bg-emerald-50") && chatPanel.includes("</span> joined") && chatPanel.includes("{joinedAt &&"), "Join notice is one small line with the join time (no big box)");
+  assert(teacherRoom.includes("{publishingLeaderboard ? \"Publishing…\" : \"Publish Leaderboard\"}") && !teacherRoom.includes('title="Dock / Undock"'), "Publish Leaderboard is always in the poll window header");
+  assert(read("src/app/api/whiteboard/sessions/[id]/quiz/leaderboard/route.ts").includes("board.rankings.length === 0"), "Publishing an empty leaderboard is refused with a clear message");
+
   await prisma.$disconnect();
 }
 

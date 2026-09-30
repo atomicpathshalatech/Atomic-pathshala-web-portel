@@ -5638,11 +5638,13 @@ function PollModal({
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const [publishingLeaderboard, setPublishingLeaderboard] = useState(false);
   const [publishSuccessMessage, setPublishSuccessMessage] = useState<string | null>(null);
+  const [publishError, setPublishError] = useState<string | null>(null);
 
   const handlePublishLeaderboard = async () => {
     if (!sessionId) return;
     setPublishingLeaderboard(true);
     setPublishSuccessMessage(null);
+    setPublishError(null);
     try {
       const res = await fetch(`/api/whiteboard/sessions/${sessionId}/quiz/leaderboard`, {
         method: "POST",
@@ -5654,9 +5656,12 @@ function PollModal({
         if (isPublishedLeaderboard(json.data)) onLeaderboardPublished?.(json.data);
         setPublishSuccessMessage("Leaderboard published to students (30s)!");
         setTimeout(() => setPublishSuccessMessage(null), 6000);
+      } else {
+        setPublishError(json.error || "Could not publish the leaderboard.");
       }
     } catch (err) {
       console.error("Leaderboard publish failed:", err);
+      setPublishError("Could not publish the leaderboard — check the connection.");
     } finally {
       setPublishingLeaderboard(false);
     }
@@ -5689,17 +5694,13 @@ function PollModal({
           <div className="flex items-center gap-1.5">
             <button
               type="button"
-              className="p-1 rounded text-gray-400 hover:text-gray-200 hover:bg-[#252836] transition"
-              title="Dock / Undock"
+              disabled={publishingLeaderboard}
+              onClick={handlePublishLeaderboard}
+              className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold transition disabled:opacity-50 cursor-pointer"
+              title="Show the leaderboard to the whole class (30 s)"
             >
-              <span className="material-symbols-outlined text-base">splitscreen</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setPollModalTab("ranks")}
-              className="text-[11px] px-2 py-0.5 rounded bg-[#252836] hover:bg-[#323648] text-gray-200 font-semibold border border-[#323648] transition"
-            >
-              Ranks
+              <span className="material-symbols-outlined text-sm">military_tech</span>
+              {publishingLeaderboard ? "Publishing…" : "Publish Leaderboard"}
             </button>
             <button
               type="button"
@@ -5710,6 +5711,10 @@ function PollModal({
             </button>
           </div>
         </div>
+
+        {publishError && (
+          <p className="mx-3 mt-3 text-[11px] text-amber-300 bg-amber-950/40 border border-amber-900/50 rounded-lg px-2.5 py-1.5">{publishError}</p>
+        )}
 
         {/* Top Switcher Tabs: Live Quiz vs Leaderboard */}
         <div className="p-3 pb-0">
@@ -5858,11 +5863,11 @@ function PollModal({
               )}
 
               {/* Publish to Students Action */}
-              {leaderboardData?.rankings && leaderboardData.rankings.length > 0 && (
+              {!leaderboardLoading && (
                 <div className="pt-2 border-t border-[#252836] space-y-1.5">
                   <button
                     type="button"
-                    disabled={publishingLeaderboard}
+                    disabled={publishingLeaderboard || !leaderboardData?.rankings.length}
                     onClick={handlePublishLeaderboard}
                     className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs shadow-lg transition flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
                   >

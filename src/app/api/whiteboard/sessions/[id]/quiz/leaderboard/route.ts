@@ -51,6 +51,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     const board = await buildQuizLeaderboard(params.id, scope);
     if (!board) return apiError("Whiteboard session not found", 404);
+    if (board.rankings.length === 0) {
+      return apiError("No answers yet — run a poll and let students answer, then publish.", 409);
+    }
 
     const payload = {
       ...board,
