@@ -62,7 +62,7 @@ const base = `http://127.0.0.1:${server.address().port}`;
 
 for (const [name, file] of Object.entries(files)) {
   const outDir = join(work, name);
-  const res = await runElectron(`${base}/${file}`, outDir, "1,2");
+  const res = await runElectron(`${base}/${file}`, outDir, process.env.PDF_SHOTS || "1,2");
   if (res.error) {
     assert(false, `${name}: ${res.error}`);
     continue;
@@ -76,8 +76,19 @@ for (const [name, file] of Object.entries(files)) {
   assert(c.pageNumbers.every((n, i, all) => i === 0 || Number(n) > Number(all[i - 1])), `${name}: page numbers run in order (${c.pageNumbers.slice(0, 3).join(",")}…)`);
   assert(c.coverTotals.every((t) => Number(t) > 1), `${name}: cover shows the real page count (${c.coverTotals[0]})`);
   assert(res.pdfPages === res.pages, `${name}: real PDF has one page per sheet (${res.pdfPages} PDF pages, ${Math.round(res.pdfBytes / 1024)} KB)`);
-  if (name === "withSol") assert(c.solutionRows === c.questionRows, `${name}: every solution included (${c.solutionRows})`);
-  else assert(c.solutionRows === 0, `${name}: no solutions in the question-only booklet`);
+  assert(c.underfilled.length === 0, `${name}: no page left a third empty — a question continues on the next page ${JSON.stringify(c.underfilled)}`);
+  assert(c.pagesWithLink === res.pages && res.pdfLinks >= res.pages, `${name}: clickable ap.atomicpathshala.in on every page (${c.pagesWithLink}/${res.pages} pages, ${res.pdfLinks} links in the PDF)`);
+  assert(c.optionLabels.join(",") === "a),b),c),d)", `${name}: options printed a) b) c) d) (${c.optionLabels.join(" ")})`);
+  assert(c.tinyOptionImages === 0, `${name}: structure images in options are at least half the option width`);
+  if (name === "withSol") {
+    assert(c.solutionRows === c.questionRows, `${name}: every solution included (${c.solutionRows})`);
+    const want = Array.from({ length: c.questionRows }, (_, i) => String(i + 1)).join(",");
+    assert([...c.answerKeyNumbers].sort((a, b) => a - b).join(",") === want && c.answerKeyFits, `${name}: answer key lists every question (${c.answerKeyNumbers.length}) and fits its page`);
+    assert(c.firstSheetHasAnswerKey && c.solutionFollowsQuestion, `${name}: answer key first, then each question followed by its own solution`);
+  } else {
+    assert(c.solutionRows === 0, `${name}: no solutions in the question-only booklet`);
+    assert(/Physics, Chemistry, Biology/.test(c.coverText) && !/Section A|खण्ड A/.test(c.coverText), `${name}: cover instruction lists the real sections (no old Section A/B rule)`);
+  }
 }
 server.close();
 console.log(`\n${passed} passed, ${failed} failed  (artifacts: ${work})`);

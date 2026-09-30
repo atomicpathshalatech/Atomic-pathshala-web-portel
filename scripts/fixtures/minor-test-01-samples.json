@@ -1,210 +1,262 @@
 [
-  {
-    "no": 15,
-    "subject": "Physics",
-    "type": "MATCH_COLUMN",
-    "correct": "B",
-    "en": {
-      "statement": "Suggest suitable match between function given in the first column and its description given in the second column.\n\n$$\\begin{array}{|l|l|l|l|} \\hline & \\textbf{Column-I} & & \\textbf{Column-II} \\\\ \\hline (\\text{A}) & \\sin(390^\\circ) & (\\text{P}) & \\text{Positive} \\\\ \\hline (\\text{B}) & \\sin(-30^\\circ) & (\\text{Q}) & \\text{Negative} \\\\ \\hline (\\text{C}) & \\cos 120^\\circ & (\\text{R}) & \\text{Zero} \\\\ \\hline (\\text{D}) & \\tan(-120^\\circ) & (\\text{S}) & \\text{Modulus is greater than one} \\\\ \\hline \\end{array}$$",
-      "options": {
-        "A": "(A)\\rightarrow Q, (B)\\rightarrow P, (C)\\rightarrow P, (D)\\rightarrow Q,S",
-        "B": "(A)\\rightarrow P, (B)\\rightarrow Q, (C)\\rightarrow Q, (D)\\rightarrow P,S",
-        "C": "(A)\\rightarrow P, (B)\\rightarrow Q, (C)\\rightarrow P, (D)\\rightarrow P,S",
-        "D": "(A)\\rightarrow Q, (B)\\rightarrow P, (C)\\rightarrow Q, (D)\\rightarrow Q,S"
-      },
-      "solution": "Concept : Trigonometric values in different quadrants.\n\nSolution :\n(A) $\\sin(390^\\circ) = \\sin(360^\\circ + 30^\\circ) = \\sin 30^\\circ = 1/2 > 0$ (Positive $\\rightarrow$ P)\n(B) $\\sin(-30^\\circ) = -\\sin 30^\\circ = -1/2 < 0$ (Negative $\\rightarrow$ Q)\n(C) $\\cos 120^\\circ = \\cos(180^\\circ - 60^\\circ) = -\\cos 60^\\circ = -1/2 < 0$ (Negative $\\rightarrow$ Q)\n(D) $\\tan(-120^\\circ) = -\\tan(120^\\circ) = \\tan 60^\\circ = \\sqrt{3} \\approx 1.732$ (Positive $\\rightarrow$ P, and modulus $> 1 \\rightarrow$ S)\n\nFinal Answer : Option (B)"
-    },
-    "hi": {
-      "statement": "स्तम्भ-I में दिये गये फलनों का स्तम्भ-II में दिये गये उनके विवरण के साथ उपयुक्त मिलान कीजिए।\n\n$$\\begin{array}{|l|l|l|l|} \\hline & \\textbf{स्तम्भ-I} & & \\textbf{स्तम्भ-II} \\\\ \\hline (\\text{A}) & \\sin(390^\\circ) & (\\text{P}) & \\text{धनात्मक} \\\\ \\hline (\\text{B}) & \\sin(-30^\\circ) & (\\text{Q}) & \\text{ऋणात्मक} \\\\ \\hline (\\text{C}) & \\cos 120^\\circ & (\\text{R}) & \\text{शून्य} \\\\ \\hline (\\text{D}) & \\tan(-120^\\circ) & (\\text{S}) & \\text{मापांक एक से अधिक है।} \\\\ \\hline \\end{array}$$",
-      "options": {
-        "A": "(A)\\rightarrow Q, (B)\\rightarrow P, (C)\\rightarrow P, (D)\\rightarrow Q,S",
-        "B": "(A)\\rightarrow P, (B)\\rightarrow Q, (C)\\rightarrow Q, (D)\\rightarrow P,S",
-        "C": "(A)\\rightarrow P, (B)\\rightarrow Q, (C)\\rightarrow P, (D)\\rightarrow P,S",
-        "D": "(A)\\rightarrow Q, (B)\\rightarrow P, (C)\\rightarrow Q, (D)\\rightarrow Q,S"
-      },
-      "solution": "सिद्धांत : विभिन्न चतुर्थांशों में त्रिकोणमितीय मान।\n\nहल :\n(A) $\\sin(390^\\circ) = \\sin(360^\\circ + 30^\\circ) = \\sin 30^\\circ = 1/2 > 0$ (धनात्मक $\\rightarrow$ P)\n(B) $\\sin(-30^\\circ) = -\\sin 30^\\circ = -1/2 < 0$ (ऋणात्मक $\\rightarrow$ Q)\n(C) $\\cos 120^\\circ = \\cos(180^\\circ - 60^\\circ) = -\\cos 60^\\circ = -1/2 < 0$ (ऋणात्मक $\\rightarrow$ Q)\n(D) $\\tan(-120^\\circ) = -\\tan(120^\\circ) = \\tan 60^\\circ = \\sqrt{3} \\approx 1.732$ (धनात्मक $\\rightarrow$ P, तथा मापांक $> 1 \\rightarrow$ S)\n\nअंतिम उत्तर : विकल्प (B)"
-    }
+ {
+  "no": 15,
+  "subject": "Physics",
+  "type": "MATCH_COLUMN",
+  "correct": "B",
+  "en": {
+   "statement": "Suggest suitable match between function given in the first column and its description given in the second column.\n\n$$\\begin{array}{|l|l|l|l|} \\hline & \\textbf{Column-I} & & \\textbf{Column-II} \\\\ \\hline (\\text{A}) & \\sin(390^\\circ) & (\\text{P}) & \\text{Positive} \\\\ \\hline (\\text{B}) & \\sin(-30^\\circ) & (\\text{Q}) & \\text{Negative} \\\\ \\hline (\\text{C}) & \\cos 120^\\circ & (\\text{R}) & \\text{Zero} \\\\ \\hline (\\text{D}) & \\tan(-120^\\circ) & (\\text{S}) & \\text{Modulus is greater than one} \\\\ \\hline \\end{array}$$",
+   "options": {
+    "A": "(A)\\rightarrow Q, (B)\\rightarrow P, (C)\\rightarrow P, (D)\\rightarrow Q,S",
+    "B": "(A)\\rightarrow P, (B)\\rightarrow Q, (C)\\rightarrow Q, (D)\\rightarrow P,S",
+    "C": "(A)\\rightarrow P, (B)\\rightarrow Q, (C)\\rightarrow P, (D)\\rightarrow P,S",
+    "D": "(A)\\rightarrow Q, (B)\\rightarrow P, (C)\\rightarrow Q, (D)\\rightarrow Q,S"
+   },
+   "solution": "Concept : Trigonometric values in different quadrants.\n\nSolution :\n(A) $\\sin(390^\\circ) = \\sin(360^\\circ + 30^\\circ) = \\sin 30^\\circ = 1/2 > 0$ (Positive $\\rightarrow$ P)\n(B) $\\sin(-30^\\circ) = -\\sin 30^\\circ = -1/2 < 0$ (Negative $\\rightarrow$ Q)\n(C) $\\cos 120^\\circ = \\cos(180^\\circ - 60^\\circ) = -\\cos 60^\\circ = -1/2 < 0$ (Negative $\\rightarrow$ Q)\n(D) $\\tan(-120^\\circ) = -\\tan(120^\\circ) = \\tan 60^\\circ = \\sqrt{3} \\approx 1.732$ (Positive $\\rightarrow$ P, and modulus $> 1 \\rightarrow$ S)\n\nFinal Answer : Option (B)"
   },
-  {
-    "no": 30,
-    "subject": "Physics",
-    "type": "MATCH_COLUMN",
-    "correct": "B",
-    "en": {
-      "statement": "Match List-I with List-II :\n\n$$\\begin{array}{llll} & \\textbf{List-I} & & \\textbf{List-II} \\\\ (a) & h\\text{ (Planck's constant)} & (i) & [\\text{M L T}^{-1}] \\\\ (b) & E\\text{ (kinetic energy)} & (ii) & [\\text{M L}^2\\text{ T}^{-1}] \\\\ (c) & V\\text{ (electric potential)} & (iii) & [\\text{M L}^2\\text{ T}^{-2}] \\\\ (d) & P\\text{ (linear momentum)} & (iv) & [\\text{M L}^2\\text{ I}^{-1}\\text{T}^{-3}] \\end{array}$$\n\nChoose the correct answer from the options given below :",
-      "options": {
-        "A": "(a) $\\rightarrow$ (iii), (b) $\\rightarrow$ (iv), (c) $\\rightarrow$ (ii), (d) $\\rightarrow$ (i)",
-        "B": "(a) $\\rightarrow$ (ii), (b) $\\rightarrow$ (iii), (c) $\\rightarrow$ (iv), (d) $\\rightarrow$ (i)",
-        "C": "(a) $\\rightarrow$ (i), (b) $\\rightarrow$ (ii), (c) $\\rightarrow$ (iv), (d) $\\rightarrow$ (iii)",
-        "D": "(a) $\\rightarrow$ (iii), (b) $\\rightarrow$ (ii), (c) $\\rightarrow$ (iv), (d) $\\rightarrow$ (i)"
-      },
-      "solution": "Concept : Determine dimensional formulas using fundamental physical relations: $h = E/\\nu$, $E = \\frac{1}{2}mv^2$, $V = W/q$, and $P = mv$.\n\nSolution :\n(a) Planck's constant: $[h] = [\\text{M L}^2\\text{T}^{-2}]/[\\text{T}^{-1}] = [\\text{M L}^2\\text{T}^{-1}] \\rightarrow$ (ii)\n\n(b) Kinetic energy: $[E] = [\\text{M}][\\text{L T}^{-1}]^2 = [\\text{M L}^2\\text{T}^{-2}] \\rightarrow$ (iii)\n\n(c) Electric potential: $[V] = [\\text{M L}^2\\text{T}^{-2}]/[\\text{I T}] = [\\text{M L}^2\\text{I}^{-1}\\text{T}^{-3}] \\rightarrow$ (iv)\n\n(d) Linear momentum: $[P] = [\\text{M}][\\text{L T}^{-1}] = [\\text{M L T}^{-1}] \\rightarrow$ (i)\n\nFinal Answer : Option (B)"
-    },
-    "hi": {
-      "statement": "सूची-I को सूची-II से सुमेलित कीजिए :\n\n$$\\begin{array}{llll} & \\textbf{सूची-I} & & \\textbf{सूची-II} \\\\ (a) & h\\text{ (प्लांक नियतांक)} & (i) & [\\text{M L T}^{-1}] \\\\ (b) & E\\text{ (गतिज ऊर्जा)} & (ii) & [\\text{M L}^2\\text{ T}^{-1}] \\\\ (c) & V\\text{ (विद्युत विभव)} & (iii) & [\\text{M L}^2\\text{ T}^{-2}] \\\\ (d) & P\\text{ (रेखीय संवेग)} & (iv) & [\\text{M L}^2\\text{ I}^{-1}\\text{T}^{-3}] \\end{array}$$\n\nनीचे दिए गए विकल्पों में से सही उत्तर चुनिए :",
-      "options": {
-        "A": "(a) $\\rightarrow$ (iii), (b) $\\rightarrow$ (iv), (c) $\\rightarrow$ (ii), (d) $\\rightarrow$ (i)",
-        "B": "(a) $\\rightarrow$ (ii), (b) $\\rightarrow$ (iii), (c) $\\rightarrow$ (iv), (d) $\\rightarrow$ (i)",
-        "C": "(a) $\\rightarrow$ (i), (b) $\\rightarrow$ (ii), (c) $\\rightarrow$ (iv), (d) $\\rightarrow$ (iii)",
-        "D": "(a) $\\rightarrow$ (iii), (b) $\\rightarrow$ (ii), (c) $\\rightarrow$ (iv), (d) $\\rightarrow$ (i)"
-      },
-      "solution": "सिद्धांत : मूलभूत भौतिक सूत्रों के उपयोग से विमीय सूत्र ज्ञात कीजिए: $h = E/\\nu$, $E = \\frac{1}{2}mv^2$, $V = W/q$, तथा $P = mv$।\n\nहल :\n(a) प्लांक नियतांक: $[h] = [\\text{M L}^2\\text{T}^{-2}]/[\\text{T}^{-1}] = [\\text{M L}^2\\text{T}^{-1}] \\rightarrow$ (ii)\n\n(b) गतिज ऊर्जा: $[E] = [\\text{M}][\\text{L T}^{-1}]^2 = [\\text{M L}^2\\text{T}^{-2}] \\rightarrow$ (iii)\n\n(c) विद्युत विभव: $[V] = [\\text{M L}^2\\text{T}^{-2}]/[\\text{I T}] = [\\text{M L}^2\\text{I}^{-1}\\text{T}^{-3}] \\rightarrow$ (iv)\n\n(d) रेखीय संवेग: $[P] = [\\text{M}][\\text{L T}^{-1}] = [\\text{M L T}^{-1}] \\rightarrow$ (i)\n\nअंतिम उत्तर : विकल्प (B)"
-    }
-  },
-  {
-    "no": 90,
-    "subject": "Chemistry",
-    "type": "SINGLE_CORRECT",
-    "correct": "A",
-    "en": {
-      "statement": "Match Column-I with Column-II and select the correct option:\n\n$$\\begin{array}{|l|l|}\n\\hline\n\\textbf{Column-I} & \\textbf{Column-II} \\\\ \\hline\n\\text{(i) } _{26}\\text{Fe}^{54}, _{26}\\text{Fe}^{56}, _{26}\\text{Fe}^{57}, _{26}\\text{Fe}^{58} & \\text{(a) Isotopes} \\\\ \\hline\n\\text{(ii) } _{1}\\text{H}^{3}, _{2}\\text{He}^{3} & \\text{(b) Isotones} \\\\ \\hline\n\\text{(iii) } _{32}\\text{Ge}^{76}, _{33}\\text{As}^{77} & \\text{(c) Isodiaphers} \\\\ \\hline\n\\text{(iv) } _{92}\\text{U}^{235}, _{90}\\text{Th}^{231} & \\text{(d) Isobars} \\\\ \\hline\n\\text{(v) } _{1}\\text{H}^{1}, _{1}\\text{D}^{2}, _{1}\\text{T}^{3} & \\\\ \\hline\n\\end{array}$$",
-      "options": {
-        "A": "[(i) - a], [(ii) - d], [(iii) - b], [(iv) - c], [(v) - a]",
-        "B": "[(i) - a], [(ii) - d], [(iii) - d], [(iv) - c], [(v) - a]",
-        "C": "[(v) - a], [(iv) - c], [(iii) - d], [(ii) - b], [(i) - a]",
-        "D": "None of these"
-      },
-      "solution": "Concept : Isotopes have same atomic number (Z). Isobars have same mass number (A). Isotones have same number of neutrons (A - Z). Isodiaphers have same isotopic excess (N - Z).\n\nSolution :\n(i) Fe species have same Z = 26 -> Isotopes (a)\n(ii) H-3 and He-3 have same A = 3 -> Isobars (d)\n(iii) Ge-76 (N = 44) and As-77 (N = 44) have same neutrons -> Isotones (b)\n(iv) U-235 (N - Z = 51) and Th-231 (N - Z = 51) have same N - Z -> Isodiaphers (c)\n(v) H-1, D-2, T-3 have same Z = 1 -> Isotopes (a)\n\nFinal Answer : Option (A)"
-    },
-    "hi": {
-      "statement": "कॉलम-I को कॉलम-II से सुमेलित कीजिए तथा सही विकल्प का चयन कीजिए:\n\n$$\\begin{array}{|l|l|}\n\\hline\n\\textbf{कॉलम-I} & \\textbf{कॉलम-II} \\\\ \\hline\n\\text{(i) } _{26}\\text{Fe}^{54}, _{26}\\text{Fe}^{56}, _{26}\\text{Fe}^{57}, _{26}\\text{Fe}^{58} & \\text{(a) समस्थानिक} \\\\ \\hline\n\\text{(ii) } _{1}\\text{H}^{3}, _{2}\\text{He}^{3} & \\text{(b) समन्यूट्रॉनिक} \\\\ \\hline\n\\text{(iii) } _{32}\\text{Ge}^{76}, _{33}\\text{As}^{77} & \\text{(c) आइसोडायफर} \\\\ \\hline\n\\text{(iv) } _{92}\\text{U}^{235}, _{90}\\text{Th}^{231} & \\text{(d) समभारिक} \\\\ \\hline\n\\text{(v) } _{1}\\text{H}^{1}, _{1}\\text{D}^{2}, _{1}\\text{T}^{3} & \\\\ \\hline\n\\end{array}$$",
-      "options": {
-        "A": "[(i) - a], [(ii) - d], [(iii) - b], [(iv) - c], [(v) - a]",
-        "B": "[(i) - a], [(ii) - d], [(iii) - d], [(iv) - c], [(v) - a]",
-        "C": "[(v) - a], [(iv) - c], [(iii) - d], [(ii) - b], [(i) - a]",
-        "D": "इनमें से कोई नहीं"
-      },
-      "solution": "सिद्धांत : समस्थानिकों में परमाणु क्रमांक (Z) समान होता है। समभारिकों में द्रव्यमान संख्या (A) समान होती है।\n\nहल :\n(i) Fe प्रजातियों में समान Z = 26 है -> समस्थानिक (a)\n(ii) H-3 और He-3 में समान A = 3 है -> समभारिक (d)\n\nअंतिम उत्तर : विकल्प (A)"
-    }
-  },
-  {
-    "no": 106,
-    "subject": "Biology",
-    "type": "SINGLE_CORRECT",
-    "correct": "C",
-    "en": {
-      "statement": "Match the column I with II :-\n\n$$\\begin{array}{|l|l|l|l|} \\hline & \\textbf{Column I} & & \\textbf{Column II} \\\\ \\hline \\text{(i)} & \\text{Ascomycetes} & \\text{(a)} & \\textit{Alternaria} \\\\ \\hline \\text{(ii)} & \\text{Basidiomycetes} & \\text{(b)} & \\textit{Mucor} \\\\ \\hline \\text{(iii)} & \\text{Phycomycetes} & \\text{(c)} & \\textit{Ustilago} \\\\ \\hline \\text{(iv)} & \\text{Deuteromycetes} & \\text{(d)} & \\textit{Penicillium} \\\\ \\hline \\end{array}$$",
-      "options": {
-        "A": "i - a, ii - b, iii - c, iv - d",
-        "B": "i - b, ii - c, iii - a, iv - d",
-        "C": "i - d, ii - c, iii - b, iv - a",
-        "D": "i - d, ii - c, iii - a, iv - b"
-      },
-      "solution": "Concept : This question is based on the classification and examples of Kingdom Fungi according to NCERT.\n\nSolution :\n- (i) **Ascomycetes** (Sac fungi): Examples include *Penicillium*, *Aspergillus*, *Claviceps*, and *Neurospora*. Thus, (i) matches with (d).\n- (ii) **Basidiomycetes** (Club fungi): Examples include *Agaricus* (mushroom), *Ustilago* (smut), and *Puccinia* (rust fungus). Thus, (ii) matches with (c).\n\nFinal Answer : Option (C)"
-    },
-    "hi": {
-      "statement": "कॉलम I को कॉलम II से सुमेलित कीजिए :-\n\n$$\\begin{array}{|l|l|l|l|} \\hline & \\textbf{कॉलम I} & & \\textbf{कॉलम II} \\\\ \\hline \\text{(i)} & \\text{ऐस्कोमाइसिटीज} & \\text{(a)} & \\textit{ऑल्टरनेरिया} \\\\ \\hline \\text{(ii)} & \\text{बेसिडियोमाइसिटीज} & \\text{(c)} & \\textit{म्यूकर} \\\\ \\hline \\text{(iii)} & \\text{फाइकोमाइसिटीज} & \\text{(c)} & \\textit{अस्टीलेगो} \\\\ \\hline \\text{(iv)} & \\text{ड्यूटेरोमाइसिटीज} & \\text{(d)} & \\textit{पेनिसिलियम} \\\\ \\hline \\end{array}$$",
-      "options": {
-        "A": "i - a, ii - b, iii - c, iv - d",
-        "B": "i - b, ii - c, iii - a, iv - d",
-        "C": "i - d, ii - c, iii - b, iv - a",
-        "D": "i - d, ii - c, iii - a, iv - b"
-      },
-      "solution": "हल (Solution) :\n- (i) **ऐस्कोमाइसिटीज** (थैली कवक): इसके सामान्य उदाहरण *पेनिसिलियम*, *ऐस्परजिलस* हैं। अतः (i) का मिलान (d) से होता है।\n\nअंतिम उत्तर (Final Answer) : विकल्प (C)"
-    }
-  },
-  {
-    "no": 45,
-    "subject": "Physics",
-    "type": "SINGLE_CORRECT",
-    "correct": "C",
-    "en": {
-      "statement": "A balloon is made of a material of surface tension $S$ and has a small inflation outlet (from where gas is filled inside it) of small area $A$. It is filled with a gas of density $\rho$ and it takes a spherical shape of radius $R$. When the gas is allowed to flow out freely from it, its radius $r$ becomes zero from $R$ in time $T$. If the speed of the gas coming out of the balloon $v(r)$ depends on $r$ as $r^a$ and $T \\propto S^\\alpha A^\\beta \\rho^\\gamma R^\\delta$, then",
-      "options": {
-        "A": "$a = \\frac{1}{2}, \\alpha = \\frac{1}{2}, \\beta = -1, \\gamma = +1, \\delta = \\frac{3}{2}$",
-        "B": "$a = -\\frac{1}{2}, \\alpha = -\\frac{1}{2}, \\beta = -1, \\gamma = -\\frac{1}{2}, \\delta = \\frac{5}{2}$",
-        "C": "$a = -\\frac{1}{2}, \\alpha = -\\frac{1}{2}, \\beta = -1, \\gamma = \\frac{1}{2}, \\delta = \\frac{7}{2}$",
-        "D": "$a = \\frac{1}{2}, \\alpha = \\frac{1}{2}, \\beta = -\\frac{1}{2}, \\gamma = \\frac{1}{2}, \\delta = \\frac{7}{2}$"
-      },
-      "solution": "Concept : Excess pressure inside a balloon is $P = 2S/r$ and efflux velocity is $v = \\sqrt{2P/\\rho}$.\n\nSolution : From $v = \\sqrt{4S/(\\rho r)} \\propto r^{-1/2}$, we get $a = -1/2$. Using rate of flow, $-dV/dt = A v \\implies -4\\pi r^2 dr/dt = A \\sqrt{4S/(\\rho r)}$. Integrating from $r = R$ to $0$ gives $T = \\frac{4\\pi}{7A} \\sqrt{\\frac{\\rho}{S}} R^{7/2} \\propto S^{-1/2} A^{-1} \\rho^{1/2} R^{7/2}$. Comparing powers, we get $\\alpha = -1/2, \\beta = -1, \\gamma = 1/2, \\delta = 7/2$.\n\nFinal Answer : Option (C)"
-    },
-    "hi": {
-      "statement": "एक गुब्बारा पृष्ठ तनाव $S$ के पदार्थ से बना हुआ है और इसके इन्फ्लेशन आउटलेट (जहाँ से इसके अन्दर गैस भरी जाती है) का छोटा क्षेत्रफल $A$ है। इसे घनत्व $\\rho$ की एक गैस से भरा जाता है और यह त्रिज्या $R$ की एक गोलाकार आकृति ले लेता है जब गैस को स्वतंत्र रूप से इससे बाहर प्रवाहित होने दिया जाता है तो इसकी त्रिज्या $r$, समय $T$ में $R$ से शून्य हो जाती है यदि गुब्बारे से बाहर आने वाली गैस की चाल $v(r)$, $r$ पर $r^a$ के रूप में निर्भर करती है और $T \\propto S^\\alpha A^\\beta \\rho^\\gamma R^\\delta$ है, तो",
-      "options": {
-        "A": "$a = \\frac{1}{2}, \\alpha = \\frac{1}{2}, \\beta = -1, \\gamma = +1, \\delta = \\frac{3}{2}$",
-        "B": "$a = -\\frac{1}{2}, \\alpha = -\\frac{1}{2}, \\beta = -1, \\gamma = -\\frac{1}{2}, \\delta = \\frac{5}{2}$",
-        "C": "$a = -\\frac{1}{2}, \\alpha = -\\frac{1}{2}, \\beta = -1, \\gamma = \\frac{1}{2}, \\delta = \\frac{7}{2}$",
-        "D": "$a = \\frac{1}{2}, \\alpha = \\frac{1}{2}, \\beta = -\\frac{1}{2}, \\gamma = \\frac{1}{2}, \\delta = \\frac{7}{2}$"
-      },
-      "solution": "सिद्धांत : गुब्बारे के अंदर अतिरिक्त दाब $P = 2S/r$ और बहिःस्राव वेग $v = \\sqrt{2P/\\rho}$ होता है।\n\nहल : $v = \\sqrt{4S/(\\rho r)} \\propto r^{-1/2}$ से, हमें $a = -1/2$ प्राप्त होता है। प्रवाह की दर से, $-dV/dt = A v \\implies -4\\pi r^2 dr/dt = A \\sqrt{4S/(\\rho r)}$। $r = R$ से $0$ तक समाकलन करने पर $T = \\frac{4\\pi}{7A} \\sqrt{\\frac{\\rho}{S}} R^{7/2} \\propto S^{-1/2} A^{-1} \\rho^{1/2} R^{7/2}$ प्राप्त होता है।\n\nअंतिम उत्तर : विकल्प (C)"
-    }
-  },
-  {
-    "no": 10,
-    "subject": "Physics",
-    "type": "SINGLE_CORRECT",
-    "correct": "D",
-    "en": {
-      "statement": "If $\\vec{A} \\times \\vec{B} = \\vec{C}$, then which of the following statements is wrong?",
-      "options": {
-        "A": "$\\vec{C} \\perp \\vec{A}$",
-        "B": "$\\vec{C} \\perp \\vec{B}$",
-        "C": "$\\vec{C} \\perp (\\vec{A} + \\vec{B})$",
-        "D": "$\\vec{C} \\perp (\\vec{A} \\times \\vec{B})$"
-      },
-      "solution": "Concept : The vector product $\\vec{C} = \\vec{A} \\times \\vec{B}$ is perpendicular to the plane containing $\\vec{A}$ and $\\vec{B}$, and parallel to itself.\n\nSolution : Since $\\vec{C} = \\vec{A} \\times \\vec{B}$, the vector $\\vec{C}$ is parallel to $(\\vec{A} \\times \\vec{B})$, not perpendicular. Hence, $\\vec{C} \\perp (\\vec{A} \\times \\vec{B})$ is incorrect.\n\nFinal Answer : Option (D)"
-    },
-    "hi": {
-      "statement": "यदि $\\vec{A} \\times \\vec{B} = \\vec{C}$ है, तो निम्नलिखित में से कौन सा कथन गलत है?",
-      "options": {
-        "A": "$\\vec{C} \\perp \\vec{A}$",
-        "B": "$\\vec{C} \\perp \\vec{B}$",
-        "C": "$\\vec{C} \\perp (\\vec{A} + \\vec{B})$",
-        "D": "$\\vec{C} \\perp (\\vec{A} \\times \\vec{B})$"
-      },
-      "solution": "सिद्धांत : सदिश गुणनफल $\\vec{C} = \\vec{A} \\times \\vec{B}$, सदिश $\\vec{A}$ और $\\vec{B}$ के तल के लंबवत होता है।\n\nअंतिम उत्तर : विकल्प (D)"
-    }
-  },
-  {
-    "no": 1,
-    "subject": "Physics",
-    "type": "ASSERTION_REASON",
-    "correct": "A",
-    "en": {
-      "statement": "Assertion : Dimensional analysis cannot tell whether an equation is correct.\nReason : A dimensionally correct equation may be incorrect.",
-      "options": {
-        "A": "Assertion & Reason both are correct, Reason correctly explains assertion.",
-        "B": "Assertion & Reason both are correct, Reason is not explanation of Assertion.",
-        "C": "Assertion is True, Reason is False",
-        "D": "Assertion is False, Reason is True"
-      },
-      "solution": "Concept : Principle of Homogeneity and limitations of dimensional analysis.\n\nFinal Answer : Option (A)"
-    },
-    "hi": {
-      "statement": "कथन: विमीय विश्लेषण किसी समीकरण की सटीकता को प्रमाणित नहीं करता।\nकारण : विमीय रूप से सही समीकरण, गलत हो सकती है।",
-      "options": {
-        "A": "कथन व कारण दोनों सही है, कारण कथन को सही रूप से व्याख्या करता है।",
-        "B": "कथन व कारण दोनों सही है परन्तु कारण कथन की सही व्याख्या नहीं करता।",
-        "C": "कथन सही, कारण गलत",
-        "D": "कथन गलत, कारण सही"
-      },
-      "solution": "सिद्धांत : समांगता का सिद्धांत एवं विमीय विश्लेषण की सीमाएँ।\n\nअंतिम उत्तर : विकल्प (A)"
-    }
-  },
-  {
-    "no": 46,
-    "subject": "Chemistry",
-    "type": "SINGLE_CORRECT",
-    "correct": "B",
-    "en": {
-      "statement": "Which is correct structure of isopropyl 2,2-dimethylpropanoate?",
-      "options": {
-        "A": "![30%](/fixtures/structure-a.svg)",
-        "B": "![30%](/fixtures/structure-b.svg)",
-        "C": "![30%](/fixtures/structure-a.svg)",
-        "D": "![30%](/fixtures/structure-b.svg)"
-      },
-      "solution": "Concept : In an ester $\\text{R}-\\text{COO}-\\text{R}'$, the group $\\text{R}'$ attached to the oxygen atom is named as an alkyl group.\n\nSolution : The alkyl group bonded to the ester oxygen is an isopropyl group $-\\text{CH}(\\text{CH}_3)_2$, and the acyl portion is 2,2-dimethylpropanoyl $\\text{(CH}_3)_3\\text{C}-\\text{C}(=\\text{O})-$.\n\nFinal Answer : Option (B)"
-    },
-    "hi": {
-      "statement": "isopropyl 2,2-dimethylpropanoate की कौनसी सही संरचना है?",
-      "options": {
-        "A": "![30%](/fixtures/structure-a.svg)",
-        "B": "![30%](/fixtures/structure-b.svg)",
-        "C": "![30%](/fixtures/structure-a.svg)",
-        "D": "![30%](/fixtures/structure-b.svg)"
-      },
-      "solution": "सिद्धांत : एस्टर $\\text{R}-\\text{COO}-\\text{R}'$ में, ऑक्सीजन परमाणु से जुड़े समूह $\\text{R}'$ को एल्किल समूह कहा जाता है।\n\nअंतिम उत्तर : विकल्प (B)"
-    }
+  "hi": {
+   "statement": "स्तम्भ-I में दिये गये फलनों का स्तम्भ-II में दिये गये उनके विवरण के साथ उपयुक्त मिलान कीजिए।\n\n$$\\begin{array}{|l|l|l|l|} \\hline & \\textbf{स्तम्भ-I} & & \\textbf{स्तम्भ-II} \\\\ \\hline (\\text{A}) & \\sin(390^\\circ) & (\\text{P}) & \\text{धनात्मक} \\\\ \\hline (\\text{B}) & \\sin(-30^\\circ) & (\\text{Q}) & \\text{ऋणात्मक} \\\\ \\hline (\\text{C}) & \\cos 120^\\circ & (\\text{R}) & \\text{शून्य} \\\\ \\hline (\\text{D}) & \\tan(-120^\\circ) & (\\text{S}) & \\text{मापांक एक से अधिक है।} \\\\ \\hline \\end{array}$$",
+   "options": {
+    "A": "(A)\\rightarrow Q, (B)\\rightarrow P, (C)\\rightarrow P, (D)\\rightarrow Q,S",
+    "B": "(A)\\rightarrow P, (B)\\rightarrow Q, (C)\\rightarrow Q, (D)\\rightarrow P,S",
+    "C": "(A)\\rightarrow P, (B)\\rightarrow Q, (C)\\rightarrow P, (D)\\rightarrow P,S",
+    "D": "(A)\\rightarrow Q, (B)\\rightarrow P, (C)\\rightarrow Q, (D)\\rightarrow Q,S"
+   },
+   "solution": "सिद्धांत : विभिन्न चतुर्थांशों में त्रिकोणमितीय मान।\n\nहल :\n(A) $\\sin(390^\\circ) = \\sin(360^\\circ + 30^\\circ) = \\sin 30^\\circ = 1/2 > 0$ (धनात्मक $\\rightarrow$ P)\n(B) $\\sin(-30^\\circ) = -\\sin 30^\\circ = -1/2 < 0$ (ऋणात्मक $\\rightarrow$ Q)\n(C) $\\cos 120^\\circ = \\cos(180^\\circ - 60^\\circ) = -\\cos 60^\\circ = -1/2 < 0$ (ऋणात्मक $\\rightarrow$ Q)\n(D) $\\tan(-120^\\circ) = -\\tan(120^\\circ) = \\tan 60^\\circ = \\sqrt{3} \\approx 1.732$ (धनात्मक $\\rightarrow$ P, तथा मापांक $> 1 \\rightarrow$ S)\n\nअंतिम उत्तर : विकल्प (B)"
   }
+ },
+ {
+  "no": 30,
+  "subject": "Physics",
+  "type": "MATCH_COLUMN",
+  "correct": "B",
+  "en": {
+   "statement": "Match List-I with List-II :\n\n$$\\begin{array}{llll} & \\textbf{List-I} & & \\textbf{List-II} \\\\ (a) & h\\text{ (Planck's constant)} & (i) & [\\text{M L T}^{-1}] \\\\ (b) & E\\text{ (kinetic energy)} & (ii) & [\\text{M L}^2\\text{ T}^{-1}] \\\\ (c) & V\\text{ (electric potential)} & (iii) & [\\text{M L}^2\\text{ T}^{-2}] \\\\ (d) & P\\text{ (linear momentum)} & (iv) & [\\text{M L}^2\\text{ I}^{-1}\\text{T}^{-3}] \\end{array}$$\n\nChoose the correct answer from the options given below :",
+   "options": {
+    "A": "(a) $\\rightarrow$ (iii), (b) $\\rightarrow$ (iv), (c) $\\rightarrow$ (ii), (d) $\\rightarrow$ (i)",
+    "B": "(a) $\\rightarrow$ (ii), (b) $\\rightarrow$ (iii), (c) $\\rightarrow$ (iv), (d) $\\rightarrow$ (i)",
+    "C": "(a) $\\rightarrow$ (i), (b) $\\rightarrow$ (ii), (c) $\\rightarrow$ (iv), (d) $\\rightarrow$ (iii)",
+    "D": "(a) $\\rightarrow$ (iii), (b) $\\rightarrow$ (ii), (c) $\\rightarrow$ (iv), (d) $\\rightarrow$ (i)"
+   },
+   "solution": "Concept : Determine dimensional formulas using fundamental physical relations: $h = E/\\nu$, $E = \\frac{1}{2}mv^2$, $V = W/q$, and $P = mv$.\n\nSolution :\n(a) Planck's constant: $[h] = [\\text{M L}^2\\text{T}^{-2}]/[\\text{T}^{-1}] = [\\text{M L}^2\\text{T}^{-1}] \\rightarrow$ (ii)\n\n(b) Kinetic energy: $[E] = [\\text{M}][\\text{L T}^{-1}]^2 = [\\text{M L}^2\\text{T}^{-2}] \\rightarrow$ (iii)\n\n(c) Electric potential: $[V] = [\\text{M L}^2\\text{T}^{-2}]/[\\text{I T}] = [\\text{M L}^2\\text{I}^{-1}\\text{T}^{-3}] \\rightarrow$ (iv)\n\n(d) Linear momentum: $[P] = [\\text{M}][\\text{L T}^{-1}] = [\\text{M L T}^{-1}] \\rightarrow$ (i)\n\nFinal Answer : Option (B)"
+  },
+  "hi": {
+   "statement": "सूची-I को सूची-II से सुमेलित कीजिए :\n\n$$\\begin{array}{llll} & \\textbf{सूची-I} & & \\textbf{सूची-II} \\\\ (a) & h\\text{ (प्लांक नियतांक)} & (i) & [\\text{M L T}^{-1}] \\\\ (b) & E\\text{ (गतिज ऊर्जा)} & (ii) & [\\text{M L}^2\\text{ T}^{-1}] \\\\ (c) & V\\text{ (विद्युत विभव)} & (iii) & [\\text{M L}^2\\text{ T}^{-2}] \\\\ (d) & P\\text{ (रेखीय संवेग)} & (iv) & [\\text{M L}^2\\text{ I}^{-1}\\text{T}^{-3}] \\end{array}$$\n\nनीचे दिए गए विकल्पों में से सही उत्तर चुनिए :",
+   "options": {
+    "A": "(a) $\\rightarrow$ (iii), (b) $\\rightarrow$ (iv), (c) $\\rightarrow$ (ii), (d) $\\rightarrow$ (i)",
+    "B": "(a) $\\rightarrow$ (ii), (b) $\\rightarrow$ (iii), (c) $\\rightarrow$ (iv), (d) $\\rightarrow$ (i)",
+    "C": "(a) $\\rightarrow$ (i), (b) $\\rightarrow$ (ii), (c) $\\rightarrow$ (iv), (d) $\\rightarrow$ (iii)",
+    "D": "(a) $\\rightarrow$ (iii), (b) $\\rightarrow$ (ii), (c) $\\rightarrow$ (iv), (d) $\\rightarrow$ (i)"
+   },
+   "solution": "सिद्धांत : मूलभूत भौतिक सूत्रों के उपयोग से विमीय सूत्र ज्ञात कीजिए: $h = E/\\nu$, $E = \\frac{1}{2}mv^2$, $V = W/q$, तथा $P = mv$।\n\nहल :\n(a) प्लांक नियतांक: $[h] = [\\text{M L}^2\\text{T}^{-2}]/[\\text{T}^{-1}] = [\\text{M L}^2\\text{T}^{-1}] \\rightarrow$ (ii)\n\n(b) गतिज ऊर्जा: $[E] = [\\text{M}][\\text{L T}^{-1}]^2 = [\\text{M L}^2\\text{T}^{-2}] \\rightarrow$ (iii)\n\n(c) विद्युत विभव: $[V] = [\\text{M L}^2\\text{T}^{-2}]/[\\text{I T}] = [\\text{M L}^2\\text{I}^{-1}\\text{T}^{-3}] \\rightarrow$ (iv)\n\n(d) रेखीय संवेग: $[P] = [\\text{M}][\\text{L T}^{-1}] = [\\text{M L T}^{-1}] \\rightarrow$ (i)\n\nअंतिम उत्तर : विकल्प (B)"
+  }
+ },
+ {
+  "no": 90,
+  "subject": "Chemistry",
+  "type": "SINGLE_CORRECT",
+  "correct": "A",
+  "en": {
+   "statement": "Match Column-I with Column-II and select the correct option:\n\n$$\\begin{array}{|l|l|}\n\\hline\n\\textbf{Column-I} & \\textbf{Column-II} \\\\ \\hline\n\\text{(i) } _{26}\\text{Fe}^{54}, _{26}\\text{Fe}^{56}, _{26}\\text{Fe}^{57}, _{26}\\text{Fe}^{58} & \\text{(a) Isotopes} \\\\ \\hline\n\\text{(ii) } _{1}\\text{H}^{3}, _{2}\\text{He}^{3} & \\text{(b) Isotones} \\\\ \\hline\n\\text{(iii) } _{32}\\text{Ge}^{76}, _{33}\\text{As}^{77} & \\text{(c) Isodiaphers} \\\\ \\hline\n\\text{(iv) } _{92}\\text{U}^{235}, _{90}\\text{Th}^{231} & \\text{(d) Isobars} \\\\ \\hline\n\\text{(v) } _{1}\\text{H}^{1}, _{1}\\text{D}^{2}, _{1}\\text{T}^{3} & \\\\ \\hline\n\\end{array}$$",
+   "options": {
+    "A": "[(i) - a], [(ii) - d], [(iii) - b], [(iv) - c], [(v) - a]",
+    "B": "[(i) - a], [(ii) - d], [(iii) - d], [(iv) - c], [(v) - a]",
+    "C": "[(v) - a], [(iv) - c], [(iii) - d], [(ii) - b], [(i) - a]",
+    "D": "None of these"
+   },
+   "solution": "Concept : Isotopes have same atomic number (Z). Isobars have same mass number (A). Isotones have same number of neutrons (A - Z). Isodiaphers have same isotopic excess (N - Z).\n\nSolution :\n(i) Fe species have same Z = 26 -> Isotopes (a)\n(ii) H-3 and He-3 have same A = 3 -> Isobars (d)\n(iii) Ge-76 (N = 44) and As-77 (N = 44) have same neutrons -> Isotones (b)\n(iv) U-235 (N - Z = 51) and Th-231 (N - Z = 51) have same N - Z -> Isodiaphers (c)\n(v) H-1, D-2, T-3 have same Z = 1 -> Isotopes (a)\n\nFinal Answer : Option (A)"
+  },
+  "hi": {
+   "statement": "कॉलम-I को कॉलम-II से सुमेलित कीजिए तथा सही विकल्प का चयन कीजिए:\n\n$$\\begin{array}{|l|l|}\n\\hline\n\\textbf{कॉलम-I} & \\textbf{कॉलम-II} \\\\ \\hline\n\\text{(i) } _{26}\\text{Fe}^{54}, _{26}\\text{Fe}^{56}, _{26}\\text{Fe}^{57}, _{26}\\text{Fe}^{58} & \\text{(a) समस्थानिक} \\\\ \\hline\n\\text{(ii) } _{1}\\text{H}^{3}, _{2}\\text{He}^{3} & \\text{(b) समन्यूट्रॉनिक} \\\\ \\hline\n\\text{(iii) } _{32}\\text{Ge}^{76}, _{33}\\text{As}^{77} & \\text{(c) आइसोडायफर} \\\\ \\hline\n\\text{(iv) } _{92}\\text{U}^{235}, _{90}\\text{Th}^{231} & \\text{(d) समभारिक} \\\\ \\hline\n\\text{(v) } _{1}\\text{H}^{1}, _{1}\\text{D}^{2}, _{1}\\text{T}^{3} & \\\\ \\hline\n\\end{array}$$",
+   "options": {
+    "A": "[(i) - a], [(ii) - d], [(iii) - b], [(iv) - c], [(v) - a]",
+    "B": "[(i) - a], [(ii) - d], [(iii) - d], [(iv) - c], [(v) - a]",
+    "C": "[(v) - a], [(iv) - c], [(iii) - d], [(ii) - b], [(i) - a]",
+    "D": "इनमें से कोई नहीं"
+   },
+   "solution": "सिद्धांत : समस्थानिकों में परमाणु क्रमांक (Z) समान होता है। समभारिकों में द्रव्यमान संख्या (A) समान होती है।\n\nहल :\n(i) Fe प्रजातियों में समान Z = 26 है -> समस्थानिक (a)\n(ii) H-3 और He-3 में समान A = 3 है -> समभारिक (d)\n\nअंतिम उत्तर : विकल्प (A)"
+  }
+ },
+ {
+  "no": 106,
+  "subject": "Biology",
+  "type": "SINGLE_CORRECT",
+  "correct": "C",
+  "en": {
+   "statement": "Match the column I with II :-\n\n$$\\begin{array}{|l|l|l|l|} \\hline & \\textbf{Column I} & & \\textbf{Column II} \\\\ \\hline \\text{(i)} & \\text{Ascomycetes} & \\text{(a)} & \\textit{Alternaria} \\\\ \\hline \\text{(ii)} & \\text{Basidiomycetes} & \\text{(b)} & \\textit{Mucor} \\\\ \\hline \\text{(iii)} & \\text{Phycomycetes} & \\text{(c)} & \\textit{Ustilago} \\\\ \\hline \\text{(iv)} & \\text{Deuteromycetes} & \\text{(d)} & \\textit{Penicillium} \\\\ \\hline \\end{array}$$",
+   "options": {
+    "A": "i - a, ii - b, iii - c, iv - d",
+    "B": "i - b, ii - c, iii - a, iv - d",
+    "C": "i - d, ii - c, iii - b, iv - a",
+    "D": "i - d, ii - c, iii - a, iv - b"
+   },
+   "solution": "Concept : This question is based on the classification and examples of Kingdom Fungi according to NCERT.\n\nSolution :\n- (i) **Ascomycetes** (Sac fungi): Examples include *Penicillium*, *Aspergillus*, *Claviceps*, and *Neurospora*. Thus, (i) matches with (d).\n- (ii) **Basidiomycetes** (Club fungi): Examples include *Agaricus* (mushroom), *Ustilago* (smut), and *Puccinia* (rust fungus). Thus, (ii) matches with (c).\n\nFinal Answer : Option (C)"
+  },
+  "hi": {
+   "statement": "कॉलम I को कॉलम II से सुमेलित कीजिए :-\n\n$$\\begin{array}{|l|l|l|l|} \\hline & \\textbf{कॉलम I} & & \\textbf{कॉलम II} \\\\ \\hline \\text{(i)} & \\text{ऐस्कोमाइसिटीज} & \\text{(a)} & \\textit{ऑल्टरनेरिया} \\\\ \\hline \\text{(ii)} & \\text{बेसिडियोमाइसिटीज} & \\text{(c)} & \\textit{म्यूकर} \\\\ \\hline \\text{(iii)} & \\text{फाइकोमाइसिटीज} & \\text{(c)} & \\textit{अस्टीलेगो} \\\\ \\hline \\text{(iv)} & \\text{ड्यूटेरोमाइसिटीज} & \\text{(d)} & \\textit{पेनिसिलियम} \\\\ \\hline \\end{array}$$",
+   "options": {
+    "A": "i - a, ii - b, iii - c, iv - d",
+    "B": "i - b, ii - c, iii - a, iv - d",
+    "C": "i - d, ii - c, iii - b, iv - a",
+    "D": "i - d, ii - c, iii - a, iv - b"
+   },
+   "solution": "हल (Solution) :\n- (i) **ऐस्कोमाइसिटीज** (थैली कवक): इसके सामान्य उदाहरण *पेनिसिलियम*, *ऐस्परजिलस* हैं। अतः (i) का मिलान (d) से होता है।\n\nअंतिम उत्तर (Final Answer) : विकल्प (C)"
+  }
+ },
+ {
+  "no": 45,
+  "subject": "Physics",
+  "type": "SINGLE_CORRECT",
+  "correct": "C",
+  "en": {
+   "statement": "A balloon is made of a material of surface tension $S$ and has a small inflation outlet (from where gas is filled inside it) of small area $A$. It is filled with a gas of density $\rho$ and it takes a spherical shape of radius $R$. When the gas is allowed to flow out freely from it, its radius $r$ becomes zero from $R$ in time $T$. If the speed of the gas coming out of the balloon $v(r)$ depends on $r$ as $r^a$ and $T \\propto S^\\alpha A^\\beta \\rho^\\gamma R^\\delta$, then",
+   "options": {
+    "A": "$a = \\frac{1}{2}, \\alpha = \\frac{1}{2}, \\beta = -1, \\gamma = +1, \\delta = \\frac{3}{2}$",
+    "B": "$a = -\\frac{1}{2}, \\alpha = -\\frac{1}{2}, \\beta = -1, \\gamma = -\\frac{1}{2}, \\delta = \\frac{5}{2}$",
+    "C": "$a = -\\frac{1}{2}, \\alpha = -\\frac{1}{2}, \\beta = -1, \\gamma = \\frac{1}{2}, \\delta = \\frac{7}{2}$",
+    "D": "$a = \\frac{1}{2}, \\alpha = \\frac{1}{2}, \\beta = -\\frac{1}{2}, \\gamma = \\frac{1}{2}, \\delta = \\frac{7}{2}$"
+   },
+   "solution": "Concept : Excess pressure inside a balloon is $P = 2S/r$ and efflux velocity is $v = \\sqrt{2P/\\rho}$.\n\nSolution : From $v = \\sqrt{4S/(\\rho r)} \\propto r^{-1/2}$, we get $a = -1/2$. Using rate of flow, $-dV/dt = A v \\implies -4\\pi r^2 dr/dt = A \\sqrt{4S/(\\rho r)}$. Integrating from $r = R$ to $0$ gives $T = \\frac{4\\pi}{7A} \\sqrt{\\frac{\\rho}{S}} R^{7/2} \\propto S^{-1/2} A^{-1} \\rho^{1/2} R^{7/2}$. Comparing powers, we get $\\alpha = -1/2, \\beta = -1, \\gamma = 1/2, \\delta = 7/2$.\n\nFinal Answer : Option (C)"
+  },
+  "hi": {
+   "statement": "एक गुब्बारा पृष्ठ तनाव $S$ के पदार्थ से बना हुआ है और इसके इन्फ्लेशन आउटलेट (जहाँ से इसके अन्दर गैस भरी जाती है) का छोटा क्षेत्रफल $A$ है। इसे घनत्व $\\rho$ की एक गैस से भरा जाता है और यह त्रिज्या $R$ की एक गोलाकार आकृति ले लेता है जब गैस को स्वतंत्र रूप से इससे बाहर प्रवाहित होने दिया जाता है तो इसकी त्रिज्या $r$, समय $T$ में $R$ से शून्य हो जाती है यदि गुब्बारे से बाहर आने वाली गैस की चाल $v(r)$, $r$ पर $r^a$ के रूप में निर्भर करती है और $T \\propto S^\\alpha A^\\beta \\rho^\\gamma R^\\delta$ है, तो",
+   "options": {
+    "A": "$a = \\frac{1}{2}, \\alpha = \\frac{1}{2}, \\beta = -1, \\gamma = +1, \\delta = \\frac{3}{2}$",
+    "B": "$a = -\\frac{1}{2}, \\alpha = -\\frac{1}{2}, \\beta = -1, \\gamma = -\\frac{1}{2}, \\delta = \\frac{5}{2}$",
+    "C": "$a = -\\frac{1}{2}, \\alpha = -\\frac{1}{2}, \\beta = -1, \\gamma = \\frac{1}{2}, \\delta = \\frac{7}{2}$",
+    "D": "$a = \\frac{1}{2}, \\alpha = \\frac{1}{2}, \\beta = -\\frac{1}{2}, \\gamma = \\frac{1}{2}, \\delta = \\frac{7}{2}$"
+   },
+   "solution": "सिद्धांत : गुब्बारे के अंदर अतिरिक्त दाब $P = 2S/r$ और बहिःस्राव वेग $v = \\sqrt{2P/\\rho}$ होता है।\n\nहल : $v = \\sqrt{4S/(\\rho r)} \\propto r^{-1/2}$ से, हमें $a = -1/2$ प्राप्त होता है। प्रवाह की दर से, $-dV/dt = A v \\implies -4\\pi r^2 dr/dt = A \\sqrt{4S/(\\rho r)}$। $r = R$ से $0$ तक समाकलन करने पर $T = \\frac{4\\pi}{7A} \\sqrt{\\frac{\\rho}{S}} R^{7/2} \\propto S^{-1/2} A^{-1} \\rho^{1/2} R^{7/2}$ प्राप्त होता है।\n\nअंतिम उत्तर : विकल्प (C)"
+  }
+ },
+ {
+  "no": 10,
+  "subject": "Physics",
+  "type": "SINGLE_CORRECT",
+  "correct": "D",
+  "en": {
+   "statement": "If $\\vec{A} \\times \\vec{B} = \\vec{C}$, then which of the following statements is wrong?",
+   "options": {
+    "A": "$\\vec{C} \\perp \\vec{A}$",
+    "B": "$\\vec{C} \\perp \\vec{B}$",
+    "C": "$\\vec{C} \\perp (\\vec{A} + \\vec{B})$",
+    "D": "$\\vec{C} \\perp (\\vec{A} \\times \\vec{B})$"
+   },
+   "solution": "Concept : The vector product $\\vec{C} = \\vec{A} \\times \\vec{B}$ is perpendicular to the plane containing $\\vec{A}$ and $\\vec{B}$, and parallel to itself.\n\nSolution : Since $\\vec{C} = \\vec{A} \\times \\vec{B}$, the vector $\\vec{C}$ is parallel to $(\\vec{A} \\times \\vec{B})$, not perpendicular. Hence, $\\vec{C} \\perp (\\vec{A} \\times \\vec{B})$ is incorrect.\n\nFinal Answer : Option (D)"
+  },
+  "hi": {
+   "statement": "यदि $\\vec{A} \\times \\vec{B} = \\vec{C}$ है, तो निम्नलिखित में से कौन सा कथन गलत है?",
+   "options": {
+    "A": "$\\vec{C} \\perp \\vec{A}$",
+    "B": "$\\vec{C} \\perp \\vec{B}$",
+    "C": "$\\vec{C} \\perp (\\vec{A} + \\vec{B})$",
+    "D": "$\\vec{C} \\perp (\\vec{A} \\times \\vec{B})$"
+   },
+   "solution": "सिद्धांत : सदिश गुणनफल $\\vec{C} = \\vec{A} \\times \\vec{B}$, सदिश $\\vec{A}$ और $\\vec{B}$ के तल के लंबवत होता है।\n\nअंतिम उत्तर : विकल्प (D)"
+  }
+ },
+ {
+  "no": 1,
+  "subject": "Physics",
+  "type": "ASSERTION_REASON",
+  "correct": "A",
+  "en": {
+   "statement": "Assertion : Dimensional analysis cannot tell whether an equation is correct.\nReason : A dimensionally correct equation may be incorrect.",
+   "options": {
+    "A": "Assertion & Reason both are correct, Reason correctly explains assertion.",
+    "B": "Assertion & Reason both are correct, Reason is not explanation of Assertion.",
+    "C": "Assertion is True, Reason is False",
+    "D": "Assertion is False, Reason is True"
+   },
+   "solution": "Concept : Principle of Homogeneity and limitations of dimensional analysis.\n\nFinal Answer : Option (A)"
+  },
+  "hi": {
+   "statement": "कथन: विमीय विश्लेषण किसी समीकरण की सटीकता को प्रमाणित नहीं करता।\nकारण : विमीय रूप से सही समीकरण, गलत हो सकती है।",
+   "options": {
+    "A": "कथन व कारण दोनों सही है, कारण कथन को सही रूप से व्याख्या करता है।",
+    "B": "कथन व कारण दोनों सही है परन्तु कारण कथन की सही व्याख्या नहीं करता।",
+    "C": "कथन सही, कारण गलत",
+    "D": "कथन गलत, कारण सही"
+   },
+   "solution": "सिद्धांत : समांगता का सिद्धांत एवं विमीय विश्लेषण की सीमाएँ।\n\nअंतिम उत्तर : विकल्प (A)"
+  }
+ },
+ {
+  "no": 46,
+  "subject": "Chemistry",
+  "type": "SINGLE_CORRECT",
+  "correct": "B",
+  "en": {
+   "statement": "Which is correct structure of isopropyl 2,2-dimethylpropanoate?",
+   "options": {
+    "A": "![30%](/fixtures/structure-a.svg)",
+    "B": "![30%](/fixtures/structure-b.svg)",
+    "C": "![30%](/fixtures/structure-a.svg)",
+    "D": "![30%](/fixtures/structure-b.svg)"
+   },
+   "solution": "Concept : In an ester $\\text{R}-\\text{COO}-\\text{R}'$, the group $\\text{R}'$ attached to the oxygen atom is named as an alkyl group.\n\nSolution : The alkyl group bonded to the ester oxygen is an isopropyl group $-\\text{CH}(\\text{CH}_3)_2$, and the acyl portion is 2,2-dimethylpropanoyl $\\text{(CH}_3)_3\\text{C}-\\text{C}(=\\text{O})-$.\n\nFinal Answer : Option (B)"
+  },
+  "hi": {
+   "statement": "isopropyl 2,2-dimethylpropanoate की कौनसी सही संरचना है?",
+   "options": {
+    "A": "![30%](/fixtures/structure-a.svg)",
+    "B": "![30%](/fixtures/structure-b.svg)",
+    "C": "![30%](/fixtures/structure-a.svg)",
+    "D": "![30%](/fixtures/structure-b.svg)"
+   },
+   "solution": "सिद्धांत : एस्टर $\\text{R}-\\text{COO}-\\text{R}'$ में, ऑक्सीजन परमाणु से जुड़े समूह $\\text{R}'$ को एल्किल समूह कहा जाता है।\n\nअंतिम उत्तर : विकल्प (B)"
+  }
+ },
+ {
+  "no": 116,
+  "subject": "Biology",
+  "type": "SINGLE_CORRECT",
+  "correct": "A",
+  "en": {
+   "statement": "Observe the following figures and identify the labelled structures $\\text{P}$, $\\text{Q}$, $\\text{R}$, and $\\text{S}$:\n\n![60%](/fixtures/figure.svg)\n\n\n$$\\begin{array}{|c|c|c|c|c|} \\hline & \\textbf{P} & \\textbf{Q} & \\textbf{R} & \\textbf{S} \\ \\hline (1) & \\text{Archegoniophore} & \\text{Gemma cup} & \\text{Antheridiophore} & \\text{Seta} \\ \\hline (2) & \\text{Antheridiophores} & \\text{Rhizoids} & \\text{Archegoniophore} & \\text{Capsule} \\ \\hline (3) & \\text{Antheridiophore} & \\text{Seta} & \\text{Archegoniophore} & \\text{Leaves} \\ \\hline (4) & \\text{Archegoniophore} & \\text{Gemma cup} & \\text{Antheridiophore} & \\text{Capsule} \\ \\hline \\end{array}$$",
+   "options": {
+    "A": "(1)",
+    "B": "(2)",
+    "C": "(3)",
+    "D": "(4)"
+   },
+   "solution": "Solution :\n- **P**: female branch bearing archegonia, the **Archegoniophore** of *Marchantia*.\n- **Q**: **Gemma cup** on the dorsal surface of the thallus.\n- **R**: male branch, the **Antheridiophore**.\n- **S**: the stalk of the *Funaria* sporophyte, the **Seta**.\n\nFinal Answer : Option (A)"
+  },
+  "hi": {
+   "statement": "निम्नलिखित चित्रों का अवलोकन कीजिए तथा नामांकित संरचनाओं $\\text{P}$, $\\text{Q}$, $\\text{R}$ तथा $\\text{S}$ को पहचानिए:\n\n![60%](/fixtures/figure.svg)\n\n\n$$\\begin{array}{|c|c|c|c|c|} \\hline & \\textbf{P} & \\textbf{Q} & \\textbf{R} & \\textbf{S} \\ \\hline (1) & \\text{स्त्रीधानीधर (Archegoniophore)} & \\text{जेमा कप (Gemma cup)} & \\text{पुंधानीधर (Antheridiophore)} & \\text{सीटा (Seta)} \\ \\hline (2) & \\text{पुंधानीधर (Antheridiophore)} & \\text{मूलाभास (Rhizoids)} & \\text{स्त्रीधानीधर (Archegoniophore)} & \\text{सम्पुटिका (Capsule)} \\ \\hline (3) & \\text{पुंधानीधर (Antheridiophore)} & \\text{सीटा (Seta)} & \\text{स्त्रीधानीधर (Archegoniophore)} & \\text{पत्तियाँ (Leaves)} \\ \\hline (4) & \\text{स्त्रीधानीधर (Archegoniophore)} & \\text{जेमा कप (Gemma cup)} & \\text{पुंधानीधर (Antheridiophore)} & \\text{सम्पुटिका (Capsule)} \\ \\hline \\end{array}$$",
+   "options": {
+    "A": "(1)",
+    "B": "(2)",
+    "C": "(3)",
+    "D": "(4)"
+   },
+   "solution": "हल (Solution) :\n- **P**: **स्त्रीधानीधर (Archegoniophore)**।\n- **Q**: **जेमा कप (Gemma cup)**।\n- **R**: **पुंधानीधर (Antheridiophore)**।\n- **S**: **सीटा (Seta)**।\n\nअंतिम उत्तर : विकल्प (A)"
+  }
+ },
+ {
+  "no": 180,
+  "subject": "Biology",
+  "type": "SINGLE_CORRECT",
+  "correct": "B",
+  "en": {
+   "statement": "Given below are two statements: one is labelled as Assertion (A) and the other is labelled as Reason (R):\nAssertion (A): Cyanobacteria have chlorophyll 'a' similar to green plants and are photosynthetic autotrophs.\nReason (R): Some cyanobacteria can fix atmospheric nitrogen in specialized cells called heterocysts.\nIn the light of the above statements, choose the correct answer from the options given below:",
+   "options": {
+    "A": "Both (A) and (R) are true and (R) is the correct explanation of (A)",
+    "B": "Both (A) and (R) are true but (R) is not the correct explanation of (A)",
+    "C": "(A) is true but (R) is false",
+    "D": "(A) is false but (R) is true"
+   },
+   "solution": "Both statements are true, but nitrogen fixation in heterocysts does not explain why cyanobacteria are photosynthetic.\n\nFinal Answer : Option (B)"
+  },
+  "hi": {
+   "statement": "नीचे दो कथन दिए गए हैं: एक को अभिकथन (A) और दूसरे को कारण (R) के रूप में लेबल किया गया है:\nअभिकथन (A): साइनोबैक्टीरिया में हरे पौधे के समान क्लोरोफिल 'a' होता है और वे प्रकाश संश्लेषक ऑटोट्रॉफ होते हैं।\nकारण (R): कुछ साइनोबैक्टीरिया हेटेरोसिस्ट नामक विशेष कोशिका में वायुमंडलीय नाइट्रोजन को स्थिरित कर सकते हैं।\nउपरोक्त कथनों के आलोक में, नीचे दिए गए विकल्पों में से सही उत्तर चुनें:",
+   "options": {
+    "A": "(A) और (R) दोनों सत्य हैं और (R), (A) की सही व्याख्या है",
+    "B": "(A) और (R) दोनों सत्य हैं लेकिन (R), (A) की सही व्याख्या नहीं है",
+    "C": "(A) सत्य है लेकिन (R) असत्य है",
+    "D": "(A) असत्य है लेकिन (R) सत्य है"
+   },
+   "solution": "दोनों कथन सत्य हैं, पर (R), (A) की व्याख्या नहीं करता।\n\nअंतिम उत्तर : विकल्प (B)"
+  }
+ }
 ]

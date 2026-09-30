@@ -37,12 +37,29 @@ app.whenReady().then(async () => {
         if (!body) return;
         const stream = body.querySelector('.questions-stream');
         if (stream && stream.offsetHeight > body.clientHeight + 1) problems.push({ sheet: i + 1, clippedPx: stream.offsetHeight - body.clientHeight });
-        body.querySelectorAll('.katex-display, .fx-table-wrap, img').forEach((el) => {
-          const col = el.closest('.q-side, .sol-col-side');
-          if (col && el.getBoundingClientRect().right > col.getBoundingClientRect().right + 2) problems.push({ sheet: i + 1, sticksOut: el.className || el.tagName });
+        // Content wider than the room it has in its column (after fitWide's zoom).
+        body.querySelectorAll('.katex-display, .fx-table-wrap, .qp-cell img, .qp-cell table:not(.fx-table)').forEach((el) => {
+          const parent = el.parentElement;
+          if (!parent || !el.closest('.qp-cell')) return;
+          const cs = getComputedStyle(parent);
+          const room = parent.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+          const zoom = parseFloat(el.style.zoom) || 1;
+          const width = Math.max(el.scrollWidth, el.offsetWidth) * zoom;
+          if (width > room + 2) problems.push({ sheet: i + 1, sticksOut: el.className || el.tagName, width: Math.round(width), room: Math.round(room) });
         });
       });
       const rows = [...document.querySelectorAll('.q-row-item')].map((r) => r.id);
+      // How full each question page is (the last page of a subject may be short).
+      const fill = sheets.map((p) => {
+        const b = p.querySelector('.content-body');
+        const s = b && b.querySelector('.questions-stream');
+        if (!s) return null;
+        const next = p.nextElementSibling;
+        const lastOfFlow = !next || !next.querySelector('.questions-stream') || next.querySelector('.test-header-subject-row');
+        return { pct: Math.round((100 * s.offsetHeight) / b.clientHeight), lastOfFlow: Boolean(lastOfFlow) };
+      });
+      const akText = [...document.querySelectorAll('.ak-table td.ak-q')].map((td) => td.textContent.trim()).filter(Boolean);
+      const akBlocks = [...document.querySelectorAll('.ak-block')].map((b) => { const c = b.closest('.content-body'); return c ? b.getBoundingClientRect().bottom <= c.getBoundingClientRect().bottom + 1 : false; });
       return {
         sheets: sheets.length,
         questionRows: rows.length,
@@ -50,6 +67,21 @@ app.whenReady().then(async () => {
         solutionRows: document.querySelectorAll('.sol-row-item').length,
         leftoverFlows: document.querySelectorAll('.q-flow, .sol-flow').length,
         overflowPages: document.querySelectorAll('.page-overflow').length,
+        underfilled: fill.map((f, i) => f && !f.lastOfFlow && f.pct < 65 ? { sheet: i + 1, pct: f.pct } : null).filter(Boolean),
+        answerKeyNumbers: akText,
+        answerKeyFits: akBlocks.every(Boolean),
+        siteLinks: [...document.querySelectorAll('a.site-link')].filter((a) => a.href === 'https://ap.atomicpathshala.in/').length,
+        pagesWithLink: sheets.filter((p) => p.querySelector('a.site-link')).length,
+        optionLabels: [...document.querySelectorAll('.q-opt .qp-en .opt-key')].slice(0, 4).map((e) => e.textContent),
+        tinyOptionImages: [...document.querySelectorAll('.opt-text img')].filter((img) => img.getBoundingClientRect().width < 0.5 * img.closest('.opt-text').getBoundingClientRect().width).length,
+        coverText: (document.querySelector('.cover-page') || {}).innerText || '',
+        firstSheetHasAnswerKey: Boolean(sheets[0] && sheets[0].querySelector('.ak-block')),
+        solutionFollowsQuestion: (() => {
+          const seq = [...document.querySelectorAll('.q-row-item, .sol-row-item')].map((e) => e.id);
+          if (!seq.some((id) => id.startsWith('sol-'))) return false;
+          for (let i = 0; i < seq.length; i += 2) if (seq[i + 1] !== 'sol-' + seq[i]) return false;
+          return true;
+        })(),
         problems: problems.slice(0, 20),
         pageNumbers: sheets.map((p) => p.querySelector('.test-header-page-no')?.textContent || null).filter(Boolean),
         coverTotals: [...document.querySelectorAll('.js-total-pages')].map((e) => e.textContent),
@@ -60,6 +92,7 @@ app.whenReady().then(async () => {
     fs.writeFileSync(path.join(outDir, "booklet.pdf"), pdf);
     result.pdfBytes = pdf.length;
     result.pdfPages = (pdf.toString("latin1").match(/\/Type\s*\/Page[^s]/g) || []).length;
+    result.pdfLinks = (pdf.toString("latin1").match(/\/URI\s*\(https:\/\/ap\.atomicpathshala\.in\/?\)/g) || []).length;
     win.setContentSize(794, 1123);
     for (const n of shotPages) {
       const ok = await win.webContents.executeJavaScript(`(() => { const s = [...document.querySelectorAll('#doc-container > .a4-sheet, #doc-container > .page')][${n - 1}]; if (!s) return false; document.querySelector('.print-toolbar')?.remove(); s.scrollIntoView({ block: 'start' }); return true; })()`);

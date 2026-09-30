@@ -89,15 +89,26 @@ async function run() {
   assert(!/html2canvas|jspdf|autoCompileAndDownloadPdf/.test(html), "No screenshot-to-JPEG PDF (html2canvas/jsPDF) any more");
   assert(html.includes("window.print()") && html.includes("var AUTO_PRINT = true"), "Real 'Save as PDF' via the browser; auto-opens for the download buttons");
   assert(generateTestPaperHtml(fixture, opts).includes("var AUTO_PRINT = false"), "Without ?direct=true it just shows the booklet");
-  assert((html.match(/class="q-flow"/g) || []).length === fixture.sections.length && html.includes('id="tpl-content-page"'), "Questions are laid out per subject flow and cut into pages by measured height");
-  const flows = html.split('class="q-flow"').slice(1).map((f) => (f.match(/class="q-row-item" id="q-(\d+)"/g) || []).length);
+  const qHtml = generateTestPaperHtml(fixture, { ...opts, withSolution: false });
+  assert((qHtml.match(/class="q-flow"/g) || []).length === fixture.sections.length && qHtml.includes('id="tpl-content-page"'), "Question booklet: one flow per subject, cut into pages by measured height");
+  const flows = qHtml.split('class="q-flow"').slice(1).map((f) => (f.match(/class="q-part q-row-item q-stmt" id="q-(\d+)"/g) || []).length);
   assert(flows.reduce((a, b) => a + b, 0) === fixture.totalQuestions, `Every question appears exactly once (${flows.join("+")} = ${fixture.totalQuestions})`);
-  assert(/grid-template-rows: subgrid/.test(html) && /grid-row: span \d+/.test(html), "Hindi | English share grid rows (statement, diagram, options aligned)");
+  assert(/<div class="q-part q-opt"><div class="qp-cell qp-hi"><span class="opt-key">a\)<\/span>/.test(qHtml) && qHtml.includes('<span class="opt-key">d)</span>'), "Options printed a) b) c) d), one line each, Hindi | English side by side");
+  assert(!/खण्ड A में 35|Section A will consist/.test(qHtml) && qHtml.includes("Physics, Chemistry, Biology"), "Cover instruction built from the real sections (old Section A/B rule gone)");
+  assert((qHtml.match(/href="https:\/\/ap\.atomicpathshala\.in"/g) || []).length >= 3 && !qHtml.includes("atomicpathshala.com"), "Clickable ap.atomicpathshala.in in the page footers (back cover no longer says .com)");
   assert(html.includes("@page { size: A4; margin: 0; }") && /height: 297mm !important/.test(html), "Exact A4 sheets for print");
-  assert(html.includes('class="sol-flow"') && html.includes('id="tpl-solutions-page"'), "Solutions are paginated too (were one ~13,000px 'page')");
-  assert((html.match(/class="js-total-pages"/g) || []).length === 3, "Cover page counts are filled in after pagination");
+  const akAt = html.indexOf('class="ak-block"');
+  assert(akAt > 0 && akAt < html.indexOf('id="q-1"') && !html.includes('rounded-xs cover-page">') && !html.includes('<div class="page rough-page">'), "Solutions booklet: answer key first, no cover/rough pages");
+  const order = [...html.matchAll(/id="(sol-)?q-(\d+)"/g)].map((m) => m[0]);
+  assert(
+    order.length === 2 * fixture.totalQuestions && order.every((id, i) => id === (i % 2 === 0 ? `id="q-${i / 2 + 1}"` : `id="sol-q-${(i - 1) / 2 + 1}"`)),
+    "…then each question followed by its own solution"
+  );
+  assert((qHtml.match(/class="js-total-pages"/g) || []).length === 3, "Cover page counts are filled in after pagination");
   assert(html.includes(`katex@${require("katex/package.json").version}/dist/katex.min.css`), "KaTeX stylesheet matches the KaTeX that rendered the HTML (vector arrows, sizes)");
-  assert(/span:not\(\.katex \*\)/.test(html), "Column fonts/sizes no longer override KaTeX's own fonts (fractions, powers, bold maths)");
+  assert(/\.qp-cell \*:not\(\.katex \*\):not\(\.katex\)/.test(html), "Column fonts/sizes don't override KaTeX's own fonts (fractions, powers, bold maths)");
+  assert(/\.qp-en \{[^}]*font-size: 14pt/.test(html) && /\.qp-hi \{[^}]*font-size: 13\.6pt/.test(html), "Question text 4pt bigger (EN 10→14pt, HI 9.6→13.6pt)");
+  assert(/\.opt-text img \{ min-width: 55%/.test(html), "Structure images in options are never printed tiny");
   assert(/<title>[^<]*\(Solutions\)<\/title>/.test(html), "Saved PDF is named '… (Solutions)' for the solutions booklet");
   assert(!/q-statement-body table \{\s*width: 100% !important/.test(html) || /table\.fx-table \{[^}]*width: auto !important/.test(html), "Tables in questions aren't forced full-width");
   const cover = generateTestCoverPageOnlyHtml(fixture, opts);

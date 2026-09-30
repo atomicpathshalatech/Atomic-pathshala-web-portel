@@ -336,6 +336,12 @@ export function generateTestPaperHtml(
 ): string {
   const { withSolution, brandName = "ATOMIC PATHSHALA", autoPrint = false } = options;
 
+  const SITE_HOST = "ap.atomicpathshala.in";
+  const SITE_URL = `https://${SITE_HOST}`;
+  /** Clickable in the saved PDF (Chrome keeps link annotations). */
+  const SITE_LINK_HTML = `<a class="footer-site site-link" href="${SITE_URL}">${SITE_HOST}</a>`;
+
+
   const durationHours = Math.floor(test.durationMin / 60);
   const durationRemainder = test.durationMin % 60;
   const durationText = durationHours > 0 
@@ -399,6 +405,34 @@ export function generateTestPaperHtml(
 
   const enSectionRange = sectionBreakdowns.map((sb) => `${sb.name}: ${sb.startQ}-${sb.endQ}`).join(", ") || `Physics: 1-45, Chemistry: 46-90, Biology: 91-180`;
   const hiSectionRange = sectionBreakdowns.map((sb) => `${sb.name}: ${sb.startQ} से ${sb.endQ}`).join(", ") || `भौतिक विज्ञान: 1 से 45, रसायन विज्ञान: 46 से 90, जीव विज्ञान: 91 से 180`;
+
+  // Instruction on the paper's pattern, from its real sections, e.g.
+  // "…तीन खण्ड हैं: Physics, Chemistry, Biology। Physics और Chemistry खण्ड में
+  // 45 प्रश्न हैं, सभी 45 प्रश्न अनिवार्य हैं तथा Biology में 90 प्रश्न हैं…"
+  const HI_COUNT_WORDS = ["", "एक", "दो", "तीन", "चार", "पाँच", "छह"];
+  const EN_COUNT_WORDS = ["", "one", "two", "three", "four", "five", "six"];
+  const patternSections = test.sections.filter((s) => s.questions.length > 0);
+  const countGroups: { names: string[]; count: number }[] = [];
+  patternSections.forEach((s) => {
+    const group = countGroups.find((g) => g.count === s.questions.length);
+    if (group) group.names.push(s.subject || s.name);
+    else countGroups.push({ names: [s.subject || s.name], count: s.questions.length });
+  });
+  const joinNames = (names: string[], and: string) =>
+    names.length > 1 ? `${names.slice(0, -1).join(", ")} ${and} ${names[names.length - 1]}` : names[0] ?? "";
+  const nSections = patternSections.length;
+  const sectionPatternHi =
+    `इस प्रश्न पत्र में ${HI_COUNT_WORDS[nSections] ?? nSections} खण्ड हैं: <strong>${patternSections.map((s) => s.subject || s.name).join(", ")}</strong>। ` +
+    countGroups
+      .map((g) => `${joinNames(g.names, "और")}${g.names.length > 1 ? " खण्ड" : ""} में <strong>${g.count} प्रश्न</strong> हैं, सभी ${g.count} प्रश्न अनिवार्य हैं`)
+      .join(" तथा ") +
+    "।";
+  const sectionPatternEn =
+    `This Test Paper has ${EN_COUNT_WORDS[nSections] ?? nSections} section${nSections === 1 ? "" : "s"}: <strong>${patternSections.map((s) => s.subject || s.name).join(", ")}</strong>. ` +
+    countGroups
+      .map((g) => `${joinNames(g.names, "and")} ${g.names.length > 1 ? "each have" : "has"} <strong>${g.count} questions</strong>, all ${g.count} compulsory`)
+      .join("; ") +
+    ".";
 
   // Helper to compute question vertical height weight accurately
   function computeQuestionWeight(q: FormattedExportQuestion): number {
@@ -580,11 +614,11 @@ export function generateTestPaperHtml(
             <div class="inst-point-row">
               <div class="inst-point-cell inst-cell-left">
                 <span class="inst-point-num">3.</span>
-                <div class="inst-point-text">इस प्रश्न पत्र के प्रत्येक विषय में 2 खण्ड हैं। खण्ड A में 35 प्रश्न हैं (सभी प्रश्न अनिवार्य हैं) तथा खण्ड B में 15 प्रश्न हैं। परीक्षार्थी इन 15 प्रश्नों में से कोई भी 10 प्रश्न कर सकता है। यदि परीक्षार्थी 10 से अधिक प्रश्न का उत्तर देता है तो हल किये हुए प्रथम 10 प्रश्न ही मान्य होंगे।</div>
+                <div class="inst-point-text">${sectionPatternHi}</div>
               </div>
               <div class="inst-point-cell inst-cell-right">
                 <span class="inst-point-num">3.</span>
-                <div class="inst-point-text">In this Test Paper, each subject will consist of <strong>two sections</strong>. Section A will consist of 35 questions (all questions are mandatory) and Section B will have 15 questions. Candidate can choose to attempt any 10 question out of these 15 questions. In case if candidate attempts more than 10 questions, first 10 attempted questions will be considered for marking.</div>
+                <div class="inst-point-text">${sectionPatternEn}</div>
               </div>
             </div>
             <!-- Point 4 -->
@@ -699,8 +733,8 @@ export function generateTestPaperHtml(
           BEST WISHES FROM ATOMIC PATHSHALA FOR NEET 2027
         </div>
         
-        <div class="text-right text-[7.5pt] font-mono-code font-bold mt-1 text-slate-800">
-          Page 1/<span class="js-total-pages">${actualTotalPages}</span>
+        <div class="flex justify-between text-[7.5pt] font-mono-code font-bold mt-1 text-slate-800">
+          ${SITE_LINK_HTML}<span>Page 1/<span class="js-total-pages">${actualTotalPages}</span></span>
         </div>
       </div>
     </div>
@@ -712,19 +746,15 @@ export function generateTestPaperHtml(
   // old fixed "N questions per page" guess clipped long questions — match
   // tables, diagrams, long Hindi statements — off the bottom of the page.
   //
-  // Hindi (left) and English (right) of a question share grid rows
-  // (CSS subgrid): statement, diagram, then each option row start at the same
-  // height on both sides, like a printed bilingual paper.
+  // A question is a run of Hindi | English lines ("parts"): statement,
+  // diagram, one line per option (a) b) c) d), and in the solutions booklet
+  // its solution. Both languages of a line sit in one grid row, so they start
+  // at the same height; a page may break between lines (statement on one
+  // page, options on the next) instead of leaving half a page empty.
 
-  /** Visible length of an option (LaTeX commands don't count). */
-  const plainLength = (s: string | undefined) =>
-    (s || "").replace(/\\[a-zA-Z]+/g, "").replace(/[{}$^_\\]/g, "").trim().length;
-
-  const optionCell = (opt: FormattedQuestionOption | undefined, idx: number, isHi: boolean) => {
-    if (!opt) return `<div class="opt-box"></div>`;
-    const raw = isHi ? (opt.textHi || opt.textEn) : opt.textEn;
-    return `<div class="opt-box"><span class="opt-label">(${idx + 1})</span><span class="opt-value">${renderFormulaContent(raw)}</span></div>`;
-  };
+  const OPTION_LETTERS = ["a", "b", "c", "d", "e", "f"];
+  /** "2" → "b" — options are printed a) b) c) d). */
+  const optionLetter = (key: string) => OPTION_LETTERS[Number(key) - 1] ?? key.toLowerCase();
 
   const diagramFor = (q: FormattedExportQuestion) =>
     q.camDrawSvg
@@ -733,29 +763,100 @@ export function generateTestPaperHtml(
       ? `<div class="q-diagram-wrap"><img src="${q.imageUrl}" alt="Diagram for Question ${q.number}" class="q-diagram-img" /></div>`
       : "";
 
-  const questionRowHtml = (q: FormattedExportQuestion) => {
-    // Four short options sit 2 x 2; anything longer gets a row each.
-    const twoByTwo =
-      q.options.length === 4 && q.options.every((o) => plainLength(o.textEn) <= 26 && plainLength(o.textHi || o.textEn) <= 26);
-    const rows = 2 + (twoByTwo ? 2 : q.options.length);
-    const side = (isHi: boolean) => {
-      const statement = renderFormulaContent(isHi ? q.statementHi || q.statementEn : q.statementEn || q.statementHi);
-      const optionRows = twoByTwo
-        ? [0, 2].map((i) => `<div class="opt-row opt-row-2">${optionCell(q.options[i], i, isHi)}${optionCell(q.options[i + 1], i + 1, isHi)}</div>`)
-        : q.options.map((opt, i) => `<div class="opt-row">${optionCell(opt, i, isHi)}</div>`);
-      return `
-            <div class="q-side ${isHi ? "q-side-hi" : "q-side-en"}" style="grid-row: span ${rows};">
-              <div class="q-head-statement">
-                <span class="q-num-label">${q.number}.</span>
-                <div class="q-statement-body">${statement}</div>
-              </div>
-              <div class="q-diagram-cell">${diagramFor(q)}</div>
-              ${optionRows.join("")}
-            </div>`;
-    };
-    return `
-          <div class="q-row-item" id="q-${q.number}" style="grid-template-rows: repeat(${rows}, auto);">${side(true)}${side(false)}
-          </div>`;
+  const part = (cls: string, hi: string, en: string, attrs = "") =>
+    `<div class="q-part ${cls}"${attrs}><div class="qp-cell qp-hi">${hi}</div><div class="qp-cell qp-en">${en}</div></div>`;
+
+  const TABLE_BLOCK = /<div class="fx-table-wrap"[^>]*>[\s\S]*?<\/table><\/div>/g;
+  const hasContent = (html: string) => /<img|<svg|class="katex/.test(html) || html.replace(/<[^>]+>/g, "").trim() !== "";
+  const trimBreaks = (html: string) => html.replace(/^(\s*<br\s*\/?>)+/, "").replace(/(<br\s*\/?>\s*)+$/, "");
+  /** Statement HTML cut at its tables, so a page can break between the text and a tall table. */
+  const statementChunks = (html: string) => {
+    const chunks: string[] = [];
+    let last = 0;
+    for (const m of html.matchAll(TABLE_BLOCK)) {
+      const before = trimBreaks(html.slice(last, m.index));
+      if (hasContent(before)) chunks.push(before);
+      chunks.push(m[0]);
+      last = (m.index ?? 0) + m[0].length;
+    }
+    const rest = trimBreaks(html.slice(last));
+    if (hasContent(rest) || chunks.length === 0) chunks.push(rest);
+    return chunks;
+  };
+
+  const PARAGRAPH_BREAK = /(?:<br\s*\/?>\s*){2,}/;
+  const balanced = (html: string) =>
+    ["div", "span", "strong", "em", "table", "b", "i"].every(
+      (t) => (html.match(new RegExp(`<${t}[\\s>]`, "g")) || []).length === (html.match(new RegExp(`</${t}>`, "g")) || []).length
+    );
+  /** Rendered text cut at its blank lines (only where no element spans the cut). */
+  const paragraphs = (html: string) => {
+    const paras = html.split(PARAGRAPH_BREAK).filter(hasContent);
+    return paras.length > 1 && paras.every(balanced) ? paras : [html];
+  };
+
+  /** A text chunk cut at its line breaks (tables are kept whole). */
+  const lines = (html: string) => {
+    if (html.startsWith('<div class="fx-table-wrap"')) return [html];
+    const parts = html.split(/<br\s*\/?>/).map((l) => l.trim()).filter(hasContent);
+    return parts.length > 1 && parts.every(balanced) ? parts : [html];
+  };
+
+  const questionPartsHtml = (q: FormattedExportQuestion, withSolutionPart: boolean) => {
+    const stmtHi = statementChunks(renderFormulaContent(q.statementHi || q.statementEn));
+    const stmtEn = statementChunks(renderFormulaContent(q.statementEn || q.statementHi));
+    // Finer still: each line of text (Assertion / Reason / …) on its own.
+    const lineHi = stmtHi.flatMap(lines);
+    const lineEn = stmtEn.flatMap(lines);
+    // Split only when both languages cut into the same pieces (so they stay side by side).
+    const [hiChunks, enChunks] =
+      lineHi.length === lineEn.length
+        ? [lineHi, lineEn]
+        : stmtHi.length === stmtEn.length
+        ? [stmtHi, stmtEn]
+        : [[stmtHi.join("<br/>")], [stmtEn.join("<br/>")]];
+    const num = `<span class="q-num">${q.number}.</span>`;
+    const parts = [
+      part("q-row-item q-stmt", `${num}<div class="q-body">${hiChunks[0]}</div>`, `${num}<div class="q-body">${enChunks[0]}</div>`, ` id="q-${q.number}"`),
+      ...hiChunks.slice(1).map((h, i) => part("q-fig q-cont", h, enChunks[i + 1]!)),
+    ];
+    const diagram = diagramFor(q);
+    if (diagram) parts.push(part("q-fig", diagram, diagram));
+    q.options.forEach((opt, i) => {
+      if (!opt.textEn && !opt.textHi) return;
+      const cell = (hi: boolean) =>
+        `<span class="opt-key">${OPTION_LETTERS[i] ?? i + 1})</span><span class="opt-text">${renderFormulaContent(
+          hi ? opt.textHi || opt.textEn : opt.textEn || opt.textHi
+        )}</span>`;
+      parts.push(part("q-opt", cell(true), cell(false)));
+    });
+    if (withSolutionPart) {
+      // One line per paragraph, so a long solution can continue on the next page.
+      const ans = optionLetter(q.correctOptionKey);
+      const solHi = q.solutionHi || q.solutionEn;
+      const solEn = q.solutionEn || q.solutionHi;
+      // Line by line (a blank line stays as a small gap), so a page can break anywhere in it.
+      const solLines = (html: string) =>
+        paragraphs(html).flatMap((p, i) => lines(p).map((l, j) => (i > 0 && j === 0 ? `<span class="para-gap"></span>${l}` : l)));
+      const hiParas = solHi ? solLines(renderFormulaContent(solHi)) : [];
+      const enParas = solEn ? solLines(renderFormulaContent(solEn)) : [];
+      const lineCount = Math.max(1, hiParas.length, enParas.length);
+      for (let i = 0; i < lineCount; i++) {
+        const cell = (hi: boolean) => {
+          const para = (hi ? hiParas : enParas)[i];
+          return `${i === 0 ? `<div class="sol-ans">${hi ? "उत्तर" : "Ans."} (${ans})</div>` : ""}${
+            para ? `<div class="sol-text">${i === 0 ? `<b>${hi ? "हल :" : "Sol. :"}</b> ` : ""}${para}</div>` : ""
+          }`;
+        };
+        parts.push(
+          i === 0
+            ? part("sol-row-item q-sol", cell(true), cell(false), ` id="sol-q-${q.number}"`)
+            : part("q-sol q-sol-cont", cell(true), cell(false))
+        );
+      }
+    }
+    parts[parts.length - 1] = parts[parts.length - 1]!.replace('class="q-part ', 'class="q-part q-last ');
+    return parts.join("");
   };
 
   const renderSingleRoughPageHtml = (pNo: number, subjectName?: string) => {
@@ -789,7 +890,7 @@ export function generateTestPaperHtml(
       <div class="page-running-footer">
         <div class="footer-phase-box">${test.batchName || "PHASE - ALL"}</div>
         <div class="footer-meta-row">
-          <span class="footer-barcode">${test.code || "9610WMD801490250051"}</span>
+          <span class="footer-barcode">${test.code || "9610WMD801490250051"}</span>${SITE_LINK_HTML}
           <span class="footer-date">${currentDateStr}</span>
         </div>
       </div>
@@ -797,15 +898,20 @@ export function generateTestPaperHtml(
   `;
   };
 
+  // Question booklet: one flow per subject, a rough page after each.
+  // Solutions booklet: answer key first, then each question followed by its
+  // solution — no cover, rough pages or back cover.
   let questionPagesHtml = "";
-  test.sections.forEach((section) => {
-    questionPagesHtml += `
-      <div class="q-flow" data-subject="${section.subject.toUpperCase().replace(/"/g, "&quot;")}">
-        ${section.questions.map(questionRowHtml).join("")}
+  if (!withSolution) {
+    test.sections.forEach((section) => {
+      questionPagesHtml += `
+      <div class="q-flow" data-subject="SUBJECT : ${section.subject.toUpperCase().replace(/"/g, "&quot;")}">
+        ${section.questions.map((q) => questionPartsHtml(q, false)).join("")}
       </div>`;
-    // Rough page after each subject (page numbers are filled in after pagination).
-    questionPagesHtml += renderSingleRoughPageHtml(0, section.subject);
-  });
+      // Rough page after each subject (page numbers are filled in after pagination).
+      questionPagesHtml += renderSingleRoughPageHtml(0, section.subject);
+    });
+  }
 
   // The frame every question page is cut into (see paginateBooklet()).
   const contentPageTemplateHtml = `
@@ -821,7 +927,7 @@ export function generateTestPaperHtml(
         <div class="page-running-footer">
           <div class="footer-phase-box">${test.batchName || "PHASE - ALL"}</div>
           <div class="footer-meta-row">
-            <span class="footer-barcode">${test.code || "9610WMD801490250051"}</span>
+            <span class="footer-barcode">${test.code || "9610WMD801490250051"}</span>${SITE_LINK_HTML}
             <span class="footer-date">${currentDateStr}</span>
           </div>
         </div>
@@ -866,7 +972,7 @@ export function generateTestPaperHtml(
           <div class="corp-brand-title">⚡ ATOMIC PATHSHALA</div>
           <div class="corp-address">Registered Office &amp; Online Learning Portal | Rampur / Uttar Pradesh, India</div>
           <div class="corp-contacts">
-            <span>Website: <strong>ap.atomicpathshala.com</strong></span>
+            <span>Website: <a href="${SITE_URL}" class="site-link"><strong>${SITE_HOST}</strong></a></span>
             <span>·</span>
             <span>Support: <strong>atomic.pathshala.info@gmail.com</strong></span>
             <span>·</span>
@@ -877,154 +983,43 @@ export function generateTestPaperHtml(
     </div>
   `;
 
-  // Optional: Answer Key Grid & Detailed Solutions
+  // Solutions booklet: answer key (columns of 45), then question + solution.
   let solutionsSectionHtml = "";
   if (withSolution) {
-    const totalQ = test.allQuestions.length;
-    const itemsPerCol = Math.ceil(totalQ / 4);
-    const col1 = test.allQuestions.slice(0, itemsPerCol);
-    const col2 = test.allQuestions.slice(itemsPerCol, itemsPerCol * 2);
-    const col3 = test.allQuestions.slice(itemsPerCol * 2, itemsPerCol * 3);
-    const col4 = test.allQuestions.slice(itemsPerCol * 3);
-
-    let answerKeyRowsHtml = "";
-    for (let r = 0; r < itemsPerCol; r++) {
-      const q1 = col1[r];
-      const q2 = col2[r];
-      const q3 = col3[r];
-      const q4 = col4[r];
-
-      answerKeyRowsHtml += `
-        <tr>
-          <td class="ak-qno">${q1 ? `Q.${q1.number}` : ""}</td>
-          <td class="ak-ans">${q1 ? `<strong>${q1.correctOptionKey}</strong>` : ""}</td>
-          <td class="ak-sep"></td>
-          <td class="ak-qno">${q2 ? `Q.${q2.number}` : ""}</td>
-          <td class="ak-ans">${q2 ? `<strong>${q2.correctOptionKey}</strong>` : ""}</td>
-          <td class="ak-sep"></td>
-          <td class="ak-qno">${q3 ? `Q.${q3.number}` : ""}</td>
-          <td class="ak-ans">${q3 ? `<strong>${q3.correctOptionKey}</strong>` : ""}</td>
-          <td class="ak-sep"></td>
-          <td class="ak-qno">${q4 ? `Q.${q4.number}` : ""}</td>
-          <td class="ak-ans">${q4 ? `<strong>${q4.correctOptionKey}</strong>` : ""}</td>
-        </tr>
-      `;
+    const PER_COLUMN = 45;
+    const COLUMNS_PER_TABLE = 5;
+    const columns: FormattedExportQuestion[][] = [];
+    for (let i = 0; i < test.allQuestions.length; i += PER_COLUMN) columns.push(test.allQuestions.slice(i, i + PER_COLUMN));
+    const answerKeyTables: string[] = [];
+    for (let t = 0; t < columns.length; t += COLUMNS_PER_TABLE) {
+      const group = columns.slice(t, t + COLUMNS_PER_TABLE);
+      const rows = Math.max(...group.map((c) => c.length));
+      let body = "";
+      for (let r = 0; r < rows; r++) {
+        body += `<tr>${group
+          .map((c) => (c[r] ? `<td class="ak-q">${c[r]!.number}</td><td class="ak-a">${optionLetter(c[r]!.correctOptionKey)}</td>` : `<td class="ak-q"></td><td class="ak-a"></td>`))
+          .join('<td class="ak-gap"></td>')}</tr>`;
+      }
+      answerKeyTables.push(`
+        <div class="ak-block">
+          ${t === 0 ? `<div class="ak-title">ANSWER KEY / उत्तर कुंजी <span>${test.name} · ${test.allQuestions.length} Questions</span></div>` : ""}
+          <table class="ak-table"><thead><tr>${group.map(() => "<th>Q.</th><th>Ans.</th>").join('<th class="ak-gap"></th>')}</tr></thead><tbody>${body}</tbody></table>
+        </div>`);
     }
 
-    const answerKeyPageHtml = `
-      <div class="page answer-key-page">
-        <div class="page-running-header">
-          <span class="header-left">ANSWER KEY</span>
-          <span class="header-center">${brandName} — ${test.name}</span>
-          <span class="header-right">CODE : <strong>${test.code}</strong></span>
-        </div>
-
-        <div class="ak-header-banner">
-          <div class="ak-main-title">OFFICIAL ANSWER KEY — ${test.examType}</div>
-          <div class="ak-sub-title">Test Code: <strong>${test.code}</strong> | Total Questions: <strong>${totalQ}</strong> | Max Marks: <strong>${test.totalMarks}</strong></div>
-        </div>
-
-        <div class="ak-table-container">
-          <table class="ak-grid-table">
-            <thead>
-              <tr>
-                <th>Q.No</th>
-                <th>Ans</th>
-                <th class="ak-sep"></th>
-                <th>Q.No</th>
-                <th>Ans</th>
-                <th class="ak-sep"></th>
-                <th>Q.No</th>
-                <th>Ans</th>
-                <th class="ak-sep"></th>
-                <th>Q.No</th>
-                <th>Ans</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${answerKeyRowsHtml}
-            </tbody>
-          </table>
-        </div>
-
-        <div class="page-running-footer">
-          <span class="footer-left">${test.code}</span>
-          <span class="footer-center">ANSWER KEY · ATOMIC PATHSHALA</span>
-          <span class="footer-right">PHASE - ALL</span>
-        </div>
-      </div>
-    `;
-
-    // Detailed solutions: one flow, cut into A4 pages in the browser like the
-    // questions (it used to be a single ~13,000px "page" that the old image
-    // export squeezed onto one sheet). Hindi | English share grid rows.
-    const solutionsFlowItems = test.sections.map((section) => {
-      const solQuestionsHtml = section.questions.map((q) => {
-        const stmtEnHtml = renderFormulaContent(q.statementEn || q.statementHi || "");
-        const stmtHiHtml = renderFormulaContent(q.statementHi || q.statementEn || "");
-        const solEnHtml = renderFormulaContent(q.solutionEn || q.solutionHi || "Detailed explanation provided as per standard textbook principles.");
-        const solHiHtml = renderFormulaContent(q.solutionHi || q.solutionEn || "विस्तृत व्याख्या मानक पाठ्यपुस्तक सिद्धांतों के अनुसार प्रदान की गई है।");
-        const diagram = q.camDrawSvg
-          ? `<div class="sol-diagram-wrap sol-camdraw-wrap">${q.camDrawSvg}</div>`
-          : q.imageUrl
-          ? `<div class="sol-diagram-wrap"><img src="${q.imageUrl}" alt="Diagram for Q${q.number}" class="sol-diagram-img" /></div>`
-          : "";
-
-        return `
-          <div class="sol-row-item" id="sol-q-${q.number}">
-            <div class="sol-item-header">
-              <span class="sol-q-badge">Q.${q.number}</span>
-              <span class="sol-correct-badge">Correct Answer: <strong>Option (${q.correctOptionKey})</strong></span>
-              <span class="sol-subject-tag">${q.subject || section.subject}</span>
-            </div>
-            <div class="sol-grid-two-col">
-              <div class="sol-col-side sol-side-hi">
-                <div class="sol-stmt-text font-devanagari">${stmtHiHtml}</div>
-                <div class="sol-diagram-cell">${diagram}</div>
-                <div class="sol-expl-heading font-devanagari">हल एवं व्याख्या (Solution) :</div>
-                <div class="sol-body-text font-devanagari">${solHiHtml}</div>
-              </div>
-              <div class="sol-col-side sol-side-en">
-                <div class="sol-stmt-text">${stmtEnHtml}</div>
-                <div class="sol-diagram-cell">${diagram}</div>
-                <div class="sol-expl-heading">Hint &amp; Step-by-Step Solution :</div>
-                <div class="sol-body-text">${solEnHtml}</div>
-              </div>
-            </div>
-          </div>`;
-      }).join("");
-
-      return `
-          <div class="sol-section-title">HINTS &amp; SOLUTIONS : ${section.subject.toUpperCase()} (${section.name.toUpperCase()})</div>
-          ${solQuestionsHtml}`;
-    }).join("");
-
-    const detailedSolutionsPageHtml = `
-      <div class="sol-flow">
-        <div class="sol-main-header">
-          <h2>HINTS &amp; STEP-BY-STEP SOLUTIONS</h2>
-          <p>Comprehensive pedagogical explanations with formulas, derivations and concept breakdown.</p>
-        </div>
-        ${solutionsFlowItems}
-      </div>
-      <template id="tpl-solutions-page">
-        <div class="page solutions-page">
-          <div class="page-running-header">
-            <span class="header-left">HINTS &amp; SOLUTIONS</span>
-            <span class="header-center">${brandName} — ${test.name}</span>
-            <span class="header-right">CODE : <strong>${test.code}</strong></span>
-          </div>
-          <div class="content-body"><div class="questions-stream"></div></div>
-          <div class="page-running-footer">
-            <span class="footer-left">${test.code}</span>
-            <span class="footer-center">HINTS &amp; SOLUTIONS · ATOMIC PATHSHALA</span>
-            <span class="footer-right js-sol-page-label"></span>
-          </div>
-        </div>
-      </template>
-    `;
-
-    solutionsSectionHtml = answerKeyPageHtml + detailedSolutionsPageHtml;
+    // One flow: each subject follows straight on (a heading marks where it starts).
+    solutionsSectionHtml = `
+      <div class="q-flow" data-subject="ANSWER KEY &amp; SOLUTIONS">
+        ${answerKeyTables.join("")}
+        ${test.sections
+          .map(
+            (section) =>
+              `<div class="sol-section-title keep-next">SOLUTIONS : ${section.subject.toUpperCase()}</div>${section.questions
+                .map((q) => questionPartsHtml(q, true))
+                .join("")}`
+          )
+          .join("")}
+      </div>`;
   }
 
   // Full Document Assembly
@@ -2041,54 +2036,74 @@ export function generateTestPaperHtml(
       .no-print { display: none !important; }
     }
 
-    /* Question row: Hindi | English share grid rows (statement, diagram, options). */
-    .q-row-item {
-      display: grid !important;
-      grid-template-columns: 1fr 1fr !important;
-      padding: 5px 0 7px 0 !important;
-      break-inside: avoid;
-      page-break-inside: avoid;
-      border-bottom: 0.5px solid #d4d4d4;
+    /* ---- Question lines (questionPartsHtml): Hindi | English in one grid row ---- */
+    .page.content-page, .page.rough-page { padding: 14px 15mm 12px 15mm !important; }
+    .q-flow { padding: 16px 15mm; }
+    .q-part { display: grid; grid-template-columns: 1fr 1fr; break-inside: avoid; page-break-inside: avoid; }
+    /* Older booklet rules for these class names must not add padding/rules between lines. */
+    .q-part.q-row-item, .q-part.sol-row-item { padding: 0 !important; margin: 0 !important; border-bottom: 0 !important; }
+    .q-part.q-last { border-bottom: 0.6px solid #bdbdbd !important; }
+    .qp-cell { min-width: 0; color: #000; --q-indent: 2.3em; }
+    .qp-hi {
+      padding-right: 14px; border-right: 1.5px solid #000;
+      font-family: 'Noto Serif Devanagari', 'Mangal', 'Times New Roman', serif;
+      font-size: 13.6pt; line-height: 1.5;
     }
-    .q-side {
-      display: grid !important;
-      grid-template-rows: subgrid;
-      row-gap: 2px;
-      align-content: start;
-      min-width: 0;
+    .qp-en {
+      padding-left: 14px;
+      font-family: 'Times New Roman', 'PT Serif', serif;
+      font-size: 14pt; line-height: 1.4;
     }
-    .q-side-hi { padding-right: 12px !important; border-right: 1.5px solid #000000 !important; }
-    .q-side-en { padding-left: 12px !important; }
-    .q-diagram-cell { min-width: 0; }
-    .q-diagram-img { max-height: 150px !important; max-width: 100% !important; }
-    .opt-row { min-width: 0; }
-    .opt-row-2 { display: grid; grid-template-columns: 1fr 1fr; column-gap: 10px; }
-    .opt-box { display: flex !important; align-items: baseline !important; gap: 4px !important; min-width: 0; }
-    .opt-value { min-width: 0; overflow-wrap: anywhere; }
-    .opt-value img { max-width: 100%; height: auto; margin: 2px 0 !important; }
+    /* Everything but KaTeX inherits the line's font and size. */
+    .qp-cell *:not(.katex *):not(.katex) { font-size: inherit; line-height: inherit; }
+    .qp-cell .katex { font-size: 1.04em !important; line-height: 1.2 !important; }
+    .q-stmt .qp-cell { display: flex; padding-top: 9px; }
+    .q-num { flex: 0 0 var(--q-indent); font-weight: 700; }
+    .q-body { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+    /* Figure, options and solution start at the statement's indent. */
+    .q-fig .qp-hi, .q-opt .qp-hi, .q-sol .qp-hi { padding-left: var(--q-indent); }
+    .q-fig .qp-en, .q-opt .qp-en, .q-sol .qp-en { padding-left: calc(14px + var(--q-indent)); }
+    .q-fig .qp-cell { padding-top: 4px; }
+    .q-opt .qp-cell { display: flex; align-items: baseline; gap: 0.5em; padding-top: 3px; }
+    .opt-key { flex: 0 0 1.6em; }
+    .q-opt .qp-cell:has(.opt-text img) { align-items: flex-start; }
+    .opt-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+    /* Structures drawn as images were sized for a wide editor (e.g. 30%); never print them tiny. */
+    .opt-text img { min-width: 55% !important; max-width: 100% !important; height: auto !important; margin: 3px 0 !important; }
+    .q-body img, .q-fig img { max-width: 100% !important; height: auto !important; }
+    .q-diagram-img { max-height: 220px !important; }
+    .q-last .qp-cell { padding-bottom: 9px; }
+    .q-last { border-bottom: 0.6px solid #bdbdbd; }
 
-    /* Type: exam-paper sizes; Hindi a touch smaller so both scripts look the same size. */
-    .q-side-en .q-statement-body, .q-side-en .opt-value, .q-side-en .opt-label, .q-side-en .q-num-label {
-      font-size: 10pt !important; line-height: 1.38 !important;
+    /* Solution line */
+    .q-sol .qp-cell { padding-top: 6px; }
+    .q-sol-cont .qp-cell { padding-top: 1px; }
+    .para-gap { display: block; height: 0.5em; }
+    .sol-ans { font-weight: 700; }
+    .sol-text { overflow-wrap: anywhere; text-align: left; }
+    .sol-section-title {
+      margin: 10px 0 2px; padding: 5px 8px; border: 1.5px solid #000; background: #f1f5f9; color: #000 !important;
+      font-family: 'Montserrat', sans-serif; font-weight: 800; font-size: 11pt; text-align: center; letter-spacing: 0.5px;
     }
-    .q-side-hi .q-statement-body, .q-side-hi .opt-value, .q-side-hi .opt-label, .q-side-hi .q-num-label {
-      font-size: 9.6pt !important; line-height: 1.45 !important;
-    }
-    .q-num-label { font-weight: 700 !important; }
-    .katex { font-size: 1.04em !important; line-height: 1.2 !important; }
-    .katex-display { overflow: visible !important; margin: 3px 0 !important; }
 
-    /* Match the column / data tables: sized to their content, never full-width boxes. */
+    /* Tables (match the column etc.): content-sized; fitWide() zooms any that are too wide. */
     .fx-table-wrap { overflow: visible !important; margin: 4px 0 !important; max-width: 100%; }
-    table.fx-table {
-      width: auto !important;
-      max-width: 100% !important;
-      border-collapse: collapse !important;
-      font-size: 9pt !important;
-      line-height: 1.3 !important;
-      margin: 0 !important;
-    }
+    table.fx-table { width: auto !important; max-width: none !important; border-collapse: collapse !important; font-size: 0.86em !important; line-height: 1.3 !important; margin: 0 !important; }
     table.fx-table td, table.fx-table th { border-color: #000000 !important; padding: 2px 6px !important; }
+
+    /* Answer key: columns of 45 */
+    .ak-block { padding: 2px 0 8px; }
+    .ak-title { font-family: 'Montserrat', sans-serif; font-weight: 800; font-size: 12pt; text-align: center; margin-bottom: 4px; }
+    .ak-title span { display: block; font-family: 'Times New Roman', serif; font-weight: 700; font-size: 9.5pt; color: #333; }
+    .ak-table { border-collapse: collapse; margin: 0 auto; font-family: 'Times New Roman', serif; font-size: 9.5pt; line-height: 1; }
+    .ak-table th, .ak-table td.ak-q, .ak-table td.ak-a { border: 1px solid #000; padding: 2px 10px; height: 16px; text-align: center; }
+    .ak-table th { background: #e2e8f0; font-weight: 700; }
+    .ak-table td.ak-q { font-weight: 700; background: #f8fafc; }
+    .ak-table .ak-gap { width: 10px; border: 0; background: transparent; }
+
+    /* Website link in every footer (clickable in the saved PDF) */
+    .site-link { color: #1d4ed8 !important; text-decoration: none; font-family: 'Times New Roman', serif; font-weight: 700; }
+    .footer-meta-row .footer-site { font-size: 8.5pt; }
 
     /* Solutions: Hindi | English share rows too. */
     .sol-row-item { break-inside: avoid; page-break-inside: avoid; }
@@ -2134,11 +2149,7 @@ export function generateTestPaperHtml(
   </div>
 
   <div class="doc-container" id="doc-container">
-    ${frontCoverHtml}
-    ${questionPagesHtml}
-    ${finalRoughPagesHtml}
-    ${backCoverHtml}
-    ${solutionsSectionHtml}
+    ${withSolution ? solutionsSectionHtml : frontCoverHtml + questionPagesHtml + finalRoughPagesHtml + backCoverHtml}
   </div>
   ${contentPageTemplateHtml}
 
@@ -2156,15 +2167,26 @@ export function generateTestPaperHtml(
         return n % 2 === 0 ? brand + num + badge : badge + num + brand;
       }
 
-      // An equation or table wider than its column is scaled down to fit
-      // instead of being cut off at the column edge.
+      // An equation or table wider than its column is shrunk (CSS zoom, so
+      // its fixed-size cells shrink too) to fit instead of running into the
+      // other language's column.
       function fitWide(root) {
-        var els = root.querySelectorAll('.katex-display, .fx-table-wrap');
+        var els = root.querySelectorAll('.katex-display, .fx-table-wrap, .qp-cell table:not(.fx-table)');
         for (var i = 0; i < els.length; i++) {
           var el = els[i];
-          var box = el.parentElement ? el.parentElement.clientWidth : 0;
-          var w = el.scrollWidth;
-          if (box > 0 && w > box + 1) el.style.fontSize = Math.max(55, Math.floor((box / w) * 100)) + '%';
+          el.style.zoom = '';
+          // Room actually available: the parent's content box (clientWidth includes its padding/indent).
+          var parent = el.parentElement;
+          if (!parent) continue;
+          var cs = getComputedStyle(parent);
+          var box = parent.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+          if (!(box > 0) || el.scrollWidth <= box + 1) continue;
+          // Zoomed content re-wraps, so re-measure until it really fits.
+          var zoom = 1;
+          for (var n = 0; n < 4 && el.scrollWidth * zoom > box; n++) {
+            zoom = Math.max(0.4, Math.floor(zoom * ((box - 2) / (el.scrollWidth * zoom)) * 1000) / 1000);
+            el.style.zoom = String(zoom);
+          }
         }
       }
 
@@ -2173,6 +2195,10 @@ export function generateTestPaperHtml(
         var template = document.getElementById(templateId);
         if (!template) return;
         var items = Array.prototype.slice.call(flow.children);
+        // Take the flow out of the document first: otherwise every measurement
+        // re-lays out all the lines still waiting in it (minutes for 180 questions).
+        var marker = document.createComment('flow');
+        flow.parentNode.replaceChild(marker, flow);
         var page, stream, body, first = true;
         function newPage() {
           page = template.content.firstElementChild.cloneNode(true);
@@ -2181,11 +2207,11 @@ export function generateTestPaperHtml(
           if (headerRowEl) headerRowEl.innerHTML = headerRow(0);
           var subjectRow = page.querySelector('.test-header-subject-row');
           if (subjectRow) {
-            if (first && subject) subjectRow.textContent = 'SUBJECT : ' + subject;
+            if (first && subject) subjectRow.textContent = subject;
             else subjectRow.parentNode.removeChild(subjectRow);
           }
           first = false;
-          flow.parentNode.insertBefore(page, flow);
+          marker.parentNode.insertBefore(page, marker);
           stream = page.querySelector('.questions-stream');
           body = page.querySelector('.content-body');
         }
@@ -2196,16 +2222,16 @@ export function generateTestPaperHtml(
           // A few px of slack: late font/KaTeX reflow must never push a row off the page.
           if (stream.offsetHeight <= body.clientHeight - SAFETY_PX) return;
           if (stream.children.length > 1) {
-            // Keep a section heading with the first row that follows it.
+            // Keep a heading with the line that follows it.
             var prev = item.previousElementSibling;
             newPage();
-            if (prev && prev.classList.contains('sol-section-title')) stream.appendChild(prev);
+            if (prev && prev.classList.contains('keep-next')) stream.appendChild(prev);
             stream.appendChild(item);
           }
           // A single row taller than a whole page: let that page grow instead of clipping it.
           if (stream.offsetHeight > body.clientHeight - SAFETY_PX) page.classList.add('page-overflow');
         });
-        flow.parentNode.removeChild(flow);
+        marker.parentNode.removeChild(marker);
       }
 
       function renumber() {
