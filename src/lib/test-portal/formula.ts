@@ -1,6 +1,39 @@
 import katex from "katex";
 
-type Segment = { type: "text" | "inline" | "block" | "image" | "bold"; content: string; width?: string };
+type Segment = { type: "text" | "inline" | "block" | "image" | "bold" | "italic"; content: string; width?: string };
+
+/**
+ * LaTeX that went through JSON without its backslashes escaped: "\rho" was
+ * stored as a carriage return + "ho", "\frac" as a form feed + "rac",
+ * "\times"/"\theta"/"\text" as a tab + …, "\beta"/"\bar" as a backspace,
+ * "\vec" as a vertical tab. Seen in real questions ("density $\rho$" showed
+ * as "ho"). Put the backslash back — only where the control character is
+ * followed by a LaTeX command name, so real line breaks and tabs are untouched.
+ */
+const MANGLED_COMMANDS: Record<string, { letter: string; rest: string[] }> = {
+  "\r": { letter: "r", rest: ["ho", "ightarrow", "ightleftharpoons", "ightharpoonup", "ight", "angle", "brace", "ceil", "floor", "m", "vert"] },
+  "\t": { letter: "t", rest: ["imes", "heta", "extbf", "extit", "extrm", "ext", "anh", "an", "au", "o", "op", "ilde", "riangle", "frac", "herefore", "extdegree"] },
+  "\f": { letter: "f", rest: ["rac", "orall", "lat"] },
+  "\b": { letter: "b", rest: ["eta", "ar", "f", "egin", "ullet", "ot", "oxed", "inom", "ecause", "igg", "ig", "old", "oldsymbol"] },
+  "\v": { letter: "v", rest: ["ec", "arepsilon", "arphi", "artheta", "arpi", "ee", "ert", "dots"] },
+};
+const MANGLED_RE = new RegExp(
+  `([\\r\\t\\f\\b\\v])(?=(?:${Array.from(new Set(Object.values(MANGLED_COMMANDS).flatMap((c) => c.rest)))
+    .sort((a, b) => b.length - a.length)
+    .join("|")})(?![a-zA-Z]))`,
+  "g"
+);
+
+export function repairLatexControlChars(input: string): string {
+  if (!input || !/[\r\t\f\b\v]/.test(input)) return input;
+  return input.replace(MANGLED_RE, (ch: string, _c: string, offset: number, whole: string) => {
+    const spec = MANGLED_COMMANDS[ch];
+    if (!spec) return ch;
+    const after = whole.slice(offset + 1);
+    const hit = spec.rest.find((r) => after.startsWith(r) && !/[a-zA-Z]/.test(after.charAt(r.length)));
+    return hit ? `\\${spec.letter}` : ch;
+  });
+}
 
 /**
  * Cleans OCR artifacts, repeated Devanagari vowel duplications, and corrupt characters
@@ -158,10 +191,12 @@ export function sanitizeLatexFormulas(input: string): string {
   return text;
 }
 
-function parseSegments(input: string): Segment[] {
-  const sanitized = sanitizeLatexFormulas(input);
+/** `sanitized` must already have been through sanitizeLatexFormulas (renderFormulaContent does it once). */
+function parseSegments(sanitized: string): Segment[] {
   const segments: Segment[] = [];
-  const regex = /!\[(.*?)\]\((.+?)\)|\$\$(.+?)\$\$|\$(.+?)\$|\*\*(.+?)\*\*/gs;
+  // image | $$block$$ | $inline$ | **bold** | *italic* (a word-bounded single-asterisk
+  // span, as in "*Penicillium*" — never "a * b", which OCR cleanup already strips)
+  const regex = /!\[(.*?)\]\((.+?)\)|\$\$(.+?)\$\$|\$(.+?)\$|\*\*(.+?)\*\*|(?<![\w*])\*(?![\s*])([^*\n]+?)(?<!\s)\*(?![\w*])/gs;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
@@ -177,6 +212,8 @@ function parseSegments(input: string): Segment[] {
       segments.push({ type: "inline", content: match[4] });
     } else if (match[5] !== undefined) {
       segments.push({ type: "bold", content: match[5] });
+    } else if (match[6] !== undefined) {
+      segments.push({ type: "italic", content: match[6] });
     }
     lastIndex = regex.lastIndex;
   }
@@ -198,7 +235,9 @@ function escapeHtml(s: string): string {
 /**
  * Renders any residual inline LaTeX expressions inside plain text chunks
  */
-function renderResidualLatexInText(text: string): string {
+function renderResidualLatexInText(input: string): string {
+  // Markdown-style list lines in solutions ("- (i) ...") → a real bullet.
+  const text = input.replace(/(^|\n)[ \t]*-[ \t]+(?=\S)/g, "$1• ");
   // Check if text has any LaTeX commands like \frac, \sqrt, \hat, \vec, \cos, \sin, \tan, etc.
   if (!/\\[a-zA-Z]+|\^\{?[0-9a-zA-Z\+\-]+\}?|_\{?[0-9a-zA-Z\+\-]+\}?/.test(text)) {
     return escapeHtml(text).replace(/\n/g, "<br/>");
@@ -234,9 +273,102 @@ function renderResidualLatexInText(text: string): string {
   return result;
 }
 
+/** Splits on a separator that isn't escaped with a backslash (a literal "\&" stays in the cell). */
+function splitUnescaped(s: string, sep: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i]!;
+    if (ch === "\\" && i + 1 < s.length) {
+      cur += ch + s[i + 1];
+      i++;
+      continue;
+    }
+    if (ch === sep) {
+      out.push(cur);
+      cur = "";
+      continue;
+    }
+    cur += ch;
+  }
+  out.push(cur);
+  return out;
+}
+
+/** One table cell: plain words stay HTML text (so they wrap), anything mathematical goes through KaTeX. */
+function renderTableCell(raw: string): { html: string; header: boolean } {
+  const c = raw.trim();
+  if (!c) return { html: "", header: false };
+  const wrapped = /^\\text(bf|it|rm|sf|normal)?\s*\{([^{}]*)\}$/.exec(c);
+  if (wrapped) {
+    const text = escapeHtml(wrapped[2]!);
+    if (wrapped[1] === "bf") return { html: `<strong>${text}</strong>`, header: true };
+    if (wrapped[1] === "it") return { html: `<em>${text}</em>`, header: false };
+    return { html: text, header: false };
+  }
+  if (!/[\\^_{}]/.test(c)) return { html: escapeHtml(c), header: false };
+  try {
+    return { html: katex.renderToString(c, { throwOnError: false, displayMode: false }), header: false };
+  } catch {
+    return { html: escapeHtml(c), header: false };
+  }
+}
+
+/**
+ * A LaTeX `array`/`tabular` used as a TABLE (match the column, data
+ * tables) → a real HTML table: columns size to their content, text wraps,
+ * and it never runs off a phone screen. KaTeX renders such an array as one
+ * rigid block of math that can't wrap — the "very long boxes". A matrix
+ * (no rules, no words) is left to KaTeX.
+ */
+export function latexTableToHtml(spec: string, body: string): string | null {
+  const bordered = spec.includes("|") || /\\hline/.test(body);
+  const wordy = /\\text/.test(body);
+  if (!bordered && !wordy) return null;
+
+  const aligns = spec.replace(/[|\s]/g, "").replace(/[pmb]\{[^}]*\}/g, "l").split("");
+  const rows = body
+    .split(/\\\\(?:\[[^\]]*\])?/)
+    .map((r) => r.replace(/\\hline|\\cline\{[^}]*\}/g, "").trim())
+    .filter((r) => r.replace(/&/g, "").trim().length > 0 || r.includes("&"))
+    .map((r) => splitUnescaped(r, "&").map(renderTableCell))
+    .filter((cells) => cells.some((c) => c.html));
+  if (rows.length === 0) return null;
+
+  const width = Math.max(...rows.map((r) => r.length));
+  const border = bordered ? "border:1px solid #64748b;" : "";
+  const htmlRows = rows.map((cells, ri) => {
+    const isHeader = ri === 0 && cells.filter((c) => c.html).every((c) => c.header);
+    const tag = isHeader ? "th" : "td";
+    const tds = Array.from({ length: width }, (_, ci) => {
+      const cell = cells[ci];
+      const align = aligns[ci] === "c" ? "center" : aligns[ci] === "r" ? "right" : "left";
+      return `<${tag} style="${border}padding:3px 8px;vertical-align:top;text-align:${isHeader ? "center" : align};">${cell?.html ?? ""}</${tag}>`;
+    });
+    return `<tr>${tds.join("")}</tr>`;
+  });
+  return `<div class="fx-table-wrap" style="max-width:100%;overflow-x:auto;margin:6px 0;"><table class="fx-table" style="border-collapse:collapse;width:auto;max-width:100%;${bordered ? "border:1px solid #64748b;" : ""}">${htmlRows.join("")}</table></div>`;
+}
+
+const TABLE_RE = /\$\$\s*\\begin\{(array|tabular)\}\s*\{((?:[^{}]|\{[^{}]*\})*)\}([\s\S]*?)\\end\{\1\}\s*\$\$|\$\s*\\begin\{(array|tabular)\}\s*\{((?:[^{}]|\{[^{}]*\})*)\}([\s\S]*?)\\end\{\4\}\s*\$/g;
+const TABLE_TOKEN = (i: number) => `\u0000FXTABLE${i}\u0000`;
+
 export function renderFormulaContent(input: string): string {
   if (!input) return "";
-  const segments = parseSegments(input);
+  const sanitized = sanitizeLatexFormulas(repairLatexControlChars(input));
+  // Tables first, each replaced by a token the text renderer leaves alone.
+  const tables: string[] = [];
+  const withTokens = sanitized.replace(TABLE_RE, (whole, _e1, spec1, body1, _e2, spec2, body2) => {
+    const html = latexTableToHtml(spec1 ?? spec2 ?? "", body1 ?? body2 ?? "");
+    if (!html) return whole;
+    tables.push(html);
+    return TABLE_TOKEN(tables.length - 1);
+  });
+  const html = renderSegments(parseSegments(withTokens));
+  return tables.length ? html.replace(/\u0000FXTABLE(\d+)\u0000/g, (_, i) => tables[Number(i)] ?? "") : html;
+}
+
+function renderSegments(segments: Segment[]): string {
   return segments
     .map((seg) => {
       if (seg.type === "text") {
@@ -255,6 +387,9 @@ export function renderFormulaContent(input: string): string {
       }
       if (seg.type === "bold") {
         return `<strong>${escapeHtml(seg.content).replace(/\n/g, "<br/>")}</strong>`;
+      }
+      if (seg.type === "italic") {
+        return `<em>${escapeHtml(seg.content)}</em>`;
       }
       if (seg.type === "image") {
         let width = "60%";

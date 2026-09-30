@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db";
+import katex from "katex";
 import { renderFormulaContent } from "@/lib/test-portal/formula";
 import { exportCamDrawToSvgString, parseCamDrawDocument } from "@/lib/camdraw/renderer";
 
@@ -10,6 +11,8 @@ export interface TestExportOptions {
   logoUrl?: string | null;
   targetCourse?: string;
   testPattern?: string;
+  /** Open the browser's print dialog ("Save as PDF") as soon as the pages are laid out. */
+  autoPrint?: boolean;
 }
 
 export interface FormattedQuestionOption {
@@ -331,7 +334,7 @@ export function generateTestPaperHtml(
   test: FormattedExportTest,
   options: TestExportOptions
 ): string {
-  const { withSolution, brandName = "ATOMIC PATHSHALA" } = options;
+  const { withSolution, brandName = "ATOMIC PATHSHALA", autoPrint = false } = options;
 
   const durationHours = Math.floor(test.durationMin / 60);
   const durationRemainder = test.durationMin % 60;
@@ -537,7 +540,7 @@ export function generateTestPaperHtml(
 
         <!-- BOOKLET CONTAINS & WARNING NOTICE -->
         <div class="cover-warning-notice">
-          <div class="font-bold text-[9pt] mb-1">This Booklet contains ${actualTotalPages} pages. इस पुस्तिका में ${actualTotalPages} पृष्ठ हैं।</div>
+          <div class="font-bold text-[9pt] mb-1">This Booklet contains <span class="js-total-pages">${actualTotalPages}</span> pages. इस पुस्तिका में <span class="js-total-pages">${actualTotalPages}</span> पृष्ठ हैं।</div>
           <div class="font-bold text-[9.5pt]">इस परीक्षा पुस्तिका को जब तक ना खोलें जब तक कहा न जाए।</div>
           <div class="font-bold text-[9.5pt]">Do not open this Test Booklet until you are asked to do so.</div>
           <div class="text-[8pt] text-slate-800 mt-1">इस परीक्षा पुस्तिका के पिछले आवरण पर दिए निर्देशों को ध्यान से पढ़ें।</div>
@@ -697,28 +700,62 @@ export function generateTestPaperHtml(
         </div>
         
         <div class="text-right text-[7.5pt] font-mono-code font-bold mt-1 text-slate-800">
-          Page 1/${actualTotalPages}
+          Page 1/<span class="js-total-pages">${actualTotalPages}</span>
         </div>
       </div>
     </div>
   `;
 
-  // Render Questions Section-wise with Authentic Academic Two-Column Typesetting
-  let pageCounter = 2;
-  let questionPagesHtml = "";
+  // ---- Question pages ------------------------------------------------------
+  // Each section's questions are emitted as ONE flow and cut into A4 pages in
+  // the browser by their real rendered height (paginateBooklet() below). The
+  // old fixed "N questions per page" guess clipped long questions — match
+  // tables, diagrams, long Hindi statements — off the bottom of the page.
+  //
+  // Hindi (left) and English (right) of a question share grid rows
+  // (CSS subgrid): statement, diagram, then each option row start at the same
+  // height on both sides, like a printed bilingual paper.
 
-  // Helper to format options
-  const renderOptionItem = (opt: FormattedQuestionOption | undefined, idx: number, isHi: boolean) => {
-    if (!opt) return "";
+  /** Visible length of an option (LaTeX commands don't count). */
+  const plainLength = (s: string | undefined) =>
+    (s || "").replace(/\\[a-zA-Z]+/g, "").replace(/[{}$^_\\]/g, "").trim().length;
+
+  const optionCell = (opt: FormattedQuestionOption | undefined, idx: number, isHi: boolean) => {
+    if (!opt) return `<div class="opt-box"></div>`;
     const raw = isHi ? (opt.textHi || opt.textEn) : opt.textEn;
-    const rendered = renderFormulaContent(raw);
-    const label = `(${idx + 1})`;
+    return `<div class="opt-box"><span class="opt-label">(${idx + 1})</span><span class="opt-value">${renderFormulaContent(raw)}</span></div>`;
+  };
+
+  const diagramFor = (q: FormattedExportQuestion) =>
+    q.camDrawSvg
+      ? `<div class="q-diagram-wrap q-camdraw-wrap">${q.camDrawSvg}</div>`
+      : q.imageUrl
+      ? `<div class="q-diagram-wrap"><img src="${q.imageUrl}" alt="Diagram for Question ${q.number}" class="q-diagram-img" /></div>`
+      : "";
+
+  const questionRowHtml = (q: FormattedExportQuestion) => {
+    // Four short options sit 2 x 2; anything longer gets a row each.
+    const twoByTwo =
+      q.options.length === 4 && q.options.every((o) => plainLength(o.textEn) <= 26 && plainLength(o.textHi || o.textEn) <= 26);
+    const rows = 2 + (twoByTwo ? 2 : q.options.length);
+    const side = (isHi: boolean) => {
+      const statement = renderFormulaContent(isHi ? q.statementHi || q.statementEn : q.statementEn || q.statementHi);
+      const optionRows = twoByTwo
+        ? [0, 2].map((i) => `<div class="opt-row opt-row-2">${optionCell(q.options[i], i, isHi)}${optionCell(q.options[i + 1], i + 1, isHi)}</div>`)
+        : q.options.map((opt, i) => `<div class="opt-row">${optionCell(opt, i, isHi)}</div>`);
+      return `
+            <div class="q-side ${isHi ? "q-side-hi" : "q-side-en"}" style="grid-row: span ${rows};">
+              <div class="q-head-statement">
+                <span class="q-num-label">${q.number}.</span>
+                <div class="q-statement-body">${statement}</div>
+              </div>
+              <div class="q-diagram-cell">${diagramFor(q)}</div>
+              ${optionRows.join("")}
+            </div>`;
+    };
     return `
-      <div class="opt-box">
-        <span class="opt-label">${label}</span>
-        <span class="opt-value">${rendered}</span>
-      </div>
-    `;
+          <div class="q-row-item" id="q-${q.number}" style="grid-template-rows: repeat(${rows}, auto);">${side(true)}${side(false)}
+          </div>`;
   };
 
   const renderSingleRoughPageHtml = (pNo: number, subjectName?: string) => {
@@ -760,153 +797,39 @@ export function generateTestPaperHtml(
   `;
   };
 
-  test.sections.forEach((section, sIdx) => {
-    const pagesForSection = chunkQuestionsIntoPages(section.questions);
-
-    pagesForSection.forEach((questionsInPage, pIdx) => {
-      const questionsChunkHtml = questionsInPage.map((q) => {
-        const statementEnHtml = renderFormulaContent(q.statementEn);
-        const statementHiHtml = renderFormulaContent(q.statementHi);
-
-        // Check if short options for 2x2 grid (matching Allen standard format)
-        const isShort = q.options.every((opt) => {
-          const lEn = (opt.textEn || "").length;
-          const lHi = (opt.textHi || opt.textEn || "").length;
-          return lEn <= 24 && lHi <= 24;
-        });
-
-        const optionsHiHtml = isShort && q.options.length === 4
-          ? `<div class="opts-grid-2">
-               ${renderOptionItem(q.options[0], 0, true)}
-               ${renderOptionItem(q.options[1], 1, true)}
-               ${renderOptionItem(q.options[2], 2, true)}
-               ${renderOptionItem(q.options[3], 3, true)}
-             </div>`
-          : `<div class="opts-stacked">${q.options.map((opt, i) => renderOptionItem(opt, i, true)).join("")}</div>`;
-
-        const optionsEnHtml = isShort && q.options.length === 4
-          ? `<div class="opts-grid-2">
-               ${renderOptionItem(q.options[0], 0, false)}
-               ${renderOptionItem(q.options[1], 1, false)}
-               ${renderOptionItem(q.options[2], 2, false)}
-               ${renderOptionItem(q.options[3], 3, false)}
-             </div>`
-          : `<div class="opts-stacked">${q.options.map((opt, i) => renderOptionItem(opt, i, false)).join("")}</div>`;
-
-        const diagramHi = q.camDrawSvg ? `
-          <div class="q-diagram-wrap q-camdraw-wrap">
-            ${q.camDrawSvg}
-          </div>
-        ` : q.imageUrl ? `
-          <div class="q-diagram-wrap">
-            <img src="${q.imageUrl}" alt="Diagram for Question ${q.number}" class="q-diagram-img" />
-          </div>
-        ` : "";
-
-        const diagramEn = q.camDrawSvg ? `
-          <div class="q-diagram-wrap q-camdraw-wrap">
-            ${q.camDrawSvg}
-          </div>
-        ` : q.imageUrl ? `
-          <div class="q-diagram-wrap">
-            <img src="${q.imageUrl}" alt="Diagram for Question ${q.number}" class="q-diagram-img" />
-          </div>
-        ` : "";
-
-        return `
-          <div class="q-row-item" id="q-${q.number}">
-            <!-- Left Column: Hindi -->
-            <div class="q-side q-side-hi">
-              <div class="q-head-statement">
-                <span class="q-num-label">${q.number}.</span>
-                <div class="q-statement-body">${statementHiHtml}</div>
-              </div>
-              ${diagramHi}
-              <div class="q-opts-wrapper">
-                ${optionsHiHtml}
-              </div>
-            </div>
-            <!-- Right Column: English -->
-            <div class="q-side q-side-en">
-              <div class="q-head-statement">
-                <span class="q-num-label">${q.number}.</span>
-                <div class="q-statement-body">${statementEnHtml}</div>
-              </div>
-              ${diagramEn}
-              <div class="q-opts-wrapper">
-                ${optionsEnHtml}
-              </div>
-            </div>
-          </div>
-        `;
-      }).join("");
-
-      const isEven = pageCounter % 2 === 0;
-      const headerRow1 = isEven ? `
-        <div class="test-header-row-1">
-          <div class="test-header-brand">${brandName}</div>
-          <div class="test-header-page-no">${pageCounter}</div>
-          <div class="test-header-lang-badge">Hindi + English</div>
-        </div>
-      ` : `
-        <div class="test-header-row-1">
-          <div class="test-header-lang-badge">Hindi + English</div>
-          <div class="test-header-page-no">${pageCounter}</div>
-          <div class="test-header-brand">${brandName}</div>
-        </div>
-      `;
-
-      const subjectRowHtml = (pIdx === 0) ? `
-        <div class="test-header-subject-row">
-          SUBJECT : ${section.subject.toUpperCase()}
-        </div>
-      ` : "";
-
-      const pageHeaderHtml = `
-        <div class="test-page-header">
-          ${headerRow1}
-          ${subjectRowHtml}
-          <div class="test-header-divider"></div>
-        </div>
-      `;
-
-      questionPagesHtml += `
-        <div class="page content-page">
-          <!-- Light Subtle Background Watermark -->
-          <div class="page-watermark">
-            <div class="watermark-text">${brandName}</div>
-          </div>
-
-          ${pageHeaderHtml}
-          
-          <!-- Content Body Starts Directly With ZERO Gap -->
-          <div class="content-body">
-            <div class="questions-stream">
-              ${questionsChunkHtml}
-            </div>
-          </div>
-
-          <!-- Bottom Footer Matching Allen Booklet Standard -->
-          <div class="page-running-footer">
-            <div class="footer-phase-box">${test.batchName || "PHASE - ALL"}</div>
-            <div class="footer-meta-row">
-              <span class="footer-barcode">${test.code || "9610WMD801490250051"}</span>
-              <span class="footer-date">${currentDateStr}</span>
-            </div>
-          </div>
-        </div>
-      `;
-
-      pageCounter++;
-    });
-
-    // Dedicated Rough Page after this subject's questions are finished
-    questionPagesHtml += renderSingleRoughPageHtml(pageCounter++, section.subject);
+  let questionPagesHtml = "";
+  test.sections.forEach((section) => {
+    questionPagesHtml += `
+      <div class="q-flow" data-subject="${section.subject.toUpperCase().replace(/"/g, "&quot;")}">
+        ${section.questions.map(questionRowHtml).join("")}
+      </div>`;
+    // Rough page after each subject (page numbers are filled in after pagination).
+    questionPagesHtml += renderSingleRoughPageHtml(0, section.subject);
   });
 
+  // The frame every question page is cut into (see paginateBooklet()).
+  const contentPageTemplateHtml = `
+    <template id="tpl-content-page">
+      <div class="page content-page">
+        <div class="page-watermark"><div class="watermark-text">${brandName}</div></div>
+        <div class="test-page-header">
+          <div class="test-header-row-1"></div>
+          <div class="test-header-subject-row"></div>
+          <div class="test-header-divider"></div>
+        </div>
+        <div class="content-body"><div class="questions-stream"></div></div>
+        <div class="page-running-footer">
+          <div class="footer-phase-box">${test.batchName || "PHASE - ALL"}</div>
+          <div class="footer-meta-row">
+            <span class="footer-barcode">${test.code || "9610WMD801490250051"}</span>
+            <span class="footer-date">${currentDateStr}</span>
+          </div>
+        </div>
+      </div>
+    </template>`;
+
   // Final End Rough Page before Back Cover / Answer Key
-  const finalRoughPagesHtml = renderSingleRoughPageHtml(pageCounter++);
-  const backCoverPageNo = pageCounter++;
+  const finalRoughPagesHtml = renderSingleRoughPageHtml(0);
 
   // Back Cover Page
   const backCoverHtml = `
@@ -1032,31 +955,20 @@ export function generateTestPaperHtml(
       </div>
     `;
 
-    const solutionsListHtml = test.sections.map((section) => {
+    // Detailed solutions: one flow, cut into A4 pages in the browser like the
+    // questions (it used to be a single ~13,000px "page" that the old image
+    // export squeezed onto one sheet). Hindi | English share grid rows.
+    const solutionsFlowItems = test.sections.map((section) => {
       const solQuestionsHtml = section.questions.map((q) => {
         const stmtEnHtml = renderFormulaContent(q.statementEn || q.statementHi || "");
         const stmtHiHtml = renderFormulaContent(q.statementHi || q.statementEn || "");
         const solEnHtml = renderFormulaContent(q.solutionEn || q.solutionHi || "Detailed explanation provided as per standard textbook principles.");
         const solHiHtml = renderFormulaContent(q.solutionHi || q.solutionEn || "विस्तृत व्याख्या मानक पाठ्यपुस्तक सिद्धांतों के अनुसार प्रदान की गई है।");
-
-        const diagramHi = q.camDrawSvg ? `
-          <div class="sol-diagram-wrap sol-camdraw-wrap">
-            ${q.camDrawSvg}
-          </div>
-        ` : q.imageUrl ? `
-          <div class="sol-diagram-wrap">
-            <img src="${q.imageUrl}" alt="Diagram for Q${q.number}" class="sol-diagram-img" />
-          </div>
-        ` : "";
-        const diagramEn = q.camDrawSvg ? `
-          <div class="sol-diagram-wrap sol-camdraw-wrap">
-            ${q.camDrawSvg}
-          </div>
-        ` : q.imageUrl ? `
-          <div class="sol-diagram-wrap">
-            <img src="${q.imageUrl}" alt="Diagram for Q${q.number}" class="sol-diagram-img" />
-          </div>
-        ` : "";
+        const diagram = q.camDrawSvg
+          ? `<div class="sol-diagram-wrap sol-camdraw-wrap">${q.camDrawSvg}</div>`
+          : q.imageUrl
+          ? `<div class="sol-diagram-wrap"><img src="${q.imageUrl}" alt="Diagram for Q${q.number}" class="sol-diagram-img" /></div>`
+          : "";
 
         return `
           <div class="sol-row-item" id="sol-q-${q.number}">
@@ -1066,56 +978,50 @@ export function generateTestPaperHtml(
               <span class="sol-subject-tag">${q.subject || section.subject}</span>
             </div>
             <div class="sol-grid-two-col">
-              <!-- Left Column: Hindi -->
               <div class="sol-col-side sol-side-hi">
-                ${stmtHiHtml ? `<div class="sol-stmt-text font-devanagari">${stmtHiHtml}</div>` : ""}
-                ${diagramHi}
-                <div class="sol-expl-heading font-devanagari">💡 हल एवं व्याख्या (Solution) :</div>
+                <div class="sol-stmt-text font-devanagari">${stmtHiHtml}</div>
+                <div class="sol-diagram-cell">${diagram}</div>
+                <div class="sol-expl-heading font-devanagari">हल एवं व्याख्या (Solution) :</div>
                 <div class="sol-body-text font-devanagari">${solHiHtml}</div>
               </div>
-
-              <!-- Right Column: English -->
               <div class="sol-col-side sol-side-en">
-                ${stmtEnHtml ? `<div class="sol-stmt-text">${stmtEnHtml}</div>` : ""}
-                ${diagramEn}
-                <div class="sol-expl-heading">💡 Hint &amp; Step-by-Step Solution :</div>
+                <div class="sol-stmt-text">${stmtEnHtml}</div>
+                <div class="sol-diagram-cell">${diagram}</div>
+                <div class="sol-expl-heading">Hint &amp; Step-by-Step Solution :</div>
                 <div class="sol-body-text">${solEnHtml}</div>
               </div>
             </div>
-          </div>
-        `;
+          </div>`;
       }).join("");
 
       return `
-        <div class="sol-section-group">
           <div class="sol-section-title">HINTS &amp; SOLUTIONS : ${section.subject.toUpperCase()} (${section.name.toUpperCase()})</div>
-          ${solQuestionsHtml}
-        </div>
-      `;
+          ${solQuestionsHtml}`;
     }).join("");
 
     const detailedSolutionsPageHtml = `
-      <div class="page solutions-page">
-        <div class="page-running-header">
-          <span class="header-left">HINTS & SOLUTIONS</span>
-          <span class="header-center">${brandName} — ${test.name}</span>
-          <span class="header-right">CODE : <strong>${test.code}</strong></span>
+      <div class="sol-flow">
+        <div class="sol-main-header">
+          <h2>HINTS &amp; STEP-BY-STEP SOLUTIONS</h2>
+          <p>Comprehensive pedagogical explanations with formulas, derivations and concept breakdown.</p>
         </div>
-
-        <div class="content-body">
-          <div class="sol-main-header">
-            <h2>HINTS & STEP-BY-STEP SOLUTIONS</h2>
-            <p>Comprehensive pedagogical explanations with formulas, derivations and concept breakdown.</p>
-          </div>
-          ${solutionsListHtml}
-        </div>
-
-        <div class="page-running-footer">
-          <span class="footer-left">${test.code}</span>
-          <span class="footer-center">HINTS & SOLUTIONS · ATOMIC PATHSHALA</span>
-          <span class="footer-right">END OF SOLUTIONS</span>
-        </div>
+        ${solutionsFlowItems}
       </div>
+      <template id="tpl-solutions-page">
+        <div class="page solutions-page">
+          <div class="page-running-header">
+            <span class="header-left">HINTS &amp; SOLUTIONS</span>
+            <span class="header-center">${brandName} — ${test.name}</span>
+            <span class="header-right">CODE : <strong>${test.code}</strong></span>
+          </div>
+          <div class="content-body"><div class="questions-stream"></div></div>
+          <div class="page-running-footer">
+            <span class="footer-left">${test.code}</span>
+            <span class="footer-center">HINTS &amp; SOLUTIONS · ATOMIC PATHSHALA</span>
+            <span class="footer-right js-sol-page-label"></span>
+          </div>
+        </div>
+      </template>
     `;
 
     solutionsSectionHtml = answerKeyPageHtml + detailedSolutionsPageHtml;
@@ -1127,11 +1033,11 @@ export function generateTestPaperHtml(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${test.name} - ${currentDateStr} - ATOMIC PATHSHALA</title>
+  <title>${test.name} - ${currentDateStr} - ATOMIC PATHSHALA${withSolution ? " (Solutions)" : ""}</title>
   
   <!-- Tailwind CSS Engine for Exact Aesthetic Rendering -->
   <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@${katex.version}/dist/katex.min.css" crossorigin="anonymous">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=PT+Serif:ital,wght@0,400;0,700;1,400;1,700&family=Noto+Serif+Devanagari:wght@400;500;600;700;800&family=Montserrat:wght@700;800;900&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet">
@@ -1691,7 +1597,7 @@ export function generateTestPaperHtml(
     .q-side-en .q-statement-body,
     .q-side-en .opt-value,
     .q-side-en p,
-    .q-side-en span {
+    .q-side-en span:not(.katex *) {
       font-family: 'Times New Roman', 'PT Serif', 'Nimbus Roman No9 L', 'FreeSerif', 'Liberation Serif', serif !important;
     }
 
@@ -1699,16 +1605,16 @@ export function generateTestPaperHtml(
     .q-side-hi .q-statement-body,
     .q-side-hi .opt-value,
     .q-side-hi p,
-    .q-side-hi span {
+    .q-side-hi span:not(.katex *) {
       font-family: 'Noto Serif Devanagari', 'Mangal', 'Kokila', 'Times New Roman', 'PT Serif', serif !important;
     }
 
     .q-statement-body,
     .q-statement-body p,
-    .q-statement-body span,
+    .q-statement-body span:not(.katex *),
     .opt-value,
     .opt-value p,
-    .opt-value span {
+    .opt-value span:not(.katex *) {
       font-size: 10pt !important;
       font-weight: 400 !important;
       line-height: 1.36 !important;
@@ -2012,11 +1918,6 @@ export function generateTestPaperHtml(
       border-radius: 4px;
       margin: 12px 0 6px 0;
     }
-    .page.solutions-page {
-      display: block !important;
-      height: auto !important;
-      min-height: 1123px;
-    }
     .sol-row-item {
       border-bottom: 1.5px solid #000000;
       padding: 8px 0 10px 0;
@@ -2106,22 +2007,130 @@ export function generateTestPaperHtml(
     .font-devanagari {
       font-family: 'Noto Serif Devanagari', 'Mangal', 'Times New Roman', serif !important;
     }
+
+    /* ================================================================
+       Vector PDF via the browser's "Save as PDF" (overrides above).
+       Every sheet is exactly A4; question/solution pages are filled by
+       measured height in paginateBooklet (script at the end).
+       ================================================================ */
+    @page { size: A4; margin: 0; }
+    .a4-sheet, .page {
+      width: 210mm !important;
+      height: 297mm !important;
+      min-height: 0 !important;
+      box-sizing: border-box !important;
+      overflow: hidden !important;
+    }
+    .page { display: flex !important; flex-direction: column !important; }
+    .page .content-body { flex: 1 1 auto !important; min-height: 0 !important; overflow: hidden !important; }
+    .page.page-overflow { height: auto !important; min-height: 297mm !important; overflow: visible !important; }
+    .page.page-overflow .content-body { overflow: visible !important; }
+    /* Before pagination (or with scripts off) the flows still read correctly. */
+    .q-flow, .sol-flow { width: 210mm; box-sizing: border-box; padding: 16px 32px; background: #fff; margin-bottom: 24px; }
+
+    @media print {
+      html, body { background: #ffffff !important; margin: 0 !important; padding: 0 !important; }
+      .doc-container { padding: 0 !important; margin: 0 !important; gap: 0 !important; display: block !important; max-width: none !important; }
+      .a4-sheet, .page {
+        margin: 0 !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+        break-after: page;
+        page-break-after: always;
+      }
+      .no-print { display: none !important; }
+    }
+
+    /* Question row: Hindi | English share grid rows (statement, diagram, options). */
+    .q-row-item {
+      display: grid !important;
+      grid-template-columns: 1fr 1fr !important;
+      padding: 5px 0 7px 0 !important;
+      break-inside: avoid;
+      page-break-inside: avoid;
+      border-bottom: 0.5px solid #d4d4d4;
+    }
+    .q-side {
+      display: grid !important;
+      grid-template-rows: subgrid;
+      row-gap: 2px;
+      align-content: start;
+      min-width: 0;
+    }
+    .q-side-hi { padding-right: 12px !important; border-right: 1.5px solid #000000 !important; }
+    .q-side-en { padding-left: 12px !important; }
+    .q-diagram-cell { min-width: 0; }
+    .q-diagram-img { max-height: 150px !important; max-width: 100% !important; }
+    .opt-row { min-width: 0; }
+    .opt-row-2 { display: grid; grid-template-columns: 1fr 1fr; column-gap: 10px; }
+    .opt-box { display: flex !important; align-items: baseline !important; gap: 4px !important; min-width: 0; }
+    .opt-value { min-width: 0; overflow-wrap: anywhere; }
+    .opt-value img { max-width: 100%; height: auto; margin: 2px 0 !important; }
+
+    /* Type: exam-paper sizes; Hindi a touch smaller so both scripts look the same size. */
+    .q-side-en .q-statement-body, .q-side-en .opt-value, .q-side-en .opt-label, .q-side-en .q-num-label {
+      font-size: 10pt !important; line-height: 1.38 !important;
+    }
+    .q-side-hi .q-statement-body, .q-side-hi .opt-value, .q-side-hi .opt-label, .q-side-hi .q-num-label {
+      font-size: 9.6pt !important; line-height: 1.45 !important;
+    }
+    .q-num-label { font-weight: 700 !important; }
+    .katex { font-size: 1.04em !important; line-height: 1.2 !important; }
+    .katex-display { overflow: visible !important; margin: 3px 0 !important; }
+
+    /* Match the column / data tables: sized to their content, never full-width boxes. */
+    .fx-table-wrap { overflow: visible !important; margin: 4px 0 !important; max-width: 100%; }
+    table.fx-table {
+      width: auto !important;
+      max-width: 100% !important;
+      border-collapse: collapse !important;
+      font-size: 9pt !important;
+      line-height: 1.3 !important;
+      margin: 0 !important;
+    }
+    table.fx-table td, table.fx-table th { border-color: #000000 !important; padding: 2px 6px !important; }
+
+    /* Solutions: Hindi | English share rows too. */
+    .sol-row-item { break-inside: avoid; page-break-inside: avoid; }
+    .sol-grid-two-col { display: grid !important; grid-template-columns: 1fr 1fr !important; grid-template-rows: repeat(4, auto); column-gap: 0 !important; }
+    .sol-col-side { display: grid !important; grid-template-rows: subgrid; grid-row: span 4; min-width: 0; align-content: start; }
+    .sol-side-hi { padding-right: 10px !important; border-right: 1px solid #94a3b8 !important; }
+    .sol-side-en { padding-left: 10px !important; }
+    .sol-diagram-cell { min-width: 0; }
+    .sol-body-text, .sol-stmt-text { overflow-wrap: anywhere; text-align: left !important; }
+    .solutions-page .page-running-footer, .answer-key-page .page-running-footer {
+      display: flex !important; justify-content: space-between !important; align-items: center;
+      border-top: 1px solid #000000; padding-top: 3px; margin-top: auto;
+      font-family: 'Times New Roman', 'PT Serif', serif; font-size: 7.5pt; font-weight: 700;
+    }
+
+    /* Screen toolbar */
+    .print-toolbar {
+      position: sticky; top: 0; z-index: 50;
+      display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+      padding: 10px 16px; background: #0f172a; color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 12px;
+    }
+    .print-toolbar .pt-title { font-weight: 800; }
+    .print-toolbar .pt-status { color: #94a3b8; }
+    .print-toolbar .pt-btn {
+      background: #2563eb; color: #fff; border: 0; border-radius: 10px; padding: 8px 16px;
+      font-weight: 800; font-size: 13px; cursor: pointer;
+    }
+    .print-toolbar .pt-btn:disabled { opacity: 0.5; cursor: wait; }
+    .print-toolbar .pt-hint { color: #94a3b8; flex-basis: 100%; }
   </style>
 </head>
 <body>
 
-  <div id="pdf-download-overlay" style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.96); z-index: 999999; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; backdrop-filter: blur(8px);">
-    <div style="background: #1e293b; padding: 36px 40px; border-radius: 24px; border: 1px solid #334155; text-align: center; max-width: 440px; width: 90%; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
-      <div style="font-size: 42px; margin-bottom: 12px; animation: bounce 1s infinite alternate;">📥</div>
-      <h2 style="margin: 0 0 6px 0; font-size: 19px; font-weight: 800; color: #ffffff;">Downloading Test Booklet PDF...</h2>
-      <p style="margin: 0 0 16px 0; font-size: 12px; color: #94a3b8; line-height: 1.4;">${test.name}</p>
-      
-      <div style="width: 100%; height: 10px; background: #0f172a; border-radius: 999px; overflow: hidden; margin-bottom: 12px; border: 1px solid #334155;">
-        <div id="pdf-progress-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #3b82f6, #10b981); transition: width 0.12s ease;"></div>
-      </div>
-      <div id="pdf-progress-text" style="font-size: 12px; font-weight: 700; color: #60a5fa;">Preparing booklet pages (0%)...</div>
-      <div style="font-size: 10.5px; color: #64748b; margin-top: 10px;">File name: ${test.name} - ${currentDateStr} - ATOMIC PATHSHALA.pdf</div>
-    </div>
+  <!-- Screen-only toolbar. The PDF is made by the browser's own "Save as PDF"
+       (real text, exact Hindi shaping and maths, small file) — not by
+       screenshotting each page into a JPEG as before. -->
+  <div class="print-toolbar no-print">
+    <div class="pt-title">${test.name} · ${brandName}${withSolution ? " (Solutions)" : ""}</div>
+    <div class="pt-status" id="pt-status">Preparing pages…</div>
+    <button type="button" class="pt-btn" id="pt-print" disabled>Save as PDF</button>
+    <div class="pt-hint">In the print window, choose <b>Save as PDF</b> as the destination.</div>
   </div>
 
   <div class="doc-container" id="doc-container">
@@ -2131,85 +2140,123 @@ export function generateTestPaperHtml(
     ${backCoverHtml}
     ${solutionsSectionHtml}
   </div>
-
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  ${contentPageTemplateHtml}
 
   <script>
-    async function autoCompileAndDownloadPdf() {
-      try {
-        if (!window.jspdf || !window.html2canvas) {
-          console.error("PDF libraries not loaded yet, retrying...");
-          setTimeout(autoCompileAndDownloadPdf, 500);
-          return;
-        }
+    (function () {
+      var BRAND = ${JSON.stringify(brandName)};
+      var AUTO_PRINT = ${autoPrint ? "true" : "false"};
+      var SAFETY_PX = 8;
 
-        const { jsPDF } = window.jspdf;
-        const pdf = new jsPDF({
-          orientation: 'portrait',
-          unit: 'mm',
-          format: 'a4',
-          compress: true
-        });
+      // Page header, mirrored on odd/even pages like a printed booklet.
+      function headerRow(n) {
+        var brand = '<div class="test-header-brand">' + BRAND + '</div>';
+        var num = '<div class="test-header-page-no">' + n + '</div>';
+        var badge = '<div class="test-header-lang-badge">Hindi + English</div>';
+        return n % 2 === 0 ? brand + num + badge : badge + num + brand;
+      }
 
-        const pages = document.querySelectorAll('.a4-sheet, .page');
-        const total = pages.length;
-        const progressBar = document.getElementById('pdf-progress-bar');
-        const progressText = document.getElementById('pdf-progress-text');
-
-        for (let i = 0; i < total; i++) {
-          const pageEl = pages[i];
-          const pct = Math.round(((i + 1) / total) * 100);
-          if (progressBar) progressBar.style.width = pct + '%';
-          if (progressText) progressText.innerText = 'Processing Page ' + (i + 1) + ' of ' + total + ' (' + pct + '%)...';
-
-          const canvas = await html2canvas(pageEl, {
-            scale: 1.6, // crisp resolution while keeping file size ~2-3 MB (<5MB)
-            useCORS: true,
-            logging: false,
-            backgroundColor: '#ffffff'
-          });
-
-          const imgData = canvas.toDataURL('image/jpeg', 0.90);
-          if (i > 0) {
-            pdf.addPage('a4', 'portrait');
-          }
-          pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
-        }
-
-        if (progressText) progressText.innerText = '✅ Saving PDF file...';
-
-        const safeTitle = "${test.name}".replace(/[/\\\\?%*:|"<>]/g, '-').trim();
-        const fileName = safeTitle + " - ${currentDateStr} - ATOMIC PATHSHALA${withSolution ? ' (Solutions)' : ''}.pdf";
-        pdf.save(fileName);
-
-        setTimeout(function() {
-          const overlay = document.getElementById('pdf-download-overlay');
-          if (overlay) {
-            overlay.innerHTML = '<div style="background: #1e293b; padding: 28px 36px; border-radius: 24px; text-align: center; border: 1.5px solid #10b981; max-width: 420px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">' +
-              '<div style="font-size: 38px; margin-bottom: 8px;">✅</div>' +
-              '<h3 style="margin:0; color:#34d399; font-size:18px; font-weight:800;">PDF Downloaded Successfully!</h3>' +
-              '<p style="margin:8px 0 16px 0; font-size:12px; color:#94a3b8; word-break:break-all;">' + fileName + '</p>' +
-              '<div style="display:flex; justify-content:center; gap:10px;">' +
-                '<button onclick="autoCompileAndDownloadPdf()" style="background:#334155; hover:bg:#475569; color:white; border:none; padding:8px 16px; border-radius:10px; cursor:pointer; font-weight:700; font-size:12px;">Re-Download</button>' +
-                '<button onclick="window.close()" style="background:#10b981; color:white; border:none; padding:8px 20px; border-radius:10px; cursor:pointer; font-weight:700; font-size:12px;">Close</button>' +
-              '</div>' +
-            '</div>';
-          }
-        }, 500);
-      } catch (err) {
-        console.error("PDF generation error:", err);
-        const progressText = document.getElementById('pdf-progress-text');
-        if (progressText) {
-          progressText.innerText = "⚠️ Generation error. Click Re-Download to retry.";
+      // An equation or table wider than its column is scaled down to fit
+      // instead of being cut off at the column edge.
+      function fitWide(root) {
+        var els = root.querySelectorAll('.katex-display, .fx-table-wrap');
+        for (var i = 0; i < els.length; i++) {
+          var el = els[i];
+          var box = el.parentElement ? el.parentElement.clientWidth : 0;
+          var w = el.scrollWidth;
+          if (box > 0 && w > box + 1) el.style.fontSize = Math.max(55, Math.floor((box / w) * 100)) + '%';
         }
       }
-    }
 
-    // Auto-trigger direct PDF compilation immediately after fonts and KaTeX render
-    window.addEventListener('load', function() {
-      setTimeout(autoCompileAndDownloadPdf, 400);
-    });
+      // Cuts a flow of question/solution rows into A4 pages by measured height.
+      function paginateFlow(flow, templateId, subject) {
+        var template = document.getElementById(templateId);
+        if (!template) return;
+        var items = Array.prototype.slice.call(flow.children);
+        var page, stream, body, first = true;
+        function newPage() {
+          page = template.content.firstElementChild.cloneNode(true);
+          // Header filled now (number fixed up later) so its height is final before measuring.
+          var headerRowEl = page.querySelector('.test-header-row-1');
+          if (headerRowEl) headerRowEl.innerHTML = headerRow(0);
+          var subjectRow = page.querySelector('.test-header-subject-row');
+          if (subjectRow) {
+            if (first && subject) subjectRow.textContent = 'SUBJECT : ' + subject;
+            else subjectRow.parentNode.removeChild(subjectRow);
+          }
+          first = false;
+          flow.parentNode.insertBefore(page, flow);
+          stream = page.querySelector('.questions-stream');
+          body = page.querySelector('.content-body');
+        }
+        newPage();
+        items.forEach(function (item) {
+          stream.appendChild(item);
+          fitWide(item);
+          // A few px of slack: late font/KaTeX reflow must never push a row off the page.
+          if (stream.offsetHeight <= body.clientHeight - SAFETY_PX) return;
+          if (stream.children.length > 1) {
+            // Keep a section heading with the first row that follows it.
+            var prev = item.previousElementSibling;
+            newPage();
+            if (prev && prev.classList.contains('sol-section-title')) stream.appendChild(prev);
+            stream.appendChild(item);
+          }
+          // A single row taller than a whole page: let that page grow instead of clipping it.
+          if (stream.offsetHeight > body.clientHeight - SAFETY_PX) page.classList.add('page-overflow');
+        });
+        flow.parentNode.removeChild(flow);
+      }
+
+      function renumber() {
+        var pages = document.querySelectorAll('#doc-container > .a4-sheet, #doc-container > .page');
+        var bookletPages = pages.length;
+        for (var i = 0; i < pages.length; i++) {
+          var n = i + 1;
+          var row = pages[i].querySelector('.test-header-row-1');
+          if (row) row.innerHTML = headerRow(n);
+          var label = pages[i].querySelector('.js-sol-page-label');
+          if (label) label.textContent = 'PAGE ' + n;
+          if (pages[i].classList.contains('back-cover-page')) bookletPages = n;
+        }
+        var totals = document.querySelectorAll('.js-total-pages');
+        for (var j = 0; j < totals.length; j++) totals[j].textContent = String(bookletPages);
+        return pages.length;
+      }
+
+      function assetsReady() {
+        var waits = [];
+        if (document.fonts && document.fonts.ready) waits.push(document.fonts.ready);
+        Array.prototype.forEach.call(document.images, function (img) {
+          if (!img.complete) waits.push(new Promise(function (r) { img.onload = img.onerror = r; }));
+        });
+        // Never hang on a slow image/font: 8 s at most.
+        return Promise.race([Promise.all(waits), new Promise(function (r) { setTimeout(r, 8000); })]);
+      }
+
+      function run() {
+        assetsReady().then(function () {
+          var flows = document.querySelectorAll('.q-flow');
+          for (var i = 0; i < flows.length; i++) paginateFlow(flows[i], 'tpl-content-page', flows[i].getAttribute('data-subject'));
+          var sol = document.querySelectorAll('.sol-flow');
+          for (var k = 0; k < sol.length; k++) paginateFlow(sol[k], 'tpl-solutions-page', null);
+          var total = renumber();
+          window.__bookletPages = total;
+          document.documentElement.classList.add('booklet-ready');
+          var status = document.getElementById('pt-status');
+          if (status) status.textContent = 'Ready · ' + total + ' pages';
+          var btn = document.getElementById('pt-print');
+          if (btn) {
+            btn.disabled = false;
+            btn.onclick = function () { window.print(); };
+          }
+          if (AUTO_PRINT) setTimeout(function () { window.print(); }, 400);
+        });
+      }
+
+      if (document.readyState === 'complete') run();
+      else window.addEventListener('load', run);
+    })();
   </script>
 
 </body>
@@ -2228,7 +2275,10 @@ export function generateTestCoverPageOnlyHtml(
   const coverMatch = fullHtml.match(/<div class="a4-sheet border-2 border-slate-900 rounded-xs cover-page">[\s\S]*?<\/div>\s*<\/div>/);
   if (!coverMatch) return fullHtml;
 
-  const headerPart = fullHtml.split('<div class="doc-container">')[0];
+  // Everything before the page container (the tag carries an id, so match the
+  // prefix only — the old exact-tag split never matched and returned the
+  // whole booklet), minus the print toolbar, which needs the booklet script.
+  const headerPart = (fullHtml.split('<div class="doc-container"')[0] ?? "").replace(/<div class="print-toolbar no-print">[\s\S]*?<\/div>\s*<\/div>/, "");
   const footerPart = "</body>\n</html>";
 
   return `${headerPart}<div class="doc-container">\n${coverMatch[0]}\n</div>\n${footerPart}`;

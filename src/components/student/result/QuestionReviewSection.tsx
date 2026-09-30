@@ -174,7 +174,7 @@ export function QuestionReviewSection({
               </div>
 
               {/* Options Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 min-w-0 [&>*]:min-w-0">
                 {["A", "B", "C", "D"].map((key) => {
                   const optVal = options[key];
                   if (!optVal && optVal !== "") return null;

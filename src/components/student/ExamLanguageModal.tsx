@@ -8,7 +8,11 @@ interface ExamLanguageModalProps {
 
 export function ExamLanguageModal({ onSelectLanguage }: ExamLanguageModalProps) {
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+    // Centred with an inner min-h-full box, not flex on the scroller itself:
+    // a flex-centred scroll container cuts off the top of content taller than
+    // the screen and it can never be scrolled back into view.
+    <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-slate-900/40 backdrop-blur-sm">
+      <div className="min-h-full flex items-center justify-center p-4">
       <div className="bg-white dark:bg-slate-900 rounded-3xl p-8 sm:p-10 max-w-lg w-full text-center shadow-2xl border border-slate-200 dark:border-slate-800 space-y-6 animate-in fade-in zoom-in-95 duration-200">
         <div className="space-y-2">
           <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
@@ -39,6 +43,7 @@ export function ExamLanguageModal({ onSelectLanguage }: ExamLanguageModalProps) 
             हिंदी (Hindi)
           </button>
         </div>
+      </div>
       </div>
     </div>
   );

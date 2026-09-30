@@ -79,6 +79,9 @@ export async function GET(
           brandName: "ATOMIC PATHSHALA",
           watermarkText: "ATOMIC PATHSHALA",
           testPattern: testData.examType,
+          // The download buttons open ?direct=true: lay the pages out, then go
+          // straight to the browser's "Save as PDF" dialog.
+          autoPrint: searchParams.get("direct") === "true",
         });
 
     const currentDateStr = new Intl.DateTimeFormat("en-IN", {

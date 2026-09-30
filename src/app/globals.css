@@ -502,3 +502,17 @@
 .teacher-compact-header > * { white-space: nowrap; }
 .teacher-header-scroll { scrollbar-width: none; }
 .teacher-header-scroll::-webkit-scrollbar { display: none; }
+
+/*
+ * Question / option / solution content (FormulaText): nothing may push the
+ * exam layout wider than the screen. A long equation scrolls inside its own
+ * box, images shrink to fit, long words break, and match-the-column tables
+ * (rendered as real HTML tables) keep their own horizontal scroll.
+ */
+.formula-content { overflow-wrap: anywhere; min-width: 0; }
+.formula-content .katex { font-size: 1.05em; }
+.formula-content .katex-display { max-width: 100%; overflow-x: auto; overflow-y: hidden; padding: 2px 0; margin: 0.4em 0; }
+.formula-content img { max-width: 100%; height: auto; }
+.formula-content .fx-table-wrap { max-width: 100%; overflow-x: auto; }
+.formula-content .fx-table { font-size: 0.95em; line-height: 1.4; }
+.formula-content .fx-table td, .formula-content .fx-table th { overflow-wrap: normal; }

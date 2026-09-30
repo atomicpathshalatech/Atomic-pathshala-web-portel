@@ -504,7 +504,7 @@ export function ExamRunner({
   // ==========================================
   if (phase === "INSTRUCTIONS") {
     return (
-      <div className="fixed inset-0 overflow-y-auto bg-slate-100 dark:bg-slate-950 p-4 sm:p-6 lg:p-8 z-50">
+      <div className="fixed inset-0 overflow-y-auto overscroll-contain bg-slate-100 dark:bg-slate-950 p-4 sm:p-6 lg:p-8 z-50">
         <ExamInstructionsView
           testId={testId}
           testTitle={data?.test.title || "Test"}
@@ -616,8 +616,9 @@ export function ExamRunner({
 
       {/* 2. MAIN EXAM BODY */}
       <main className="max-w-7xl mx-auto w-full p-3 sm:p-6 pb-28 sm:pb-20 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* LEFT COLUMN: Question Display & Subject Tabs (8 Cols) */}
-        <div className="lg:col-span-8 space-y-4">
+        {/* LEFT COLUMN: Question Display & Subject Tabs (8 Cols) — min-w-0 so a
+            wide equation/table can never stretch the grid past the screen */}
+        <div className="lg:col-span-8 space-y-4 min-w-0">
           {/* Question Counter & Subject Tabs */}
           <div className="space-y-3">
             <div className="flex items-center justify-between text-xs font-bold text-slate-500">
@@ -653,7 +654,7 @@ export function ExamRunner({
           </div>
 
           {/* Question Card */}
-          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-slate-800 shadow-sm space-y-6 min-h-[380px]">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-8 border border-slate-200 dark:border-slate-800 shadow-sm space-y-6 min-h-[380px] min-w-0">
             {/* Statement */}
             <div className="space-y-2">
               <FormulaText
@@ -678,7 +679,7 @@ export function ExamRunner({
                   <img
                     src={currentQ.imageUrl}
                     alt="Question Diagram"
-                    className="max-h-64 object-contain rounded-xl"
+                    className="max-h-64 max-w-full object-contain rounded-xl"
                   />
                 </div>
               )}
@@ -696,7 +697,7 @@ export function ExamRunner({
                     key={key}
                     type="button"
                     onClick={() => handleSelectOption(key)}
-                    className={`w-full p-4 rounded-2xl border text-left transition flex items-center gap-3.5 group ${
+                    className={`w-full p-3 sm:p-4 rounded-2xl border text-left transition flex items-start gap-3 sm:gap-3.5 group ${
                       isSelected
                         ? "bg-blue-50/80 dark:bg-blue-950/40 border-blue-500 ring-2 ring-blue-500/20 shadow-sm"
                         : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700/80 hover:border-slate-300"
@@ -797,7 +798,7 @@ export function ExamRunner({
 
         {/* RIGHT COLUMN: Question Palette (4 Cols) */}
         <div
-          className={`lg:col-span-4 space-y-4 ${
+          className={`lg:col-span-4 space-y-4 min-w-0 ${
             paletteOpen ? "block" : "hidden lg:block"
           }`}
         >
