@@ -2,6 +2,7 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { missingTableAsEmpty } from "@/lib/teaching/stats";
+import { matchesActivity, pickSort, sortRows, type ActivityFilter, type SortDir, type SortSpec } from "@/lib/performance/sort";
 
 /**
  * Student performance for the Super Admin board — everything is what the
@@ -32,77 +33,126 @@ export interface StudentRow {
   lastActiveAt: Date | null;
 }
 
-export async function listStudentPerformance(opts: { search?: string; skip?: number; take?: number } = {}) {
+export const STUDENT_SORT: SortSpec<StudentRow> = {
+  name: (r) => r.name,
+  batch: (r) => r.batches.join(", ") || null,
+  dpps: (r) => r.dppsAttempted,
+  tests: (r) => r.testsAttempted,
+  questions: (r) => r.questionsAnswered,
+  correct: (r) => r.questionsCorrect,
+  accuracy: (r) => (r.questionsAnswered > 0 ? r.questionsCorrect / r.questionsAnswered : null),
+  liveClasses: (r) => r.liveClasses,
+  liveTime: (r) => r.liveMinutes,
+  recorded: (r) => r.recordedMinutes,
+  lectures: (r) => r.lecturesCompleted,
+  lastActive: (r) => r.lastActiveAt,
+};
+
+const chunk = <T,>(xs: T[], n: number) => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
+
+/**
+ * Every matching student with their numbers, then filtered, sorted and
+ * paged — so sorting ("top to bottom") covers ALL students, not just the
+ * page on screen.
+ */
+export async function listStudentPerformance(
+  opts: { search?: string; batchId?: string; activity?: ActivityFilter; sort?: string; dir?: SortDir; skip?: number; take?: number } = {}
+) {
   const q = opts.search?.trim();
-  const where = q
-    ? {
-        OR: [
-          { user: { name: { contains: q, mode: "insensitive" as const } } },
-          { user: { email: { contains: q, mode: "insensitive" as const } } },
-          { studentIdCode: { contains: q, mode: "insensitive" as const } },
-          { enrollmentNumber: { contains: q, mode: "insensitive" as const } },
-        ],
-      }
-    : {};
-  const [total, students] = await Promise.all([
-    prisma.student.count({ where }),
-    prisma.student.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      skip: opts.skip ?? 0,
-      take: Math.min(opts.take ?? 50, 200),
-      select: {
-        id: true,
-        studentIdCode: true,
-        user: { select: { name: true, email: true, lastLoginAt: true } },
-        batchEnrollments: { where: { status: "ACTIVE" }, select: { batch: { select: { name: true } } } },
-      },
+  const where: Prisma.StudentWhereInput = {
+    ...(q && {
+      OR: [
+        { user: { name: { contains: q, mode: "insensitive" } } },
+        { user: { email: { contains: q, mode: "insensitive" } } },
+        { studentIdCode: { contains: q, mode: "insensitive" } },
+        { enrollmentNumber: { contains: q, mode: "insensitive" } },
+      ],
     }),
-  ]);
-  const ids = students.map((s) => s.id);
-  if (ids.length === 0) return { total, rows: [] as StudentRow[] };
-
-  const [attempts, answers, live, watches, completed] = await Promise.all([
-    prisma.attempt.groupBy({ by: ["studentId", "dppId", "testId"], where: { studentId: { in: ids }, status: { in: ["SUBMITTED", "AUTO_SUBMITTED"] } }, _count: { _all: true } }),
-    // Counted in the database: a student can have thousands of answers.
-    prisma.$queryRaw<Array<{ studentId: string; answered: bigint; correct: bigint }>>`
-      SELECT a."studentId",
-             COUNT(*) FILTER (WHERE jsonb_typeof(aa."selectedOptionIds") = 'array' AND jsonb_array_length(aa."selectedOptionIds") > 0) AS answered,
-             COUNT(*) FILTER (WHERE jsonb_typeof(aa."selectedOptionIds") = 'array' AND jsonb_array_length(aa."selectedOptionIds") > 0 AND aa."isCorrect" = true) AS correct
-      FROM attempt_answers aa JOIN attempts a ON a.id = aa."attemptId"
-      WHERE a."studentId" IN (${Prisma.join(ids)})
-      GROUP BY a."studentId"`,
-    prisma.liveClassAttendance.groupBy({ by: ["studentId"], where: { studentId: { in: ids } }, _count: { _all: true }, _sum: { activeDurationSec: true }, _max: { lastSeenAt: true } }),
-    missingTableAsEmpty(prisma.videoWatch.groupBy({ by: ["studentId"], where: { studentId: { in: ids } }, _sum: { watchedSec: true }, _max: { lastWatchedAt: true } }), []),
-    prisma.lectureProgress.groupBy({ by: ["studentId"], where: { studentId: { in: ids } }, _count: { _all: true } }),
-  ]);
-
-  const rows = students.map<StudentRow>((s) => {
-    const mine = attempts.filter((a) => a.studentId === s.id);
-    const ans = answers.find((a) => a.studentId === s.id);
-    const l = live.find((x) => x.studentId === s.id);
-    const w = watches.find((x) => x.studentId === s.id);
-    const last = [s.user.lastLoginAt, l?._max.lastSeenAt ?? null, w?._max.lastWatchedAt ?? null]
-      .filter((d): d is Date => Boolean(d))
-      .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
-    return {
-      studentId: s.id,
-      name: s.user.name,
-      email: s.user.email,
-      code: s.studentIdCode,
-      batches: s.batchEnrollments.map((e) => e.batch.name),
-      dppsAttempted: mine.filter((a) => a.dppId).length,
-      testsAttempted: mine.filter((a) => a.testId).length,
-      questionsAnswered: Number(ans?.answered ?? 0),
-      questionsCorrect: Number(ans?.correct ?? 0),
-      liveClasses: l?._count._all ?? 0,
-      liveMinutes: Math.round((l?._sum.activeDurationSec ?? 0) / 60),
-      recordedMinutes: Math.round((w?._sum.watchedSec ?? 0) / 60),
-      lecturesCompleted: completed.find((c) => c.studentId === s.id)?._count._all ?? 0,
-      lastActiveAt: last,
-    };
+    ...(opts.batchId && { batchEnrollments: { some: { batchId: opts.batchId, status: "ACTIVE" } } }),
+  };
+  const students = await prisma.student.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      studentIdCode: true,
+      user: { select: { name: true, email: true, lastLoginAt: true } },
+      batchEnrollments: { where: { status: "ACTIVE" }, select: { batch: { select: { name: true } } } },
+    },
   });
-  return { total, rows };
+  const ids = students.map((s) => s.id);
+  let rows: StudentRow[] = [];
+  if (ids.length > 0) {
+    const inIds = { in: ids };
+    const [attempts, answerChunks, live, watches, completed] = await Promise.all([
+      prisma.attempt.groupBy({ by: ["studentId", "dppId", "testId"], where: { studentId: inIds, status: { in: ["SUBMITTED", "AUTO_SUBMITTED"] } }, _count: { _all: true } }),
+      // Counted in the database: a student can have thousands of answers.
+      Promise.all(
+        chunk(ids, 5000).map(
+          (part) => prisma.$queryRaw<Array<{ studentId: string; answered: bigint; correct: bigint }>>`
+            SELECT a."studentId",
+                   COUNT(*) FILTER (WHERE jsonb_typeof(aa."selectedOptionIds") = 'array' AND jsonb_array_length(aa."selectedOptionIds") > 0) AS answered,
+                   COUNT(*) FILTER (WHERE jsonb_typeof(aa."selectedOptionIds") = 'array' AND jsonb_array_length(aa."selectedOptionIds") > 0 AND aa."isCorrect" = true) AS correct
+            FROM attempt_answers aa JOIN attempts a ON a.id = aa."attemptId"
+            WHERE a."studentId" IN (${Prisma.join(part)})
+            GROUP BY a."studentId"`
+        )
+      ),
+      prisma.liveClassAttendance.groupBy({ by: ["studentId"], where: { studentId: inIds }, _count: { _all: true }, _sum: { activeDurationSec: true }, _max: { lastSeenAt: true } }),
+      missingTableAsEmpty(prisma.videoWatch.groupBy({ by: ["studentId"], where: { studentId: inIds }, _sum: { watchedSec: true }, _max: { lastWatchedAt: true } }), []),
+      prisma.lectureProgress.groupBy({ by: ["studentId"], where: { studentId: inIds }, _count: { _all: true } }),
+    ]);
+    const practice = new Map<string, { dpps: number; tests: number }>();
+    for (const a of attempts) {
+      const p = practice.get(a.studentId) ?? { dpps: 0, tests: 0 };
+      if (a.dppId) p.dpps += 1;
+      if (a.testId) p.tests += 1;
+      practice.set(a.studentId, p);
+    }
+    const answers = new Map(answerChunks.flat().map((a) => [a.studentId, a]));
+    const liveBy = new Map(live.map((l) => [l.studentId, l]));
+    const watchBy = new Map(watches.map((w) => [w.studentId, w]));
+    const doneBy = new Map(completed.map((c) => [c.studentId, c._count._all]));
+
+    rows = students.map<StudentRow>((s) => {
+      const ans = answers.get(s.id);
+      const l = liveBy.get(s.id);
+      const w = watchBy.get(s.id);
+      const last =
+        [s.user.lastLoginAt, l?._max.lastSeenAt ?? null, w?._max.lastWatchedAt ?? null]
+          .filter((d): d is Date => Boolean(d))
+          .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
+      return {
+        studentId: s.id,
+        name: s.user.name,
+        email: s.user.email,
+        code: s.studentIdCode,
+        batches: s.batchEnrollments.map((e) => e.batch.name),
+        dppsAttempted: practice.get(s.id)?.dpps ?? 0,
+        testsAttempted: practice.get(s.id)?.tests ?? 0,
+        questionsAnswered: Number(ans?.answered ?? 0),
+        questionsCorrect: Number(ans?.correct ?? 0),
+        liveClasses: l?._count._all ?? 0,
+        liveMinutes: Math.round((l?._sum.activeDurationSec ?? 0) / 60),
+        recordedMinutes: Math.round((w?._sum.watchedSec ?? 0) / 60),
+        lecturesCompleted: doneBy.get(s.id) ?? 0,
+        lastActiveAt: last,
+      };
+    });
+  }
+
+  const activity = opts.activity ?? "all";
+  const filtered = rows.filter((r) => matchesActivity(r.lastActiveAt, activity));
+  const sortKey = pickSort(STUDENT_SORT, opts.sort, "lastActive");
+  const sorted = sortRows(filtered, STUDENT_SORT, sortKey, opts.dir ?? "desc");
+  const skip = opts.skip ?? 0;
+  const take = Math.min(opts.take ?? 50, 200);
+  return { total: filtered.length, rows: sorted.slice(skip, skip + take), sort: sortKey };
+}
+
+/** Batches for the students filter. */
+export async function batchOptions() {
+  return prisma.batch.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } });
 }
 
 export async function studentPerformanceDetail(studentId: string) {

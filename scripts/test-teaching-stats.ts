@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createAsserts, prepareTestDatabase, requireTestDatabase } from "./lib/test-db";
 import { allowedIncrement, parseContentKey, playedBetween } from "../src/lib/video/watch-time";
+import { matchesActivity, pickDir, pickSort, sortRows } from "../src/lib/performance/sort";
 
 const { testUrl, parsed } = requireTestDatabase();
 const { assert, finish } = createAsserts();
@@ -25,6 +26,25 @@ assert(playedBetween({ at: 0, pos: 10 }, { at: 5000, pos: 10 }) === 0, "Paused: 
 assert(playedBetween({ at: 0, pos: 10 }, { at: 5000, pos: 600 }) === 0, "A seek forward isn't watching");
 assert(playedBetween({ at: 0, pos: 10 }, { at: 5000, pos: 20 }) === 5, "2x speed: wall time, not video time");
 assert(playedBetween(null, { at: 5000, pos: 20 }) === 0, "First sample only starts the clock");
+
+// ---- Sorting & filters for the boards (pure) ----
+{
+  type R = { name: string; mins: number; last: Date | null };
+  const spec = { name: (r: R) => r.name, mins: (r: R) => r.mins, last: (r: R) => r.last };
+  const rows: R[] = [
+    { name: "banti", mins: 30, last: new Date("2026-09-01") },
+    { name: "Amit", mins: 120, last: null },
+    { name: "chetan", mins: 30, last: new Date("2026-09-20") },
+  ];
+  assert(sortRows(rows, spec, "mins", "desc").map((r) => r.name).join() === "Amit,banti,chetan", "Sort high→low (ties keep their order)");
+  assert(sortRows(rows, spec, "mins", "asc").map((r) => r.name).join() === "banti,chetan,Amit", "Sort low→high");
+  assert(sortRows(rows, spec, "name", "asc").map((r) => r.name).join() === "Amit,banti,chetan", "Sort by name A→Z, ignoring capitals");
+  assert(sortRows(rows, spec, "last", "desc").map((r) => r.name).join() === "chetan,banti,Amit" && sortRows(rows, spec, "last", "asc").at(-1)?.name === "Amit", "Empty values (never) always go last, either direction");
+  assert(pickSort(spec, "hack", "mins") === "mins" && pickSort(spec, "name", "mins") === "name" && pickDir("sideways") === "desc", "Unknown sort column / direction from the URL falls back");
+  const now = new Date("2026-10-01T00:00:00Z").getTime();
+  assert(matchesActivity(new Date("2026-09-28"), "7d", now) && !matchesActivity(new Date("2026-09-01"), "7d", now), "Active in last 7 days");
+  assert(matchesActivity(new Date("2026-09-01"), "inactive7", now) && matchesActivity(null, "inactive7", now) && matchesActivity(null, "never", now) && !matchesActivity(new Date(), "never", now), "Inactive 7+ days / never active");
+}
 
 async function run() {
   prepareTestDatabase(testUrl, parsed);
@@ -136,6 +156,23 @@ async function run() {
   const row = list.rows[0];
   assert(list.total === 1 && row?.dppsAttempted === 1 && row.questionsAnswered === 2 && row.questionsCorrect === 1, "Student list: DPPs, questions answered, correct");
   assert(row?.liveClasses === 2 && row.liveMinutes === 105 && row.recordedMinutes === 40, `Student list: live classes + minutes present, recorded minutes watched (${row?.liveMinutes}/${row?.recordedMinutes})`);
+  // Sort + filter across ALL students (not just the page on screen).
+  const aaravUser = await prisma.user.create({ data: { email: "aarav@t.local", passwordHash: "x", name: "Aarav" } });
+  const aarav = await prisma.student.create({
+    data: { userId: aaravUser.id, enrollmentNumber: "E2", studentIdCode: "S2", fatherName: "F", motherName: "M", dob: new Date("2008-01-01"), gender: "MALE", class: "12", targetExam: "NEET", school: "X", city: "Y", state: "Z" },
+  });
+  await prisma.batchEnrollment.create({ data: { batchId: batch.id, studentId: student.id, status: "ACTIVE" } });
+  const byQuestions = await listStudentPerformance({ sort: "questions", dir: "desc", take: 1 });
+  assert(byQuestions.total === 2 && byQuestions.rows[0]?.studentId === student.id, "Students: top by questions done — sorted before paging");
+  const byName = await listStudentPerformance({ sort: "name", dir: "asc", take: 1 });
+  assert(byName.rows[0]?.studentId === aarav.id, "Students: A→Z by name");
+  const inBatch = await listStudentPerformance({ batchId: batch.id });
+  assert(inBatch.total === 1 && inBatch.rows[0]?.studentId === student.id, "Students: batch filter");
+  const never = await listStudentPerformance({ activity: "never" });
+  assert(never.total === 1 && never.rows[0]?.studentId === aarav.id, "Students: 'never active' filter");
+  const bogus = await listStudentPerformance({ sort: "passwordHash" });
+  assert(bogus.sort === "lastActive", "Students: an unknown sort column falls back safely");
+
   const detail = await studentPerformanceDetail(student.id);
   const d1 = detail?.practice[0];
   assert(d1?.title === "Cell DPP 1" && d1.totalQuestions === 3 && d1.answered === 2 && d1.notAnswered === 1 && d1.correct === 1 && d1.wrong === 1, "Student detail: per DPP — questions, answered, left, right, wrong");
@@ -160,7 +197,7 @@ async function run() {
     const pre = (await computeTeachingStats({ teacherIds: [moaz.id] })).get(moaz.id)!;
     assert(pre.appMinutes === 135 && pre.youtubeMinutes === 0 && pre.youtubePending === 2, "Without the new tables: teaching stats still work (app time; YouTube lengths wait)");
     const preBoard = await teacherBoard().then(() => true, () => false);
-    const preList = await listStudentPerformance({}).then((r) => r.rows.length === 1, () => false);
+    const preList = await listStudentPerformance({}).then((r) => r.rows.length === 2, () => false);
     const preDetail = await studentPerformanceDetail(student.id).then((d) => d?.recorded.length === 0, () => false);
     assert(preBoard && preList && preDetail, "Without the new tables: Performance Boards and student pages open (no crash)");
   } finally {
