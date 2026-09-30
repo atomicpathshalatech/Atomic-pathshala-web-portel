@@ -16,6 +16,10 @@ type Doubt = {
   attachmentUrl: string | null;
   voiceUrl: string | null;
   voiceDurationSec: number | null;
+  studentVoiceUrl: string | null;
+  studentVoiceDurationSec: number | null;
+  videoTimestampSec: number | null;
+  batchSchedule: { id: string; title: string; subject: string | null } | null;
   createdAt: string;
   resolvedAt: string | null;
   student: {
@@ -24,6 +28,14 @@ type Doubt = {
     user: { name: string };
   };
 };
+
+function formatClock(totalSec: number): string {
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
 
 const STATUS_TABS = [
   { key: "OPEN", label: "Open" },
@@ -160,6 +172,16 @@ export function DoubtDeskWorkspace({ canResolve }: { canResolve: boolean }) {
                         photo
                       </span>
                     )}
+                    {d.studentVoiceUrl && (
+                      <span className="material-symbols-outlined text-sm" title="Has a voice note">
+                        mic
+                      </span>
+                    )}
+                    {d.batchSchedule && (
+                      <span className="material-symbols-outlined text-sm" title={`From recorded class: ${d.batchSchedule.title}`}>
+                        smart_display
+                      </span>
+                    )}
                   </span>
                   {d.subject && <span className="font-bold text-primary">{d.subject}</span>}
                 </div>
@@ -198,7 +220,21 @@ export function DoubtDeskWorkspace({ canResolve }: { canResolve: boolean }) {
               </div>
 
               <div className="glass-card p-gutter rounded-2xl bg-surface-container-low/50 space-y-3">
+                {selected.batchSchedule && (
+                  <p className="inline-flex items-center gap-1.5 text-label-sm font-semibold text-primary bg-primary/10 px-2.5 py-1 rounded-full">
+                    <span className="material-symbols-outlined text-sm">smart_display</span>
+                    Recorded class: {selected.batchSchedule.title}
+                    {selected.videoTimestampSec != null && ` @ ${formatClock(selected.videoTimestampSec)}`}
+                  </p>
+                )}
                 <p className="text-body-lg text-on-surface leading-relaxed">{selected.body}</p>
+                {selected.studentVoiceUrl && (
+                  <VoicePlayer
+                    url={selected.studentVoiceUrl}
+                    durationSec={selected.studentVoiceDurationSec}
+                    title="Student's Voice Doubt"
+                  />
+                )}
                 {selected.attachmentUrl && (
                   <a href={selected.attachmentUrl} target="_blank" rel="noopener noreferrer">
                     {/* eslint-disable-next-line @next/next/no-img-element -- uploaded to external object storage, not a next.config image domain */}

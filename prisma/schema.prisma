@@ -748,6 +748,7 @@ model BatchSchedule {
   // see LiveSession. At most one is non-terminal at a time (partial unique
   // index in the migration).
   liveSessions          LiveSession[]
+  doubts                Doubt[]
   test                  Test?
 
   @@index([batchId])
@@ -2591,6 +2592,14 @@ model Doubt {
   // above, just for the separate Classroom session/message tables.
   classroomSessionId       String?
   sourceClassroomMessageId String?
+  // Populated when a student asks from the recorded-class player (/watch):
+  // which class, where in the video, and an optional voice note recorded by
+  // the student (distinct from voiceUrl, which is the teacher's answer).
+  batchScheduleId          String?
+  videoTimestampSec        Int?
+  studentVoiceUrl          String?
+  studentVoiceDurationSec  Int?
+  batchSchedule            BatchSchedule? @relation(fields: [batchScheduleId], references: [id], onDelete: SetNull)
   resolvedBy          User?              @relation("DoubtResolvedBy", fields: [resolvedById], references: [id])
   student             Student            @relation(fields: [studentId], references: [id], onDelete: Cascade)
   whiteboardSession   WhiteboardSession? @relation(fields: [whiteboardSessionId], references: [id], onDelete: SetNull)
@@ -2602,6 +2611,7 @@ model Doubt {
   @@index([studentId])
   @@index([whiteboardSessionId])
   @@index([classroomSessionId])
+  @@index([batchScheduleId])
   @@map("doubts")
 }
 

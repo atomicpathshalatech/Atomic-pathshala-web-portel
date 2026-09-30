@@ -16,7 +16,10 @@ export async function GET(request: NextRequest) {
 
     const doubts = await prisma.doubt.findMany({
       where: status ? { status: status as "OPEN" | "RESOLVED" | "FLAGGED" } : {},
-      include: { student: { include: { user: true } } },
+      include: {
+        student: { include: { user: true } },
+        batchSchedule: { select: { id: true, title: true, subject: true } },
+      },
       orderBy: [{ priority: "desc" }, { createdAt: "asc" }],
     });
 

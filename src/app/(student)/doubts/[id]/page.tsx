@@ -27,7 +27,10 @@ export default async function DoubtDetailPage({ params }: { params: { id: string
 
   const doubt = await prisma.doubt.findFirst({
     where: { id: params.id, studentId: student.id },
-    include: { resolvedBy: { select: { name: true } } },
+    include: {
+      resolvedBy: { select: { name: true } },
+      batchSchedule: { select: { id: true, title: true } },
+    },
   });
   if (!doubt) notFound();
 
@@ -62,7 +65,19 @@ export default async function DoubtDetailPage({ params }: { params: { id: string
           {doubt.createdAt.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}
           {doubt.priority === "HIGH" && <span className="text-error font-semibold"> · Urgent</span>}
         </p>
+        {doubt.batchSchedule && (
+          <Link
+            href={`/watch/${doubt.batchSchedule.id}`}
+            className="inline-flex items-center gap-1.5 text-label-sm font-semibold text-primary bg-primary/10 px-2.5 py-1 rounded-full"
+          >
+            <span className="material-symbols-outlined text-sm">smart_display</span>
+            {doubt.batchSchedule.title}
+          </Link>
+        )}
         <p className="font-body-lg text-body-lg text-on-surface whitespace-pre-wrap">{doubt.body}</p>
+        {doubt.studentVoiceUrl && (
+          <VoicePlayer url={doubt.studentVoiceUrl} durationSec={doubt.studentVoiceDurationSec} title="Your Voice Doubt" />
+        )}
         {doubt.attachmentUrl && (
           // eslint-disable-next-line @next/next/no-img-element -- uploaded to external object storage, not a next.config image domain
           <img
