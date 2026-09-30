@@ -10,6 +10,13 @@ export const LANGUAGE_OPTIONS = ["English", "Hindi", "Hinglish"] as const;
  * of their own (an admin-tier user attributing the lecture to someone else)
  * — see the POST route for the exact rule.
  */
+/** A full URL, or a file served by the app itself (e.g. notes uploaded to the batch: /api/batch-materials/<id>). */
+const slidesUrlSchema = z
+  .string()
+  .max(2000)
+  .refine((v) => v === "" || /^\/api\/[\w\-/]+(\?[\w=&.-]*)?$/.test(v) || /^https?:\/\/\S+$/i.test(v), "Enter a valid URL")
+  .optional();
+
 export const lectureCreateSchema = z.object({
   chapterId: z.string().min(1, "Chapter is required"),
   teacherId: z.string().min(1).optional(),
@@ -18,7 +25,7 @@ export const lectureCreateSchema = z.object({
   order: z.number().int().min(0).max(9999).default(0),
   videoUrl: z.string().url("Enter a valid video URL").max(2000),
   educatorVideoUrl: z.string().url("Enter a valid video URL").max(2000).optional().or(z.literal("")),
-  slidesUrl: z.string().url("Enter a valid URL").max(2000).optional().or(z.literal("")),
+  slidesUrl: slidesUrlSchema,
 });
 export type LectureCreateInput = z.infer<typeof lectureCreateSchema>;
 
@@ -28,7 +35,7 @@ export const lectureUpdateSchema = z.object({
   order: z.number().int().min(0).max(9999).optional(),
   videoUrl: z.string().url("Enter a valid video URL").max(2000).optional(),
   educatorVideoUrl: z.string().url("Enter a valid video URL").max(2000).optional().or(z.literal("")),
-  slidesUrl: z.string().url("Enter a valid URL").max(2000).optional().or(z.literal("")),
+  slidesUrl: slidesUrlSchema,
 });
 export type LectureUpdateInput = z.infer<typeof lectureUpdateSchema>;
 

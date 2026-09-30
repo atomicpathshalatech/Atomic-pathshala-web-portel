@@ -103,3 +103,26 @@ export const batchScheduleUpdateSchema = z
   });
 
 export type BatchScheduleUpdateInput = z.infer<typeof batchScheduleUpdateSchema>;
+
+/**
+ * A class that already happened (before the app was used for it): recorded
+ * on YouTube, optionally with its notes PDF. Becomes a completed timetable
+ * entry on its real date + a published lecture in its chapter.
+ */
+export const pastClassCreateSchema = z
+  .object({
+    chapterId: z.string().min(1, "Choose the chapter"),
+    teacherId: z.string().min(1, "Choose the teacher"),
+    title: z.string().trim().min(2, "Title is required").max(200),
+    startsAt: z.coerce.date({ required_error: "Date and time are required" }),
+    durationMin: z.coerce.number().int().min(10, "At least 10 minutes").max(600, "At most 10 hours").default(60),
+    youtubeUrl: z.string().trim().min(1, "Paste the YouTube link"),
+    notesFileAssetId: z.string().trim().min(1).optional(),
+    language: z.enum(["English", "Hindi", "Hinglish"]).default("Hinglish"),
+  })
+  .refine((d) => d.startsAt.getTime() <= Date.now() + 5 * 60_000, {
+    message: "This is for classes that already happened — pick a past date",
+    path: ["startsAt"],
+  });
+
+export type PastClassCreateInput = z.infer<typeof pastClassCreateSchema>;

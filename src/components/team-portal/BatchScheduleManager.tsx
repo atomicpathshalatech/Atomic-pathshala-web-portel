@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { PastClassForm } from "./PastClassForm";
 import Link from "next/link";
 import {
   SCHEDULE_SESSION_TYPE_OPTIONS,
@@ -86,6 +87,7 @@ export function BatchScheduleManager({
   canManageSchedule?: boolean;
 }) {
   const router = useRouter();
+  const [showPastForm, setShowPastForm] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -426,15 +428,29 @@ export function BatchScheduleManager({
       )}
 
       {/* Timetable Form & Duration Selector */}
+      {canManageSchedule && showPastForm && <PastClassForm batchId={batchId} onClose={() => setShowPastForm(false)} />}
+
       {!canManageSchedule ? null : !showForm ? (
-        <button
-          type="button"
-          onClick={() => setShowForm(true)}
-          className="px-5 py-2.5 bg-primary text-on-primary font-bold text-xs rounded-xl shadow hover:opacity-90 active:scale-95 transition-all flex items-center gap-1.5"
-        >
-          <span className="material-symbols-outlined text-base">add</span>
-          Schedule Lecture / Class
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setShowForm(true)}
+            className="px-5 py-2.5 bg-primary text-on-primary font-bold text-xs rounded-xl shadow hover:opacity-90 active:scale-95 transition-all flex items-center gap-1.5"
+          >
+            <span className="material-symbols-outlined text-base">add</span>
+            Schedule Lecture / Class
+          </button>
+          {!showPastForm && (
+            <button
+              type="button"
+              onClick={() => setShowPastForm(true)}
+              className="px-5 py-2.5 border border-primary/40 text-primary font-bold text-xs rounded-xl hover:bg-primary/5 active:scale-95 transition-all flex items-center gap-1.5"
+            >
+              <span className="material-symbols-outlined text-base">history</span>
+              Add Past Class (YouTube)
+            </button>
+          )}
+        </div>
       ) : (
         <div className="border border-outline-variant/30 bg-surface-container-high/20 rounded-3xl p-6 space-y-5">
           <div className="flex items-center justify-between border-b border-outline-variant/20 pb-3">
