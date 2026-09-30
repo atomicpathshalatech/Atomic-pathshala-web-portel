@@ -33,8 +33,11 @@ export interface LectureVideoPlayerProps {
   className?: string;
 }
 
-// Exactly matching user Screenshot 2
 const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0] as const;
+
+// Controls, branding and the close button all fade out after this long
+// without interaction — whether the video is playing or paused.
+const CONTROLS_HIDE_MS = 2500;
 
 export const DEFAULT_QUALITY_OPTIONS = [
   "1080p",
@@ -72,6 +75,25 @@ export const YT_LEVEL_TO_LABEL: Record<string, string> = {
   default: "Auto",
 };
 
+/**
+ * YouTube ignores setPlaybackQuality() nowadays — its adaptive player picks
+ * the stream from the embed's rendered pixel size. So to honour the chosen
+ * quality we render the iframe at (at least) that many device pixels wide
+ * and CSS-scale it back down to fit. "Auto" leaves it at its natural size.
+ */
+const QUALITY_TARGET_WIDTH: Record<string, number> = {
+  "4K (2160p)": 3840,
+  "1440p": 2560,
+  "1080p": 1920,
+  "720p": 1280,
+  "480p": 854,
+  "360p": 640,
+  "240p": 426,
+  "144p": 256,
+};
+
+const VIDEO_ASPECT = 16 / 9;
+
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return "00:00";
   const h = Math.floor(seconds / 3600);
@@ -92,6 +114,9 @@ function extractYouTubeVideoId(url: string): string | null {
   if (url.includes("youtu.be/")) {
     return url.split("youtu.be/")[1]?.split("?")[0] || null;
   }
+  if (url.includes("/live/")) {
+    return url.split("/live/")[1]?.split(/[?&/]/)[0] || null;
+  }
   return null;
 }
 
@@ -99,7 +124,6 @@ export function LectureVideoPlayer({
   mode = "recorded",
   lectureId = "lecture",
   title,
-  subtitle,
   subjectTitle,
   educatorName,
   videoUrl,
@@ -111,8 +135,6 @@ export function LectureVideoPlayer({
   watchContentKey,
   onEnded,
   onProgressPercentage,
-  onBookmarkAdd,
-  isCompleted = false,
   className = "",
 }: LectureVideoPlayerProps) {
   const { data: session } = useSession();
@@ -122,12 +144,15 @@ export function LectureVideoPlayer({
   const ytPlayerRef = useRef<any>(null);
 
   const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const progressSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const progressBarRef = useRef<HTMLDivElement>(null);
   const lastTickTimeRef = useRef<number>(Date.now());
   const lastReportedTimeRef = useRef<number>(-1);
   const seekCooldownUntilRef = useRef<number>(0);
   const scrubTargetTimeRef = useRef<number>(0);
+  const lastSavedProgressRef = useRef<number>(0);
+  // A resume position chosen before the first real play (the seek may be
+  // dropped while a phone is still waiting for the in-iframe tap).
+  const pendingSeekRef = useRef<number | null>(null);
 
   // Playback State
   const [isPlaying, setIsPlaying] = useState(false);
@@ -140,22 +165,15 @@ export function LectureVideoPlayer({
   const [previousVolume, setPreviousVolume] = useState(1);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
   const [selectedQuality, setSelectedQuality] = useState<string>("1080p");
-  const [qualityOptions, setQualityOptions] = useState<string[]>([
-    "1080p",
-    "720p",
-    "480p",
-    "360p",
-    "240p",
-    "144p",
-    "Auto",
-  ]);
+  const [qualityOptions, setQualityOptions] = useState<string[]>([...DEFAULT_QUALITY_OPTIONS]);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  // iPhone Safari can't fullscreen a <div>; fall back to a fixed overlay.
+  const [isPseudoFullscreen, setIsPseudoFullscreen] = useState(false);
   const [isAspectFill, setIsAspectFill] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
-  const [hasEnded, setHasEnded] = useState(false);
   const [hasStartedPlaying, setHasStartedPlaying] = useState(false);
+  const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });
 
-  // Popups State (matching Screenshots 2 & 3)
   const [showControls, setShowControls] = useState(true);
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
   const [showQualityMenu, setShowQualityMenu] = useState(false);
@@ -163,21 +181,18 @@ export function LectureVideoPlayer({
   const [hoverPosition, setHoverPosition] = useState<number>(0);
   const [isScrubbing, setIsScrubbing] = useState(false);
 
-  // Resume Banner State
   const [showResumeBanner, setShowResumeBanner] = useState(false);
   const [savedResumeTime, setSavedResumeTime] = useState(0);
 
-  // Micro-feedback animation state
   const [feedbackIcon, setFeedbackIcon] = useState<{
     icon: string;
     text?: string;
     key: number;
   } | null>(null);
 
-  // Live state
   const isLive = mode === "live";
+  const expanded = isFullscreen || isPseudoFullscreen;
 
-  // Check if YouTube
   const youtubeVideoId = useMemo(() => extractYouTubeVideoId(videoUrl), [videoUrl]);
   const isYouTube = Boolean(youtubeVideoId);
   const ytPlayerElementId = useMemo(
@@ -185,15 +200,23 @@ export function LectureVideoPlayer({
     []
   );
 
-  // Headless YouTube embed url (controls=0 completely removes YouTube player UI)
+  // Latest values for the one-time YT.Player init + callbacks, so changing
+  // volume/speed never re-creates the player (that used to reset playback).
+  const settingsRef = useRef({ volume, isMuted, playbackSpeed, selectedQuality, initialTime });
+  settingsRef.current = { volume, isMuted, playbackSpeed, selectedQuality, initialTime };
+  const currentTimeRef = useRef(0);
+  currentTimeRef.current = currentTime;
+  const callbacksRef = useRef({ onEnded, onTimeUpdate, onProgressPercentage });
+  callbacksRef.current = { onEnded, onTimeUpdate, onProgressPercentage };
+
+  // Headless YouTube embed (controls=0 removes YouTube's own UI)
   const youtubeHeadlessEmbedUrl = useMemo(() => {
     if (!youtubeVideoId) return "";
     const origin = typeof window !== "undefined" && window.location.origin ? window.location.origin : "";
     const originParam = origin ? `&origin=${encodeURIComponent(origin)}` : "";
-    return `https://www.youtube.com/embed/${youtubeVideoId}?enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&disablekb=1&fs=0&iv_load_policy=3&showinfo=0&autoplay=0&vq=hd1080${originParam}`;
+    return `https://www.youtube.com/embed/${youtubeVideoId}?enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&disablekb=1&fs=0&iv_load_policy=3&autoplay=0&vq=hd1080${originParam}`;
   }, [youtubeVideoId]);
 
-  // Student Watermark text (Screenshot 1: e.g. firozali78644@gmail.com 8958900405)
   const activeWatermark = useMemo(() => {
     if (watermarkText) return watermarkText;
     const email = session?.user?.email || "";
@@ -203,6 +226,19 @@ export function LectureVideoPlayer({
     if (session?.user?.name) return `${session.user.name} (Atomic Pathshala)`;
     return "Atomic Pathshala Verified Student";
   }, [watermarkText, session]);
+
+  // Track the rendered size — drives the YouTube quality render-scale and
+  // the "fill" crop factor.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((entries) => {
+      const r = entries[0]?.contentRect;
+      if (r) setContainerSize({ w: r.width, h: r.height });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // Load stored preferences (volume, muted, speed, quality)
   useEffect(() => {
@@ -219,27 +255,22 @@ export function LectureVideoPlayer({
           setPreviousVolume(v > 0 ? v : 1);
         }
       }
-      if (storedMute === "true") {
-        setIsMuted(true);
-      }
+      if (storedMute === "true") setIsMuted(true);
       if (storedSpeed !== null) {
         const s = parseFloat(storedSpeed);
-        if ((SPEED_OPTIONS as readonly number[]).includes(s)) {
-          setPlaybackSpeed(s);
-        }
+        if ((SPEED_OPTIONS as readonly number[]).includes(s)) setPlaybackSpeed(s);
       }
-      if (storedQuality) {
+      if (storedQuality && (storedQuality === "Auto" || QUALITY_TARGET_WIDTH[storedQuality])) {
         setSelectedQuality(storedQuality);
       }
     } catch {}
   }, []);
 
-  // Check saved resume position for recorded lectures
+  // Saved resume position for recorded lectures
   useEffect(() => {
     if (isLive || !lectureId) return;
     try {
-      const savedKey = `atomic_progress_${lectureId}`;
-      const saved = localStorage.getItem(savedKey);
+      const saved = localStorage.getItem(`atomic_progress_${lectureId}`);
       if (saved) {
         const t = parseFloat(saved);
         if (t > 15 && (!initialTime || initialTime === 0)) {
@@ -250,7 +281,16 @@ export function LectureVideoPlayer({
     } catch {}
   }, [lectureId, isLive, initialTime]);
 
-  // Trigger brief micro-feedback icon in center
+  // Persist progress (YouTube and HTML5 alike) every ~5s of playback
+  useEffect(() => {
+    if (isLive || !lectureId || !isPlaying) return;
+    if (Math.abs(currentTime - lastSavedProgressRef.current) < 5) return;
+    lastSavedProgressRef.current = currentTime;
+    try {
+      localStorage.setItem(`atomic_progress_${lectureId}`, String(currentTime));
+    } catch {}
+  }, [currentTime, isPlaying, isLive, lectureId]);
+
   const triggerFeedback = useCallback((icon: string, text?: string) => {
     setFeedbackIcon({ icon, text, key: Date.now() });
     setTimeout(() => {
@@ -258,45 +298,80 @@ export function LectureVideoPlayer({
     }, 600);
   }, []);
 
-  // Auto-hide controls logic
+  // ---------- Auto-hide ----------
+  const menusOpen = showSpeedMenu || showQualityMenu;
   const resetControlsTimer = useCallback(() => {
     setShowControls(true);
-    if (controlsTimeoutRef.current) {
-      clearTimeout(controlsTimeoutRef.current);
-    }
-    if (isPlaying && !showSpeedMenu && !showQualityMenu && !isScrubbing) {
-      controlsTimeoutRef.current = setTimeout(() => {
-        setShowControls(false);
-      }, 3500);
-    }
-  }, [isPlaying, showSpeedMenu, showQualityMenu, isScrubbing]);
+    if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+    controlsTimeoutRef.current = setTimeout(() => setShowControls(false), CONTROLS_HIDE_MS);
+  }, []);
 
-  const handleMouseMove = () => {
-    resetControlsTimer();
-  };
+  // Menus / scrubbing pin the controls; closing them restarts the countdown.
+  useEffect(() => {
+    if (menusOpen || isScrubbing) {
+      if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+      setShowControls(true);
+    } else {
+      resetControlsTimer();
+    }
+  }, [menusOpen, isScrubbing, resetControlsTimer]);
 
-  // Helper to dispatch command to YouTube (via YT.Player instance and postMessage fallback)
-  const sendYouTubeCommand = useCallback(
-    (func: string, args: any[] = []) => {
-      if (ytPlayerRef.current && typeof ytPlayerRef.current[func] === "function") {
-        try {
-          ytPlayerRef.current[func](...args);
-        } catch {}
-      }
-      if (iframeRef.current?.contentWindow) {
-        try {
-          iframeRef.current.contentWindow.postMessage(
-            JSON.stringify({ event: "command", func, args }),
-            "*"
-          );
-        } catch {}
+  useEffect(() => {
+    return () => {
+      if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (hasStartedPlaying) resetControlsTimer();
+  }, [hasStartedPlaying, resetControlsTimer]);
+
+  const controlsVisible = hasStartedPlaying && (showControls || menusOpen || isScrubbing);
+
+  // ---------- YouTube bridge ----------
+  const sendYouTubeCommand = useCallback((func: string, args: any[] = []) => {
+    if (ytPlayerRef.current && typeof ytPlayerRef.current[func] === "function") {
+      try {
+        ytPlayerRef.current[func](...args);
+        return;
+      } catch {}
+    }
+    if (iframeRef.current?.contentWindow) {
+      try {
+        iframeRef.current.contentWindow.postMessage(JSON.stringify({ event: "command", func, args }), "*");
+      } catch {}
+    }
+  }, []);
+
+  const markStarted = useCallback(() => {
+    setHasStartedPlaying(true);
+    setIsPlaying(true);
+    setIsBuffering(false);
+  }, []);
+
+  const handleYtState = useCallback(
+    (state: number) => {
+      // 1: PLAYING, 2: PAUSED, 3: BUFFERING, 0: ENDED
+      if (state === 1) {
+        markStarted();
+        if (pendingSeekRef.current !== null) {
+          const t = pendingSeekRef.current;
+          pendingSeekRef.current = null;
+          ytPlayerRef.current?.seekTo?.(t, true);
+        }
+      } else if (state === 2) {
+        setIsPlaying(false);
+        setIsBuffering(false);
+      } else if (state === 3) setIsBuffering(true);
+      else if (state === 0) {
+        setIsPlaying(false);
+        setShowControls(true);
+        callbacksRef.current.onEnded?.();
       }
     },
-    []
+    [markStarted]
   );
 
-  // Authoritative Seek: updates UI immediately and commits seek to YouTube / HTML5 video
-  // Sets a 1200ms cooldown so stale YouTube polling frames won't snap the timeline back
   const commitSeek = useCallback(
     (targetTime: number) => {
       const activeDur = duration || 999999;
@@ -305,20 +380,15 @@ export function LectureVideoPlayer({
       lastReportedTimeRef.current = clamped;
       seekCooldownUntilRef.current = Date.now() + 1200;
 
-      if (isYouTube) {
-        sendYouTubeCommand("seekTo", [clamped, true]);
-      } else if (videoRef.current) {
-        videoRef.current.currentTime = clamped;
-      }
-      if (onTimeUpdate) onTimeUpdate(clamped, duration);
-      if (duration > 0 && onProgressPercentage) {
-        onProgressPercentage(Math.floor((clamped / duration) * 100));
-      }
+      if (isYouTube) sendYouTubeCommand("seekTo", [clamped, true]);
+      else if (videoRef.current) videoRef.current.currentTime = clamped;
+
+      callbacksRef.current.onTimeUpdate?.(clamped, duration);
+      if (duration > 0) callbacksRef.current.onProgressPercentage?.(Math.floor((clamped / duration) * 100));
     },
-    [duration, isYouTube, sendYouTubeCommand, onTimeUpdate, onProgressPercentage]
+    [duration, isYouTube, sendYouTubeCommand]
   );
 
-  // Helper to dynamically update available qualities from YouTube
   const updateAvailableQualities = useCallback((levels: string[]) => {
     if (!Array.isArray(levels) || levels.length === 0) return;
     const order = ["4K (2160p)", "1440p", "1080p", "720p", "480p", "360p", "240p", "144p"];
@@ -328,76 +398,51 @@ export function LectureVideoPlayer({
       if (mapped && mapped !== "Auto") detected.add(mapped);
     }
     const filtered = order.filter((label) => detected.has(label));
-    // If YouTube hasn't finished HD processing yet, keep 1080p selectable so user can request HD
-    if (!filtered.includes("1080p") && !filtered.includes("1440p") && !filtered.includes("4K (2160p)")) {
-      filtered.unshift("1080p");
-    }
+    if (filtered.length === 0) return;
     filtered.push("Auto");
-    if (filtered.length > 0) {
-      setQualityOptions(filtered);
-    }
+    setQualityOptions(filtered);
   }, []);
 
-  // Initialize YouTube Iframe API if YouTube URL
+  // Initialize the YouTube Iframe API once per video
   useEffect(() => {
     if (!isYouTube || !youtubeVideoId) return;
     let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let attempts = 0;
 
     function initYt() {
       if (cancelled) return;
-      if (!(window as any).YT || !(window as any).YT.Player) {
+      const YT = (window as any).YT;
+      if (!YT || !YT.Player) {
+        // Script present but not ready yet (e.g. another player loaded it).
+        if (attempts++ < 50) retryTimer = setTimeout(initYt, 200);
         return;
       }
       try {
         const targetEl = document.getElementById(ytPlayerElementId) || iframeRef.current;
         if (!targetEl) return;
-
-        const player = new (window as any).YT.Player(targetEl, {
+        new YT.Player(targetEl, {
           events: {
             onReady: (e: any) => {
+              if (cancelled) return;
               ytPlayerRef.current = e.target;
+              const s = settingsRef.current;
               try {
                 const dur = e.target.getDuration() || 0;
                 if (dur > 0) setDuration(dur);
-                e.target.setPlaybackRate(playbackSpeed);
-                e.target.setVolume(isMuted ? 0 : volume * 100);
-                if (initialTime > 0) {
-                  e.target.seekTo(initialTime, true);
-                }
-                const targetYtQ = YT_QUALITY_MAP[selectedQuality] || "hd1080";
-                e.target.setPlaybackQuality(targetYtQ);
-                if (typeof e.target.setPlaybackQualityRange === "function") {
-                  e.target.setPlaybackQualityRange(targetYtQ, targetYtQ);
-                }
-                if (typeof e.target.getAvailableQualityLevels === "function") {
-                  const levels = e.target.getAvailableQualityLevels();
-                  if (Array.isArray(levels) && levels.length > 0) {
-                    updateAvailableQualities(levels);
-                  }
-                }
+                e.target.setPlaybackRate(s.playbackSpeed);
+                e.target.setVolume(s.isMuted ? 0 : s.volume * 100);
+                if (s.isMuted) e.target.mute();
+                if (s.initialTime > 0) e.target.seekTo(s.initialTime, true);
+                const q = YT_QUALITY_MAP[s.selectedQuality] || "default";
+                e.target.setPlaybackQuality?.(q);
+                const levels = e.target.getAvailableQualityLevels?.();
+                if (Array.isArray(levels) && levels.length > 0) updateAvailableQualities(levels);
               } catch {}
             },
-            onStateChange: (e: any) => {
-              // 1: PLAYING, 2: PAUSED, 3: BUFFERING, 0: ENDED
-              if (e.data === 1) {
-                setHasStartedPlaying(true);
-                setIsPlaying(true);
-                setIsBuffering(false);
-                setHasEnded(false);
-              } else if (e.data === 2) {
-                setIsPlaying(false);
-                setIsBuffering(false);
-              } else if (e.data === 3) {
-                setIsBuffering(true);
-              } else if (e.data === 0) {
-                setIsPlaying(false);
-                setHasEnded(true);
-                if (onEnded) onEnded();
-              }
-            },
+            onStateChange: (e: any) => handleYtState(e.data),
           },
         });
-        ytPlayerRef.current = player;
       } catch (err) {
         console.debug("[LectureVideoPlayer] YT.Player init:", err);
       }
@@ -406,9 +451,7 @@ export function LectureVideoPlayer({
     if (!(window as any).YT) {
       const tag = document.createElement("script");
       tag.src = "https://www.youtube.com/iframe_api";
-      const firstScriptTag = document.getElementsByTagName("script")[0];
-      firstScriptTag?.parentNode?.insertBefore(tag, firstScriptTag);
-
+      document.head.appendChild(tag);
       const prevReady = (window as any).onYouTubeIframeAPIReady;
       (window as any).onYouTubeIframeAPIReady = () => {
         if (typeof prevReady === "function") prevReady();
@@ -420,14 +463,16 @@ export function LectureVideoPlayer({
 
     return () => {
       cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      ytPlayerRef.current = null;
     };
-  }, [isYouTube, youtubeVideoId, ytPlayerElementId, initialTime, isMuted, volume, playbackSpeed, onEnded]);
+  }, [isYouTube, youtubeVideoId, ytPlayerElementId, handleYtState, updateAvailableQualities]);
 
-  // Direct window postMessage listener for YouTube events (infoDelivery & onStateChange)
+  // Raw postMessage listener (works even before YT.Player's onReady)
   useEffect(() => {
     if (!isYouTube) return;
-
     const handleWindowMessage = (e: MessageEvent) => {
+      if (typeof e.origin === "string" && !e.origin.includes("youtube")) return;
       try {
         let msg = e.data;
         if (typeof msg === "string") {
@@ -438,69 +483,44 @@ export function LectureVideoPlayer({
           }
         }
         if (!msg || typeof msg !== "object") return;
-
         if (msg.event === "infoDelivery" && msg.info) {
           const info = msg.info;
-          if (
-            typeof info.currentTime === "number" &&
-            !isScrubbing &&
-            Date.now() >= seekCooldownUntilRef.current
-          ) {
-            setCurrentTime(info.currentTime);
-          }
-          if (typeof info.duration === "number" && info.duration > 0) {
-            setDuration(info.duration);
-          }
+          if (typeof info.duration === "number" && info.duration > 0) setDuration(info.duration);
           if (typeof info.videoLoadedFraction === "number") {
             setBufferedEnd((prev) => info.videoLoadedFraction * (info.duration || prev || 0));
           }
           if (Array.isArray(info.availableQualityLevels) && info.availableQualityLevels.length > 0) {
             updateAvailableQualities(info.availableQualityLevels);
           }
-          if (typeof info.playerState === "number") {
-            if (info.playerState === 1) {
-              setHasStartedPlaying(true);
-              setIsPlaying(true);
-              setIsBuffering(false);
-              setHasEnded(false);
-            } else if (info.playerState === 2) {
-              setIsPlaying(false);
-              setIsBuffering(false);
-            } else if (info.playerState === 3) {
-              setIsBuffering(true);
-            } else if (info.playerState === 0) {
-              setIsPlaying(false);
-              setHasEnded(true);
-              if (onEnded) onEnded();
-            }
-          }
-        } else if (msg.event === "onStateChange") {
-          if (msg.info === 1) {
-            setHasStartedPlaying(true);
-            setIsPlaying(true);
-            setIsBuffering(false);
-            setHasEnded(false);
-          } else if (msg.info === 2) {
-            setIsPlaying(false);
-            setIsBuffering(false);
-          } else if (msg.info === 3) {
-            setIsBuffering(true);
-          } else if (msg.info === 0) {
-            setIsPlaying(false);
-            setHasEnded(true);
-            if (onEnded) onEnded();
-          }
+          if (typeof info.playerState === "number") handleYtState(info.playerState);
+        } else if (msg.event === "onStateChange" && typeof msg.info === "number") {
+          handleYtState(msg.info);
         }
       } catch {}
     };
-
     window.addEventListener("message", handleWindowMessage);
-    return () => {
-      window.removeEventListener("message", handleWindowMessage);
-    };
-  }, [isYouTube, isScrubbing, onEnded]);
+    return () => window.removeEventListener("message", handleWindowMessage);
+  }, [isYouTube, handleYtState, updateAvailableQualities]);
 
-  // Robust YouTube progress ticker: combines API calls with continuous smooth time advancement
+  // First play on phones has to be a real tap *inside* the YouTube iframe
+  // (mobile browsers block API-initiated playback of an untouched embed),
+  // so before playback starts the iframe is left tappable under our
+  // non-interactive poster. If the state event is slow to arrive, a focus
+  // move into the iframe is our cue that the student tapped it.
+  useEffect(() => {
+    if (!isYouTube || hasStartedPlaying) return;
+    const onBlur = () => {
+      setTimeout(() => {
+        if (document.activeElement === iframeRef.current) {
+          setHasStartedPlaying(true);
+        }
+      }, 0);
+    };
+    window.addEventListener("blur", onBlur);
+    return () => window.removeEventListener("blur", onBlur);
+  }, [isYouTube, hasStartedPlaying]);
+
+  // YouTube progress ticker (the iframe doesn't push timeupdate events)
   useEffect(() => {
     if (!isYouTube) return;
     lastTickTimeRef.current = Date.now();
@@ -510,146 +530,88 @@ export function LectureVideoPlayer({
       const elapsed = (now - lastTickTimeRef.current) / 1000;
       lastTickTimeRef.current = now;
 
-      // 1. Keep-alive ping to YouTube iframe
-      if (iframeRef.current?.contentWindow) {
-        try {
-          iframeRef.current.contentWindow.postMessage(
-            JSON.stringify({ event: "command", func: "getCurrentTime", args: [] }),
-            "*"
-          );
-        } catch {}
-      }
-
-      // 2. Read state from YT.Player instance if available
       let reportedTime: number | null = null;
       let reportedDur: number | null = null;
       let loadedFraction: number | null = null;
-
-      if (ytPlayerRef.current) {
+      const p = ytPlayerRef.current;
+      if (p) {
         try {
-          const cur = ytPlayerRef.current.getCurrentTime?.();
-          if (typeof cur === "number" && !isNaN(cur) && cur >= 0) {
-            reportedTime = cur;
-          }
-          const dur = ytPlayerRef.current.getDuration?.();
-          if (typeof dur === "number" && !isNaN(dur) && dur > 0) {
-            reportedDur = dur;
-          }
-          const frac = ytPlayerRef.current.getVideoLoadedFraction?.();
-          if (typeof frac === "number" && !isNaN(frac)) {
-            loadedFraction = frac;
-          }
+          const cur = p.getCurrentTime?.();
+          if (typeof cur === "number" && !isNaN(cur) && cur >= 0) reportedTime = cur;
+          const dur = p.getDuration?.();
+          if (typeof dur === "number" && !isNaN(dur) && dur > 0) reportedDur = dur;
+          const frac = p.getVideoLoadedFraction?.();
+          if (typeof frac === "number" && !isNaN(frac)) loadedFraction = frac;
         } catch {}
       }
 
-      if (reportedDur && reportedDur > 0) {
-        setDuration(reportedDur);
-      }
+      if (reportedDur && reportedDur > 0) setDuration(reportedDur);
       const activeDur = reportedDur || duration;
-      if (loadedFraction !== null && activeDur > 0) {
-        setBufferedEnd(loadedFraction * activeDur);
-      }
+      if (loadedFraction !== null && activeDur > 0) setBufferedEnd(loadedFraction * activeDur);
+      if (isScrubbing) return;
 
-      // 3. Update current time & scrub progress bar
-      if (!isScrubbing) {
-        if (Date.now() < seekCooldownUntilRef.current) {
-          // In seek cooldown - do not snap back to stale time!
-          if (isPlaying) {
-            setCurrentTime((prev) => {
-              const next = prev + elapsed * playbackSpeed;
-              const clamped = activeDur > 0 ? Math.min(next, activeDur) : next;
-              if (onTimeUpdate) onTimeUpdate(clamped, activeDur);
-              if (activeDur > 0 && onProgressPercentage) {
-                onProgressPercentage(Math.floor((clamped / activeDur) * 100));
-              }
-              return clamped;
-            });
-          }
-          return;
+      const currentTime = currentTimeRef.current;
+      let next: number | null = null;
+      if (Date.now() < seekCooldownUntilRef.current) {
+        if (isPlaying) next = currentTime + elapsed * playbackSpeed;
+      } else if (isPlaying) {
+        if (reportedTime !== null && Math.abs(reportedTime - currentTime) > 1.2) {
+          next = reportedTime;
+        } else {
+          const base = reportedTime !== null && reportedTime > currentTime ? reportedTime : currentTime;
+          next = base + elapsed * playbackSpeed;
         }
-
-        if (isPlaying) {
-          // If reported time has changed noticeably from last time (user sought or fresh frame from YT)
-          if (
-            reportedTime !== null &&
-            reportedTime > 0 &&
-            Math.abs(reportedTime - lastReportedTimeRef.current) > 1.2
-          ) {
-            lastReportedTimeRef.current = reportedTime;
-            setCurrentTime(reportedTime);
-            if (onTimeUpdate) onTimeUpdate(reportedTime, activeDur);
-            if (activeDur > 0 && onProgressPercentage) {
-              onProgressPercentage(Math.floor((reportedTime / activeDur) * 100));
-            }
-          } else {
-            // Smoothly advance time locally at high resolution
-            setCurrentTime((prev) => {
-              const base = (reportedTime !== null && reportedTime > prev) ? reportedTime : prev;
-              const next = base + elapsed * playbackSpeed;
-              const clamped = activeDur > 0 ? Math.min(next, activeDur) : next;
-              if (onTimeUpdate) onTimeUpdate(clamped, activeDur);
-              if (activeDur > 0 && onProgressPercentage) {
-                onProgressPercentage(Math.floor((clamped / activeDur) * 100));
-              }
-              return clamped;
-            });
-          }
-        } else if (reportedTime !== null && reportedTime > 0) {
-          // When paused, strictly sync to the reported frame
-          lastReportedTimeRef.current = reportedTime;
-          setCurrentTime(reportedTime);
-        }
+      } else if (reportedTime !== null && reportedTime > 0) {
+        next = reportedTime;
       }
-    }, 100);
+      if (next === null) return;
+      const clamped = activeDur > 0 ? Math.min(next, activeDur) : next;
+      lastReportedTimeRef.current = clamped;
+      setCurrentTime(clamped);
+      callbacksRef.current.onTimeUpdate?.(clamped, activeDur);
+      if (activeDur > 0) callbacksRef.current.onProgressPercentage?.(Math.floor((clamped / activeDur) * 100));
+    }, 250);
 
     return () => clearInterval(pollInterval);
-  }, [isYouTube, isPlaying, isScrubbing, duration, playbackSpeed, onTimeUpdate, onProgressPercentage]);
+  }, [isYouTube, isPlaying, isScrubbing, duration, playbackSpeed]);
 
-  // Play / Pause Toggle
+  // ---------- Actions ----------
   const togglePlay = useCallback(() => {
     if (isYouTube) {
       if (isPlaying) {
         sendYouTubeCommand("pauseVideo");
         setIsPlaying(false);
+      } else if (!hasStartedPlaying) {
+        // Not flipped optimistically: on phones this call can be refused
+        // until the student taps the iframe itself, and the poster must
+        // stay tappable-through until YouTube reports PLAYING.
+        sendYouTubeCommand("playVideo");
       } else {
-        setHasStartedPlaying(true);
         sendYouTubeCommand("playVideo");
         setIsPlaying(true);
-        setHasEnded(false);
       }
     } else if (videoRef.current) {
       if (videoRef.current.paused || videoRef.current.ended) {
         setHasStartedPlaying(true);
-        videoRef.current
-          .play()
-          .then(() => {
-            setIsPlaying(true);
-            setHasEnded(false);
-          })
-          .catch(() => {});
+        videoRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
       } else {
         videoRef.current.pause();
         setIsPlaying(false);
       }
     }
     resetControlsTimer();
-  }, [isYouTube, isPlaying, sendYouTubeCommand, resetControlsTimer]);
+  }, [isYouTube, isPlaying, hasStartedPlaying, sendYouTubeCommand, resetControlsTimer]);
 
-  // Seek Skip (+10s or -10s)
   const skip = useCallback(
     (seconds: number) => {
       const targetTime = Math.min(Math.max(0, currentTime + seconds), duration || 999999);
       commitSeek(targetTime);
-      triggerFeedback(
-        seconds > 0 ? "forward_10" : "replay_10",
-        seconds > 0 ? "+10s" : "-10s"
-      );
+      triggerFeedback(seconds > 0 ? "forward_10" : "replay_10", seconds > 0 ? "+10s" : "-10s");
       resetControlsTimer();
     },
     [currentTime, duration, commitSeek, triggerFeedback, resetControlsTimer]
   );
 
-  // Volume & Mute Handlers
   const handleVolumeChange = useCallback(
     (newVol: number) => {
       const clamped = Math.max(0, Math.min(1, newVol));
@@ -659,13 +621,11 @@ export function LectureVideoPlayer({
 
       if (isYouTube) {
         sendYouTubeCommand("setVolume", [clamped * 100]);
-        if (clamped === 0) sendYouTubeCommand("mute");
-        else sendYouTubeCommand("unMute");
+        sendYouTubeCommand(clamped === 0 ? "mute" : "unMute");
       } else if (videoRef.current) {
         videoRef.current.volume = clamped;
         videoRef.current.muted = clamped === 0;
       }
-
       try {
         localStorage.setItem("atomic_player_volume", String(clamped));
         localStorage.setItem("atomic_player_muted", clamped === 0 ? "true" : "false");
@@ -689,117 +649,101 @@ export function LectureVideoPlayer({
       triggerFeedback("volume_up", `${Math.round(restored * 100)}%`);
     } else {
       setIsMuted(true);
-      if (isYouTube) {
-        sendYouTubeCommand("mute");
-      } else if (videoRef.current) {
-        videoRef.current.muted = true;
-      }
+      if (isYouTube) sendYouTubeCommand("mute");
+      else if (videoRef.current) videoRef.current.muted = true;
       triggerFeedback("volume_off", "Muted");
     }
     resetControlsTimer();
   }, [isMuted, volume, previousVolume, isYouTube, sendYouTubeCommand, triggerFeedback, resetControlsTimer]);
 
-  // Speed Change Handler (matching Screenshot 2: 0.5x to 4.0x)
   const handleSpeedChange = useCallback(
     (speed: number) => {
       setPlaybackSpeed(speed);
-      if (isYouTube) {
-        sendYouTubeCommand("setPlaybackRate", [speed]);
-      } else if (videoRef.current) {
-        videoRef.current.playbackRate = speed;
-      }
+      if (isYouTube) sendYouTubeCommand("setPlaybackRate", [speed]);
+      else if (videoRef.current) videoRef.current.playbackRate = speed;
       try {
         localStorage.setItem("atomic_playback_rate", String(speed));
       } catch {}
       triggerFeedback("speed", `${speed}x`);
       setShowSpeedMenu(false);
-      resetControlsTimer();
     },
-    [isYouTube, sendYouTubeCommand, triggerFeedback, resetControlsTimer]
+    [isYouTube, sendYouTubeCommand, triggerFeedback]
   );
 
-  // Quality Change Handler (supporting 4K, 1440p, 1080p, 720p, 480p, 360p, 240p, 144p, Auto)
   const handleQualityChange = useCallback(
     (q: string) => {
       setSelectedQuality(q);
       try {
         localStorage.setItem("atomic_player_quality", q);
       } catch {}
-
-      if (isYouTube) {
-        const ytQ = YT_QUALITY_MAP[q] || "default";
-        sendYouTubeCommand("setPlaybackQuality", [ytQ]);
-        sendYouTubeCommand("setPlaybackQualityRange", [ytQ, ytQ]);
-      }
-      triggerFeedback("high_quality", `${q}`);
+      if (isYouTube) sendYouTubeCommand("setPlaybackQuality", [YT_QUALITY_MAP[q] || "default"]);
+      triggerFeedback("high_quality", q);
       setShowQualityMenu(false);
-      resetControlsTimer();
     },
-    [isYouTube, sendYouTubeCommand, triggerFeedback, resetControlsTimer]
+    [isYouTube, sendYouTubeCommand, triggerFeedback]
   );
 
-  // Screen Rotation / Aspect Ratio Handler
-  const handleRotateOrAspect = useCallback(async () => {
-    // 1. Attempt mobile screen orientation lock
-    if (typeof window !== "undefined" && "screen" in window && "orientation" in window.screen) {
-      try {
-        const orientation = window.screen.orientation;
-        if (orientation && "lock" in orientation) {
-          if (!document.fullscreenElement && containerRef.current) {
-            await containerRef.current.requestFullscreen().catch(() => {});
-          }
-          await (orientation.lock as any)("landscape").catch(() => {});
-        }
-      } catch {}
-    }
-    // 2. Toggle aspect fill/contain
-    setIsAspectFill((prev) => !prev);
-    triggerFeedback("aspect_ratio", isAspectFill ? "Aspect: Fit" : "Aspect: Fill");
+  const toggleAspect = useCallback(() => {
+    setIsAspectFill((prev) => {
+      triggerFeedback("aspect_ratio", prev ? "Fit" : "Fill");
+      return !prev;
+    });
     resetControlsTimer();
-  }, [isAspectFill, triggerFeedback, resetControlsTimer]);
+  }, [triggerFeedback, resetControlsTimer]);
 
-  // Fullscreen Handler
   const toggleFullscreen = useCallback(async () => {
-    if (!containerRef.current) return;
+    const el = containerRef.current as any;
+    if (!el) return;
+    const doc = document as any;
+    const fsElement = document.fullscreenElement || doc.webkitFullscreenElement;
     try {
-      if (!document.fullscreenElement) {
-        await containerRef.current.requestFullscreen();
-        setIsFullscreen(true);
-        // Lock landscape on mobile when entering fullscreen
-        if (screen.orientation && "lock" in screen.orientation) {
-          await (screen.orientation as any).lock("landscape").catch(() => {});
-        }
-      } else {
-        await document.exitFullscreen();
-        setIsFullscreen(false);
-        if (screen.orientation && "unlock" in screen.orientation) {
-          (screen.orientation as any).unlock();
-        }
+      if (fsElement) {
+        await (document.exitFullscreen?.() ?? doc.webkitExitFullscreen?.());
+        (screen.orientation as any)?.unlock?.();
+        return;
       }
+      if (isPseudoFullscreen) {
+        setIsPseudoFullscreen(false);
+        return;
+      }
+      const request = el.requestFullscreen || el.webkitRequestFullscreen;
+      if (!request) {
+        setIsPseudoFullscreen(true);
+        return;
+      }
+      await request.call(el);
+      await (screen.orientation as any)?.lock?.("landscape").catch?.(() => {});
     } catch {
-      setIsFullscreen(!isFullscreen);
+      setIsPseudoFullscreen((v) => !v);
     }
-  }, [isFullscreen]);
+    resetControlsTimer();
+  }, [isPseudoFullscreen, resetControlsTimer]);
 
   useEffect(() => {
     const handleFsChange = () => {
-      setIsFullscreen(Boolean(document.fullscreenElement));
+      const doc = document as any;
+      setIsFullscreen(Boolean(document.fullscreenElement || doc.webkitFullscreenElement));
     };
     document.addEventListener("fullscreenchange", handleFsChange);
-    return () => document.removeEventListener("fullscreenchange", handleFsChange);
+    document.addEventListener("webkitfullscreenchange", handleFsChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFsChange);
+      document.removeEventListener("webkitfullscreenchange", handleFsChange);
+    };
   }, []);
 
-  // Keyboard Shortcuts Handler
+  // Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeTag = document.activeElement?.tagName.toLowerCase();
-      const isInputFocused =
+      if (
         activeTag === "input" ||
         activeTag === "textarea" ||
-        document.activeElement?.getAttribute("contenteditable") === "true";
-
-      if (isInputFocused) return;
-
+        activeTag === "select" ||
+        document.activeElement?.getAttribute("contenteditable") === "true"
+      ) {
+        return;
+      }
       switch (e.key.toLowerCase()) {
         case " ":
         case "k":
@@ -814,6 +758,9 @@ export function LectureVideoPlayer({
           e.preventDefault();
           toggleFullscreen();
           break;
+        case "escape":
+          if (isPseudoFullscreen) setIsPseudoFullscreen(false);
+          break;
         case "arrowleft":
         case "j":
           e.preventDefault();
@@ -827,246 +774,197 @@ export function LectureVideoPlayer({
         case "arrowup":
           e.preventDefault();
           handleVolumeChange(Math.min(1, volume + 0.05));
+          resetControlsTimer();
           break;
         case "arrowdown":
           e.preventDefault();
           handleVolumeChange(Math.max(0, volume - 0.05));
+          resetControlsTimer();
           break;
       }
     };
-
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [togglePlay, toggleMute, toggleFullscreen, skip, handleVolumeChange, volume]);
+  }, [togglePlay, toggleMute, toggleFullscreen, skip, handleVolumeChange, volume, isPseudoFullscreen, resetControlsTimer]);
 
-  // Video Events (HTML5 video fallback)
+  // ---------- HTML5 video events ----------
   const handleTimeUpdate = () => {
     if (!videoRef.current || isYouTube) return;
     const cur = videoRef.current.currentTime;
     const dur = videoRef.current.duration || 0;
-    if (!isScrubbing) {
-      setCurrentTime(cur);
-    }
+    if (!isScrubbing) setCurrentTime(cur);
     if (dur > 0) setDuration(dur);
-
     if (videoRef.current.buffered.length > 0) {
       try {
-        const bufferedTime = videoRef.current.buffered.end(videoRef.current.buffered.length - 1);
-        setBufferedEnd(bufferedTime);
+        setBufferedEnd(videoRef.current.buffered.end(videoRef.current.buffered.length - 1));
       } catch {}
     }
-
-    if (onTimeUpdate) onTimeUpdate(cur, dur);
-
-    if (dur > 0) {
-      const pct = Math.floor((cur / dur) * 100);
-      if (onProgressPercentage) onProgressPercentage(pct);
-
-      if (!isLive && lectureId) {
-        if (progressSaveTimeoutRef.current) clearTimeout(progressSaveTimeoutRef.current);
-        progressSaveTimeoutRef.current = setTimeout(() => {
-          try {
-            localStorage.setItem(`atomic_progress_${lectureId}`, String(cur));
-          } catch {}
-        }, 3000);
-      }
-    }
+    onTimeUpdate?.(cur, dur);
+    if (dur > 0) onProgressPercentage?.(Math.floor((cur / dur) * 100));
   };
 
   const handleVideoEnded = () => {
     setIsPlaying(false);
-    setHasEnded(true);
     setShowControls(true);
-    if (onEnded) onEnded();
+    onEnded?.();
   };
 
-  // Progress Bar Scrubbing with Pointer Capture & Touch Support
-  const calculateScrubPositionFromClientX = useCallback(
-    (clientX: number) => {
-      if (!progressBarRef.current) return 0;
-      let effectiveDur = duration;
-      if (effectiveDur <= 0) {
-        if (isYouTube && ytPlayerRef.current?.getDuration) {
-          try {
-            const d = ytPlayerRef.current.getDuration();
-            if (typeof d === "number" && d > 0) {
-              effectiveDur = d;
-              setDuration(d);
-            }
-          } catch {}
-        } else if (videoRef.current?.duration && videoRef.current.duration > 0) {
-          effectiveDur = videoRef.current.duration;
-          setDuration(effectiveDur);
-        }
+  // ---------- Progress bar scrubbing ----------
+  const resolveDuration = useCallback(() => {
+    if (duration > 0) return duration;
+    try {
+      const d = isYouTube ? ytPlayerRef.current?.getDuration?.() : videoRef.current?.duration;
+      if (typeof d === "number" && d > 0) {
+        setDuration(d);
+        return d;
       }
-      if (effectiveDur <= 0) return 0;
+    } catch {}
+    return 0;
+  }, [duration, isYouTube]);
+
+  const timeFromClientX = useCallback(
+    (clientX: number) => {
+      const dur = resolveDuration();
+      if (!progressBarRef.current || dur <= 0) return 0;
       const rect = progressBarRef.current.getBoundingClientRect();
       if (rect.width <= 0) return 0;
-      const pos = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-      return pos * effectiveDur;
+      return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) * dur;
     },
-    [duration, isYouTube]
+    [resolveDuration]
   );
 
   const handleProgressPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    let effectiveDur = duration;
-    if (effectiveDur <= 0) {
-      if (isYouTube && ytPlayerRef.current?.getDuration) {
-        try {
-          const d = ytPlayerRef.current.getDuration();
-          if (typeof d === "number" && d > 0) {
-            effectiveDur = d;
-            setDuration(d);
-          }
-        } catch {}
-      } else if (videoRef.current?.duration && videoRef.current.duration > 0) {
-        effectiveDur = videoRef.current.duration;
-        setDuration(effectiveDur);
-      }
-    }
-    if (effectiveDur <= 0) return;
+    const dur = resolveDuration();
+    if (dur <= 0) return;
     e.preventDefault();
     e.stopPropagation();
-
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
     } catch {}
-
     setIsScrubbing(true);
-    const target = calculateScrubPositionFromClientX(e.clientX);
+    const target = timeFromClientX(e.clientX);
     scrubTargetTimeRef.current = target;
     setCurrentTime(target);
-    setHoverPosition((target / effectiveDur) * 100);
+    setHoverPosition((target / dur) * 100);
     setHoverTime(target);
-    resetControlsTimer();
   };
 
   const handleProgressPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    const effectiveDur = duration > 0 ? duration : (scrubTargetTimeRef.current || 1);
-    const target = calculateScrubPositionFromClientX(e.clientX);
-    const pct = effectiveDur > 0 ? (target / effectiveDur) * 100 : 0;
-    setHoverPosition(pct);
+    const dur = duration > 0 ? duration : 1;
+    const target = timeFromClientX(e.clientX);
+    setHoverPosition((target / dur) * 100);
     setHoverTime(target);
-
     if (isScrubbing) {
       scrubTargetTimeRef.current = target;
       setCurrentTime(target);
-      resetControlsTimer();
     }
   };
 
-  const handleProgressPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-
+  const endScrub = (e: React.PointerEvent<HTMLDivElement>, target: number) => {
     try {
-      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-        e.currentTarget.releasePointerCapture(e.pointerId);
-      }
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
     } catch {}
-
-    const target = calculateScrubPositionFromClientX(e.clientX);
     setIsScrubbing(false);
     setHoverTime(null);
     commitSeek(target);
-    resetControlsTimer();
   };
 
-  const handleProgressPointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
-    try {
-      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-        e.currentTarget.releasePointerCapture(e.pointerId);
-      }
-    } catch {}
-    setIsScrubbing(false);
-    setHoverTime(null);
-    commitSeek(scrubTargetTimeRef.current);
-    resetControlsTimer();
-  };
-
-  const handleProgressMouseLeave = () => {
-    if (!isScrubbing) {
-      setHoverTime(null);
-    }
-  };
-
-  // Resume Video Action
+  // ---------- Resume ----------
   const applyResumeTime = () => {
     if (savedResumeTime <= 0) return;
-    setCurrentTime(savedResumeTime);
-    if (isYouTube) {
-      sendYouTubeCommand("seekTo", [savedResumeTime, true]);
-      sendYouTubeCommand("playVideo");
-      setIsPlaying(true);
-    } else if (videoRef.current) {
-      videoRef.current.currentTime = savedResumeTime;
-      videoRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
-    }
     setShowResumeBanner(false);
+    if (isYouTube && !hasStartedPlaying) pendingSeekRef.current = savedResumeTime;
+    commitSeek(savedResumeTime);
+    if (!hasStartedPlaying || !isPlaying) togglePlay();
     toast.success(`Resumed from ${formatTime(savedResumeTime)}`);
   };
 
-  const dismissResumeBanner = () => {
-    setShowResumeBanner(false);
-    setCurrentTime(0);
-    if (isYouTube) {
-      sendYouTubeCommand("seekTo", [0, true]);
-      sendYouTubeCommand("playVideo");
-      setIsPlaying(true);
-    } else if (videoRef.current) {
-      videoRef.current.currentTime = 0;
-      videoRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+  // ---------- Surface taps / clicks ----------
+  // Mouse: click toggles play, double-click toggles fullscreen.
+  // Touch: tap shows/hides controls; double-tap left/right seeks ±10s,
+  // double-tap centre toggles play (YouTube-app behaviour).
+  const lastTapRef = useRef<number>(0);
+  const lastPointerTypeRef = useRef<string>("mouse");
+  const handleSurfacePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    lastPointerTypeRef.current = e.pointerType;
+    if (e.pointerType === "mouse") {
+      if (e.button !== 0) return;
+      togglePlay();
+      return;
     }
-  };
-
-  // Double Tap for Mobile
-  const lastTapRef = useRef<{ time: number; x: number }>({ time: 0, x: 0 });
-  const handleTouchEnd = (e: React.TouchEvent) => {
     const now = Date.now();
-    const touch = e.changedTouches[0];
-    if (!touch) return;
     const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-
-    const tapX = touch.clientX - rect.left;
-    const isDoubleTap = now - lastTapRef.current.time < 300;
-
-    if (isDoubleTap) {
-      if (tapX < rect.width * 0.35) {
-        skip(-10);
-      } else if (tapX > rect.width * 0.65) {
-        skip(10);
-      } else {
-        togglePlay();
-      }
+    const x = rect ? e.clientX - rect.left : 0;
+    const width = rect?.width || 1;
+    if (now - lastTapRef.current < 300) {
+      lastTapRef.current = 0;
+      if (x < width * 0.35) skip(-10);
+      else if (x > width * 0.65) skip(10);
+      else togglePlay();
+      return;
+    }
+    lastTapRef.current = now;
+    if (showControls) {
+      if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+      setShowControls(false);
+      setShowSpeedMenu(false);
+      setShowQualityMenu(false);
     } else {
-      setShowControls((prev) => !prev);
       resetControlsTimer();
     }
-    lastTapRef.current = { time: now, x: tapX };
   };
+
+  // ---------- Layout maths ----------
+  const cw = containerSize.w || 1;
+  const ch = containerSize.h || 1;
+  const containerAspect = cw / ch;
+  const fillScale = isAspectFill
+    ? containerAspect > VIDEO_ASPECT
+      ? containerAspect / VIDEO_ASPECT
+      : VIDEO_ASPECT / containerAspect
+    : 1;
+  const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+  const targetWidth = QUALITY_TARGET_WIDTH[selectedQuality];
+  const renderScale =
+    isYouTube && targetWidth && containerSize.w > 0
+      ? Math.min(3, Math.max(0.25, targetWidth / (containerSize.w * dpr)))
+      : 1;
 
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
   const bufferPercent = duration > 0 ? (bufferedEnd / duration) * 100 : 0;
 
+  const iconBtn =
+    "w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-white/80 hover:text-white hover:bg-white/10 active:scale-95 transition cursor-pointer";
+  const iconCls = "material-symbols-outlined text-[18px] sm:text-[20px]";
+  const fade = `transition-opacity duration-300 ${controlsVisible ? "opacity-100" : "opacity-0 pointer-events-none"}`;
+
   return (
     <div
       ref={containerRef}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={() => isPlaying && setShowControls(false)}
-      onTouchEnd={handleTouchEnd}
-      className={`relative w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl group select-none flex items-center justify-center font-sans ${
-        isFullscreen ? "!rounded-none !aspect-auto !w-screen !h-screen" : ""
+      onPointerMove={(e) => {
+        if (e.pointerType === "mouse") resetControlsTimer();
+      }}
+      onPointerLeave={(e) => {
+        if (e.pointerType === "mouse" && !menusOpen && !isScrubbing) setShowControls(false);
+      }}
+      className={`relative w-full aspect-video bg-black overflow-hidden group select-none flex items-center justify-center font-sans ${
+        controlsVisible || !hasStartedPlaying ? "" : "cursor-none"
+      } ${
+        isFullscreen
+          ? "!aspect-auto !w-screen !h-screen !rounded-none"
+          : isPseudoFullscreen
+          ? "!fixed !inset-0 !z-[200] !aspect-auto !w-screen !h-[100dvh] !rounded-none"
+          : "rounded-2xl"
       } ${className}`}
     >
-      {/* ----------------- 1. VIDEO LAYER (HEADLESS YOUTUBE OR HTML5 VIDEO) ----------------- */}
+      {/* 1. VIDEO LAYER */}
       {isYouTube ? (
-        <div className="w-full h-full relative overflow-hidden flex items-center justify-center bg-black">
+        <div className="absolute inset-0 overflow-hidden bg-black">
           <iframe
             id={ytPlayerElementId}
             ref={iframeRef}
             src={youtubeHeadlessEmbedUrl}
-            title="Atomic Pathshala Player"
+            title={title || "Atomic Pathshala Player"}
             onLoad={() => {
               try {
                 iframeRef.current?.contentWindow?.postMessage(
@@ -1075,15 +973,25 @@ export function LectureVideoPlayer({
                 );
               } catch {}
             }}
-            className={`w-[102%] h-[124%] max-w-none border-0 pointer-events-none transition-transform duration-300 ${
-              isAspectFill ? "scale-[1.25]" : "scale-[1.12]"
+            // Untransformed until the first play so the student's first tap
+            // lands on a plain iframe (transformed iframes have had touch
+            // hit-testing bugs on mobile Safari).
+            style={
+              hasStartedPlaying
+                ? {
+                    position: "absolute",
+                    left: "50%",
+                    top: "50%",
+                    width: `${renderScale * 100}%`,
+                    height: `${renderScale * 100}%`,
+                    transform: `translate(-50%, -50%) scale(${fillScale / renderScale})`,
+                  }
+                : { position: "absolute", inset: 0, width: "100%", height: "100%" }
+            }
+            className={`max-w-none border-0 transition-transform duration-300 ${
+              hasStartedPlaying ? "pointer-events-none" : "pointer-events-auto"
             }`}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          />
-          {/* Interaction transparent shield: intercepts user clicks/taps directly to our custom handler */}
-          <div
-            onClick={togglePlay}
-            className="absolute inset-0 z-10 cursor-pointer bg-transparent"
           />
         </div>
       ) : (
@@ -1092,329 +1000,223 @@ export function LectureVideoPlayer({
           src={videoUrl}
           poster={posterUrl || undefined}
           playsInline
-          className={`w-full h-full cursor-pointer transition-transform duration-300 ${
-            isAspectFill ? "object-cover" : "object-contain"
-          }`}
-          onClick={togglePlay}
+          preload="metadata"
+          className={`absolute inset-0 w-full h-full ${isAspectFill ? "object-cover" : "object-contain"}`}
           onTimeUpdate={handleTimeUpdate}
           onEnded={handleVideoEnded}
           onWaiting={() => setIsBuffering(true)}
-          onPlaying={() => {
-            setHasStartedPlaying(true);
-            setIsBuffering(false);
-            setIsPlaying(true);
-          }}
+          onPlaying={markStarted}
+          onPause={() => setIsPlaying(false)}
           onCanPlay={() => setIsBuffering(false)}
           onLoadedMetadata={() => {
             if (videoRef.current) {
               setDuration(videoRef.current.duration || 0);
-              if (initialTime > 0) {
-                videoRef.current.currentTime = initialTime;
-              }
+              if (initialTime > 0) videoRef.current.currentTime = initialTime;
               videoRef.current.volume = isMuted ? 0 : volume;
+              videoRef.current.muted = isMuted;
               videoRef.current.playbackRate = playbackSpeed;
             }
           }}
         />
       )}
 
-      {/* ----------------- 1.5 PRE-PLAY BRANDED POSTER / COVER LAYER ----------------- */}
-      {/* Completely covers YouTube's raw preview, red play button, channel name & "Watch on YouTube" */}
+      {/* 1.2 Interaction surface — above the video, below every control */}
+      {hasStartedPlaying && (
+        <div
+          onPointerUp={handleSurfacePointerUp}
+          onDoubleClick={(e) => {
+            e.preventDefault();
+            if (lastPointerTypeRef.current === "mouse") toggleFullscreen();
+          }}
+          className="absolute inset-0 z-10 bg-transparent"
+        />
+      )}
+
+      {/* 1.5 PRE-PLAY POSTER — hides YouTube's own preview/branding. For
+          YouTube it lets the tap through to the iframe (see above). */}
       {!hasStartedPlaying && (
         <div
-          onClick={(e) => {
-            e.stopPropagation();
-            togglePlay();
-          }}
-          className="absolute inset-0 z-20 bg-slate-950 flex flex-col items-center justify-center cursor-pointer select-none overflow-hidden group/poster"
+          onClick={isYouTube ? undefined : togglePlay}
+          className={`absolute inset-0 z-20 bg-slate-950 flex flex-col items-center justify-center select-none overflow-hidden ${
+            isYouTube ? "pointer-events-none" : "cursor-pointer"
+          }`}
         >
           {posterUrl ? (
-            <img
-              src={posterUrl}
-              alt={title || "Lecture Thumbnail"}
-              className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover/poster:scale-105"
-            />
+            // eslint-disable-next-line @next/next/no-img-element -- remote thumbnail
+            <img src={posterUrl} alt={title || "Lecture"} className="absolute inset-0 w-full h-full object-cover opacity-80" />
           ) : (
-            <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950/70 flex flex-col justify-between p-4 sm:p-7">
-              {/* Subtle ambient glows */}
-              <div className="absolute -top-12 -right-12 w-64 h-64 rounded-full bg-blue-600/15 blur-3xl pointer-events-none" />
-              <div className="absolute -bottom-12 -left-12 w-64 h-64 rounded-full bg-indigo-600/15 blur-3xl pointer-events-none" />
-
-              {/* Top Row: Brand & Subject Pill */}
-              <div className="relative z-10 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-white/10 backdrop-blur-md p-1 border border-white/20 flex items-center justify-center shadow">
-                    <img
-                      src="/brand/logo.png"
-                      alt="Atomic Pathshala"
-                      className="w-full h-full object-contain"
-                    />
-                  </div>
-                  <span className="text-xs sm:text-sm font-bold text-white tracking-wide">
-                    Atomic Pathshala
-                  </span>
-                </div>
-                {subjectTitle && (
-                  <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-blue-600/30 text-blue-300 border border-blue-500/30">
-                    {subjectTitle}
-                  </span>
-                )}
-              </div>
-
-              {/* Center Lecture Title & Educator */}
-              <div className="relative z-10 my-auto text-center max-w-lg mx-auto px-4">
-                {title && (
-                  <h3 className="text-base sm:text-2xl font-black text-white tracking-tight drop-shadow-md line-clamp-2 mb-2">
-                    {title}
-                  </h3>
-                )}
-                {educatorName && (
-                  <p className="text-xs sm:text-sm text-slate-300 font-medium flex items-center justify-center gap-1.5 drop-shadow">
-                    <span className="material-symbols-outlined text-base text-blue-400">school</span>
-                    <span>{educatorName}</span>
-                  </p>
-                )}
-              </div>
-
-              {/* Bottom Prompt */}
-              <div className="relative z-10 flex items-center justify-center">
-                <span className="text-[11px] font-semibold text-blue-300/90 bg-blue-500/15 px-3.5 py-1 rounded-full border border-blue-400/25 flex items-center gap-2 shadow-sm">
-                  <span className="w-2 h-2 rounded-full bg-blue-400 animate-ping" />
-                  Tap to Start Class
-                </span>
-              </div>
-            </div>
+            <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950/70" />
           )}
-
-          {/* Center Branded Play Button */}
-          <div className="relative z-20 flex items-center justify-center pointer-events-none">
-            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-blue-600 group-hover/poster:bg-blue-500 active:scale-90 text-white flex items-center justify-center shadow-2xl shadow-blue-500/50 ring-4 ring-white/30 transition-all duration-200">
-              <span className="material-symbols-outlined text-4xl sm:text-5xl ml-1">
-                play_arrow
-              </span>
+          <div className="relative z-10 flex flex-col items-center gap-3 px-6 text-center">
+            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white/15 backdrop-blur-sm border border-white/25 text-white flex items-center justify-center">
+              <span className="material-symbols-outlined text-4xl ml-0.5">play_arrow</span>
             </div>
+            {title && (
+              <h3 className="text-sm sm:text-lg font-bold text-white/95 line-clamp-2 max-w-lg drop-shadow">{title}</h3>
+            )}
+            {(subjectTitle || educatorName) && (
+              <p className="text-[11px] sm:text-xs text-white/60">
+                {[subjectTitle, educatorName].filter(Boolean).join(" • ")}
+              </p>
+            )}
           </div>
         </div>
       )}
 
-      {/* ----------------- 2. FLOATING STUDENT ANTI-PIRACY WATERMARK ----------------- */}
-      {/* Drifting subtly across center matching user screenshot */}
-      <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-15 overflow-hidden select-none">
-        <div className="text-white/20 text-xs sm:text-sm font-mono tracking-wider font-semibold pointer-events-none transform -rotate-12 transition-transform duration-1000">
+      {/* 2. ANTI-PIRACY WATERMARK */}
+      <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-[15] overflow-hidden select-none">
+        <div className="text-white/15 text-[10px] sm:text-xs font-mono tracking-wider font-semibold -rotate-12">
           {activeWatermark}
         </div>
       </div>
 
-      {/* ----------------- 3. BUFFERING SPINNER ----------------- */}
-      {isBuffering && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 backdrop-blur-xs pointer-events-none z-20">
-          <div className="w-12 h-12 rounded-full border-4 border-blue-500/20 border-t-blue-500 animate-spin" />
-          <span className="text-xs font-semibold text-white/90 mt-2 tracking-wide drop-shadow">
-            Buffering...
-          </span>
+      {/* 3. BUFFERING SPINNER */}
+      {isBuffering && hasStartedPlaying && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+          <div className="w-10 h-10 rounded-full border-[3px] border-white/15 border-t-white/80 animate-spin" />
         </div>
       )}
 
-      {/* ----------------- 4. MICRO-FEEDBACK ANIMATION ----------------- */}
+      {/* 4. MICRO-FEEDBACK */}
       {feedbackIcon && (
         <div
           key={feedbackIcon.key}
           className="absolute z-30 pointer-events-none flex flex-col items-center justify-center inset-0 m-auto animate-in zoom-in-75 fade-in duration-200"
         >
-          <div className="w-16 h-16 rounded-full bg-black/75 backdrop-blur-md border border-white/20 text-white flex items-center justify-center shadow-2xl">
-            <span className="material-symbols-outlined text-3xl text-blue-400">
-              {feedbackIcon.icon}
-            </span>
+          <div className="w-12 h-12 rounded-full bg-black/40 backdrop-blur-sm text-white flex items-center justify-center">
+            <span className="material-symbols-outlined text-2xl">{feedbackIcon.icon}</span>
           </div>
           {feedbackIcon.text && (
-            <span className="mt-2 text-xs font-bold text-white bg-black/80 px-3 py-1 rounded-full border border-white/10 shadow">
+            <span className="mt-1.5 text-[11px] font-bold text-white bg-black/40 px-2.5 py-0.5 rounded-full">
               {feedbackIcon.text}
             </span>
           )}
         </div>
       )}
 
-      {/* ----------------- 5. RESUME PROMPT BANNER ----------------- */}
+      {/* 5. RESUME PROMPT */}
       {showResumeBanner && !isLive && (
-        <div className="absolute top-16 left-4 right-4 z-40 bg-slate-900/95 backdrop-blur-md border border-blue-500/50 p-3 rounded-2xl shadow-2xl flex items-center justify-between gap-3 animate-in slide-in-from-top duration-300">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
-              <span className="material-symbols-outlined text-xl">history</span>
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs font-bold text-white truncate">
-                Resume playback from {formatTime(savedResumeTime)}?
-              </p>
-              <p className="text-[10px] text-slate-400">
-                You previously watched this lecture up to this position.
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={applyResumeTime}
-              className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-sm cursor-pointer"
-            >
-              Resume
-            </button>
-            <button
-              type="button"
-              onClick={dismissResumeBanner}
-              className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition cursor-pointer"
-            >
-              Start Over
-            </button>
-          </div>
+        <div className="absolute bottom-3 sm:bottom-12 left-1/2 -translate-x-1/2 z-40 bg-black/60 backdrop-blur-md border border-white/10 pl-3 pr-1.5 py-1.5 rounded-full flex items-center gap-2 text-white text-[11px] sm:text-xs whitespace-nowrap">
+          <span className="material-symbols-outlined text-base text-white/70">history</span>
+          <span>Resume from {formatTime(savedResumeTime)}?</span>
+          <button
+            type="button"
+            onClick={applyResumeTime}
+            className="px-2.5 py-1 rounded-full bg-white/90 text-slate-900 font-bold hover:bg-white transition cursor-pointer"
+          >
+            Resume
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowResumeBanner(false)}
+            className="w-6 h-6 rounded-full flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 cursor-pointer"
+            aria-label="Dismiss"
+          >
+            <span className="material-symbols-outlined text-base">close</span>
+          </button>
         </div>
       )}
 
-      {/* ----------------- 6. PERMANENT BRANDING (Logo + Atomic Pathshala - Visible during playback) ----------------- */}
-      {hasStartedPlaying && (
-        <div className="absolute top-3 sm:top-4 left-3 sm:left-4 z-30 pointer-events-none select-none flex items-center gap-2.5 animate-in fade-in duration-200">
-          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-white/10 backdrop-blur-md p-1 border border-white/20 flex items-center justify-center shrink-0 shadow-md">
-            <img
-              src="/brand/logo.png"
-              alt="Atomic Pathshala"
-              className="w-full h-full object-contain"
-            />
-          </div>
-          <div className="min-w-0">
-            <span className="text-xs sm:text-sm font-bold text-white tracking-wide drop-shadow leading-tight block">
-              Atomic Pathshala
-            </span>
-            {subjectTitle ? (
-              <p className="text-[10px] sm:text-[11px] text-slate-300 font-medium truncate leading-tight">
-                {subjectTitle} {educatorName ? `• ${educatorName}` : ""}
-              </p>
-            ) : educatorName ? (
-              <p className="text-[10px] sm:text-[11px] text-slate-300 font-medium truncate leading-tight">
-                {educatorName}
-              </p>
-            ) : null}
-          </div>
-        </div>
-      )}
-
-      {/* Top Header Bar Gradient & Close Button (Always accessible at top right) */}
+      {/* 6. TOP BAR — back/close, title, branding (auto-hides) */}
       <div
-        className="absolute top-0 left-0 right-0 h-20 bg-gradient-to-b from-black/70 via-black/20 to-transparent z-35 flex items-start justify-end p-3 sm:p-4 pointer-events-none border-0"
+        className={`absolute top-0 left-0 right-0 z-30 flex items-center gap-2 px-2 sm:px-3 pt-2 pb-6 bg-gradient-to-b from-black/50 to-transparent ${fade}`}
       >
-        {/* Close Button matching Screenshot 1 Top Right */}
         <button
           type="button"
           onClick={() => {
-            if (onClose) {
-              onClose();
-            } else if (typeof window !== "undefined" && window.history.length > 1) {
-              window.history.back();
+            if (isPseudoFullscreen) {
+              setIsPseudoFullscreen(false);
+              return;
             }
+            if (onClose) onClose();
+            else if (typeof window !== "undefined" && window.history.length > 1) window.history.back();
           }}
-          className="pointer-events-auto w-8 h-8 rounded-full bg-black/60 hover:bg-black/85 active:scale-95 text-white/90 hover:text-white flex items-center justify-center transition border border-white/20 cursor-pointer shadow-lg"
-          title="Close Player"
+          className={iconBtn}
+          title="Back"
         >
-          <span className="material-symbols-outlined text-lg">close</span>
+          <span className={iconCls}>arrow_back</span>
         </button>
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] sm:text-xs font-semibold text-white/90 truncate">{title}</p>
+          {(subjectTitle || educatorName) && (
+            <p className="text-[10px] text-white/55 truncate">{[subjectTitle, educatorName].filter(Boolean).join(" • ")}</p>
+          )}
+        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
+        <img src="/brand/logo.png" alt="Atomic Pathshala" className="w-5 h-5 sm:w-6 sm:h-6 object-contain opacity-60 shrink-0" />
       </div>
 
-      {/* ----------------- 7. CENTER CONTROLS (Screenshot 1: Rewind 10, Play/Pause, Forward 10) ----------------- */}
+      {/* 7. CENTER CONTROLS — small and translucent */}
       <div
-        className={`absolute inset-0 flex items-center justify-center gap-10 sm:gap-20 pointer-events-none z-25 border-0 bg-transparent transition-opacity duration-300 ${
-          hasStartedPlaying && (showControls || !isPlaying)
-            ? "opacity-100"
-            : "opacity-0 pointer-events-none"
-        }`}
+        className={`absolute inset-0 z-20 flex items-center justify-center gap-8 sm:gap-14 pointer-events-none ${fade}`}
       >
-        {/* Rewind 10s Circular Button */}
         <button
           type="button"
           onClick={(e) => {
             e.stopPropagation();
             skip(-10);
           }}
-          className="pointer-events-auto w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-black/50 hover:bg-black/75 active:scale-90 text-white/90 hover:text-white border border-white/20 flex items-center justify-center shadow-2xl backdrop-blur-xs transition cursor-pointer"
+          className="pointer-events-auto w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-black/25 hover:bg-black/40 active:scale-90 text-white/85 flex items-center justify-center backdrop-blur-[2px] transition cursor-pointer"
           title="Rewind 10 seconds"
         >
-          <span className="material-symbols-outlined text-2xl sm:text-3xl">replay_10</span>
+          <span className="material-symbols-outlined text-xl sm:text-2xl">replay_10</span>
         </button>
-
-        {/* Big Center Play / Pause Button */}
         <button
           type="button"
           onClick={(e) => {
             e.stopPropagation();
             togglePlay();
           }}
-          className="pointer-events-auto w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-black/60 hover:bg-black/85 active:scale-95 text-white border-2 border-white/30 flex items-center justify-center shadow-2xl backdrop-blur-sm transition cursor-pointer"
+          className="pointer-events-auto w-11 h-11 sm:w-14 sm:h-14 rounded-full bg-black/25 hover:bg-black/40 active:scale-95 text-white/90 flex items-center justify-center backdrop-blur-[2px] transition cursor-pointer"
           title={isPlaying ? "Pause (Space/K)" : "Play (Space/K)"}
         >
-          <span className="material-symbols-outlined text-3xl sm:text-5xl">
-            {isPlaying ? "pause" : "play_arrow"}
-          </span>
+          <span className="material-symbols-outlined text-3xl sm:text-4xl">{isPlaying ? "pause" : "play_arrow"}</span>
         </button>
-
-        {/* Forward 10s Circular Button */}
         <button
           type="button"
           onClick={(e) => {
             e.stopPropagation();
             skip(10);
           }}
-          className="pointer-events-auto w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-black/50 hover:bg-black/75 active:scale-90 text-white/90 hover:text-white border border-white/20 flex items-center justify-center shadow-2xl backdrop-blur-xs transition cursor-pointer"
+          className="pointer-events-auto w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-black/25 hover:bg-black/40 active:scale-90 text-white/85 flex items-center justify-center backdrop-blur-[2px] transition cursor-pointer"
           title="Forward 10 seconds"
         >
-          <span className="material-symbols-outlined text-2xl sm:text-3xl">forward_10</span>
+          <span className="material-symbols-outlined text-xl sm:text-2xl">forward_10</span>
         </button>
       </div>
 
-      {/* ----------------- 8. BOTTOM CONTROL BAR (Screenshots 1, 2, 3) ----------------- */}
+      {/* 8. BOTTOM CONTROL BAR */}
       <div
-        className={`absolute bottom-0 left-0 right-0 p-3 sm:p-4 bg-gradient-to-t from-black/95 via-black/70 to-transparent transition-opacity duration-300 z-30 pointer-events-auto flex flex-col gap-2.5 ${
-          hasStartedPlaying && (showControls || !isPlaying || showSpeedMenu || showQualityMenu)
-            ? "opacity-100"
-            : "opacity-0 pointer-events-none"
-        }`}
-        onClick={(e) => e.stopPropagation()}
+        className={`absolute bottom-0 left-0 right-0 z-30 px-2 sm:px-3 pb-1 sm:pb-1.5 pt-6 bg-gradient-to-t from-black/60 to-transparent flex flex-col gap-0.5 ${fade}`}
+        onPointerUp={(e) => e.stopPropagation()}
       >
-        {/* Full-width Timeline Scrub Bar with BLUE THUMB (Screenshot 1) */}
         {!isLive && (
           <div
             ref={progressBarRef}
             onPointerDown={handleProgressPointerDown}
             onPointerMove={handleProgressPointerMove}
-            onPointerUp={handleProgressPointerUp}
-            onPointerCancel={handleProgressPointerCancel}
-            onMouseLeave={handleProgressMouseLeave}
-            className="relative w-full py-3.5 -my-2 group/progress cursor-pointer flex items-center touch-none select-none"
+            onPointerUp={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              endScrub(e, timeFromClientX(e.clientX));
+            }}
+            onPointerCancel={(e) => endScrub(e, scrubTargetTimeRef.current)}
+            onMouseLeave={() => !isScrubbing && setHoverTime(null)}
+            className="relative w-full py-2 group/progress cursor-pointer flex items-center touch-none select-none"
           >
-            {/* Background Track */}
-            <div className="w-full h-1.5 group-hover/progress:h-2.5 bg-white/25 rounded-full overflow-hidden relative transition-all duration-150">
-              {/* Buffer Bar */}
-              <div
-                className="absolute top-0 left-0 bottom-0 bg-white/35 rounded-full transition-all duration-200"
-                style={{ width: `${bufferPercent}%` }}
-              />
-              {/* Played Bar */}
-              <div
-                className={`absolute top-0 left-0 bottom-0 bg-blue-500 rounded-full ${
-                  isScrubbing ? "transition-none" : "transition-[width] duration-100 ease-linear"
-                }`}
-                style={{ width: `${progressPercent}%` }}
-              />
+            <div className="w-full h-[3px] group-hover/progress:h-[5px] bg-white/25 rounded-full overflow-hidden relative transition-all duration-150">
+              <div className="absolute inset-y-0 left-0 bg-white/35" style={{ width: `${bufferPercent}%` }} />
+              <div className="absolute inset-y-0 left-0 bg-blue-500" style={{ width: `${progressPercent}%` }} />
             </div>
-
-            {/* Blue Circular Thumb Knob */}
             <div
-              className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 group-hover/progress:w-5 group-hover/progress:h-5 bg-blue-500 rounded-full shadow-lg border-2 border-white pointer-events-none transition-transform ${
-                isScrubbing ? "scale-125 transition-none" : "transition-[left] duration-100 ease-linear"
+              className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-2.5 h-2.5 group-hover/progress:w-3.5 group-hover/progress:h-3.5 bg-blue-500 rounded-full pointer-events-none transition-[width,height] ${
+                isScrubbing ? "w-3.5 h-3.5" : ""
               }`}
               style={{ left: `${progressPercent}%` }}
             />
-
-            {/* Hover Tooltip */}
             {hoverTime !== null && (
               <div
-                className="absolute -top-7 -translate-x-1/2 px-2 py-0.5 rounded bg-black/90 text-white text-[10px] font-mono font-bold border border-white/20 shadow-xl pointer-events-none"
+                className="absolute -top-5 -translate-x-1/2 px-1.5 py-0.5 rounded bg-black/70 text-white text-[10px] font-mono pointer-events-none"
                 style={{ left: `${hoverPosition}%` }}
               >
                 {formatTime(hoverTime)}
@@ -1423,56 +1225,15 @@ export function LectureVideoPlayer({
           </div>
         )}
 
-        {/* Bottom Controls Row */}
-        <div className="flex items-center justify-between gap-2 text-white">
-          {/* Left Controls: Play/Pause, -10s, +10s, Volume with Blue Thumb, Time Display */}
-          <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
-            {/* Play / Pause Button */}
-            <button
-              type="button"
-              onClick={togglePlay}
-              className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-white/15 active:scale-95 transition text-white cursor-pointer"
-              title={isPlaying ? "Pause" : "Play"}
-            >
-              <span className="material-symbols-outlined text-2xl">
-                {isPlaying ? "pause" : "play_arrow"}
-              </span>
+        <div className="flex items-center justify-between gap-1 text-white">
+          <div className="flex items-center gap-0.5 sm:gap-1 min-w-0">
+            <button type="button" onClick={togglePlay} className={iconBtn} title={isPlaying ? "Pause" : "Play"}>
+              <span className={iconCls}>{isPlaying ? "pause" : "play_arrow"}</span>
             </button>
-
-            {/* Replay 10s */}
-            <button
-              type="button"
-              onClick={() => skip(-10)}
-              className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-white/15 active:scale-90 transition text-white/90 hover:text-white cursor-pointer"
-              title="Rewind 10 seconds"
-            >
-              <span className="material-symbols-outlined text-xl">replay_10</span>
-            </button>
-
-            {/* Forward 10s */}
-            <button
-              type="button"
-              onClick={() => skip(10)}
-              className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-white/15 active:scale-90 transition text-white/90 hover:text-white cursor-pointer"
-              title="Forward 10 seconds"
-            >
-              <span className="material-symbols-outlined text-xl">forward_10</span>
-            </button>
-
-            {/* Volume Icon + Horizontal Slider (with blue dot thumb) */}
-            <div className="flex items-center gap-1 group/volume">
-              <button
-                type="button"
-                onClick={toggleMute}
-                className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-white/15 transition text-white/90 hover:text-white cursor-pointer"
-                title={isMuted ? "Unmute" : "Mute"}
-              >
-                <span className="material-symbols-outlined text-xl">
-                  {isMuted || volume === 0
-                    ? "volume_off"
-                    : volume < 0.5
-                    ? "volume_down"
-                    : "volume_up"}
+            <div className="flex items-center group/volume">
+              <button type="button" onClick={toggleMute} className={iconBtn} title={isMuted ? "Unmute" : "Mute"}>
+                <span className={iconCls}>
+                  {isMuted || volume === 0 ? "volume_off" : volume < 0.5 ? "volume_down" : "volume_up"}
                 </span>
               </button>
               <input
@@ -1482,22 +1243,16 @@ export function LectureVideoPlayer({
                 step="0.05"
                 value={isMuted ? 0 : volume}
                 onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
-                className="w-14 sm:w-20 h-1 bg-white/30 rounded-full appearance-none accent-blue-500 cursor-pointer hidden sm:block opacity-85 group-hover/volume:opacity-100 transition"
+                className="w-0 opacity-0 group-hover/volume:w-16 group-hover/volume:opacity-100 focus:w-16 focus:opacity-100 h-1 accent-blue-500 cursor-pointer hidden sm:block transition-all duration-200"
                 title="Volume"
               />
             </div>
-
-            {/* Exact Time indicator format from Screenshot 1: 27:14/01:47:41 */}
-            <div className="text-[11px] sm:text-xs font-mono font-medium text-white/90 select-none ml-1">
-              <span>{formatTime(currentTime)}</span>
-              <span>/</span>
-              <span>{formatTime(duration)}</span>
+            <div className="text-[10px] sm:text-[11px] font-mono text-white/80 ml-1 whitespace-nowrap">
+              {formatTime(currentTime)} / {formatTime(duration)}
             </div>
           </div>
 
-          {/* Right Controls: Speedometer, Rotate/Aspect, Settings Gear, Fullscreen */}
-          <div className="flex items-center gap-1 sm:gap-2 shrink-0 relative">
-            {/* Speedometer Button (Screenshot 1 & 2) */}
+          <div className="flex items-center gap-0.5 sm:gap-1 shrink-0 relative">
             <div className="relative">
               <button
                 type="button"
@@ -1505,50 +1260,29 @@ export function LectureVideoPlayer({
                   setShowSpeedMenu((prev) => !prev);
                   setShowQualityMenu(false);
                 }}
-                className={`w-8 h-8 rounded-lg flex items-center justify-center hover:bg-white/15 transition cursor-pointer ${
-                  showSpeedMenu ? "bg-white/20 text-blue-400" : "text-white/90 hover:text-white"
-                }`}
+                className={`${iconBtn} !w-auto px-1.5 text-[11px] font-bold ${showSpeedMenu ? "bg-white/15" : ""}`}
                 title="Playback Speed"
               >
-                <span className="material-symbols-outlined text-xl">speed</span>
+                {playbackSpeed}x
               </button>
-
-              {/* Exact Speed Popup Menu from Screenshot 2 */}
               {showSpeedMenu && (
-                <div className="absolute bottom-11 right-0 w-24 bg-black/90 backdrop-blur-md border border-white/10 rounded-2xl shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-150">
-                  <div className="flex flex-col space-y-0.5">
-                    {SPEED_OPTIONS.map((s) => (
-                      <button
-                        key={s}
-                        type="button"
-                        onClick={() => handleSpeedChange(s)}
-                        className={`w-full text-left px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
-                          playbackSpeed === s
-                            ? "bg-white/20 text-white font-bold"
-                            : "text-white/80 hover:bg-white/10 hover:text-white"
-                        }`}
-                      >
-                        {s}x
-                      </button>
-                    ))}
-                  </div>
+                <div className="absolute bottom-9 right-0 w-20 bg-black/75 backdrop-blur-md border border-white/10 rounded-xl p-1 z-50 max-h-60 overflow-y-auto">
+                  {SPEED_OPTIONS.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => handleSpeedChange(s)}
+                      className={`w-full text-left px-2.5 py-1 rounded-lg text-[11px] transition cursor-pointer ${
+                        playbackSpeed === s ? "bg-white/20 text-white font-bold" : "text-white/75 hover:bg-white/10"
+                      }`}
+                    >
+                      {s}x
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
 
-            {/* Screen Rotation / Aspect Ratio Button (Screenshot 1) */}
-            <button
-              type="button"
-              onClick={handleRotateOrAspect}
-              className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-white/15 text-white/90 hover:text-white transition cursor-pointer"
-              title="Screen Rotation / Aspect Ratio"
-            >
-              <span className="material-symbols-outlined text-xl">
-                {isAspectFill ? "crop_free" : "aspect_ratio"}
-              </span>
-            </button>
-
-            {/* Settings Gear Button (Screenshot 1 & 3) */}
             <div className="relative">
               <button
                 type="button"
@@ -1556,57 +1290,48 @@ export function LectureVideoPlayer({
                   setShowQualityMenu((prev) => !prev);
                   setShowSpeedMenu(false);
                 }}
-                className={`w-8 h-8 rounded-lg flex items-center justify-center hover:bg-white/15 transition cursor-pointer ${
-                  showQualityMenu ? "bg-white/20 text-blue-400" : "text-white/90 hover:text-white"
-                }`}
+                className={`${iconBtn} ${showQualityMenu ? "bg-white/15" : ""}`}
                 title="Video Quality"
               >
-                <span className="material-symbols-outlined text-xl">settings</span>
+                <span className={iconCls}>settings</span>
               </button>
-
-              {/* Quality Popup Menu (Supporting 1080p HD, 720p, 480p, 360p, 240p, 144p, Auto) */}
               {showQualityMenu && (
-                <div className="absolute bottom-11 right-0 w-28 bg-black/90 backdrop-blur-md border border-white/10 rounded-2xl shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-150 max-h-64 overflow-y-auto scrollbar-none">
-                  <div className="flex flex-col space-y-0.5">
-                    {qualityOptions.map((q) => (
-                      <button
-                        key={q}
-                        type="button"
-                        onClick={() => handleQualityChange(q)}
-                        className={`w-full text-left px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer flex items-center justify-between ${
-                          selectedQuality === q
-                            ? "bg-white/20 text-white font-bold"
-                            : "text-white/80 hover:bg-white/10 hover:text-white"
-                        }`}
-                      >
-                        <span>{q}</span>
-                        {q === "1080p" && (
-                          <span className="text-[9px] px-1 py-0.2 rounded bg-blue-500/30 text-blue-300 font-semibold uppercase tracking-wider">
-                            HD
-                          </span>
-                        )}
-                        {q === "4K (2160p)" && (
-                          <span className="text-[9px] px-1 py-0.2 rounded bg-amber-500/30 text-amber-300 font-semibold uppercase tracking-wider">
-                            4K
-                          </span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
+                <div className="absolute bottom-9 right-0 w-24 bg-black/75 backdrop-blur-md border border-white/10 rounded-xl p-1 z-50 max-h-60 overflow-y-auto">
+                  {qualityOptions.map((q) => (
+                    <button
+                      key={q}
+                      type="button"
+                      onClick={() => handleQualityChange(q)}
+                      className={`w-full text-left px-2.5 py-1 rounded-lg text-[11px] transition cursor-pointer flex items-center justify-between ${
+                        selectedQuality === q ? "bg-white/20 text-white font-bold" : "text-white/75 hover:bg-white/10"
+                      }`}
+                    >
+                      <span>{q}</span>
+                      {(q === "1080p" || q === "1440p" || q === "4K (2160p)") && (
+                        <span className="text-[8px] font-bold text-blue-300">HD</span>
+                      )}
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
 
-            {/* Fullscreen Button */}
+            <button
+              type="button"
+              onClick={toggleAspect}
+              className={iconBtn}
+              title={isAspectFill ? "Fit to screen" : "Fill screen"}
+            >
+              <span className={iconCls}>{isAspectFill ? "fit_screen" : "aspect_ratio"}</span>
+            </button>
+
             <button
               type="button"
               onClick={toggleFullscreen}
-              className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-white/15 text-white/90 hover:text-white transition cursor-pointer"
-              title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+              className={iconBtn}
+              title={expanded ? "Exit Fullscreen" : "Fullscreen"}
             >
-              <span className="material-symbols-outlined text-xl">
-                {isFullscreen ? "fullscreen_exit" : "fullscreen"}
-              </span>
+              <span className={iconCls}>{expanded ? "fullscreen_exit" : "fullscreen"}</span>
             </button>
           </div>
         </div>

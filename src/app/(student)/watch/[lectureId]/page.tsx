@@ -92,7 +92,16 @@ export default async function WatchLecturePage({ params }: { params?: { lectureI
       },
     });
 
-    if (schedule?.lecture) {
+    // A recorded class always plays here (the same unified player on every
+    // device), even when it's linked to a Lecture row; only a class with
+    // no recording of its own falls through to that lecture's route below.
+    const sessionHasRecording = Boolean(
+      (schedule?.liveWhiteboardSession?.youtubeArchiveStatus === "COMPLETED" &&
+        schedule.liveWhiteboardSession.youtubeArchiveVideoUrl) ||
+        schedule?.liveWhiteboardSession?.youtubeVideoId ||
+        schedule?.liveWhiteboardSession?.recordingStorageKey
+    );
+    if (schedule?.lecture && !sessionHasRecording) {
       lecture = schedule.lecture;
     } else if (schedule) {
       const { resolveBatchAccess } = await import("@/lib/batch/entitlement");
@@ -174,6 +183,7 @@ export default async function WatchLecturePage({ params }: { params?: { lectureI
         <AtomicVideoPlayer
           lectureId={schedule.id}
           watchContentKey={`schedule:${schedule.id}`}
+          classKind="schedule"
           title={schedule.title}
           subjectTitle={schedule.subject || schedule.chapter?.subject?.title || "Live Class"}
           chapterTitle={schedule.chapter?.title || "Class Recording"}

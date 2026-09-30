@@ -7,6 +7,11 @@ interface VoiceRecorderProps {
   onRecorded: (result: { url: string; durationSec: number }) => void;
   onCancel?: () => void;
   className?: string;
+  /** Copy overrides — defaults are the teacher-side "voice answer" wording. */
+  title?: string;
+  subtitle?: string;
+  attachLabel?: string;
+  successMessage?: string;
 }
 
 function formatTimer(seconds: number): string {
@@ -19,6 +24,10 @@ export function VoiceRecorder({
   onRecorded,
   onCancel,
   className = "",
+  title = "Record Voice Answer",
+  subtitle = "Explain the solution aloud for the student",
+  attachLabel = "Attach Voice Answer",
+  successMessage = "Voice answer uploaded successfully!",
 }: VoiceRecorderProps) {
   const [status, setStatus] = useState<"idle" | "recording" | "preview" | "uploading">("idle");
   const [recordSec, setRecordSec] = useState(0);
@@ -164,7 +173,7 @@ export function VoiceRecorder({
         throw new Error(json.error?.message || "Failed to upload voice recording");
       }
 
-      toast.success("Voice answer uploaded successfully!");
+      toast.success(successMessage);
       onRecorded({
         url: json.data.url,
         durationSec: Math.max(1, recordSec),
@@ -194,8 +203,8 @@ export function VoiceRecorder({
               <span className="material-symbols-outlined text-lg">mic</span>
             </span>
             <div>
-              <p className="font-bold text-slate-800 dark:text-slate-200">Record Voice Answer</p>
-              <p className="text-[11px] text-slate-400">Explain the solution aloud for the student</p>
+              <p className="font-bold text-slate-800 dark:text-slate-200">{title}</p>
+              <p className="text-[11px] text-slate-400">{subtitle}</p>
             </div>
           </div>
           <button
@@ -281,7 +290,7 @@ export function VoiceRecorder({
               className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition active:scale-95"
             >
               <span className="material-symbols-outlined text-base">cloud_upload</span>
-              <span>Attach Voice Answer</span>
+              <span>{attachLabel}</span>
             </button>
           </div>
         </div>

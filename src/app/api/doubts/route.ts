@@ -21,7 +21,10 @@ export async function GET() {
     const doubts = await prisma.doubt.findMany({
       where: { studentId: student.id },
       orderBy: { createdAt: "desc" },
-      include: { resolvedBy: { select: { name: true } } },
+      include: {
+        resolvedBy: { select: { name: true } },
+        batchSchedule: { select: { id: true, title: true } },
+      },
     });
 
     return apiSuccess({ doubts });
@@ -40,13 +43,38 @@ export async function POST(request: Request) {
 
     const body = doubtCreateSchema.parse(await request.json());
 
+    // A recorded-class doubt only links the schedule after confirming
+    // the student can actually watch that batch's classes.
+    let batchScheduleId: string | null = null;
+    if (body.batchScheduleId) {
+      const schedule = await prisma.batchSchedule.findUnique({
+        where: { id: body.batchScheduleId },
+        select: { id: true, batchId: true },
+      });
+      if (schedule) {
+        const { resolveBatchAccess } = await import("@/lib/batch/entitlement");
+        const access = await resolveBatchAccess(session.user.id, schedule.batchId);
+        if (
+          access.status === "ACTIVE_ENROLLMENT" ||
+          access.status === "ACTIVE_SUBSCRIPTION" ||
+          access.status === "ADMIN_GRANTED"
+        ) {
+          batchScheduleId = schedule.id;
+        }
+      }
+    }
+
     const doubt = await prisma.doubt.create({
       data: {
         studentId: student.id,
         subject: body.subject,
-        body: body.body,
+        body: body.body || (body.studentVoiceUrl ? "(Voice doubt)" : "(Photo doubt)"),
         priority: body.priority,
         attachmentUrl: body.attachmentUrl || null,
+        batchScheduleId,
+        videoTimestampSec: batchScheduleId ? body.videoTimestampSec ?? null : null,
+        studentVoiceUrl: body.studentVoiceUrl || null,
+        studentVoiceDurationSec: body.studentVoiceUrl ? body.studentVoiceDurationSec ?? null : null,
       },
     });
 

@@ -205,6 +205,9 @@ export function StudentShell({
   const pathname = usePathname();
   const isExamAttempt = pathname?.includes("/attempt");
   const isLiveClass = pathname?.startsWith("/live-class");
+  // The recorded-class player owns the whole screen (same layout on every
+  // device) instead of sitting boxed inside the portal chrome.
+  const isRecordedPlayer = pathname?.startsWith("/watch");
   const [activeGoal, setActiveGoal] = useState<string>(targetExam || "NEET");
   const [goalModalOpen, setGoalModalOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -229,9 +232,13 @@ export function StudentShell({
     setSidebarOpen(false);
   }, [pathname]);
 
-  if (isExamAttempt || isLiveClass) {
+  if (isExamAttempt || isLiveClass || isRecordedPlayer) {
     return (
-      <div className="fixed inset-0 overflow-y-auto bg-[#0b0d14] overscroll-contain">
+      <div
+        className={`fixed inset-0 overflow-y-auto overscroll-contain ${
+          isRecordedPlayer ? "bg-white dark:bg-slate-950" : "bg-[#0b0d14]"
+        }`}
+      >
         {children}
       </div>
     );
