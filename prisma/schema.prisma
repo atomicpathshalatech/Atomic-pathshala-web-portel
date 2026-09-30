@@ -1753,10 +1753,34 @@ model QuizSession {
 
   whiteboardSession WhiteboardSession @relation(fields: [whiteboardSessionId], references: [id], onDelete: Cascade)
   responses         QuizResponse[]
+  youtubeVotes      QuizYoutubeVote[]
 
   @@index([whiteboardSessionId])
   @@index([status])
   @@map("quiz_sessions")
+}
+
+/// An answer typed in the class's YouTube live chat ("A", "ans B", "yes").
+/// One per YouTube account per poll (the first valid one, typed while the
+/// poll was open). These viewers aren't enrolled students, so they are kept
+/// apart from QuizResponse and shown with a YouTube mark.
+model QuizYoutubeVote {
+  id              String   @id @default(cuid())
+  quizSessionId   String
+  authorChannelId String
+  authorName      String
+  authorPhotoUrl  String?
+  selectedOption  String
+  responseTimeMs  Int
+  isCorrect       Boolean?
+  chatMessageId   String
+  submittedAt     DateTime
+
+  quizSession QuizSession @relation(fields: [quizSessionId], references: [id], onDelete: Cascade)
+
+  @@unique([quizSessionId, authorChannelId])
+  @@index([quizSessionId])
+  @@map("quiz_youtube_votes")
 }
 
 model QuizResponse {

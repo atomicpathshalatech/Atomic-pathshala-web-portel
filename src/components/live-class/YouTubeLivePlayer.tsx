@@ -15,6 +15,8 @@ export type YouTubeLivePlayerProps = {
   onFullscreen?: () => void;
   /** Link to this class on Atomic's own domain (never YouTube) — offered in the ⋮ menu. */
   shareUrl?: string;
+  /** On a live call with the teacher: the stream's (delayed) audio is silenced so the student doesn't hear the teacher twice. */
+  silenced?: boolean;
   className?: string;
   children?: React.ReactNode;
 };
@@ -32,6 +34,7 @@ export function YouTubeLivePlayer({
   onRefresh,
   onFullscreen,
   shareUrl,
+  silenced = false,
   className = "",
   children,
 }: YouTubeLivePlayerProps) {
@@ -402,6 +405,23 @@ export function YouTubeLivePlayer({
     sendYouTubeCommand("setVolume", [100]);
     setIsMuted(false);
   };
+
+  // Call audio comes live over LiveKit; the stream carries the same voice
+  // 5-20 s later, so it is muted for the call and restored afterwards.
+  const mutedBeforeCallRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (silenced) {
+      if (mutedBeforeCallRef.current === null) mutedBeforeCallRef.current = isMuted;
+      sendYouTubeCommand("mute");
+    } else if (mutedBeforeCallRef.current !== null) {
+      if (!mutedBeforeCallRef.current) {
+        sendYouTubeCommand("unMute");
+        sendYouTubeCommand("setVolume", [100]);
+      }
+      mutedBeforeCallRef.current = null;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [silenced, sendYouTubeCommand]);
 
   const toggleMute = () => {
     if (isMuted) {

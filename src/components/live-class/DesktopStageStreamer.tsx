@@ -3,11 +3,14 @@
 import { useEffect, useRef } from "react";
 import { getDesktopBridge } from "@/lib/desktop/bridge";
 import { DesktopClassStreamer } from "@/lib/live-class/desktop-streamer";
+import type { StagePoll } from "@/lib/live-class/stage-compositor";
 
 type StageLook = {
   background: string | null;
   cameraShape?: string | null;
   cameraPosition?: string | null;
+  /** The open poll, drawn into the video (YouTube viewers answer in the chat). */
+  poll?: StagePoll | null;
 };
 
 /**
@@ -49,6 +52,7 @@ export function DesktopStageStreamer({
         cameraShape: lookRef.current.cameraShape === "SQUARE" ? ("SQUARE" as const) : ("CIRCULAR" as const),
         cameraPosition: lookRef.current.cameraPosition || "UPPER_RIGHT",
         showCamera: true,
+        poll: lookRef.current.poll ?? null,
       };
     };
 

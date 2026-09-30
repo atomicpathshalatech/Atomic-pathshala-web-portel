@@ -21,6 +21,7 @@ import {
 import { getPusherClient } from "@/lib/realtime/pusher-client";
 import { sessionChannel, teacherChannel, WB_EVENTS } from "@/lib/realtime/events";
 import { VideoStrip } from "@/components/live-class/VideoStrip";
+import { LeaderboardPopup, YouTubeBadge, isPublishedLeaderboard, type PublishedLeaderboard } from "@/components/live-class/LeaderboardPopup";
 import type { TeacherConnectedStudent } from "@/components/live-class/LiveVideoCallModal";
 import { MessagesPanel } from "@/components/live-class/MessagesPanel";
 import { ParticipantsPanel } from "@/components/live-class/ParticipantsPanel";
@@ -36,7 +37,7 @@ import { extractYouTubeVideoId } from "@/lib/live-class/youtube";
 import { StagePreview } from "@/components/live-class/StagePreview";
 import { getDesktopBridge, type DesktopEncoderStatus } from "@/lib/desktop/bridge";
 import { DesktopClassStreamer } from "@/lib/live-class/desktop-streamer";
-import { formatFreeCameraLayout, isBrandedTemplate } from "@/lib/live-class/stage-compositor";
+import { formatFreeCameraLayout, isBrandedTemplate, toStagePoll, type StagePoll } from "@/lib/live-class/stage-compositor";
 import { loadSavedChroma, saveChroma, type ChromaSettings } from "@/lib/live-class/chroma-key";
 import { ChromaKeyPanel } from "@/components/live-class/ChromaKeyPanel";
 import { BroadcastQuizCanvasOverlay } from "@/components/live-class/BroadcastQuizCanvasOverlay";
@@ -93,6 +94,9 @@ type HandRaiseQueueItem = {
 };
 
 type QuizOption = { key: string; label: string };
+/** Live tally; youtubeResponses = answers typed in the YouTube chat (already inside the counts). */
+type QuizMetricsView = { counts: Record<string, number>; totalResponses: number; youtubeResponses?: number };
+
 type ActiveQuiz = {
   id: string;
   questionText: string | null;
@@ -696,6 +700,8 @@ export function TeacherLiveClassRoom({
   const [shapeSubjectTab, setShapeSubjectTab] = useState<ShapeCategory>("general");
   const [chemSubcategory, setChemSubcategory] = useState<ChemSubcategory>("bonds");
   const [pollOpen, setPollOpen] = useState(false);
+  // The leaderboard the teacher just published — the teacher sees the same popup as the students.
+  const [shownLeaderboard, setShownLeaderboard] = useState<PublishedLeaderboard | null>(null);
   const [pollModalTab, setPollModalTab] = useState<"quiz" | "ranks">("quiz");
   const [pollType, setPollType] = useState<"mcq4" | "yesno">("mcq4");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -854,6 +860,8 @@ export function TeacherLiveClassRoom({
   // app build, a streamer running inside this page.
   const desktopStreamerRef = useRef<{ running: boolean; stop: () => Promise<void>; offscreen?: boolean } | null>(null);
   const stageInfoRef = useRef<{ background?: string; cameraShape?: string | null; cameraPosition?: string | null }>({});
+  // The open poll, drawn into the class video (kept current below).
+  const stagePollRef = useRef<StagePoll | null>(null);
   const [desktopStream, setDesktopStream] = useState<(DesktopEncoderStatus & { warnings?: string[] }) | null>(null);
   const [desktopStreamError, setDesktopStreamError] = useState<string | null>(null);
 
@@ -869,6 +877,7 @@ export function TeacherLiveClassRoom({
       cameraShape: stageInfoRef.current.cameraShape === "SQUARE" ? ("SQUARE" as const) : ("CIRCULAR" as const),
       cameraPosition: stageInfoRef.current.cameraPosition || "UPPER_RIGHT",
       showCamera: true,
+      poll: stagePollRef.current,
     };
   }, []);
 
@@ -1001,9 +1010,10 @@ export function TeacherLiveClassRoom({
   useEffect(() => {
     activeQuizIdRef.current = activeQuiz?.id ?? null;
   }, [activeQuiz]);
-  const [quizMetrics, setQuizMetrics] = useState<{ counts: Record<string, number>; totalResponses: number } | null>(
+  const [quizMetrics, setQuizMetrics] = useState<QuizMetricsView | null>(
     null
   );
+  stagePollRef.current = toStagePoll(activeQuiz, quizMetrics);
   const [quizForm, setQuizForm] = useState({
     isQuickQuiz: true,
     questionText: "",
@@ -1498,9 +1508,9 @@ export function TeacherLiveClassRoom({
 
     teacherCh.bind(
       WB_EVENTS.QUIZ_METRICS,
-      (data: { quizSessionId: string; counts: Record<string, number>; totalResponses: number }) => {
+      (data: { quizSessionId: string; counts: Record<string, number>; totalResponses: number; youtubeResponses?: number }) => {
         if (activeQuizIdRef.current !== data.quizSessionId) return;
-        setQuizMetrics({ counts: data.counts, totalResponses: data.totalResponses });
+        setQuizMetrics({ counts: data.counts, totalResponses: data.totalResponses, youtubeResponses: data.youtubeResponses });
       }
     );
 
@@ -2598,7 +2608,7 @@ export function TeacherLiveClassRoom({
         correctOption: optionToReveal,
       });
       setActiveQuiz(data.quiz);
-      setQuizMetrics({ counts: data.counts, totalResponses: data.totalResponses });
+      setQuizMetrics({ counts: data.counts, totalResponses: data.totalResponses, youtubeResponses: data.youtubeResponses });
       // Previously the reveal-confirmation screen (QuizPanel's
       // activeQuiz.status !== "ACTIVE" branch) stayed up until the teacher
       // manually clicked "Finish & Dismiss" - the poll popup never closed
@@ -2623,6 +2633,36 @@ export function TeacherLiveClassRoom({
       setQuizError(err instanceof Error ? err.message : "Could not reveal the answer.");
     }
   }
+
+  // YouTube viewers answer by typing in the live chat: while a poll is open
+  // (and a few seconds after, for chat delay) the server reads the chat and
+  // the tally here includes those answers.
+  const pollIsOnYouTube = wbSession?.videoTransport === "YOUTUBE" && Boolean(wbSession?.youtubeVideoId);
+  const chatPollId = activeQuiz?.status === "ACTIVE" && pollIsOnYouTube ? activeQuiz.id : null;
+  const chatPollDeadline = activeQuiz?.startedAt ? Date.parse(activeQuiz.startedAt) + activeQuiz.timeLimitSec * 1000 : null;
+  useEffect(() => {
+    if (!chatPollId || !wbSession?.id) return;
+    const sessionId = wbSession.id;
+    let stopped = false;
+    const tick = async () => {
+      if (stopped) return;
+      if (chatPollDeadline && Date.now() > chatPollDeadline + 8000) return;
+      try {
+        const data = await postJson(`/api/whiteboard/sessions/${sessionId}/quiz/${chatPollId}/youtube-votes`, {});
+        if (!stopped && data?.metrics && activeQuizIdRef.current === chatPollId) {
+          setQuizMetrics({ counts: data.metrics.counts, totalResponses: data.metrics.totalResponses, youtubeResponses: data.metrics.youtubeResponses });
+        }
+      } catch {
+        // the in-app tally keeps working; next tick retries
+      }
+    };
+    void tick();
+    const timer = window.setInterval(tick, 4000);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [chatPollId, chatPollDeadline, wbSession?.id]);
 
   async function closeQuiz() {
     if (!wbSession || !activeQuiz) return;
@@ -3521,7 +3561,10 @@ export function TeacherLiveClassRoom({
                 forceLocalOnly={
                   wbSession?.videoTransport === "YOUTUBE" &&
                   Boolean(wbSession?.youtubeVideoId) &&
-                  !handRaiseQueue.some((h) => h.status === "APPROVED")
+                  !handRaiseQueue.some((h) => h.status === "APPROVED") &&
+                  // A teacher-started call needs LiveKit too, or the
+                  // teacher never hears the student.
+                  connectedStudents.length === 0
                 }
               />
 
@@ -3671,7 +3714,10 @@ export function TeacherLiveClassRoom({
                 forceLocalOnly={
                   wbSession?.videoTransport === "YOUTUBE" &&
                   Boolean(wbSession?.youtubeVideoId) &&
-                  !handRaiseQueue.some((h) => h.status === "APPROVED")
+                  !handRaiseQueue.some((h) => h.status === "APPROVED") &&
+                  // A teacher-started call needs LiveKit too, or the
+                  // teacher never hears the student.
+                  connectedStudents.length === 0
                 }
               />
               {/* Float on canvas button */}
@@ -4496,7 +4542,15 @@ export function TeacherLiveClassRoom({
           setPollModalTab={setPollModalTab}
           pollType={pollType}
           setPollType={setPollType}
+          onLeaderboardPublished={(lb) => {
+            setPollOpen(false);
+            setShownLeaderboard(lb);
+          }}
         />
+      )}
+
+      {shownLeaderboard && (
+        <LeaderboardPopup leaderboard={shownLeaderboard} onClose={() => setShownLeaderboard(null)} />
       )}
 
       {/* Pre-Flight Setup Wizard Modal */}
@@ -5529,11 +5583,13 @@ function PollModal({
   setPollModalTab,
   pollType,
   setPollType,
+  onLeaderboardPublished,
 }: {
+  onLeaderboardPublished?: (leaderboard: PublishedLeaderboard) => void;
   onClose: () => void;
   sessionId?: string;
   activeQuiz: ActiveQuiz | null;
-  quizMetrics: { counts: Record<string, number>; totalResponses: number } | null;
+  quizMetrics: QuizMetricsView | null;
   form: {
     isQuickQuiz: boolean;
     questionText: string;
@@ -5571,6 +5627,7 @@ function PollModal({
       accuracyPct: number;
       avgResponseTimeMs: number;
       rank: number;
+      source?: "APP" | "YOUTUBE";
     }>;
     stats: {
       totalParticipants: number;
@@ -5594,6 +5651,7 @@ function PollModal({
       });
       const json = await res.json();
       if (json.success) {
+        if (isPublishedLeaderboard(json.data)) onLeaderboardPublished?.(json.data);
         setPublishSuccessMessage("Leaderboard published to students (30s)!");
         setTimeout(() => setPublishSuccessMessage(null), 6000);
       }
@@ -5779,7 +5837,10 @@ function PollModal({
                             {student.rank}
                           </span>
                           <div className="min-w-0">
-                            <p className="text-xs font-bold text-gray-200 truncate">{student.name}</p>
+                            <p className="text-xs font-bold text-gray-200 truncate flex items-center gap-1.5">
+                              <span className="truncate">{student.name}</span>
+                              {student.source === "YOUTUBE" && <YouTubeBadge />}
+                            </p>
                             <p className="text-[10px] text-gray-400 font-mono">
                               {student.correctCount}/{student.totalAttempted} correct · {(student.avgResponseTimeMs / 1000).toFixed(1)}s avg
                             </p>
@@ -5843,7 +5904,7 @@ function QuizPanel({
   setPollType,
 }: {
   activeQuiz: ActiveQuiz | null;
-  quizMetrics: { counts: Record<string, number>; totalResponses: number } | null;
+  quizMetrics: QuizMetricsView | null;
   form: {
     isQuickQuiz: boolean;
     questionText: string;
@@ -5971,6 +6032,9 @@ function QuizPanel({
 
         <p className="text-[11px] text-gray-400 text-center">
           {quizMetrics?.totalResponses ?? 0} response{(quizMetrics?.totalResponses ?? 0) === 1 ? "" : "s"} collected
+          {(quizMetrics?.youtubeResponses ?? 0) > 0 && (
+            <span className="text-red-400"> · {quizMetrics?.youtubeResponses} from YouTube chat</span>
+          )}
         </p>
 
         {activeQuiz.status === "ACTIVE" ? (

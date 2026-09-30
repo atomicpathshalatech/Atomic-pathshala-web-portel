@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db";
 import { pusherServer, teacherChannel, WB_EVENTS } from "@/lib/realtime/pusher-server";
+import { addCounts, youtubeVoteCounts } from "@/lib/whiteboard/youtube-votes";
 
 /**
  * Aggregates live response counts per option and pushes them to the
@@ -16,7 +17,7 @@ export async function pushQuizMetrics(quizSessionId: string) {
   // ~100s of ms (the same Vercel<->Supabase distance already the dominant
   // cost elsewhere in this app), that was 3x the necessary latency on the
   // hot path for "how fast do the teacher's live vote bars update".
-  const [quiz, responses, totalResponses] = await Promise.all([
+  const [quiz, responses, totalResponses, youtube] = await Promise.all([
     prisma.quizSession.findUnique({ where: { id: quizSessionId } }),
     prisma.quizResponse.groupBy({
       by: ["selectedOption"],
@@ -24,12 +25,14 @@ export async function pushQuizMetrics(quizSessionId: string) {
       _count: { _all: true },
     }),
     prisma.quizResponse.count({ where: { quizSessionId } }),
+    // Answers typed in the YouTube chat (viewers watching on YouTube).
+    youtubeVoteCounts(quizSessionId),
   ]);
   if (!quiz) return null;
 
-  const counts = Object.fromEntries(responses.map((r) => [r.selectedOption, r._count._all]));
+  const counts = addCounts(Object.fromEntries(responses.map((r) => [r.selectedOption, r._count._all])), youtube.counts);
 
-  const payload = { quizSessionId, counts, totalResponses };
+  const payload = { quizSessionId, counts, totalResponses: totalResponses + youtube.total, youtubeResponses: youtube.total };
 
   try {
     await pusherServer.trigger(

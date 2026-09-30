@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { addCounts, youtubeVoteCounts } from "@/lib/whiteboard/youtube-votes";
 import { prisma } from "@/lib/db";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { looksLikeStageToken, verifyStageToken } from "@/lib/live-class/stage-session";
@@ -70,7 +71,12 @@ export async function GET(request: NextRequest, { params }: { params: { schedule
     const activeQuiz = await prisma.quizSession.findFirst({
       where: {
         whiteboardSessionId: wbSession.id,
-        status: { in: ["ACTIVE", "REVEALED"] },
+        // A revealed poll is closed by the teacher's room ~2.5 s later; the
+        // result stays in the video for 10 s so viewers can read it.
+        OR: [
+          { status: { in: ["ACTIVE", "REVEALED"] } },
+          { status: "CLOSED", revealedAt: { gte: new Date(Date.now() - 10_000) } },
+        ],
       },
       orderBy: { startedAt: "desc" },
       select: {
@@ -81,6 +87,7 @@ export async function GET(request: NextRequest, { params }: { params: { schedule
         status: true,
         correctOption: true,
         startedAt: true,
+        revealedAt: true,
       },
     });
 
@@ -94,7 +101,9 @@ export async function GET(request: NextRequest, { params }: { params: { schedule
       responses.forEach((r: { selectedOption: string }) => {
         counts[r.selectedOption] = (counts[r.selectedOption] || 0) + 1;
       });
-      quizMetrics = { counts, totalResponses: responses.length };
+      // Plus answers typed in the YouTube chat.
+      const youtube = await youtubeVoteCounts(activeQuiz.id);
+      quizMetrics = { counts: addCounts(counts, youtube.counts), totalResponses: responses.length + youtube.total };
     }
 
     // Active hand raise — only whether one exists and its type; the student's
@@ -126,10 +135,10 @@ export async function GET(request: NextRequest, { params }: { params: { schedule
             questionText: activeQuiz.questionText,
             options: (activeQuiz.options as any) || [],
             timeLimitSec: activeQuiz.timeLimitSec,
-            status: activeQuiz.status,
+            status: activeQuiz.status === "CLOSED" ? "REVEALED" : activeQuiz.status,
             // The answer key only after the teacher reveals it — students
             // see it at that point anyway.
-            correctOption: activeQuiz.status === "REVEALED" ? activeQuiz.correctOption : null,
+            correctOption: activeQuiz.revealedAt ? activeQuiz.correctOption : null,
             startedAt: activeQuiz.startedAt ? activeQuiz.startedAt.toISOString() : null,
           }
         : null,

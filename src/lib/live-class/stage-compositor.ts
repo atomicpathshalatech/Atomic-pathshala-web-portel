@@ -21,6 +21,7 @@
 
 import { ChromaKeyer, type ChromaSettings } from "@/lib/live-class/chroma-key";
 import { MIC_CONSTRAINTS, createVoiceFilter } from "@/lib/live-class/voice-filter";
+import { chatVoteHint, type PollOption } from "@/lib/live-class/youtube-poll";
 
 export type CameraShape = "CIRCULAR" | "SQUARE";
 
@@ -39,6 +40,189 @@ export interface StageSources {
   showCamera: boolean;
   /** Green/blue screen removal for the camera (teacher cut out over the board). */
   chroma?: ChromaSettings | null;
+  /** The open poll — drawn into the video so YouTube viewers can answer in the chat. */
+  poll?: StagePoll | null;
+}
+
+export interface StagePoll {
+  questionText: string | null;
+  options: PollOption[];
+  status: "ACTIVE" | "REVEALED";
+  /** Epoch ms the poll opened (for the countdown). */
+  startedAtMs: number;
+  timeLimitSec: number;
+  correctOption?: string | null;
+  /** Per-option totals — only after reveal (never leak the vote before). */
+  counts?: Record<string, number> | null;
+  totalResponses?: number | null;
+}
+
+/** Stage poll from the room's quiz state (null when nothing should show). */
+export function toStagePoll(
+  quiz: { questionText: string | null; options: PollOption[]; status: string; startedAt?: string | null; timeLimitSec: number; correctOption?: string | null } | null | undefined,
+  revealed?: { counts?: Record<string, number> | null; totalResponses?: number | null } | null
+): StagePoll | null {
+  if (!quiz || (quiz.status !== "ACTIVE" && quiz.status !== "REVEALED")) return null;
+  const startedAtMs = quiz.startedAt ? Date.parse(quiz.startedAt) : NaN;
+  return {
+    questionText: quiz.questionText,
+    options: quiz.options,
+    status: quiz.status,
+    startedAtMs: Number.isFinite(startedAtMs) ? startedAtMs : Date.now(),
+    timeLimitSec: quiz.timeLimitSec,
+    correctOption: quiz.status === "REVEALED" ? quiz.correctOption ?? null : null,
+    counts: quiz.status === "REVEALED" ? revealed?.counts ?? null : null,
+    totalResponses: quiz.status === "REVEALED" ? revealed?.totalResponses ?? null : null,
+  };
+}
+
+/** Word-wraps `text` to `maxWidth`, at most `maxLines` lines (last one ellipsised). */
+function wrapLines(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, maxLines: number): string[] {
+  const words = text.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let line = "";
+  for (const w of words) {
+    const next = line ? `${line} ${w}` : w;
+    if (ctx.measureText(next).width <= maxWidth || !line) {
+      line = next;
+    } else {
+      lines.push(line);
+      line = w;
+      if (lines.length === maxLines) break;
+    }
+  }
+  if (lines.length < maxLines && line) lines.push(line);
+  if (lines.length === maxLines && words.join(" ") !== lines.join(" ")) {
+    let last = lines[maxLines - 1]!;
+    while (last.length > 1 && ctx.measureText(`${last}…`).width > maxWidth) last = last.slice(0, -1);
+    lines[maxLines - 1] = `${last}…`;
+  }
+  return lines;
+}
+
+/**
+ * The poll card in the class video (bottom-left): question, options, timer
+ * and how to answer from YouTube; after reveal the right answer and the
+ * share of votes per option. Dark glass so it reads on any slide template.
+ * Returns the card rect (tests check it stays inside the frame).
+ */
+export function drawPollCard(ctx: CanvasRenderingContext2D, poll: StagePoll, W: number, H: number, now = Date.now()): Rect {
+  const s = H / 1080;
+  const pad = 22 * s;
+  const w = Math.round(W * 0.3);
+  const rowH = 46 * s;
+  const gap = 8 * s;
+  ctx.save();
+  ctx.font = `700 ${Math.round(26 * s)}px system-ui, sans-serif`;
+  const q = wrapLines(ctx, poll.questionText?.trim() || "Quick poll", w - pad * 2, 3);
+  const qLineH = 34 * s;
+  const headH = 34 * s;
+  const footH = 40 * s;
+  const h = Math.round(pad + headH + q.length * qLineH + 10 * s + poll.options.length * (rowH + gap) + footH + pad * 0.6);
+  const x = Math.round(28 * s);
+  const y = Math.round(H - h - 28 * s);
+
+  ctx.fillStyle = "rgba(10, 12, 22, 0.88)";
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 18 * s);
+  ctx.fill();
+  ctx.lineWidth = 2 * s;
+  ctx.strokeStyle = "rgba(234, 88, 12, 0.9)";
+  ctx.stroke();
+
+  // Header: LIVE POLL + countdown / result.
+  let cy = y + pad;
+  ctx.textBaseline = "top";
+  ctx.textAlign = "left";
+  ctx.font = `800 ${Math.round(20 * s)}px system-ui, sans-serif`;
+  ctx.fillStyle = "#fb923c";
+  ctx.fillText("LIVE POLL", x + pad, cy);
+  ctx.textAlign = "right";
+  if (poll.status === "ACTIVE") {
+    const left = Math.max(0, Math.ceil((poll.startedAtMs + poll.timeLimitSec * 1000 - now) / 1000));
+    ctx.fillStyle = left <= 5 ? "#f87171" : "#e2e8f0";
+    ctx.fillText(left > 0 ? `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}` : "Time up", x + w - pad, cy);
+  } else {
+    ctx.fillStyle = "#4ade80";
+    ctx.fillText("RESULT", x + w - pad, cy);
+  }
+  cy += headH;
+
+  ctx.textAlign = "left";
+  ctx.font = `700 ${Math.round(26 * s)}px system-ui, sans-serif`;
+  ctx.fillStyle = "#ffffff";
+  for (const line of q) {
+    ctx.fillText(line, x + pad, cy);
+    cy += qLineH;
+  }
+  cy += 10 * s;
+
+  const total = poll.totalResponses ?? 0;
+  for (const o of poll.options) {
+    const isRight = poll.status === "REVEALED" && poll.correctOption === o.key;
+    const share = poll.status === "REVEALED" && total > 0 ? (poll.counts?.[o.key] ?? 0) / total : null;
+    const rx = x + pad;
+    const rw = w - pad * 2;
+    ctx.fillStyle = isRight ? "rgba(22, 163, 74, 0.35)" : "rgba(255, 255, 255, 0.08)";
+    ctx.beginPath();
+    ctx.roundRect(rx, cy, rw, rowH, 10 * s);
+    ctx.fill();
+    if (share !== null && share > 0) {
+      ctx.fillStyle = isRight ? "rgba(34, 197, 94, 0.55)" : "rgba(148, 163, 184, 0.35)";
+      ctx.beginPath();
+      ctx.roundRect(rx, cy, Math.max(12 * s, rw * share), rowH, 10 * s);
+      ctx.fill();
+    }
+    if (isRight) {
+      ctx.lineWidth = 2 * s;
+      ctx.strokeStyle = "#22c55e";
+      ctx.beginPath();
+      ctx.roundRect(rx, cy, rw, rowH, 10 * s);
+      ctx.stroke();
+    }
+    // Key chip
+    const chip = 32 * s;
+    ctx.fillStyle = isRight ? "#16a34a" : "#ea580c";
+    ctx.beginPath();
+    ctx.roundRect(rx + 8 * s, cy + (rowH - chip) / 2, chip, chip, 8 * s);
+    ctx.fill();
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = `800 ${Math.round(20 * s)}px system-ui, sans-serif`;
+    ctx.fillText(o.key, rx + 8 * s + chip / 2, cy + rowH / 2 + 1 * s);
+    // Label + percentage
+    ctx.textAlign = "left";
+    ctx.font = `600 ${Math.round(22 * s)}px system-ui, sans-serif`;
+    const pctText = share !== null ? `${Math.round(share * 100)}%` : "";
+    const pctW = pctText ? ctx.measureText(pctText).width + 14 * s : 0;
+    const labelMax = rw - chip - 28 * s - pctW;
+    let label = o.label;
+    while (label.length > 1 && ctx.measureText(label).width > labelMax) label = label.slice(0, -2) + "…";
+    ctx.fillText(label, rx + chip + 20 * s, cy + rowH / 2 + 1 * s);
+    if (pctText) {
+      ctx.textAlign = "right";
+      ctx.font = `800 ${Math.round(22 * s)}px system-ui, sans-serif`;
+      ctx.fillText(pctText, rx + rw - 12 * s, cy + rowH / 2 + 1 * s);
+    }
+    ctx.textBaseline = "top";
+    cy += rowH + gap;
+  }
+
+  // Footer: how to answer (open) / the answer (revealed).
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  ctx.font = `700 ${Math.round(21 * s)}px system-ui, sans-serif`;
+  if (poll.status === "ACTIVE") {
+    ctx.fillStyle = "#fca5a5";
+    ctx.fillText(chatVoteHint(poll.options), x + pad, cy + 6 * s);
+  } else {
+    ctx.fillStyle = "#4ade80";
+    const right = poll.options.find((o) => o.key === poll.correctOption);
+    ctx.fillText(right ? `Answer: ${right.key}${right.label && right.label !== right.key ? ` — ${right.label}` : ""}` : "Poll closed", x + pad, cy + 6 * s);
+  }
+  ctx.restore();
+  return { x, y, w, h };
 }
 
 /** Templates that carry the Atomic Pathshala brand band (logo + name). */
@@ -436,7 +620,7 @@ export class StageCompositor {
           if (keyed) {
             // Keyed teacher: no bubble, no ring — just the person over the board.
             ctx.drawImage(keyed, crop.x, crop.y, crop.w, crop.h, box.x, box.y, box.w, box.h);
-            return this.drawChannelMark();
+            return this.drawOverlays();
           }
         } else if (!this.warnedChroma) {
           this.warnedChroma = true;
@@ -466,6 +650,12 @@ export class StageCompositor {
       ctx.restore();
     }
 
+    this.drawOverlays();
+  }
+
+  /** Everything drawn above the board and camera. */
+  private drawOverlays() {
+    if (this.sources.poll) drawPollCard(this.ctx, this.sources.poll, this.width, this.height);
     this.drawChannelMark();
   }
 

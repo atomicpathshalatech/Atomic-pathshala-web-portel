@@ -7,7 +7,7 @@ import { sessionChannel, teacherChannel, WB_EVENTS } from "@/lib/realtime/events
 import { BroadcastQuizCanvasOverlay, type BroadcastQuizData } from "@/components/live-class/BroadcastQuizCanvasOverlay";
 import { DesktopStageStreamer } from "@/components/live-class/DesktopStageStreamer";
 import { getDesktopBridge } from "@/lib/desktop/bridge";
-import { isBrandedTemplate, parseFreeCameraLayout } from "@/lib/live-class/stage-compositor";
+import { isBrandedTemplate, parseFreeCameraLayout, toStagePoll } from "@/lib/live-class/stage-compositor";
 
 type StageData = {
   sessionId?: string;
@@ -513,19 +513,27 @@ export function BroadcastStage({ scheduleId, token }: { scheduleId: string; toke
       setData((prev) => (prev ? { ...prev, quizMetrics: metricsPayload } : prev));
     });
 
-    channel.bind(WB_EVENTS.QUIZ_REVEALED, (revealPayload: { correctOption: string }) => {
-      setData((prev) =>
-        prev && prev.activeQuiz
-          ? {
-              ...prev,
-              activeQuiz: { ...prev.activeQuiz, status: "REVEALED", correctOption: revealPayload.correctOption },
-            }
-          : prev
-      );
-    });
+    channel.bind(
+      WB_EVENTS.QUIZ_REVEALED,
+      (revealPayload: { correctOption: string; counts?: Record<string, number>; totalResponses?: number }) => {
+        setData((prev) =>
+          prev && prev.activeQuiz
+            ? {
+                ...prev,
+                activeQuiz: { ...prev.activeQuiz, status: "REVEALED", correctOption: revealPayload.correctOption },
+                quizMetrics:
+                  revealPayload.counts && typeof revealPayload.totalResponses === "number"
+                    ? { counts: revealPayload.counts, totalResponses: revealPayload.totalResponses }
+                    : prev.quizMetrics,
+              }
+            : prev
+        );
+      }
+    );
 
     channel.bind(WB_EVENTS.QUIZ_CLOSED, () => {
-      setData((prev) => (prev ? { ...prev, activeQuiz: null, quizMetrics: null } : prev));
+      // A revealed result stays up; the stage poll drops it after 10 s.
+      setData((prev) => (prev && prev.activeQuiz?.status !== "REVEALED" ? { ...prev, activeQuiz: null, quizMetrics: null } : prev));
     });
 
     // Hand Raises in OBS
@@ -612,6 +620,7 @@ export function BroadcastStage({ scheduleId, token }: { scheduleId: string; toke
             background: data.page?.background || (data.classroomTheme === "DARK" ? "atomic_dark" : "atomic_white"),
             cameraShape: data.cameraShape,
             cameraPosition: data.cameraPosition,
+            poll: toStagePoll(data.activeQuiz, data.quizMetrics),
           }}
         />
       )}

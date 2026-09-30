@@ -1,33 +1,21 @@
 import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/db";
 import { UnauthorizedError, ForbiddenError } from "@/lib/rbac/guard";
 import { resolveWhiteboardAccess } from "@/lib/whiteboard/access";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { buildQuizLeaderboard, type LeaderboardEntry } from "@/lib/whiteboard/quiz-leaderboard";
 
-export interface StudentLeaderboardEntry {
-  studentId: string;
-  name: string;
-  photoUrl: string | null;
-  totalAttempted: number;
-  correctCount: number;
-  accuracyPct: number;
-  avgResponseTimeMs: number;
-  rank: number;
-}
+export type StudentLeaderboardEntry = LeaderboardEntry;
 
 /**
  * GET /api/whiteboard/sessions/[id]/quiz/leaderboard
  * Query Params: ?scope=session (default) | chapter
- * Returns real-time ranked student leaderboard for either the current live session
- * or the entire chapter progression (Batch + Chapter + Lecture + Poll relation).
- * Ranking formula: Accuracy % primary -> Correct Count -> Avg Response Time (ms) tie-breaker.
+ * Real-time ranked leaderboard for the current live session or the whole
+ * chapter (Batch + Chapter). Includes answers typed in the YouTube chat.
+ * Ranking: accuracy % → correct count → avg response time → attempts.
  */
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
@@ -35,163 +23,10 @@ export async function GET(
     const access = await resolveWhiteboardAccess(session.user.id, params.id);
     if (!access) throw new ForbiddenError();
 
-    const searchParams = request.nextUrl.searchParams;
-    const scope = searchParams.get("scope") === "chapter" ? "chapter" : "session";
-
-    const wbSession = await prisma.whiteboardSession.findUnique({
-      where: { id: params.id },
-      include: {
-        batchSchedule: {
-          select: {
-            id: true,
-            batchId: true,
-            chapterId: true,
-            lectureId: true,
-          },
-        },
-      },
-    });
-
-    if (!wbSession) return apiError("Whiteboard session not found", 404);
-
-    let sessionIds: string[] = [params.id];
-
-    if (scope === "chapter" && wbSession.batchSchedule?.chapterId) {
-      const chapterSchedules = await prisma.batchSchedule.findMany({
-        where: {
-          chapterId: wbSession.batchSchedule.chapterId,
-          batchId: wbSession.batchSchedule.batchId,
-        },
-        select: {
-          liveWhiteboardSession: {
-            select: { id: true },
-          },
-        },
-      });
-
-      const ids = chapterSchedules
-        .map((s) => s.liveWhiteboardSession?.id)
-        .filter((id): id is string => Boolean(id));
-
-      if (ids.length > 0) {
-        sessionIds = Array.from(new Set([...sessionIds, ...ids]));
-      }
-    }
-
-    const quizzes = await prisma.quizSession.findMany({
-      where: {
-        whiteboardSessionId: { in: sessionIds },
-      },
-      include: {
-        responses: {
-          include: {
-            student: {
-              include: {
-                user: {
-                  select: {
-                    name: true,
-                    photoUrl: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-      orderBy: { startedAt: "asc" },
-    });
-
-    const studentMap: Record<
-      string,
-      {
-        studentId: string;
-        name: string;
-        photoUrl: string | null;
-        totalAttempted: number;
-        correctCount: number;
-        totalResponseTimeMs: number;
-      }
-    > = {};
-
-    for (const quiz of quizzes) {
-      for (const resp of quiz.responses) {
-        const studentId = resp.studentId;
-        const studentName = resp.student.user?.name || `Student ${resp.student.studentIdCode || ""}`.trim() || "Student";
-        const photoUrl = resp.student.user?.photoUrl || null;
-
-        if (!studentMap[studentId]) {
-          studentMap[studentId] = {
-            studentId,
-            name: studentName,
-            photoUrl,
-            totalAttempted: 0,
-            correctCount: 0,
-            totalResponseTimeMs: 0,
-          };
-        }
-
-        const entry = studentMap[studentId];
-        entry.totalAttempted += 1;
-        entry.totalResponseTimeMs += Math.max(0, resp.responseTimeMs || 0);
-
-        const isCorrect =
-          resp.isCorrect === true ||
-          (Boolean(quiz.correctOption) && resp.selectedOption === quiz.correctOption);
-
-        if (isCorrect) {
-          entry.correctCount += 1;
-        }
-      }
-    }
-
-    const studentList = Object.values(studentMap).map((s) => {
-      const accuracyPct = s.totalAttempted > 0 ? Math.round((s.correctCount / s.totalAttempted) * 100) : 0;
-      const avgResponseTimeMs = s.totalAttempted > 0 ? Math.round(s.totalResponseTimeMs / s.totalAttempted) : 0;
-      return {
-        studentId: s.studentId,
-        name: s.name,
-        photoUrl: s.photoUrl,
-        totalAttempted: s.totalAttempted,
-        correctCount: s.correctCount,
-        accuracyPct,
-        avgResponseTimeMs,
-        rank: 0,
-      };
-    });
-
-    // Ranking algorithm:
-    // 1. Accuracy % (Descending)
-    // 2. Correct count (Descending)
-    // 3. Average response time (Ascending, faster response wins)
-    // 4. Total attempted (Descending)
-    studentList.sort((a, b) => {
-      if (b.accuracyPct !== a.accuracyPct) return b.accuracyPct - a.accuracyPct;
-      if (b.correctCount !== a.correctCount) return b.correctCount - a.correctCount;
-      if (a.avgResponseTimeMs !== b.avgResponseTimeMs) return a.avgResponseTimeMs - b.avgResponseTimeMs;
-      return b.totalAttempted - a.totalAttempted;
-    });
-
-    const rankings: StudentLeaderboardEntry[] = studentList.map((entry, index) => ({
-      ...entry,
-      rank: index + 1,
-    }));
-
-    const totalParticipants = rankings.length;
-    const totalPolls = quizzes.length;
-    const averageAccuracy =
-      totalParticipants > 0
-        ? Math.round(rankings.reduce((sum, r) => sum + r.accuracyPct, 0) / totalParticipants)
-        : 0;
-
-    return apiSuccess({
-      scope,
-      stats: {
-        totalParticipants,
-        totalPolls,
-        averageAccuracy,
-      },
-      rankings,
-    });
+    const scope = request.nextUrl.searchParams.get("scope") === "chapter" ? "chapter" : "session";
+    const board = await buildQuizLeaderboard(params.id, scope);
+    if (!board) return apiError("Whiteboard session not found", 404);
+    return apiSuccess(board);
   } catch (error) {
     return handleApiError(error);
   }
@@ -199,13 +34,10 @@ export async function GET(
 
 /**
  * POST /api/whiteboard/sessions/[id]/quiz/leaderboard
- * Teacher publishes the current real-time ranked leaderboard to all connected students.
- * Broadcasts via Pusher with a 30-second display timer and dismiss button.
+ * Teacher publishes the current leaderboard to everyone in the class
+ * (top 10, shown as a popup with a timer).
  */
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
@@ -217,159 +49,16 @@ export async function POST(
     const scope = body?.scope === "chapter" ? "chapter" : "session";
     const durationSec = typeof body?.durationSec === "number" && body.durationSec > 0 ? body.durationSec : 30;
 
-    const wbSession = await prisma.whiteboardSession.findUnique({
-      where: { id: params.id },
-      include: {
-        batchSchedule: {
-          select: {
-            id: true,
-            batchId: true,
-            chapterId: true,
-            lectureId: true,
-          },
-        },
-      },
-    });
-
-    if (!wbSession) return apiError("Whiteboard session not found", 404);
-
-    let sessionIds: string[] = [params.id];
-
-    if (scope === "chapter" && wbSession.batchSchedule?.chapterId) {
-      const chapterSchedules = await prisma.batchSchedule.findMany({
-        where: {
-          chapterId: wbSession.batchSchedule.chapterId,
-          batchId: wbSession.batchSchedule.batchId,
-        },
-        select: {
-          liveWhiteboardSession: {
-            select: { id: true },
-          },
-        },
-      });
-
-      const ids = chapterSchedules
-        .map((s) => s.liveWhiteboardSession?.id)
-        .filter((id): id is string => Boolean(id));
-
-      if (ids.length > 0) {
-        sessionIds = Array.from(new Set([...sessionIds, ...ids]));
-      }
-    }
-
-    const quizzes = await prisma.quizSession.findMany({
-      where: {
-        whiteboardSessionId: { in: sessionIds },
-      },
-      include: {
-        responses: {
-          include: {
-            student: {
-              include: {
-                user: {
-                  select: {
-                    name: true,
-                    photoUrl: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-      orderBy: { startedAt: "asc" },
-    });
-
-    const studentMap: Record<
-      string,
-      {
-        studentId: string;
-        name: string;
-        photoUrl: string | null;
-        totalAttempted: number;
-        correctCount: number;
-        totalResponseTimeMs: number;
-      }
-    > = {};
-
-    for (const quiz of quizzes) {
-      for (const resp of quiz.responses) {
-        const studentId = resp.studentId;
-        const studentName = resp.student.user?.name || `Student ${resp.student.studentIdCode || ""}`.trim() || "Student";
-        const photoUrl = resp.student.user?.photoUrl || null;
-
-        if (!studentMap[studentId]) {
-          studentMap[studentId] = {
-            studentId,
-            name: studentName,
-            photoUrl,
-            totalAttempted: 0,
-            correctCount: 0,
-            totalResponseTimeMs: 0,
-          };
-        }
-
-        const entry = studentMap[studentId];
-        entry.totalAttempted += 1;
-        entry.totalResponseTimeMs += Math.max(0, resp.responseTimeMs || 0);
-
-        const isCorrect =
-          resp.isCorrect === true ||
-          (Boolean(quiz.correctOption) && resp.selectedOption === quiz.correctOption);
-
-        if (isCorrect) {
-          entry.correctCount += 1;
-        }
-      }
-    }
-
-    const studentList = Object.values(studentMap).map((s) => {
-      const accuracyPct = s.totalAttempted > 0 ? Math.round((s.correctCount / s.totalAttempted) * 100) : 0;
-      const avgResponseTimeMs = s.totalAttempted > 0 ? Math.round(s.totalResponseTimeMs / s.totalAttempted) : 0;
-      return {
-        studentId: s.studentId,
-        name: s.name,
-        photoUrl: s.photoUrl,
-        totalAttempted: s.totalAttempted,
-        correctCount: s.correctCount,
-        accuracyPct,
-        avgResponseTimeMs,
-        rank: 0,
-      };
-    });
-
-    studentList.sort((a, b) => {
-      if (b.accuracyPct !== a.accuracyPct) return b.accuracyPct - a.accuracyPct;
-      if (b.correctCount !== a.correctCount) return b.correctCount - a.correctCount;
-      if (a.avgResponseTimeMs !== b.avgResponseTimeMs) return a.avgResponseTimeMs - b.avgResponseTimeMs;
-      return b.totalAttempted - a.totalAttempted;
-    });
-
-    const rankings: StudentLeaderboardEntry[] = studentList.map((entry, index) => ({
-      ...entry,
-      rank: index + 1,
-    }));
-
-    const totalParticipants = rankings.length;
-    const totalPolls = quizzes.length;
-    const averageAccuracy =
-      totalParticipants > 0
-        ? Math.round(rankings.reduce((sum, r) => sum + r.accuracyPct, 0) / totalParticipants)
-        : 0;
+    const board = await buildQuizLeaderboard(params.id, scope);
+    if (!board) return apiError("Whiteboard session not found", 404);
 
     const payload = {
-      scope,
-      stats: {
-        totalParticipants,
-        totalPolls,
-        averageAccuracy,
-      },
-      rankings: rankings.slice(0, 10), // Top 10 ranks for students
+      ...board,
+      rankings: board.rankings.slice(0, 10),
       durationSec,
       publishedAt: new Date().toISOString(),
     };
 
-    // Broadcast to all students in the class
     try {
       const { pusherServer, sessionChannel, WB_EVENTS } = await import("@/lib/realtime/pusher-server");
       await pusherServer.trigger(sessionChannel(params.id), WB_EVENTS.QUIZ_LEADERBOARD_PUBLISHED, payload);
@@ -385,4 +74,3 @@ export async function POST(
     return handleApiError(error);
   }
 }
-

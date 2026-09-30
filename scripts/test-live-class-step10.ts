@@ -177,6 +177,76 @@ async function run() {
   const startSrc = read("src/app/api/team/live-class/[scheduleId]/start/route.ts");
   assert(startSrc.includes("!isNewOccurrence && !schedule.liveWhiteboardSession?.actualStartedAt && { scheduledStart, scheduledEnd }"), "First Start takes the room's times from the schedule as it is now");
 
+  // ---- 6. Calls + leaderboard (test class 5 feedback) ----
+  const studentRoom = read("src/components/live-class/StudentLiveClassRoom.tsx");
+  const desktopAt = studentRoom.indexOf("{isDesktopViewport && (");
+  const mobileAt = studentRoom.indexOf("{!isDesktopViewport && (");
+  const strips = [...studentRoom.matchAll(/<VideoStrip\s/g)].map((m) => m.index!);
+  assert(desktopAt > 0 && mobileAt > desktopAt, "Student room mounts only one layout (desktop OR phone)");
+  assert(strips.length > 0 && strips.every((i) => i > desktopAt), "Every call connection (VideoStrip) sits inside a layout that is mounted alone — no second LiveKit connection with the same identity");
+  assert((studentRoom.match(/silenced=\{isApprovedSpeaker \|\| teacherAudioConnected \|\| teacherVideoConnected\}/g) ?? []).length === 2, "The stream's delayed audio is silenced during a call (no double teacher voice)");
+  const teacherRoom = read("src/components/live-class/TeacherLiveClassRoom.tsx");
+  assert((teacherRoom.match(/connectedStudents\.length === 0\s*\n?\s*\}/g) ?? []).length === 2, "A teacher-started call also joins LiveKit (teacher can hear the student)");
+  assert(teacherRoom.includes("<LeaderboardPopup") && studentRoom.includes("<LeaderboardPopup"), "Published leaderboard pops up for the teacher and the students");
+  assert(studentRoom.includes("secondaryChannel?.bind(WB_EVENTS.QUIZ_LEADERBOARD_PUBLISHED"), "Student hears a leaderboard publish on both channels");
+  assert(read("src/components/live-class/LeaderboardPopup.tsx").includes("Array.isArray((data as PublishedLeaderboard).rankings)"), "Leaderboard popup only opens for a real rankings payload");
+
+  // ---- 7. Poll answers typed in the YouTube chat ----
+  const { parseChatVote, collectChatVotes, chatVoteHint } = await import("../src/lib/live-class/youtube-poll");
+  const abcd = ["A", "B", "C", "D"].map((key) => ({ key, label: `Option ${key}` }));
+  const yesNo = [{ key: "A", label: "YES" }, { key: "B", label: "NO" }];
+  const asVote = (t: string, o = abcd) => parseChatVote(t, o);
+  assert(asVote("B") === "B" && asVote("b") === "B" && asVote(" (c) ") === "C" && asVote("D.") === "D" && asVote("[a]") === "A", "Chat vote: a bare letter in any case / brackets counts");
+  assert(asVote("ans B") === "B" && asVote("Answer: c") === "C" && asVote("option d") === "D" && asVote("jawab a") === "A", "Chat vote: 'ans B', 'Answer: c', 'option d', 'jawab a'");
+  assert(asVote("E") === null && asVote("I think it's B") === null && asVote("bhai A ya B?") === null && asVote("") === null && asVote("abc") === null, "Chat vote: sentences, unknown letters and chatter don't count");
+  assert(asVote("yes", yesNo) === "A" && asVote("Haan", yesNo) === "A" && asVote("nahi", yesNo) === "B" && asVote("NO!", yesNo) === "B" && asVote("b", yesNo) === "B", "Chat vote: YES/NO poll understands yes/haan/no/nahi and the letters");
+  assert(asVote("yes") === null, "Chat vote: 'yes' is not a vote on an A-D poll");
+  const t0 = new Date("2026-09-30T10:00:00Z");
+  const msg = (id: string, ch: string, text: string, secs: number) => ({ id, authorChannelId: ch, authorName: `Viewer ${ch}`, authorPhotoUrl: null, messageText: text, publishedAt: new Date(t0.getTime() + secs * 1000).toISOString() });
+  const votes = collectChatVotes(
+    [
+      msg("m1", "c1", "hello sir", 2),
+      msg("m2", "c1", "B", 5), // first valid answer of c1
+      msg("m3", "c1", "C", 7), // changing the answer doesn't count
+      msg("m4", "c2", "a", -3), // before the poll opened
+      msg("m5", "c2", "D", 10),
+      msg("m6", "c3", "A", 33), // 30 s poll + 3 s grace → still counts
+      msg("m7", "c4", "A", 40), // too late
+    ],
+    { options: abcd, startedAt: t0, timeLimitSec: 30 }
+  );
+  assert(votes.map((v) => `${v.authorChannelId}:${v.selectedOption}`).join(",") === "c1:B,c2:D,c3:A", `Chat votes: one per account, first answer, only while open (${votes.map((v) => v.authorChannelId + ":" + v.selectedOption).join(",")})`);
+  assert(votes[0]!.responseTimeMs === 5000, "Chat vote response time counts from the poll start");
+  assert(chatVoteHint(abcd) === "Type A, B, C or D in the YouTube chat" && chatVoteHint(yesNo) === "Type YES or NO in the YouTube chat", "Video hint tells YouTube viewers what to type");
+
+  const { toStagePoll } = await import("../src/lib/live-class/stage-compositor");
+  const openPoll = toStagePoll({ questionText: "Q?", options: abcd, status: "ACTIVE", startedAt: t0.toISOString(), timeLimitSec: 30, correctOption: "B" }, { counts: { B: 3 }, totalResponses: 3 });
+  assert(openPoll !== null && openPoll.correctOption === null && openPoll.counts === null, "Open poll in the video never shows the answer or the vote split");
+  const shownResult = toStagePoll({ questionText: "Q?", options: abcd, status: "REVEALED", startedAt: t0.toISOString(), timeLimitSec: 30, correctOption: "B" }, { counts: { B: 3 }, totalResponses: 3 });
+  assert(shownResult?.correctOption === "B" && shownResult.counts?.B === 3, "Revealed poll in the video shows the answer and the split");
+  assert(toStagePoll({ questionText: null, options: abcd, status: "CLOSED", timeLimitSec: 30 }) === null, "Closed poll leaves the video");
+
+  // DB: YouTube answers are counted, marked and ranked (with a YouTube mark).
+  const quiz = await prisma.quizSession.create({
+    data: { whiteboardSessionId: opened.wb.id, options: abcd, correctOption: "B", timeLimitSec: 30, createdById: user.id, startedAt: t0 },
+  });
+  await prisma.quizYoutubeVote.createMany({
+    data: votes.map((v) => ({ ...v, quizSessionId: quiz.id })),
+  });
+  const dup = await prisma.quizYoutubeVote.createMany({ data: votes.map((v) => ({ ...v, quizSessionId: quiz.id })), skipDuplicates: true });
+  assert(dup.count === 0, "Reading the same chat again adds no duplicate votes");
+  const yv = await import("../src/lib/whiteboard/youtube-votes");
+  const tally = await yv.youtubeVoteCounts(quiz.id);
+  assert(tally.total === 3 && tally.counts.B === 1 && tally.counts.D === 1 && tally.counts.A === 1, "YouTube answers are tallied per option");
+  await yv.markYoutubeVotes(quiz.id, "B");
+  const marked = await prisma.quizYoutubeVote.findMany({ where: { quizSessionId: quiz.id } });
+  assert(marked.find((v) => v.authorChannelId === "c1")?.isCorrect === true && marked.filter((v) => v.isCorrect === false).length === 2, "Reveal marks YouTube answers right/wrong");
+  const { buildQuizLeaderboard } = await import("../src/lib/whiteboard/quiz-leaderboard");
+  const board = await buildQuizLeaderboard(opened.wb.id, "session");
+  assert(board?.rankings[0]?.studentId === "yt:c1" && board.rankings[0].source === "YOUTUBE" && board.rankings[0].correctCount === 1, "Leaderboard ranks YouTube chat answers, marked as YouTube");
+  assert(board?.stats.totalParticipants === 3 && board.stats.totalPolls === 1, "Leaderboard stats include YouTube participants");
+  assert(yv.addCounts({ A: 2, B: 1 }, { B: 4, C: 1 }).B === 5, "App + YouTube counts add up");
+
   await prisma.$disconnect();
 }
 

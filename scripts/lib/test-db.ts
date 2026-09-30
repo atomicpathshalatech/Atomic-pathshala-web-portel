@@ -9,7 +9,7 @@
  * The target database is WIPED by prepareTestDatabase().
  */
 import { execSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -86,10 +86,14 @@ export function prepareTestDatabase(testUrl: string, parsed: URL) {
     writeFileSync(baseSchema, execSync(`git show ${baseRef}:prisma/schema.prisma`, { encoding: "utf8" }));
     console.log(`Rebuilding ${parsed.pathname.slice(1)} from ${baseRef}'s schema, then applying the redesign migration…`);
     execSync(`npx prisma db push --force-reset --skip-generate --accept-data-loss --schema "${baseSchema}"`, { stdio: "inherit", env });
-    execSync(
-      `npx prisma db execute --url "${testUrl}" --file prisma/migrations/20260927120000_live_session_youtube_delivery/migration.sql`,
-      { stdio: "inherit", env }
-    );
+    // The redesign migration and every migration after it, in order — what
+    // `prisma migrate deploy` applies in prod.
+    const later = readdirSync("prisma/migrations")
+      .filter((m) => /^\d{14}_/.test(m) && m >= "20260927120000")
+      .sort();
+    for (const m of later) {
+      execSync(`npx prisma db execute --url "${testUrl}" --file prisma/migrations/${m}/migration.sql`, { stdio: "inherit", env });
+    }
   } else {
     console.log(`Resetting ${parsed.pathname.slice(1)} on ${parsed.hostname} and applying all migrations…`);
     execSync("npx prisma migrate reset --force --skip-seed --skip-generate", { stdio: "inherit", env });

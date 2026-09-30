@@ -6,6 +6,7 @@ import { UnauthorizedError, ForbiddenError } from "@/lib/rbac/guard";
 import { resolveWhiteboardAccess } from "@/lib/whiteboard/access";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { pusherServer, sessionChannel, WB_EVENTS } from "@/lib/realtime/pusher-server";
+import { addCounts, markYoutubeVotes, syncYoutubeVotes, youtubeVoteCounts } from "@/lib/whiteboard/youtube-votes";
 
 /** Teacher reveals the correct answer + final tally to everyone in the session. */
 export async function POST(
@@ -33,6 +34,9 @@ export async function POST(
 
     const effectiveCorrectOption = body?.correctOption || quiz.correctOption;
 
+    // Last read of the YouTube chat, so answers typed in the final seconds count.
+    await syncYoutubeVotes(quiz.id, { force: true });
+
     const updated = await prisma.quizSession.update({
       where: { id: quiz.id },
       data: {
@@ -44,6 +48,7 @@ export async function POST(
 
     if (effectiveCorrectOption) {
       await prisma.$executeRaw`UPDATE quiz_responses SET "isCorrect" = ("selectedOption" = ${effectiveCorrectOption}) WHERE "quizSessionId" = ${quiz.id}`;
+      await markYoutubeVotes(quiz.id, effectiveCorrectOption);
     }
 
     // Independent queries, run in parallel rather than three sequential
@@ -51,7 +56,7 @@ export async function POST(
     // quiz.ts: this is on the path from "teacher clicks Reveal" to students
     // actually seeing the answer, so every avoidable round-trip here is
     // latency the whole class sits through together.
-    const [grouped, totalResponses, correctCount] = await Promise.all([
+    const [grouped, appResponses, appCorrect, youtube] = await Promise.all([
       prisma.quizResponse.groupBy({
         by: ["selectedOption"],
         where: { quizSessionId: quiz.id },
@@ -63,8 +68,11 @@ export async function POST(
             where: { quizSessionId: quiz.id, selectedOption: effectiveCorrectOption },
           })
         : Promise.resolve(null),
+      youtubeVoteCounts(quiz.id),
     ]);
-    const counts = Object.fromEntries(grouped.map((r) => [r.selectedOption, r._count._all]));
+    const counts = addCounts(Object.fromEntries(grouped.map((r) => [r.selectedOption, r._count._all])), youtube.counts);
+    const totalResponses = appResponses + youtube.total;
+    const correctCount = appCorrect === null ? null : appCorrect + (youtube.counts[effectiveCorrectOption] ?? 0);
 
     // Broadcast first, audit log fire-and-forget after — same reordering
     // and reasoning as the quiz-launch route: an awaited audit-log write
@@ -77,6 +85,7 @@ export async function POST(
         counts,
         totalResponses,
         correctCount,
+        youtubeResponses: youtube.total,
       });
     } catch (err) {
       console.error("[pusher_trigger_error]", err);

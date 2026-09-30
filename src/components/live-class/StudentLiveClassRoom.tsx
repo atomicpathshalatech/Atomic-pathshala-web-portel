@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { getPusherClient } from "@/lib/realtime/pusher-client";
 import { sessionChannel, WB_EVENTS } from "@/lib/realtime/events";
@@ -8,6 +8,7 @@ import { STUDENT_HEARTBEAT_MS } from "@/lib/whiteboard/constants";
 import { CanvasEngine, type StrokeObject } from "@/lib/canvas/canvas-engine";
 import { MessagesPanel } from "@/components/live-class/MessagesPanel";
 import { YouTubeLivePlayer } from "@/components/live-class/YouTubeLivePlayer";
+import { LeaderboardPopup, isPublishedLeaderboard, type PublishedLeaderboard } from "./LeaderboardPopup";
 import { VideoPollOverlay, type VideoPollData } from "@/components/live-class/VideoPollOverlay";
 import { VideoStrip } from "@/components/live-class/VideoStrip";
 import { RecordingPlayer } from "@/components/live-class/RecordingPlayer";
@@ -615,46 +616,9 @@ export function StudentLiveClassRoom({
   const [quizError, setQuizError] = useState<string | null>(null);
   const [quizDismissed, setQuizDismissed] = useState(false);
 
-  // Published Quiz Leaderboard from Teacher (30s auto-dismiss timer)
-  const [publishedLeaderboard, setPublishedLeaderboard] = useState<{
-    rankings: Array<{
-      studentId: string;
-      name: string;
-      photoUrl: string | null;
-      totalAttempted: number;
-      correctCount: number;
-      accuracyPct: number;
-      avgResponseTimeMs: number;
-      rank: number;
-    }>;
-    stats?: {
-      totalParticipants: number;
-      totalPolls: number;
-      averageAccuracy: number;
-    };
-    scope?: string;
-    durationSec?: number;
-    publishedAt?: string;
-  } | null>(null);
-  const [leaderboardCountdown, setLeaderboardCountdown] = useState<number>(30);
-
-  useEffect(() => {
-    if (!publishedLeaderboard) return;
-    if (leaderboardCountdown <= 0) {
-      setPublishedLeaderboard(null);
-      return;
-    }
-    const timer = setInterval(() => {
-      setLeaderboardCountdown((prev) => {
-        if (prev <= 1) {
-          setPublishedLeaderboard(null);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [publishedLeaderboard, leaderboardCountdown]);
+  // Quiz leaderboard published by the teacher (the popup closes itself).
+  const [publishedLeaderboard, setPublishedLeaderboard] = useState<PublishedLeaderboard | null>(null);
+  const closeLeaderboard = useCallback(() => setPublishedLeaderboard(null), []);
 
   // Auto-dismiss quiz 5 seconds after results are revealed or closed
   useEffect(() => {
@@ -797,7 +761,11 @@ export function StudentLiveClassRoom({
   // same as any normal scrollable page, with nothing else on screen moving.
 
   // Exactly one <VideoStrip> must ever be mounted per student
-  const [isDesktopViewport, setIsDesktopViewport] = useState(true);
+  // Client-only component (ssr: false), so the first render already picks
+  // the right layout — a phone never mounts the desktop one, even briefly.
+  const [isDesktopViewport, setIsDesktopViewport] = useState(
+    () => typeof window === "undefined" || window.matchMedia("(min-width: 1024px)").matches
+  );
   useEffect(() => {
     const mql = window.matchMedia("(min-width: 1024px)");
     setIsDesktopViewport(mql.matches);
@@ -1169,12 +1137,14 @@ export function StudentLiveClassRoom({
       setQuiz((prev) => (prev && prev.id === data.id ? null : prev));
     });
 
-    channel.bind(WB_EVENTS.QUIZ_LEADERBOARD_PUBLISHED, (data: any) => {
-      if (data?.rankings && Array.isArray(data.rankings)) {
-        setPublishedLeaderboard(data);
-        setLeaderboardCountdown(typeof data.durationSec === "number" ? data.durationSec : 30);
-      }
-    });
+    // Bound on both channels: the teacher publishes on the whiteboard
+    // session id, which a student who joined early may only know as the
+    // schedule id.
+    const handleLeaderboard = (data: unknown) => {
+      if (isPublishedLeaderboard(data)) setPublishedLeaderboard({ ...data });
+    };
+    channel.bind(WB_EVENTS.QUIZ_LEADERBOARD_PUBLISHED, handleLeaderboard);
+    secondaryChannel?.bind(WB_EVENTS.QUIZ_LEADERBOARD_PUBLISHED, handleLeaderboard);
 
     // Handle teacher approving speaking permission for this student
     channel.bind(
@@ -1772,6 +1742,12 @@ export function StudentLiveClassRoom({
       {/* ========================================================================= */}
       {/* DESKTOP & LAPTOP VIEW (lg and up): Fixed 2-Column Split */}
       {/* ========================================================================= */}
+      {/* Only ONE layout is mounted. The other used to stay mounted but
+          CSS-hidden, so on a phone the hidden desktop sidebar opened a second
+          LiveKit connection with the same identity during a hand-raise call
+          (the two kicked each other off: calls wouldn't connect or end
+          cleanly) and a second YouTube player downloaded the stream. */}
+      {isDesktopViewport && (
       <div className="hidden lg:flex flex-1 min-h-0 flex-row p-3 gap-3 overflow-hidden bg-[#0b0d14]">
         {/* Left Main Stage (Whiteboard Canvas / YouTube Player + Overlaid Quiz Drawer) */}
         <div className="flex-1 min-w-0 h-full flex flex-col bg-[#10121d] rounded-2xl border border-slate-800/80 overflow-hidden relative shadow-2xl">
@@ -1851,6 +1827,7 @@ export function StudentLiveClassRoom({
             {isYouTube && activeViewMode === "STREAM" ? (
               <div className="w-full h-full max-w-full max-h-full aspect-video flex items-center justify-center">
                 <YouTubeLivePlayer
+                silenced={isApprovedSpeaker || teacherAudioConnected || teacherVideoConnected}
                 shareUrl={typeof window !== "undefined" ? `${window.location.origin}/live-class/${batchScheduleId}` : undefined}
                   youtubeVideoId={wbSession?.youtubeVideoId ?? null}
                   title={scheduleTitle}
@@ -1957,6 +1934,7 @@ export function StudentLiveClassRoom({
           />
         </aside>
       </div>
+      )}
 
       {/* ========================================================================= */}
       {/* MOBILE & TABLET VIEW (< lg): Top Video/Canvas Stage + Bottom Tabbed Console */}
@@ -1964,12 +1942,14 @@ export function StudentLiveClassRoom({
       {/* ========================================================================= */}
       {/* MOBILE & TABLET VIEW (< lg): Fullscreen Landscape / Tabbed Portrait View */}
       {/* ========================================================================= */}
+      {!isDesktopViewport && (
       <div className="lg:hidden flex-1 min-h-0 flex flex-col landscape:flex-row overflow-hidden bg-[#0b0d14] relative">
         {/* Mobile Media Area: In portrait takes top 40-45dvh; in LANDSCAPE takes 100% FULL SCREEN */}
         <div className="w-full aspect-video max-h-[45vh] landscape:w-auto landscape:flex-1 landscape:min-w-0 landscape:h-full landscape:max-h-full landscape:aspect-auto shrink-0 bg-black relative flex items-center justify-center overflow-hidden border-b landscape:border-0 border-slate-800/80">
           {isYouTube ? (
             <div className="relative w-full h-full">
               <YouTubeLivePlayer
+                silenced={isApprovedSpeaker || teacherAudioConnected || teacherVideoConnected}
                 shareUrl={typeof window !== "undefined" ? `${window.location.origin}/live-class/${batchScheduleId}` : undefined}
                 onFullscreen={toggleMobileOrientation}
                 youtubeVideoId={wbSession?.youtubeVideoId ?? null}
@@ -2147,107 +2127,11 @@ export function StudentLiveClassRoom({
           />
         </div>
       </div>
+      )}
 
-      {/* Real-time Quiz Leaderboard Broadcast from Teacher (30s Display with Dismiss) */}
+      {/* Quiz leaderboard published by the teacher */}
       {publishedLeaderboard && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-[#121420] border border-[#2b3046] w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] text-white">
-            {/* Header with Title and 30s Countdown timer */}
-            <div className="px-5 py-4 bg-gradient-to-r from-blue-950 via-[#171a2b] to-[#121420] border-b border-[#25283a] flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center shadow">
-                  <span className="material-symbols-outlined text-xl">military_tech</span>
-                </div>
-                <div>
-                  <h3 className="font-bold text-sm text-white">Class Quiz Leaderboard</h3>
-                  <p className="text-[11px] text-slate-400">
-                    {publishedLeaderboard.scope === "chapter" ? "Chapter Progression" : "Live Session Performance"}
-                  </p>
-                </div>
-              </div>
-
-              {/* 30s Countdown Badge and Close Button */}
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/15 border border-blue-500/30 text-blue-300 text-xs font-mono font-bold">
-                  <span className="material-symbols-outlined text-xs animate-spin">timelapse</span>
-                  <span>{leaderboardCountdown}s</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setPublishedLeaderboard(null)}
-                  className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
-                  title="Close Leaderboard"
-                >
-                  <span className="material-symbols-outlined text-lg">close</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Stats Bar */}
-            {publishedLeaderboard.stats && (
-              <div className="px-5 py-2 bg-[#0c0d15] border-b border-[#1f2233] flex items-center justify-between text-xs text-slate-400">
-                <span>{publishedLeaderboard.stats.totalParticipants} Students</span>
-                <span>{publishedLeaderboard.stats.totalPolls} Questions</span>
-                <span className="text-emerald-400 font-bold">{publishedLeaderboard.stats.averageAccuracy}% Class Avg</span>
-              </div>
-            )}
-
-            {/* Rankings List */}
-            <div className="p-4 space-y-2 overflow-y-auto flex-1 text-xs">
-              {publishedLeaderboard.rankings.map((student) => {
-                const isRank1 = student.rank === 1;
-                const isRank2 = student.rank === 2;
-                const isRank3 = student.rank === 3;
-                const medal = isRank1 ? "🥇" : isRank2 ? "🥈" : isRank3 ? "🥉" : null;
-
-                return (
-                  <div
-                    key={student.studentId}
-                    className={`flex items-center justify-between p-3 rounded-xl border transition ${
-                      isRank1
-                        ? "bg-gradient-to-r from-amber-500/15 via-[#181a28] to-[#121420] border-amber-500/40 shadow-sm"
-                        : isRank2
-                        ? "bg-gradient-to-r from-slate-400/10 via-[#181a28] to-[#121420] border-slate-400/30"
-                        : isRank3
-                        ? "bg-gradient-to-r from-amber-700/10 via-[#181a28] to-[#121420] border-amber-700/30"
-                        : "bg-[#161826] border-[#25283a]"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span className="w-7 h-7 rounded-full flex items-center justify-center font-black font-mono text-xs shrink-0 bg-black/40 border border-white/10">
-                        {medal || student.rank}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="font-bold text-white text-xs truncate">{student.name}</p>
-                        <p className="text-[10px] text-slate-400 font-mono">
-                          {student.correctCount}/{student.totalAttempted} correct · {(student.avgResponseTimeMs / 1000).toFixed(1)}s avg
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="text-right shrink-0">
-                      <span className="text-xs font-mono font-black text-emerald-400">
-                        {student.accuracyPct}%
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Footer with instant Dismiss Button */}
-            <div className="p-3 bg-[#0d0f17] border-t border-[#1f2233] flex items-center justify-between">
-              <span className="text-[11px] text-slate-400">Auto-closing in {leaderboardCountdown}s</span>
-              <button
-                type="button"
-                onClick={() => setPublishedLeaderboard(null)}
-                className="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition cursor-pointer"
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        </div>
+        <LeaderboardPopup leaderboard={publishedLeaderboard} onClose={closeLeaderboard} />
       )}
     </div>
   );

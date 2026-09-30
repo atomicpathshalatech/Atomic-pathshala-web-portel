@@ -451,6 +451,8 @@ export async function createAndBindBroadcast(title: string, scheduledStartTime: 
 export interface YouTubeLiveChatMessage {
   id: string;
   authorName: string;
+  /** YouTube channel id of the writer — stable per account (names are not unique). */
+  authorChannelId: string;
   authorPhotoUrl?: string | null;
   messageText: string;
   publishedAt: string;
@@ -469,7 +471,7 @@ export async function fetchLiveChatMessages(
     items?: Array<{
       id: string;
       snippet: { displayMessage: string; publishedAt: string };
-      authorDetails: { displayName: string; profileImageUrl: string };
+      authorDetails: { displayName: string; profileImageUrl: string; channelId?: string };
     }>;
     nextPageToken?: string;
     pollingIntervalMillis?: number;
@@ -487,6 +489,7 @@ export async function fetchLiveChatMessages(
     messages: (json.items || []).map((item) => ({
       id: item.id,
       authorName: item.authorDetails?.displayName || "YouTube Viewer",
+      authorChannelId: item.authorDetails?.channelId || "",
       authorPhotoUrl: item.authorDetails?.profileImageUrl || null,
       messageText: item.snippet?.displayMessage || "",
       publishedAt: item.snippet?.publishedAt || new Date().toISOString(),
