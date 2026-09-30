@@ -50,9 +50,38 @@ const prog = enc.parseProgressBlock("fps=29.97\nbitrate=4488.2kbits/s\ndrop_fram
 assert(prog.fps === 29.97 && prog.bitrateKbps === 4488.2 && prog.droppedFrames === 3 && prog.outTimeMs === 5000, "Progress parsing");
 assert(!enc.redact(`failed to connect to rtmp://h/live2/${KEY}`, KEY).includes(KEY), "Stream key is redacted from logs");
 
+assert(has("-colorspace", "bt709") && args.join(" ").includes("in_color_matrix=bt601:out_color_matrix=bt709"), "Converts the recorder's BT.601 to tagged BT.709");
+
 // ---- Probe -------------------------------------------------------------------
 const usable = enc.probeEncoders(FFMPEG);
 assert(usable.length > 0 && usable.includes("libopenh264"), `Encoder probe finds working encoders: ${usable.join(", ")}`);
+
+// ---- Colour: a board green must decode as the same green on a BT.709 player ----
+{
+  const { mkdtempSync, readFileSync: rf } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join: pj } = await import("node:path");
+  const dir = mkdtempSync(pj(tmpdir(), "atomic-colour-"));
+  const src = pj(dir, "in.webm"), outFile = pj(dir, "out.flv"), raw = pj(dir, "f.yuv");
+  // Untagged BT.601 input, like Chromium's MediaRecorder writes.
+  spawnSync(FFMPEG, ["-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "color=c=0x22c55e:size=640x360:rate=30", "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-t", "1", "-vf", "format=yuv420p", "-c:v", "libvpx", "-c:a", "libopus", src]);
+  const a = enc.buildFfmpegArgs({ encoder: "libopenh264", serverUrl: "x", streamKey: "k", profile: "720p" });
+  a[a.length - 1] = outFile;
+  const inIdx = a.indexOf("pipe:0");
+  a[inIdx] = src;
+  spawnSync(FFMPEG, a.filter((x, i) => !(x === "-progress" || a[i - 1] === "-progress")));
+  spawnSync(FFMPEG, ["-hide_banner", "-loglevel", "error", "-y", "-i", outFile, "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "yuv420p", raw]);
+  const b = rf(raw);
+  const W = 1280, H = 720, x = 640, y = 360;
+  const Y = b[y * W + x], U = b[W * H + (y >> 1) * (W / 2) + (x >> 1)], V = b[W * H * 1.25 + (y >> 1) * (W / 2) + (x >> 1)];
+  const kr = 0.2126, kb = 0.0722, kg = 1 - kr - kb;
+  const yy = (Y - 16) / 219, u = (U - 128) / 224, v = (V - 128) / 224;
+  const r = yy + 2 * (1 - kr) * v, bl = yy + 2 * (1 - kb) * u, g = (yy - kr * r - kb * bl) / kg;
+  const got = [r, g, bl].map((c) => Math.round(Math.max(0, Math.min(1, c)) * 255));
+  const want = [0x22, 0xc5, 0x5e];
+  const off = Math.max(...got.map((c, i) => Math.abs(c - want[i])));
+  assert(off <= 8, `Board green #22c55e decodes as rgb(${got.join(",")}) on a BT.709 player (max off ${off})`);
+}
 const chosen = usable[0];
 console.log(`   using ${chosen}`);
 

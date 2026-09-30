@@ -80,7 +80,12 @@ function buildFfmpegArgs({ encoder, serverUrl, streamKey, fps = 30, profile = "1
     "-i", "pipe:0",
     "-map", "0:v:0",
     "-map", "0:a:0",
-    "-vf", `fps=${fps},scale=${p.width}:${p.height}:flags=bicubic,format=${pix}`,
+    // Chromium's recorder writes BT.601 colour without tagging it, while
+    // YouTube (and every HD player) reads untagged video as BT.709: board
+    // colours came out shifted (green darker, red/pink/cyan off). Measured:
+    // convert to BT.709 and tag it, and the decoded colours match the board.
+    "-vf", `fps=${fps},scale=${p.width}:${p.height}:flags=bicubic:in_color_matrix=bt601:out_color_matrix=bt709:in_range=tv:out_range=tv,format=${pix}`,
+    "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv",
     "-fps_mode", "cfr",
     ...rateControlArgs(encoder, p.videoKbps, fps),
     "-force_key_frames", "expr:gte(t,n_forced*2)",
