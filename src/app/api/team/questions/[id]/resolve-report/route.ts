@@ -46,14 +46,20 @@ export async function POST(
     }
 
     if (action === "FIX_QUESTION" && fixData) {
-      // 1. Create a QuestionVersion snapshot of previous state before modifying
-      const latestVersionNum = question.versions[0]?.versionNumber ?? question.version ?? 1;
-      const nextVersionNum = latestVersionNum + 1;
+      // 1. Snapshot the current state before modifying. Snapshots are stored
+      // under the version they capture (an edit from v2 → v3 saves snapshot 2),
+      // so the number to use is the question's current version — never one
+      // that already has a snapshot, or the unique (question, version) key fails.
+      const snapshotVersionNum = Math.max(
+        question.version ?? 1,
+        (question.versions[0]?.versionNumber ?? 0) + 1
+      );
+      const nextVersionNum = snapshotVersionNum + 1;
 
       await prisma.questionVersion.create({
         data: {
           questionId: question.id,
-          versionNumber: latestVersionNum,
+          versionNumber: snapshotVersionNum,
           editedById: session.user.id,
           reason: teacherNotes || "Corrected based on student reports",
           changeType: "CORRECTION_FROM_REPORT",
@@ -104,7 +110,16 @@ export async function POST(
         where: { id: question.id },
         data: {
           version: nextVersionNum,
-          solution: fixData.solution !== undefined ? fixData.solution : question.solution,
+          // question.solution mirrors one translation (usually English); only
+          // follow the fix when it is that translation, so fixing the Hindi
+          // solution doesn't overwrite the English one here.
+          solution:
+            fixData.solution !== undefined &&
+            (question.solution == null
+              ? !existingTranslation || existingTranslation.language.toLowerCase() === "english"
+              : existingTranslation?.solution === question.solution)
+              ? fixData.solution
+              : question.solution,
           chapter: fixData.chapter !== undefined ? fixData.chapter : question.chapter,
           topic: fixData.topic !== undefined ? fixData.topic : question.topic,
           difficulty: (fixData.difficulty as any) || question.difficulty,
