@@ -96,7 +96,20 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         },
       });
 
+      // A lecture already in this batch's timetable (e.g. a class the teacher
+      // scheduled/rescheduled there before the chapter was assigned) keeps its
+      // own entry and time — never a second copy at the lecture's default time.
+      const alreadyScheduled = new Set(
+        (
+          await prisma.batchSchedule.findMany({
+            where: { batchId: params.id, lectureId: { in: lectures.map((l) => l.id) } },
+            select: { lectureId: true },
+          })
+        ).map((s) => s.lectureId)
+      );
+
       for (const lec of lectures) {
+        if (alreadyScheduled.has(lec.id)) continue;
         if (lec.scheduledDate && lec.startTime) {
           const { startsAt, endsAt } = computeISTScheduleDates(
             lec.scheduledDate,

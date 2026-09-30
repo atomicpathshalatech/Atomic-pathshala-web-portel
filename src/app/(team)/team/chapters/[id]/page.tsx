@@ -33,7 +33,7 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
   });
   if (!chapter) notFound();
 
-  const [user, lectures, dpps, tests, reviews, batchChapters] = await Promise.all([
+  const [user, lectures, dpps, tests, reviews, batchChapters, scheduledBatches] = await Promise.all([
     prisma.user.findUnique({
       where: { id: session.user.id },
       include: { role: true },
@@ -67,7 +67,19 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
       },
       orderBy: { assignedAt: "asc" },
     }),
+    // Batches whose timetable actually has this chapter's classes.
+    prisma.batchSchedule.findMany({
+      where: { chapterId: chapter.id },
+      distinct: ["batchId"],
+      select: { batch: { select: { id: true, name: true } } },
+    }),
   ]);
+
+  // "Scheduled in": assigned batches plus any batch already running its classes.
+  const scheduledInBatches = [
+    ...batchChapters.map((bc) => ({ id: bc.batch.id, name: bc.batch.name })),
+    ...scheduledBatches.map((s) => s.batch),
+  ].filter((b, i, all) => all.findIndex((x) => x.id === b.id) === i);
 
   const isAdmin = user?.role?.name === "SUPER_ADMIN" || user?.role?.name === "ADMIN";
   const canReview = canReviewPermission && (isAdmin || chapter.createdById !== session.user.id);
@@ -246,7 +258,7 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
           },
         }))}
         studentPreviewData={studentPreviewData}
-        assignedBatches={batchChapters.map((bc) => ({ id: bc.batch.id, name: bc.batch.name }))}
+        assignedBatches={scheduledInBatches}
       />
     </div>
   );

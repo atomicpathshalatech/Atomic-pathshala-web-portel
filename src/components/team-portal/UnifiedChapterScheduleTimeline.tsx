@@ -621,7 +621,7 @@ export function UnifiedChapterScheduleTimeline({
                 ))
               ) : (
                 <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">
-                  Not assigned to specific batch (syncs across default batch)
+                  Not assigned to any batch yet
                 </span>
               )}
             </div>

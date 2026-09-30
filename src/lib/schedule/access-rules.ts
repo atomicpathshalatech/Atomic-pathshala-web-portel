@@ -461,6 +461,28 @@ export function canTeacherStartClass(
     };
   }
 
+  // Not before T-5 (the documented Teacher Start Window): the Start button
+  // used to show for classes days away.
+  if (nowMs < startOpensAt.getTime()) {
+    return {
+      allowed: false,
+      status: nowMs < opensAt.getTime() ? "SCHEDULED" : "TEACHER_ENTRY_OPEN",
+      code: "START_TOO_EARLY",
+      reason: `Class can be started from ${TEACHER_START_WINDOW_MINUTES} minutes before its scheduled time.`,
+      opensAt,
+      startOpensAt,
+      startsAt,
+      endsAt,
+      isLive: false,
+      isCompleted: false,
+      isCancelled: false,
+      isWindowOpen: false,
+      secondsUntilWindowOpens,
+      secondsUntilStartOpens,
+      secondsUntilStartsAt,
+    };
+  }
+
   // Start Class is allowed whenever educator is ready (or starting stream)
   return {
     allowed: true,

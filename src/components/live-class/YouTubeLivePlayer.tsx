@@ -43,6 +43,8 @@ export function YouTubeLivePlayer({
   // The real YT.Player wrapper (see the IFrame API bootstrap effect below) —
   // used for every control action instead of the old raw postMessage guesses.
   const playerRef = useRef<any>(null);
+  // Time and DVR length as the iframe last reported them (infoDelivery).
+  const reportedRef = useRef<{ cur: number | null; dur: number | null }>({ cur: null, dur: null });
 
   const [isStreamLive, setIsStreamLive] = useState(false);
   const [isPlaying, setIsPlaying] = useState(true);
@@ -98,6 +100,7 @@ export function YouTubeLivePlayer({
     setHasStartedPlaying(false);
     setCurrentTime(0);
     setDuration(0);
+    reportedRef.current = { cur: null, dur: null };
     setIsLiveEdge(true);
   }, [playerKey]);
 
@@ -156,9 +159,9 @@ export function YouTubeLivePlayer({
     const interval = setInterval(() => {
       try {
         const player = playerRef.current;
-        if (player) {
-          const cur = player.getCurrentTime?.();
-          const dur = player.getDuration?.();
+        if (player || reportedRef.current.cur !== null) {
+          const cur = player?.getCurrentTime?.() ?? reportedRef.current.cur;
+          const dur = player?.getDuration?.() ?? reportedRef.current.dur;
           if (typeof cur === "number" && !isNaN(cur)) {
             setCurrentTime(cur);
           }
@@ -224,6 +227,12 @@ export function YouTubeLivePlayer({
     const handleMessage = (event: MessageEvent) => {
       try {
         const d = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+        // The player's own time/DVR length, even if the YT.Player wrapper isn't
+        // ready: rewinding used to count from 0 then and jump to the start.
+        if (d?.event === "infoDelivery" && d.info) {
+          if (typeof d.info.currentTime === "number" && !isNaN(d.info.currentTime)) reportedRef.current.cur = d.info.currentTime;
+          if (typeof d.info.duration === "number" && d.info.duration > 0) reportedRef.current.dur = d.info.duration;
+        }
         if (d?.event === "infoDelivery" && (d.info?.playerState === 1 || d.info?.playerState === 3)) {
           setIsStreamLive(true);
           setHasEmbedError(false);
@@ -341,8 +350,8 @@ export function YouTubeLivePlayer({
   };
 
   const handleSeek = (offsetSeconds: number) => {
-    const cur = playerRef.current?.getCurrentTime?.() ?? currentTime;
-    const dur = playerRef.current?.getDuration?.() ?? duration;
+    const cur = playerRef.current?.getCurrentTime?.() ?? reportedRef.current.cur ?? currentTime;
+    const dur = playerRef.current?.getDuration?.() ?? reportedRef.current.dur ?? duration;
     const target = Math.max(0, cur + offsetSeconds);
     setCurrentTime(target);
     if (dur > 0 && target >= dur - 6) {
@@ -572,12 +581,17 @@ export function YouTubeLivePlayer({
         <div
           onClick={() => {
             if (isMuted) unmuteNow();
-            if (!hasStartedPlaying || !isPlaying) {
+            if (!hasStartedPlaying) {
               setHasStartedPlaying(true);
               sendYouTubeCommand("playVideo");
               sendYouTubeCommand("seekTo", [999999, true]);
               setIsPlaying(true);
               setIsStreamLive(true);
+            } else if (!isPlaying) {
+              // Paused while watching an earlier part: resume right there
+              // (it used to jump back to the live moment).
+              sendYouTubeCommand("playVideo");
+              setIsPlaying(true);
             }
             setShowControls((prev) => !prev);
             resetControlsTimer();

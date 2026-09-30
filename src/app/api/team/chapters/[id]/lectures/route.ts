@@ -236,20 +236,15 @@ export async function POST(
         }
       };
 
-      if (batchChapters.length > 0) {
-        for (let i = 0; i < batchChapters.length; i++) {
-          const bc = batchChapters[i];
-          if (!bc) continue;
-          const scheduleKey = i === 0 ? lecture.id : `${lecture.id}-${bc.batchId}`;
-          await syncSchedule(scheduleKey, bc.batchId);
-        }
-      } else {
-        const defaultBatch =
-          (await prisma.batch.findFirst({ where: { status: "ACTIVE" } })) ||
-          (await prisma.batch.findFirst());
-        if (defaultBatch) {
-          await syncSchedule(lecture.id, defaultBatch.id);
-        }
+      // Only the batches this chapter is assigned to. A chapter in no batch
+      // used to be dropped into the first ACTIVE batch's timetable while the
+      // chapter still said "not assigned"; assigning the chapter to a batch
+      // later schedules its lectures there (batches/[id]/chapter-assignments).
+      for (let i = 0; i < batchChapters.length; i++) {
+        const bc = batchChapters[i];
+        if (!bc) continue;
+        const scheduleKey = i === 0 ? lecture.id : `${lecture.id}-${bc.batchId}`;
+        await syncSchedule(scheduleKey, bc.batchId);
       }
     } catch (syncErr) {
       console.error("[multi_batch_schedule_sync_error]", syncErr);
