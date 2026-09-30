@@ -153,6 +153,21 @@ async function run() {
   const sp = staff.find((s) => s.userId === sales.id);
   assert(sp?.actions30d === 2 && sp.topWork[0]?.entityType === "Lead" && !staff.some((s) => s.userId === moaz.userId), "Staff board: other staff with their recorded work; teachers are on their own board");
 
+  // ---- Before `migrate deploy`: the new tables don't exist yet ----
+  await prisma.$executeRawUnsafe(`ALTER TABLE "video_watches" RENAME TO "video_watches_off"`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE "youtube_video_stats" RENAME TO "youtube_video_stats_off"`);
+  try {
+    const pre = (await computeTeachingStats({ teacherIds: [moaz.id] })).get(moaz.id)!;
+    assert(pre.appMinutes === 135 && pre.youtubeMinutes === 0 && pre.youtubePending === 2, "Without the new tables: teaching stats still work (app time; YouTube lengths wait)");
+    const preBoard = await teacherBoard().then(() => true, () => false);
+    const preList = await listStudentPerformance({}).then((r) => r.rows.length === 1, () => false);
+    const preDetail = await studentPerformanceDetail(student.id).then((d) => d?.recorded.length === 0, () => false);
+    assert(preBoard && preList && preDetail, "Without the new tables: Performance Boards and student pages open (no crash)");
+  } finally {
+    await prisma.$executeRawUnsafe(`ALTER TABLE "video_watches_off" RENAME TO "video_watches"`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE "youtube_video_stats_off" RENAME TO "youtube_video_stats"`);
+  }
+
   // ---- 4. Access + wiring ----
   const { isSuperAdmin } = await import("../src/lib/rbac/super-admin");
   const superRole = await prisma.role.create({ data: { name: "SUPER_ADMIN", label: "Super Admin" } });

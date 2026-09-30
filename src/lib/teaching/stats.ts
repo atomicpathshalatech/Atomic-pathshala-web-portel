@@ -18,6 +18,24 @@ import { parseYouTubeVideoId } from "@/lib/youtube/video-link";
  * recordings). So nothing is counted twice.
  */
 
+/**
+ * Until `prisma migrate deploy` has created the newer tables
+ * (youtube_video_stats, video_watches), read them as empty instead of
+ * failing the page — profiles and the teacher dashboard use these numbers.
+ * Any other error still throws.
+ */
+export async function missingTableAsEmpty<T>(query: Promise<T>, empty: T): Promise<T> {
+  try {
+    return await query;
+  } catch (err) {
+    if ((err as { code?: string })?.code === "P2021") {
+      console.warn("[teaching_stats] table missing — run prisma migrate deploy", (err as { meta?: unknown }).meta);
+      return empty;
+    }
+    throw err;
+  }
+}
+
 /** A class left running for days must not count as days of teaching. */
 export const MAX_CLASS_MINUTES = 6 * 60;
 
@@ -177,7 +195,7 @@ export async function computeTeachingStats(opts: { teacherIds?: string[]; from?:
   for (const set of videosByTeacher.values()) for (const id of set) allIds.add(id);
   for (const v of youtubeClassVideos) allIds.add(v.videoId);
   const stats = allIds.size
-    ? await prisma.youtubeVideoStat.findMany({ where: { videoId: { in: Array.from(allIds) } }, select: { videoId: true, durationSec: true, viewCount: true } })
+    ? await missingTableAsEmpty(prisma.youtubeVideoStat.findMany({ where: { videoId: { in: Array.from(allIds) } }, select: { videoId: true, durationSec: true, viewCount: true } }), [])
     : [];
   const statById = new Map(stats.map((s) => [s.videoId, s]));
 
@@ -216,7 +234,7 @@ export async function computeTeachingStats(opts: { teacherIds?: string[]; from?:
       if (t) get(t).appViews += j._count._all;
     }
   }
-  const watches = await prisma.videoWatch.findMany({
+  const watches = await missingTableAsEmpty(prisma.videoWatch.findMany({
     where: {
       OR: [
         { lecture: { NOT: [{ videoUrl: { contains: "youtube.com" } }, { videoUrl: { contains: "youtu.be" } }], ...(inTeachers && { teacherId: inTeachers }) } },
@@ -230,7 +248,7 @@ export async function computeTeachingStats(opts: { teacherIds?: string[]; from?:
       ],
     },
     select: { lecture: { select: { teacherId: true } }, batchSchedule: { select: { teacherId: true } } },
-  });
+  }), []);
   for (const w of watches) {
     const t = w.lecture?.teacherId ?? w.batchSchedule?.teacherId;
     if (t) get(t).appViews += 1;

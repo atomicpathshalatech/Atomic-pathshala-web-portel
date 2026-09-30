@@ -1,6 +1,7 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { missingTableAsEmpty } from "@/lib/teaching/stats";
 
 /**
  * Student performance for the Super Admin board — everything is what the
@@ -72,7 +73,7 @@ export async function listStudentPerformance(opts: { search?: string; skip?: num
       WHERE a."studentId" IN (${Prisma.join(ids)})
       GROUP BY a."studentId"`,
     prisma.liveClassAttendance.groupBy({ by: ["studentId"], where: { studentId: { in: ids } }, _count: { _all: true }, _sum: { activeDurationSec: true }, _max: { lastSeenAt: true } }),
-    prisma.videoWatch.groupBy({ by: ["studentId"], where: { studentId: { in: ids } }, _sum: { watchedSec: true }, _max: { lastWatchedAt: true } }),
+    missingTableAsEmpty(prisma.videoWatch.groupBy({ by: ["studentId"], where: { studentId: { in: ids } }, _sum: { watchedSec: true }, _max: { lastWatchedAt: true } }), []),
     prisma.lectureProgress.groupBy({ by: ["studentId"], where: { studentId: { in: ids } }, _count: { _all: true } }),
   ]);
 
@@ -144,7 +145,7 @@ export async function studentPerformanceDetail(studentId: string) {
         },
       },
     }),
-    prisma.videoWatch.findMany({
+    missingTableAsEmpty(prisma.videoWatch.findMany({
       where: { studentId },
       orderBy: { lastWatchedAt: "desc" },
       select: {
@@ -155,7 +156,7 @@ export async function studentPerformanceDetail(studentId: string) {
         lecture: { select: { title: true, chapter: { select: { title: true, subject: { select: { title: true } } } } } },
         batchSchedule: { select: { title: true, subject: true } },
       },
-    }),
+    }), []),
   ]);
 
   const practice = attempts.map((a) => {
