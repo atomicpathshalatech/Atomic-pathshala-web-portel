@@ -79,6 +79,10 @@ async function run() {
   const sol106 = renderFormulaContent(samples.find((s) => s.no === 106)!.en.solution);
   assert(sol106.includes("<em>Penicillium</em>") && sol106.includes("• (i)") && !/\*Penicillium\*/.test(sol106), "Solution: *italic* and '- ' bullets render properly");
   assert(!renderFormulaContent("2 * 3 = 6").includes("<em>"), "A lone multiplication '*' isn't italics");
+  // Real Minor Test 01 Q118: \textbf outside $…$ was cut at "Statement-" into a red KaTeX error.
+  const q118 = renderFormulaContent("Read the following statements.\n\\textbf{Statement-A :} Pyrenoids contain protein.\n\\textbf{Statement-B :} It is located in the chloroplasts.\n- a list line");
+  assert(!q118.includes("katex-error") && q118.includes("<strong>Statement-A :</strong>") && q118.includes("<strong>Statement-B :</strong>") && q118.includes("• a list line"), "\\textbf{…} outside maths → bold text (Q118), bullets still work");
+  assert(renderFormulaContent("a \\textbf{x} - b").includes("- b"), "A dash after \\textbf{} isn't turned into a bullet");
 
   // ---- 4. PDF booklet HTML ----
   const { buildExportFixture } = await import("./fixtures/build-export-fixture");

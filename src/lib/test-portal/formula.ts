@@ -235,9 +235,24 @@ function escapeHtml(s: string): string {
 /**
  * Renders any residual inline LaTeX expressions inside plain text chunks
  */
-function renderResidualLatexInText(input: string): string {
-  // Markdown-style list lines in solutions ("- (i) ...") → a real bullet.
-  const text = input.replace(/(^|\n)[ \t]*-[ \t]+(?=\S)/g, "$1• ");
+function renderResidualLatexInText(raw: string, bulleted = false): string {
+  // Markdown-style list lines in solutions ("- (i) ...") → a real bullet (once, on the whole text).
+  const text = bulleted ? raw : raw.replace(/(^|\n)[ \t]*-[ \t]+(?=\S)/g, "$1• ");
+  // Text-mode commands outside $…$ ("\textbf{Statement-A :} …") are plain
+  // formatting, not maths: make them HTML first (the maths scanner below cut
+  // them apart at "-" and showed a red KaTeX error).
+  const TEXT_CMD = /\\(textbf|textit|emph)\{([^{}]*)\}/g;
+  if (/\\(textbf|textit|emph)\{[^{}]*\}/.test(text)) {
+    let out = "";
+    let last = 0;
+    for (const m of text.matchAll(TEXT_CMD)) {
+      out += renderResidualLatexInText(text.slice(last, m.index), true);
+      const inner = renderResidualLatexInText(m[2] ?? "", true);
+      out += m[1] === "textbf" ? `<strong>${inner}</strong>` : `<em>${inner}</em>`;
+      last = (m.index ?? 0) + m[0].length;
+    }
+    return out + renderResidualLatexInText(text.slice(last), true);
+  }
   // Check if text has any LaTeX commands like \frac, \sqrt, \hat, \vec, \cos, \sin, \tan, etc.
   if (!/\\[a-zA-Z]+|\^\{?[0-9a-zA-Z\+\-]+\}?|_\{?[0-9a-zA-Z\+\-]+\}?/.test(text)) {
     return escapeHtml(text).replace(/\n/g, "<br/>");
