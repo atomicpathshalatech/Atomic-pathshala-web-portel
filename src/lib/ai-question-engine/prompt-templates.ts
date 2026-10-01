@@ -104,6 +104,11 @@ MANDATORY STATEMENT COMPLETENESS RULES:
 - For STATEMENT_BASED or MULTI-STATEMENT questions (e.g. "Consider the following statements..."): "statementEn" and "statementHi" MUST include the full question text WITH ALL individual numbered statements (I, II, III, IV...) explicitly written out inside the statement field, followed by the question prompt (e.g. "Which of the statements given above is/are correct?"). NEVER write only the introductory line without the statements!
 - For ASSERTION_REASON questions: "statementEn" and "statementHi" MUST include both "Assertion (A): ..." and "Reason (R): ..." completely.
 - For MATCH_COLUMN questions: "statementEn" and "statementHi" MUST include the complete Column-I and Column-II items.
+- MATCH THE COLUMN / ANY TABLE — write it exactly like the printed paper, as a table in the statement:
+  one header row, a "---|---" divider row, then ONE ROW PER LINE, columns separated by " | ", rows separated by \\n.
+  Example (statementEn): "Match Column-I with Column-II.\\n\\nColumn-I | Column-II\\n---|---\\n(A) Benzene | (P) 4\\n(B) Cyclohexane | (Q) 1\\n(C) Naphthalene | (R) 7\\n(D) But-1-ene | (S) 0"
+  Hindi (statementHi): "स्तम्भ-I | स्तम्भ-II\\n---|---\\n(A) बेंज़ीन | (P) 4\\n..."
+  Never run the pairs together on one line or inside a sentence; keep Column-I labels (A),(B),(C),(D) and Column-II labels (P),(Q),(R),(S) (or (i),(ii),(iii),(iv) as printed), and give the options as code combinations, e.g. "A-Q, B-P, C-S, D-R".
 - A question statement must be 100% self-contained so that a student can read and solve it without missing parts.
 
 ${

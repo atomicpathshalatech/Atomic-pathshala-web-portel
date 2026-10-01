@@ -365,6 +365,83 @@ export function latexTableToHtml(spec: string, body: string): string | null {
   return `<div class="fx-table-wrap" style="max-width:100%;overflow-x:auto;margin:6px 0;"><table class="fx-table" style="border-collapse:collapse;width:auto;max-width:100%;${bordered ? "border:1px solid #64748b;" : ""}">${htmlRows.join("")}</table></div>`;
 }
 
+/**
+ * Splits a line on "|" outside $…$ math (|x| inside a formula is not a column).
+ * Leading / trailing pipes ("| a | b |") are ignored.
+ */
+function splitPipeRow(line: string): string[] | null {
+  const cells: string[] = [];
+  let cur = "";
+  let inMath = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]!;
+    if (ch === "$") inMath = !inMath;
+    if (ch === "|" && !inMath) {
+      cells.push(cur);
+      cur = "";
+      continue;
+    }
+    cur += ch;
+  }
+  cells.push(cur);
+  if (cells.length && !cells[0]!.trim()) cells.shift();
+  if (cells.length && !cells[cells.length - 1]!.trim()) cells.pop();
+  return cells.length >= 2 ? cells.map((c) => c.trim()) : null;
+}
+
+const PIPE_DIVIDER = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$/;
+const COLUMN_HEADER = /column|colum|list|स्तम्भ|स्तंभ|कॉलम|कालम|सूची/i;
+
+/**
+ * Match-the-column (and other) tables written as lines of "a | b" — the way
+ * AI-generated and extracted questions often arrive, with or without a
+ * markdown "---|---" divider — become a real bordered table instead of
+ * showing the pipes as text. Needs at least two rows with the same number
+ * of columns; returns the text with each table swapped for a token.
+ */
+function pipeTablesToTokens(text: string, tables: string[]): string {
+  if (!text.includes("|")) return text;
+  const lines = text.split("\n");
+  const out: string[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const block: { cells: string[] | null; divider: boolean }[] = [];
+    let width = 0;
+    let j = i;
+    while (j < lines.length && !lines[j]!.includes("$$")) {
+      const divider = PIPE_DIVIDER.test(lines[j]!);
+      const cells = divider ? null : splitPipeRow(lines[j]!);
+      if (!divider && !cells) break;
+      if (cells) {
+        if (width && cells.length !== width) break;
+        width = cells.length;
+      }
+      block.push({ cells, divider });
+      j++;
+    }
+    const rows = block.filter((r) => r.cells).map((r) => r.cells!);
+    if (rows.length < 2) {
+      out.push(lines[i]!);
+      i++;
+      continue;
+    }
+    const headerByDivider = block.length > 1 && block[1]!.divider;
+    const header = headerByDivider || rows[0]!.some((c) => COLUMN_HEADER.test(c));
+    const cell = (c: string) => renderSegments(parseSegments(c));
+    const border = "border:1px solid #64748b;padding:3px 8px;vertical-align:top;";
+    const htmlRows = rows.map((r, ri) => {
+      const tag = header && ri === 0 ? "th" : "td";
+      return `<tr>${r.map((c) => `<${tag} style="${border}text-align:${tag === "th" ? "center" : "left"};">${cell(c)}</${tag}>`).join("")}</tr>`;
+    });
+    tables.push(
+      `<div class="fx-table-wrap" style="max-width:100%;overflow-x:auto;margin:6px 0;"><table class="fx-table" style="border-collapse:collapse;width:auto;max-width:100%;border:1px solid #64748b;">${htmlRows.join("")}</table></div>`
+    );
+    out.push(TABLE_TOKEN(tables.length - 1));
+    i = j;
+  }
+  return out.join("\n");
+}
+
 const TABLE_RE = /\$\$\s*\\begin\{(array|tabular)\}\s*\{((?:[^{}]|\{[^{}]*\})*)\}([\s\S]*?)\\end\{\1\}\s*\$\$|\$\s*\\begin\{(array|tabular)\}\s*\{((?:[^{}]|\{[^{}]*\})*)\}([\s\S]*?)\\end\{\4\}\s*\$/g;
 const TABLE_TOKEN = (i: number) => `\u0000FXTABLE${i}\u0000`;
 
@@ -379,7 +456,7 @@ export function renderFormulaContent(input: string): string {
     tables.push(html);
     return TABLE_TOKEN(tables.length - 1);
   });
-  const html = renderSegments(parseSegments(withTokens));
+  const html = renderSegments(parseSegments(pipeTablesToTokens(withTokens, tables)));
   return tables.length ? html.replace(/\u0000FXTABLE(\d+)\u0000/g, (_, i) => tables[Number(i)] ?? "") : html;
 }
 

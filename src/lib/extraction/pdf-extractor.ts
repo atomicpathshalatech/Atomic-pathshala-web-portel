@@ -233,6 +233,12 @@ YOUR INSTRUCTIONS:
 5. SCIENTIFICALLY VERIFIED CORRECT ANSWER:
    - Identify printed answer key or deduce the 100% correct answer ("A", "B", "C", or "D") in "correctAnswer".
 
+   - MATCH THE COLUMN / ANY TABLE — write it exactly like the printed paper, as a table in the statement:
+     one header row, a "---|---" divider row, then ONE ROW PER LINE, columns separated by " | ", rows separated by \\n.
+     Example (statement): "Match Column-I with Column-II.\\n\\nColumn-I | Column-II\\n---|---\\n(A) Benzene | (P) 4\\n(B) Cyclohexane | (Q) 1\\n(C) Naphthalene | (R) 7\\n(D) But-1-ene | (S) 0"
+     Hindi (statementHi): "स्तम्भ-I | स्तम्भ-II\\n---|---\\n(A) बेंज़ीन | (P) 4\\n..."
+     Never run the pairs together on one line or inside a sentence; keep Column-I labels (A),(B),(C),(D) and Column-II labels (P),(Q),(R),(S) (or (i),(ii),(iii),(iv) as printed), and give the options as code combinations, e.g. "A-Q, B-P, C-S, D-R".
+
 6. QUALITY & CLASSIFICATION:
    - "subject": "Physics" | "Chemistry" | "Biology" | "Mathematics"
    - "chapter": NCERT Chapter title
