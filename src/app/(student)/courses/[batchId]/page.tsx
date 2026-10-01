@@ -117,7 +117,7 @@ export default async function BatchCoursePage({
     const data = await loadStudentBatchHome(dbBatch.id, studentId, userId);
     if (data) {
       const t = searchParams?.tab;
-      const initialTab: BatchTab = t === "recorded" || t === "tests" || t === "material" || t === "notices" ? t : "classes";
+      const initialTab: BatchTab = t === "recorded" || t === "dpp" || t === "tests" || t === "material" || t === "notices" ? t : "classes";
       return <StudentBatchHome data={data} initialTab={initialTab} />;
     }
   }

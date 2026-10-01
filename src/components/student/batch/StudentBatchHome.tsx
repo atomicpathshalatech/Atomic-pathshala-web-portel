@@ -3,13 +3,14 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { canStudentJoinClass, getEffectiveScheduleStatus } from "@/lib/schedule/access-rules";
-import type { StudentBatchHomeData, BatchClassItem, BatchTestItem } from "@/lib/batch/student-batch-home";
+import type { StudentBatchHomeData, BatchClassItem, BatchTestItem, BatchDppItem } from "@/lib/batch/student-batch-home";
 
-export type BatchTab = "classes" | "recorded" | "tests" | "material" | "notices";
+export type BatchTab = "classes" | "recorded" | "dpp" | "tests" | "material" | "notices";
 
 const TABS: { id: BatchTab; label: string; icon: string }[] = [
   { id: "classes", label: "Live", icon: "sensors" },
   { id: "recorded", label: "Recorded", icon: "smart_display" },
+  { id: "dpp", label: "DPP", icon: "assignment" },
   { id: "tests", label: "Tests", icon: "quiz" },
   { id: "material", label: "Material", icon: "folder_open" },
   { id: "notices", label: "Notices", icon: "campaign" },
@@ -43,6 +44,7 @@ export function StudentBatchHome({ data, initialTab }: { data: StudentBatchHomeD
   const counts = {
     classes: data.classes.filter((c) => dayKey(c.startsAt) === dayKey(now)).length,
     recorded: 0,
+    dpp: data.dpps.filter((d) => d.status === "PENDING" || d.status === "IN_PROGRESS").length,
     tests: data.tests.filter((t) => t.attemptStatus !== "SUBMITTED" && (!t.closeTime || new Date(t.closeTime) > now)).length,
     material: data.folders.reduce((n, f) => n + f.files.length, 0),
     notices: data.notices.length,
@@ -87,7 +89,7 @@ export function StudentBatchHome({ data, initialTab }: { data: StudentBatchHomeD
         )}
 
         {/* Tabs */}
-        <div className="grid grid-cols-5 border-t border-slate-200 dark:border-slate-800">
+        <div className="grid grid-cols-6 border-t border-slate-200 dark:border-slate-800">
           {TABS.map((t) => {
             const active = tab === t.id;
             const n = counts[t.id];
@@ -96,14 +98,14 @@ export function StudentBatchHome({ data, initialTab }: { data: StudentBatchHomeD
                 key={t.id}
                 type="button"
                 onClick={() => switchTab(t.id)}
-                className={`relative py-2.5 sm:py-3 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 text-[11px] sm:text-xs font-bold transition ${
+                className={`relative py-2.5 sm:py-3 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 text-[10px] min-[400px]:text-[11px] sm:text-xs font-bold transition ${
                   active ? "text-blue-600" : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
                 }`}
               >
                 <span className="material-symbols-outlined text-[20px]">{t.icon}</span>
                 <span className="leading-tight text-center">{t.label}</span>
                 {n > 0 && t.id !== "material" && t.id !== "recorded" && (
-                  <span className="absolute top-1.5 right-2 sm:static min-w-[18px] h-[18px] px-1 rounded-full bg-blue-600 text-white text-[10px] flex items-center justify-center">{n}</span>
+                  <span className="absolute top-1 right-0.5 sm:static min-w-[18px] h-[18px] px-1 rounded-full bg-blue-600 text-white text-[10px] flex items-center justify-center">{n}</span>
                 )}
                 {active && <span className="absolute bottom-0 left-3 right-3 h-[3px] rounded-full bg-blue-600" />}
               </button>
@@ -114,8 +116,9 @@ export function StudentBatchHome({ data, initialTab }: { data: StudentBatchHomeD
 
       {tab === "classes" && <ClassesTab data={data} now={now} />}
       {tab === "recorded" && <RecordedTab data={data} now={now} />}
+      {tab === "dpp" && <DppTab dpps={data.dpps} />}
       {tab === "tests" && <TestsTab tests={data.tests} now={now} />}
-      {tab === "material" && <MaterialTab folders={data.folders} />}
+      {tab === "material" && <MaterialTab folders={data.folders} teachers={data.batch.teacherCards} />}
       {tab === "notices" && <NoticesTab notices={data.notices} />}
     </div>
   );
@@ -345,16 +348,128 @@ function TestsTab({ tests, now }: { tests: BatchTestItem[]; now: Date }) {
   );
 }
 
-function MaterialTab({ folders }: { folders: StudentBatchHomeData["folders"] }) {
+const DPP_CHIP: Record<BatchDppItem["status"], { label: string; cls: string }> = {
+  UPCOMING: { label: "Upcoming", cls: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300" },
+  LOCKED: { label: "Coming soon", cls: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300" },
+  PENDING: { label: "Not attempted", cls: "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300" },
+  IN_PROGRESS: { label: "In progress", cls: "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300" },
+  COMPLETED: { label: "Done", cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300" },
+};
+
+function DppTab({ dpps }: { dpps: BatchDppItem[] }) {
+  const [subject, setSubject] = useState<string | null>(null);
+  const [chapter, setChapter] = useState<string | null>(null);
+  if (dpps.length === 0) return <Empty text="DPPs for this batch will appear here." />;
+
+  const pending = (list: BatchDppItem[]) => list.filter((d) => d.status === "PENDING" || d.status === "IN_PROGRESS").length;
+  const crumbs = (
+    <div className="flex items-center gap-1 flex-wrap text-xs font-bold">
+      <button type="button" onClick={() => { setSubject(null); setChapter(null); }} className={subject ? "text-blue-600" : "text-slate-800 dark:text-slate-100"}>
+        All subjects
+      </button>
+      {subject && (
+        <>
+          <span className="material-symbols-outlined text-xs text-slate-400">chevron_right</span>
+          <button type="button" onClick={() => setChapter(null)} className={chapter ? "text-blue-600" : "text-slate-800 dark:text-slate-100"}>{subject}</button>
+        </>
+      )}
+      {chapter && (
+        <>
+          <span className="material-symbols-outlined text-xs text-slate-400">chevron_right</span>
+          <span className="text-slate-800 dark:text-slate-100">{chapter}</span>
+        </>
+      )}
+    </div>
+  );
+  const folderBtn = (key: string, label: string, list: BatchDppItem[], onClick: () => void, color: string) => {
+    const p = pending(list);
+    return (
+      <button key={key} type="button" onClick={onClick} className="w-full flex items-center gap-3 p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-blue-400 text-left">
+        <span className={`material-symbols-outlined ${color}`}>folder</span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{label}</span>
+          <span className="block text-[11px] text-slate-500">{list.length} DPP{list.length === 1 ? "" : "s"}{p ? ` · ${p} to do` : ""}</span>
+        </span>
+        <span className="material-symbols-outlined text-slate-400">chevron_right</span>
+      </button>
+    );
+  };
+
+  if (!subject) {
+    const subjects = Array.from(new Set(dpps.map((d) => d.subject))).sort();
+    return (
+      <div className="space-y-3">
+        {crumbs}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {subjects.map((s) => folderBtn(s, s, dpps.filter((d) => d.subject === s), () => setSubject(s), "text-blue-600"))}
+        </div>
+      </div>
+    );
+  }
+  const inSubject = dpps.filter((d) => d.subject === subject);
+  if (!chapter) {
+    const chapters = Array.from(new Set(inSubject.map((d) => d.chapter)));
+    return (
+      <div className="space-y-3">
+        {crumbs}
+        <div className="space-y-2">{chapters.map((c) => folderBtn(c, c, inSubject.filter((d) => d.chapter === c), () => setChapter(c), "text-amber-500"))}</div>
+      </div>
+    );
+  }
+  const list = inSubject.filter((d) => d.chapter === chapter);
+  return (
+    <div className="space-y-3">
+      {crumbs}
+      <div className="space-y-2">
+        {list.map((d) => {
+          const chip = DPP_CHIP[d.status];
+          return (
+            <div key={d.id} className="flex items-center gap-3 p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <span className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined">assignment</span>
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{d.title}</p>
+                <p className="text-[11px] text-slate-500 flex items-center gap-1.5 flex-wrap">
+                  {d.questionCount > 0 && <span>{d.questionCount} Qs</span>}
+                  {d.durationMin > 0 && <span>· {d.durationMin} min</span>}
+                  {d.status === "UPCOMING" && d.opensAt && <span>· opens {date(d.opensAt)}, {time(d.opensAt)}</span>}
+                  {d.status === "COMPLETED" && d.score != null && <span>· score {d.score}</span>}
+                </p>
+                <span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${chip.cls}`}>{chip.label}</span>
+              </div>
+              {d.href ? (
+                <Link href={d.href} className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 ${d.status === "COMPLETED" ? "border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200" : "bg-blue-600 text-white"}`}>
+                  {d.status === "COMPLETED" ? "Result" : d.status === "IN_PROGRESS" ? "Resume" : "Attempt"}
+                </Link>
+              ) : (
+                <span className="material-symbols-outlined text-slate-400 shrink-0">lock</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const INFO = "__batch_info__";
+const isInfoFolder = (name: string) => /^(batch\s*info|brochure)$/i.test(name.trim());
+
+function MaterialTab({ folders, teachers }: { folders: StudentBatchHomeData["folders"]; teachers: StudentBatchHomeData["batch"]["teacherCards"] }) {
   const [path, setPath] = useState<string[]>([]);
   const current = path[path.length - 1] ?? null;
-  const children = folders.filter((f) => f.parentId === current);
-  const files = current ? folders.find((f) => f.id === current)?.files ?? [] : [];
-  const nameOf = (id: string) => folders.find((f) => f.id === id)?.name ?? "";
+  // The admin's own "Batch Info" / "Brochure" folder is shown inside the
+  // pinned Batch Info folder, not twice.
+  const infoFolders = folders.filter((f) => !f.parentId && isInfoFolder(f.name));
+  const children = current === INFO ? [] : folders.filter((f) => f.parentId === current && !(current === null && isInfoFolder(f.name)));
+  const files =
+    current === INFO ? infoFolders.flatMap((f) => f.files) : current ? folders.find((f) => f.id === current)?.files ?? [] : [];
+  const nameOf = (id: string) => (id === INFO ? "Batch Info" : folders.find((f) => f.id === id)?.name ?? "");
   const countIn = (id: string): number =>
     (folders.find((f) => f.id === id)?.files.length ?? 0) + folders.filter((f) => f.parentId === id).reduce((n, f) => n + countIn(f.id), 0);
 
-  if (folders.length === 0) return <Empty text="No study material in this batch yet." />;
+  const infoFileCount = infoFolders.reduce((n, f) => n + f.files.length, 0);
   return (
     <div className="space-y-3">
       {/* Breadcrumb: folders open right here, never in a pop-up */}
@@ -372,6 +487,53 @@ function MaterialTab({ folders }: { folders: StudentBatchHomeData["folders"] }) 
         ))}
       </div>
 
+      {current === null && (
+        <button
+          type="button"
+          onClick={() => setPath([INFO])}
+          className="w-full flex items-center gap-3 p-3 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-left"
+        >
+          <span className="material-symbols-outlined">info</span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-black">Batch Info</span>
+            <span className="block text-[11px] text-white/80">
+              {teachers.length} teacher{teachers.length === 1 ? "" : "s"}{infoFileCount ? ` · brochure & ${infoFileCount} file${infoFileCount === 1 ? "" : "s"}` : ""}
+            </span>
+          </span>
+          <span className="material-symbols-outlined">chevron_right</span>
+        </button>
+      )}
+
+      {current === INFO && (
+        <section className="space-y-2">
+          <h3 className="text-xs font-black uppercase tracking-wider text-slate-500 px-1">Your teachers</h3>
+          {teachers.length === 0 ? (
+            <Empty text="Teachers will be listed here." />
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {teachers.map((t) => (
+                <div key={t.id} className="flex gap-3 p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                  {t.photoUrl ? (
+                    <img src={t.photoUrl} alt="" className="w-14 h-14 rounded-2xl object-cover shrink-0" />
+                  ) : (
+                    <div className="w-14 h-14 rounded-2xl bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 flex items-center justify-center text-xl font-black shrink-0">{t.name.charAt(0)}</div>
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-sm font-black text-slate-900 dark:text-white">{t.name}</p>
+                    <p className="text-[11px] font-bold text-blue-600">
+                      {[t.subjects.join(", "), t.experienceYears ? `${t.experienceYears} yrs experience` : null].filter(Boolean).join(" · ")}
+                    </p>
+                    {t.bio && <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-3">{t.bio}</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <h3 className="text-xs font-black uppercase tracking-wider text-slate-500 px-1 pt-2">Brochure</h3>
+          {files.length === 0 && <Empty text="The batch brochure will be added here soon." />}
+        </section>
+      )}
+
       {children.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           {children.map((f) => (
@@ -384,7 +546,7 @@ function MaterialTab({ folders }: { folders: StudentBatchHomeData["folders"] }) 
               <span className="material-symbols-outlined text-amber-500">folder</span>
               <span className="min-w-0">
                 <span className="block text-xs font-bold text-slate-800 dark:text-slate-100 truncate">{f.name}</span>
-                <span className="block text-[11px] text-slate-500">{countIn(f.id)} files</span>
+                <span className="block text-[11px] text-slate-500">{countIn(f.id)} file{countIn(f.id) === 1 ? "" : "s"}</span>
               </span>
             </button>
           ))}
@@ -411,7 +573,8 @@ function MaterialTab({ folders }: { folders: StudentBatchHomeData["folders"] }) 
         </div>
       )}
 
-      {current && children.length === 0 && files.length === 0 && <Empty text="This folder is empty." />}
+      {current && current !== INFO && children.length === 0 && files.length === 0 && <Empty text="This folder is empty." />}
+      {current === null && children.length === 0 && <Empty text="Study material for this batch will appear here." />}
     </div>
   );
 }

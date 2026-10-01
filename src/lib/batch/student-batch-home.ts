@@ -41,13 +41,38 @@ export type BatchFolderNode = {
   files: { id: string; title: string; fileName: string; sizeBytes: number }[];
 };
 
+export type BatchDppItem = {
+  id: string;
+  title: string;
+  subject: string;
+  chapter: string;
+  questionCount: number;
+  durationMin: number;
+  /** UPCOMING = not open yet; LOCKED = published but no questions yet. */
+  status: "UPCOMING" | "LOCKED" | "PENDING" | "IN_PROGRESS" | "COMPLETED";
+  score: number | null;
+  opensAt: string | null;
+  /** Where Attempt / Result goes. */
+  href: string | null;
+};
+
+export type BatchTeacherCard = {
+  id: string;
+  name: string;
+  photoUrl: string | null;
+  subjects: string[];
+  experienceYears: string | null;
+  bio: string | null;
+};
+
 export type BatchNotice = { id: string; title: string; body: string; createdAt: string; deepLink: string | null };
 
 export type StudentBatchHomeData = {
-  batch: { id: string; name: string; code: string; exam: string | null; thumbnailUrl: string | null; teachers: string[] };
+  batch: { id: string; name: string; code: string; exam: string | null; thumbnailUrl: string | null; teachers: string[]; teacherCards: BatchTeacherCard[] };
   classes: BatchClassItem[];
   chapters: BatchChapterItem[];
   tests: BatchTestItem[];
+  dpps: BatchDppItem[];
   folders: BatchFolderNode[];
   notices: BatchNotice[];
 };
@@ -62,7 +87,20 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, u
       targetExam: true,
       thumbnailUrl: true,
       courseId: true,
-      teachers: { select: { teacher: { select: { user: { select: { name: true } } } } } },
+      teachers: {
+        select: {
+          teacher: {
+            select: {
+              id: true,
+              displayName: true,
+              subjects: true,
+              experienceYears: true,
+              bio: true,
+              user: { select: { name: true, photoUrl: true } },
+            },
+          },
+        },
+      },
     },
   });
   if (!batch) return null;
@@ -142,6 +180,94 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, u
     .sort((a, b) => a.subject.localeCompare(b.subject) || a.order - b.order || a.title.localeCompare(b.title))
     .map(({ order: _order, ...c }) => c);
 
+  // DPPs: the batch's own DPP slots (each backed by a test) plus the
+  // practice DPPs written for this batch's chapters.
+  const now = new Date();
+  const [dppSlots, chapterDpps] = await Promise.all([
+    prisma.batchSchedule.findMany({
+      where: { batchId, type: "DPP", status: { not: "CANCELLED" } },
+      orderBy: { startsAt: "desc" },
+      take: 200,
+      select: {
+        id: true,
+        title: true,
+        subject: true,
+        notes: true,
+        startsAt: true,
+        chapter: { select: { title: true, subject: { select: { title: true } } } },
+        test: {
+          select: {
+            id: true,
+            status: true,
+            archived: true,
+            durationMin: true,
+            sections: { select: { targetCount: true, _count: { select: { questions: true } } } },
+            attempts: { where: { studentId }, orderBy: { startedAt: "desc" }, take: 1, select: { status: true, score: true } },
+          },
+        },
+      },
+    }),
+    chapterMap.size
+      ? prisma.dpp.findMany({
+          where: { chapterId: { in: [...chapterMap.keys()] }, status: { in: ["PUBLISHED", "ACTIVE"] } },
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            name: true,
+            estimatedTimeMin: true,
+            questionTargetCount: true,
+            chapterId: true,
+            _count: { select: { questions: true } },
+            attempts: { where: { studentId }, orderBy: { startedAt: "desc" }, take: 1, select: { status: true, score: true } },
+          },
+        })
+      : Promise.resolve([]),
+  ]);
+  const attemptStatus = (a: { status: string } | undefined) =>
+    !a ? ("PENDING" as const) : a.status === "IN_PROGRESS" ? ("IN_PROGRESS" as const) : ("COMPLETED" as const);
+  const dpps: BatchDppItem[] = [
+    ...dppSlots.map((d): BatchDppItem => {
+      const t = d.test;
+      const questionCount = (t?.sections ?? []).reduce(
+        (n, sec) => n + Math.min(sec.targetCount > 0 ? sec.targetCount : Infinity, sec._count.questions),
+        0
+      );
+      const published = Boolean(t && t.status === "PUBLISHED" && !t.archived && questionCount > 0);
+      const upcoming = d.startsAt > now;
+      const a = t?.attempts[0];
+      const status = upcoming ? "UPCOMING" : !published ? "LOCKED" : attemptStatus(a);
+      return {
+        id: d.id,
+        title: d.title,
+        subject: d.chapter?.subject.title ?? d.subject ?? "Practice",
+        chapter: d.chapter?.title ?? d.notes ?? "Practice",
+        questionCount,
+        durationMin: t?.durationMin ?? 0,
+        status,
+        score: a?.score ?? null,
+        opensAt: d.startsAt.toISOString(),
+        href: status === "UPCOMING" || status === "LOCKED" || !t ? null : status === "COMPLETED" ? `/tests/${t.id}/result` : `/tests/${t.id}/attempt`,
+      };
+    }),
+    ...chapterDpps.map((d): BatchDppItem => {
+      const ch = chapterMap.get(d.chapterId!)!;
+      const ready = d._count.questions > 0;
+      const status = !ready ? "LOCKED" : attemptStatus(d.attempts[0]);
+      return {
+        id: d.id,
+        title: d.name,
+        subject: ch.subject,
+        chapter: ch.title,
+        questionCount: d._count.questions || d.questionTargetCount,
+        durationMin: d.estimatedTimeMin,
+        status,
+        score: d.attempts[0]?.score ?? null,
+        opensAt: null,
+        href: ready ? `/practice?dppId=${d.id}` : null,
+      };
+    }),
+  ];
+
   const tests = await prisma.test.findMany({
     where: {
       archived: false,
@@ -184,6 +310,14 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, u
       exam: batch.targetExam ?? null,
       thumbnailUrl: batch.thumbnailUrl ?? null,
       teachers: batch.teachers.map((t) => t.teacher.user.name).filter(Boolean),
+      teacherCards: batch.teachers.map(({ teacher: t }) => ({
+        id: t.id,
+        name: t.displayName || t.user.name,
+        photoUrl: t.user.photoUrl ?? null,
+        subjects: t.subjects,
+        experienceYears: t.experienceYears ?? null,
+        bio: t.bio ?? null,
+      })),
     },
     classes: schedules.map((s) => ({
       id: s.id,
@@ -211,6 +345,7 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, u
         attemptStatus: !st ? "NOT_STARTED" : st === "IN_PROGRESS" ? "IN_PROGRESS" : "SUBMITTED",
       };
     }),
+    dpps,
     folders: folders.filter(visible).map((f) => ({ id: f.id, parentId: f.parentId, name: f.name, files: f.files })),
     notices: notices.slice(0, 40),
   };
