@@ -33,6 +33,9 @@ import { DppItem } from "./ChapterDppsTab";
 import { TestItem } from "./ChapterTestsTab";
 import { ChapterReviewHistoryTimeline, ReviewHistoryItem } from "./ChapterReviewHistoryTimeline";
 import { formatISTDate, formatISTTime, computeISTScheduleDates } from "@/lib/date-utils";
+import { uploadFileToR2 } from "@/lib/storage/upload-client";
+
+const NOTES_MAX_BYTES = 50 * 1024 * 1024;
 import { UnifiedStartClassModal } from "./UnifiedStartClassModal";
 
 export interface UnifiedChapterScheduleTimelineProps {
@@ -124,6 +127,9 @@ export function UnifiedChapterScheduleTimeline({
   // its date/time are when it was taught, its length comes from the video.
   const [lecMode, setLecMode] = useState<"LECTURE" | "OLD_CLASS">("LECTURE");
   const [notesUrl, setNotesUrl] = useState("");
+  // Notes are uploaded as a PDF file here (not pasted as a link).
+  const [notesFile, setNotesFile] = useState<File | null>(null);
+  const [notesProgress, setNotesProgress] = useState<number | null>(null);
 
   // Form states - DPP
   const [dppName, setDppName] = useState("");
@@ -358,19 +364,44 @@ export function UnifiedChapterScheduleTimeline({
   };
 
   // Handle Notes PDF
-  const handleSaveNotes = async (e: React.FormEvent) => {
+  const handleSaveNotes = async (e: React.FormEvent, remove = false) => {
     e.preventDefault();
     if (!notesModalLecture) return;
+    if (!remove) {
+      if (!notesFile) {
+        setFormError("Choose the notes PDF to upload.");
+        return;
+      }
+      if (notesFile.type !== "application/pdf" && !notesFile.name.toLowerCase().endsWith(".pdf")) {
+        setFormError("Notes must be a PDF file.");
+        return;
+      }
+      if (notesFile.size > NOTES_MAX_BYTES) {
+        setFormError("The PDF is larger than 50 MB.");
+        return;
+      }
+    }
     setSubmitting(true);
     setFormError("");
 
     try {
+      let slidesUrl: string | null = null;
+      if (!remove && notesFile) {
+        setNotesProgress(0);
+        const up = await uploadFileToR2(notesFile, {
+          prefix: "notes",
+          fileType: "NOTES",
+          subPath: "lecture-notes",
+          entityId: notesModalLecture.id,
+          visibility: "PROTECTED",
+          onProgress: setNotesProgress,
+        });
+        slidesUrl = `/api/files/${up.fileAssetId}/open`;
+      }
       const res = await fetch(`/api/team/chapters/${chapterId}/lectures/${notesModalLecture.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          slidesUrl: notesUrl.trim() || null,
-        }),
+        body: JSON.stringify({ slidesUrl }),
       });
       const json = await res.json();
       if (!json.success) {
@@ -382,12 +413,14 @@ export function UnifiedChapterScheduleTimeline({
         prev.map((l) => (l.id === notesModalLecture.id ? json.data.lecture : l))
       );
       setNotesModalLecture(null);
-      toast.success("Class notes attached successfully!");
+      setNotesFile(null);
+      toast.success(remove ? "Class notes removed." : "Class notes uploaded!");
       router.refresh();
     } catch (err: any) {
-      setFormError(err.message || "Network error");
+      setFormError(err.message || "Upload failed — try again.");
     } finally {
       setSubmitting(false);
+      setNotesProgress(null);
     }
   };
 
@@ -930,7 +963,7 @@ export function UnifiedChapterScheduleTimeline({
                           type="button"
                           onClick={() => {
                             setNotesModalLecture(item.lectureData!);
-                            setNotesUrl("");
+                            setNotesUrl(""); setNotesFile(null);
                           }}
                           className="px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
                           title="Attach PDF Notes"
@@ -1015,7 +1048,7 @@ export function UnifiedChapterScheduleTimeline({
                                   onClick={() => {
                                     setActiveMenuId(null);
                                     setNotesModalLecture(item.lectureData!);
-                                    setNotesUrl(item.lectureData!.slidesUrl || "");
+                                    setNotesUrl(item.lectureData!.slidesUrl || ""); setNotesFile(null);
                                     setFormError("");
                                   }}
                                   className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition text-left cursor-pointer"
@@ -1337,19 +1370,33 @@ export function UnifiedChapterScheduleTimeline({
             )}
 
             <form onSubmit={handleSaveNotes} className="space-y-4 text-xs">
+              {notesUrl && (
+                <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900">
+                  <a href={notesUrl} target="_blank" rel="noreferrer" className="font-bold text-emerald-700 dark:text-emerald-300 hover:underline">
+                    Current notes PDF — open
+                  </a>
+                  <button
+                    type="button"
+                    disabled={submitting}
+                    onClick={(e) => handleSaveNotes(e, true)}
+                    className="text-rose-600 font-bold hover:underline disabled:opacity-50"
+                  >
+                    Remove
+                  </button>
+                </div>
+              )}
               <div>
                 <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  PDF URL or CDN Document Link
+                  {notesUrl ? "Replace with a new PDF" : "Upload notes PDF *"}
                 </label>
                 <input
-                  type="url"
-                  value={notesUrl}
-                  onChange={(e) => setNotesUrl(e.target.value)}
-                  placeholder="https://cdn.atomicpathshala.com/notes/chem-01.pdf"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 font-mono text-xs"
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  onChange={(e) => setNotesFile(e.target.files?.[0] ?? null)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:bg-blue-600 file:text-white file:font-bold"
                 />
                 <p className="text-[11px] text-slate-400 mt-1">
-                  Students will be able to read and download this PDF directly from their chapter roadmap.
+                  PDF up to 50 MB. Students can read and download it from the class.
                 </p>
               </div>
 
@@ -1366,7 +1413,11 @@ export function UnifiedChapterScheduleTimeline({
                   disabled={submitting}
                   className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-md shadow-blue-500/20 transition disabled:opacity-50"
                 >
-                  {submitting ? "Saving..." : "Save Notes PDF"}
+                  {submitting
+                    ? notesProgress !== null && notesProgress < 100
+                      ? `Uploading ${notesProgress}%`
+                      : "Saving..."
+                    : "Upload Notes PDF"}
                 </button>
               </div>
             </form>
