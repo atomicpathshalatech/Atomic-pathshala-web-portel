@@ -815,7 +815,9 @@ export function generateTestPaperHtml(
         : stmtHi.length === stmtEn.length
         ? [stmtHi, stmtEn]
         : [[stmtHi.join("<br/>")], [stmtEn.join("<br/>")]];
-    const num = `<span class="q-num">${q.number}.</span>`;
+    const num = withSolutionPart
+      ? `<span class="q-num"><span class="q-num-box">${q.number}</span></span>`
+      : `<span class="q-num">${q.number}.</span>`;
     const parts = [
       part("q-row-item q-stmt", `${num}<div class="q-body">${hiChunks[0]}</div>`, `${num}<div class="q-body">${enChunks[0]}</div>`, ` id="q-${q.number}"`),
       ...hiChunks.slice(1).map((h, i) => part("q-fig q-cont", h, enChunks[i + 1]!)),
@@ -856,7 +858,8 @@ export function generateTestPaperHtml(
       }
     }
     parts[parts.length - 1] = parts[parts.length - 1]!.replace('class="q-part ', 'class="q-part q-last ');
-    return parts.join("");
+    // Solutions booklet: a little more indent so lines start after the boxed number.
+    return withSolutionPart ? parts.map((p) => p.replace('class="q-part ', 'class="q-part in-sol ')).join("") : parts.join("");
   };
 
   const renderSingleRoughPageHtml = (pNo: number, subjectName?: string) => {
@@ -2043,26 +2046,32 @@ export function generateTestPaperHtml(
     /* Older booklet rules for these class names must not add padding/rules between lines. */
     .q-part.q-row-item, .q-part.sol-row-item { padding: 0 !important; margin: 0 !important; border-bottom: 0 !important; }
     .q-part.q-last { border-bottom: 0.6px solid #bdbdbd !important; }
-    .qp-cell { min-width: 0; color: #000; --q-indent: 2.3em; }
+    .qp-cell { min-width: 0; color: #000; --q-indent: 1.9em; }
+    .in-sol .qp-cell { --q-indent: 2.9em; }
     .qp-hi {
-      padding-right: 14px; border-right: 1.5px solid #000;
+      padding-right: 10px; border-right: 1.5px solid #000;
       font-family: 'Noto Serif Devanagari', 'Mangal', 'Times New Roman', serif;
-      font-size: 13.6pt; line-height: 1.5;
+      font-size: 12.6pt; line-height: 1.5;
     }
     .qp-en {
-      padding-left: 14px;
+      padding-left: 10px;
       font-family: 'Times New Roman', 'PT Serif', serif;
-      font-size: 14pt; line-height: 1.4;
+      font-size: 12.8pt; line-height: 1.4;
     }
     /* Everything but KaTeX inherits the line's font and size. */
     .qp-cell *:not(.katex *):not(.katex) { font-size: inherit; line-height: inherit; }
     .qp-cell .katex { font-size: 1.04em !important; line-height: 1.2 !important; }
     .q-stmt .qp-cell { display: flex; padding-top: 9px; }
     .q-num { flex: 0 0 var(--q-indent); font-weight: 700; }
+    .q-num-box {
+      display: inline-block; min-width: 1.9em; padding: 0 0.3em; text-align: center;
+      border: 1.5px solid #000; border-radius: 3px; background: #e8eef7;
+      font-family: 'Times New Roman', serif; font-weight: 700; line-height: 1.25;
+    }
     .q-body { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
     /* Figure, options and solution start at the statement's indent. */
     .q-fig .qp-hi, .q-opt .qp-hi, .q-sol .qp-hi { padding-left: var(--q-indent); }
-    .q-fig .qp-en, .q-opt .qp-en, .q-sol .qp-en { padding-left: calc(14px + var(--q-indent)); }
+    .q-fig .qp-en, .q-opt .qp-en, .q-sol .qp-en { padding-left: calc(10px + var(--q-indent)); }
     .q-fig .qp-cell { padding-top: 4px; }
     .q-opt .qp-cell { display: flex; align-items: baseline; gap: 0.5em; padding-top: 3px; }
     .opt-key { flex: 0 0 1.6em; }
