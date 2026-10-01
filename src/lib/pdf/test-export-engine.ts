@@ -753,8 +753,20 @@ export function generateTestPaperHtml(
   // page, options on the next) instead of leaving half a page empty.
 
   const OPTION_LETTERS = ["a", "b", "c", "d", "e", "f"];
-  /** "2" → "b" — options are printed a) b) c) d). */
-  const optionLetter = (key: string) => OPTION_LETTERS[Number(key) - 1] ?? key.toLowerCase();
+  /**
+   * Match-the-column questions already use (a) (b) … / (i) (ii) … inside the
+   * columns, so their answer choices are numbered 1) 2) 3) 4) instead —
+   * otherwise "(b)" in the table and "b)" as a choice read the same.
+   */
+  const MATCH_COLUMN = /column|colum|कॉलम|कालम|स्तम्भ|स्तंभ|list[\s-]*(i|1)\b|सूची/i;
+  const isMatchColumn = (q: FormattedExportQuestion) => MATCH_COLUMN.test(`${q.statementEn} ${q.statementHi}`);
+  /** Printed label of choice i (0-based): a b c d, or 1 2 3 4 for match-the-column. */
+  const choiceLabel = (q: FormattedExportQuestion, i: number) => (isMatchColumn(q) ? String(i + 1) : OPTION_LETTERS[i] ?? String(i + 1));
+  /** "2" → "b" (or "2" for match-the-column) — the correct choice as printed. */
+  const optionLetter = (q: FormattedExportQuestion) => {
+    const i = Number(q.correctOptionKey) - 1;
+    return Number.isInteger(i) && i >= 0 ? choiceLabel(q, i) : q.correctOptionKey.toLowerCase();
+  };
 
   const diagramFor = (q: FormattedExportQuestion) =>
     q.camDrawSvg
@@ -824,17 +836,20 @@ export function generateTestPaperHtml(
     ];
     const diagram = diagramFor(q);
     if (diagram) parts.push(part("q-fig", diagram, diagram));
+    if (q.options.some((o) => o.textEn || o.textHi)) {
+      for (let k = 0; k < parts.length; k++) parts[k] = parts[k]!.replace('class="q-part ', 'class="q-part keep-next ');
+    }
     q.options.forEach((opt, i) => {
       if (!opt.textEn && !opt.textHi) return;
       const cell = (hi: boolean) =>
-        `<span class="opt-key">${OPTION_LETTERS[i] ?? i + 1})</span><span class="opt-text">${renderFormulaContent(
+        `<span class="opt-key">${choiceLabel(q, i)})</span><span class="opt-text">${renderFormulaContent(
           hi ? opt.textHi || opt.textEn : opt.textEn || opt.textHi
         )}</span>`;
       parts.push(part("q-opt", cell(true), cell(false)));
     });
     if (withSolutionPart) {
       // One line per paragraph, so a long solution can continue on the next page.
-      const ans = optionLetter(q.correctOptionKey);
+      const ans = optionLetter(q);
       const solHi = q.solutionHi || q.solutionEn;
       const solEn = q.solutionEn || q.solutionHi;
       // Line by line (a blank line stays as a small gap), so a page can break anywhere in it.
@@ -1000,7 +1015,7 @@ export function generateTestPaperHtml(
       let body = "";
       for (let r = 0; r < rows; r++) {
         body += `<tr>${group
-          .map((c) => (c[r] ? `<td class="ak-q">${c[r]!.number}</td><td class="ak-a">${optionLetter(c[r]!.correctOptionKey)}</td>` : `<td class="ak-q"></td><td class="ak-a"></td>`))
+          .map((c) => (c[r] ? `<td class="ak-q">${c[r]!.number}</td><td class="ak-a">${optionLetter(c[r]!)}</td>` : `<td class="ak-q"></td><td class="ak-a"></td>`))
           .join('<td class="ak-gap"></td>')}</tr>`;
       }
       answerKeyTables.push(`
@@ -2231,10 +2246,19 @@ export function generateTestPaperHtml(
           // A few px of slack: late font/KaTeX reflow must never push a row off the page.
           if (stream.offsetHeight <= body.clientHeight - SAFETY_PX) return;
           if (stream.children.length > 1) {
-            // Keep a heading with the line that follows it.
+            // Keep headings / a question's statement with the line that
+            // follows them — unless they'd fill most of a page by themselves.
+            var carry = [];
+            var carried = 0;
             var prev = item.previousElementSibling;
+            while (prev && prev.classList.contains('keep-next') && carry.length + 1 < stream.children.length) {
+              carried += prev.offsetHeight;
+              if (carried > body.clientHeight * 0.45) { carry = []; break; }
+              carry.unshift(prev);
+              prev = prev.previousElementSibling;
+            }
             newPage();
-            if (prev && prev.classList.contains('keep-next')) stream.appendChild(prev);
+            carry.forEach(function (el) { stream.appendChild(el); });
             stream.appendChild(item);
           }
           // A single row taller than a whole page: let that page grow instead of clipping it.
