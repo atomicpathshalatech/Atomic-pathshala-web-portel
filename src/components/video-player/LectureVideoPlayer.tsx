@@ -217,7 +217,7 @@ export function LectureVideoPlayer({
     if (!youtubeVideoId) return "";
     const origin = typeof window !== "undefined" && window.location.origin ? window.location.origin : "";
     const originParam = origin ? `&origin=${encodeURIComponent(origin)}` : "";
-    return `https://www.youtube.com/embed/${youtubeVideoId}?enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&disablekb=1&fs=0&iv_load_policy=3&autoplay=0&vq=hd1080${originParam}`;
+    return `https://www.youtube.com/embed/${youtubeVideoId}?enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&disablekb=1&fs=0&iv_load_policy=3&cc_load_policy=0&autoplay=0&vq=hd1080${originParam}`;
   }, [youtubeVideoId]);
 
   const activeWatermark = useMemo(() => {
@@ -439,6 +439,8 @@ export function LectureVideoPlayer({
                 if (s.initialTime > 0) e.target.seekTo(s.initialTime, true);
                 const q = YT_QUALITY_MAP[s.selectedQuality] || "default";
                 e.target.setPlaybackQuality?.(q);
+                e.target.unloadModule?.("captions");
+                e.target.unloadModule?.("cc");
                 const levels = e.target.getAvailableQualityLevels?.();
                 if (Array.isArray(levels) && levels.length > 0) updateAvailableQualities(levels);
               } catch {}
@@ -940,6 +942,20 @@ export function LectureVideoPlayer({
       ? Math.min(3, Math.max(0.25, targetWidth / (containerSize.w * dpr)))
       : 1;
 
+  // YouTube draws its title bar, share/watch-later, "More videos", captions
+  // and logo along the top and bottom edges of the iframe. The iframe is made
+  // exactly as wide as the video and taller than it by YT_EDGE_PAD (its own
+  // pixels) above and below: the video stays the same size and centred, and
+  // YouTube's edge chrome lands in those extra bands, which sit outside the
+  // visible video (cropped by the container or covered by the masks below).
+  const videoW = Math.min(cw, ch * VIDEO_ASPECT); // fitted video, container px
+  const videoH = videoW / VIDEO_ASPECT;
+  const ytInnerW = videoW * renderScale;
+  const ytInnerH = videoH * renderScale;
+  const ytEdgePad = Math.max(160, ytInnerH * 0.25);
+  const ytShownH = videoH * fillScale; // visible video height, container px
+  const ytMaskH = Math.max(0, (ch - ytShownH) / 2);
+
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
   const bufferPercent = duration > 0 ? (bufferedEnd / duration) * 100 : 0;
 
@@ -992,8 +1008,8 @@ export function LectureVideoPlayer({
                     position: "absolute",
                     left: "50%",
                     top: "50%",
-                    width: `${renderScale * 100}%`,
-                    height: `${renderScale * 100}%`,
+                    width: `${ytInnerW}px`,
+                    height: `${ytInnerH + 2 * ytEdgePad}px`,
                     transform: `translate(-50%, -50%) scale(${fillScale / renderScale})`,
                   }
                 : { position: "absolute", inset: 0, width: "100%", height: "100%" }
@@ -1035,6 +1051,12 @@ export function LectureVideoPlayer({
           behind the poster. Right after play/resume, veil just the top edge
           where the title flashes. Sits under the interaction surface and
           every control. */}
+      {isYouTube && hasStartedPlaying && ytMaskH > 0 && (
+        <>
+          <div className="absolute top-0 left-0 right-0 z-[4] bg-black pointer-events-none" style={{ height: ytMaskH + 1 }} />
+          <div className="absolute bottom-0 left-0 right-0 z-[4] bg-black pointer-events-none" style={{ height: ytMaskH + 1 }} />
+        </>
+      )}
       {isYouTube && hasStartedPlaying && !isPlaying && (
         <div className="absolute inset-0 z-[5] bg-black pointer-events-none overflow-hidden">
           {posterUrl ? (
