@@ -6,6 +6,7 @@ import { requirePermission, hasPermission, UnauthorizedError } from "@/lib/rbac/
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { testSeriesSchema } from "@/lib/validation/test-series";
+import { thumbnailFields } from "@/lib/creative/thumbnail";
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -49,7 +50,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         ...(data.course !== undefined ? { course: data.course || null } : {}),
         ...(data.examType !== undefined ? { examType: data.examType || null } : {}),
         ...(data.tags !== undefined ? { tags: data.tags.length > 0 ? data.tags.join(",") : null } : {}),
-        ...(data.thumbnailUrl !== undefined ? { thumbnailUrl: data.thumbnailUrl || null } : {}),
+        ...(data.thumbnailUrl !== undefined ? thumbnailFields(data.thumbnailUrl) : {}),
         ...(data.visibility !== undefined ? { visibility: data.visibility } : {}),
         ...(data.status !== undefined ? { status: data.status } : {}),
         ...(data.startDate !== undefined ? { startDate: data.startDate ? new Date(data.startDate) : null } : {}),

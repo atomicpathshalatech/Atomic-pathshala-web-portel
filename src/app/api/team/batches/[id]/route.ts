@@ -9,6 +9,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { batchUpdateSchema } from "@/lib/validation/batch";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { clearAttemptsForSchedules } from "@/lib/team/resource-delete";
+import { thumbnailFields } from "@/lib/creative/thumbnail";
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -70,7 +71,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         startDate: data.startDate ?? null,
         endDate: data.endDate ?? null,
         capacity: data.capacity ?? null,
-        thumbnailUrl: data.thumbnailUrl || null,
+        ...thumbnailFields(data.thumbnailUrl),
       },
     });
 

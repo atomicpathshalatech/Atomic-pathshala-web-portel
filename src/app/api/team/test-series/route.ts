@@ -8,6 +8,7 @@ import { apiSuccess, handleApiError } from "@/lib/api/response";
 import { testSeriesSchema } from "@/lib/validation/test-series";
 import { generateTestSeriesCode } from "@/lib/test-series/code";
 import { Prisma } from "@prisma/client";
+import { thumbnailFields } from "@/lib/creative/thumbnail";
 
 export async function GET(request: NextRequest) {
   try {
@@ -56,7 +57,7 @@ export async function POST(request: NextRequest) {
             course: data.course || null,
             examType: data.examType || null,
             tags: data.tags.length > 0 ? data.tags.join(",") : null,
-            thumbnailUrl: data.thumbnailUrl || null,
+            ...thumbnailFields(data.thumbnailUrl),
             visibility: data.visibility,
             status: data.status || "DRAFT",
             startDate: data.startDate ? new Date(data.startDate) : null,

@@ -10,6 +10,7 @@ import { batchCreateSchema } from "@/lib/validation/batch";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import type { Prisma, BatchStatus } from "@prisma/client";
 import { BATCH_STATUS_OPTIONS } from "@/lib/validation/batch";
+import { thumbnailFields } from "@/lib/creative/thumbnail";
 
 export async function GET(request: NextRequest) {
   try {
@@ -80,7 +81,7 @@ export async function POST(request: NextRequest) {
           startDate: input.startDate ?? null,
           endDate: input.endDate ?? null,
           capacity: input.capacity ?? null,
-          thumbnailUrl: input.thumbnailUrl || null,
+          ...thumbnailFields(input.thumbnailUrl),
           createdById: session.user.id,
         },
       });
