@@ -13,6 +13,7 @@ export async function POST(request: NextRequest) {
       quizId?: string;
       questionId?: string;
       selectedIndex?: number;
+      correctIndex?: number;
       timeTakenSec?: number;
       questionText?: string;
       options?: any;
@@ -27,6 +28,7 @@ export async function POST(request: NextRequest) {
       quizId,
       questionId,
       selectedIndex,
+      correctIndex,
       timeTakenSec = 0,
       questionText,
       options,
@@ -47,6 +49,7 @@ export async function POST(request: NextRequest) {
       quizId,
       questionId,
       selectedIndex,
+      fallbackCorrectIndex: typeof correctIndex === "number" ? correctIndex : undefined,
       timeTakenSec,
       questionText,
       options,

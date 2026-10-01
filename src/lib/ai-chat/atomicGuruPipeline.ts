@@ -289,6 +289,7 @@ export async function recordQuizAnswer({
   attemptId,
   quizId,
   questionId,
+  fallbackCorrectIndex,
   selectedIndex,
   timeTakenSec = 0,
   questionText,
@@ -302,6 +303,8 @@ export async function recordQuizAnswer({
   quizId?: string;
   questionId: string;
   selectedIndex: number;
+  /** The quiz's own answer, used only when the question isn't stored. */
+  fallbackCorrectIndex?: number;
   timeTakenSec?: number;
   questionText?: string;
   options?: any;
@@ -334,6 +337,7 @@ export async function recordQuizAnswer({
     }
   }
 
+  if (!questionRecord && typeof fallbackCorrectIndex === "number") correctIndex = fallbackCorrectIndex;
   const isCorrect = selectedIndex === correctIndex;
   const correctLetter = String.fromCharCode(65 + correctIndex);
   const selectedLetter = String.fromCharCode(65 + selectedIndex);

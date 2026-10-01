@@ -1017,6 +1017,7 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
             quizId: dbQuizIdRef.current,
             questionId: currentQuestion.id,
             selectedIndex: optionIndex,
+            correctIndex: currentQuestion.correctIndex,
             timeTakenSec: timeSpent,
             questionText: currentQuestion.text,
             options: currentQuestion.options,
