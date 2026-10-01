@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
       ];
     }
 
-    const [logs, totalCount, activeNowCount] = await Promise.all([
+    const [logs, totalCount, recentVisitors] = await Promise.all([
       prisma.pageActivityLog.findMany({
         where,
         orderBy: { createdAt: "desc" },
@@ -75,12 +75,15 @@ export async function GET(request: NextRequest) {
         },
       }),
       prisma.pageActivityLog.count({ where }),
-      prisma.pageActivityLog.count({
-        where: {
-          createdAt: { gte: new Date(Date.now() - 5 * 60 * 1000) }, // active in last 5 min
-        },
+      // Who was on the site in the last 5 minutes — one per person (signed-in
+      // user, else browser), not one per page view: this used to count events.
+      prisma.pageActivityLog.findMany({
+        where: { createdAt: { gte: new Date(Date.now() - 5 * 60 * 1000) } },
+        select: { userId: true, visitorId: true },
+        distinct: ["userId", "visitorId"],
       }),
     ]);
+    const activeNowCount = new Set(recentVisitors.map((v) => v.userId ?? `v:${v.visitorId}`)).size;
 
     return NextResponse.json({
       ok: true,

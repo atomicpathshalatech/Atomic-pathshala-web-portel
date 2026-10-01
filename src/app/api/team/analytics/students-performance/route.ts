@@ -26,15 +26,102 @@ export async function GET(request: NextRequest) {
     const now = new Date();
 
     if (timeframe === "today") {
-      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      // Midnight in India (the server runs in UTC).
+      const istDay = new Date(now.getTime() + 330 * 60 * 1000).toISOString().slice(0, 10);
+      startDate = new Date(`${istDay}T00:00:00+05:30`);
     } else if (timeframe === "week") {
       startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     } else if (timeframe === "month") {
       startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     }
 
-    // Fetch all students
+    const since = startDate ? { gte: startDate } : undefined;
+
+    // Activity in the timeframe first; the board then covers every student who
+    // did something (it used to look at an arbitrary 200 students only).
+    const [testAttempts, dppAttempts, lectureProgresses, liveAttendances, ncertAttempts, videoWatches, totalStudents] = await Promise.all([
+      prisma.attempt.findMany({
+        where: {
+          status: { in: ["SUBMITTED", "AUTO_SUBMITTED"] },
+          testId: { not: null },
+          ...(since ? { submittedAt: since } : {}),
+        },
+        select: {
+          studentId: true,
+          score: true,
+          answers: { select: { isCorrect: true } },
+        },
+      }),
+      prisma.attempt.findMany({
+        where: {
+          dppId: { not: null },
+          ...(since ? { submittedAt: since } : {}),
+        },
+        select: {
+          studentId: true,
+          answers: { select: { isCorrect: true } },
+        },
+      }),
+      prisma.lectureProgress.findMany({
+        where: since ? { completedAt: since } : {},
+        select: {
+          studentId: true,
+          lectureId: true,
+          lecture: { select: { durationMin: true } },
+        },
+      }),
+      prisma.liveClassAttendance.findMany({
+        // (this table has no createdAt — filtering on it made every
+        // Today / Week / Month request fail, so the tab showed zeros)
+        where: since ? { joinedAt: since } : {},
+        select: {
+          studentId: true,
+          joinedAt: true,
+          leftAt: true,
+          lastSeenAt: true,
+          activeDurationSec: true,
+        },
+      }),
+      prisma.ncertStudentPageProgress.findMany({
+        where: since ? { startedAt: since } : {},
+        select: {
+          studentId: true,
+          questionsAttempted: true,
+          correctAnswers: true,
+          incorrectAnswers: true,
+        },
+      }),
+      prisma.videoWatch.findMany({
+        where: since ? { lastWatchedAt: since } : {},
+        select: { studentId: true, lectureId: true, watchedSec: true },
+      }),
+      prisma.student.count(),
+    ]);
+
+    const activeIds = new Set<string>();
+    for (const list of [testAttempts, dppAttempts, lectureProgresses, liveAttendances, ncertAttempts, videoWatches]) {
+      for (const row of list) activeIds.add(row.studentId);
+    }
+    // Searching also finds students with no activity in this timeframe.
+    const searchMatches = searchQuery
+      ? await prisma.student.findMany({
+          where: {
+            OR: [
+              { user: { name: { contains: searchQuery, mode: "insensitive" } } },
+              { user: { email: { contains: searchQuery, mode: "insensitive" } } },
+              { studentIdCode: { contains: searchQuery, mode: "insensitive" } },
+              { enrollmentNumber: { contains: searchQuery, mode: "insensitive" } },
+              { batchEnrollments: { some: { batch: { name: { contains: searchQuery, mode: "insensitive" } } } } },
+            ],
+          },
+          select: { id: true },
+          take: 200,
+        })
+      : [];
+    for (const m of searchMatches) activeIds.add(m.id);
+
     const students = await prisma.student.findMany({
+      where: { id: { in: [...activeIds] } },
       include: {
         user: {
           select: {
@@ -51,67 +138,7 @@ export async function GET(request: NextRequest) {
           },
         },
       },
-      take: 200,
     });
-
-    const studentIds = students.map((s) => s.id);
-
-    const [testAttempts, dppAttempts, lectureProgresses, liveAttendances, ncertAttempts] = await Promise.all([
-      prisma.attempt.findMany({
-        where: {
-          studentId: { in: studentIds },
-          status: { in: ["SUBMITTED", "AUTO_SUBMITTED"] },
-          testId: { not: null },
-          ...(startDate ? { submittedAt: { gte: startDate } } : {}),
-        },
-        include: {
-          test: { select: { name: true, correctMarks: true } },
-          answers: { select: { isCorrect: true, timeTakenSec: true } },
-        },
-      }),
-      prisma.attempt.findMany({
-        where: {
-          studentId: { in: studentIds },
-          dppId: { not: null },
-          ...(startDate ? { submittedAt: { gte: startDate } } : {}),
-        },
-        include: {
-          answers: { select: { isCorrect: true, timeTakenSec: true } },
-        },
-      }),
-      prisma.lectureProgress.findMany({
-        where: {
-          studentId: { in: studentIds },
-          ...(startDate ? { completedAt: { gte: startDate } } : {}),
-        },
-        include: {
-          lecture: { select: { durationMin: true } },
-        },
-      }),
-      prisma.liveClassAttendance.findMany({
-        where: {
-          studentId: { in: studentIds },
-          ...(startDate ? { createdAt: { gte: startDate } } : {}),
-        },
-        select: {
-          studentId: true,
-          joinedAt: true,
-          leftAt: true,
-        },
-      }),
-      prisma.ncertStudentPageProgress.findMany({
-        where: {
-          studentId: { in: studentIds },
-          ...(startDate ? { startedAt: { gte: startDate } } : {}),
-        },
-        select: {
-          studentId: true,
-          questionsAttempted: true,
-          correctAnswers: true,
-          incorrectAnswers: true,
-        },
-      }),
-    ]);
 
     // Aggregate metrics per student
     const studentMetrics = students.map((s) => {
@@ -119,6 +146,7 @@ export async function GET(request: NextRequest) {
       const studentDpps = dppAttempts.filter((d) => d.studentId === s.id);
       const studentLectures = lectureProgresses.filter((l) => l.studentId === s.id);
       const studentLives = liveAttendances.filter((a) => a.studentId === s.id);
+      const studentWatches = videoWatches.filter((w) => w.studentId === s.id);
       const studentNcert = ncertAttempts.filter((n) => n.studentId === s.id);
 
       // Questions practiced
@@ -150,15 +178,18 @@ export async function GET(request: NextRequest) {
           : 0;
 
       // Watch time and study hours
-      let lectureWatchMinutes = studentLectures.reduce((sum, l) => sum + (l.lecture?.durationMin || 45), 0);
+      const watchedLectureIds = new Set(studentWatches.map((w) => w.lectureId).filter(Boolean));
+      const watchedSec = studentWatches.reduce((sum, w) => sum + w.watchedSec, 0);
+      const untrackedLectureMin = studentLectures
+        .filter((l) => !watchedLectureIds.has(l.lectureId))
+        .reduce((sum, l) => sum + (l.lecture?.durationMin ?? 0), 0);
+      const lectureWatchMinutes = Math.round(watchedSec / 60) + untrackedLectureMin;
       let liveClassMinutes = 0;
       for (const att of studentLives) {
-        if (att.joinedAt && att.leftAt) {
-          const dur = Math.round((att.leftAt.getTime() - att.joinedAt.getTime()) / 60000);
-          liveClassMinutes += Math.max(5, Math.min(180, dur));
-        } else {
-          liveClassMinutes += 45;
-        }
+        const end = att.leftAt ?? att.lastSeenAt;
+        const spanMin = Math.max(0, Math.round((end.getTime() - att.joinedAt.getTime()) / 60000));
+        const activeMin = Math.round(att.activeDurationSec / 60);
+        liveClassMinutes += Math.min(240, activeMin > 0 ? activeMin : spanMin);
       }
 
       const totalStudyMinutes = lectureWatchMinutes + liveClassMinutes;
@@ -240,16 +271,17 @@ export async function GET(request: NextRequest) {
 
     // Summary statistics
     const totalQuestionsPlatform = studentMetrics.reduce((sum, s) => sum + s.totalQuestionsAttempted, 0);
-    const totalStudyHoursPlatform = Math.round(
-      studentMetrics.reduce((sum, s) => sum + s.totalStudyMinutes, 0) / 60
-    );
+    // One decimal: a few minutes of study no longer rounds down to "0 hrs".
+    const totalStudyHoursPlatform =
+      Math.round((studentMetrics.reduce((sum, s) => sum + s.totalStudyMinutes, 0) / 60) * 10) / 10;
     const activePracticingStudents = studentMetrics.filter((s) => s.totalQuestionsAttempted > 0).length;
 
     return NextResponse.json({
       ok: true,
       timeframe,
       summary: {
-        totalStudents: studentMetrics.length,
+        totalStudents,
+        activeStudents: studentMetrics.filter((m) => m.totalQuestionsAttempted > 0 || m.totalStudyMinutes > 0 || m.testsCompletedCount > 0).length,
         activePracticingStudents,
         totalQuestionsPlatform,
         totalStudyHoursPlatform,

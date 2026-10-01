@@ -41,6 +41,7 @@ export function StudentPerformanceTab() {
   const [summary, setSummary] = useState({
     totalStudents: 0,
     activePracticingStudents: 0,
+    activeStudents: 0 as number | undefined,
     totalQuestionsPlatform: 0,
     totalStudyHoursPlatform: 0,
   });
@@ -109,9 +110,9 @@ export function StudentPerformanceTab() {
             <span className="material-symbols-outlined text-lg">local_fire_department</span>
           </div>
           <p className="text-2xl font-bold text-slate-900 dark:text-white">
-            {summary.activePracticingStudents.toLocaleString("en-IN")}
+            {(summary.activeStudents ?? summary.activePracticingStudents).toLocaleString("en-IN")}
           </p>
-          <p className="text-xs text-slate-500 font-medium">Active Students Today</p>
+          <p className="text-xs text-slate-500 font-medium">Active Students ({timeframe})</p>
         </div>
 
         <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">

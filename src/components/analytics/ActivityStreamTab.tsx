@@ -184,9 +184,9 @@ export function ActivityStreamTab() {
         <div className="flex items-center gap-2">
           <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
           <span className="font-semibold text-slate-800 dark:text-slate-200">
-            {activeNowCount} active user{activeNowCount === 1 ? "" : "s"}
+            {activeNowCount} {activeNowCount === 1 ? "person" : "people"} online
           </span>{" "}
-          in last 5 minutes
+          (unique visitors in the last 5 minutes)
         </div>
         <div>
           Showing <span className="font-semibold text-slate-800 dark:text-slate-200">{logs.length}</span> of{" "}
