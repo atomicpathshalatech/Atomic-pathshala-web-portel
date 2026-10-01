@@ -9,7 +9,7 @@ import { CLASS_NOTES_FOLDER, ensureFolder } from "@/lib/batch/past-classes";
  *  - the class's player shows it (lecture notes, or the class session's
  *    slides when the class has no chapter lecture), and
  *  - it is filed in the batch under Materials → Class Notes → <subject>.
- * Re-uploading replaces what the player shows; the older file stays in Materials.
+ * Re-uploading replaces the earlier notes everywhere (player and Materials).
  */
 
 export class ClassNotesError extends Error {
@@ -29,7 +29,7 @@ export async function attachClassNotes(scheduleId: string, fileAssetId: string, 
       batchId: true,
       lectureId: true,
       chapter: { select: { subject: { select: { title: true } } } },
-      liveWhiteboardSession: { select: { id: true } },
+      liveWhiteboardSession: { select: { id: true, presentationUrl: true } },
     },
   });
   if (!schedule) throw new ClassNotesError("Class not found", 404);
@@ -54,6 +54,8 @@ export async function attachClassNotes(scheduleId: string, fileAssetId: string, 
     const rootId = await ensureFolder(tx as typeof prisma, schedule.batchId, null, ROOT_FOLDER_NAME, userId);
     const notesId = await ensureFolder(tx as typeof prisma, schedule.batchId, rootId, CLASS_NOTES_FOLDER, userId);
     const subjectId = await ensureFolder(tx as typeof prisma, schedule.batchId, notesId, subject, userId);
+    // A new upload replaces this class's earlier notes in Materials too.
+    await tx.batchFolderFile.deleteMany({ where: { folderId: subjectId, title: `${schedule.title} — Notes` } });
     const file = await tx.batchFolderFile.create({
       data: {
         folderId: subjectId,
@@ -72,6 +74,12 @@ export async function attachClassNotes(scheduleId: string, fileAssetId: string, 
     if (schedule.lectureId) {
       await tx.lecture.update({ where: { id: schedule.lectureId }, data: { slidesUrl: openUrl } });
       shownOn = "LECTURE";
+      // An earlier notes upload kept on the class session is replaced too
+      // (live-class slides, stored as /access links, are left alone).
+      const wb = schedule.liveWhiteboardSession;
+      if (wb?.presentationUrl && /^\/api\/files\/[^/]+\/open$/.test(wb.presentationUrl)) {
+        await tx.whiteboardSession.update({ where: { id: wb.id }, data: { presentationUrl: openUrl, presentationName: asset.originalFilename } });
+      }
     } else if (schedule.liveWhiteboardSession) {
       await tx.whiteboardSession.update({
         where: { id: schedule.liveWhiteboardSession.id },

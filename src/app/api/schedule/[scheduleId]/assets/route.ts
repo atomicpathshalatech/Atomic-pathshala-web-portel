@@ -285,9 +285,22 @@ export async function GET(
 
     // Notes the teacher uploaded for this class (Notes button / chapter notes)
     // are stored as /api/files/<id>/open and always win over generated ones.
-    const uploadedNotes = [wbSession?.presentationUrl, schedule.lecture?.slidesUrl].find(
-      (u): u is string => typeof u === "string" && /^\/api\/files\/[^/]+\/open$/.test(u)
+    // They can sit on the class session and on its chapter lecture; the most
+    // recently uploaded one is the current notes (an older upload used to
+    // keep showing after a new PDF went to the other place).
+    const UPLOADED = /^\/api\/files\/([^/]+)\/open$/;
+    const uploadedCandidates = [wbSession?.presentationUrl, schedule.lecture?.slidesUrl].filter(
+      (u): u is string => typeof u === "string" && UPLOADED.test(u)
     );
+    let uploadedNotes = uploadedCandidates[0];
+    if (new Set(uploadedCandidates).size > 1) {
+      const assets = await prisma.fileAsset.findMany({
+        where: { id: { in: uploadedCandidates.map((u) => u.match(UPLOADED)![1]!) } },
+        select: { id: true, createdAt: true },
+      });
+      const newest = assets.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+      if (newest) uploadedNotes = `/api/files/${newest.id}/open`;
+    }
 
     if (wbSession) {
       // Check original presentation uploaded before/during class
