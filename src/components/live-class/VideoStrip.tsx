@@ -247,6 +247,7 @@ function VideoStripInner({
   const connectionState = useConnectionState();
   const tracks = useTracks([Track.Source.Camera, Track.Source.Microphone], { onlySubscribed: false });
   const { isCameraEnabled, isMicrophoneEnabled, localParticipant } = useLocalParticipant();
+  const localVideoRef = useRef<HTMLVideoElement>(null);
 
   const mic = useMediaDeviceSelect({ kind: "audioinput" });
   const cam = useMediaDeviceSelect({ kind: "videoinput" });
@@ -435,7 +436,15 @@ function VideoStripInner({
 
         {/* Video Canvas */}
         {cameraTrack && cameraTrack.publication && !cameraTrack.publication.isMuted && isCameraEnabled ? (
-          <VideoTrack trackRef={cameraTrack} className="w-full h-full object-cover transform scale-x-[-1]" />
+          chromaKey ? (
+            <>
+              {/* Source for the keyer: kept rendering (not display:none) so frames keep coming. */}
+              <VideoTrack ref={localVideoRef} trackRef={cameraTrack} className="absolute inset-0 w-full h-full opacity-0 pointer-events-none" />
+              <ChromaKeyVideoCanvas videoRef={localVideoRef} className="relative w-full h-full object-cover transform scale-x-[-1]" />
+            </>
+          ) : (
+            <VideoTrack trackRef={cameraTrack} className="w-full h-full object-cover transform scale-x-[-1]" />
+          )
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center bg-[#0d0f18] p-4 text-center">
             <div className="w-14 h-14 rounded-2xl bg-blue-500/10 border border-blue-500/30 text-blue-400 flex items-center justify-center mb-2 shadow-inner">
@@ -954,12 +963,12 @@ function LocalWebcamPreview({
             autoPlay
             playsInline
             muted
-            className={chromaKey ? "hidden" : "w-full h-full object-cover transform scale-x-[-1]"}
+            className={chromaKey ? "absolute inset-0 w-full h-full opacity-0 pointer-events-none" : "w-full h-full object-cover transform scale-x-[-1]"}
           />
           {chromaKey && (
             <ChromaKeyVideoCanvas
               videoRef={videoRef}
-              className="w-full h-full object-cover transform scale-x-[-1]"
+              className="relative w-full h-full object-cover transform scale-x-[-1]"
             />
           )}
         </>

@@ -131,15 +131,20 @@ void main() {
   }
   vec2 v = acc / n - 0.5;
   vec2 k = keyCbCr - 0.5;
-  float mag = length(v);
-  // Plain chroma distance (like OBS) misses a DIM screen: low light shrinks
-  // the chroma toward grey, far from the bright key. So also compare the
-  // chroma DIRECTION (hue angle) — a dim green points the same way as the
-  // key — while never keying near-neutral pixels (black hair, grey clothes).
-  float cosang = dot(v, k) / (mag * length(k) + 1e-5);
-  float angular = (1.0 - cosang) * 0.35 + max(0.0, 0.05 - mag) * 4.0;
-  float dist = min(distance(acc / n, keyCbCr), angular);
-  float baseMask = dist - similarity * 0.3;
+  // Measured against the screen's own colour:
+  //  - hue:    how far the pixel's hue is off the screen's (in units of the
+  //            screen's saturation, so a dull olive wall gets a tight band);
+  //  - colour: how close to colourless it is (along the screen's hue).
+  // A dim / shadowed screen keeps the screen's hue and some colour, so it
+  // still keys; skin is another hue and hair / white / grey clothes are
+  // nearly colourless, so they never key — even with the similarity slider
+  // turned all the way up.
+  float kmag = max(length(k), 0.02);
+  vec2 kh = k / kmag;
+  float along = dot(v, kh);
+  float perp = abs(v.x * kh.y - v.y * kh.x);
+  float dist = max(perp / kmag, clamp((0.06 - along) / 0.06, 0.0, 2.0));
+  float baseMask = dist - similarity * 0.5;
   float alpha = pow(clamp(baseMask / smoothness, 0.0, 1.0), 1.5);
   // Spill: pull the key colour's cast out of what remains (desaturate toward luma).
   float spillVal = pow(clamp(baseMask / spill, 0.0, 1.0), 1.5);
@@ -224,8 +229,8 @@ export class ChromaKeyer {
     gl.uniform2f(this.u.texel!, 1 / w, 1 / h);
     gl.uniform2f(this.u.keyCbCr!, cb, cr);
     gl.uniform1f(this.u.similarity!, s.similarity);
-    gl.uniform1f(this.u.smoothness!, Math.max(0.001, s.smoothness * 0.3));
-    gl.uniform1f(this.u.spill!, Math.max(0.001, s.spill * 0.3));
+    gl.uniform1f(this.u.smoothness!, Math.max(0.02, s.smoothness * 0.6));
+    gl.uniform1f(this.u.spill!, Math.max(0.001, s.spill * 0.6));
     gl.uniform1f(this.u.brightness!, s.brightness);
     gl.uniform1f(this.u.contrast!, s.contrast);
     gl.uniform1f(this.u.gamma!, s.gamma);
