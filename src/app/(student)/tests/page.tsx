@@ -293,11 +293,20 @@ export default async function StudentTestsPage() {
   // 3. Fetch Category 2: Test Series & Batch Test Series Boxes
   let dbTestSeries: any[] = [];
   try {
+    // Only series this student has: added to one of their batches, or one
+    // they have already taken a test in (used to list every series, and
+    // their draft tests).
     dbTestSeries = await prisma.testSeries.findMany({
+      where: {
+        OR: [
+          ...(batchIds.length ? [{ batchImports: { some: { batchId: { in: batchIds } } } }] : []),
+          { tests: { some: { attempts: { some: { studentId: student.id } } } } },
+        ],
+      },
       include: {
         tests: {
           where: {
-            status: { in: ["PUBLISHED", "DRAFT", "APPROVED"] },
+            status: { in: ["PUBLISHED", "APPROVED"] },
             archived: false,
           },
           include: {
@@ -314,7 +323,8 @@ export default async function StudentTestsPage() {
               },
             },
           },
-          orderBy: { createdAt: "asc" },
+          // In sequence: by when each test opens, then by when it was added.
+          orderBy: [{ openTime: "asc" }, { createdAt: "asc" }],
         },
       },
       orderBy: { createdAt: "desc" },
