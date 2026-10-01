@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db";
+import { areResultsReleased } from "@/lib/tests/schedule-rules";
 
 /**
  * Everything an enrolled student's batch page shows, in one place (PW/Allen
@@ -32,6 +33,8 @@ export type BatchTestItem = {
   openTime: string | null;
   closeTime: string | null;
   attemptStatus: "NOT_STARTED" | "IN_PROGRESS" | "SUBMITTED";
+  /** Paper + solutions PDF, once the export route will hand it out. */
+  pdfHref: string | null;
 };
 
 export type BatchFolderNode = {
@@ -54,6 +57,8 @@ export type BatchDppItem = {
   opensAt: string | null;
   /** Where Attempt / Result goes. */
   href: string | null;
+  /** Questions + solutions PDF (submitted DPPs that are backed by a test). */
+  pdfHref: string | null;
 };
 
 export type BatchTeacherCard = {
@@ -247,6 +252,8 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, u
         score: a?.score ?? null,
         opensAt: d.startsAt.toISOString(),
         href: status === "UPCOMING" || status === "LOCKED" || !t ? null : status === "COMPLETED" ? `/tests/${t.id}/result` : `/tests/${t.id}/attempt`,
+        // DPP solutions open once the student has submitted it.
+        pdfHref: status === "COMPLETED" && t && a?.status !== "IN_PROGRESS" ? `/api/tests/${t.id}/export?type=with-solution` : null,
       };
     }),
     ...chapterDpps.map((d): BatchDppItem => {
@@ -264,6 +271,7 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, u
         score: d.attempts[0]?.score ?? null,
         opensAt: null,
         href: ready ? `/practice?dppId=${d.id}` : null,
+        pdfHref: null,
       };
     }),
   ];
@@ -285,6 +293,7 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, u
       durationMin: true,
       openTime: true,
       closeTime: true,
+      batchSchedule: { select: { startsAt: true, endsAt: true, type: true } },
       attempts: { where: { studentId }, select: { status: true } },
     },
   });
@@ -343,6 +352,8 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, u
         openTime: t.openTime?.toISOString() ?? null,
         closeTime: t.closeTime?.toISOString() ?? null,
         attemptStatus: !st ? "NOT_STARTED" : st === "IN_PROGRESS" ? "IN_PROGRESS" : "SUBMITTED",
+        // Same rule as the export route: everyone gets the paper once the test time is over.
+        pdfHref: st && st !== "IN_PROGRESS" && areResultsReleased(t) ? `/api/tests/${t.id}/export?type=with-solution` : null,
       };
     }),
     dpps,
