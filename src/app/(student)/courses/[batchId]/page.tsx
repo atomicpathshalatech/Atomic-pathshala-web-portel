@@ -5,6 +5,8 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { CourseDetailMasterView } from "@/components/course-platform/CourseDetailMasterView";
 import { SAMPLE_COURSES } from "@/components/course-platform/sample-courses";
+import { StudentBatchHome, type BatchTab } from "@/components/student/batch/StudentBatchHome";
+import { loadStudentBatchHome } from "@/lib/batch/student-batch-home";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -15,8 +17,10 @@ export const metadata: Metadata = {
 
 export default async function BatchCoursePage({
   params,
+  searchParams,
 }: {
   params: { batchId: string } | Promise<{ batchId: string }>;
+  searchParams?: { tab?: string };
 }) {
   const resolvedParams = await Promise.resolve(params);
   const batchId = resolvedParams?.batchId || "yodha-chemistry-neet-2027";
@@ -83,9 +87,11 @@ export default async function BatchCoursePage({
   // 3. Check student session & resolve batch access (Admin grant, paid enrollment, or subscription)
   let isEnrolled = false;
   let studentId: string | null = null;
+  let userId: string | null = null;
   try {
     const session = await getServerSession(authOptions);
     if (session?.user?.id) {
+      userId = session.user.id;
       const student = await prisma.student.findUnique({
         where: { userId: session.user.id },
         select: { id: true },
@@ -105,7 +111,18 @@ export default async function BatchCoursePage({
     console.error("Session lookup or entitlement check error in batch page:", err);
   }
 
-  // 4. If enrolled and batch has subjects, render the enrolled course dashboard
+  // 4. Enrolled student: their batch — classes, tests, study material and
+  // announcements on one page with tabs (no pop-ups, no sales sections).
+  if (isEnrolled && dbBatch && studentId && userId) {
+    const data = await loadStudentBatchHome(dbBatch.id, studentId, userId);
+    if (data) {
+      const t = searchParams?.tab;
+      const initialTab: BatchTab = t === "tests" || t === "material" || t === "notices" ? t : "classes";
+      return <StudentBatchHome data={data} initialTab={initialTab} />;
+    }
+  }
+
+  // (Legacy enrolled view, used only if the batch home couldn't load.)
   if (isEnrolled && dbBatch?.course?.subjects && dbBatch.course.subjects.length > 0) {
     const course = dbBatch.course;
     return (
