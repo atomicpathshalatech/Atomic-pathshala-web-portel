@@ -9,7 +9,7 @@ import { doubtCreateSchema, type DoubtCreateInput, SUBJECT_OPTIONS } from "@/lib
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024; // 5MB, mirrors the API route's limit
 const ALLOWED_ATTACHMENT_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
-export function DoubtForm() {
+export function DoubtForm({ defaultSubject }: { defaultSubject?: DoubtCreateInput["subject"] } = {}) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -27,7 +27,7 @@ export function DoubtForm() {
     handleSubmit,
     reset,
     formState: { errors },
-  } = useForm<DoubtCreateInput>({ resolver: zodResolver(doubtCreateSchema) });
+  } = useForm<DoubtCreateInput>({ resolver: zodResolver(doubtCreateSchema), defaultValues: defaultSubject ? { subject: defaultSubject } : undefined });
 
   async function handleAttachmentChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
