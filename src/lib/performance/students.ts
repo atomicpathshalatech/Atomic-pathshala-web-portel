@@ -143,7 +143,8 @@ export async function listStudentPerformance(
 
   const activity = opts.activity ?? "all";
   const filtered = rows.filter((r) => matchesActivity(r.lastActiveAt, activity));
-  const sortKey = pickSort(STUDENT_SORT, opts.sort, "lastActive");
+  // Top performers first by default: most questions answered correctly.
+  const sortKey = pickSort(STUDENT_SORT, opts.sort, "correct");
   const sorted = sortRows(filtered, STUDENT_SORT, sortKey, opts.dir ?? "desc");
   const skip = opts.skip ?? 0;
   const take = Math.min(opts.take ?? 50, 200);

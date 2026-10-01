@@ -171,7 +171,9 @@ async function run() {
   const never = await listStudentPerformance({ activity: "never" });
   assert(never.total === 1 && never.rows[0]?.studentId === aarav.id, "Students: 'never active' filter");
   const bogus = await listStudentPerformance({ sort: "passwordHash" });
-  assert(bogus.sort === "lastActive", "Students: an unknown sort column falls back safely");
+  assert(bogus.sort === "correct", "Students: an unknown sort column falls back safely (to top performers)");
+  const byDefault = await listStudentPerformance({});
+  assert(byDefault.sort === "correct" && byDefault.rows[0]?.studentId === student.id && byDefault.rows[1]?.studentId === aarav.id, "Students: top performer (most correct answers) first by default");
 
   const detail = await studentPerformanceDetail(student.id);
   const d1 = detail?.practice[0];

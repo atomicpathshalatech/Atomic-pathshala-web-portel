@@ -355,7 +355,7 @@ const PAGE_SIZE = 50;
 
 async function StudentsTable({ params, q, page, link }: { params: Params; q: string; page: number; link: LinkFn }) {
   const activity: ActivityFilter = ACTIVITY.some((a) => a.id === params.activity) ? (params.activity as ActivityFilter) : "all";
-  const sort = pickSort(STUDENT_SORT, params.sort, "lastActive");
+  const sort = pickSort(STUDENT_SORT, params.sort, "correct");
   const dir = pickDir(params.dir, TEXT_COLUMNS.has(sort) ? "asc" : "desc");
   const [{ total, rows }, batches] = await Promise.all([
     listStudentPerformance({ search: q, batchId: params.batch || undefined, activity, sort, dir, skip: (page - 1) * PAGE_SIZE, take: PAGE_SIZE }),
