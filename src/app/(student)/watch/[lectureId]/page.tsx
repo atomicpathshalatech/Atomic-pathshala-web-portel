@@ -50,8 +50,14 @@ export default async function WatchLecturePage({ params }: { params?: { lectureI
     },
   });
 
-  // 2. If not found by lecture ID, check if targetId is a BatchSchedule ID
-  if (!lecture) {
+  // 2. If not found by lecture ID, check if targetId is a BatchSchedule ID.
+  // A class scheduled from a chapter has the SAME id as its lecture, so check
+  // the class too — otherwise its recording never played and the student was
+  // sent to the course/batch lecture page instead.
+  const classWithSameId = lecture
+    ? await prisma.batchSchedule.findUnique({ where: { id: targetId }, select: { id: true } })
+    : null;
+  if (!lecture || classWithSameId) {
     const schedule = await prisma.batchSchedule.findUnique({
       where: { id: targetId },
       include: {
