@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { ROOT_FOLDER_NAME } from "@/lib/batch/folders";
 import type { PastClassCreateInput } from "@/lib/validation/batch";
 import { canonicalYouTubeUrl, checkYouTubeEmbeddable, parseYouTubeVideoId, type EmbedCheck } from "@/lib/youtube/video-link";
+import { youtubeVideoDurationMin } from "@/lib/youtube/video-duration";
 
 /**
  * Classes that happened before the app ran them (the batch started on
@@ -84,7 +85,7 @@ export async function createPastClass(
   batchId: string,
   userId: string,
   input: PastClassCreateInput,
-  deps: { checkEmbed?: (id: string) => Promise<EmbedCheck> } = {}
+  deps: { checkEmbed?: (id: string) => Promise<EmbedCheck>; videoDurationMin?: (id: string) => Promise<number | null> } = {}
 ) {
   const options = await pastClassOptions(batchId);
   if (!options) throw new PastClassError("Batch not found", 404);
@@ -110,7 +111,10 @@ export async function createPastClass(
   }
 
   const startsAt = input.startsAt;
-  const endsAt = new Date(startsAt.getTime() + input.durationMin * 60_000);
+  // The class lasts as long as its YouTube video (not a typed-in number).
+  const fromYoutube = await (deps.videoDurationMin ?? youtubeVideoDurationMin)(videoId);
+  const durationMin = fromYoutube ?? input.durationMin;
+  const endsAt = new Date(startsAt.getTime() + durationMin * 60_000);
 
   const duplicate = await prisma.batchSchedule.findFirst({
     where: { batchId, chapterId: chapter.id, startsAt },
@@ -159,7 +163,7 @@ export async function createPastClass(
         scheduledDate: startsAt,
         startTime: istClock(startsAt),
         endTime: istClock(endsAt),
-        durationMin: input.durationMin,
+        durationMin,
         status: "PUBLISHED",
         teacherId: teacher.id,
       },

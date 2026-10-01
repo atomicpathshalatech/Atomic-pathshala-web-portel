@@ -92,6 +92,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           startTime: true,
           durationMin: true,
           teacherId: true,
+          videoUrl: true,
           chapter: { select: { subject: { select: { title: true } } } },
         },
       });
@@ -142,6 +143,30 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
               createdById: session.user.id,
             },
           });
+          // An old class (YouTube recording) arrives as that recording, not as
+          // an empty live class that would show "Cancelled".
+          const { extractYouTubeVideoId } = await import("@/lib/live-class/youtube");
+          const ytId = lec.videoUrl ? extractYouTubeVideoId(lec.videoUrl) : null;
+          if (ytId) {
+            await prisma.batchSchedule.update({ where: { id: scheduleKey }, data: { status: "COMPLETED" } });
+            await prisma.whiteboardSession.upsert({
+              where: { batchScheduleId: scheduleKey },
+              update: { status: "ENDED", livePhase: "ENDED", videoTransport: "YOUTUBE", youtubeVideoId: ytId, recordingStatus: "READY" },
+              create: {
+                batchScheduleId: scheduleKey,
+                teacherId: lec.teacherId,
+                title: lec.title,
+                status: "ENDED",
+                livePhase: "ENDED",
+                videoTransport: "YOUTUBE",
+                youtubeVideoId: ytId,
+                recordingStatus: "READY",
+                actualStartedAt: startsAt,
+                actualEndedAt: endsAt,
+                pages: { create: { pageNumber: 1, objects: [] } },
+              },
+            });
+          }
         }
       }
     } catch (syncErr) {

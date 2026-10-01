@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { WhiteboardPdfDownloadButton } from "@/components/whiteboard/WhiteboardPdfDownloadButton";
 import { PrepareSlidesModal } from "@/components/live-class/PrepareSlidesModal";
@@ -12,7 +12,6 @@ import {
   formatISTTime,
   formatISTDate,
   getISTDayKey,
-  isTodayInIST,
 } from "@/lib/date-utils";
 import {
   canStudentJoin,
@@ -109,6 +108,19 @@ function getSubjectBadgeColor(subject?: string | null) {
   return { bg: "bg-blue-100 dark:bg-blue-950/60", text: "text-blue-700 dark:text-blue-300" };
 }
 
+const DAY_MS = 86_400_000;
+const STRIP_EXTEND = 42;
+/** "2026-10-01" → noon IST on that day (its IST calendar day is the key). */
+function dateFromDayKey(key: string): Date {
+  return new Date(`${key}T12:00:00+05:30`);
+}
+function shiftDayKey(key: string, days: number): string {
+  return getISTDayKey(new Date(dateFromDayKey(key).getTime() + days * DAY_MS));
+}
+function daysBetweenKeys(from: string, to: string): number {
+  return Math.round((dateFromDayKey(to).getTime() - dateFromDayKey(from).getTime()) / DAY_MS);
+}
+
 export function HorizontalScheduleCalendar({
   schedules: initialSchedules,
   batches,
@@ -130,11 +142,16 @@ export function HorizontalScheduleCalendar({
   blockedReason?: string | null;
 }) {
   const [selectedBatchId, setSelectedBatchId] = useState<string>("ALL");
-  const [currentMonthDate, setCurrentMonthDate] = useState<Date>(() => {
-    const d = new Date();
-    return new Date(d.getFullYear(), d.getMonth(), 1);
-  });
   const [selectedDateKey, setSelectedDateKey] = useState<string>(() => getISTDayKey(new Date()));
+  // Day strip: 7 days in view, today in the middle, scrolls without limit both
+  // ways (more days are added as either end comes near). Offsets are counted
+  // from today's IST date.
+  const [todayKey] = useState<string>(() => getISTDayKey(new Date()));
+  const [dayRange, setDayRange] = useState<{ start: number; end: number }>({ start: -STRIP_EXTEND, end: STRIP_EXTEND });
+  // Scroll position just before days were added in front (restored after).
+  const prependFromRef = useRef<{ left: number; width: number } | null>(null);
+  const extendingRef = useRef(false);
+  const firstCenterRef = useRef(true);
   const [clientTimeMs, setClientTimeMs] = useState<number>(Date.now());
   const [batchDropdownOpen, setBatchDropdownOpen] = useState(false);
   const [blockedBannerDismissed, setBlockedBannerDismissed] = useState(false);
@@ -158,36 +175,47 @@ export function HorizontalScheduleCalendar({
     return () => clearInterval(timer);
   }, []);
 
-  // Auto-scroll active day pill into center of screen
+  // The selected day always exists in the strip (the arrows can jump past its ends).
   useEffect(() => {
-    if (scrollContainerRef.current) {
-      const activeEl = scrollContainerRef.current.querySelector(
-        `[data-day-key="${selectedDateKey}"]`
-      ) as HTMLElement;
-      if (activeEl) {
-        activeEl.scrollIntoView({
-          behavior: "smooth",
-          inline: "center",
-          block: "nearest",
-        });
-      }
-    }
-  }, [selectedDateKey, currentMonthDate]);
+    const offset = daysBetweenKeys(todayKey, selectedDateKey);
+    if (offset < dayRange.start + 3) setDayRange((r) => ({ ...r, start: Math.min(r.start, offset - STRIP_EXTEND) }));
+    if (offset > dayRange.end - 3) setDayRange((r) => ({ ...r, end: Math.max(r.end, offset + STRIP_EXTEND) }));
+  }, [selectedDateKey, todayKey, dayRange.start, dayRange.end]);
 
-  // Sync month if selectedDateKey crosses month boundaries
+  // Keep the selected day in the middle of the strip (instantly on first load).
   useEffect(() => {
-    const parts = selectedDateKey.split("-").map(Number);
-    if (parts.length >= 2 && parts[0] && parts[1]) {
-      const y = parts[0];
-      const m = parts[1] - 1;
-      if (
-        currentMonthDate.getFullYear() !== y ||
-        currentMonthDate.getMonth() !== m
-      ) {
-        setCurrentMonthDate(new Date(y, m, 1));
-      }
-    }
+    const el = scrollContainerRef.current?.querySelector(`[data-day-key="${selectedDateKey}"]`) as HTMLElement | null;
+    if (!el) return;
+    el.scrollIntoView({ behavior: firstCenterRef.current ? "auto" : "smooth", inline: "center", block: "nearest" });
+    firstCenterRef.current = false;
   }, [selectedDateKey]);
+
+  // Days added in front would push the view sideways: put it back exactly
+  // where it was (by the width that was added, whatever the browser did).
+  useLayoutEffect(() => {
+    const el = scrollContainerRef.current;
+    const from = prependFromRef.current;
+    if (el && from) {
+      el.scrollLeft = from.left + (el.scrollWidth - from.width);
+      prependFromRef.current = null;
+    }
+    extendingRef.current = false;
+  }, [dayRange.start, dayRange.end]);
+
+  const handleStripScroll = () => {
+    const el = scrollContainerRef.current;
+    const first = el?.firstElementChild as HTMLElement | null;
+    if (!el || !first || extendingRef.current) return;
+    const pitch = first.getBoundingClientRect().width + (parseFloat(getComputedStyle(el).columnGap) || 0);
+    if (el.scrollLeft < pitch * 7) {
+      extendingRef.current = true;
+      prependFromRef.current = { left: el.scrollLeft, width: el.scrollWidth };
+      setDayRange((r) => ({ ...r, start: r.start - STRIP_EXTEND }));
+    } else if (el.scrollLeft + el.clientWidth > el.scrollWidth - pitch * 7) {
+      extendingRef.current = true;
+      setDayRange((r) => ({ ...r, end: r.end + STRIP_EXTEND }));
+    }
+  };
 
   // Filter schedules by batch
   const filteredSchedules = useMemo(() => {
@@ -197,25 +225,17 @@ export function HorizontalScheduleCalendar({
     });
   }, [initialSchedules, selectedBatchId]);
 
-  // Generate all days of the current selected month (1 to 28/29/30/31)
+  // Every day in the strip's current range (IST calendar days).
   const monthDays = useMemo(() => {
-    const y = currentMonthDate.getFullYear();
-    const m = currentMonthDate.getMonth();
-    const totalDays = new Date(y, m + 1, 0).getDate();
     const days: { date: Date; key: string; dayName: string; dayNum: string; isToday: boolean }[] = [];
-
-    for (let day = 1; day <= totalDays; day++) {
-      const d = new Date(y, m, day);
-      const key = getISTDayKey(d);
-      const dayName = d
-        .toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", weekday: "short" })
-        .toUpperCase();
-      const dayNum = String(day).padStart(2, "0");
-      const isToday = isTodayInIST(d);
-      days.push({ date: d, key, dayName, dayNum, isToday });
+    for (let o = dayRange.start; o <= dayRange.end; o++) {
+      const key = shiftDayKey(todayKey, o);
+      const d = dateFromDayKey(key);
+      const dayName = d.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", weekday: "short" }).toUpperCase();
+      days.push({ date: d, key, dayName, dayNum: key.slice(8, 10), isToday: o === 0 });
     }
     return days;
-  }, [currentMonthDate]);
+  }, [dayRange.start, dayRange.end, todayKey]);
 
   // Group filtered schedules by IST Date Key
   const groupedByDate = useMemo(() => {
@@ -231,52 +251,26 @@ export function HorizontalScheduleCalendar({
     return map;
   }, [filteredSchedules]);
 
-  // Navigation handlers
-  const handlePrevMonth = () => {
-    const y = currentMonthDate.getFullYear();
-    const m = currentMonthDate.getMonth();
-    const newMonth = new Date(y, m - 1, 1);
-    setCurrentMonthDate(newMonth);
-    setSelectedDateKey(getISTDayKey(newMonth));
-  };
+  // Navigation: the arrows move a week, Today jumps back.
+  const handlePrevMonth = () => setSelectedDateKey((k) => shiftDayKey(k, -7));
+  const handleNextMonth = () => setSelectedDateKey((k) => shiftDayKey(k, 7));
+  const handleToday = () => setSelectedDateKey(getISTDayKey(new Date()));
 
-  const handleNextMonth = () => {
-    const y = currentMonthDate.getFullYear();
-    const m = currentMonthDate.getMonth();
-    const newMonth = new Date(y, m + 1, 1);
-    setCurrentMonthDate(newMonth);
-    setSelectedDateKey(getISTDayKey(newMonth));
-  };
-
-  const handleToday = () => {
-    const today = new Date();
-    setCurrentMonthDate(new Date(today.getFullYear(), today.getMonth(), 1));
-    setSelectedDateKey(getISTDayKey(today));
-  };
-
-  // Month & Year header label
+  // Month & year of the selected day
   const monthYearLabel = useMemo(() => {
-    return currentMonthDate
+    return dateFromDayKey(selectedDateKey)
       .toLocaleDateString("en-IN", {
         timeZone: "Asia/Kolkata",
         month: "long",
         year: "numeric",
       })
       .toUpperCase();
-  }, [currentMonthDate]);
+  }, [selectedDateKey]);
 
   const clientNow = useMemo(() => new Date(clientTimeMs), [clientTimeMs]);
 
   // Selected date object & items
-  const selectedDateObj = useMemo(() => {
-    const found = monthDays.find((d) => d.key === selectedDateKey);
-    if (found) return found.date;
-    const parts = selectedDateKey.split("-").map(Number);
-    const y = parts[0] ?? 2026;
-    const m = parts[1] ?? 1;
-    const d = parts[2] ?? 1;
-    return new Date(y, m - 1, d);
-  }, [monthDays, selectedDateKey]);
+  const selectedDateObj = useMemo(() => dateFromDayKey(selectedDateKey), [selectedDateKey]);
 
   const selectedDateFormattedTitle = useMemo(() => {
     return selectedDateObj.toLocaleDateString("en-IN", {
@@ -353,7 +347,7 @@ export function HorizontalScheduleCalendar({
           {/* Month Navigator */}
           <div className="flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm rounded-xl px-2 py-1">
             <button
-              aria-label="Previous Month"
+              aria-label="Previous week"
               onClick={handlePrevMonth}
               className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
               type="button"
@@ -364,7 +358,7 @@ export function HorizontalScheduleCalendar({
               {monthYearLabel}
             </span>
             <button
-              aria-label="Next Month"
+              aria-label="Next week"
               onClick={handleNextMonth}
               className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
               type="button"
@@ -442,11 +436,12 @@ export function HorizontalScheduleCalendar({
         </div>
       </section>
 
-      {/* Horizontal Scrollable Date Strip for the Entire Month */}
+      {/* Day strip: 7 days in view, scrolls endlessly either way */}
       <section className="relative w-full">
         <div
           ref={scrollContainerRef}
-          className="w-full overflow-x-auto no-scrollbar py-1.5 px-0.5 scroll-smooth snap-x touch-pan-x flex items-center gap-2 min-w-full"
+          onScroll={handleStripScroll}
+          className="w-full overflow-x-auto no-scrollbar py-1.5 px-0.5 snap-x touch-pan-x flex items-center gap-2 min-w-full"
         >
           {monthDays.map((day) => {
             const isSelected = selectedDateKey === day.key;
@@ -461,7 +456,7 @@ export function HorizontalScheduleCalendar({
                 key={day.key}
                 data-day-key={day.key}
                 onClick={() => setSelectedDateKey(day.key)}
-                className={`flex flex-col items-center justify-center min-w-[46px] w-[46px] sm:min-w-[50px] sm:w-[50px] py-1.5 sm:py-2 rounded-xl transition-all active:scale-95 border snap-center shrink-0 cursor-pointer ${
+                className={`flex flex-col items-center justify-center basis-[calc((100%-3rem)/7)] grow-0 min-w-[40px] py-1.5 sm:py-2 rounded-xl transition-all active:scale-95 border snap-center shrink-0 cursor-pointer ${
                   isSelected
                     ? "bg-[#a33900] text-white border-[#a33900] shadow-sm scale-105"
                     : day.isToday

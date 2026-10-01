@@ -120,6 +120,13 @@ export default async function WatchLecturePage({ params }: { params?: { lectureI
         redirect("/schedule");
       }
 
+      // A recording linked to a class ahead of time plays only from the class's time.
+      const { isRecordingNotYetDue } = await import("@/lib/schedule/access-rules");
+      if (isRecordingNotYetDue({ ...schedule, liveWhiteboardSession: schedule.liveWhiteboardSession })) {
+        const when = schedule.startsAt.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true });
+        redirect(`/schedule?blocked=1&reason=${encodeURIComponent(`This class opens on ${when}.`)}`);
+      }
+
       let resolvedRecUrl = "";
       if (schedule.liveWhiteboardSession) {
         const updated = await reconcileRecordingStatus(schedule.liveWhiteboardSession);

@@ -114,12 +114,15 @@ export function UnifiedChapterScheduleTimeline({
     new Date().toISOString().split("T")[0] || ""
   );
   const [lecStartTime, setLecStartTime] = useState("10:00");
-  const [lecDurationMin, setLecDurationMin] = useState<number>(60);
   const [lecOrder, setLecOrder] = useState<number>(lectures.length + 1);
   const [lecLanguage, setLecLanguage] = useState(
     chapterMedium === "HINDI" ? "Hindi" : chapterMedium === "HINGLISH" ? "Hinglish" : "English"
   );
   const [lecVideoUrl, setLecVideoUrl] = useState("");
+  // LECTURE: just the lecture (its date/time/duration come from the chapter's
+  // weekday schedule on submit). OLD_CLASS: a past class from a YouTube link —
+  // its date/time are when it was taught, its length comes from the video.
+  const [lecMode, setLecMode] = useState<"LECTURE" | "OLD_CLASS">("LECTURE");
   const [notesUrl, setNotesUrl] = useState("");
 
   // Form states - DPP
@@ -265,6 +268,10 @@ export function UnifiedChapterScheduleTimeline({
       setFormError("Please enter lecture title.");
       return;
     }
+    if (lecMode === "OLD_CLASS" && (!lecVideoUrl.trim() || !lecScheduledDate)) {
+      setFormError("Paste the YouTube link and the date the class was taught.");
+      return;
+    }
     setSubmitting(true);
     setFormError("");
 
@@ -272,15 +279,22 @@ export function UnifiedChapterScheduleTimeline({
       const res = await fetch(`/api/team/chapters/${chapterId}/lectures`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: lecTitle.trim(),
-          scheduledDate: lecScheduledDate ? new Date(lecScheduledDate).toISOString() : null,
-          startTime: lecStartTime || null,
-          durationMin: Number(lecDurationMin) || 60,
-          language: lecLanguage,
-          order: Number(lecOrder) || lectures.length + 1,
-          videoUrl: lecVideoUrl.trim() || undefined,
-        }),
+        body: JSON.stringify(
+          lecMode === "OLD_CLASS"
+            ? {
+                title: lecTitle.trim(),
+                scheduledDate: lecScheduledDate ? new Date(lecScheduledDate).toISOString() : null,
+                startTime: lecStartTime || null,
+                language: lecLanguage,
+                order: Number(lecOrder) || lectures.length + 1,
+                videoUrl: lecVideoUrl.trim(),
+              }
+            : {
+                title: lecTitle.trim(),
+                language: lecLanguage,
+                order: Number(lecOrder) || lectures.length + 1,
+              }
+        ),
       });
       const json = await res.json();
       if (!json.success) {
@@ -291,7 +305,7 @@ export function UnifiedChapterScheduleTimeline({
       setLectures((prev) => [...prev, json.data.lecture]);
       setShowAddLectureModal(false);
       setLecVideoUrl("");
-      toast.success(lecVideoUrl.trim() ? "Old class recording added successfully!" : "Lecture scheduled successfully!");
+      toast.success(lecMode === "OLD_CLASS" ? "Old class recording added successfully!" : "Lecture added — it is scheduled when you submit the chapter.");
       router.refresh();
     } catch (err: any) {
       setFormError(err.message || "Network error");
@@ -311,14 +325,17 @@ export function UnifiedChapterScheduleTimeline({
       const res = await fetch(`/api/team/chapters/${chapterId}/lectures/${editingLecture.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: lecTitle.trim(),
-          scheduledDate: lecScheduledDate ? new Date(lecScheduledDate).toISOString() : null,
-          startTime: lecStartTime || null,
-          durationMin: Number(lecDurationMin) || 60,
-          language: lecLanguage,
-          videoUrl: lecVideoUrl.trim() || "",
-        }),
+        body: JSON.stringify(
+          lecMode === "OLD_CLASS"
+            ? {
+                title: lecTitle.trim(),
+                scheduledDate: lecScheduledDate ? new Date(lecScheduledDate).toISOString() : null,
+                startTime: lecStartTime || null,
+                language: lecLanguage,
+                videoUrl: lecVideoUrl.trim(),
+              }
+            : { title: lecTitle.trim(), language: lecLanguage }
+        ),
       });
       const json = await res.json();
       if (!json.success) {
@@ -633,10 +650,8 @@ export function UnifiedChapterScheduleTimeline({
               <button
                 type="button"
                 onClick={() => {
+                  setLecMode("LECTURE");
                   setLecTitle(`${chapterTitle} — Lecture ${String(lectures.length + 1).padStart(2, "0")}`);
-                  setLecScheduledDate(new Date().toISOString().split("T")[0] || "");
-                  setLecStartTime("10:00");
-                  setLecDurationMin(90);
                   setLecOrder(lectures.length + 1);
                   setLecVideoUrl("");
                   setFormError("");
@@ -651,10 +666,10 @@ export function UnifiedChapterScheduleTimeline({
               <button
                 type="button"
                 onClick={() => {
+                  setLecMode("OLD_CLASS");
                   setLecTitle(`${chapterTitle} — Lecture ${String(lectures.length + 1).padStart(2, "0")} (Recorded)`);
-                  setLecScheduledDate(new Date().toISOString().split("T")[0] || "");
+                  setLecScheduledDate(new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }));
                   setLecStartTime("10:00");
-                  setLecDurationMin(90);
                   setLecOrder(lectures.length + 1);
                   setLecVideoUrl("");
                   setFormError("");
@@ -984,7 +999,7 @@ export function UnifiedChapterScheduleTimeline({
                                         : new Date().toISOString().split("T")[0] || ""
                                     );
                                     setLecStartTime(lec.startTime || "10:00");
-                                    setLecDurationMin(lec.durationMin || 60);
+                                    setLecMode(lec.videoUrl ? "OLD_CLASS" : "LECTURE");
                                     setLecLanguage(lec.language || "Hindi");
                                     setLecVideoUrl(lec.videoUrl || "");
                                     setFormError("");
@@ -1147,10 +1162,14 @@ export function UnifiedChapterScheduleTimeline({
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                    {editingLecture ? "Edit Scheduled Lecture" : "Schedule New Lecture"}
+                    {lecMode === "OLD_CLASS"
+                      ? editingLecture ? "Edit Old Class (YouTube)" : "Add Old Class (YouTube)"
+                      : editingLecture ? "Edit Lecture" : "Add Lecture"}
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Configure class timing, language, and curriculum position.
+                    {lecMode === "OLD_CLASS"
+                      ? "When it was taught and its YouTube link — the length comes from the video."
+                      : "Dates, time and duration are set when you submit the chapter (weekdays + duration)."}
                   </p>
                 </div>
               </div>
@@ -1191,49 +1210,36 @@ export function UnifiedChapterScheduleTimeline({
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Scheduled Date
-                  </label>
-                  <input
-                    type="date"
-                    value={lecScheduledDate}
-                    onChange={(e) => setLecScheduledDate(e.target.value)}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 font-medium"
-                  />
+              {lecMode === "OLD_CLASS" && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Class Date *
+                    </label>
+                    <input
+                      type="date"
+                      value={lecScheduledDate}
+                      onChange={(e) => setLecScheduledDate(e.target.value)}
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 font-medium"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Class Time (IST)
+                    </label>
+                    <input
+                      type="time"
+                      value={lecStartTime}
+                      onChange={(e) => setLecStartTime(e.target.value)}
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 font-medium"
+                    />
+                  </div>
                 </div>
+              )}
 
-                <div>
-                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Class Time (IST)
-                  </label>
-                  <input
-                    type="time"
-                    value={lecStartTime}
-                    onChange={(e) => setLecStartTime(e.target.value)}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 font-medium"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Duration (Minutes)
-                  </label>
-                  <input
-                    type="number"
-                    min={15}
-                    max={360}
-                    value={lecDurationMin}
-                    onChange={(e) => setLecDurationMin(Number(e.target.value))}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 font-medium"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
                     Delivery Medium
                   </label>
                   <select
@@ -1245,12 +1251,12 @@ export function UnifiedChapterScheduleTimeline({
                     <option value="Hindi">Hindi</option>
                     <option value="English">English</option>
                   </select>
-                </div>
               </div>
 
+              {lecMode === "OLD_CLASS" && (
               <div>
                 <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Unlisted YouTube Recording Link (Optional for Old / Past Classes)
+                  Unlisted YouTube Recording Link *
                 </label>
                 <input
                   type="url"
@@ -1260,9 +1266,10 @@ export function UnifiedChapterScheduleTimeline({
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 font-mono text-xs"
                 />
                 <p className="text-[11px] text-slate-400 mt-1">
-                  Paste unlisted YouTube link. The class will be automatically saved as a completed recording for students with interactive playback.
+                  Paste the unlisted YouTube link. Students can play it from the class's date and time; its length is read from the video.
                 </p>
               </div>
+              )}
 
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
                 <button
@@ -1284,8 +1291,10 @@ export function UnifiedChapterScheduleTimeline({
                   {submitting
                     ? "Saving..."
                     : editingLecture
-                    ? "Update Lecture"
-                    : "Schedule Lecture"}
+                    ? "Save"
+                    : lecMode === "OLD_CLASS"
+                    ? "Add Old Class"
+                    : "Add Lecture"}
                 </button>
               </div>
             </form>

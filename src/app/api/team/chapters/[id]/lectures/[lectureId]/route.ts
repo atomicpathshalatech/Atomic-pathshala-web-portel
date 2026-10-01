@@ -22,7 +22,19 @@ export async function PATCH(
     if (!lecture) return apiError("Lecture not found", 404);
 
     const body = await request.json();
-    const { title, scheduledDate, startTime, durationMin, slidesUrl, videoUrl, language } = body;
+    const { title, scheduledDate, startTime, slidesUrl, videoUrl, language } = body;
+    let { durationMin } = body;
+    // A YouTube class's length comes from the video itself, never typed in.
+    if (typeof videoUrl === "string" && videoUrl.trim()) {
+      const { extractYouTubeVideoId } = await import("@/lib/live-class/youtube");
+      const { youtubeVideoDurationMin } = await import("@/lib/youtube/video-duration");
+      const fromYoutube = await youtubeVideoDurationMin(extractYouTubeVideoId(videoUrl.trim()));
+      if (fromYoutube) durationMin = fromYoutube;
+    }
+    // Only an edit that actually sets the timing moves the class in the batch
+    // timetable — saving notes or a title used to reset its date/time to the
+    // lecture's old values ("the date changed by itself").
+    const timingChanged = scheduledDate !== undefined || startTime !== undefined || durationMin !== undefined;
 
     const updated = await prisma.lecture.update({
       where: { id: params.lectureId },
@@ -41,7 +53,7 @@ export async function PATCH(
     });
 
     // Auto-sync BatchSchedule with accurate IST dates
-    try {
+    if (updated.scheduledDate && (timingChanged || videoUrl !== undefined || title !== undefined)) try {
       const { startsAt, endsAt } = computeISTScheduleDates(
         updated.scheduledDate,
         updated.startTime,
@@ -63,8 +75,7 @@ export async function PATCH(
           where: { id: s.id },
           data: {
             title: updated.title,
-            startsAt,
-            endsAt,
+            ...(timingChanged && { startsAt, endsAt }),
             ...(isPastCompletedClass && { status: "COMPLETED" }),
           },
         });

@@ -19,6 +19,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const chapter = await prisma.chapter.findUnique({
       where: { id: params.id },
       include: {
+        subject: { select: { title: true } },
         lectures: { orderBy: [{ order: "asc" }, { createdAt: "asc" }] },
       },
     });
@@ -31,22 +32,33 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const currentStatus = chapter.status as ChapterStatusValue;
 
     // Optional Batch Scheduling Calculation across selected Weekdays
+    // Weekdays + time + duration chosen here decide every lecture's date, and
+    // the same dates go into the batch timetable (assigned batches) — before,
+    // only the Lecture rows changed, so the chapter and the batch showed
+    // different dates. Old classes (a YouTube recording) keep their own date;
+    // a class that already ran is never moved.
+    const { computeISTScheduleDates } = await import("@/lib/date-utils");
+    const { extractYouTubeVideoId } = await import("@/lib/live-class/youtube");
     const lectureUpdates: any[] = [];
+    const planned: { lectureId: string; title: string; teacherId: string; startsAt: Date; endsAt: Date }[] = [];
     if (startDate && Array.isArray(weekdays) && weekdays.length > 0) {
       const parts = String(startDate).split("-").map((p) => parseInt(p, 10));
       const year = parts[0] || new Date().getFullYear();
       const month = (parts[1] || 1) - 1;
       const day = parts[2] || 1;
-      const current = new Date(year, month, day);
+      // Calendar arithmetic in UTC, so the server's own timezone can't shift a day.
+      const current = new Date(Date.UTC(year, month, day));
       const duration = Number(durationMin) || 90;
 
       for (const lec of chapter.lectures) {
-        // Find next matching weekday
-        while (!weekdays.includes(current.getDay())) {
-          current.setDate(current.getDate() + 1);
+        if (lec.videoUrl && extractYouTubeVideoId(lec.videoUrl)) continue;
+        while (!weekdays.includes(current.getUTCDay())) {
+          current.setUTCDate(current.getUTCDate() + 1);
         }
 
         const scheduledDate = new Date(current);
+        const { startsAt, endsAt } = computeISTScheduleDates(scheduledDate, startTime || "10:00", duration);
+        planned.push({ lectureId: lec.id, title: lec.title, teacherId: lec.teacherId, startsAt, endsAt });
         lectureUpdates.push(
           prisma.lecture.update({
             where: { id: lec.id },
@@ -58,8 +70,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           })
         );
 
-        // Move to next calendar day for the next iteration
-        current.setDate(current.getDate() + 1);
+        current.setUTCDate(current.getUTCDate() + 1);
       }
     }
 
@@ -92,6 +103,47 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         },
       }),
     ]);
+
+    // Batch timetable: same dates in every batch this chapter is assigned to.
+    if (planned.length) {
+      const batches = await prisma.batchChapter.findMany({ where: { chapterId: chapter.id }, select: { batchId: true } });
+      const { rescheduleOpenLiveSession } = await import("@/lib/live-session/service");
+      for (const p of planned) {
+        for (const { batchId } of batches) {
+          const existing = await prisma.batchSchedule.findFirst({
+            where: { batchId, lectureId: p.lectureId },
+            select: { id: true, status: true, liveWhiteboardSession: { select: { status: true, livePhase: true } } },
+          });
+          if (existing) {
+            const ran =
+              existing.status === "COMPLETED" ||
+              existing.status === "LIVE" ||
+              existing.liveWhiteboardSession?.status === "ENDED" ||
+              existing.liveWhiteboardSession?.livePhase === "LIVE" ||
+              existing.liveWhiteboardSession?.livePhase === "ENDED";
+            if (ran) continue;
+            await prisma.batchSchedule.update({ where: { id: existing.id }, data: { startsAt: p.startsAt, endsAt: p.endsAt } });
+            await rescheduleOpenLiveSession(existing.id, p.startsAt, p.endsAt);
+          } else {
+            await prisma.batchSchedule.create({
+              data: {
+                id: `${p.lectureId}-${batchId}`,
+                title: p.title,
+                subject: chapter.subject?.title ?? null,
+                type: "LIVE_CLASS",
+                batchId,
+                teacherId: p.teacherId,
+                chapterId: chapter.id,
+                lectureId: p.lectureId,
+                startsAt: p.startsAt,
+                endsAt: p.endsAt,
+                createdById: session.user.id,
+              },
+            });
+          }
+        }
+      }
+    }
 
     return apiSuccess({ chapter: updated });
   } catch (error) {

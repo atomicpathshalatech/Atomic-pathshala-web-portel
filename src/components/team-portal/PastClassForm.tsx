@@ -12,7 +12,6 @@ type Added = { title: string; startsAt: string; chapter: string; hasNotes: boole
 
 const inputClass =
   "w-full rounded-xl border border-outline-variant/40 bg-surface-container-lowest py-2.5 px-3.5 text-body-sm outline-none focus:ring-2 focus:ring-primary/30";
-const DURATIONS = [45, 60, 90, 120];
 
 /**
  * "Add past class": a class that already happened (on YouTube) goes into the
@@ -26,7 +25,6 @@ export function PastClassForm({ batchId, onClose }: { batchId: string; onClose: 
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [startsAt, setStartsAt] = useState("");
-  const [durationMin, setDurationMin] = useState(60);
   const [chapterId, setChapterId] = useState("");
   const [teacherId, setTeacherId] = useState("");
   const [title, setTitle] = useState("");
@@ -103,7 +101,6 @@ export function PastClassForm({ batchId, onClose }: { batchId: string; onClose: 
           teacherId,
           title: title.trim(),
           startsAt: parseISTDateTimeInput(startsAt).toISOString(),
-          durationMin,
           youtubeUrl,
           notesFileAssetId,
           language,
@@ -167,30 +164,8 @@ export function PastClassForm({ batchId, onClose }: { batchId: string; onClose: 
               <input type="datetime-local" className={inputClass} max={maxDate} value={startsAt} onChange={(e) => setStartsAt(e.target.value)} />
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-on-surface">Duration *</label>
-              <div className="flex flex-wrap gap-2">
-                {DURATIONS.map((d) => (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={() => setDurationMin(d)}
-                    className={`px-3.5 py-2 rounded-xl text-xs font-semibold transition ${
-                      durationMin === d ? "bg-primary text-on-primary" : "bg-surface-container-lowest border border-outline-variant/30 text-on-surface"
-                    }`}
-                  >
-                    {d} min
-                  </button>
-                ))}
-                <input
-                  type="number"
-                  min={10}
-                  max={600}
-                  value={durationMin}
-                  onChange={(e) => setDurationMin(Math.max(10, Math.min(600, Number(e.target.value) || 60)))}
-                  className={`${inputClass} !w-24`}
-                  title="Minutes"
-                />
-              </div>
+              <label className="text-xs font-bold text-on-surface">Duration</label>
+              <p className="text-xs text-on-surface-variant py-2">Taken automatically from the YouTube video's length.</p>
             </div>
 
             <div className="space-y-1.5">

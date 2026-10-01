@@ -110,6 +110,15 @@ export function isScheduleGenuinelyLive(schedule: ScheduleAccessTarget): boolean
 }
 
 /**
+ * A class marked done (e.g. a YouTube recording linked to it) whose scheduled
+ * time hasn't come yet: it stays "scheduled" until then, so a link pasted into
+ * tomorrow's class doesn't play today.
+ */
+export function isRecordingNotYetDue(schedule: ScheduleAccessTarget, now: Date = new Date()): boolean {
+  return !isScheduleGenuinelyLive(schedule) && new Date(schedule.startsAt).getTime() > now.getTime();
+}
+
+/**
  * Authoritative Teacher Pre-Class Room Entry Check
  * Window: scheduled_start_at - 15 minutes (T-15)
  * Teacher may enter the pre-flight whiteboard room starting at T-15.
@@ -525,6 +534,27 @@ export function canStudentJoinClass(
   const secondsUntilStartOpens = Math.max(0, Math.ceil((startOpensAt.getTime() - nowMs) / 1000));
   const secondsUntilStartsAt = Math.max(0, Math.ceil((startsAt.getTime() - nowMs) / 1000));
 
+  // A recording attached ahead of time opens only at the class's time.
+  if (isCompleted && isRecordingNotYetDue(schedule, serverNow)) {
+    return {
+      allowed: false,
+      status: "SCHEDULED",
+      code: "JOIN_TOO_EARLY",
+      reason: "This class opens at its scheduled time.",
+      opensAt,
+      startOpensAt,
+      startsAt,
+      endsAt,
+      isLive: false,
+      isCompleted: false,
+      isCancelled: false,
+      isWindowOpen: false,
+      secondsUntilWindowOpens,
+      secondsUntilStartOpens,
+      secondsUntilStartsAt,
+    };
+  }
+
   if (isCancelled) {
     return {
       allowed: false,
@@ -658,7 +688,8 @@ export function getEffectiveScheduleStatus(
     schedule.liveWhiteboardSession?.status === "ENDED" ||
     schedule.liveWhiteboardSession?.livePhase === "ENDED"
   ) {
-    return "COMPLETED";
+    // A recording attached ahead of time shows as scheduled until its time.
+    return isRecordingNotYetDue(schedule, serverNow) ? "SCHEDULED" : "COMPLETED";
   }
 
   const { startsAt, endsAt, opensAt, startOpensAt, expiresAt } = getScheduleWindowDates(schedule);

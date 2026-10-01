@@ -86,6 +86,16 @@ export default async function LecturePlayerPage({
 
   if (!enrolled) redirect("/courses");
 
+  // A recording linked to a class ahead of time plays only from the class's time.
+  const classStarts = (lecture.batchSchedules ?? [])
+    .filter((s: any) => s.status !== "CANCELLED")
+    .map((s: any) => new Date(s.startsAt).getTime());
+  const firstClassAt = classStarts.length ? Math.min(...classStarts) : null;
+  if (lecture.videoUrl && firstClassAt && firstClassAt > Date.now()) {
+    const when = new Date(firstClassAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true });
+    redirect(`/schedule?blocked=1&reason=${encodeURIComponent(`This class opens on ${when}.`)}`);
+  }
+
   // prev/next among this chapter's lectures, ordered by `order`
   const siblings = await prisma.lecture.findMany({
     where: { chapterId: lecture.chapterId, status: { in: ["PUBLISHED", "DRAFT"] } },

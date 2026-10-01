@@ -118,7 +118,11 @@ export async function POST(
     }
 
     const parsedDate = scheduledDate ? new Date(scheduledDate) : null;
-    const parsedDuration = durationMin ? Number(durationMin) : 60;
+    // A YouTube class's length comes from the video itself, never typed in.
+    const { extractYouTubeVideoId: ytIdOf } = await import("@/lib/live-class/youtube");
+    const linkedVideoId = videoUrl ? ytIdOf(videoUrl) : null;
+    const { youtubeVideoDurationMin } = await import("@/lib/youtube/video-duration");
+    const parsedDuration = (linkedVideoId ? await youtubeVideoDurationMin(linkedVideoId) : null) ?? (durationMin ? Number(durationMin) : 60);
 
     const lecture = await prisma.lecture.create({
       data: {
@@ -141,8 +145,11 @@ export async function POST(
       },
     });
 
-    // Auto-sync BatchSchedule and WhiteboardSession with accurate IST dates across all assigned batches
-    try {
+    // Auto-sync BatchSchedule and WhiteboardSession with accurate IST dates across all assigned batches.
+    // Only a lecture with a date becomes a class: an undated lecture used to
+    // become a class "today at 10:00". Dates are set when the chapter is
+    // submitted (weekdays + duration).
+    if (parsedDate) try {
       const { startsAt, endsAt } = computeISTScheduleDates(parsedDate, startTime, parsedDuration);
       const { extractYouTubeVideoId } = await import("@/lib/live-class/youtube");
       const ytVideoId = videoUrl ? extractYouTubeVideoId(videoUrl) : null;
