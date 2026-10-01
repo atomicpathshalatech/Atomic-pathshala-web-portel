@@ -73,7 +73,7 @@ export class PastClassError extends Error {
 }
 
 /** Finds or creates a folder by name under `parentId` (null = batch root level). */
-async function ensureFolder(tx: typeof prisma, batchId: string, parentId: string | null, name: string, userId: string) {
+export async function ensureFolder(tx: typeof prisma, batchId: string, parentId: string | null, name: string, userId: string) {
   const existing = await tx.batchFolder.findFirst({ where: { batchId, parentId, name }, select: { id: true } });
   if (existing) return existing.id;
   const order = await tx.batchFolder.count({ where: { batchId, parentId } });

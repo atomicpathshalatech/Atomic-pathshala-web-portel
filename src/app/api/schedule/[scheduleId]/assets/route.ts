@@ -283,6 +283,12 @@ export async function GET(
     let originalDownloadUrl: string | null = null;
     let originalFilename: string | null = null;
 
+    // Notes the teacher uploaded for this class (Notes button / chapter notes)
+    // are stored as /api/files/<id>/open and always win over generated ones.
+    const uploadedNotes = [wbSession?.presentationUrl, schedule.lecture?.slidesUrl].find(
+      (u): u is string => typeof u === "string" && /^\/api\/files\/[^/]+\/open$/.test(u)
+    );
+
     if (wbSession) {
       // Check original presentation uploaded before/during class
       const presUrl = wbSession.presentationUrl;
@@ -306,7 +312,7 @@ export async function GET(
       let activePdfKey = wbSession.pdfStorageKey;
       if (!activePdfKey || wbSession.pdfStatus !== "READY") {
         // If class has completed and has pages, attempt on-demand generation
-        if (wbSession.pages.length > 0 && wbSession.status === "ENDED") {
+        if (!uploadedNotes && wbSession.pages.length > 0 && wbSession.status === "ENDED") {
           const { finalizeWhiteboardSlides } = await import("@/lib/whiteboard/finalization");
           await finalizeWhiteboardSlides(wbSession.id).catch((err) =>
             console.warn("[on_demand_finalize_error]", err)
@@ -357,6 +363,12 @@ export async function GET(
       notesStatus = "READY";
       notesPreviewUrl = schedule.lecture.slidesUrl;
       notesDownloadUrl = schedule.lecture.slidesUrl;
+      notesFilename = `${schedule.title.replace(/[^a-zA-Z0-9_-]/g, "_")}_Notes.pdf`;
+    }
+    if (uploadedNotes) {
+      notesStatus = "READY";
+      notesPreviewUrl = uploadedNotes;
+      notesDownloadUrl = uploadedNotes;
       notesFilename = `${schedule.title.replace(/[^a-zA-Z0-9_-]/g, "_")}_Notes.pdf`;
     }
 

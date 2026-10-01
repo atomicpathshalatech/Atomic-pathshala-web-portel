@@ -6,6 +6,7 @@ import { WhiteboardPdfDownloadButton } from "@/components/whiteboard/WhiteboardP
 import { PrepareSlidesModal } from "@/components/live-class/PrepareSlidesModal";
 import { UnifiedStartClassModal } from "@/components/team-portal/UnifiedStartClassModal";
 import { CompletedClassModal } from "@/components/schedule/CompletedClassModal";
+import { ClassNotesUploadButton } from "@/components/schedule/ClassNotesUploadButton";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -857,6 +858,11 @@ function TimelineLectureRow({
                   <span className="material-symbols-outlined text-[14px]">play_circle</span>
                   <span>Play Class</span>
                 </Link>
+                {role === "TEACHER" && item.type === "LIVE_CLASS" && (
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <ClassNotesUploadButton scheduleId={item.id} />
+                  </div>
+                )}
                 {item.liveWhiteboardSession?.id && (
                   <div onClick={(e) => e.stopPropagation()}>
                     <WhiteboardPdfDownloadButton

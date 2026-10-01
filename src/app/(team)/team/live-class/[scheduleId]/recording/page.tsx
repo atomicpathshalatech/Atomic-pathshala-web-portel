@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { RecordingPlayer } from "@/components/live-class/RecordingPlayer";
+import { ClassNotesUploadButton } from "@/components/schedule/ClassNotesUploadButton";
 import { isRecordingNotYetDue } from "@/lib/schedule/access-rules";
 import { formatISTDate, formatISTTime } from "@/lib/date-utils";
 
@@ -90,12 +91,15 @@ export default async function TeacherRecordingPage({
           <h1 className="text-lg font-bold text-gray-900 dark:text-white">{schedule.title}</h1>
           <p className="text-xs text-gray-500">{schedule.batch?.name}</p>
         </div>
-        <Link
-          href="/team/my-schedule"
-          className="text-xs font-bold text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
-        >
-          ← Back to Schedule
-        </Link>
+        <div className="flex items-center gap-3">
+          <ClassNotesUploadButton scheduleId={schedule.id} />
+          <Link
+            href="/team/my-schedule"
+            className="text-xs font-bold text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+          >
+            ← Back to Schedule
+          </Link>
+        </div>
       </div>
       <RecordingPlayer whiteboardSessionId={schedule.liveWhiteboardSession.id} />
     </div>
