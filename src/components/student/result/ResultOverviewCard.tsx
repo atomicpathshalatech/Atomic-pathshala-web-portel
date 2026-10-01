@@ -22,126 +22,61 @@ export function ResultOverviewCard({
 
   return (
     <div className="space-y-6">
-      {/* Top Banner: Score, Rank, Percentile, and NEET 2026 Prediction */}
-      <div className="rounded-3xl p-6 sm:p-8 bg-gradient-to-r from-blue-700 to-blue-800 text-white shadow-xl shadow-blue-950/15 relative overflow-hidden border-2 border-blue-400/30">
-        {/* Subtle decorative circles */}
-        <div className="absolute top-0 right-0 w-80 h-80 bg-white/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-0 w-60 h-60 bg-emerald-400/20 rounded-full blur-2xl pointer-events-none" />
-
-        <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
-          {/* Left: Test Name, Raw Score & NEET Equivalent Score */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30 text-[11px] font-mono font-bold tracking-wider uppercase">
-                {analysis.targetExam || "NEET UG"} Official Scorecard
+      {/* Scorecard: compact, one aligned row of rank / AIR / gap */}
+      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm p-4 sm:p-5">
+        <div className="flex flex-col md:flex-row md:items-center gap-4">
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              {analysis.targetExam || "NEET UG"} scorecard ·{" "}
+              {new Date(analysis.submittedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+            </p>
+            <h1 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white truncate">{analysis.testName}</h1>
+            <div className="mt-1 flex items-baseline gap-2 flex-wrap">
+              <span className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white font-mono">{analysis.score}</span>
+              <span className="text-sm font-bold text-slate-400">/ {analysis.maxMarks}</span>
+              <span className="px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-xs font-bold font-mono">
+                {analysis.percentage}%
               </span>
-              <span className="text-xs text-slate-400 font-medium">
-                Submitted on {new Date(analysis.submittedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
-              </span>
-            </div>
-
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
-              {analysis.testName}
-            </h1>
-
-            {/* Score & Normalized Scale */}
-            <div className="space-y-1 pt-1">
-              <div className="flex items-baseline gap-3">
-                <div className="text-4xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-200 via-white to-blue-300 font-mono">
-                  {analysis.score}
-                </div>
-                <div className="text-lg sm:text-xl font-bold text-slate-400">
-                  / {analysis.maxMarks} <span className="text-xs font-normal">Atomic test marks</span>
-                </div>
-                <div className="ml-2 px-3 py-1 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold font-mono">
-                  {analysis.percentage}%
-                </div>
-              </div>
-
-              {isNormalized && (
-                <div className="flex items-center gap-2 text-xs text-cyan-300 font-mono pt-1">
-                  <span className="material-symbols-outlined text-sm">swap_horiz</span>
-                  <span>
-                    NEET-Equivalent Score: <b>{neetEqScore} / 720</b> (Normalized scale)
-                  </span>
-                </div>
-              )}
+              {isNormalized && <span className="text-[11px] text-slate-500 font-mono">≈ {neetEqScore}/720 NEET scale</span>}
             </div>
           </div>
 
-          {/* Right: Atomic Test Rank + NEET 2026 AIR Predictor + Benchmark */}
-          <div className="flex flex-wrap items-center gap-4">
-            {/* Atomic Test Rank Card */}
-            <div className="p-4 rounded-2xl bg-white/5 backdrop-blur-md border border-white/10 text-center min-w-[130px]">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">
-                Atomic Test Rank
-              </span>
-              <div className="text-3xl font-black text-amber-300 font-mono">
-                #{analysis.rank}
-              </div>
-              <span className="text-[10px] text-slate-400 font-medium">
-                out of {analysis.totalParticipants} candidate{analysis.totalParticipants > 1 ? "s" : ""}
-              </span>
+          <div className="grid grid-cols-3 gap-2 md:w-[420px] shrink-0">
+            <div className="rounded-xl bg-slate-50 dark:bg-slate-800/60 px-3 py-2.5 text-center">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Test rank</p>
+              <p className="text-xl font-black text-slate-900 dark:text-white font-mono leading-tight">#{analysis.rank}</p>
+              <p className="text-[10px] text-slate-500">of {analysis.totalParticipants}</p>
             </div>
-
-            {/* Estimated NEET 2026 AIR Card (Data-Backed from NTA PDF) */}
-            <div className="p-4 rounded-2xl bg-gradient-to-br from-blue-900/60 to-blue-900/60 backdrop-blur-md border border-blue-400/40 text-center min-w-[170px] shadow-lg">
-              <div className="flex items-center justify-center gap-1 mb-1">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-blue-200">
-                  Estimated NEET AIR
-                </span>
-                <span className="px-1.5 py-0.2 rounded bg-blue-500/30 text-blue-200 text-[9px] font-mono font-bold">
-                  2026
-                </span>
-              </div>
-              <div className="text-2xl sm:text-3xl font-black text-cyan-300 font-mono">
-                {analysis.estimatedNeetAir ? `≈ ${analysis.estimatedNeetAir.toLocaleString("en-IN")}` : "≈ N/A"}
-              </div>
-              {analysis.estimatedNeetAirMin && analysis.estimatedNeetAirMax ? (
-                <span className="text-[10px] text-slate-300 font-mono block mt-0.5">
-                  Range: {analysis.estimatedNeetAirMin.toLocaleString("en-IN")} – {analysis.estimatedNeetAirMax.toLocaleString("en-IN")}
-                </span>
-              ) : (
-                <span className="text-[10px] text-slate-300 font-medium">Predicted from NTA 2026 data</span>
-              )}
+            <div className="rounded-xl bg-indigo-50 dark:bg-indigo-950/40 px-3 py-2.5 text-center">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">Est. NEET AIR</p>
+              <p className="text-xl font-black text-indigo-700 dark:text-indigo-300 font-mono leading-tight">
+                {analysis.estimatedNeetAir ? analysis.estimatedNeetAir.toLocaleString("en-IN") : "—"}
+              </p>
+              <p className="text-[10px] text-slate-500 truncate">
+                {analysis.estimatedNeetAirMin && analysis.estimatedNeetAirMax
+                  ? `${analysis.estimatedNeetAirMin.toLocaleString("en-IN")}–${analysis.estimatedNeetAirMax.toLocaleString("en-IN")}`
+                  : "estimate"}
+              </p>
             </div>
-
-            {/* Anonymous NEET 2026 Rank 1 Benchmark */}
-            <div className="p-4 rounded-2xl bg-blue-600/20 backdrop-blur-md border border-blue-500/30 text-center min-w-[140px]">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-blue-200 block mb-1">
-                NEET 2026 Rank 1
-              </span>
-              <div className="text-lg font-black text-white font-mono">
-                720 <span className="text-xs font-normal text-slate-300">/ 720</span>
-              </div>
-              <span className="text-[10px] text-amber-300 font-bold block mt-0.5">
-                Gap: {Math.max(0, 720 - neetEqScore)} marks
-              </span>
+            <div className="rounded-xl bg-amber-50 dark:bg-amber-950/30 px-3 py-2.5 text-center">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">Gap to 720</p>
+              <p className="text-xl font-black text-amber-700 dark:text-amber-300 font-mono leading-tight">{Math.max(0, 720 - neetEqScore)}</p>
+              <p className="text-[10px] text-slate-500">marks</p>
             </div>
-
-            <button
-              type="button"
-              onClick={onOpenLeaderboard}
-              className="px-5 py-3 rounded-2xl bg-blue-500 hover:bg-blue-400 text-white font-bold text-xs shadow-lg shadow-blue-500/25 transition flex items-center gap-2"
-            >
-              <span className="material-symbols-outlined text-base">leaderboard</span>
-              <span>Test Leaderboard</span>
-            </button>
           </div>
+
+          <button
+            type="button"
+            onClick={onOpenLeaderboard}
+            className="shrink-0 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-black dark:bg-white dark:text-slate-900 text-white font-bold text-xs flex items-center justify-center gap-1.5"
+          >
+            <span className="material-symbols-outlined text-base">leaderboard</span>
+            Leaderboard
+          </button>
         </div>
-
-        {/* Source Transparency Bar */}
-        <div className="mt-5 pt-3 border-t border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-[11px] text-slate-400">
-          <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-sm text-cyan-400">verified</span>
-            <span>
-              <b>NEET 2026 Prediction Source:</b> {analysis.neetPredictionSource || "Official National Testing Agency (NTA) NEET (UG)-2026 Dataset (Pages 1–15)"}
-            </span>
-          </div>
-          <span className="text-slate-400 italic">
-            *Estimated based on official reference points. Not an official NTA rank.
-          </span>
-        </div>
+        <p className="mt-3 text-[10px] text-slate-400">
+          *NEET AIR is an estimate from {analysis.neetPredictionSource || "NTA NEET (UG) reference data"} — not an official NTA rank.
+        </p>
       </div>
 
       {/* Grid: Counter Metric Tiles */}

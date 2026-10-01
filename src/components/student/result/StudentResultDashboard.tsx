@@ -1,35 +1,29 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import { FullTestAnalysisResult } from "@/lib/test-engine/analysis-engine";
 import { ResultOverviewCard } from "./ResultOverviewCard";
-import { SubjectAnalysisSection } from "./SubjectAnalysisSection";
-import { QuestionTypeAnalysisSection } from "./QuestionTypeAnalysisSection";
-import { ErrorTaxonomySection } from "./ErrorTaxonomySection";
-import { ChapterTopicAnalysisSection } from "./ChapterTopicAnalysisSection";
-import { NcertRevisionSection } from "./NcertRevisionSection";
 import { QuestionReviewSection } from "./QuestionReviewSection";
-import { PersonalizedActionPlan } from "./PersonalizedActionPlan";
+import {
+  ExamPatternInsights,
+  ImprovementPlanView,
+  NcertRevisionPlan,
+  QuestionTypeInsights,
+  SubjectInsights,
+} from "./ResultInsightSections";
+import { buildResultInsights } from "@/lib/test-engine/result-insights";
 import { LeaderboardModal } from "./LeaderboardModal";
 import { TestPdfDownloadModal } from "@/components/test-portal/TestPdfDownloadModal";
 
-type ActiveTab =
-  | "OVERVIEW"
-  | "SUBJECTS"
-  | "QUESTION_TYPES"
-  | "ERROR_TAXONOMY"
-  | "CHAPTERS_TOPICS"
-  | "NCERT_PLAN"
-  | "QUESTION_REVIEW"
-  | "ACTION_PLAN";
+type ActiveTab = "SUBJECTS" | "QUESTION_TYPES" | "EXAM_PATTERN" | "NCERT_PLAN" | "QUESTION_REVIEW" | "ACTION_PLAN";
 
+// Overview and Chapters & Topics were removed: the first repeated the other
+// tabs, the second was mostly noise.
 const TABS: { id: ActiveTab; label: string; icon: string }[] = [
-  { id: "OVERVIEW", label: "Overview", icon: "dashboard" },
   { id: "SUBJECTS", label: "Subject Analysis", icon: "donut_large" },
   { id: "QUESTION_TYPES", label: "Question Types", icon: "category" },
-  { id: "ERROR_TAXONOMY", label: "Error Patterns", icon: "bug_report" },
-  { id: "CHAPTERS_TOPICS", label: "Chapters & Topics", icon: "account_tree" },
+  { id: "EXAM_PATTERN", label: "Exam Pattern", icon: "insights" },
   { id: "NCERT_PLAN", label: "NCERT Revision", icon: "menu_book" },
   { id: "QUESTION_REVIEW", label: "Question Review", icon: "fact_check" },
   { id: "ACTION_PLAN", label: "Improvement Plan", icon: "rocket_launch" },
@@ -40,7 +34,8 @@ export function StudentResultDashboard({
 }: {
   analysis: FullTestAnalysisResult;
 }) {
-  const [activeTab, setActiveTab] = useState<ActiveTab>("OVERVIEW");
+  const [activeTab, setActiveTab] = useState<ActiveTab>("SUBJECTS");
+  const insights = useMemo(() => buildResultInsights(analysis.questionReviews ?? []), [analysis.questionReviews]);
   const [leaderboardOpen, setLeaderboardOpen] = useState(false);
 
   return (
@@ -102,7 +97,7 @@ export function StudentResultDashboard({
                 onClick={() => setActiveTab(tab.id)}
                 className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
                   isActive
-                    ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
+                    ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900"
                     : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
                 }`}
               >
@@ -116,51 +111,21 @@ export function StudentResultDashboard({
 
       {/* Active Tab Content Area */}
       <div className="transition-all duration-200">
-        {activeTab === "OVERVIEW" && (
-          <div className="space-y-8">
-            <SubjectAnalysisSection subjects={analysis.subjectStats} />
-            <ErrorTaxonomySection
-              errorBreakdown={analysis.errorBreakdown}
-              losingMarkAreas={analysis.losingMarkAreas}
-            />
-            <NcertRevisionSection ncertPlan={analysis.ncertPlan} />
-            <PersonalizedActionPlan actionPlan={analysis.actionPlan} />
-          </div>
-        )}
+        {activeTab === "SUBJECTS" && <SubjectInsights insights={insights} />}
 
-        {activeTab === "SUBJECTS" && (
-          <SubjectAnalysisSection subjects={analysis.subjectStats} />
-        )}
+        {activeTab === "QUESTION_TYPES" && <QuestionTypeInsights insights={insights} />}
 
-        {activeTab === "QUESTION_TYPES" && (
-          <QuestionTypeAnalysisSection questionTypes={analysis.questionTypeStats} />
-        )}
-
-        {activeTab === "ERROR_TAXONOMY" && (
-          <ErrorTaxonomySection
-            errorBreakdown={analysis.errorBreakdown}
-            losingMarkAreas={analysis.losingMarkAreas}
-          />
-        )}
-
-        {activeTab === "CHAPTERS_TOPICS" && (
-          <ChapterTopicAnalysisSection
-            chapterStats={analysis.chapterStats}
-            topicStats={analysis.topicStats}
-          />
-        )}
+        {activeTab === "EXAM_PATTERN" && <ExamPatternInsights insights={insights} />}
 
         {activeTab === "NCERT_PLAN" && (
-          <NcertRevisionSection ncertPlan={analysis.ncertPlan} />
+          <NcertRevisionPlan ncertPlan={analysis.ncertPlan ?? []} insights={insights} storageKey={`ncert-done:${analysis.attemptId}`} />
         )}
 
         {activeTab === "QUESTION_REVIEW" && (
           <QuestionReviewSection questions={analysis.questionReviews} />
         )}
 
-        {activeTab === "ACTION_PLAN" && (
-          <PersonalizedActionPlan actionPlan={analysis.actionPlan} />
-        )}
+        {activeTab === "ACTION_PLAN" && <ImprovementPlanView insights={insights} />}
       </div>
 
       {/* Leaderboard Modal */}
