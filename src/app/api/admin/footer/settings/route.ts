@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
-import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
+import { requirePermission, UnauthorizedError, requireSuperAdmin } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { footerSettingsUpdateSchema } from "@/lib/validation/footer";
 import { apiSuccess, handleApiError } from "@/lib/api/response";
@@ -22,6 +22,7 @@ export async function GET() {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.FOOTER_MANAGE);
+    await requireSuperAdmin(session.user.id);
 
     const settings = await getOrCreateSettings();
     return apiSuccess({ settings });
@@ -35,6 +36,7 @@ export async function PATCH(request: NextRequest) {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.FOOTER_MANAGE);
+    await requireSuperAdmin(session.user.id);
 
     const input = footerSettingsUpdateSchema.parse(await request.json());
     const current = await getOrCreateSettings();

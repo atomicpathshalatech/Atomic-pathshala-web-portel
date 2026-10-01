@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
-import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
+import { requirePermission, UnauthorizedError, requireSuperAdmin } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { sectionUpdateSchema } from "@/lib/validation/homepage";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
@@ -13,6 +13,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.HOME_EDIT);
+    await requireSuperAdmin(session.user.id);
 
     const input = sectionUpdateSchema.parse(await request.json());
 
@@ -52,6 +53,7 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.HOME_DELETE);
+    await requireSuperAdmin(session.user.id);
 
     const existing = await prisma.homePageSection.findUnique({ where: { id: params.id } });
     if (!existing) return apiError("Section not found.", 404);

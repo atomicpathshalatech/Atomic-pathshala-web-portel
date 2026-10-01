@@ -1,15 +1,17 @@
 import type { Metadata } from "next";
 import { requireTeamSession } from "@/lib/auth/session";
-import { hasPermission } from "@/lib/rbac/guard";
+import { hasPermission, isSuperAdminUser } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { prisma } from "@/lib/db";
 import { FounderManager, type FounderData } from "@/components/home-cms/FounderManager";
 import { parseFounderSocialLinks } from "@/lib/founder";
+import { SuperAdminOnlyNotice } from "@/components/team-portal/SuperAdminOnlyNotice";
 
 export const metadata: Metadata = { title: "About the Founder — Website Builder" };
 
 export default async function FounderAdminPage() {
   const { user } = await requireTeamSession();
+  if (!(await isSuperAdminUser(user.id))) return <SuperAdminOnlyNotice />;
   const canManage = await hasPermission(user.id, PERMISSIONS.FOUNDER_MANAGE);
   if (!canManage) {
     return (

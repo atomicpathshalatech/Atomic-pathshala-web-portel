@@ -3,7 +3,7 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
+import { requirePermission, UnauthorizedError, requireSuperAdmin } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { founderUpdateSchema } from "@/lib/validation/founder";
 import { FOUNDER_TAG } from "@/lib/founder";
@@ -18,6 +18,7 @@ export async function GET() {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.FOUNDER_MANAGE);
+    await requireSuperAdmin(session.user.id);
 
     const founder = await prisma.founder.upsert({
       where: { id: "singleton" },
@@ -35,6 +36,7 @@ export async function PUT(request: NextRequest) {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.FOUNDER_MANAGE);
+    await requireSuperAdmin(session.user.id);
 
     const input = founderUpdateSchema.parse(await request.json());
     const norm = (v: string | null | undefined) => (v && v !== "" ? v : null);

@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
+import { requirePermission, UnauthorizedError, requireSuperAdmin } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { footerColumnCreateSchema } from "@/lib/validation/footer";
 import { apiSuccess, handleApiError } from "@/lib/api/response";
@@ -12,6 +12,7 @@ export async function GET() {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.FOOTER_MANAGE);
+    await requireSuperAdmin(session.user.id);
 
     const columns = await prisma.footerColumn.findMany({
       orderBy: { order: "asc" },
@@ -28,6 +29,7 @@ export async function POST(request: NextRequest) {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.FOOTER_MANAGE);
+    await requireSuperAdmin(session.user.id);
 
     const input = footerColumnCreateSchema.parse(await request.json());
     const column = await prisma.footerColumn.create({ data: input });

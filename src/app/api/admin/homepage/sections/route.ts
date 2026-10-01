@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
-import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
+import { requirePermission, UnauthorizedError, requireSuperAdmin } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { sectionCreateSchema } from "@/lib/validation/homepage";
 import { apiSuccess, handleApiError } from "@/lib/api/response";
@@ -18,6 +18,7 @@ export async function GET() {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.HOME_VIEW);
+    await requireSuperAdmin(session.user.id);
 
     const sections = await prisma.homePageSection.findMany({ orderBy: { order: "asc" } });
     return apiSuccess({ sections });
@@ -31,6 +32,7 @@ export async function POST(request: NextRequest) {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.HOME_CREATE);
+    await requireSuperAdmin(session.user.id);
 
     const input = sectionCreateSchema.parse(await request.json());
 

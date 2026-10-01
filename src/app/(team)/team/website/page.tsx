@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireTeamSession } from "@/lib/auth/session";
-import { hasPermission } from "@/lib/rbac/guard";
+import { hasPermission, isSuperAdminUser } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { prisma } from "@/lib/db";
 import { HomeSectionBuilder } from "@/components/home-cms/HomeSectionBuilder";
+import { SuperAdminOnlyNotice } from "@/components/team-portal/SuperAdminOnlyNotice";
 
 export const metadata: Metadata = {
   title: "Website Builder — Team Portal",
@@ -12,6 +13,7 @@ export const metadata: Metadata = {
 
 export default async function HomeBuilderPage() {
   const { user } = await requireTeamSession();
+  if (!(await isSuperAdminUser(user.id))) return <SuperAdminOnlyNotice />;
   const canView =
     (await hasPermission(user.id, PERMISSIONS.HOME_VIEW)) ||
     (await hasPermission(user.id, PERMISSIONS.TEAM_PORTAL_ACCESS));

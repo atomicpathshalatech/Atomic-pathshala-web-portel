@@ -183,3 +183,19 @@ export async function requirePermission(
   const allowed = await hasPermission(userId, permission);
   if (!allowed) throw new ForbiddenError();
 }
+
+/**
+ * Super Admin / Founder only (an active account). ADMIN passes every
+ * permission, so a permission can't express "only the Super Admin" — the
+ * website CMS (builder, FAQs, student feedback) uses this.
+ */
+export async function isSuperAdminUser(userId: string | undefined | null): Promise<boolean> {
+  if (!userId) return false;
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { status: true, role: { select: { name: true } } } });
+  return Boolean(user && user.status === "ACTIVE" && (user.role?.name === "SUPER_ADMIN" || user.role?.name === "FOUNDER"));
+}
+
+export async function requireSuperAdmin(userId: string | undefined | null): Promise<void> {
+  if (!userId) throw new UnauthorizedError();
+  if (!(await isSuperAdminUser(userId))) throw new ForbiddenError("Only the Super Admin can manage the website.");
+}

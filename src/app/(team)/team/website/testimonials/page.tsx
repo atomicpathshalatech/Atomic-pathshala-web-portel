@@ -1,14 +1,16 @@
 import type { Metadata } from "next";
 import { requireTeamSession } from "@/lib/auth/session";
-import { hasPermission } from "@/lib/rbac/guard";
+import { hasPermission, isSuperAdminUser } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { prisma } from "@/lib/db";
 import { TestimonialManager } from "@/components/home-cms/TestimonialManager";
+import { SuperAdminOnlyNotice } from "@/components/team-portal/SuperAdminOnlyNotice";
 
 export const metadata: Metadata = { title: "Testimonials — Website Builder" };
 
 export default async function TestimonialsPage() {
   const { user } = await requireTeamSession();
+  if (!(await isSuperAdminUser(user.id))) return <SuperAdminOnlyNotice />;
   const canManage =
     (await hasPermission(user.id, PERMISSIONS.TESTIMONIAL_MANAGE)) ||
     (await hasPermission(user.id, PERMISSIONS.TEAM_PORTAL_ACCESS));

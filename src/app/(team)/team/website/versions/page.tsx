@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import { requireTeamSession } from "@/lib/auth/session";
-import { hasPermission } from "@/lib/rbac/guard";
+import { hasPermission, isSuperAdminUser } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { prisma } from "@/lib/db";
 import { VersionHistoryList } from "@/components/home-cms/VersionHistoryList";
+import { SuperAdminOnlyNotice } from "@/components/team-portal/SuperAdminOnlyNotice";
 
 export const metadata: Metadata = {
   title: "Version History — Website Builder",
@@ -11,6 +12,7 @@ export const metadata: Metadata = {
 
 export default async function HomeVersionsPage() {
   const { user } = await requireTeamSession();
+  if (!(await isSuperAdminUser(user.id))) return <SuperAdminOnlyNotice />;
   const canView = await hasPermission(user.id, PERMISSIONS.HOME_VIEW);
   if (!canView) {
     return (

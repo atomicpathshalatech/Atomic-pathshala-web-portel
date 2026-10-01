@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
+import { requirePermission, UnauthorizedError, requireSuperAdmin } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { pageSeoUpsertSchema } from "@/lib/validation/seo";
 import { apiSuccess, handleApiError } from "@/lib/api/response";
@@ -12,6 +12,7 @@ export async function GET(_request: NextRequest, { params }: { params: { pageKey
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.SEO_MANAGE);
+    await requireSuperAdmin(session.user.id);
 
     const seo = await prisma.pageSeo.findUnique({ where: { pageKey: params.pageKey } });
     return apiSuccess({ seo });
@@ -25,6 +26,7 @@ export async function PUT(request: NextRequest, { params }: { params: { pageKey:
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.SEO_MANAGE);
+    await requireSuperAdmin(session.user.id);
 
     const input = pageSeoUpsertSchema.parse({ ...(await request.json()), pageKey: params.pageKey });
 

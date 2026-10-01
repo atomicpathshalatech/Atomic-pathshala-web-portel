@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireTeamSession } from "@/lib/auth/session";
-import { getUserPermissionCodes } from "@/lib/rbac/guard";
+import { getUserPermissionCodes, isSuperAdminUser } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { prisma } from "@/lib/db";
 import { CalendarWidget } from "@/components/team-portal/CalendarWidget";
@@ -48,7 +48,9 @@ function toIsoDate(d: Date) {
 export default async function TeamHomePage() {
   const { user } = await requireTeamSession();
   const permissions = await getUserPermissionCodes(user.id);
-  const cards = MODULE_CARDS.filter((c) => permissions.has(c.permission));
+  const superAdmin = await isSuperAdminUser(user.id);
+  // The Website Builder is the Super Admin's alone.
+  const cards = MODULE_CARDS.filter((c) => permissions.has(c.permission) && (c.href !== "/team/website" || superAdmin));
 
   const teacherProfile = await prisma.teacher.findUnique({ where: { userId: user.id } });
   const commandCenterData = teacherProfile ? await getTeacherCommandCenterData(teacherProfile.id) : null;
