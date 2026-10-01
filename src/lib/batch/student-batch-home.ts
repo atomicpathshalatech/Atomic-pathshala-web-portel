@@ -253,7 +253,7 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, u
         opensAt: d.startsAt.toISOString(),
         href: status === "UPCOMING" || status === "LOCKED" || !t ? null : status === "COMPLETED" ? `/tests/${t.id}/result` : `/tests/${t.id}/attempt`,
         // DPP solutions open once the student has submitted it.
-        pdfHref: status === "COMPLETED" && t && a?.status !== "IN_PROGRESS" ? `/api/tests/${t.id}/export?type=with-solution` : null,
+        pdfHref: status === "COMPLETED" && t && a?.status !== "IN_PROGRESS" ? `/api/tests/${t.id}/pdf` : null,
       };
     }),
     ...chapterDpps.map((d): BatchDppItem => {
@@ -353,7 +353,7 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, u
         closeTime: t.closeTime?.toISOString() ?? null,
         attemptStatus: !st ? "NOT_STARTED" : st === "IN_PROGRESS" ? "IN_PROGRESS" : "SUBMITTED",
         // Same rule as the export route: everyone gets the paper once the test time is over.
-        pdfHref: st && st !== "IN_PROGRESS" && areResultsReleased(t) ? `/api/tests/${t.id}/export?type=with-solution` : null,
+        pdfHref: st && st !== "IN_PROGRESS" && areResultsReleased(t) ? `/api/tests/${t.id}/pdf` : null,
       };
     }),
     dpps,

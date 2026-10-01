@@ -124,6 +124,24 @@ export function StudentBatchHome({ data, initialTab }: { data: StudentBatchHomeD
   );
 }
 
+/** Question paper and solutions as direct PDF downloads (no print dialog). */
+function PdfButtons({ base }: { base: string }) {
+  const cls =
+    "inline-flex items-center gap-0.5 px-2 py-1.5 rounded-xl border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 text-[11px] font-bold shrink-0";
+  return (
+    <>
+      <a href={`${base}?type=questions`} className={cls} title="Download the question paper (PDF)">
+        <span className="material-symbols-outlined text-[15px]">download</span>
+        Paper
+      </a>
+      <a href={`${base}?type=solutions`} className={cls} title="Download the solutions (PDF)">
+        <span className="material-symbols-outlined text-[15px]">download</span>
+        Solutions
+      </a>
+    </>
+  );
+}
+
 function Section({ title, children, right }: { title: string; children: React.ReactNode; right?: React.ReactNode }) {
   return (
     <section className="space-y-2">
@@ -334,18 +352,7 @@ function TestsTab({ tests, now }: { tests: BatchTestItem[]; now: Date }) {
                     </div>
                     {s === "open" && <Link href={`/tests/${t.id}/attempt`} className="px-3 py-1.5 rounded-xl bg-blue-600 text-white text-xs font-bold shrink-0">Start</Link>}
                     {s === "resume" && <Link href={`/tests/${t.id}/attempt`} className="px-3 py-1.5 rounded-xl bg-amber-500 text-white text-xs font-bold shrink-0">Resume</Link>}
-                    {s === "done" && t.pdfHref && (
-                      <a
-                        href={t.pdfHref}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 text-xs font-bold shrink-0"
-                        title="Download questions + solutions PDF"
-                      >
-                        <span className="material-symbols-outlined text-[16px]">picture_as_pdf</span>
-                        PDF
-                      </a>
-                    )}
+                    {s === "done" && t.pdfHref && <PdfButtons base={t.pdfHref} />}
                     {s === "done" && <Link href={`/tests/${t.id}/result`} className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-bold shrink-0">Result</Link>}
                     {s === "upcoming" && <span className="text-[11px] font-semibold text-slate-500 shrink-0">Opens {t.openTime ? date(t.openTime) : ""}</span>}
                     {s === "missed" && <span className="text-[11px] font-semibold text-slate-400 shrink-0">Closed</span>}
@@ -450,18 +457,7 @@ function DppTab({ dpps }: { dpps: BatchDppItem[] }) {
                 </p>
                 <span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${chip.cls}`}>{chip.label}</span>
               </div>
-              {d.pdfHref && (
-                      <a
-                        href={d.pdfHref}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 text-xs font-bold shrink-0"
-                        title="Download questions + solutions PDF"
-                      >
-                        <span className="material-symbols-outlined text-[16px]">picture_as_pdf</span>
-                        PDF
-                      </a>
-                    )}
+              {d.pdfHref && <PdfButtons base={d.pdfHref} />}
               {d.href ? (
                 <Link href={d.href} className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 ${d.status === "COMPLETED" ? "border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200" : "bg-blue-600 text-white"}`}>
                   {d.status === "COMPLETED" ? "Result" : d.status === "IN_PROGRESS" ? "Resume" : "Attempt"}

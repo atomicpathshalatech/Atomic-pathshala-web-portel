@@ -42,6 +42,9 @@ const nextConfig = {
     // client bundles; per-icon / per-function import rewriting keeps route
     // chunks small.
     optimizePackageImports: ["lucide-react", "date-fns"],
+    // Headless Chromium for the test-PDF download (/api/tests/[id]/pdf):
+    // kept out of the bundle and its binary files traced into that route only.
+    serverComponentsExternalPackages: ["@sparticuz/chromium", "puppeteer-core"],
     serverActions: {
       bodySizeLimit: "10mb",
     },
@@ -83,6 +86,7 @@ const nextConfig = {
     // export-pdf, the cron safety net, pptx export, …).
     outputFileTracingIncludes: {
       "*": ["public/brand/logo.png", "public/atomic-logo.png"],
+      "/api/tests/[id]/pdf": ["node_modules/@sparticuz/chromium/bin/**"],
     },
   },
   async headers() {

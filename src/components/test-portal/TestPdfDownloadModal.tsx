@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
-import { FileText, CheckCircle, Download, ExternalLink, Sparkles, X, Printer } from "lucide-react";
+import { FileText, CheckCircle, Download, ExternalLink, Sparkles, X } from "lucide-react";
 
 interface TestPdfDownloadModalProps {
   testId: string;
@@ -39,10 +39,19 @@ export function TestPdfDownloadModal({
   const closeModal = controlledOnClose || (() => setInternalOpen(false));
   const openModal = () => setInternalOpen(true);
 
+  // Straight download of a ready PDF file (no print dialog). The first
+  // download of a test takes a few seconds while the PDF is prepared.
+  const [preparing, setPreparing] = useState<null | "questions" | "solutions">(null);
   const handleDownload = (withSolution: boolean) => {
-    const type = withSolution ? "with-solution" : "without-solution";
-    const url = `/api/tests/${testId}/export?type=${type}&direct=true&t=${Date.now()}`;
-    window.open(url, "_blank");
+    const type = withSolution ? "solutions" : "questions";
+    setPreparing(type);
+    const a = document.createElement("a");
+    a.href = `/api/tests/${testId}/pdf?type=${type}`;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => setPreparing((p) => (p === type ? null : p)), 15000);
   };
 
   return (
@@ -138,8 +147,7 @@ export function TestPdfDownloadModal({
                   className="w-full py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-black dark:bg-blue-600 dark:hover:bg-blue-700 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition cursor-pointer"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>Download Question Paper PDF</span>
-                  <ExternalLink className="w-3.5 h-3.5 opacity-60" />
+                  <span>{preparing === "questions" ? "Preparing PDF… download starts shortly" : "Download Question Paper PDF"}</span>
                 </button>
               </div>
 
@@ -182,8 +190,7 @@ export function TestPdfDownloadModal({
                   className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition cursor-pointer"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>Download Paper + Solutions PDF</span>
-                  <ExternalLink className="w-3.5 h-3.5 opacity-60" />
+                  <span>{preparing === "solutions" ? "Preparing PDF… download starts shortly" : "Download Paper + Solutions PDF"}</span>
                 </button>
               </div>
 
@@ -207,8 +214,8 @@ export function TestPdfDownloadModal({
             {/* Modal Footer */}
             <div className="bg-slate-50 dark:bg-slate-800/80 px-6 py-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 shrink-0">
               <div className="flex items-center gap-1">
-                <Printer className="w-3.5 h-3.5 text-blue-500" />
-                <span>Print Dialog / PDF Save ready</span>
+                <Download className="w-3.5 h-3.5 text-blue-500" />
+                <span>Direct PDF download</span>
               </div>
               <button
                 type="button"

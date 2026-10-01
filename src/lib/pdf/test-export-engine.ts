@@ -1053,7 +1053,7 @@ export function generateTestPaperHtml(
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@${katex.version}/dist/katex.min.css" crossorigin="anonymous">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=PT+Serif:ital,wght@0,400;0,700;1,400;1,700&family=Noto+Serif+Devanagari:wght@400;500;600;700;800&family=Montserrat:wght@700;800;900&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Tinos:ital,wght@0,400;0,700;1,400;1,700&family=PT+Serif:ital,wght@0,400;0,700;1,400;1,700&family=Noto+Serif+Devanagari:wght@400;500;600;700;800&family=Montserrat:wght@700;800;900&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet">
 
   <style>
     @page {
@@ -1071,7 +1071,7 @@ export function generateTestPaperHtml(
       margin: 0;
       padding: 24px 0;
       background: #f1f5f9;
-      font-family: 'Times New Roman', 'PT Serif', 'Noto Serif Devanagari', 'Mangal', serif;
+      font-family: 'Tinos', 'Times New Roman', 'PT Serif', 'Noto Serif Devanagari', 'Mangal', serif;
       color: #000000;
       font-size: 10.5pt;
       line-height: 1.36;
@@ -1399,7 +1399,7 @@ export function generateTestPaperHtml(
       font-family: 'Noto Serif Devanagari', sans-serif;
     }
     .inst-heading-right {
-      font-family: 'Times New Roman', 'PT Serif', serif;
+      font-family: 'Tinos', 'Times New Roman', 'PT Serif', serif;
     }
     .inst-points-list {
       display: flex;
@@ -1426,7 +1426,7 @@ export function generateTestPaperHtml(
       font-family: 'Noto Serif Devanagari', sans-serif;
     }
     .inst-cell-right {
-      font-family: 'Times New Roman', 'PT Serif', serif;
+      font-family: 'Tinos', 'Times New Roman', 'PT Serif', serif;
     }
     .inst-point-num {
       font-weight: 800;
@@ -1519,7 +1519,7 @@ export function generateTestPaperHtml(
     }
 
     .test-header-page-no {
-      font-family: 'Times New Roman', 'PT Serif', serif;
+      font-family: 'Tinos', 'Times New Roman', 'PT Serif', serif;
       font-size: 12.5pt;
       font-weight: 700;
       color: #000000;
@@ -1528,7 +1528,7 @@ export function generateTestPaperHtml(
     .test-header-lang-badge {
       border: 1px solid #000000;
       padding: 1px 8px;
-      font-family: 'Times New Roman', 'PT Serif', serif;
+      font-family: 'Tinos', 'Times New Roman', 'PT Serif', serif;
       font-size: 8pt;
       font-weight: 700;
       color: #000000;
@@ -1537,7 +1537,7 @@ export function generateTestPaperHtml(
 
     .test-header-subject-row {
       text-align: center;
-      font-family: 'Times New Roman', 'PT Serif', serif;
+      font-family: 'Tinos', 'Times New Roman', 'PT Serif', serif;
       font-size: 11pt;
       font-weight: 700;
       letter-spacing: 0.5px;
@@ -1611,7 +1611,7 @@ export function generateTestPaperHtml(
     .q-side-en .opt-value,
     .q-side-en p,
     .q-side-en span:not(.katex *) {
-      font-family: 'Times New Roman', 'PT Serif', 'Nimbus Roman No9 L', 'FreeSerif', 'Liberation Serif', serif !important;
+      font-family: 'Tinos', 'Times New Roman', 'PT Serif', 'Nimbus Roman No9 L', 'FreeSerif', 'Liberation Serif', serif !important;
     }
 
     .q-side-hi,
@@ -1619,7 +1619,7 @@ export function generateTestPaperHtml(
     .q-side-hi .opt-value,
     .q-side-hi p,
     .q-side-hi span:not(.katex *) {
-      font-family: 'Noto Serif Devanagari', 'Mangal', 'Kokila', 'Times New Roman', 'PT Serif', serif !important;
+      font-family: 'Noto Serif Devanagari', 'Mangal', 'Kokila', 'Tinos', 'Times New Roman', 'PT Serif', serif !important;
     }
 
     .q-statement-body,
@@ -1635,7 +1635,7 @@ export function generateTestPaperHtml(
     }
 
     .q-num-label {
-      font-family: 'Times New Roman', 'PT Serif', serif !important;
+      font-family: 'Tinos', 'Times New Roman', 'PT Serif', serif !important;
       font-size: 10.5pt !important;
       font-weight: 700 !important;
       color: #000000 !important;
@@ -1667,7 +1667,7 @@ export function generateTestPaperHtml(
     }
 
     .opt-label {
-      font-family: 'Times New Roman', 'PT Serif', serif !important;
+      font-family: 'Tinos', 'Times New Roman', 'PT Serif', serif !important;
       font-size: 10pt !important;
       font-weight: 400 !important;
       color: #000000 !important;
@@ -1735,7 +1735,7 @@ export function generateTestPaperHtml(
     .footer-phase-box {
       border: 1px solid #000000;
       padding: 1px 6px;
-      font-family: 'Times New Roman', 'PT Serif', serif;
+      font-family: 'Tinos', 'Times New Roman', 'PT Serif', serif;
       font-size: 7.5pt;
       font-weight: 700;
       width: fit-content;
@@ -1748,7 +1748,7 @@ export function generateTestPaperHtml(
       align-items: center;
       border-top: 1.5px solid #000000;
       padding-top: 2px;
-      font-family: 'Times New Roman', 'PT Serif', serif;
+      font-family: 'Tinos', 'Times New Roman', 'PT Serif', serif;
       font-size: 8pt;
       font-weight: 700;
       color: #000000;
@@ -1761,7 +1761,7 @@ export function generateTestPaperHtml(
     }
 
     .footer-date {
-      font-family: 'Times New Roman', 'PT Serif', serif;
+      font-family: 'Tinos', 'Times New Roman', 'PT Serif', serif;
       font-weight: 700;
       font-size: 8.5pt;
     }
@@ -1814,7 +1814,7 @@ export function generateTestPaperHtml(
       font-family: 'Noto Serif Devanagari', 'Mangal', serif;
     }
     .back-col-en {
-      font-family: 'Times New Roman', 'PT Serif', serif;
+      font-family: 'Tinos', 'Times New Roman', 'PT Serif', serif;
     }
     .back-heading {
       font-size: 11pt;
@@ -1946,7 +1946,7 @@ export function generateTestPaperHtml(
       margin-bottom: 6px;
     }
     .sol-q-badge {
-      font-family: 'Times New Roman', 'PT Serif', serif;
+      font-family: 'Tinos', 'Times New Roman', 'PT Serif', serif;
       font-size: 9.5pt;
       font-weight: 800;
       background: #0f172a;
@@ -1955,7 +1955,7 @@ export function generateTestPaperHtml(
       border-radius: 3px;
     }
     .sol-correct-badge {
-      font-family: 'Times New Roman', 'PT Serif', serif;
+      font-family: 'Tinos', 'Times New Roman', 'PT Serif', serif;
       font-size: 9.5pt;
       color: #047857;
       font-weight: 700;
@@ -1985,7 +1985,7 @@ export function generateTestPaperHtml(
       padding-left: 14px;
     }
     .sol-stmt-text {
-      font-family: 'Noto Serif Devanagari', 'Mangal', 'Times New Roman', serif;
+      font-family: 'Noto Serif Devanagari', 'Mangal', 'Tinos', 'Times New Roman', serif;
       font-size: 9pt;
       line-height: 1.35;
       color: #334155;
@@ -1993,7 +1993,7 @@ export function generateTestPaperHtml(
       text-align: justify;
     }
     .sol-expl-heading {
-      font-family: 'Noto Serif Devanagari', 'Mangal', 'Times New Roman', serif;
+      font-family: 'Noto Serif Devanagari', 'Mangal', 'Tinos', 'Times New Roman', serif;
       font-size: 8.5pt;
       font-weight: 700;
       color: #1e40af;
@@ -2001,7 +2001,7 @@ export function generateTestPaperHtml(
       margin-bottom: 3px;
     }
     .sol-body-text {
-      font-family: 'Noto Serif Devanagari', 'Mangal', 'Times New Roman', serif;
+      font-family: 'Noto Serif Devanagari', 'Mangal', 'Tinos', 'Times New Roman', serif;
       font-size: 9.5pt;
       line-height: 1.45;
       color: #000000;
@@ -2018,7 +2018,7 @@ export function generateTestPaperHtml(
       display: inline-block;
     }
     .font-devanagari {
-      font-family: 'Noto Serif Devanagari', 'Mangal', 'Times New Roman', serif !important;
+      font-family: 'Noto Serif Devanagari', 'Mangal', 'Tinos', 'Times New Roman', serif !important;
     }
 
     /* ================================================================
@@ -2057,7 +2057,7 @@ export function generateTestPaperHtml(
     /* ---- Question lines (questionPartsHtml): Hindi | English in one grid row ---- */
     .page.content-page, .page.rough-page { padding: 14px 15mm 12px 15mm !important; }
     .q-flow { padding: 16px 15mm; }
-    .q-part { display: grid; grid-template-columns: 1fr 1fr; break-inside: avoid; page-break-inside: avoid; }
+    .q-part { display: grid; grid-template-columns: 0.94fr 1.06fr; break-inside: avoid; page-break-inside: avoid; }
     /* Older booklet rules for these class names must not add padding/rules between lines. */
     .q-part.q-row-item, .q-part.sol-row-item { padding: 0 !important; margin: 0 !important; border-bottom: 0 !important; }
     .q-part.q-last { border-bottom: 0.6px solid #bdbdbd !important; }
@@ -2065,13 +2065,13 @@ export function generateTestPaperHtml(
     .in-sol .qp-cell { --q-indent: 2.9em; }
     .qp-hi {
       padding-right: 10px; border-right: 1.5px solid #000;
-      font-family: 'Noto Serif Devanagari', 'Mangal', 'Times New Roman', serif;
-      font-size: 12.6pt; line-height: 1.5;
+      font-family: 'Noto Serif Devanagari', 'Mangal', 'Tinos', 'Times New Roman', serif;
+      font-size: 12pt; line-height: 1.5;
     }
     .qp-en {
       padding-left: 10px;
-      font-family: 'Times New Roman', 'PT Serif', serif;
-      font-size: 12.8pt; line-height: 1.4;
+      font-family: 'Tinos', 'Times New Roman', 'PT Serif', serif;
+      font-size: 12.2pt; line-height: 1.4;
     }
     /* Everything but KaTeX inherits the line's font and size. */
     .qp-cell *:not(.katex *):not(.katex) { font-size: inherit; line-height: inherit; }
@@ -2081,7 +2081,7 @@ export function generateTestPaperHtml(
     .q-num-box {
       display: inline-block; min-width: 1.9em; padding: 0 0.3em; text-align: center;
       border: 1.5px solid #000; border-radius: 3px; background: #e8eef7;
-      font-family: 'Times New Roman', serif; font-weight: 700; line-height: 1.25;
+      font-family: 'Tinos', 'Times New Roman', serif; font-weight: 700; line-height: 1.25;
     }
     .q-body { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
     /* Figure, options and solution start at the statement's indent. */
@@ -2118,15 +2118,15 @@ export function generateTestPaperHtml(
     /* Answer key: columns of 45 */
     .ak-block { padding: 2px 0 8px; }
     .ak-title { font-family: 'Montserrat', sans-serif; font-weight: 800; font-size: 12pt; text-align: center; margin-bottom: 4px; }
-    .ak-title span { display: block; font-family: 'Times New Roman', serif; font-weight: 700; font-size: 9.5pt; color: #333; }
-    .ak-table { border-collapse: collapse; margin: 0 auto; font-family: 'Times New Roman', serif; font-size: 9.5pt; line-height: 1; }
+    .ak-title span { display: block; font-family: 'Tinos', 'Times New Roman', serif; font-weight: 700; font-size: 9.5pt; color: #333; }
+    .ak-table { border-collapse: collapse; margin: 0 auto; font-family: 'Tinos', 'Times New Roman', serif; font-size: 9.5pt; line-height: 1; }
     .ak-table th, .ak-table td.ak-q, .ak-table td.ak-a { border: 1px solid #000; padding: 2px 10px; height: 16px; text-align: center; }
     .ak-table th { background: #e2e8f0; font-weight: 700; }
     .ak-table td.ak-q { font-weight: 700; background: #f8fafc; }
     .ak-table .ak-gap { width: 10px; border: 0; background: transparent; }
 
     /* Website link in every footer (clickable in the saved PDF) */
-    .site-link { color: #1d4ed8 !important; text-decoration: none; font-family: 'Times New Roman', serif; font-weight: 700; }
+    .site-link { color: #1d4ed8 !important; text-decoration: none; font-family: 'Tinos', 'Times New Roman', serif; font-weight: 700; }
     .footer-meta-row .footer-site { font-size: 8.5pt; }
 
     /* Solutions: Hindi | English share rows too. */
@@ -2140,7 +2140,7 @@ export function generateTestPaperHtml(
     .solutions-page .page-running-footer, .answer-key-page .page-running-footer {
       display: flex !important; justify-content: space-between !important; align-items: center;
       border-top: 1px solid #000000; padding-top: 3px; margin-top: auto;
-      font-family: 'Times New Roman', 'PT Serif', serif; font-size: 7.5pt; font-weight: 700;
+      font-family: 'Tinos', 'Times New Roman', 'PT Serif', serif; font-size: 7.5pt; font-weight: 700;
     }
 
     /* Screen toolbar */
@@ -2214,6 +2214,28 @@ export function generateTestPaperHtml(
         }
       }
 
+      function textHeight(el) {
+        var r = document.createRange();
+        r.selectNodeContents(el);
+        return r.getBoundingClientRect().height;
+      }
+      function balanceRow(row) {
+        if (!row.classList || !row.classList.contains('q-part') || row.classList.contains('q-fig')) return;
+        var cells = row.querySelectorAll('.qp-cell');
+        if (cells.length !== 2) return;
+        var hi = cells[0], en = cells[1];
+        var a = textHeight(hi), b = textHeight(en);
+        var tall = b > a ? en : hi;
+        var line = parseFloat(getComputedStyle(tall).lineHeight) || 20;
+        if (Math.abs(b - a) < line * 0.6) return;
+        var base = parseFloat(getComputedStyle(tall).fontSize);
+        for (var step = 1; step <= 5; step++) {
+          tall.style.fontSize = (base * (1 - 0.02 * step)) + 'px';
+          if (Math.abs(textHeight(en) - textHeight(hi)) < line * 0.6) return;
+        }
+        tall.style.fontSize = '';
+      }
+
       // Cuts a flow of question/solution rows into A4 pages by measured height.
       function paginateFlow(flow, templateId, subject) {
         var template = document.getElementById(templateId);
@@ -2243,6 +2265,7 @@ export function generateTestPaperHtml(
         items.forEach(function (item) {
           stream.appendChild(item);
           fitWide(item);
+          balanceRow(item);
           // A few px of slack: late font/KaTeX reflow must never push a row off the page.
           if (stream.offsetHeight <= body.clientHeight - SAFETY_PX) return;
           if (stream.children.length > 1) {
