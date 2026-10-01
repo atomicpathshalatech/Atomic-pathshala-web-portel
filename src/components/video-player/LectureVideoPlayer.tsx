@@ -172,6 +172,9 @@ export function LectureVideoPlayer({
   const [isAspectFill, setIsAspectFill] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
   const [hasStartedPlaying, setHasStartedPlaying] = useState(false);
+  // YouTube flashes its title / channel logo for a few seconds whenever
+  // playback starts or resumes; keep the top edge veiled until it fades.
+  const [ytTitleVeil, setYtTitleVeil] = useState(false);
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });
 
   const [showControls, setShowControls] = useState(true);
@@ -574,6 +577,13 @@ export function LectureVideoPlayer({
 
     return () => clearInterval(pollInterval);
   }, [isYouTube, isPlaying, isScrubbing, duration, playbackSpeed]);
+
+  useEffect(() => {
+    if (!isYouTube || !isPlaying) return;
+    setYtTitleVeil(true);
+    const t = setTimeout(() => setYtTitleVeil(false), 4000);
+    return () => clearTimeout(t);
+  }, [isYouTube, isPlaying]);
 
   // ---------- Actions ----------
   const togglePlay = useCallback(() => {
@@ -1018,6 +1028,23 @@ export function LectureVideoPlayer({
             }
           }}
         />
+      )}
+
+      {/* 1.1 YouTube chrome cover. Paused or ended, YouTube draws its title,
+          share button, logo and "More videos" over the frame — hide all of it
+          behind the poster. Right after play/resume, veil just the top edge
+          where the title flashes. Sits under the interaction surface and
+          every control. */}
+      {isYouTube && hasStartedPlaying && !isPlaying && (
+        <div className="absolute inset-0 z-[5] bg-black pointer-events-none overflow-hidden">
+          {posterUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- remote thumbnail
+            <img src={posterUrl} alt="" className="absolute inset-0 w-full h-full object-cover opacity-40" />
+          ) : null}
+        </div>
+      )}
+      {isYouTube && hasStartedPlaying && isPlaying && ytTitleVeil && (
+        <div className="absolute top-0 left-0 right-0 h-[22%] z-[5] bg-gradient-to-b from-black via-black/95 to-transparent pointer-events-none" />
       )}
 
       {/* 1.2 Interaction surface — above the video, below every control */}

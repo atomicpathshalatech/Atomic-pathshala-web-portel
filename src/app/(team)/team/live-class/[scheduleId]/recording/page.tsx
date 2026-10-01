@@ -7,6 +7,8 @@ import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { RecordingPlayer } from "@/components/live-class/RecordingPlayer";
+import { isRecordingNotYetDue } from "@/lib/schedule/access-rules";
+import { formatISTDate, formatISTTime } from "@/lib/date-utils";
 
 export const metadata: Metadata = {
   title: "Class Recording — Atomic Pathshala",
@@ -53,6 +55,20 @@ export default async function TeacherRecordingPage({
     if (!assignedViaSchedule && !assignedViaBatch && !isAdminOverride) {
       redirect("/team/my-schedule");
     }
+  }
+
+  if (isRecordingNotYetDue(schedule)) {
+    return (
+      <div className="max-w-2xl mx-auto py-16 px-4 text-center">
+        <span className="material-symbols-outlined text-4xl text-gray-400">schedule</span>
+        <p className="mt-3 text-sm font-semibold text-gray-500">
+          This class is scheduled for {formatISTDate(schedule.startsAt)}, {formatISTTime(schedule.startsAt)}. Its video plays after that time.
+        </p>
+        <Link href="/team/my-schedule" className="inline-block mt-4 text-xs font-bold text-blue-600 hover:underline">
+          Back to My Schedule
+        </Link>
+      </div>
+    );
   }
 
   if (!schedule.liveWhiteboardSession) {

@@ -17,6 +17,10 @@ export type BatchClassItem = {
   status: string;
   type: string;
   liveWhiteboardSession: { status?: string; livePhase?: string } | null;
+  /** For the Recorded folders: Subject → Chapter. */
+  chapterId: string | null;
+  chapterTitle: string | null;
+  subjectName: string;
 };
 
 export type BatchChapterItem = { id: string; title: string; subjectId: string; subject: string; lectures: number; dpps: number };
@@ -78,6 +82,7 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, u
         type: true,
         teacher: { select: { user: { select: { name: true } } } },
         liveWhiteboardSession: { select: { status: true, livePhase: true } },
+        chapter: { select: { id: true, title: true, subject: { select: { title: true } } } },
       },
     }),
     prisma.batchChapter.findMany({
@@ -190,6 +195,9 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, u
       status: s.status,
       type: s.type,
       liveWhiteboardSession: s.liveWhiteboardSession,
+      chapterId: s.chapter?.id ?? null,
+      chapterTitle: s.chapter?.title ?? null,
+      subjectName: s.chapter?.subject.title ?? s.subject ?? "Other classes",
     })),
     chapters,
     tests: tests.map((t) => {

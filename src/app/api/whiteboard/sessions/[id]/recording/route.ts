@@ -6,6 +6,7 @@ import { resolveWhiteboardAccess } from "@/lib/whiteboard/access";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { createPresignedDownloadUrl } from "@/lib/storage/r2-client";
 import { reconcileRecordingStatus } from "@/lib/livekit/egress";
+import { isRecordingNotYetDue } from "@/lib/schedule/access-rules";
 
 /**
  * Catch-up recording playback & metadata endpoint.
@@ -43,10 +44,40 @@ export async function GET(
         youtubeArchiveVideoUrl: true,
         youtubeVideoId: true,
         videoTransport: true,
+        status: true,
+        livePhase: true,
+        batchSchedule: { select: { id: true, startsAt: true, endsAt: true, status: true, type: true } },
       },
     });
 
     if (!wbSession) return apiError("Live class session not found", 404);
+
+    // A link added to a class that hasn't happened yet (e.g. tomorrow's) must
+    // not play before the class's scheduled time — for teachers too.
+    if (
+      wbSession.batchSchedule &&
+      isRecordingNotYetDue({
+        ...wbSession.batchSchedule,
+        liveWhiteboardSession: { status: wbSession.status, livePhase: wbSession.livePhase },
+      })
+    ) {
+      return apiSuccess({
+        recordingId: wbSession.id,
+        classId: wbSession.batchScheduleId,
+        liveSessionId: wbSession.id,
+        providerRecordingId: null,
+        status: "SCHEDULED",
+        available: false,
+        url: null,
+        message: "This class hasn't happened yet. The recording plays after its scheduled time.",
+        startedAt: null,
+        stoppedAt: null,
+        durationSeconds: null,
+        storagePath: null,
+        resourceId: null,
+        createdAt: wbSession.createdAt,
+      });
+    }
 
     // YouTube-delivered occurrences: the recording is whatever YouTube has
     // CONFIRMED processed — nothing is guessed from youtubeVideoId. While

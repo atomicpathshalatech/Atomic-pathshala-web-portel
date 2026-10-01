@@ -5,13 +5,14 @@ import Link from "next/link";
 import { canStudentJoinClass, getEffectiveScheduleStatus } from "@/lib/schedule/access-rules";
 import type { StudentBatchHomeData, BatchClassItem, BatchTestItem } from "@/lib/batch/student-batch-home";
 
-export type BatchTab = "classes" | "tests" | "material" | "notices";
+export type BatchTab = "classes" | "recorded" | "tests" | "material" | "notices";
 
 const TABS: { id: BatchTab; label: string; icon: string }[] = [
-  { id: "classes", label: "Classes", icon: "smart_display" },
+  { id: "classes", label: "Live", icon: "sensors" },
+  { id: "recorded", label: "Recorded", icon: "smart_display" },
   { id: "tests", label: "Tests", icon: "quiz" },
-  { id: "material", label: "Study Material", icon: "folder_open" },
-  { id: "notices", label: "Announcements", icon: "campaign" },
+  { id: "material", label: "Material", icon: "folder_open" },
+  { id: "notices", label: "Notices", icon: "campaign" },
 ];
 
 const IST = "Asia/Kolkata";
@@ -41,6 +42,7 @@ export function StudentBatchHome({ data, initialTab }: { data: StudentBatchHomeD
   const live = useMemo(() => data.classes.filter((c) => getEffectiveScheduleStatus(c, now) === "LIVE"), [data.classes, now]);
   const counts = {
     classes: data.classes.filter((c) => dayKey(c.startsAt) === dayKey(now)).length,
+    recorded: 0,
     tests: data.tests.filter((t) => t.attemptStatus !== "SUBMITTED" && (!t.closeTime || new Date(t.closeTime) > now)).length,
     material: data.folders.reduce((n, f) => n + f.files.length, 0),
     notices: data.notices.length,
@@ -85,7 +87,7 @@ export function StudentBatchHome({ data, initialTab }: { data: StudentBatchHomeD
         )}
 
         {/* Tabs */}
-        <div className="grid grid-cols-4 border-t border-slate-200 dark:border-slate-800">
+        <div className="grid grid-cols-5 border-t border-slate-200 dark:border-slate-800">
           {TABS.map((t) => {
             const active = tab === t.id;
             const n = counts[t.id];
@@ -100,7 +102,7 @@ export function StudentBatchHome({ data, initialTab }: { data: StudentBatchHomeD
               >
                 <span className="material-symbols-outlined text-[20px]">{t.icon}</span>
                 <span className="leading-tight text-center">{t.label}</span>
-                {n > 0 && t.id !== "material" && (
+                {n > 0 && t.id !== "material" && t.id !== "recorded" && (
                   <span className="absolute top-1.5 right-2 sm:static min-w-[18px] h-[18px] px-1 rounded-full bg-blue-600 text-white text-[10px] flex items-center justify-center">{n}</span>
                 )}
                 {active && <span className="absolute bottom-0 left-3 right-3 h-[3px] rounded-full bg-blue-600" />}
@@ -111,6 +113,7 @@ export function StudentBatchHome({ data, initialTab }: { data: StudentBatchHomeD
       </div>
 
       {tab === "classes" && <ClassesTab data={data} now={now} />}
+      {tab === "recorded" && <RecordedTab data={data} now={now} />}
       {tab === "tests" && <TestsTab tests={data.tests} now={now} />}
       {tab === "material" && <MaterialTab folders={data.folders} />}
       {tab === "notices" && <NoticesTab notices={data.notices} />}
@@ -161,16 +164,10 @@ function ClassRow({ c, now }: { c: BatchClassItem; now: Date }) {
 }
 
 function ClassesTab({ data, now }: { data: StudentBatchHomeData; now: Date }) {
-  const [showAllRecorded, setShowAllRecorded] = useState(false);
   const today = dayKey(now);
   const weekAhead = now.getTime() + 7 * 86_400_000;
   const todays = data.classes.filter((c) => dayKey(c.startsAt) === today);
   const upcoming = data.classes.filter((c) => dayKey(c.startsAt) > today && new Date(c.startsAt).getTime() <= weekAhead);
-  const recorded = data.classes
-    .filter((c) => dayKey(c.startsAt) < today && getEffectiveScheduleStatus(c, now) === "COMPLETED")
-    .reverse();
-  const subjects = Array.from(new Set(data.chapters.map((c) => c.subject)));
-
   return (
     <div className="space-y-5">
       <Section title="Today">
@@ -179,46 +176,121 @@ function ClassesTab({ data, now }: { data: StudentBatchHomeData; now: Date }) {
       <Section title="Next 7 days">
         {upcoming.length ? <div className="space-y-2">{upcoming.map((c) => <ClassRow key={c.id} c={c} now={now} />)}</div> : <Empty text="Nothing scheduled in the next 7 days." />}
       </Section>
-      <Section
-        title={`Recorded classes (${recorded.length})`}
-        right={recorded.length > 6 ? (
-          <button type="button" onClick={() => setShowAllRecorded((v) => !v)} className="text-xs font-bold text-blue-600">
-            {showAllRecorded ? "Show less" : "Show all"}
-          </button>
-        ) : null}
-      >
-        {recorded.length ? (
-          <div className="space-y-2">{(showAllRecorded ? recorded : recorded.slice(0, 6)).map((c) => <ClassRow key={c.id} c={c} now={now} />)}</div>
-        ) : (
-          <Empty text="Recordings appear here after each class." />
-        )}
-      </Section>
-      {subjects.length > 0 && (
-        <Section title="Chapters">
-          <div className="space-y-3">
-            {subjects.map((s) => (
-              <div key={s} className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3">
-                <p className="text-sm font-black text-slate-900 dark:text-white mb-2">{s}</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {data.chapters.filter((c) => c.subject === s).map((c) => (
-                    <Link
-                      key={c.id}
-                      href={`/courses/${data.batch.id}/subjects/${c.subjectId}/chapters/${c.id}`}
-                      className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition"
-                    >
-                      <span className="min-w-0">
-                        <span className="block text-xs font-bold text-slate-800 dark:text-slate-100 truncate">{c.title}</span>
-                        <span className="block text-[11px] text-slate-500">{c.lectures} lectures · {c.dpps} DPPs</span>
-                      </span>
-                      <span className="material-symbols-outlined text-slate-400 text-base shrink-0">chevron_right</span>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </Section>
+    </div>
+  );
+}
+
+/** Recorded classes as folders: Subject → Chapter → classes (and the chapter's notes/DPPs). */
+function RecordedTab({ data, now }: { data: StudentBatchHomeData; now: Date }) {
+  const [subject, setSubject] = useState<string | null>(null);
+  const [chapter, setChapter] = useState<string | null>(null); // chapterId, or "" for classes without a chapter
+  const recorded = data.classes
+    .filter((c) => getEffectiveScheduleStatus(c, now) === "COMPLETED")
+    .slice()
+    .reverse();
+  const subjects = Array.from(new Set([...recorded.map((c) => c.subjectName), ...data.chapters.map((c) => c.subject)])).sort();
+  const crumb = (label: string, onClick: (() => void) | null) =>
+    onClick ? (
+      <button type="button" onClick={onClick} className="text-blue-600">{label}</button>
+    ) : (
+      <span className="text-slate-800 dark:text-slate-100">{label}</span>
+    );
+
+  if (recorded.length === 0 && data.chapters.length === 0) return <Empty text="Recorded classes appear here after each class." />;
+
+  // Level 1: subjects
+  if (subject === null) {
+    return (
+      <div className="space-y-3">
+        <div className="text-xs font-bold">{crumb("All subjects", null)}</div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {subjects.map((s) => {
+            const n = recorded.filter((c) => c.subjectName === s).length;
+            return (
+              <button key={s} type="button" onClick={() => setSubject(s)} className="flex items-center gap-2 p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-blue-400 text-left">
+                <span className="material-symbols-outlined text-blue-600">folder</span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{s}</span>
+                  <span className="block text-[11px] text-slate-500">{n} recorded class{n === 1 ? "" : "es"}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  const inSubject = recorded.filter((c) => c.subjectName === subject);
+  const chapters = data.chapters.filter((c) => c.subject === subject);
+  const chapterIds = new Set(chapters.map((c) => c.id));
+  // Chapters that have recordings even if not in the chapter list.
+  for (const c of inSubject) {
+    if (c.chapterId && !chapterIds.has(c.chapterId)) {
+      chapterIds.add(c.chapterId);
+      chapters.push({ id: c.chapterId, title: c.chapterTitle ?? "Chapter", subjectId: "", subject, lectures: 0, dpps: 0 });
+    }
+  }
+  const loose = inSubject.filter((c) => !c.chapterId);
+
+  // Level 2: chapters of the subject
+  if (chapter === null) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-1 text-xs font-bold">
+          {crumb("All subjects", () => setSubject(null))}
+          <span className="material-symbols-outlined text-xs text-slate-400">chevron_right</span>
+          {crumb(subject, null)}
+        </div>
+        <div className="space-y-2">
+          {chapters.map((ch) => {
+            const n = inSubject.filter((c) => c.chapterId === ch.id).length;
+            return (
+              <button key={ch.id} type="button" onClick={() => setChapter(ch.id)} className="w-full flex items-center gap-3 p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-blue-400 text-left">
+                <span className="material-symbols-outlined text-amber-500">folder</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{ch.title}</span>
+                  <span className="block text-[11px] text-slate-500">{n} recorded class{n === 1 ? "" : "es"}</span>
+                </span>
+                <span className="material-symbols-outlined text-slate-400">chevron_right</span>
+              </button>
+            );
+          })}
+          {loose.length > 0 && (
+            <button type="button" onClick={() => setChapter("")} className="w-full flex items-center gap-3 p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-blue-400 text-left">
+              <span className="material-symbols-outlined text-slate-400">folder</span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-bold text-slate-800 dark:text-slate-100">Other classes</span>
+                <span className="block text-[11px] text-slate-500">{loose.length} recorded class{loose.length === 1 ? "" : "es"}</span>
+              </span>
+              <span className="material-symbols-outlined text-slate-400">chevron_right</span>
+            </button>
+          )}
+          {chapters.length === 0 && loose.length === 0 && <Empty text="No recorded classes in this subject yet." />}
+        </div>
+      </div>
+    );
+  }
+
+  // Level 3: the chapter's recorded classes
+  const ch = chapters.find((c) => c.id === chapter);
+  const list = chapter === "" ? loose : inSubject.filter((c) => c.chapterId === chapter);
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-1 flex-wrap text-xs font-bold">
+        {crumb("All subjects", () => { setSubject(null); setChapter(null); })}
+        <span className="material-symbols-outlined text-xs text-slate-400">chevron_right</span>
+        {crumb(subject, () => setChapter(null))}
+        <span className="material-symbols-outlined text-xs text-slate-400">chevron_right</span>
+        {crumb(ch?.title ?? "Other classes", null)}
+      </div>
+      {ch && ch.subjectId && (
+        <Link href={`/courses/${data.batch.id}/subjects/${ch.subjectId}/chapters/${ch.id}`} className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 text-xs font-bold">
+          <span>Chapter notes, DPPs &amp; lectures ({ch.lectures} lectures · {ch.dpps} DPPs)</span>
+          <span className="material-symbols-outlined text-base">chevron_right</span>
+        </Link>
       )}
+      {list.length ? <div className="space-y-2">{list.map((c) => <ClassRow key={c.id} c={c} now={now} />)}</div> : <Empty text="No recorded class in this chapter yet." />}
     </div>
   );
 }

@@ -4,7 +4,6 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getActiveBatchCatalog } from "@/lib/courses/catalog";
-import { CourseListingMasterView } from "@/components/course-platform/CourseListingMasterView";
 import { CourseData } from "@/components/course-platform/CourseCard";
 
 export const metadata: Metadata = {
@@ -100,27 +99,8 @@ export default async function CoursesPage() {
   const enrolledCourses = allCourses.filter((c) => c.isEnrolled);
 
   return (
-    <div className="max-w-7xl mx-auto py-4 sm:py-6 space-y-6">
-      <div>
-        <div className="flex items-center gap-2.5 mb-2">
-          <Link
-            href="/dashboard"
-            className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 transition"
-          >
-            <span className="material-symbols-outlined text-lg">arrow_back</span>
-          </Link>
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Back</span>
-        </div>
-
-        <div>
-          <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-            Your Enrolled Batches
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Access your active batches, live lectures, tests, and study materials.
-          </p>
-        </div>
-      </div>
+    <div className="max-w-5xl mx-auto py-4 sm:py-6 space-y-5">
+      <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">My Batches</h1>
 
       {enrolledCourses.length === 0 ? (
         <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-4 shadow-xs max-w-lg mx-auto">
@@ -144,7 +124,28 @@ export default async function CoursesPage() {
           </Link>
         </div>
       ) : (
-        <CourseListingMasterView courses={enrolledCourses} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {enrolledCourses.map((c) => (
+            <Link
+              key={c.id}
+              href={`/courses/${c.slug}`}
+              className="group rounded-3xl overflow-hidden bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:shadow-lg transition-shadow"
+            >
+              {/* The batch's own thumbnail, nothing drawn on top of it */}
+              <div className="aspect-[16/9] bg-slate-100 dark:bg-slate-800">
+                {c.thumbnailUrl ? (
+                  <img src={c.thumbnailUrl} alt={c.title} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-4xl font-black text-slate-400">{c.title.charAt(0)}</div>
+                )}
+              </div>
+              <div className="p-3.5 flex items-center justify-between gap-3">
+                <span className="font-black text-sm sm:text-base text-slate-900 dark:text-white line-clamp-2">{c.title}</span>
+                <span className="shrink-0 px-3 py-1.5 rounded-xl bg-blue-600 group-hover:bg-blue-700 text-white text-xs font-bold">Open</span>
+              </div>
+            </Link>
+          ))}
+        </div>
       )}
     </div>
   );

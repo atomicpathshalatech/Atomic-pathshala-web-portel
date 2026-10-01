@@ -14,7 +14,6 @@ import { StudentBannerCarousel, type StudentBanner } from "@/components/student/
 import { EducatorsShowcase, type EducatorItem } from "@/components/student/home/EducatorsShowcase";
 import { StudentFeedbackSection, type StudentFeedbackItem } from "@/components/student/home/StudentFeedbackSection";
 import { UpcomingTestCard, type UpcomingTestItem } from "@/components/student/home/UpcomingTestCard";
-import { MyBatchShortcuts, type MyBatchShortcut } from "@/components/student/home/MyBatchShortcuts";
 import { isDppTest, testWindowEnd } from "@/lib/tests/schedule-rules";
 
 export const metadata: Metadata = {
@@ -48,15 +47,6 @@ export default async function StudentDashboardPage() {
   });
 
   const enrolledBatchIds = enrollments.map((e) => e.batch.id);
-  // Home → straight into each batch (classes, tests, study material, notices).
-  const todayIST = now.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-  const myBatches: MyBatchShortcut[] = enrollments.slice(0, 3).map((e) => ({
-    id: e.batch.id,
-    name: e.batch.name,
-    todayClasses: (e.batch.schedules as { startsAt: Date; type?: string }[]).filter(
-      (s) => s.startsAt.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }) === todayIST
-    ).length,
-  }));
   const primaryBatch = enrollments[0]?.batch ?? null;
 
   const allUpcoming: ScheduleWithTeacher[] = enrollments
@@ -398,9 +388,6 @@ export default async function StudentDashboardPage() {
         continueLabel="Continue Learning"
         nextEvent={nextEvent}
       />
-
-      {/* 2.2 My Batch: classes, tests, study material, announcements */}
-      <MyBatchShortcuts batches={myBatches} />
 
       {/* 2.5 Prominent Upcoming / Live Test Card */}
       {upcomingTestCard && (
