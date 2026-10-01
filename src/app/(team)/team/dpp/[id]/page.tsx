@@ -9,6 +9,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { DppStatusActions } from "@/components/team-portal/DppStatusActions";
 import { DppQuestionPicker } from "@/components/team-portal/DppQuestionPicker";
 import { DPP_LEVELS } from "@/lib/dpp/levels";
+import { FormulaText } from "@/components/test-portal/FormulaText";
 
 export const metadata: Metadata = {
   title: "DPP Detail",
@@ -69,59 +70,47 @@ export default async function DppDetailPage({ params }: { params: { id: string }
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-gutter">
-        <div className="glass-card p-4 rounded-xl">
-          <p className="text-label-sm text-on-surface-variant">Questions</p>
-          <p className="text-headline-sm font-headline-sm text-primary">
-            {dpp.questions.length} / {dpp.questionTargetCount}
-          </p>
-        </div>
-        <div className="glass-card p-4 rounded-xl">
-          <p className="text-label-sm text-on-surface-variant">Est. Time</p>
-          <p className="text-headline-sm font-headline-sm text-primary">{dpp.estimatedTimeMin} min</p>
-        </div>
-        <div className="glass-card p-4 rounded-xl">
-          <p className="text-label-sm text-on-surface-variant">Correct / Incorrect</p>
-          <p className="text-headline-sm font-headline-sm text-primary">
-            {dpp.correctMarks} / {dpp.incorrectMarks}
-          </p>
-        </div>
-        <div className="glass-card p-4 rounded-xl">
-          <p className="text-label-sm text-on-surface-variant">Difficulty</p>
-          <p className="text-headline-sm font-headline-sm text-primary">{dpp.difficulty}</p>
-        </div>
+      {/* One plain line of facts */}
+      <div className="flex flex-wrap gap-2 text-xs">
+        {[
+          ["Questions", `${dpp.questions.length}${dpp.questionTargetCount ? ` / ${dpp.questionTargetCount}` : ""}`],
+          ["Time", `${dpp.estimatedTimeMin} min`],
+          ["Marking", `+${dpp.correctMarks} / ${dpp.incorrectMarks}`],
+          ["Difficulty", dpp.difficulty.toLowerCase()],
+        ].map(([label, value]) => (
+          <span key={label} className="px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
+            {label}: <b className="text-slate-900 dark:text-white">{value}</b>
+          </span>
+        ))}
       </div>
 
-      {dpp.topics.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {dpp.topics.map((topic) => (
-            <span
-              key={topic}
-              className="inline-flex items-center bg-primary-container/30 text-primary px-3 py-1 rounded-full text-label-sm"
-            >
-              {topic}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {dpp.questions.length > 0 && (
-        <div className="glass-card rounded-xl p-stack-lg space-y-stack-md">
-          <h3 className="font-headline-md text-headline-md text-primary">Questions in this DPP</h3>
-          <ol className="space-y-3 list-decimal list-inside">
-            {dpp.questions.map((link) => {
+      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-5">
+        <h3 className="text-base font-black text-slate-900 dark:text-white mb-3">Questions in this DPP ({dpp.questions.length})</h3>
+        {dpp.questions.length === 0 ? (
+          <p className="text-sm text-slate-500">No questions yet — add them below.</p>
+        ) : (
+          <ol className="space-y-3">
+            {dpp.questions.map((link, i) => {
               const en =
-                link.question.translations.find((t) => t.language === "ENGLISH") ??
-                link.question.translations[0];
+                link.question.translations.find((t) => t.language === "ENGLISH") ?? link.question.translations[0];
               return (
-                <li key={link.id} className="text-body-md">
-                  {en?.statement ?? "(no statement)"}
+                <li key={link.id} className="flex gap-3 rounded-xl border border-slate-100 dark:border-slate-800 p-3">
+                  <span className="w-7 h-7 rounded-lg bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-xs font-black flex items-center justify-center shrink-0">
+                    {i + 1}
+                  </span>
+                  <div className="min-w-0 flex-1 text-sm text-slate-900 dark:text-slate-100 [&_img]:max-h-40">
+                    <FormulaText text={en?.statement ?? "(no statement)"} />
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      {link.question.questionCode ? `#${link.question.questionCode} · ` : ""}
+                      {String(link.question.difficulty).toLowerCase()}
+                    </p>
+                  </div>
                 </li>
               );
             })}
           </ol>
-        </div>
-      )}
+        )}
+      </div>
 
       <DppQuestionPicker
         dppId={dpp.id}
