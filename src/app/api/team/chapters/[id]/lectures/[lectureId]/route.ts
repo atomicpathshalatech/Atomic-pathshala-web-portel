@@ -6,6 +6,7 @@ import { requirePermission, hasPermission, UnauthorizedError, ForbiddenError } f
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { computeISTScheduleDates } from "@/lib/date-utils";
+import { newTimeBlockReason, rescheduleBlockReason } from "@/lib/schedule/reschedule-guard";
 
 export async function PATCH(
   request: NextRequest,
@@ -35,6 +36,37 @@ export async function PATCH(
     // timetable — saving notes or a title used to reset its date/time to the
     // lecture's old values ("the date changed by itself").
     const timingChanged = scheduledDate !== undefined || startTime !== undefined || durationMin !== undefined;
+
+    // Moving a live class: only while it's still ahead (not started, start
+    // time not passed), and only to a future time. An old class (YouTube
+    // recording) records when it was taught, so its date may be in the past.
+    const { extractYouTubeVideoId: ytOf } = await import("@/lib/live-class/youtube");
+    const isOldClass = Boolean(ytOf(typeof videoUrl === "string" ? videoUrl : lecture.videoUrl || ""));
+    if (timingChanged && !isOldClass) {
+      const nextDate = scheduledDate !== undefined ? (scheduledDate ? new Date(scheduledDate) : null) : lecture.scheduledDate;
+      const nextTime = startTime !== undefined ? startTime?.trim() || null : lecture.startTime;
+      const nextDuration = durationMin !== undefined ? Number(durationMin) || 60 : lecture.durationMin || 60;
+      const schedules = await prisma.batchSchedule.findMany({
+        where: { OR: [{ id: lecture.id }, { lectureId: lecture.id }] },
+        select: { startsAt: true, endsAt: true, status: true, liveWhiteboardSession: { select: { actualStartedAt: true, livePhase: true } } },
+      });
+      if (nextDate) {
+        const next = computeISTScheduleDates(nextDate, nextTime, nextDuration);
+        const moves = schedules.some(
+          (s) => s.startsAt.getTime() !== next.startsAt.getTime() || s.endsAt.getTime() !== next.endsAt.getTime()
+        );
+        if (moves) {
+          for (const s of schedules) {
+            const blocked = rescheduleBlockReason(s);
+            if (blocked) return apiError(blocked, 409, { code: "RESCHEDULE_NOT_ALLOWED" });
+          }
+          const pastTime = newTimeBlockReason(next.startsAt);
+          if (pastTime) return apiError(pastTime, 400, { code: "TIME_IN_PAST" });
+        }
+      } else if (schedules.length > 0) {
+        return apiError("A scheduled class needs a date and time.", 400);
+      }
+    }
 
     const updated = await prisma.lecture.update({
       where: { id: params.lectureId },

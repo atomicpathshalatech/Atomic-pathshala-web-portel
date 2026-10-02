@@ -21,10 +21,22 @@ export async function PATCH(
 
     const existing = await prisma.batchSchedule.findFirst({
       where: { id: params.scheduleId, batchId: params.id },
+      include: { liveWhiteboardSession: { select: { actualStartedAt: true, livePhase: true } } },
     });
     if (!existing) return apiError("Schedule entry not found", 404);
 
     const input = batchScheduleUpdateSchema.parse(await request.json());
+
+    // A class can only be moved while it's still ahead, and only to a future time.
+    if (
+      existing.type === "LIVE_CLASS" &&
+      input.status !== "CANCELLED" &&
+      (existing.startsAt.getTime() !== input.startsAt.getTime() || existing.endsAt.getTime() !== input.endsAt.getTime())
+    ) {
+      const { rescheduleBlockReason, newTimeBlockReason } = await import("@/lib/schedule/reschedule-guard");
+      const blocked = rescheduleBlockReason(existing) ?? newTimeBlockReason(input.startsAt);
+      if (blocked) return apiError(blocked, 409, { code: "RESCHEDULE_NOT_ALLOWED" });
+    }
 
     if (input.teacherId) {
       const teacher = await prisma.teacher.findUnique({ where: { id: input.teacherId } });

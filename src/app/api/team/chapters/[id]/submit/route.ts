@@ -41,6 +41,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const { extractYouTubeVideoId } = await import("@/lib/live-class/youtube");
     const lectureUpdates: any[] = [];
     const planned: { lectureId: string; title: string; teacherId: string; startsAt: Date; endsAt: Date }[] = [];
+    // Classes already taken or whose time has passed keep their date (they
+    // can only be deleted or have notes updated, never moved).
+    const { rescheduleBlockReason } = await import("@/lib/schedule/reschedule-guard");
+    const existingSchedules = await prisma.batchSchedule.findMany({
+      where: { lectureId: { in: chapter.lectures.map((l) => l.id) } },
+      select: { lectureId: true, startsAt: true, status: true, liveWhiteboardSession: { select: { actualStartedAt: true, livePhase: true } } },
+    });
+    const lockedLectureIds = new Set(existingSchedules.filter((s) => rescheduleBlockReason(s)).map((s) => s.lectureId));
     if (startDate && Array.isArray(weekdays) && weekdays.length > 0) {
       const parts = String(startDate).split("-").map((p) => parseInt(p, 10));
       const year = parts[0] || new Date().getFullYear();
@@ -52,6 +60,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
       for (const lec of chapter.lectures) {
         if (lec.videoUrl && extractYouTubeVideoId(lec.videoUrl)) continue;
+        if (lockedLectureIds.has(lec.id)) continue;
         while (!weekdays.includes(current.getUTCDay())) {
           current.setUTCDate(current.getUTCDate() + 1);
         }

@@ -8,6 +8,7 @@ import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { LectureStatus } from "@prisma/client";
 import { getChapterSequenceState } from "@/lib/chapters/sequence";
 import { computeISTScheduleDates } from "@/lib/date-utils";
+import { newTimeBlockReason } from "@/lib/schedule/reschedule-guard";
 import { regenerateCreativeAwaited } from "@/lib/creative/engine";
 
 export async function GET(
@@ -121,6 +122,13 @@ export async function POST(
     // A YouTube class's length comes from the video itself, never typed in.
     const { extractYouTubeVideoId: ytIdOf } = await import("@/lib/live-class/youtube");
     const linkedVideoId = videoUrl ? ytIdOf(videoUrl) : null;
+    // A new live class must be in the future (an old YouTube class records
+    // when it was taught, so its date may be past).
+    if (parsedDate && !linkedVideoId) {
+      const { startsAt: newStart } = computeISTScheduleDates(parsedDate, startTime, Number(durationMin) || 60);
+      const past = newTimeBlockReason(newStart);
+      if (past) return apiError(past, 400, { code: "TIME_IN_PAST" });
+    }
     const { youtubeVideoDurationMin } = await import("@/lib/youtube/video-duration");
     const parsedDuration = (linkedVideoId ? await youtubeVideoDurationMin(linkedVideoId) : null) ?? (durationMin ? Number(durationMin) : 60);
 

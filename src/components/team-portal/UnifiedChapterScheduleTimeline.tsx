@@ -122,10 +122,26 @@ export function UnifiedChapterScheduleTimeline({
     chapterMedium === "HINDI" ? "Hindi" : chapterMedium === "HINGLISH" ? "Hinglish" : "English"
   );
   const [lecVideoUrl, setLecVideoUrl] = useState("");
+  const [lecDuration, setLecDuration] = useState<number>(90);
+  // Once a chapter has been submitted its classes are already in the batch
+  // timetable, and it isn't submitted again — so a lecture added later gets
+  // its own date, time and duration right here.
+  const chapterIsScheduled = ["SUBMITTED", "UNDER_REVIEW", "APPROVED", "PUBLISHED"].includes(chapterStatus);
+  // A class may be moved only while it's still ahead (not taken, not
+  // cancelled, start time not passed) — the server enforces the same rule.
+  const lectureStillAhead = (lec: LectureItem | null) => {
+    if (!lec) return true;
+    if (["COMPLETED", "LIVE", "CANCELLED"].includes(lec.status)) return false;
+    if (!lec.scheduledDate) return true;
+    const { startsAt } = computeISTScheduleDates(new Date(lec.scheduledDate), lec.startTime || "10:00", lec.durationMin || 60);
+    return startsAt.getTime() > Date.now();
+  };
   // LECTURE: just the lecture (its date/time/duration come from the chapter's
   // weekday schedule on submit). OLD_CLASS: a past class from a YouTube link —
   // its date/time are when it was taught, its length comes from the video.
   const [lecMode, setLecMode] = useState<"LECTURE" | "OLD_CLASS">("LECTURE");
+  const showLiveTiming = lecMode === "LECTURE" && (editingLecture ? Boolean(editingLecture.scheduledDate) : chapterIsScheduled);
+  const timingLocked = lecMode === "LECTURE" && Boolean(editingLecture) && !lectureStillAhead(editingLecture);
   const [notesUrl, setNotesUrl] = useState("");
   // Notes are uploaded as a PDF file here (not pasted as a link).
   const [notesFile, setNotesFile] = useState<File | null>(null);
@@ -278,6 +294,17 @@ export function UnifiedChapterScheduleTimeline({
       setFormError("Paste the YouTube link and the date the class was taught.");
       return;
     }
+    if (showLiveTiming) {
+      if (!lecScheduledDate || !lecStartTime) {
+        setFormError("Pick the class date and time.");
+        return;
+      }
+      const { startsAt } = computeISTScheduleDates(new Date(lecScheduledDate), lecStartTime, lecDuration);
+      if (startsAt.getTime() <= Date.now()) {
+        setFormError("Pick a date and time in the future.");
+        return;
+      }
+    }
     setSubmitting(true);
     setFormError("");
 
@@ -299,6 +326,11 @@ export function UnifiedChapterScheduleTimeline({
                 title: lecTitle.trim(),
                 language: lecLanguage,
                 order: Number(lecOrder) || lectures.length + 1,
+                ...(showLiveTiming && {
+                  scheduledDate: new Date(lecScheduledDate).toISOString(),
+                  startTime: lecStartTime,
+                  durationMin: lecDuration,
+                }),
               }
         ),
       });
@@ -311,7 +343,13 @@ export function UnifiedChapterScheduleTimeline({
       setLectures((prev) => [...prev, json.data.lecture]);
       setShowAddLectureModal(false);
       setLecVideoUrl("");
-      toast.success(lecMode === "OLD_CLASS" ? "Old class recording added successfully!" : "Lecture added — it is scheduled when you submit the chapter.");
+      toast.success(
+        lecMode === "OLD_CLASS"
+          ? "Old class recording added successfully!"
+          : showLiveTiming
+          ? "Lecture added and scheduled in the batch timetable."
+          : "Lecture added — it is scheduled when you submit the chapter."
+      );
       router.refresh();
     } catch (err: any) {
       setFormError(err.message || "Network error");
@@ -340,7 +378,16 @@ export function UnifiedChapterScheduleTimeline({
                 language: lecLanguage,
                 videoUrl: lecVideoUrl.trim(),
               }
-            : { title: lecTitle.trim(), language: lecLanguage }
+            : {
+                title: lecTitle.trim(),
+                language: lecLanguage,
+                // Timing is sent only while the class can still be moved.
+                ...(showLiveTiming && !timingLocked && {
+                  scheduledDate: new Date(lecScheduledDate).toISOString(),
+                  startTime: lecStartTime,
+                  durationMin: lecDuration,
+                }),
+              }
         ),
       });
       const json = await res.json();
@@ -684,6 +731,9 @@ export function UnifiedChapterScheduleTimeline({
                 type="button"
                 onClick={() => {
                   setLecMode("LECTURE");
+                  setLecScheduledDate(new Date(Date.now() + 86_400_000).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }));
+                  setLecStartTime("10:00");
+                  setLecDuration(90);
                   setLecTitle(`${chapterTitle} — Lecture ${String(lectures.length + 1).padStart(2, "0")}`);
                   setLecOrder(lectures.length + 1);
                   setLecVideoUrl("");
@@ -1039,6 +1089,7 @@ export function UnifiedChapterScheduleTimeline({
                                         : new Date().toISOString().split("T")[0] || ""
                                     );
                                     setLecStartTime(lec.startTime || "10:00");
+                                    setLecDuration(lec.durationMin || 90);
                                     setLecMode(lec.videoUrl ? "OLD_CLASS" : "LECTURE");
                                     setLecLanguage(lec.language || "Hindi");
                                     setLecVideoUrl(lec.videoUrl || "");
@@ -1209,6 +1260,8 @@ export function UnifiedChapterScheduleTimeline({
                   <p className="text-xs text-slate-500 dark:text-slate-400">
                     {lecMode === "OLD_CLASS"
                       ? "When it was taught and its YouTube link — the length comes from the video."
+                      : showLiveTiming
+                      ? "Class date, time and duration — it goes straight into the batch timetable."
                       : "Dates, time and duration are set when you submit the chapter (weekdays + duration)."}
                   </p>
                 </div>
@@ -1274,6 +1327,53 @@ export function UnifiedChapterScheduleTimeline({
                       onChange={(e) => setLecStartTime(e.target.value)}
                       className="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 font-medium"
                     />
+                  </div>
+                </div>
+              )}
+
+              {showLiveTiming && timingLocked && (
+                <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 text-[11px] leading-relaxed">
+                  This class&apos;s time has passed (or it was already taken), so it can&apos;t be rescheduled. You can change its
+                  title, delete it, or update its notes.
+                </div>
+              )}
+
+              {showLiveTiming && !timingLocked && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Class Date *</label>
+                    <input
+                      type="date"
+                      value={lecScheduledDate}
+                      min={new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" })}
+                      onChange={(e) => setLecScheduledDate(e.target.value)}
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 font-medium"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Start Time (IST) *</label>
+                    <input
+                      type="time"
+                      value={lecStartTime}
+                      onChange={(e) => setLecStartTime(e.target.value)}
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 font-medium"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Duration *</label>
+                    <select
+                      value={lecDuration}
+                      onChange={(e) => setLecDuration(Number(e.target.value))}
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 font-medium"
+                    >
+                      {[45, 60, 75, 90, 105, 120, 150, 180].map((m) => (
+                        <option key={m} value={m}>
+                          {m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ""}` : `${m} min`}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
               )}
