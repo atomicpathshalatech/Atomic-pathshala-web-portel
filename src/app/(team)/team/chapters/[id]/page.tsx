@@ -10,6 +10,7 @@ import { ChapterTeamViewWrapper } from "@/components/team-portal/ChapterTeamView
 import { CreativeThumbnail } from "@/components/team-portal/CreativeThumbnail";
 import { ChapterDetailData } from "@/components/chapter-detail/ChapterDetailView";
 import { RoadmapTopicGroup } from "@/components/chapter-detail/ChapterRoadmapTimeline";
+import { lecturesAsScheduled } from "@/lib/chapters/lecture-class-view";
 
 export const metadata: Metadata = {
   title: "Chapter Detail",
@@ -80,6 +81,11 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
     ...batchChapters.map((bc) => ({ id: bc.batch.id, name: bc.batch.name })),
     ...scheduledBatches.map((s) => s.batch),
   ].filter((b, i, all) => all.findIndex((x) => x.id === b.id) === i);
+
+  // Date, time and state of each lecture come from its class in the batch
+  // timetable, so this page and My Schedule always agree.
+  const scheduled = await lecturesAsScheduled(lectures, scheduledInBatches.map((b) => b.id));
+  const asScheduled = (l: (typeof lectures)[number]) => scheduled.get(l.id)!;
 
   const isAdmin = user?.role?.name === "SUPER_ADMIN" || user?.role?.name === "ADMIN";
   const canReview = canReviewPermission && (isAdmin || chapter.createdById !== session.user.id);
@@ -206,13 +212,9 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
           videoUrl: l.videoUrl,
           educatorVideoUrl: l.educatorVideoUrl,
           slidesUrl: l.slidesUrl,
-          scheduledDate: l.scheduledDate,
-          startTime: l.startTime,
-          endTime: l.endTime,
-          durationMin: l.durationMin,
+          ...asScheduled(l),
           language: l.language,
           order: l.order,
-          status: l.status,
           createdAt: l.createdAt,
           teacher: l.teacher,
         }))}

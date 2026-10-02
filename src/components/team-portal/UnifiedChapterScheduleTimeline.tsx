@@ -936,7 +936,14 @@ export function UnifiedChapterScheduleTimeline({
                   {/* Context-Sensitive Primary Buttons */}
                   {item.type === "LECTURE" && item.lectureData && (
                     <>
-                      {item.lectureData.status !== "COMPLETED" && item.lectureData.status !== "RECORDED" && (
+                      {/* Same state as the class in My Schedule */}
+                      {item.lectureData.status === "COMPLETED" && (
+                        <span className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold">Completed</span>
+                      )}
+                      {item.lectureData.status === "CANCELLED" && (
+                        <span className="px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 text-xs font-bold">Cancelled</span>
+                      )}
+                      {item.lectureData.status !== "COMPLETED" && item.lectureData.status !== "RECORDED" && item.lectureData.status !== "CANCELLED" && (
                         <button
                           type="button"
                           onClick={() => setStartClassTarget(item.lectureData!)}
