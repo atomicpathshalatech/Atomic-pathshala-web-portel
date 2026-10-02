@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { MasterChapter } from "@/lib/batch/master-chapters";
-import { COMMON_DURATIONS } from "@/lib/batch/schedule-conflict";
 
 export function ChapterImportModal({
   batchId,
@@ -22,13 +21,6 @@ export function ChapterImportModal({
   const [searchAttempted, setSearchAttempted] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
 
-  const [startDate, setStartDate] = useState(
-    new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split("T")[0]
-  );
-  const [dailyStartTime, setDailyStartTime] = useState("10:00");
-  const [durationMinutes, setDurationMinutes] = useState(60);
-  const [isCustomDuration, setIsCustomDuration] = useState(false);
-  const [customDuration, setCustomDuration] = useState(60);
   const [importing, setImporting] = useState(false);
 
   // Check if found chapter is already imported into this batch
@@ -101,12 +93,6 @@ export function ChapterImportModal({
       return;
     }
 
-    const duration = isCustomDuration ? customDuration : durationMinutes;
-    if (!duration || duration <= 0) {
-      toast.error("Duration must be a positive number of minutes.");
-      return;
-    }
-
     setImporting(true);
     try {
       const res = await fetch(`/api/team/batches/${batchId}/chapters`, {
@@ -114,9 +100,6 @@ export function ChapterImportModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           chapterIdOrCode: foundChapter.chapterCode || foundChapter.id,
-          startDate,
-          dailyStartTime,
-          durationMinutes: duration,
         }),
       });
       const data = await res.json();
@@ -291,87 +274,38 @@ export function ChapterImportModal({
             </div>
           )}
 
-          {/* 4. Scheduling Options (Only shown when chapter is found and not duplicate) */}
+          {/* 4. Lectures come with the date / time already set in the chapter */}
           {foundChapter && !isDuplicate && (
-            <div className="space-y-4 pt-2 border-t border-slate-200/80 dark:border-slate-800">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                Timetable &amp; Schedule Settings
-              </h4>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400">
-                    First Lecture Start Date
-                  </label>
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white outline-none focus:border-blue-500"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400">
-                    Daily Start Time (IST)
-                  </label>
-                  <input
-                    type="time"
-                    value={dailyStartTime}
-                    onChange={(e) => setDailyStartTime(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white outline-none focus:border-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400">
-                  Lecture Duration
-                </label>
-                <div className="flex flex-wrap items-center gap-2">
-                  {COMMON_DURATIONS.map((dur) => (
-                    <button
-                      key={dur.minutes}
-                      type="button"
-                      onClick={() => {
-                        setIsCustomDuration(false);
-                        setDurationMinutes(dur.minutes);
-                      }}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
-                        !isCustomDuration && durationMinutes === dur.minutes
-                          ? "bg-[#031635] text-white shadow-xs"
-                          : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200"
-                      }`}
-                    >
-                      {dur.label}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => setIsCustomDuration(true)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
-                      isCustomDuration
-                        ? "bg-[#031635] text-white shadow-xs"
-                        : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200"
-                    }`}
-                  >
-                    Custom
-                  </button>
-                </div>
-                {isCustomDuration && (
-                  <div className="flex items-center gap-2 pt-1">
-                    <input
-                      type="number"
-                      min={15}
-                      max={300}
-                      value={customDuration}
-                      onChange={(e) => setCustomDuration(parseInt(e.target.value) || 60)}
-                      className="w-24 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs font-semibold"
-                    />
-                    <span className="text-xs text-slate-500">Minutes</span>
-                  </div>
-                )}
-              </div>
+            <div className="space-y-2 pt-2 border-t border-slate-200/80 dark:border-slate-800">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">Lectures to import</h4>
+              <p className="text-[11px] text-slate-500">
+                Each lecture is added to this batch at the date &amp; time already set in the chapter.
+              </p>
+              <ul className="max-h-48 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 rounded-xl border border-slate-200/80 dark:border-slate-800">
+                {foundChapter.lectures.map((l) => (
+                  <li key={l.id} className="flex items-center justify-between gap-3 px-3 py-2 text-xs">
+                    <span className="min-w-0 truncate font-semibold text-slate-800 dark:text-slate-200">
+                      <span className="font-mono text-slate-400 mr-1.5">{l.lectureCode}</span>
+                      {l.title}
+                    </span>
+                    {l.startsAt ? (
+                      <span className="shrink-0 tabular-nums text-slate-600 dark:text-slate-300">
+                        {new Date(l.startsAt).toLocaleString("en-IN", {
+                          timeZone: "Asia/Kolkata",
+                          day: "2-digit",
+                          month: "short",
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })}
+                        {" · "}
+                        {l.durationMinutes} min
+                      </span>
+                    ) : (
+                      <span className="shrink-0 text-amber-600 font-semibold">Date/time not set yet</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
         </div>

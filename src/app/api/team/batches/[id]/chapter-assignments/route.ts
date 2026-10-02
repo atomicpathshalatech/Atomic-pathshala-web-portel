@@ -6,6 +6,7 @@ import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { z } from "zod";
+import { syncChapterLecturesIntoBatch } from "@/lib/batch/chapter-sync";
 
 /**
  * Explicit chapter->batch assignment (the durable BatchChapter row) — the
@@ -82,93 +83,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     // Auto-sync existing scheduled lectures in this chapter into this batch's schedule
     try {
-      const { computeISTScheduleDates } = await import("@/lib/date-utils");
-      const lectures = await prisma.lecture.findMany({
-        where: { chapterId },
-        select: {
-          id: true,
-          title: true,
-          scheduledDate: true,
-          startTime: true,
-          durationMin: true,
-          teacherId: true,
-          videoUrl: true,
-          chapter: { select: { subject: { select: { title: true } } } },
-        },
-      });
-
-      // A lecture already in this batch's timetable (e.g. a class the teacher
-      // scheduled/rescheduled there before the chapter was assigned) keeps its
-      // own entry and time — never a second copy at the lecture's default time.
-      const alreadyScheduled = new Set(
-        (
-          await prisma.batchSchedule.findMany({
-            where: { batchId: params.id, lectureId: { in: lectures.map((l) => l.id) } },
-            select: { lectureId: true },
-          })
-        ).map((s) => s.lectureId)
-      );
-
-      for (const lec of lectures) {
-        if (alreadyScheduled.has(lec.id)) continue;
-        if (lec.scheduledDate && lec.startTime) {
-          const { startsAt, endsAt } = computeISTScheduleDates(
-            lec.scheduledDate,
-            lec.startTime,
-            lec.durationMin || 60
-          );
-          const scheduleKey = `${lec.id}-${params.id}`;
-          await prisma.batchSchedule.upsert({
-            where: { id: scheduleKey },
-            update: {
-              title: lec.title,
-              subject: lec.chapter?.subject?.title || null,
-              teacherId: lec.teacherId,
-              chapterId,
-              lectureId: lec.id,
-              startsAt,
-              endsAt,
-            },
-            create: {
-              id: scheduleKey,
-              title: lec.title,
-              subject: lec.chapter?.subject?.title || null,
-              type: "LIVE_CLASS",
-              batchId: params.id,
-              teacherId: lec.teacherId,
-              chapterId,
-              lectureId: lec.id,
-              startsAt,
-              endsAt,
-              createdById: session.user.id,
-            },
-          });
-          // An old class (YouTube recording) arrives as that recording, not as
-          // an empty live class that would show "Cancelled".
-          const { extractYouTubeVideoId } = await import("@/lib/live-class/youtube");
-          const ytId = lec.videoUrl ? extractYouTubeVideoId(lec.videoUrl) : null;
-          if (ytId) {
-            await prisma.batchSchedule.update({ where: { id: scheduleKey }, data: { status: "COMPLETED" } });
-            await prisma.whiteboardSession.upsert({
-              where: { batchScheduleId: scheduleKey },
-              update: { status: "ENDED", livePhase: "ENDED", videoTransport: "YOUTUBE", youtubeVideoId: ytId, recordingStatus: "READY" },
-              create: {
-                batchScheduleId: scheduleKey,
-                teacherId: lec.teacherId,
-                title: lec.title,
-                status: "ENDED",
-                livePhase: "ENDED",
-                videoTransport: "YOUTUBE",
-                youtubeVideoId: ytId,
-                recordingStatus: "READY",
-                actualStartedAt: startsAt,
-                actualEndedAt: endsAt,
-                pages: { create: { pageNumber: 1, objects: [] } },
-              },
-            });
-          }
-        }
-      }
+      await syncChapterLecturesIntoBatch(params.id, chapterId, session.user.id);
     } catch (syncErr) {
       console.error("[batch_chapter_assign_schedule_sync_error]", syncErr);
     }

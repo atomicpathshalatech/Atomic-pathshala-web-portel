@@ -6,16 +6,14 @@ import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { getMasterChapterById } from "@/lib/batch/master-chapters";
-import { checkScheduleConflict } from "@/lib/batch/schedule-conflict";
-import { computeISTScheduleDates } from "@/lib/date-utils";
+import { syncChapterLecturesIntoBatch } from "@/lib/batch/chapter-sync";
 import { z } from "zod";
 
+// Lectures keep the date / time already set on them in Chapter Management,
+// so import takes only the chapter. (Old clients may still send timing
+// fields; they are accepted and ignored.)
 const importChapterSchema = z.object({
   chapterIdOrCode: z.string().min(1, "Chapter ID or code is required"),
-  startDate: z.string().optional(),
-  dailyStartTime: z.string().default("10:00"),
-  durationMinutes: z.number().int().positive().default(60),
-  teacherId: z.string().optional(),
 });
 
 export async function POST(
@@ -41,17 +39,6 @@ export async function POST(
       return apiError(`Master Chapter "${input.chapterIdOrCode}" not found.`, 404);
     }
 
-    const assignedTeacherId =
-      input.teacherId ||
-      batch.teachers.find((t) => t.subject?.toLowerCase() === masterChapter.subject.toLowerCase())
-        ?.teacherId ||
-      batch.teachers[0]?.teacherId ||
-      null;
-
-    const rawBaseDate = input.startDate ? new Date(input.startDate) : new Date(Date.now() + 24 * 60 * 60 * 1000);
-
-    const createdSchedules = [];
-
     // Check if masterChapter maps to a real DB Chapter
     const dbChapter = await prisma.chapter.findFirst({
       where: {
@@ -64,61 +51,21 @@ export async function POST(
       select: { id: true, title: true },
     });
 
-    if (dbChapter?.id) {
-      const existingInBatch = await prisma.batchSchedule.findFirst({
-        where: {
-          batchId: batch.id,
-          chapterId: dbChapter.id,
-        },
-      });
+    if (!dbChapter) return apiError(`Chapter "${masterChapter.title}" not found.`, 404);
 
-      if (existingInBatch) {
-        return apiError(
-          `Chapter "${masterChapter.title}" (${masterChapter.chapterCode}) is already imported into this batch. Duplicate chapter imports are strictly forbidden.`,
-          409
-        );
-      }
-    }
-
-    for (let i = 0; i < masterChapter.lectures.length; i++) {
-      const lecture = masterChapter.lectures[i];
-      if (!lecture) continue;
-
-      const targetDay = new Date(rawBaseDate.getTime() + i * 24 * 60 * 60 * 1000);
-      const { startsAt, endsAt } = computeISTScheduleDates(
-        targetDay,
-        input.dailyStartTime || "10:00",
-        input.durationMinutes || lecture.durationMinutes || 60
+    const [existingInBatch, existingAssignment] = await Promise.all([
+      prisma.batchSchedule.findFirst({ where: { batchId: batch.id, chapterId: dbChapter.id }, select: { id: true } }),
+      prisma.batchChapter.findUnique({ where: { batchId_chapterId: { batchId: batch.id, chapterId: dbChapter.id } }, select: { id: true } }),
+    ]);
+    if (existingInBatch || existingAssignment) {
+      return apiError(
+        `Chapter "${masterChapter.title}" (${masterChapter.chapterCode}) is already imported into this batch. Duplicate chapter imports are strictly forbidden.`,
+        409
       );
-
-      // Check conflict before creating
-      const conflict = await checkScheduleConflict({
-        batchId: batch.id,
-        teacherId: assignedTeacherId,
-        startsAt,
-        endsAt,
-      });
-
-      // If conflict, adjust time or record with title
-      const title = `${masterChapter.title} — ${lecture.lectureCode}: ${lecture.title}`;
-
-      const schedule = await prisma.batchSchedule.create({
-        data: {
-          batchId: batch.id,
-          title,
-          subject: masterChapter.subject,
-          type: "LIVE_CLASS",
-          teacherId: assignedTeacherId,
-          chapterId: dbChapter?.id || null,
-          startsAt,
-          endsAt,
-          notes: `Imported from Master Chapter ${masterChapter.chapterCode} (${masterChapter.title})`,
-          createdById: session.user.id,
-        },
-      });
-
-      createdSchedules.push(schedule);
     }
+
+    await prisma.batchChapter.create({ data: { batchId: batch.id, chapterId: dbChapter.id, assignedById: session.user.id } });
+    const sync = await syncChapterLecturesIntoBatch(batch.id, dbChapter.id, session.user.id);
 
     await prisma.auditLog.create({
       data: {
@@ -130,15 +77,19 @@ export async function POST(
           chapterCode: masterChapter.chapterCode,
           chapterTitle: masterChapter.title,
           lecturesCount: masterChapter.lectures.length,
+          lecturesScheduled: sync.scheduled,
+          lecturesWithoutTime: sync.notScheduled,
         },
       },
     });
 
     return apiSuccess(
       {
-        message: `Successfully imported "${masterChapter.title}" (${masterChapter.lectures.length} lectures scheduled).`,
+        message:
+          `Imported "${masterChapter.title}" — ${sync.scheduled} lecture${sync.scheduled === 1 ? "" : "s"} added at their set date & time` +
+          (sync.notScheduled ? `; ${sync.notScheduled} without a date/time yet (they appear once scheduled in the chapter).` : "."),
         chapter: masterChapter,
-        schedules: createdSchedules,
+        sync,
       },
       201
     );

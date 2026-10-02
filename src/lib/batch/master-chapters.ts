@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { computeISTScheduleDates } from "@/lib/date-utils";
 
 export type MasterLectureItem = {
   id: string;
@@ -7,6 +8,8 @@ export type MasterLectureItem = {
   durationMinutes: number;
   type: "LIVE_CLASS" | "RECORDED" | "PRACTICE";
   order: number;
+  /** When the lecture is scheduled in Chapter Management (null = not yet). */
+  startsAt?: string | null;
 };
 
 export type MasterChapter = {
@@ -71,9 +74,10 @@ export async function searchMasterChapters(query: string = ""): Promise<MasterCh
             id: l.id,
             lectureCode: `LEC-${String(lIdx + 1).padStart(2, "0")}`,
             title: l.title,
-            durationMinutes: 60,
+            durationMinutes: l.durationMin || 60,
             type: "LIVE_CLASS",
             order: l.order || lIdx + 1,
+            startsAt: l.scheduledDate && l.startTime ? computeISTScheduleDates(l.scheduledDate, l.startTime, l.durationMin || 60).startsAt.toISOString() : null,
           }))
         : [
             { id: `${ch.id}_1`, lectureCode: "LEC-01", title: `${ch.title} — Lecture 1`, durationMinutes: 60, type: "LIVE_CLASS", order: 1 },
@@ -124,9 +128,10 @@ export async function getMasterChapterById(idOrCode: string): Promise<MasterChap
             id: l.id,
             lectureCode: `LEC-${String(lIdx + 1).padStart(2, "0")}`,
             title: l.title,
-            durationMinutes: 60,
+            durationMinutes: l.durationMin || 60,
             type: "LIVE_CLASS",
             order: l.order || lIdx + 1,
+            startsAt: l.scheduledDate && l.startTime ? computeISTScheduleDates(l.scheduledDate, l.startTime, l.durationMin || 60).startsAt.toISOString() : null,
           }))
         : [
             { id: `${ch.id}_1`, lectureCode: "LEC-01", title: `${ch.title} — Lecture 1`, durationMinutes: 60, type: "LIVE_CLASS", order: 1 },
