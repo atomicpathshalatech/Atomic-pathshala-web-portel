@@ -261,7 +261,14 @@ export function analyzeChromaFrame(px: Uint8ClampedArray, w: number, h: number):
   // Chroma relative to brightness, so a dark room's dim screen is still found.
   const candY = median(cand.map((c) => lumaOf(...c)));
   const close = cand.filter((_, i) => Math.hypot(cbcrs[i]![0] - mcb, cbcrs[i]![1] - mcr) < Math.max(0.02, kmag * 0.45));
-  const screenFound = close.length >= Math.max(12, cand.length * 0.35) && kmag > 0.02 && kmag / (candY + 0.06) > 0.18;
+  // A painted / pastel green wall is far less saturated than a studio
+  // screen but still keys well. Accept low chroma as long as the hue is a
+  // screen hue (green: Cb and Cr both below neutral; blue: Cb well above) —
+  // a beige / grey / skin-coloured wall is never taken for a screen.
+  const gcb = mcb - 0.5;
+  const gcr = mcr - 0.5;
+  const screenHue = (gcr < -0.015 && gcb < 0.03) || (gcb > 0.05 && gcr < 0.02);
+  const screenFound = close.length >= Math.max(12, cand.length * 0.35) && screenHue && kmag > 0.025 && kmag / (candY + 0.06) > 0.06;
 
   let keyColor: string | null = null;
   let screenUnevenness = 0;
@@ -428,8 +435,12 @@ void main() {
   // Shadow tolerance: compare chroma relative to brightness, so a shadowed
   // part of the screen (same hue, less light) still reads as screen. Damped
   // for very dark pixels so camera noise in black hair isn't amplified.
-  vec2 vRel = v * (keyY + 0.12) / (Y + 0.12);
-  vec2 vv = mix(v, vRel, shadowTol * (1.0 - detail));
+  // The boost is capped, and pixels far darker than the screen (black hair,
+  // beard, a dark shirt) get no shadow tolerance at all — with a bright,
+  // pale screen their faint colour cast would otherwise read as "screen".
+  vec2 vRel = v * min((keyY + 0.12) / (Y + 0.12), 2.2);
+  float shadowOk = smoothstep(0.18 * keyY, 0.45 * keyY, Y);
+  vec2 vv = mix(v, vRel, shadowTol * shadowOk * (1.0 - detail));
   float kmag = max(length(keyC), 0.02);
   vec2 kh = keyC / kmag;
   float along = dot(vv, kh) / kmag;                            // 1 = fully screen, 0 = no screen colour
