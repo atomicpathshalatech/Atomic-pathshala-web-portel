@@ -19,7 +19,7 @@
  * running.
  */
 
-import { ChromaKeyer, type ChromaSettings } from "@/lib/live-class/chroma-key";
+import { ChromaKeyer, drawKeyedTeacher, type ChromaSettings } from "@/lib/live-class/chroma-key";
 import { MIC_CONSTRAINTS, createVoiceFilter } from "@/lib/live-class/voice-filter";
 import { chatVoteHint, type PollOption } from "@/lib/live-class/youtube-poll";
 
@@ -619,7 +619,7 @@ export class StageCompositor {
           const keyed = this.keyer.process(video, video.videoWidth, video.videoHeight);
           if (keyed) {
             // Keyed teacher: no bubble, no ring — just the person over the board.
-            ctx.drawImage(keyed, crop.x, crop.y, crop.w, crop.h, box.x, box.y, box.w, box.h);
+            drawKeyedTeacher(ctx, keyed, crop, box, Boolean(chroma.naturalShadow));
             return this.drawOverlays();
           }
         } else if (!this.warnedChroma) {
