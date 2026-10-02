@@ -1,5 +1,4 @@
-import { geminiKeyManager } from "@/lib/ai/gemini-key-manager";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { executeGeminiWithFailover } from "@/lib/questions/gemini-engine";
 import { detectNeetQuestionType } from "./neet-question-classifier";
 
 export interface AiExtractionResult {
@@ -255,8 +254,8 @@ export async function extractFromImage(
 ): Promise<AiExtractionResult> {
   const cleanBase64 = imageBase64.replace(/^data:image\/[a-z]+;base64,/, "");
 
-  return geminiKeyManager.executeWithRotation(async (client: GoogleGenerativeAI) => {
-    const model = client.getGenerativeModel({ model: "gemini-2.5-flash" });
+  return executeGeminiWithFailover(async (client, modelName) => {
+    const model = client.getGenerativeModel({ model: modelName });
 
     const prompt = `You are an expert exam question digitizer for Indian national competitive exams (NEET, JEE Main, CBSE).
 Analyze the provided question image and extract all elements with high precision.
@@ -342,8 +341,8 @@ export async function generateEducationalTranslation(
   if (!text?.trim()) return "";
 
   try {
-    return await geminiKeyManager.executeWithRotation(async (client: GoogleGenerativeAI) => {
-      const model = client.getGenerativeModel({ model: "gemini-2.5-flash" });
+    return await executeGeminiWithFailover(async (client, modelName) => {
+      const model = client.getGenerativeModel({ model: modelName });
       const targetLang = sourceLanguage === "ENGLISH" ? "Hindi (Devanagari)" : "English";
 
       const prompt = `Translate the following scientific / mathematical exam content from ${sourceLanguage} to ${targetLang}.
@@ -393,8 +392,8 @@ export async function verifyTranslation(
     enNumbers.every((n, i) => hiNumbers[i] === n);
 
   try {
-    return await geminiKeyManager.executeWithRotation(async (client: GoogleGenerativeAI) => {
-      const model = client.getGenerativeModel({ model: "gemini-2.5-flash" });
+    return await executeGeminiWithFailover(async (client, modelName) => {
+      const model = client.getGenerativeModel({ model: modelName });
       const prompt = `You are an NCERT Bilingual Examination Quality Auditor.
 Compare the English question and Hindi translation:
 English: "${englishText}"

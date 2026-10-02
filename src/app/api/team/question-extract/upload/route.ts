@@ -13,6 +13,11 @@ import {
 import { detectQuestionBlocks } from "@/lib/extraction/boundary-detector";
 import { extractAnswerKey, extractSolutions } from "@/lib/extraction/answer-key-engine";
 import { validateAndClassifyQuestions } from "@/lib/extraction/validator";
+import { attachFigures, cropQuestionFigures, FIGURE_PLACEHOLDER } from "@/lib/extraction/figure-crops";
+import { uploadFile } from "@/lib/storage";
+
+// Rendering pages + locating and cropping figures takes a while on big papers.
+export const maxDuration = 300;
 
 export async function POST(request: NextRequest) {
   try {
@@ -76,9 +81,11 @@ export async function POST(request: NextRequest) {
     let docText = "";
     let pageCount = 1;
     let fileUrl = `/uploads/extraction/${fileName}`;
+    let pdfBuffer: Buffer | null = null;
 
     if (file) {
       const buffer = Buffer.from(await file.arrayBuffer());
+      pdfBuffer = buffer;
       const pdfResult = await extractTextFromPdfBuffer(buffer);
       docText = pdfResult.fullText;
       pageCount = pdfResult.pageCount || 1;
@@ -115,6 +122,44 @@ export async function POST(request: NextRequest) {
       } catch (aiErr) {
         console.warn("[Upload Extraction Route] AI extraction fallback to regex boundary parser:", aiErr);
       }
+    }
+
+    // 3b. Chemical structures / diagrams: crop them from the page images and put
+    // them into their questions (statement or option) — never a text guess.
+    if (isAiProcessed && pdfBuffer) {
+      try {
+        await prisma.extractionJob.update({ where: { id: job.id }, data: { progress: 70, currentStep: "Cropping structures & diagrams from pages..." } });
+        const crops = await cropQuestionFigures(pdfBuffer);
+        const uploaded: { questionNumber: number; place: "STATEMENT" | "A" | "B" | "C" | "D"; url: string }[] = [];
+        for (const [i, c] of crops.entries()) {
+          const url = await uploadFile({
+            key: `questions/extracted/${job.id}/q${c.questionNumber}-${c.place}-${i}.png`,
+            body: c.png,
+            contentType: "image/png",
+          });
+          uploaded.push({ questionNumber: c.questionNumber, place: c.place, url });
+        }
+        extractedList = attachFigures(extractedList, uploaded);
+      } catch (figErr) {
+        console.warn("[Upload Extraction Route] figure cropping skipped:", figErr);
+      }
+      // A [FIGURE] spot with no cropped figure: take the marker out and flag it for review.
+      extractedList = extractedList.map((q: any) => {
+        const texts = [q.statement, q.statementHi, ...Object.values(q.options || {})].map((t) => String(t ?? ""));
+        if (!texts.some((t) => t.includes(FIGURE_PLACEHOLDER))) return q;
+        const clean = (t: any) => (typeof t === "string" ? t.split(FIGURE_PLACEHOLDER).join("").trim() : t);
+        const options = Object.fromEntries(Object.entries(q.options || {}).map(([k, v]) => [k, clean(v)]));
+        return {
+          ...q,
+          statement: clean(q.statement),
+          statementHi: clean(q.statementHi),
+          options,
+          hasImage: true,
+          missingImage: true,
+          status: "REVIEW_REQUIRED",
+          reviewReasons: [...(q.reviewReasons || []), "⚠️ Structure/diagram could not be cropped automatically — attach the image."],
+        };
+      });
     }
 
     // 4. Fallback to Local Boundary Regex Engine if AI didn't run or returned 0 questions

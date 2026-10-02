@@ -216,6 +216,13 @@ YOUR INSTRUCTIONS:
      * Set "missingImageReason": "Question statement refers to a diagram/figure, but image is not yet attached."
      * Add to reviewReasons: "⚠️ Missing Diagram: Question refers to a figure/diagram. Image needs attachment."
    - If no diagram is mentioned: "hasImage": false, "missingImage": false.
+   - CHEMICAL STRUCTURES & DRAWINGS: you only have the page TEXT, so a drawn structure, skeletal formula,
+     diagram or graph is NOT visible to you (it may show up as stray atom letters like "O", "OH", "CH3"
+     or as an empty gap). NEVER describe, guess, name or re-draw it in words or as a formula
+     (do NOT write things like "C6H8O (represented as a six-membered ring…)").
+     Write exactly [FIGURE] at the place where the drawing is printed (in the statement, or inside the
+     option it belongs to), in BOTH languages, and set "hasImage": true. The real drawing is cropped from
+     the page and inserted there automatically, so the student sees the printed structure.
 
 4. 4-STEP STEP-BY-STEP SOLUTION GENERATION:
    - If the document provides a solution, extract it.

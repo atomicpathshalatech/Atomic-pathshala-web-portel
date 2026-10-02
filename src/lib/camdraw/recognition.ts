@@ -4,9 +4,8 @@
  * and academic STEM diagrams with geometry preservation and graph topology normalization.
  */
 
-import { geminiKeyManager } from "@/lib/ai/gemini-key-manager";
+import { executeGeminiWithFailover } from "@/lib/questions/gemini-engine";
 import { parseAiJson } from "@/lib/ai/latex-json";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { CamDrawDocument, CamDrawElement, createEmptyCamDrawDocument } from "./types";
 import { normalizeGraphTopology, centerStructureOnCanvas } from "./graph";
 import { validateChemicalDocument } from "./validator";
@@ -131,8 +130,8 @@ export async function recognizeStructureFromImage(
 Ensure all atoms, bonds, rings, substituents, vertical branches, stereochemistry wedges/dashes, coordination brackets, and reaction conditions are completely extracted with exact connectivity.
 Subject hint: ${options.hintSubject || "Chemistry"}.`;
 
-    const rawText = await geminiKeyManager.executeWithRotation(async (client: GoogleGenerativeAI) => {
-      const model = client.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const rawText = await executeGeminiWithFailover(async (client, modelName) => {
+      const model = client.getGenerativeModel({ model: modelName });
       const response = await model.generateContent([
         ADVANCED_CHEMICAL_SYSTEM_PROMPT,
         inlinePart,

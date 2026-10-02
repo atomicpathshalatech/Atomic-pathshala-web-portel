@@ -19,7 +19,7 @@ const LOCAL_BROWSERS = [
   "/usr/bin/chromium",
 ].filter(Boolean) as string[];
 
-async function launch() {
+export async function launchBrowser() {
   const puppeteer = (await import("puppeteer-core")).default;
   const local = process.platform !== "linux" || process.env.CHROME_PATH ? LOCAL_BROWSERS.find((p) => existsSync(p)) : undefined;
   if (local) {
@@ -36,7 +36,7 @@ async function launch() {
 
 export async function renderBookletPdf(html: string, opts: { timeoutMs?: number } = {}): Promise<Buffer> {
   const timeout = opts.timeoutMs ?? 50_000;
-  const browser = await launch();
+  const browser = await launchBrowser();
   try {
     const page = await browser.newPage();
     await page.emulateMediaType("print");

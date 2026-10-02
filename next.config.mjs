@@ -87,6 +87,11 @@ const nextConfig = {
     outputFileTracingIncludes: {
       "*": ["public/brand/logo.png", "public/atomic-logo.png"],
       "/api/tests/[id]/pdf": ["node_modules/@sparticuz/chromium/bin/**"],
+      "/api/team/question-extract/upload": [
+        "node_modules/@sparticuz/chromium/bin/**",
+        "node_modules/pdfjs-dist/build/pdf.min.mjs",
+        "node_modules/pdfjs-dist/build/pdf.worker.min.mjs",
+      ],
     },
   },
   async headers() {
