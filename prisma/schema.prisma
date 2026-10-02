@@ -1199,6 +1199,13 @@ model Dpp {
   status                 String       @default("DRAFT")
   level                  Int?
   topics                 String[]     @default([])
+  // DPP hierarchy (Subject → Class → Exam → Chapter → Topic → Sub-topic),
+  // printed on the PDF front page. All optional: older DPPs keep working.
+  dppNumber              Int?
+  className              String?
+  exam                   String?
+  topic                  String?
+  subTopic               String?
   createdById            String?
   createdAt              DateTime     @default(now())
   // Real FK to the Chapter Management System's Chapter — nullable so
@@ -3954,6 +3961,19 @@ model FooterSettings {
   updatedAt        DateTime @updatedAt
 
   @@map("footer_settings")
+}
+
+/// Singleton: links printed (as QR codes / clickable links) on every DPP PDF front page.
+model DppBrandSettings {
+  id          String   @id @default(cuid())
+  tagline     String?
+  youtubeUrl  String?
+  telegramUrl String?
+  websiteUrl  String?
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+
+  @@map("dpp_brand_settings")
 }
 
 // Generic per-page SEO row, keyed by a human-readable page identifier.

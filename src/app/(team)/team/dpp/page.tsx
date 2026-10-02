@@ -9,6 +9,8 @@ import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { DppStatusActions } from "@/components/team-portal/DppStatusActions";
 import { DppDeleteButton } from "@/components/team-portal/DppDeleteButton";
+import { DppBrandSettingsButton } from "@/components/team-portal/DppBrandSettingsButton";
+import { dppNumberLabel } from "@/lib/dpp/hierarchy";
 import { DPP_LEVELS } from "@/lib/dpp/levels";
 
 export const metadata: Metadata = {
@@ -103,6 +105,8 @@ export default async function DppListPage({
             {allCount} practice set{allCount === 1 ? "" : "s"} · {countFor("PUBLISHED")} published
           </p>
         </div>
+        <div className="flex items-center gap-2">
+        {canPublish && <DppBrandSettingsButton />}
         {canCreate && (
           <Link
             href="/team/dpp/new"
@@ -112,6 +116,7 @@ export default async function DppListPage({
             New DPP
           </Link>
         )}
+        </div>
       </div>
 
       {/* Status tabs */}
@@ -215,7 +220,7 @@ export default async function DppListPage({
                   {dpp.name}
                 </Link>
                 <p className="mt-0.5 text-[11px] text-slate-400 truncate">
-                  {[dpp.chapter, dpp.level ? `Level ${dpp.level}` : null, dpp.code].filter(Boolean).join(" · ")}
+                  {[dpp.dppNumber ? dppNumberLabel(dpp) : null, dpp.className, dpp.exam, dpp.chapter, dpp.topic, dpp.level ? `Level ${dpp.level}` : null, dpp.code].filter(Boolean).join(" · ")}
                 </p>
 
                 <div className="mt-3 flex items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">

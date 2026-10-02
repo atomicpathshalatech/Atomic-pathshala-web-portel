@@ -1,6 +1,4 @@
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -9,23 +7,11 @@ import { fetchCanonicalTestData, generateTestPaperHtml } from "@/lib/pdf/test-ex
 import { renderBookletPdf } from "@/lib/pdf/html-to-pdf";
 import { studentPaperBlockReason } from "@/lib/tests/paper-access";
 import { createPresignedDownloadUrl, getR2ObjectMetadata, uploadBufferToR2 } from "@/lib/storage/r2-client";
+import { brandLogoDataUrl } from "@/lib/pdf/brand-logo";
+import { buildDppCoverForTestCode } from "@/lib/dpp/cover";
 
 export const runtime = "nodejs";
 
-// The cover logo is embedded in the page (public/brand/logo.png is traced into
-// every function — see next.config.mjs), so printing never waits on a
-// third-party image host.
-let logoDataUrl: string | null | undefined;
-function brandLogo(): string | null {
-  if (logoDataUrl === undefined) {
-    try {
-      logoDataUrl = `data:image/png;base64,${readFileSync(join(process.cwd(), "public", "brand", "logo.png")).toString("base64")}`;
-    } catch {
-      logoDataUrl = null;
-    }
-  }
-  return logoDataUrl;
-}
 export const maxDuration = 60;
 
 /**
@@ -49,13 +35,16 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const testData = await fetchCanonicalTestData(params.id);
     if (!testData) return apiError("Test not found", 404);
 
+    const logoUrl = brandLogoDataUrl();
     const html = generateTestPaperHtml(testData, {
       withSolution,
       brandName: "ATOMIC PATHSHALA",
       watermarkText: "ATOMIC PATHSHALA",
       testPattern: testData.examType,
       autoPrint: false,
-      logoUrl: brandLogo(),
+      logoUrl,
+      // A DPP opens with its front page (details, YouTube / Telegram QR, website link).
+      dppCoverHtml: await buildDppCoverForTestCode(testData.code, { logoUrl, solutions: withSolution }),
     });
 
     const version = createHash("sha1").update(html).digest("hex").slice(0, 16);

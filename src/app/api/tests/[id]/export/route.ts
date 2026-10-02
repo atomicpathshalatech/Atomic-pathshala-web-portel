@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth";
 import { fetchCanonicalTestData, generateTestPaperHtml, generateTestCoverPageOnlyHtml } from "@/lib/pdf/test-export-engine";
 import { apiError } from "@/lib/api/response";
 import { studentPaperBlockReason } from "@/lib/tests/paper-access";
+import { brandLogoDataUrl } from "@/lib/pdf/brand-logo";
+import { buildDppCoverForTestCode } from "@/lib/dpp/cover";
 
 export async function GET(
   request: NextRequest,
@@ -46,6 +48,8 @@ export async function GET(
           // The download buttons open ?direct=true: lay the pages out, then go
           // straight to the browser's "Save as PDF" dialog.
           autoPrint: searchParams.get("direct") === "true",
+          logoUrl: brandLogoDataUrl(),
+          dppCoverHtml: await buildDppCoverForTestCode(testData.code, { logoUrl: brandLogoDataUrl(), solutions: withSolution }),
         });
 
     const currentDateStr = new Intl.DateTimeFormat("en-IN", {

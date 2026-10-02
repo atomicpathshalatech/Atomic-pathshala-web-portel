@@ -47,7 +47,9 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     if (data.subjectId || data.chapterId) {
       const resolved = await resolveSubjectChapterNames(prisma, data.subjectId, data.chapterId || undefined);
       subject = resolved.subject;
-      chapter = resolved.chapter ?? chapter;
+      chapter = resolved.chapter ?? (data.chapterName || chapter);
+    } else if (data.chapterName) {
+      chapter = data.chapterName;
     }
 
     const dpp = await prisma.dpp.update({
@@ -71,6 +73,11 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         ...(data.questionTargetCount !== undefined ? { questionTargetCount: data.questionTargetCount } : {}),
         ...(data.level !== undefined ? { level: data.level ?? null } : {}),
         ...(data.topics !== undefined ? { topics: data.topics } : {}),
+        ...(data.dppNumber !== undefined ? { dppNumber: data.dppNumber } : {}),
+        ...(data.className !== undefined ? { className: data.className || null } : {}),
+        ...(data.exam !== undefined ? { exam: data.exam || null } : {}),
+        ...(data.topic !== undefined ? { topic: data.topic || null } : {}),
+        ...(data.subTopic !== undefined ? { subTopic: data.subTopic || null } : {}),
       },
     });
 

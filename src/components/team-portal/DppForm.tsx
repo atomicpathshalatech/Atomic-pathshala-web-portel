@@ -1,17 +1,99 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { dppSchema, type DppInput } from "@/lib/validation/dpp";
 import { DPP_LEVELS } from "@/lib/dpp/levels";
+import { DPP_CLASSES, DPP_EXAMS } from "@/lib/dpp/hierarchy";
+import { DppCoverPreview } from "@/components/team-portal/DppCoverPreview";
 
 type SubjectOption = {
   id: string;
   title: string;
   chapters: { id: string; title: string }[];
 };
+
+type ChapterOption = { title: string; label: string; chapterId: string | null; classNumber: number | null };
+type TopicOption = { title: string; subtopics: string[] };
+
+const OTHER = "__other__";
+
+/**
+ * A dropdown fed by the syllabus, with "Type another…" for anything that
+ * isn't listed. `value` is the chosen / typed text.
+ */
+function SelectOrType({
+  label,
+  value,
+  onChange,
+  options,
+  disabled,
+  placeholder,
+  loading,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  disabled?: boolean;
+  placeholder: string;
+  loading?: boolean;
+}) {
+  const listed = !value || options.some((o) => o.value === value);
+  const [typing, setTyping] = useState(false);
+  const showInput = typing || !listed;
+  return (
+    <div>
+      <label className={labelClass}>{label}</label>
+      {showInput ? (
+        <div className="flex gap-2">
+          <input
+            className={inputClass}
+            autoFocus={typing}
+            value={value}
+            disabled={disabled}
+            placeholder={`Type ${label.toLowerCase()}…`}
+            onChange={(e) => onChange(e.target.value)}
+          />
+          {options.length > 0 && (
+            <button
+              type="button"
+              className="shrink-0 px-2 text-label-sm text-primary hover:underline"
+              onClick={() => {
+                setTyping(false);
+                onChange("");
+              }}
+            >
+              List
+            </button>
+          )}
+        </div>
+      ) : (
+        <select
+          className={inputClass}
+          value={value}
+          disabled={disabled}
+          onChange={(e) => {
+            if (e.target.value === OTHER) {
+              setTyping(true);
+              onChange("");
+            } else onChange(e.target.value);
+          }}
+        >
+          <option value="">{loading ? "Loading…" : placeholder}</option>
+          {options.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+          <option value={OTHER}>✎ Type another…</option>
+        </select>
+      )}
+    </div>
+  );
+}
 
 export function DppForm({
   subjects,
@@ -23,7 +105,11 @@ export function DppForm({
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
-  const [topicInput, setTopicInput] = useState("");
+  const [nameTouched, setNameTouched] = useState(false);
+  const [chapters, setChapters] = useState<ChapterOption[]>([]);
+  const [topics, setTopics] = useState<TopicOption[]>([]);
+  const [loadingChapters, setLoadingChapters] = useState(false);
+  const [loadingTopics, setLoadingTopics] = useState(false);
 
   const {
     register,
@@ -44,29 +130,70 @@ export function DppForm({
       topics: [],
       tags: [],
       facultyName: defaultFacultyName ?? "",
+      className: "",
+      exam: "NEET",
+      chapterName: "",
+      topic: "",
+      subTopic: "",
     },
   });
 
-  const subjectId = watch("subjectId");
-  const chapterId = watch("chapterId");
-  const level = watch("level");
-  const topics = watch("topics") ?? [];
+  const v = watch();
+  const subjectId = v.subjectId ?? "";
+  const className = v.className ?? "";
+  const chapterName = v.chapterName ?? "";
+  const topic = v.topic ?? "";
   const selectedSubject = subjects.find((s) => s.id === subjectId);
 
-  function addTopic() {
-    const value = topicInput.trim();
-    if (value && !topics.includes(value)) {
-      setValue("topics", [...topics, value]);
-    }
-    setTopicInput("");
-  }
+  // Subject + Class → chapters of that class (syllabus + the team's own chapters).
+  useEffect(() => {
+    setChapters([]);
+    if (!subjectId) return;
+    let alive = true;
+    setLoadingChapters(true);
+    const qs = new URLSearchParams({ subjectId, className });
+    fetch(`/api/team/dpp/taxonomy?${qs}`)
+      .then((r) => r.json())
+      .then((b) => {
+        if (alive && b?.success) setChapters(b.data.chapters ?? []);
+      })
+      .catch(() => {})
+      .finally(() => alive && setLoadingChapters(false));
+    return () => {
+      alive = false;
+    };
+  }, [subjectId, className]);
 
-  function removeTopic(topic: string) {
-    setValue(
-      "topics",
-      topics.filter((t) => t !== topic)
-    );
-  }
+  // Chapter → topics (with sub-topics) from the Question Bank syllabus.
+  useEffect(() => {
+    setTopics([]);
+    if (!subjectId || !chapterName.trim()) return;
+    let alive = true;
+    setLoadingTopics(true);
+    const t = setTimeout(() => {
+      const qs = new URLSearchParams({ subjectId, chapter: chapterName.trim() });
+      fetch(`/api/team/dpp/taxonomy?${qs}`)
+        .then((r) => r.json())
+        .then((b) => {
+          if (alive && b?.success) setTopics(b.data.topics ?? []);
+        })
+        .catch(() => {})
+        .finally(() => alive && setLoadingTopics(false));
+    }, 250);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+  }, [subjectId, chapterName]);
+
+  const subtopicOptions = useMemo(() => topics.find((t) => t.title === topic)?.subtopics ?? [], [topics, topic]);
+
+  // Suggest a name until the teacher types their own.
+  useEffect(() => {
+    if (nameTouched) return;
+    const parts = [chapterName.trim(), topic.trim()].filter(Boolean);
+    if (parts.length) setValue("name", parts.join(" — "));
+  }, [chapterName, topic, nameTouched, setValue]);
 
   async function onSubmit(values: DppInput) {
     setSubmitting(true);
@@ -93,190 +220,268 @@ export function DppForm({
     }
   }
 
+  const previewInfo = useMemo(
+    () => ({
+      dppNumberLabel: v.dppNumber ? `DPP ${String(v.dppNumber).padStart(2, "0")}` : "DPP 01",
+      name: v.name || "DPP name",
+      subject: selectedSubject?.title ?? "",
+      className: v.className,
+      exam: v.exam,
+      chapter: v.chapterName,
+      topic: v.topic,
+      subTopic: v.subTopic,
+      questionCount: Number(v.questionTargetCount) || 0,
+      difficulty: v.difficulty,
+      teacher: v.facultyName,
+      durationMin: Number(v.estimatedTimeMin) || null,
+      correctMarks: Number.isFinite(Number(v.correctMarks)) ? Number(v.correctMarks) : null,
+      incorrectMarks: Number.isFinite(Number(v.incorrectMarks)) ? Number(v.incorrectMarks) : null,
+    }),
+    [
+      v.dppNumber,
+      v.name,
+      selectedSubject?.title,
+      v.className,
+      v.exam,
+      v.chapterName,
+      v.topic,
+      v.subTopic,
+      v.questionTargetCount,
+      v.difficulty,
+      v.facultyName,
+      v.estimatedTimeMin,
+      v.correctMarks,
+      v.incorrectMarks,
+    ]
+  );
+
+  const nameField = register("name");
+
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="max-w-3xl space-y-gutter" noValidate>
-      {serverError && (
-        <div className="bg-error-container/40 border border-error/20 rounded-xl px-4 py-3">
-          <p className="text-label-sm font-label-sm text-error">{serverError}</p>
-        </div>
-      )}
-
-      <div className="glass-card p-stack-lg rounded-xl space-y-stack-md">
-        <div>
-          <label className={labelClass}>DPP Name</label>
-          <input className={inputClass} placeholder="Mole Concept — Basic Concepts" {...register("name")} />
-          {errors.name && <p className={errorClass}>{errors.name.message}</p>}
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className={labelClass}>Subject</label>
-            <select
-              className={inputClass}
-              value={subjectId ?? ""}
-              onChange={(e) => {
-                setValue("subjectId", e.target.value);
-                setValue("chapterId", "");
-                setValue("topics", []);
-              }}
-            >
-              <option value="">Select subject...</option>
-              {subjects.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.title}
-                </option>
-              ))}
-            </select>
-            {errors.subjectId && <p className={errorClass}>{errors.subjectId.message}</p>}
+    <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-6 items-start">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-gutter min-w-0" noValidate>
+        {serverError && (
+          <div className="bg-error-container/40 border border-error/20 rounded-xl px-4 py-3">
+            <p className="text-label-sm font-label-sm text-error">{serverError}</p>
           </div>
-          <div>
-            <label className={labelClass}>Chapter</label>
-            <select className={inputClass} disabled={!selectedSubject} {...register("chapterId")}>
-              <option value="">Select or type a chapter...</option>
-              {selectedSubject?.chapters.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.title}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
+        )}
 
-        <div>
-          <label className={labelClass}>Topics (optional — select all that this DPP covers)</label>
-          {topics.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-2">
-              {topics.map((topic) => (
-                <span
-                  key={topic}
-                  className="inline-flex items-center gap-1 bg-primary-container/30 text-primary px-3 py-1 rounded-full text-label-sm"
-                >
-                  {topic}
-                  <button
-                    type="button"
-                    onClick={() => removeTopic(topic)}
-                    className="text-on-surface-variant hover:text-error"
-                  >
-                    <span className="material-symbols-outlined text-sm">close</span>
-                  </button>
-                </span>
-              ))}
+        <div className="glass-card p-stack-lg rounded-xl space-y-stack-md">
+          <p className="text-label-sm font-bold uppercase tracking-wider text-on-surface-variant">
+            Syllabus — Subject → Class → Exam → Chapter → Topic → Sub-topic
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label className={labelClass}>Subject</label>
+              <select
+                className={inputClass}
+                value={subjectId}
+                onChange={(e) => {
+                  setValue("subjectId", e.target.value, { shouldValidate: true });
+                  setValue("chapterId", "");
+                  setValue("chapterName", "");
+                  setValue("topic", "");
+                  setValue("subTopic", "");
+                }}
+              >
+                <option value="">Select subject...</option>
+                {subjects.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.title}
+                  </option>
+                ))}
+              </select>
+              {errors.subjectId && <p className={errorClass}>{errors.subjectId.message}</p>}
             </div>
-          )}
-          <input
-            className={inputClass}
-            placeholder={chapterId ? "Add a topic and press Enter" : "Select chapter first"}
-            disabled={!chapterId}
-            value={topicInput}
-            onChange={(e) => setTopicInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                addTopic();
-              }
+            <div>
+              <label className={labelClass}>Class</label>
+              <select
+                className={inputClass}
+                value={className}
+                disabled={!subjectId}
+                onChange={(e) => {
+                  setValue("className", e.target.value);
+                  setValue("chapterName", "");
+                  setValue("topic", "");
+                  setValue("subTopic", "");
+                }}
+              >
+                <option value="">All classes</option>
+                {DPP_CLASSES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <SelectOrType
+              label="Exam"
+              value={v.exam ?? ""}
+              onChange={(x) => setValue("exam", x)}
+              options={DPP_EXAMS.map((e) => ({ value: e, label: e }))}
+              placeholder="Select exam..."
+            />
+          </div>
+
+          <SelectOrType
+            label="Chapter"
+            value={chapterName}
+            disabled={!subjectId}
+            loading={loadingChapters}
+            onChange={(x) => {
+              setValue("chapterName", x);
+              setValue("topic", "");
+              setValue("subTopic", "");
             }}
+            options={chapters.map((c) => ({
+              value: c.title,
+              label: `${c.classNumber && !className ? `[${c.classNumber}] ` : ""}${c.label}`,
+            }))}
+            placeholder={subjectId ? "Select chapter..." : "Select subject first"}
           />
-        </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className={labelClass}>Faculty (display name)</label>
-            <input className={inputClass} placeholder="By Firoz Sir" {...register("facultyName")} />
-          </div>
-          <div>
-            <label className={labelClass}>Language</label>
-            <select className={inputClass} {...register("languageMode")}>
-              <option value="BOTH">Both</option>
-              <option value="HINDI">Hindi</option>
-              <option value="ENGLISH">English</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      <div className="glass-card p-stack-lg rounded-xl space-y-stack-md">
-        <label className={labelClass}>DPP Level (optional — defines the question style for this DPP)</label>
-        <div className="space-y-2">
-          {DPP_LEVELS.map((l) => (
-            <button
-              key={l.level}
-              type="button"
-              onClick={() => setValue("level", level === l.level ? undefined : (l.level as DppInput["level"]))}
-              className={`w-full text-left rounded-xl border p-4 transition-colors ${
-                level === l.level
-                  ? "border-primary bg-primary-container/15"
-                  : "border-outline-variant hover:bg-surface-container-lowest"
-              }`}
-            >
-              <p className="text-label-sm font-bold text-on-surface-variant tracking-wide uppercase">
-                Level {l.level} · {l.title}
-              </p>
-              <p className="text-label-sm text-on-surface-variant mt-0.5">{l.description}</p>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="glass-card p-stack-lg rounded-xl space-y-stack-md">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div>
-            <label className={labelClass}>Difficulty</label>
-            <select className={inputClass} {...register("difficulty")}>
-              <option value="EASY">Easy</option>
-              <option value="MEDIUM">Medium</option>
-              <option value="HARD">Hard</option>
-            </select>
-          </div>
-          <div>
-            <label className={labelClass}>Questions</label>
-            <input
-              type="number"
-              className={inputClass}
-              {...register("questionTargetCount", { valueAsNumber: true })}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <SelectOrType
+              label="Topic"
+              value={topic}
+              disabled={!chapterName}
+              loading={loadingTopics}
+              onChange={(x) => {
+                setValue("topic", x);
+                setValue("subTopic", "");
+              }}
+              options={topics.map((t) => ({ value: t.title, label: t.title }))}
+              placeholder={chapterName ? "Select topic..." : "Select chapter first"}
             />
-          </div>
-          <div>
-            <label className={labelClass}>Est. Time (min)</label>
-            <input
-              type="number"
-              className={inputClass}
-              {...register("estimatedTimeMin", { valueAsNumber: true })}
+            <SelectOrType
+              label="Sub-topic (optional)"
+              value={v.subTopic ?? ""}
+              disabled={!topic}
+              onChange={(x) => setValue("subTopic", x)}
+              options={subtopicOptions.map((s) => ({ value: s, label: s }))}
+              placeholder={topic ? "Select sub-topic..." : "Select topic first"}
             />
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className={labelClass}>Correct Marks</label>
-            <input
-              type="number"
-              step="0.5"
-              className={inputClass}
-              {...register("correctMarks", { valueAsNumber: true })}
-            />
+        <div className="glass-card p-stack-lg rounded-xl space-y-stack-md">
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_140px] gap-4">
+            <div>
+              <label className={labelClass}>DPP Name</label>
+              <input
+                className={inputClass}
+                placeholder="Mole Concept — Basic Concepts"
+                {...nameField}
+                onChange={(e) => {
+                  setNameTouched(true);
+                  nameField.onChange(e);
+                }}
+              />
+              {errors.name && <p className={errorClass}>{errors.name.message}</p>}
+            </div>
+            <div>
+              <label className={labelClass}>DPP No.</label>
+              <input
+                type="number"
+                min={1}
+                className={inputClass}
+                placeholder="Auto"
+                {...register("dppNumber", { setValueAs: (x) => (x === "" || x == null ? undefined : Number(x)) })}
+              />
+              {errors.dppNumber && <p className={errorClass}>{errors.dppNumber.message}</p>}
+            </div>
           </div>
-          <div>
-            <label className={labelClass}>Incorrect Marks</label>
-            <input
-              type="number"
-              step="0.5"
-              className={inputClass}
-              {...register("incorrectMarks", { valueAsNumber: true })}
-            />
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className={labelClass}>Teacher</label>
+              <input className={inputClass} placeholder="Firoz Sir" {...register("facultyName")} />
+            </div>
+            <div>
+              <label className={labelClass}>Language</label>
+              <select className={inputClass} {...register("languageMode")}>
+                <option value="BOTH">Both</option>
+                <option value="HINDI">Hindi</option>
+                <option value="ENGLISH">English</option>
+              </select>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="glass-card p-stack-md rounded-xl">
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-full py-3 rounded-xl bg-primary text-on-primary font-label-md shadow-lg hover:opacity-90 active:scale-[0.99] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-        >
-          {submitting ? "Creating..." : "Create DPP & Add Questions →"}
-        </button>
-      </div>
-    </form>
+        <div className="glass-card p-stack-lg rounded-xl space-y-stack-md">
+          <label className={labelClass}>DPP Level (optional — defines the question style for this DPP)</label>
+          <div className="space-y-2">
+            {DPP_LEVELS.map((l) => (
+              <button
+                key={l.level}
+                type="button"
+                onClick={() => setValue("level", v.level === l.level ? undefined : (l.level as DppInput["level"]))}
+                className={`w-full text-left rounded-xl border p-4 transition-colors ${
+                  v.level === l.level
+                    ? "border-primary bg-primary-container/15"
+                    : "border-outline-variant hover:bg-surface-container-lowest"
+                }`}
+              >
+                <p className="text-label-sm font-bold text-on-surface-variant tracking-wide uppercase">
+                  Level {l.level} · {l.title}
+                </p>
+                <p className="text-label-sm text-on-surface-variant mt-0.5">{l.description}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="glass-card p-stack-lg rounded-xl space-y-stack-md">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label className={labelClass}>Difficulty</label>
+              <select className={inputClass} {...register("difficulty")}>
+                <option value="EASY">Easy</option>
+                <option value="MEDIUM">Medium</option>
+                <option value="HARD">Hard</option>
+              </select>
+            </div>
+            <div>
+              <label className={labelClass}>Questions</label>
+              <input type="number" className={inputClass} {...register("questionTargetCount", { valueAsNumber: true })} />
+            </div>
+            <div>
+              <label className={labelClass}>Est. Time (min)</label>
+              <input type="number" className={inputClass} {...register("estimatedTimeMin", { valueAsNumber: true })} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className={labelClass}>Correct Marks</label>
+              <input type="number" step="0.5" className={inputClass} {...register("correctMarks", { valueAsNumber: true })} />
+            </div>
+            <div>
+              <label className={labelClass}>Incorrect Marks</label>
+              <input type="number" step="0.5" className={inputClass} {...register("incorrectMarks", { valueAsNumber: true })} />
+            </div>
+          </div>
+        </div>
+
+        <div className="glass-card p-stack-md rounded-xl">
+          <button
+            type="submit"
+            disabled={submitting}
+            className="w-full py-3 rounded-xl bg-primary text-on-primary font-label-md shadow-lg hover:opacity-90 active:scale-[0.99] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {submitting ? "Creating..." : "Create DPP & Add Questions →"}
+          </button>
+        </div>
+      </form>
+
+      <aside className="xl:sticky xl:top-4 space-y-2">
+        <p className="text-label-sm font-bold uppercase tracking-wider text-on-surface-variant">PDF front page — live preview</p>
+        <DppCoverPreview info={previewInfo} />
+        <p className="text-label-sm text-on-surface-variant">
+          Questions from the Question Bank follow this page. After creating, use <b>Preview</b> on the DPP page to see the whole booklet before downloading.
+        </p>
+      </aside>
+    </div>
   );
 }
 

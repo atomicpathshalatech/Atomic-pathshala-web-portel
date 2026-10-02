@@ -4,7 +4,18 @@ export const dppSchema = z.object({
   name: z.string().trim().min(3, "DPP name is required").max(200),
   subjectId: z.string().min(1, "Subject is required"),
   chapterId: z.string().optional().or(z.literal("")),
-  topics: z.array(z.string().trim().min(1)).default([]),
+  // Chapter picked from the syllabus (not a Chapter Management chapter) — saved by name.
+  chapterName: z.string().trim().max(200).optional().or(z.literal("")),
+  className: z.string().trim().max(60).optional().or(z.literal("")),
+  exam: z.string().trim().max(60).optional().or(z.literal("")),
+  topic: z.string().trim().max(200).optional().or(z.literal("")),
+  subTopic: z.string().trim().max(200).optional().or(z.literal("")),
+  /** Empty → next number for this subject + chapter. */
+  dppNumber: z.preprocess(
+    (v) => (v === "" || v === null || (typeof v === "number" && Number.isNaN(v)) ? undefined : v),
+    z.coerce.number().int().min(1).max(999).optional()
+  ),
+  topics:z.array(z.string().trim().min(1)).default([]),
   facultyName: z.string().trim().max(120).optional().or(z.literal("")),
   languageMode: z.enum(["HINDI", "ENGLISH", "BOTH"]).default("BOTH"),
   level: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]).optional(),

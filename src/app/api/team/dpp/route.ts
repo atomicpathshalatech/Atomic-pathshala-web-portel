@@ -8,6 +8,7 @@ import { apiSuccess, handleApiError } from "@/lib/api/response";
 import { dppSchema } from "@/lib/validation/dpp";
 import { resolveSubjectChapterNames } from "@/lib/questions/legacy";
 import { generateDppCode } from "@/lib/dpp/code";
+import { nextDppNumber } from "@/lib/dpp/hierarchy-server";
 import { Prisma } from "@prisma/client";
 
 export async function GET(request: NextRequest) {
@@ -62,11 +63,15 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const data = dppSchema.parse(body);
 
-    const { subject, chapter } = await resolveSubjectChapterNames(
+    const resolved = await resolveSubjectChapterNames(
       prisma,
       data.subjectId,
       data.chapterId || undefined
     );
+    const subject = resolved.subject;
+    const chapter = resolved.chapter ?? (data.chapterName || null);
+    const dppNumber = data.dppNumber ?? (await nextDppNumber(subject, chapter ?? "Unclassified"));
+    const topics = data.topic ? Array.from(new Set([data.topic, ...data.topics])) : data.topics;
 
     let dpp: Awaited<ReturnType<typeof prisma.dpp.create>> | null = null;
     let lastError: unknown = null;
@@ -92,7 +97,12 @@ export async function POST(request: NextRequest) {
             negativeMarkingEnabled: data.negativeMarkingEnabled,
             questionTargetCount: data.questionTargetCount,
             level: data.level ?? null,
-            topics: data.topics,
+            topics,
+            dppNumber,
+            className: data.className || null,
+            exam: data.exam || null,
+            topic: data.topic || null,
+            subTopic: data.subTopic || null,
             createdById: session.user.id,
           },
         });

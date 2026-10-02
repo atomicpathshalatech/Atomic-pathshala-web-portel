@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import katex from "katex";
 import { renderFormulaContent } from "@/lib/test-portal/formula";
 import { exportCamDrawToSvgString, parseCamDrawDocument } from "@/lib/camdraw/renderer";
+import { DPP_COVER_CSS } from "@/lib/dpp/cover-html";
 
 export interface TestExportOptions {
   withSolution: boolean;
@@ -13,6 +14,8 @@ export interface TestExportOptions {
   testPattern?: string;
   /** Open the browser's print dialog ("Save as PDF") as soon as the pages are laid out. */
   autoPrint?: boolean;
+  /** DPP only: the front page (renderDppCoverHtml), printed before the questions / solutions. */
+  dppCoverHtml?: string | null;
 }
 
 export interface FormattedQuestionOption {
@@ -2169,6 +2172,7 @@ export function generateTestPaperHtml(
     }
     .print-toolbar .pt-btn:disabled { opacity: 0.5; cursor: wait; }
     .print-toolbar .pt-hint { color: #94a3b8; flex-basis: 100%; }
+${isDpp && options.dppCoverHtml ? DPP_COVER_CSS : ""}
   </style>
 </head>
 <body>
@@ -2184,7 +2188,7 @@ export function generateTestPaperHtml(
   </div>
 
   <div class="doc-container" id="doc-container">
-    ${withSolution ? solutionsSectionHtml : isDpp ? questionPagesHtml : frontCoverHtml + questionPagesHtml + finalRoughPagesHtml + backCoverHtml}
+    ${isDpp && options.dppCoverHtml ? options.dppCoverHtml : ""}${withSolution ? solutionsSectionHtml : isDpp ? questionPagesHtml : frontCoverHtml + questionPagesHtml + finalRoughPagesHtml + backCoverHtml}
   </div>
   ${contentPageTemplateHtml}
 

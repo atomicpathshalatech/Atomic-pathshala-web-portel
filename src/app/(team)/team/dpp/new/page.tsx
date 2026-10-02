@@ -52,7 +52,7 @@ export default async function NewDppPage() {
   const subjects = Array.from(subjectMap.values());
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="max-w-6xl space-y-6">
       <div>
         <h1 className="font-headline-lg text-headline-lg text-primary">Create DPP</h1>
         <p className="text-on-surface-variant font-body-md mt-1">
