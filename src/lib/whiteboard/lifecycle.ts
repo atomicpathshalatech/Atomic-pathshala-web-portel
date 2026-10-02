@@ -104,6 +104,16 @@ export async function endWhiteboardSession(
     }
   }
 
+  // Every scheduled class has an ACTIVE session row from the moment it is
+  // scheduled, so the auto-end also reaches classes nobody ever started.
+  // Those were never taught: they are CANCELLED, not COMPLETED (no "Play
+  // Class", no empty board PDF).
+  const neverStarted =
+    opts.reason === "auto_grace_expired" &&
+    !existing.actualStartedAt &&
+    existing.livePhase !== "LIVE" &&
+    existing.livePhase !== "ENDING";
+
   const isRecordingActive =
     existing.recordingEgressId &&
     (existing.recordingStatus === "RECORDING" ||
@@ -115,9 +125,9 @@ export async function endWhiteboardSession(
       where: { id: sessionId },
       data: {
         status: "ENDED",
-        livePhase: "ENDED",
+        livePhase: neverStarted ? "CANCELLED" : "ENDED",
         endedAt: existing.endedAt || now,
-        actualEndedAt: existing.actualEndedAt || now,
+        actualEndedAt: neverStarted ? existing.actualEndedAt : existing.actualEndedAt || now,
         ...(isRecordingActive && { recordingStatus: "PROCESSING" }),
         ...(youtubeManaged && existing.youtubeVideoId && { recordingStatus: "PROCESSING", recordingVideoId: null }),
         ...(!openLiveSession &&
@@ -130,7 +140,7 @@ export async function endWhiteboardSession(
 
     prisma.batchSchedule.update({
       where: { id: existing.batchScheduleId },
-      data: { status: "COMPLETED" },
+      data: { status: neverStarted ? "CANCELLED" : "COMPLETED" },
     }),
 
     prisma.handRaiseEvent.updateMany({
@@ -210,7 +220,8 @@ export async function endWhiteboardSession(
 
   // Trigger background slide generation & R2 upload (PDF & PPTX with
   // watermark) — same waitUntil reasoning as stopRoomRecording above.
-  waitUntil(
+  // A class that never started has no board to export.
+  if (!neverStarted) waitUntil(
     import("@/lib/whiteboard/finalization")
       .then(({ finalizeWhiteboardSlides }) => finalizeWhiteboardSlides(sessionId))
       .catch((err) => console.error("[finalizeWhiteboardSlides_trigger_error]", err))

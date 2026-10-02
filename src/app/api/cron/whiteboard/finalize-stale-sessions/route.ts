@@ -76,6 +76,8 @@ export async function GET(req: NextRequest) {
     const staleFinalization = await prisma.whiteboardSession.findMany({
       where: {
         endedAt: { lt: retryCutoff, not: null },
+        // A class that was never started (auto-cancelled) has no board to export.
+        livePhase: { not: "CANCELLED" },
         OR: [{ pdfStatus: { in: ["NONE", "FAILED"] } }, { pptxStatus: { in: ["NONE", "FAILED"] } }],
       },
       select: { id: true },
