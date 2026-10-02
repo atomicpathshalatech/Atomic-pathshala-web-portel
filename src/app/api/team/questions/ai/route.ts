@@ -19,6 +19,9 @@ import {
   generateAiMetadata,
 } from "@/lib/questions/ai-service";
 
+// Image extraction + cropping drawings in headless Chromium.
+export const maxDuration = 120;
+
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -42,6 +45,14 @@ export async function POST(request: NextRequest) {
           topicContext: payload.topic,
           difficultyContext: payload.difficulty,
         });
+        // Drawings (structures, diagrams) are cropped from the pasted image
+        // and placed where they belong — never rewritten as text.
+        const { attachPastedFigures } = await import("@/lib/questions/paste-figures");
+        result = await attachPastedFigures(
+          result,
+          { base64: payload.imageBase64, mimeType: payload.mimeType || "image/png" },
+          `${session.user.id.slice(0, 8)}-${Date.now()}`
+        );
       } else if (payload.rawText?.trim()) {
         result = await extractBilingualQuestionFromText({
           rawText: payload.rawText.trim(),

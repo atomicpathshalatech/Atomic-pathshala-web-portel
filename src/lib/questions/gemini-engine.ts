@@ -1,8 +1,11 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { parseAiJson } from "@/lib/ai/latex-json";
 import { geminiKeyManager, CostEstimateResult } from "@/lib/ai/gemini-key-manager";
 import { GEMINI_TEXT_MODELS, classifyGeminiFailure, usableModels } from "@/lib/ai/gemini-models";
 
 export interface ExtractedQuestionData {
+  /** Drawings in the pasted image, to be cropped by the caller (image extraction only). */
+  figures?: { place: string; box: number[] }[];
   statementEn: string;
   statementHi: string;
   optionsEn: {
@@ -124,21 +127,11 @@ YOUR TASK (ALL-IN-ONE INGESTION IN A SINGLE RESPONSE):
      * If the image is English-only: Extract English AND generate authentic NCERT Hindi translation (Devanagari script) for "statementHi" and "optionsHi" { A, B, C, D }.
      * If the image is Hindi-only: Extract Hindi AND generate authentic NCERT English translation for "statementEn" and "optionsEn" { A, B, C, D }.
      * If the image contains both: Extract both versions with 1:1 option alignment (Option 1 ↔ A, Option 2 ↔ B, etc.).
+     * A translation must say exactly what the printed question says — no added names, formulas or hints — and keep every [FIGURE] marker in the same place.
    - Standard LaTeX notation $...$ for all inline math, equations, symbols, fractions, powers, and chemical formulas (e.g. $\\text{H}_2\\text{SO}_4$, $\\text{Ca}^{2+}$).
-    - CRITICAL: CHEMICAL STRUCTURES, MOLECULES & ZERO-PLACEHOLDER RULE:
-      * ABSOLUTELY NEVER OUTPUT LAZY PLACEHOLDERS LIKE "[Structure given in figure]", "[चित्र में दी गई संरचना]", "[See diagram]", "[Image]", "[Diagram]", "[चित्र]"!
-      * You MUST extract, convert, and fully write out the actual chemical structure directly in "statementEn" and "statementHi"!
-      * For Branched Organic Molecules (e.g. IUPAC questions):
-        Identify which exact carbon atom has vertical/diagonal branches attached. NEVER shift branches to adjacent carbons.
-        Format using LaTeX KaTeX:
-        $\\text{NC}-\\underset{\\begin{subarray}{c}|\\[-1pt]\\text{CHO}\\end{subarray}}{\\overset{\\begin{subarray}{c}\\text{CH}_3\\[-1pt]|\\end{subarray}}{\\text{C}}}-\\text{CH}_2-\\text{CH}_2-\\text{COOH}$
-        or condensed structural formula $\text{NC}-\text{C}(\text{CH}_3)(\text{CHO})-\text{CH}_2-\text{CH}_2-\text{COOH}$.
-      * For Skeletal Line-Angle Formulas (zig-zag bond lines):
-        Count all vertices/carbons and double/triple bonds, and convert the drawing into its complete chemical structural formula (e.g. $\text{CH}_3-\text{C}(\text{CH}_3)=\text{CH}-\text{CH}_2-\text{CH}_3$).
-      * For Rings & Heterocycles:
-        Write the full condensed or IUPAC representation (e.g. $\text{C}_6\text{H}_5-\text{OH}$, $\text{p-NO}_2-\text{C}_6\text{H}_4-\text{COOH}$, Cyclohex-2-en-1-ol: $\text{C}_6\text{H}_9\text{OH}$).
-      * For Coordination Complexes & Inorganics:
-        Write full coordination formula with brackets, e.g. $[\text{Pt}(\text{NH}_3)_2\text{Cl}_2]$ or $[\text{Fe}(\text{CN})_6]^{4-}$.
+    - EXACT TRANSCRIPTION (MOST IMPORTANT): copy the question and every option exactly as printed — same words, same order, same numbers and symbols. NEVER add a name, formula, explanation or any word that is not printed. Example: if the image shows a drawn ring structure with "The total degree of unsaturation of the following hydrocarbon is:", the statement is exactly that sentence followed by [FIGURE] — do NOT write "naphthalene" or "C10H8".
+    - DRAWINGS ARE NEVER TURNED INTO TEXT: any drawn chemical structure (skeletal / ring / line-angle / Fischer / Newman / wedge-dash), reaction scheme drawing, diagram, graph, circuit, apparatus or picture is cropped from the image by the system. Put the marker [FIGURE] exactly where the drawing sits — in the statement, or as the option's text if that option is a drawing — in BOTH languages, and list each drawing in "figures" as {"place":"STATEMENT"|"A"|"B"|"C"|"D","box":[ymin,xmin,ymax,xmax]} with box normalized 0–1000 on the image, covering the whole drawing with its own atom/axis labels but not the surrounding text or the option label like (A).
+    - Formulas that are TYPED as text in the image (e.g. H2SO4, CH3-CH2-OH, [Fe(CN)6]4-) are written in LaTeX inside $...$.
 
 2. SCIENTIFICALLY VERIFIED CORRECT ANSWER:
    - Identify visibly marked answer or deduce the 100% scientifically correct option ("A", "B", "C", or "D"). Put in "correctAnswer": ["A"].
@@ -177,6 +170,7 @@ RETURN STRICT JSON SCHEMA:
   "solutionHi": "सिद्धांत : ...\\nहल : ...\\nअंतिम उत्तर : विकल्प (A)",
   "hasFigure": false,
   "figureCaption": "",
+  "figures": [],
   "subject": "Physics",
   "chapter": "Current Electricity",
   "topic": "Kirchhoff's Rules",
@@ -212,7 +206,7 @@ RETURN STRICT JSON SCHEMA:
     const response = await model.generateContent(parts);
     const text = response.response.text().trim();
     const cleanJson = text.replace(/^```json\s*/i, "").replace(/\s*```$/i, "").trim();
-    const parsed = JSON.parse(cleanJson);
+    const parsed = parseAiJson<any>(cleanJson);
 
     // Calculate token usage & cost in Paise
     const usageMetadata = response.response.usageMetadata;
@@ -238,8 +232,13 @@ RETURN STRICT JSON SCHEMA:
       correctAnswer: Array.isArray(parsed.correctAnswer) ? parsed.correctAnswer : [parsed.correctAnswer || "A"],
       solutionEn: formatSolutionSpacing(parsed.solutionEn || ""),
       solutionHi: formatSolutionSpacing(parsed.solutionHi || ""),
-      hasFigure: Boolean(parsed.hasFigure),
+      hasFigure: Boolean(parsed.hasFigure) || (Array.isArray(parsed.figures) && parsed.figures.length > 0),
       figureCaption: parsed.figureCaption || undefined,
+      figures: Array.isArray(parsed.figures)
+        ? parsed.figures.filter(
+            (f: any) => f && Array.isArray(f.box) && f.box.length === 4 && f.box.every((n: unknown) => typeof n === "number")
+          )
+        : [],
       subject: parsed.subject || (subjectContext as any) || "Physics",
       chapter: parsed.chapter || chapterContext || "General",
       topic: parsed.topic || topicContext || "Core Concept",
@@ -336,7 +335,7 @@ RETURN STRICT JSON SCHEMA:
     const response = await model.generateContent(prompt);
     const text = response.response.text().trim();
     const cleanJson = text.replace(/^```json\s*/i, "").replace(/\s*```$/i, "").trim();
-    const parsed = JSON.parse(cleanJson);
+    const parsed = parseAiJson<any>(cleanJson);
 
     const usageMetadata = response.response.usageMetadata;
     const inputTokens = usageMetadata?.promptTokenCount || Math.ceil(prompt.length / 4);
@@ -460,7 +459,7 @@ RETURN STRICT JSON SCHEMA:
 
     const response = await model.generateContent(prompt);
     const jsonStr = response.response.text().replace(/^```json\s*/i, "").replace(/\s*```$/i, "").trim();
-    const parsed = JSON.parse(jsonStr);
+    const parsed = parseAiJson<any>(jsonStr);
 
     const recommended = (parsed.recommendedAnswer || correctAnswer || "A").toUpperCase();
     const userAns = (userSelectedAnswer || "").toUpperCase();
@@ -577,7 +576,7 @@ RETURN STRICT JSON SCHEMA:
 
     const response = await model.generateContent(prompt);
     const jsonStr = response.response.text().replace(/^```json\s*/i, "").replace(/\s*```$/i, "").trim();
-    const parsed = JSON.parse(jsonStr);
+    const parsed = parseAiJson<any>(jsonStr);
 
     const usageMetadata = response.response.usageMetadata;
     const inputTokens = usageMetadata?.promptTokenCount || Math.ceil(prompt.length / 4);
