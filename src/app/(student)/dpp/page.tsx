@@ -68,6 +68,21 @@ export default async function DppPortalPage() {
     console.error("Error loading DPPs:", err);
   }
 
+  // 2b. Chapter DPPs are attempted through their backing test (code DPPT-<id>).
+  const backingTests = dbDpps.length
+    ? await prisma.test
+        .findMany({
+          where: { code: { in: dbDpps.map((d) => `DPPT-${d.id}`) } },
+          select: {
+            id: true,
+            code: true,
+            attempts: { where: { studentId: student.id }, select: { status: true, score: true }, take: 1 },
+          },
+        })
+        .catch(() => [])
+    : [];
+  const backingByDpp = new Map(backingTests.map((t) => [String(t.code).slice(5), t]));
+
   // 3. Fetch all real Batch-scheduled DPPs
   let batchDpps: any[] = [];
   if (batchIds.length > 0) {
@@ -157,7 +172,8 @@ export default async function DppPortalPage() {
       subjectMap[subjName]![chapterName] = [];
     }
 
-    const latestAttempt = d.attempts?.[0];
+    const backing = backingByDpp.get(d.id);
+    const latestAttempt = backing?.attempts?.[0] ?? d.attempts?.[0];
     const status: "PENDING" | "IN_PROGRESS" | "COMPLETED" = latestAttempt
       ? latestAttempt.status === "IN_PROGRESS"
         ? "IN_PROGRESS"
@@ -182,6 +198,9 @@ export default async function DppPortalPage() {
       status,
       score: latestAttempt?.score ?? null,
       ready: addedCount > 0,
+      // Opened through /dpp/<id>/attempt (exam room); downloads use its backing test.
+      attemptHref: `/dpp/${d.id}/attempt`,
+      testId: backing?.id ?? null,
     });
   }
 

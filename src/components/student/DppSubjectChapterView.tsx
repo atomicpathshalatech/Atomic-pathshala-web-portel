@@ -20,6 +20,8 @@ export interface RealDPPItem {
   startsAt?: string | null;
   /** Published with questions added — only then can it be attempted/downloaded. */
   ready?: boolean;
+  /** Where "Attempt" goes (chapter DPPs: /dpp/<id>/attempt). */
+  attemptHref?: string | null;
 }
 
 export interface RealChapterGroup {
@@ -314,8 +316,8 @@ export function DppSubjectChapterView({
                                     {/* Nothing to attempt or download until the DPP is published with its questions. */}
                                     {dpp.ready && (
                                     <div className="flex items-center gap-1.5">
-                                      {/* Question sheet PDF (and solutions once submitted) */}
-                                      {dpp.testId && !isUpcoming && (
+                                      {/* Question sheet + solutions PDFs, once the student has submitted. */}
+                                      {dpp.testId && dpp.status === "COMPLETED" && (
                                         <a
                                           href={`/api/tests/${dpp.testId}/pdf?type=questions`}
                                           className="p-1.5 rounded-lg border border-outline-variant/30 hover:bg-surface-container text-on-surface-variant hover:text-primary transition"
@@ -346,14 +348,18 @@ export function DppSubjectChapterView({
                                         </button>
                                       ) : (
                                         <Link
-                                          href={dpp.testId ? `/tests/${dpp.testId}/attempt` : `/practice?dppId=${dpp.id}`}
+                                          href={
+                                            dpp.status === "COMPLETED" && dpp.testId
+                                              ? `/tests/${dpp.testId}/result`
+                                              : dpp.attemptHref ?? (dpp.testId ? `/tests/${dpp.testId}/attempt` : `/dpp/${dpp.id}/attempt`)
+                                          }
                                           className={`px-3 py-1.5 rounded-xl font-bold text-xs transition shadow-sm ${
                                             dpp.status === "COMPLETED"
                                               ? "bg-surface-container-high text-on-surface hover:bg-surface-container-highest"
                                               : "bg-primary text-on-primary hover:opacity-90 active:scale-95"
                                           }`}
                                         >
-                                          {dpp.status === "COMPLETED" ? "Re-attempt" : dpp.status === "IN_PROGRESS" ? "Resume" : "Attempt Now"}
+                                          {dpp.status === "COMPLETED" ? "View Result" : dpp.status === "IN_PROGRESS" ? "Resume" : "Attempt Now"}
                                         </Link>
                                       )}
                                     </div>

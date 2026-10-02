@@ -40,7 +40,9 @@ export async function renderBookletPdf(html: string, opts: { timeoutMs?: number 
   try {
     const page = await browser.newPage();
     await page.emulateMediaType("print");
-    await page.setContent(html, { waitUntil: "networkidle0", timeout });
+    // "load" (styles, scripts, images in) rather than "networkidle0": a font
+    // or CDN connection that stays open would otherwise hang the export.
+    await page.setContent(html, { waitUntil: "load", timeout });
     // The booklet lays itself out (pagination) and then marks <html> ready.
     await page.waitForSelector("html.booklet-ready", { timeout });
     await page.evaluate(() => document.fonts.ready);

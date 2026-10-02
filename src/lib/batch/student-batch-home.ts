@@ -228,6 +228,14 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, u
         })
       : Promise.resolve([]),
   ]);
+  // Chapter DPPs are attempted through their backing test (code DPPT-<id>).
+  const dppBacking = chapterDpps.length
+    ? await prisma.test.findMany({
+        where: { code: { in: chapterDpps.map((d) => `DPPT-${d.id}`) } },
+        select: { id: true, code: true, attempts: { where: { studentId }, orderBy: { startedAt: "desc" }, take: 1, select: { status: true, score: true } } },
+      })
+    : [];
+  const backingByDpp = new Map(dppBacking.map((t) => [String(t.code).slice(5), t]));
   const attemptStatus = (a: { status: string } | undefined) =>
     !a ? ("PENDING" as const) : a.status === "IN_PROGRESS" ? ("IN_PROGRESS" as const) : ("COMPLETED" as const);
   const dpps: BatchDppItem[] = [
@@ -259,7 +267,9 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, u
     ...chapterDpps.map((d): BatchDppItem => {
       const ch = chapterMap.get(d.chapterId!)!;
       const ready = d._count.questions > 0;
-      const status = !ready ? "LOCKED" : attemptStatus(d.attempts[0]);
+      const backing = backingByDpp.get(d.id);
+      const a = backing?.attempts[0] ?? d.attempts[0];
+      const status = !ready ? "LOCKED" : attemptStatus(a);
       return {
         id: d.id,
         title: d.name,
@@ -268,10 +278,11 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, u
         questionCount: d._count.questions || d.questionTargetCount,
         durationMin: d.estimatedTimeMin,
         status,
-        score: d.attempts[0]?.score ?? null,
+        score: a?.score ?? null,
         opensAt: null,
-        href: ready ? `/practice?dppId=${d.id}` : null,
-        pdfHref: null,
+        href: !ready ? null : status === "COMPLETED" && backing ? `/tests/${backing.id}/result` : `/dpp/${d.id}/attempt`,
+        // Question sheet + solutions once the student has submitted it.
+        pdfHref: status === "COMPLETED" && backing ? `/api/tests/${backing.id}/pdf` : null,
       };
     }),
   ];

@@ -30,7 +30,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     const test = await prisma.test.findUnique({ where: { id: params.id } });
     if (!test) return apiError("Test not found", 404);
-    if (!test.batchScheduleId && !test.testSeriesId && !test.chapterId) {
+    if (!test.batchScheduleId && !test.testSeriesId && !test.chapterId && test.testType !== "DPP") {
       return apiError("This test isn't linked to a scheduled session, series, or chapter.", 400);
     }
 

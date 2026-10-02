@@ -67,6 +67,21 @@ export default async function DppDetailPage({ params }: { params: { id: string }
             {dpp.status === "PUBLISHED" ? "Published" : "Draft"}
           </span>
           {canPublish && <DppStatusActions dppId={dpp.id} status={dpp.status} />}
+          <a
+            href={`/api/team/dpp/${dpp.id}/pdf?type=questions`}
+            className="h-8 px-3 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 inline-flex items-center gap-1"
+            title="Download the DPP question sheet (PDF)"
+          >
+            <span className="material-symbols-outlined text-[16px]">download</span>
+            DPP PDF
+          </a>
+          <a
+            href={`/api/team/dpp/${dpp.id}/pdf?type=solutions`}
+            className="h-8 px-3 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 inline-flex items-center gap-1"
+            title="Download the solutions (PDF)"
+          >
+            Solutions PDF
+          </a>
         </div>
       </div>
 

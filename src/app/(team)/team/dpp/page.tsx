@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
-import { Plus, Search, Clock, ListChecks, ArrowUpRight, FileText } from "lucide-react";
+import { Plus, Search, Clock, ListChecks, ArrowUpRight, FileText, Download } from "lucide-react";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
@@ -239,6 +239,24 @@ export default async function DppListPage({
                     <ArrowUpRight className="w-3.5 h-3.5" />
                   </Link>
                   <div className="flex items-center gap-1">
+                    {have > 0 && (
+                      <>
+                        <a
+                          href={`/api/team/dpp/${dpp.id}/pdf?type=questions`}
+                          title="Download DPP (question sheet PDF)"
+                          className="h-8 w-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition"
+                        >
+                          <Download className="w-4 h-4" />
+                        </a>
+                        <a
+                          href={`/api/team/dpp/${dpp.id}/pdf?type=solutions`}
+                          title="Download solutions PDF"
+                          className="h-8 px-2 rounded-lg text-[11px] font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 inline-flex items-center"
+                        >
+                          Solutions
+                        </a>
+                      </>
+                    )}
                     {canPublish && <DppStatusActions dppId={dpp.id} status={dpp.status} />}
                     {canDelete && <DppDeleteButton dppId={dpp.id} dppCode={dpp.code} dppName={dpp.name} />}
                   </div>

@@ -14,6 +14,8 @@ export type ScheduledTestLike = {
   closeTime?: Date | string | null;
   durationMin?: number | null;
   batchSchedule?: { startsAt?: Date | string | null; endsAt?: Date | string | null; type?: string | null } | null;
+  /** "DPP" for a chapter DPP's backing test (see @/lib/dpp/dpp-test). */
+  testType?: string | null;
 };
 
 export const POPUP_LEAD_MS = 24 * 60 * 60 * 1000;
@@ -25,7 +27,7 @@ const toDate = (d: Date | string | null | undefined): Date | null => {
 };
 
 export function isDppTest(test: ScheduledTestLike): boolean {
-  return (test.batchSchedule?.type ?? "").toUpperCase() === "DPP";
+  return (test.batchSchedule?.type ?? "").toUpperCase() === "DPP" || (test.testType ?? "").toUpperCase() === "DPP";
 }
 
 /** When the test opens (its own open time, else its class-schedule slot). */

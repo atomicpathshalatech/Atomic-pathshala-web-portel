@@ -1042,6 +1042,17 @@ export function UnifiedChapterScheduleTimeline({
                     </Link>
                   )}
 
+                  {item.type === "DPP" && item.dppData && (item.dppData._count?.questions || 0) > 0 && (
+                    <a
+                      href={`/api/team/dpp/${item.dppData.id}/pdf?type=solutions`}
+                      title="Download this DPP with solutions (PDF)"
+                      className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-bold flex items-center gap-1.5 transition"
+                    >
+                      <FileUp className="w-3.5 h-3.5 rotate-180" />
+                      <span>PDF</span>
+                    </a>
+                  )}
+
                   {item.type === "TEST" && item.testData && (
                     <Link
                       href={`/team/tests/${item.testData.id}/author`}

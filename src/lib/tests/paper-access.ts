@@ -25,6 +25,7 @@ export async function studentPaperBlockReason(
       openTime: true,
       closeTime: true,
       durationMin: true,
+      testType: true,
       batchSchedule: { select: { startsAt: true, endsAt: true, type: true } },
     },
   });

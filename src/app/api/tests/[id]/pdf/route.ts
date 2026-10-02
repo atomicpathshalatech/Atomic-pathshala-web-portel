@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -9,6 +11,21 @@ import { studentPaperBlockReason } from "@/lib/tests/paper-access";
 import { createPresignedDownloadUrl, getR2ObjectMetadata, uploadBufferToR2 } from "@/lib/storage/r2-client";
 
 export const runtime = "nodejs";
+
+// The cover logo is embedded in the page (public/brand/logo.png is traced into
+// every function — see next.config.mjs), so printing never waits on a
+// third-party image host.
+let logoDataUrl: string | null | undefined;
+function brandLogo(): string | null {
+  if (logoDataUrl === undefined) {
+    try {
+      logoDataUrl = `data:image/png;base64,${readFileSync(join(process.cwd(), "public", "brand", "logo.png")).toString("base64")}`;
+    } catch {
+      logoDataUrl = null;
+    }
+  }
+  return logoDataUrl;
+}
 export const maxDuration = 60;
 
 /**
@@ -38,6 +55,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       watermarkText: "ATOMIC PATHSHALA",
       testPattern: testData.examType,
       autoPrint: false,
+      logoUrl: brandLogo(),
     });
 
     const version = createHash("sha1").update(html).digest("hex").slice(0, 16);

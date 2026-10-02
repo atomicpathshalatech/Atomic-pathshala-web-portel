@@ -335,6 +335,10 @@ export function generateTestPaperHtml(
   options: TestExportOptions
 ): string {
   const { withSolution, brandName = "ATOMIC PATHSHALA", autoPrint = false } = options;
+  // A DPP is practice, not an exam: its sheet has no exam cover, OMR rules,
+  // rough-work pages or back cover — just a title strip and the questions.
+  const isDpp = String(options.testPattern || test.examType || "").toUpperCase() === "DPP";
+  const footerCode = isDpp ? "DPP" : test.code || "9610WMD801490250051";
 
   const SITE_HOST = "ap.atomicpathshala.in";
   const SITE_URL = `https://${SITE_HOST}`;
@@ -908,7 +912,7 @@ export function generateTestPaperHtml(
       <div class="page-running-footer">
         <div class="footer-phase-box">${test.batchName || "PHASE - ALL"}</div>
         <div class="footer-meta-row">
-          <span class="footer-barcode">${test.code || "9610WMD801490250051"}</span>${SITE_LINK_HTML}
+          <span class="footer-barcode">${footerCode}</span>${SITE_LINK_HTML}
           <span class="footer-date">${currentDateStr}</span>
         </div>
       </div>
@@ -921,13 +925,17 @@ export function generateTestPaperHtml(
   // solution — no cover, rough pages or back cover.
   let questionPagesHtml = "";
   if (!withSolution) {
-    test.sections.forEach((section) => {
+    test.sections.forEach((section, si) => {
+      const dppStrip =
+        isDpp && si === 0
+          ? `<div class="dpp-strip"><div class="dpp-strip-title">${test.name}</div><div class="dpp-strip-meta">${test.totalQuestions} Questions · ${test.durationMin} min · +${test.correctMarks} / ${test.incorrectMarks}</div></div>`
+          : "";
       questionPagesHtml += `
       <div class="q-flow" data-subject="SUBJECT : ${section.subject.toUpperCase().replace(/"/g, "&quot;")}">
-        ${section.questions.map((q) => questionPartsHtml(q, false)).join("")}
+        ${dppStrip}${section.questions.map((q) => questionPartsHtml(q, false)).join("")}
       </div>`;
       // Rough page after each subject (page numbers are filled in after pagination).
-      questionPagesHtml += renderSingleRoughPageHtml(0, section.subject);
+      if (!isDpp) questionPagesHtml += renderSingleRoughPageHtml(0, section.subject);
     });
   }
 
@@ -945,7 +953,7 @@ export function generateTestPaperHtml(
         <div class="page-running-footer">
           <div class="footer-phase-box">${test.batchName || "PHASE - ALL"}</div>
           <div class="footer-meta-row">
-            <span class="footer-barcode">${test.code || "9610WMD801490250051"}</span>${SITE_LINK_HTML}
+            <span class="footer-barcode">${footerCode}</span>${SITE_LINK_HTML}
             <span class="footer-date">${currentDateStr}</span>
           </div>
         </div>
@@ -1726,6 +1734,9 @@ export function generateTestPaperHtml(
     }
 
     /* Running Footer Matching Allen */
+    .dpp-strip { border: 1.5px solid #111; border-radius: 6px; padding: 7px 12px; margin: 0 0 10px; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+    .dpp-strip-title { font-weight: 700; font-size: 14pt; }
+    .dpp-strip-meta { font-size: 9.5pt; color: #333; white-space: nowrap; }
     .page-running-footer {
       margin-top: auto;
       padding-top: 2px;
@@ -2173,7 +2184,7 @@ export function generateTestPaperHtml(
   </div>
 
   <div class="doc-container" id="doc-container">
-    ${withSolution ? solutionsSectionHtml : frontCoverHtml + questionPagesHtml + finalRoughPagesHtml + backCoverHtml}
+    ${withSolution ? solutionsSectionHtml : isDpp ? questionPagesHtml : frontCoverHtml + questionPagesHtml + finalRoughPagesHtml + backCoverHtml}
   </div>
   ${contentPageTemplateHtml}
 

@@ -39,7 +39,7 @@ export default async function TestAttemptPage({ params }: { params: { id: string
   });
   if (!test) notFound();
   if (test.status === "ARCHIVED" || test.archived) redirect("/tests");
-  if (!test.batchScheduleId && !test.testSeriesId && !test.chapterId) redirect("/tests");
+  if (!test.batchScheduleId && !test.testSeriesId && !test.chapterId && test.testType !== "DPP") redirect("/tests");
 
   const { student } = await resolveStudentForTest(session.user.id, test);
   if (!student) redirect("/tests");
@@ -58,8 +58,9 @@ export default async function TestAttemptPage({ params }: { params: { id: string
     // Can't start a paper that isn't published or has no questions yet (a DPP
     // must be published after its questions are added).
     const hasQuestions = test.sections.some((s) => s.questions.length > 0);
-    const published = test.batchSchedule?.type === "DPP" ? test.status === "PUBLISHED" : !["DRAFT", "PENDING_APPROVAL", "UNDER_REVIEW"].includes(test.status);
-    if (!hasQuestions || !published) redirect(test.batchSchedule?.type === "DPP" ? "/dpp" : "/tests");
+    const isDpp = test.batchSchedule?.type === "DPP" || test.testType === "DPP";
+    const published = isDpp ? test.status === "PUBLISHED" : !["DRAFT", "PENDING_APPROVAL", "UNDER_REVIEW"].includes(test.status);
+    if (!hasQuestions || !published) redirect(isDpp ? "/dpp" : "/tests");
     if (test.batchSchedule && now > test.batchSchedule.endsAt) redirect("/tests");
     if (test.closeTime && now > test.closeTime) redirect("/tests");
     attempt = await prisma.attempt.create({
