@@ -5,7 +5,7 @@ import {
   mapGeminiError,
 } from "@/lib/ai-chat/errors";
 import { getSystemPrompt } from "@/lib/ai-chat/prompts";
-import { GEMINI_FAST_MODELS, GEMINI_TEXT_MODELS, LightGoogleGenerativeAI, classifyGeminiFailure, isDeadKeyError, isRetiredModelError, readGeminiKeys, usableKeys, usableModels } from "@/lib/ai/gemini-models";
+import { GEMINI_FAST_MODELS, GEMINI_TEXT_MODELS, LightGoogleGenerativeAI, classifyGeminiFailure, isDeadKeyError, isRetiredModelError, readGeminiKeys, retryAfterMs, usableKeys, usableModels } from "@/lib/ai/gemini-models";
 import type {
   ChatRequestAttachment,
   ChatRequestBody,
@@ -79,6 +79,9 @@ function retryReason(error: unknown) {
 }
 
 function retryCooldownMs(error: unknown) {
+  // A daily free-tier quota says how long to wait (often hours).
+  const wait = retryAfterMs(error);
+  if (wait && wait > RATE_LIMIT_COOLDOWN_MS) return Math.min(wait, 24 * 60 * 60 * 1000);
   const reason = retryReason(error);
   return reason === "quota" || reason === "rate limit"
     ? RATE_LIMIT_COOLDOWN_MS

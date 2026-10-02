@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { LightGoogleGenerativeAI, isDeadKeyError, isKeyDead, markKeyDead, readGeminiKeys } from "@/lib/ai/gemini-models";
+import { LightGoogleGenerativeAI, isDeadKeyError, isKeyDead, markKeyDead, readGeminiKeys, retryAfterMs } from "@/lib/ai/gemini-models";
 
 export interface KeyTelemetry {
   keyIndex: number;
@@ -196,7 +196,11 @@ export class GeminiKeyManager {
       // Blocked project / invalid key: shared skip for every Gemini caller.
       markKeyDead(key);
     } else if (isRateLimit) {
-      this.cooldowns.set(key, Date.now() + DEFAULT_COOLDOWN_MS);
+      // A free-tier key out of its daily quota says how long to wait (often
+      // hours) — rest it that long (max 24 h) instead of retrying every minute.
+      const wait = retryAfterMs(err);
+      const ms = wait && wait > DEFAULT_COOLDOWN_MS ? Math.min(wait, 24 * 60 * 60 * 1000) : DEFAULT_COOLDOWN_MS;
+      this.cooldowns.set(key, Date.now() + ms);
     }
   }
 

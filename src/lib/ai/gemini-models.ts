@@ -146,3 +146,24 @@ export class LightGoogleGenerativeAI extends GoogleGenerativeAI {
     return super.getGenerativeModel({ ...params, generationConfig }, options);
   }
 }
+
+/**
+ * How long Google says to wait after a 429 ("Please retry in 10h10m44s" /
+ * "retryDelay":"36644s"). A free-tier key that used up its daily quota
+ * (20 requests per model per day) should be left alone until then instead
+ * of being retried every minute. null when the error doesn't say.
+ */
+export function retryAfterMs(err: unknown): number | null {
+  const m = message(err);
+  const delay = m.match(/retrydelay"?\s*:\s*"(\d+(?:\.\d+)?)s"/);
+  if (delay) return Math.round(Number(delay[1]) * 1000);
+  const human = m.match(/retry in ((?:\d+h)?(?:\d+m)?(?:\d+(?:\.\d+)?s)?)/);
+  if (human && human[1]) {
+    const h = Number(human[1].match(/(\d+)h/)?.[1] ?? 0);
+    const mi = Number(human[1].match(/(\d+)m(?!s)/)?.[1] ?? 0);
+    const s = Number(human[1].match(/(\d+(?:\.\d+)?)s/)?.[1] ?? 0);
+    const ms = ((h * 60 + mi) * 60 + s) * 1000;
+    return ms > 0 ? Math.round(ms) : null;
+  }
+  return null;
+}
