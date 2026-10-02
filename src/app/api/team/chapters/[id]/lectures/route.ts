@@ -166,10 +166,10 @@ export async function POST(
       const ytVideoId = videoUrl ? extractYouTubeVideoId(videoUrl) : null;
       const isPastCompletedClass = Boolean(ytVideoId);
 
-      const batchChapters = await prisma.batchChapter.findMany({
-        where: { chapterId: chapter.id },
-        include: { batch: true },
-      });
+      // Every batch that has this chapter — assigned/imported, or already
+      // holding its classes (older imports never made the assignment row).
+      const { chapterBatchIds } = await import("@/lib/chapters/lecture-batch-sync");
+      const batchIds = await chapterBatchIds(chapter.id);
 
       const syncSchedule = async (scheduleKey: string, batchId: string) => {
         await prisma.batchSchedule.upsert({
@@ -258,11 +258,11 @@ export async function POST(
       // used to be dropped into the first ACTIVE batch's timetable while the
       // chapter still said "not assigned"; assigning the chapter to a batch
       // later schedules its lectures there (batches/[id]/chapter-assignments).
-      for (let i = 0; i < batchChapters.length; i++) {
-        const bc = batchChapters[i];
-        if (!bc) continue;
-        const scheduleKey = i === 0 ? lecture.id : `${lecture.id}-${bc.batchId}`;
-        await syncSchedule(scheduleKey, bc.batchId);
+      for (let i = 0; i < batchIds.length; i++) {
+        const batchId = batchIds[i];
+        if (!batchId) continue;
+        const scheduleKey = i === 0 ? lecture.id : `${lecture.id}-${batchId}`;
+        await syncSchedule(scheduleKey, batchId);
       }
     } catch (syncErr) {
       console.error("[multi_batch_schedule_sync_error]", syncErr);

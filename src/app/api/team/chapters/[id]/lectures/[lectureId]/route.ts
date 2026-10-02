@@ -144,6 +144,16 @@ export async function PATCH(
       console.error("[lecture_patch_sync_error]", syncErr);
     }
 
+    // A batch that has this chapter but not this class yet (e.g. the lecture
+    // got its date only now) gets it.
+    if (updated.scheduledDate) try {
+      const { addLectureToChapterBatches } = await import("@/lib/chapters/lecture-batch-sync");
+      const chapterRow = await prisma.chapter.findUnique({ where: { id: params.id }, select: { subject: { select: { title: true } } } });
+      await addLectureToChapterBatches(updated, { id: params.id, subjectTitle: chapterRow?.subject?.title ?? null }, session.user.id);
+    } catch (syncErr) {
+      console.error("[lecture_patch_add_to_batches_error]", syncErr);
+    }
+
     await prisma.auditLog.create({
       data: {
         userId: session.user.id,
@@ -198,6 +208,14 @@ export async function DELETE(
     // `id: params.lectureId`, a Lecture id never a BatchSchedule id, so it
     // always matched zero rows — dead code, removed rather than fixed
     // in place since it's now redundant with the FK's own SetNull.)
+    // The lecture's upcoming classes leave the batch timetables with it (a
+    // class that already happened stays as history).
+    const { removeLectureFromBatches } = await import("@/lib/chapters/lecture-batch-sync");
+    const fromBatches = await removeLectureFromBatches(params.lectureId);
+    if (fromBatches.liveTitle) {
+      return apiError(`"${fromBatches.liveTitle}" is live right now — end the class before deleting the lecture.`, 409);
+    }
+
     await prisma.lecture.delete({
       where: { id: params.lectureId },
     });
@@ -208,11 +226,11 @@ export async function DELETE(
         action: "LECTURE_DELETED",
         entityType: "Lecture",
         entityId: params.lectureId,
-        metadata: { chapterId: params.id, title: lecture.title },
+        metadata: { chapterId: params.id, title: lecture.title, batchClassesRemoved: fromBatches.removed, batchClassesKept: fromBatches.kept },
       },
     });
 
-    return apiSuccess({ deleted: true });
+    return apiSuccess({ deleted: true, batchClassesRemoved: fromBatches.removed });
   } catch (error) {
     return handleApiError(error);
   }

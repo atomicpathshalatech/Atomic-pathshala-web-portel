@@ -115,9 +115,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }),
     ]);
 
-    // Batch timetable: same dates in every batch this chapter is assigned to.
+    // Batch timetable: same dates in every batch that has this chapter.
     if (planned.length) {
-      const batches = await prisma.batchChapter.findMany({ where: { chapterId: chapter.id }, select: { batchId: true } });
+      const { chapterBatchIds } = await import("@/lib/chapters/lecture-batch-sync");
+      const batches = (await chapterBatchIds(chapter.id)).map((batchId) => ({ batchId }));
       const { rescheduleOpenLiveSession } = await import("@/lib/live-session/service");
       for (const p of planned) {
         for (const { batchId } of batches) {

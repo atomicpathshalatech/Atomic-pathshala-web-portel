@@ -103,6 +103,17 @@ export async function PATCH(
       }
     }
 
+    // Moved in the batch → the chapter's lecture (and its class in the
+    // chapter's other batches) moves too.
+    if (isLiveClassReschedule && input.status !== "CANCELLED" && existing.lectureId) {
+      try {
+        const { applyBatchRescheduleToLecture } = await import("@/lib/chapters/lecture-batch-sync");
+        await applyBatchRescheduleToLecture(schedule.id, existing.lectureId, schedule.startsAt, schedule.endsAt);
+      } catch (syncErr) {
+        console.error("[batch_reschedule_lecture_sync_error]", syncErr);
+      }
+    }
+
     if (isLiveClassReschedule) {
       await applyLateReschedulePenaltyIfDue({
         scheduleId: schedule.id,
