@@ -123,15 +123,68 @@ export async function cropQuestionFigures(pdf: Buffer, opts: { maxPages?: number
         (pi: number, box: number[]) => {
           const c = (window as any).__pages[pi] as HTMLCanvasElement | undefined;
           if (!c) return null;
-          // A little margin so a bond or charge at the edge is never clipped.
+          // The model's box is often a little tight (a CH3 or NO2 label sticking
+          // out). Start from the box plus a small margin, then push each edge
+          // outwards while it still cuts through ink, until a blank line —
+          // so the whole drawing is always inside. Growth is capped so a
+          // figure touching other text can't swallow the page.
           const pad = 0.012;
-          const y0 = Math.max(0, box[0]! / 1000 - pad) * c.height;
-          const x0 = Math.max(0, box[1]! / 1000 - pad) * c.width;
-          const y1 = Math.min(1, box[2]! / 1000 + pad) * c.height;
-          const x1 = Math.min(1, box[3]! / 1000 + pad) * c.width;
+          let y0 = Math.round(Math.max(0, box[0]! / 1000 - pad) * c.height);
+          let x0 = Math.round(Math.max(0, box[1]! / 1000 - pad) * c.width);
+          let y1 = Math.round(Math.min(1, box[2]! / 1000 + pad) * c.height);
+          let x1 = Math.round(Math.min(1, box[3]! / 1000 + pad) * c.width);
+          // (No helper functions in here: this code runs in the page, and
+          // bundlers may wrap named functions with helpers that don't exist there.)
+          const px = c.getContext("2d")!.getImageData(0, 0, c.width, c.height).data;
+          const W = c.width;
+          const maxX = Math.round(c.width * 0.12);
+          const maxY = Math.round(c.height * 0.06);
+          // A label can sit a few pixels away from its bond (the O of a C=O),
+          // so an edge only stops after a clear gap of GAP blank lines.
+          const GAP = Math.max(6, Math.round(c.height * 0.006));
+          for (let pass = 0; pass < 2; pass++) {
+            // side: 0 top, 1 bottom, 2 left, 3 right
+            for (let side = 0; side < 4; side++) {
+              const vertical = side < 2;
+              const limit = vertical ? c.height : c.width;
+              const dir = side === 0 || side === 2 ? -1 : 1;
+              let grown = 0;
+              while (grown < (vertical ? maxY : maxX)) {
+                const edge = side === 0 ? y0 : side === 1 ? y1 : side === 2 ? x0 : x1;
+                const from = vertical ? x0 : y0;
+                const to = vertical ? x1 : y1;
+                // Nearest line within GAP (from the edge outwards) that has ink.
+                let found = -1;
+                for (let d = 0; d < GAP && found < 0; d++) {
+                  const line = edge + dir * d;
+                  if (line < 0 || line > limit - 1) break;
+                  for (let k = from; k < to; k++) {
+                    const i = (vertical ? line * W + k : k * W + line) * 4;
+                    if (px[i]! + px[i + 1]! + px[i + 2]! < 600) { // darker than light grey
+                      found = d;
+                      break;
+                    }
+                  }
+                }
+                if (found < 0) break;
+                const step = found + 1;
+                if (side === 0) y0 = Math.max(0, y0 - step);
+                else if (side === 1) y1 = Math.min(limit - 1, y1 + step);
+                else if (side === 2) x0 = Math.max(0, x0 - step);
+                else x1 = Math.min(limit - 1, x1 + step);
+                grown += step;
+                if ((side === 0 && y0 === 0) || (side === 2 && x0 === 0) || (side === 1 && y1 === limit - 1) || (side === 3 && x1 === limit - 1)) break;
+              }
+            }
+          }
+          const m = Math.round(c.width * 0.006);
+          x0 = Math.max(0, x0 - m);
+          y0 = Math.max(0, y0 - m);
+          x1 = Math.min(c.width, x1 + m);
+          y1 = Math.min(c.height, y1 + m);
           const out = document.createElement("canvas");
-          out.width = Math.round(x1 - x0);
-          out.height = Math.round(y1 - y0);
+          out.width = x1 - x0;
+          out.height = y1 - y0;
           out.getContext("2d")!.drawImage(c, x0, y0, out.width, out.height, 0, 0, out.width, out.height);
           return out.toDataURL("image/png");
         },
