@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GEMINI_TEXT_MODELS, classifyGeminiFailure, isKeyDead, readGeminiKeys, usableKeys, usableModels } from "@/lib/ai/gemini-models";
 
 export type QuestionCategory =
   | "CONCEPTUAL"
@@ -57,21 +58,11 @@ export interface SolveDoubtInput {
 }
 
 function getGeminiApiKeys(): string[] {
-  const multi = process.env.GEMINI_API_KEYS?.trim();
-  const single = process.env.GEMINI_API_KEY?.trim();
-
-  const raw = [
-    ...(multi ? multi.split(",") : []),
-    ...(single ? [single] : []),
-  ]
-    .map((k) => k.trim().replace(/^["']|["']$/g, ""))
-    .filter((k) => k && !k.includes("your_gemini_api_key") && k.length > 20);
-
-  const unique = Array.from(new Set(raw));
+  const unique = readGeminiKeys();
   if (unique.length === 0) {
     throw new Error("GEMINI_API_KEY is not configured in environment variables.");
   }
-  return unique;
+  return usableKeys(unique);
 }
 
 const SYSTEM_PROMPT = `You are 'Atomic AI Tutor', an expert NEET/JEE faculty mentor at Atomic Pathshala.
@@ -142,7 +133,7 @@ You MUST output a valid, parseable JSON object matching this schema strictly (no
 
 export async function solveDoubtWithAi(input: SolveDoubtInput): Promise<AiDoubtSolution> {
   const keys = getGeminiApiKeys();
-  const modelNames = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-3.6-flash"];
+  const modelNames = usableModels(GEMINI_TEXT_MODELS);
 
   // Format conversation history for multi-turn context
   let conversationContext = "";
@@ -164,6 +155,7 @@ export async function solveDoubtWithAi(input: SolveDoubtInput): Promise<AiDoubtS
   for (const modelName of modelNames) {
     for (let i = 0; i < keys.length; i++) {
       const apiKey = keys[i]!;
+      if (isKeyDead(apiKey) && keys.some((k) => !isKeyDead(k))) continue;
       try {
         const genAI = new GoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({
@@ -234,6 +226,9 @@ export async function solveDoubtWithAi(input: SolveDoubtInput): Promise<AiDoubtS
           `[DoubtSolverEngine] Key ${i} failed on ${modelName}:`,
           err.message?.slice(0, 120)
         );
+        // A retired model fails for every key — go to the next model. (A
+        // blocked key is remembered and skipped from now on.)
+        if (classifyGeminiFailure(err, apiKey, modelName) === "next-model" && /404|no longer available|not found/i.test(String(err?.message))) break;
       }
     }
   }

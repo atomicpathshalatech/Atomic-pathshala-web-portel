@@ -5,6 +5,7 @@ import {
   mapGeminiError,
 } from "@/lib/ai-chat/errors";
 import { getSystemPrompt } from "@/lib/ai-chat/prompts";
+import { GEMINI_TEXT_MODELS, classifyGeminiFailure, isDeadKeyError, isRetiredModelError, readGeminiKeys, usableKeys, usableModels } from "@/lib/ai/gemini-models";
 import type {
   ChatRequestAttachment,
   ChatRequestBody,
@@ -12,12 +13,9 @@ import type {
   StudentProfile,
 } from "@/types/ai-chat";
 
-// Ordered fallback chain of models. If ALL API keys are exhausted for a
-// given model, we move on to the next model in this list.
-const MODEL_FALLBACKS = [
-  "gemini-3.1-flash-lite",
-  "gemini-3.5-flash",
-] as const;
+// Ordered fallback chain of models (shared with every other Gemini caller).
+// If ALL API keys are exhausted for a given model, we move on to the next.
+const MODEL_FALLBACKS = GEMINI_TEXT_MODELS;
 const RETRY_BASE_DELAY_MS = 800; // small backoff between key attempts
 const RATE_LIMIT_COOLDOWN_MS = 60_000;
 const TRANSIENT_COOLDOWN_MS = 15_000;
@@ -47,17 +45,7 @@ function sleep(ms: number) {
  * Both can be present; results are merged and de-duplicated, preserving order.
  */
 function getApiKeys(): string[] {
-  const multi = process.env.GEMINI_API_KEYS?.trim();
-  const single = process.env.GEMINI_API_KEY?.trim();
-
-  const raw = [
-    ...(multi ? multi.split(",") : []),
-    ...(single ? [single] : []),
-  ]
-    .map((k) => k.trim())
-    .filter((k) => k && !k.includes("your_gemini_api_key") && !k.includes("_gemini_api_key"));
-
-  const uniqueKeys = [...new Set(raw)];
+  const uniqueKeys = readGeminiKeys();
 
   if (uniqueKeys.length === 0) {
     throw new Error(
@@ -65,7 +53,8 @@ function getApiKeys(): string[] {
     );
   }
 
-  return uniqueKeys;
+  // Keys whose Google project is blocked are skipped (see gemini-models).
+  return usableKeys(uniqueKeys);
 }
 
 function maskKey(key: string) {
@@ -253,7 +242,7 @@ export async function generateChatResponse(body: ChatRequestBody): Promise<strin
   const apiKeys = getApiKeys(); // throws immediately if none configured
   let lastError: unknown;
 
-  for (const modelName of MODEL_FALLBACKS) {
+  for (const modelName of usableModels(MODEL_FALLBACKS)) {
     const availableKeys = availableKeysForModel(modelName, apiKeys);
 
     for (let i = 0; i < availableKeys.length; i++) {
@@ -271,6 +260,12 @@ export async function generateChatResponse(body: ChatRequestBody): Promise<strin
         return text.trim();
       } catch (error) {
         lastError = error;
+
+        // A blocked/invalid key: try the next key. A retired model: next model.
+        if (isDeadKeyError(error) || isRetiredModelError(error)) {
+          if (classifyGeminiFailure(error, apiKey, modelName) === "next-key") continue;
+          break;
+        }
 
         if (!isRetryableGeminiError(error)) {
           throw mapGeminiError(error);
@@ -297,7 +292,7 @@ export async function* generateChatResponseStream(
   const apiKeys = getApiKeys(); // throws immediately if none configured
   let lastError: unknown;
 
-  for (const modelName of MODEL_FALLBACKS) {
+  for (const modelName of usableModels(MODEL_FALLBACKS)) {
     const availableKeys = availableKeysForModel(modelName, apiKeys);
 
     for (let i = 0; i < availableKeys.length; i++) {
@@ -336,6 +331,12 @@ export async function* generateChatResponseStream(
 
         lastError = error;
 
+        // A blocked/invalid key: try the next key. A retired model: next model.
+        if (isDeadKeyError(error) || isRetiredModelError(error)) {
+          if (classifyGeminiFailure(error, apiKey, modelName) === "next-key") continue;
+          break;
+        }
+
         if (!isRetryableGeminiError(error)) {
           throw mapGeminiError(error);
         }
@@ -359,7 +360,7 @@ export async function generateQuizQuestions(promptText: string): Promise<string>
   const apiKeys = getApiKeys();
   let lastError: unknown;
 
-  for (const modelName of MODEL_FALLBACKS) {
+  for (const modelName of usableModels(MODEL_FALLBACKS)) {
     const availableKeys = availableKeysForModel(modelName, apiKeys);
 
     for (let i = 0; i < availableKeys.length; i++) {
@@ -387,6 +388,12 @@ export async function generateQuizQuestions(promptText: string): Promise<string>
       } catch (error) {
         lastError = error;
 
+        // A blocked/invalid key: try the next key. A retired model: next model.
+        if (isDeadKeyError(error) || isRetiredModelError(error)) {
+          if (classifyGeminiFailure(error, apiKey, modelName) === "next-key") continue;
+          break;
+        }
+
         if (!isRetryableGeminiError(error)) {
           throw mapGeminiError(error);
         }
@@ -409,7 +416,7 @@ export async function generateBoardExamContent(promptText: string): Promise<stri
   const apiKeys = getApiKeys();
   let lastError: unknown;
 
-  for (const modelName of MODEL_FALLBACKS) {
+  for (const modelName of usableModels(MODEL_FALLBACKS)) {
     const availableKeys = availableKeysForModel(modelName, apiKeys);
 
     for (let i = 0; i < availableKeys.length; i++) {
@@ -437,6 +444,12 @@ export async function generateBoardExamContent(promptText: string): Promise<stri
       } catch (error) {
         lastError = error;
 
+        // A blocked/invalid key: try the next key. A retired model: next model.
+        if (isDeadKeyError(error) || isRetiredModelError(error)) {
+          if (classifyGeminiFailure(error, apiKey, modelName) === "next-key") continue;
+          break;
+        }
+
         if (!isRetryableGeminiError(error)) {
           throw mapGeminiError(error);
         }
@@ -460,7 +473,7 @@ export async function generateStudyPlanContent(promptText: string): Promise<stri
   const apiKeys = getApiKeys();
   let lastError: unknown;
 
-  for (const modelName of MODEL_FALLBACKS) {
+  for (const modelName of usableModels(MODEL_FALLBACKS)) {
     const availableKeys = availableKeysForModel(modelName, apiKeys);
 
     for (let i = 0; i < availableKeys.length; i++) {
@@ -486,6 +499,12 @@ export async function generateStudyPlanContent(promptText: string): Promise<stri
       } catch (error) {
         lastError = error;
 
+        // A blocked/invalid key: try the next key. A retired model: next model.
+        if (isDeadKeyError(error) || isRetiredModelError(error)) {
+          if (classifyGeminiFailure(error, apiKey, modelName) === "next-key") continue;
+          break;
+        }
+
         if (!isRetryableGeminiError(error)) {
           throw mapGeminiError(error);
         }
@@ -509,7 +528,7 @@ export async function generateCoachReply(promptText: string): Promise<string> {
   const apiKeys = getApiKeys();
   let lastError: unknown;
 
-  for (const modelName of MODEL_FALLBACKS) {
+  for (const modelName of usableModels(MODEL_FALLBACKS)) {
     const availableKeys = availableKeysForModel(modelName, apiKeys);
 
     for (let i = 0; i < availableKeys.length; i++) {
@@ -533,6 +552,12 @@ export async function generateCoachReply(promptText: string): Promise<string> {
         return text.trim();
       } catch (error) {
         lastError = error;
+
+        // A blocked/invalid key: try the next key. A retired model: next model.
+        if (isDeadKeyError(error) || isRetiredModelError(error)) {
+          if (classifyGeminiFailure(error, apiKey, modelName) === "next-key") continue;
+          break;
+        }
 
         if (!isRetryableGeminiError(error)) {
           throw mapGeminiError(error);

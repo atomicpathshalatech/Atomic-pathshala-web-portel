@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { isDeadKeyError, isKeyDead, markKeyDead, readGeminiKeys } from "@/lib/ai/gemini-models";
 
 export interface KeyTelemetry {
   keyIndex: number;
@@ -79,7 +80,7 @@ export class GeminiKeyManager {
         this.freeKeys = parseList(rawMulti);
       }
     } else {
-      const combined = Array.from(new Set([...parseList(rawMulti), ...parseList(rawSingle)]));
+      const combined = readGeminiKeys();
       if (combined.length > 2) {
         // As per project rule: 2 paid keys, remaining are free keys
         this.freeKeys = combined.slice(0, combined.length - 2);
@@ -129,8 +130,8 @@ export class GeminiKeyManager {
         if (!key) continue;
         const cd = this.cooldowns.get(key) || 0;
 
-        if (cd > now) {
-          continue; // Key is currently rate limited, skip to next free key
+        if (cd > now || isKeyDead(key)) {
+          continue; // Key is rate limited or blocked, skip to next free key
         }
 
         this.currentFreeIndex = (idx + 1) % this.freeKeys.length;
@@ -159,7 +160,7 @@ export class GeminiKeyManager {
         if (!key) continue;
         const cd = this.cooldowns.get(key) || 0;
 
-        if (cd > now && this.paidKeys.some((k) => (this.cooldowns.get(k) || 0) <= now)) {
+        if (isKeyDead(key) || (cd > now && this.paidKeys.some((k) => (this.cooldowns.get(k) || 0) <= now))) {
           continue;
         }
 
@@ -187,18 +188,13 @@ export class GeminiKeyManager {
 
   private handleKeyError(key: string, err: any) {
     const msg = (err?.message || String(err)).toLowerCase();
-    const isAuthError = msg.includes("401") || msg.includes("unauthenticated") || msg.includes("invalid authentication");
-    const isRateLimit =
-      msg.includes("429") ||
-      msg.includes("quota") ||
-      msg.includes("resourceexhausted") ||
-      msg.includes("503") ||
-      msg.includes("overloaded") ||
-      msg.includes("high demand");
+    // 503 "high demand" is the MODEL being busy, not this key — no cooldown
+    // for it (the model failover already moved on to other models).
+    const isRateLimit = msg.includes("429") || msg.includes("quota") || msg.includes("resourceexhausted");
 
-    if (isAuthError) {
-      // 24hr cooldown for invalid key
-      this.cooldowns.set(key, Date.now() + 24 * 60 * 60 * 1000);
+    if (isDeadKeyError(err)) {
+      // Blocked project / invalid key: shared skip for every Gemini caller.
+      markKeyDead(key);
     } else if (isRateLimit) {
       this.cooldowns.set(key, Date.now() + DEFAULT_COOLDOWN_MS);
     }

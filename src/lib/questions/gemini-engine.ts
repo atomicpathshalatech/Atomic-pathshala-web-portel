@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { geminiKeyManager, CostEstimateResult } from "@/lib/ai/gemini-key-manager";
+import { GEMINI_TEXT_MODELS, classifyGeminiFailure, usableModels } from "@/lib/ai/gemini-models";
 
 export interface ExtractedQuestionData {
   statementEn: string;
@@ -39,15 +40,8 @@ export interface ExtractedQuestionData {
   costEstimate?: CostEstimateResult;
 }
 
-// Cost-effective and ultra-fast Gemini Flash model hierarchy
-const GEMINI_MODELS = [
-  "gemini-3.8-flash",
-  "gemini-3.5-flash",
-  "gemini-3.6-flash",
-  "gemini-3.1-flash-lite",
-  // Retired for new keys (404) — kept last only for older keys.
-  "gemini-2.5-flash",
-] as const;
+// Model order and retired / blocked handling live in one shared place.
+const GEMINI_MODELS = GEMINI_TEXT_MODELS;
 
 /**
  * Executes a Gemini request with automatic Free-Tier priority rotation, 
@@ -58,14 +52,16 @@ export async function executeGeminiWithFailover<T>(
 ): Promise<T> {
   return geminiKeyManager.executeWithRotation(async (client, meta) => {
     let lastError: any = null;
-    for (const modelName of GEMINI_MODELS) {
+    for (const modelName of usableModels(GEMINI_MODELS)) {
       try {
         return await task(client, modelName, meta);
       } catch (err: any) {
         lastError = err;
         const msg = (err?.message || String(err)).toLowerCase();
-        // If it's a rate limit or auth error, throw out to allow key rotation
-        if (msg.includes("429") || msg.includes("quota") || msg.includes("resourceexhausted") || msg.includes("401")) {
+        // A blocked/invalid key fails on every model — go straight to the next key.
+        if (classifyGeminiFailure(err, meta.key, modelName) === "next-key") throw err;
+        // If it's a rate limit, throw out to allow key rotation
+        if (msg.includes("429") || msg.includes("quota") || msg.includes("resourceexhausted")) {
           throw err;
         }
         // If model not found or transient model error, try next model in hierarchy

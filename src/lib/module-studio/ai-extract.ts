@@ -3,8 +3,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { ModuleElementInput } from "@/lib/validation/module";
 import { MODULE_ELEMENT_TYPES } from "@/lib/validation/module";
 import { geminiKeyManager } from "@/lib/ai/gemini-key-manager";
-
-const MODEL_FALLBACKS = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-3.6-flash"] as const;
+import { GEMINI_TEXT_MODELS, classifyGeminiFailure, usableModels } from "@/lib/ai/gemini-models";
 
 const TEXT_ELEMENT_TYPES = MODULE_ELEMENT_TYPES;
 
@@ -26,10 +25,11 @@ export type ExtractionResult = { elements: ModuleElementInput[]; usedFallback: b
  * Structures one page's raw extracted text into typed content blocks via Gemini with Key Rotation.
  */
 export async function structurePageText(pageText: string): Promise<ExtractionResult> {
-  return geminiKeyManager.executeWithRotation(async (genAI: GoogleGenerativeAI) => {
+  return geminiKeyManager.executeWithRotation(async (genAI: GoogleGenerativeAI, meta) => {
     let lastError: string | null = null;
-    for (let i = 0; i < MODEL_FALLBACKS.length; i++) {
-      const modelName = MODEL_FALLBACKS[i]!;
+    const models = usableModels(GEMINI_TEXT_MODELS);
+    for (let i = 0; i < models.length; i++) {
+      const modelName = models[i]!;
       try {
         const model = genAI.getGenerativeModel({
           model: modelName,
@@ -53,7 +53,9 @@ export async function structurePageText(pageText: string): Promise<ExtractionRes
       } catch (err: any) {
         lastError = err instanceof Error ? err.message : "Unknown error";
         const msg = (err?.message || String(err)).toLowerCase();
-        if (msg.includes("429") || msg.includes("quota") || msg.includes("401")) {
+        // A blocked key or a rate limit: let the key manager try the next key.
+        if (classifyGeminiFailure(err, meta.key, modelName) === "next-key") throw err;
+        if (msg.includes("429") || msg.includes("quota")) {
           throw err;
         }
       }
