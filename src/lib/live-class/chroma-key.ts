@@ -502,7 +502,9 @@ void main() {
     enclosed += farA + farB;
     thin = max(thin, nearA * nearB);   // person close on both sides of one axis
   }
-  a = max(a, holeFill * thin * smoothstep(5.5, 6.5, enclosed));
+  // Only where the key saw some of the person (a reflection) — a gap that is
+  // pure screen colour (between fingers, under an arm) stays open.
+  a = max(a, holeFill * thin * smoothstep(5.5, 6.5, enclosed) * smoothstep(0.1, 0.22, raw.r));
   float edge = clamp((1.0 - mn) * 1.4, 0.0, 1.0);
   gl_FragColor = vec4(a, edge, raw.b, 1.0);
 }`;
@@ -528,6 +530,7 @@ uniform sampler2D mask;
 uniform vec2 keyDir;       // unit key chroma direction in camera space
 uniform float keyMag;      // key chroma magnitude in camera space
 uniform float spill, faceLift, temperature, tint, saturation, debugView;
+uniform vec3 keyRgb;       // the screen colour in camera space
 
 void main() {
   vec3 rgb = texture2D(src, uv).rgb;
@@ -538,6 +541,14 @@ void main() {
     float v = debugView < 1.5 ? a : debugView < 2.5 ? edge : m.b;
     gl_FragColor = vec4(vec3(v), 1.0);
     return;
+  }
+  // Background unmix: an edge pixel is part person, part screen. Taking the
+  // screen's share out (C = a*F + (1-a)*B, solved for F) leaves the person's
+  // own colour on the edge: no light / green rim on a dark board and no dark
+  // rim on a white one. Fully solid pixels are untouched.
+  if (a > 0.02 && a < 0.985) {
+    vec3 f = (rgb - (1.0 - a) * keyRgb) / max(a, 0.05);
+    rgb = mix(rgb, clamp(f, 0.0, 1.0), 1.0 - smoothstep(0.6, 0.985, a));
   }
   // Spill: remove the screen-colour component of the chroma, strongest on
   // edge pixels facing the screen, light inside (natural green clothes stay).
@@ -645,7 +656,7 @@ export class ChromaKeyer {
     const key = this.compile(KEY_FRAG, ["src", "srcTexel", "keyC", "keyY", "t0", "t1", "shadowTol", "skinProtect", "exposure", "shadows", "contrast", "wb", "radius", "hairDetail"]);
     const refine = this.compile(REFINE_FRAG, ["mask", "src", "maskTexel", "spread", "clipLo", "clipHi", "colorSigma", "holeFill"]);
     const temporal = this.compile(TEMPORAL_FRAG, ["cur", "prev", "stability", "hasPrev"]);
-    const comp = this.compile(COMP_FRAG, ["src", "mask", "keyDir", "keyMag", "spill", "faceLift", "temperature", "tint", "saturation", "debugView"]);
+    const comp = this.compile(COMP_FRAG, ["src", "mask", "keyDir", "keyMag", "keyRgb", "spill", "faceLift", "temperature", "tint", "saturation", "debugView"]);
     const raw = this.compile(RAW_FRAG, ["src"]);
     if (!key || !refine || !temporal || !comp || !raw) return false;
     this.progs = { key, refine, temporal, comp, raw };
@@ -851,6 +862,7 @@ export class ChromaKeyer {
     gl.uniform1i(cp.u.mask!, 1);
     gl.uniform2f(cp.u.keyDir!, (ocb - 0.5) / kd, (ocr - 0.5) / kd);
     gl.uniform1f(cp.u.keyMag!, kd);
+    gl.uniform3f(cp.u.keyRgb!, key[0], key[1], key[2]);
     gl.uniform1f(cp.u.spill!, s.spill);
     gl.uniform1f(cp.u.faceLift!, clamp(s.faceEnhance + (s.preset === "AUTO" ? this.live.faceLift * 0.6 : 0), 0, 1));
     gl.uniform1f(cp.u.temperature!, s.temperature);

@@ -3545,9 +3545,11 @@ export function TeacherLiveClassRoom({
                 touchAction: "none",
                 zIndex: 35,
               }}
-              className={`overflow-hidden border-0 shadow-2xl cursor-grab active:cursor-grabbing select-none group/cam ${
-                chromaKeyEnabled ? "bg-transparent" : "bg-black"
-              } ${isCameraCircle ? "rounded-full" : "rounded-2xl"}`}
+              // Keyed (green screen) teacher: just the person over the board — no
+              // box, shadow or rounded clipping around them.
+              className={`overflow-hidden border-0 cursor-grab active:cursor-grabbing select-none group/cam ${
+                chromaKeyEnabled ? "bg-transparent" : `bg-black shadow-2xl ${isCameraCircle ? "rounded-full" : "rounded-2xl"}`
+              }`}
             >
               <VideoStrip
                 whiteboardSessionId={wbSession.id}

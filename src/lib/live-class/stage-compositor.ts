@@ -619,7 +619,10 @@ export class StageCompositor {
           const keyed = this.keyer.process(video, video.videoWidth, video.videoHeight);
           if (keyed) {
             // Keyed teacher: no bubble, no ring — just the person over the board.
-            drawKeyedTeacher(ctx, keyed, crop, box, Boolean(chroma.naturalShadow));
+            // The camera frame cuts the person straight across the bottom; near the
+            // bottom of the board, sit them on its edge so that cut is hidden.
+            const seat = box.y + box.h > H * 0.85 ? { ...box, y: H - box.h } : box;
+            drawKeyedTeacher(ctx, keyed, crop, seat, Boolean(chroma.naturalShadow));
             return this.drawOverlays();
           }
         } else if (!this.warnedChroma) {
