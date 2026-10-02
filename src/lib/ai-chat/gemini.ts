@@ -5,7 +5,7 @@ import {
   mapGeminiError,
 } from "@/lib/ai-chat/errors";
 import { getSystemPrompt } from "@/lib/ai-chat/prompts";
-import { GEMINI_TEXT_MODELS, classifyGeminiFailure, isDeadKeyError, isRetiredModelError, readGeminiKeys, usableKeys, usableModels } from "@/lib/ai/gemini-models";
+import { GEMINI_FAST_MODELS, GEMINI_TEXT_MODELS, LightGoogleGenerativeAI, classifyGeminiFailure, isDeadKeyError, isRetiredModelError, readGeminiKeys, usableKeys, usableModels } from "@/lib/ai/gemini-models";
 import type {
   ChatRequestAttachment,
   ChatRequestBody,
@@ -108,7 +108,7 @@ function markRetryableFailure(modelName: string, apiKey: string, error: unknown)
 }
 
 function createModel(body: ChatRequestBody, modelName: string, apiKey: string) {
-  const genAI = new GoogleGenerativeAI(apiKey);
+  const genAI = new LightGoogleGenerativeAI(apiKey);
 
   return genAI.getGenerativeModel({
     model: modelName,
@@ -360,7 +360,7 @@ export async function generateQuizQuestions(promptText: string): Promise<string>
   const apiKeys = getApiKeys();
   let lastError: unknown;
 
-  for (const modelName of usableModels(MODEL_FALLBACKS)) {
+  for (const modelName of usableModels(GEMINI_FAST_MODELS)) {
     const availableKeys = availableKeysForModel(modelName, apiKeys);
 
     for (let i = 0; i < availableKeys.length; i++) {
@@ -368,12 +368,12 @@ export async function generateQuizQuestions(promptText: string): Promise<string>
       // always in range — noUncheckedIndexedAccess just can't see that.
       const apiKey = availableKeys[i]!;
       try {
-        const genAI = new GoogleGenerativeAI(apiKey);
+        const genAI = new LightGoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({
           model: modelName,
           systemInstruction: QUIZ_SYSTEM_INSTRUCTION,
           generationConfig: {
-            maxOutputTokens: 8192,
+            maxOutputTokens: 32768,
            temperature: 0.1,
             topP: 0.95,
             responseMimeType: "application/json",
@@ -416,7 +416,7 @@ export async function generateBoardExamContent(promptText: string): Promise<stri
   const apiKeys = getApiKeys();
   let lastError: unknown;
 
-  for (const modelName of usableModels(MODEL_FALLBACKS)) {
+  for (const modelName of usableModels(GEMINI_FAST_MODELS)) {
     const availableKeys = availableKeysForModel(modelName, apiKeys);
 
     for (let i = 0; i < availableKeys.length; i++) {
@@ -424,12 +424,12 @@ export async function generateBoardExamContent(promptText: string): Promise<stri
       // always in range — noUncheckedIndexedAccess just can't see that.
       const apiKey = availableKeys[i]!;
       try {
-        const genAI = new GoogleGenerativeAI(apiKey);
+        const genAI = new LightGoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({
           model: modelName,
           systemInstruction: BOARD_EXAM_SYSTEM_INSTRUCTION,
           generationConfig: {
-            maxOutputTokens: 8192,
+            maxOutputTokens: 32768,
             temperature: 0.1,
             topP: 0.95,
             responseMimeType: "application/json",
@@ -479,12 +479,12 @@ export async function generateStudyPlanContent(promptText: string): Promise<stri
     for (let i = 0; i < availableKeys.length; i++) {
       const apiKey = availableKeys[i]!;
       try {
-        const genAI = new GoogleGenerativeAI(apiKey);
+        const genAI = new LightGoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({
           model: modelName,
           systemInstruction: STUDY_PLAN_SYSTEM_INSTRUCTION,
           generationConfig: {
-            maxOutputTokens: 4096,
+            maxOutputTokens: 16384,
             temperature: 0.3,
             topP: 0.95,
             responseMimeType: "application/json",
@@ -534,12 +534,12 @@ export async function generateCoachReply(promptText: string): Promise<string> {
     for (let i = 0; i < availableKeys.length; i++) {
       const apiKey = availableKeys[i]!;
       try {
-        const genAI = new GoogleGenerativeAI(apiKey);
+        const genAI = new LightGoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({
           model: modelName,
           systemInstruction: COACH_SYSTEM_INSTRUCTION,
           generationConfig: {
-            maxOutputTokens: 1024,
+            maxOutputTokens: 2048,
             temperature: 0.6,
             topP: 0.95,
           },

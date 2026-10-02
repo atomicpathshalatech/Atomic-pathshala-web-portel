@@ -372,13 +372,26 @@ export function parseQuizJson(content: string): QuizQuestion[] | null {
   const raw = match?.[1] ?? content;
 
   try {
-    const parsed = parseAiJson(raw.trim()) as { questions?: unknown[] };
-    if (!parsed.questions || !Array.isArray(parsed.questions) || parsed.questions.length === 0) {
+    // The model sometimes returns the bare array instead of {"questions": [...]}.
+    const parsed = parseAiJson(raw.trim()) as { questions?: unknown[] } | unknown[];
+    const list = Array.isArray(parsed) ? parsed : parsed?.questions;
+    if (!list || !Array.isArray(list) || list.length === 0) {
       return null;
     }
 
+    // A question that has a worked solution but no separate "explanation"
+    // is still complete — use the solution rather than dropping it.
+    const filled = list.map((q) => {
+      const x = q as Partial<QuizQuestion>;
+      if (x && typeof x === "object" && !(typeof x.explanation === "string" && x.explanation.trim())) {
+        const fallback = [x.solution, x.finalAnswer, x.concept].find((v) => typeof v === "string" && v.trim());
+        if (fallback) return { ...x, explanation: fallback };
+      }
+      return q;
+    });
+
     // Drop any malformed/incomplete question instead of crashing the whole quiz.
-    const validQuestions = parsed.questions.filter(isValidQuestion);
+    const validQuestions = filled.filter(isValidQuestion);
     if (validQuestions.length === 0) return null;
 
     return validQuestions;

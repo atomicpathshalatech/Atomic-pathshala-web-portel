@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { GEMINI_TEXT_MODELS, classifyGeminiFailure, isKeyDead, readGeminiKeys, usableKeys, usableModels } from "@/lib/ai/gemini-models";
+import { GEMINI_TEXT_MODELS, LightGoogleGenerativeAI, classifyGeminiFailure, isKeyDead, readGeminiKeys, usableKeys, usableModels } from "@/lib/ai/gemini-models";
 
 export type QuestionCategory =
   | "CONCEPTUAL"
@@ -157,14 +157,14 @@ export async function solveDoubtWithAi(input: SolveDoubtInput): Promise<AiDoubtS
       const apiKey = keys[i]!;
       if (isKeyDead(apiKey) && keys.some((k) => !isKeyDead(k))) continue;
       try {
-        const genAI = new GoogleGenerativeAI(apiKey);
+        const genAI = new LightGoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({
           model: modelName,
           systemInstruction: SYSTEM_PROMPT,
           generationConfig: {
             responseMimeType: "application/json",
             temperature: 0.25,
-            maxOutputTokens: 2048,
+            maxOutputTokens: 4096,
           },
         });
 

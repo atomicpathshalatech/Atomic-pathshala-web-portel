@@ -34,7 +34,7 @@ export async function structurePageText(pageText: string): Promise<ExtractionRes
         const model = genAI.getGenerativeModel({
           model: modelName,
           systemInstruction: SYSTEM_PROMPT,
-          generationConfig: { maxOutputTokens: 4096, temperature: 0.1, responseMimeType: "application/json" },
+          generationConfig: { maxOutputTokens: 16384, temperature: 0.1, responseMimeType: "application/json" },
         });
         const result = await model.generateContent(pageText);
         const raw = result.response.text();

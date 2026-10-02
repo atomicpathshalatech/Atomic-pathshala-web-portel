@@ -191,7 +191,7 @@ Respond with ONLY valid JSON adhering to this exact schema (no markdown fences, 
         generationConfig: {
           temperature: 0.2, // Low temperature for high factual grounding
           topP: 0.8,
-          maxOutputTokens: 4000,
+          maxOutputTokens: 16000,
           responseMimeType: "application/json",
         },
       });

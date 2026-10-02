@@ -6,6 +6,7 @@
 
 import { executeGeminiWithFailover } from "@/lib/questions/gemini-engine";
 import { parseAiJson } from "@/lib/ai/latex-json";
+import { lightThinking } from "@/lib/ai/gemini-models";
 import { CamDrawDocument, CamDrawElement, createEmptyCamDrawDocument } from "./types";
 import { normalizeGraphTopology, centerStructureOnCanvas } from "./graph";
 import { validateChemicalDocument } from "./validator";
@@ -131,7 +132,8 @@ Ensure all atoms, bonds, rings, substituents, vertical branches, stereochemistry
 Subject hint: ${options.hintSubject || "Chemistry"}.`;
 
     const rawText = await executeGeminiWithFailover(async (client, modelName) => {
-      const model = client.getGenerativeModel({ model: modelName });
+      // Reading a structure is hard: allow some thinking here.
+      const model = client.getGenerativeModel({ model: modelName, generationConfig: lightThinking(modelName, "low") as Record<string, unknown> });
       const response = await model.generateContent([
         ADVANCED_CHEMICAL_SYSTEM_PROMPT,
         inlinePart,

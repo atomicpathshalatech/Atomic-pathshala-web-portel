@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { isDeadKeyError, isKeyDead, markKeyDead, readGeminiKeys } from "@/lib/ai/gemini-models";
+import { LightGoogleGenerativeAI, isDeadKeyError, isKeyDead, markKeyDead, readGeminiKeys } from "@/lib/ai/gemini-models";
 
 export interface KeyTelemetry {
   keyIndex: number;
@@ -138,7 +138,7 @@ export class GeminiKeyManager {
         this.trackRequest(key, false);
 
         try {
-          const client = new GoogleGenerativeAI(key);
+          const client = new LightGoogleGenerativeAI(key);
           const result = await task(client, { key, tier: "FREE", index: idx + 1 });
           return result;
         } catch (err: any) {
@@ -168,7 +168,7 @@ export class GeminiKeyManager {
         this.trackRequest(key, false);
 
         try {
-          const client = new GoogleGenerativeAI(key);
+          const client = new LightGoogleGenerativeAI(key);
           const result = await task(client, { key, tier: "PAID", index: idx + 1 });
           return result;
         } catch (err: any) {

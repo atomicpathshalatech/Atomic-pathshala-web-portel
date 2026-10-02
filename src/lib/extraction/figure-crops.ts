@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { executeGeminiWithFailover } from "@/lib/questions/gemini-engine";
 import { parseAiJson } from "@/lib/ai/latex-json";
+import { lightThinking } from "@/lib/ai/gemini-models";
 import { launchBrowser } from "@/lib/pdf/html-to-pdf";
 
 /**
@@ -44,7 +45,7 @@ type Located = { page: number; question: number; place: string; box: number[] };
 async function locateFigures(images: string[]): Promise<Located[]> {
   const parts = images.map((dataUrl) => ({ inlineData: { mimeType: "image/jpeg", data: dataUrl.replace(/^data:[^,]+,/, "") } }));
   const raw = await executeGeminiWithFailover(async (client, modelName) => {
-    const model = client.getGenerativeModel({ model: modelName, generationConfig: { responseMimeType: "application/json", temperature: 0 } });
+    const model = client.getGenerativeModel({ model: modelName, generationConfig: { responseMimeType: "application/json", temperature: 0, ...lightThinking(modelName, "low") } });
     const res = await model.generateContent([LOCATE_PROMPT, ...parts]);
     return res.response?.text() || "";
   });

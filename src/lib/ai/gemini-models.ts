@@ -10,6 +10,8 @@
  * 3.1-flash-lite is the fast last resort. The 2.5 family is retired for these
  * keys (404 "no longer available"), and the pro models have no quota (429).
  */
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
 export const GEMINI_TEXT_MODELS = [
   "gemini-3.6-flash",
   "gemini-3.8-flash",
@@ -119,4 +121,28 @@ export function readGeminiKeys(): string[] {
     .map((k) => k.trim().replace(/^["']|["']$/g, ""))
     .filter((k) => k.length > 20 && k.length <= 120 && !k.includes("your_gemini_api_key") && !k.includes("_gemini_api_key"));
   return Array.from(new Set(raw));
+}
+
+/**
+ * Gemini 3 models "think" before answering by default, and those thinking
+ * tokens count against maxOutputTokens: a 10-question quiz came back cut off
+ * mid-JSON (→ 0 questions) after ~60 s. Light thinking keeps answers whole and
+ * fast. MINIMAL isn't accepted by every model (3.8-flash / flash-latest want
+ * LOW), so the level is picked per model.
+ */
+export function lightThinking(model: string, level: "minimal" | "low" = "minimal") {
+  const needsLow = model === "gemini-3.8-flash" || model === "gemini-flash-latest";
+  return { thinkingConfig: { thinkingLevel: level === "minimal" && needsLow ? "low" : level } };
+}
+
+/**
+ * The SDK client every Gemini caller uses: each model it hands out gets light
+ * thinking unless the caller set its own thinkingConfig.
+ */
+export class LightGoogleGenerativeAI extends GoogleGenerativeAI {
+  getGenerativeModel(...args: Parameters<GoogleGenerativeAI["getGenerativeModel"]>) {
+    const [params, options] = args;
+    const generationConfig = { ...lightThinking(params.model), ...(params.generationConfig ?? {}) } as typeof params.generationConfig;
+    return super.getGenerativeModel({ ...params, generationConfig }, options);
+  }
 }
