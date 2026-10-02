@@ -6,6 +6,7 @@ import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { deleteDppCascading } from "@/lib/team/resource-delete";
+import { assertChapterAccess } from "@/lib/chapters/access";
 
 export async function PATCH(
   request: NextRequest,
@@ -15,6 +16,7 @@ export async function PATCH(
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.DPP_CREATE || PERMISSIONS.CHAPTER_UPDATE);
+    await assertChapterAccess(session?.user?.id ?? "", params.id, "write");
 
     const dpp = await prisma.dpp.findUnique({
       where: { id: params.dppId, chapterId: params.id },
@@ -62,6 +64,7 @@ export async function DELETE(
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.DPP_DELETE || PERMISSIONS.CHAPTER_UPDATE);
+    await assertChapterAccess(session?.user?.id ?? "", params.id, "write");
 
     const dpp = await prisma.dpp.findUnique({
       where: { id: params.dppId, chapterId: params.id },

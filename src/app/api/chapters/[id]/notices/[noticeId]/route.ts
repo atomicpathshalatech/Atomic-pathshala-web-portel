@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { assertChapterAccess } from "@/lib/chapters/access";
 
 // PATCH /api/chapters/[id]/notices/[noticeId] - Update or toggle pin on a notice
 export async function PATCH(
@@ -12,6 +13,12 @@ export async function PATCH(
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    // Only this chapter's own teacher (or a Super Admin / "manage all chapters") may change its notices.
+    try {
+      await assertChapterAccess(session.user.id, params.id, "write");
+    } catch {
+      return NextResponse.json({ error: "Only this chapter's teacher can manage its notices." }, { status: 403 });
     }
 
     const { id: chapterId, noticeId } = params;
@@ -56,6 +63,12 @@ export async function DELETE(
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    // Only this chapter's own teacher (or a Super Admin / "manage all chapters") may change its notices.
+    try {
+      await assertChapterAccess(session.user.id, params.id, "write");
+    } catch {
+      return NextResponse.json({ error: "Only this chapter's teacher can manage its notices." }, { status: 403 });
     }
 
     const { id: chapterId, noticeId } = params;

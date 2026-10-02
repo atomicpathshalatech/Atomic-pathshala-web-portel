@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { assertChapterAccess } from "@/lib/chapters/access";
 
 // GET /api/chapters/[id]/notices - Fetch all notices for a chapter
 export async function GET(
@@ -47,6 +48,12 @@ export async function POST(
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    // Only this chapter's own teacher (or a Super Admin / "manage all chapters") may change its notices.
+    try {
+      await assertChapterAccess(session.user.id, params.id, "write");
+    } catch {
+      return NextResponse.json({ error: "Only this chapter's teacher can manage its notices." }, { status: 403 });
     }
 
     const chapterId = params.id;

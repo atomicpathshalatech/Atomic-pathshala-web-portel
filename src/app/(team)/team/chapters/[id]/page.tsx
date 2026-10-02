@@ -5,6 +5,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
+import { canAccessChapter, getChapterScope } from "@/lib/chapters/access";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { ChapterTeamViewWrapper } from "@/components/team-portal/ChapterTeamViewWrapper";
 import { ChapterDetailData } from "@/components/chapter-detail/ChapterDetailView";
@@ -22,7 +23,12 @@ export default async function ChapterDetailPage({ params }: { params: { id: stri
   const canRead = await hasPermission(session.user.id, PERMISSIONS.CHAPTER_READ);
   if (!canRead) redirect("/team");
 
-  const canUpdate = await hasPermission(session.user.id, PERMISSIONS.CHAPTER_UPDATE);
+  // Another teacher's chapter can't be opened; editing needs it to be your own
+  // (or the "manage all chapters" permission).
+  const scope = await getChapterScope(session.user.id);
+  if (!(await canAccessChapter(scope, params.id, "read"))) redirect("/team/chapters");
+  const canUpdate =
+    (await hasPermission(session.user.id, PERMISSIONS.CHAPTER_UPDATE)) && (await canAccessChapter(scope, params.id, "write"));
   const canReviewPermission = await hasPermission(session.user.id, PERMISSIONS.CHAPTER_REVIEW);
 
   const chapter = await prisma.chapter.findUnique({

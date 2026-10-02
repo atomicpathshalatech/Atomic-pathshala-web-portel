@@ -16,7 +16,8 @@ export default async function EditFacultyPage({ params }: { params: { id: string
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) redirect("/login");
 
-  const canUpdate = await hasPermission(session.user.id, PERMISSIONS.TEACHER_UPDATE);
+  const canUpdate =
+    (await hasPermission(session.user.id, PERMISSIONS.FACULTY_DIRECTORY)) && (await hasPermission(session.user.id, PERMISSIONS.TEACHER_UPDATE));
   if (!canUpdate) redirect("/team/faculty");
 
   const teacher = await prisma.teacher.findUnique({

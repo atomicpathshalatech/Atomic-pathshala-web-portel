@@ -6,11 +6,13 @@ import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { chapterSchema } from "@/lib/validation/chapter";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { assertChapterAccess } from "@/lib/chapters/access";
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions);
     await requirePermission(session?.user?.id, PERMISSIONS.CHAPTER_READ);
+    await assertChapterAccess(session?.user?.id ?? "", params.id, "read");
 
     const chapter = await prisma.chapter.findUnique({
       where: { id: params.id },
@@ -34,6 +36,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.CHAPTER_UPDATE);
+    await assertChapterAccess(session?.user?.id ?? "", params.id, "write");
 
     const existing = await prisma.chapter.findUnique({ where: { id: params.id } });
     if (!existing) return apiError("Chapter not found", 404);
@@ -96,6 +99,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.CHAPTER_DELETE);
+    await assertChapterAccess(session?.user?.id ?? "", params.id, "write");
 
     const force = request.nextUrl.searchParams.get("force") === "1";
 

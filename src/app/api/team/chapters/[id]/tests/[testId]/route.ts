@@ -6,6 +6,7 @@ import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { deleteTestCascading } from "@/lib/team/resource-delete";
+import { assertChapterAccess } from "@/lib/chapters/access";
 
 export async function PATCH(
   request: NextRequest,
@@ -15,6 +16,7 @@ export async function PATCH(
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.TEST_UPDATE || PERMISSIONS.CHAPTER_UPDATE);
+    await assertChapterAccess(session?.user?.id ?? "", params.id, "write");
 
     const test = await prisma.test.findUnique({
       where: { id: params.testId },
@@ -61,6 +63,7 @@ export async function DELETE(
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.TEST_DELETE || PERMISSIONS.CHAPTER_UPDATE);
+    await assertChapterAccess(session?.user?.id ?? "", params.id, "write");
 
     // deleteTestCascading explicitly removes this test's Attempt rows (and
     // everything that cascades from them) inside a transaction before

@@ -21,7 +21,11 @@ export async function GET(request: NextRequest) {
     const medium = searchParams.get("medium");
     const status = searchParams.get("status");
 
+    // Only the chapters this person may see (own ones, unless allowed all).
+    const { getChapterScope, chapterListWhere } = await import("@/lib/chapters/access");
+    const scopeWhere = chapterListWhere(await getChapterScope(session!.user.id));
     const where: Prisma.ChapterWhereInput = {
+      AND: [scopeWhere],
       ...(subjectId ? { subjectId } : {}),
       ...(courseId ? { subject: { courseId } } : {}),
       ...(medium ? { medium: medium as Prisma.EnumMediumFilter } : {}),

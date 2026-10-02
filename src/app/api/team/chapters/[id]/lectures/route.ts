@@ -10,6 +10,7 @@ import { getChapterSequenceState } from "@/lib/chapters/sequence";
 import { computeISTScheduleDates } from "@/lib/date-utils";
 import { newTimeBlockReason } from "@/lib/schedule/reschedule-guard";
 import { regenerateCreativeAwaited } from "@/lib/creative/engine";
+import { assertChapterAccess } from "@/lib/chapters/access";
 
 export async function GET(
   request: NextRequest,
@@ -19,6 +20,7 @@ export async function GET(
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.LECTURE_READ);
+    await assertChapterAccess(session?.user?.id ?? "", params.id, "read");
 
     const lectures = await prisma.lecture.findMany({
       where: { chapterId: params.id },
@@ -42,6 +44,7 @@ export async function POST(
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.LECTURE_CREATE);
+    await assertChapterAccess(session?.user?.id ?? "", params.id, "write");
 
     const chapter = await prisma.chapter.findUnique({
       where: { id: params.id },

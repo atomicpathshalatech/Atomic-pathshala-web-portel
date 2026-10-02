@@ -70,7 +70,7 @@ const NAV_SECTIONS: { title?: string; items: { href: string; label: string; icon
   {
     title: "People",
     items: [
-      { href: "/team/faculty", label: "Faculty", icon: "school", permission: PERMISSIONS.TEACHER_READ },
+      { href: "/team/faculty", label: "Faculty", icon: "school", permission: PERMISSIONS.FACULTY_DIRECTORY },
       { href: "/team/contracts", label: "Contracts & Agreements", icon: "description", permission: PERMISSIONS.CONTRACT_READ_ANY },
       { href: "/team/onboarding", label: "Onboarding", icon: "pending_actions", permission: PERMISSIONS.ONBOARDING_REVIEW },
       { href: "/team/leaderboard", label: "Leaderboard", icon: "leaderboard", permission: PERMISSIONS.LEADERBOARD_READ },

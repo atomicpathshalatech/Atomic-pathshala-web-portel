@@ -7,6 +7,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { generateDppCode } from "@/lib/dpp/code";
 import { LanguageMode } from "@prisma/client";
+import { assertChapterAccess } from "@/lib/chapters/access";
 
 export async function POST(
   request: NextRequest,
@@ -16,6 +17,7 @@ export async function POST(
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.DPP_CREATE);
+    await assertChapterAccess(session?.user?.id ?? "", params.id, "write");
 
     const chapter = await prisma.chapter.findUnique({
       where: { id: params.id },

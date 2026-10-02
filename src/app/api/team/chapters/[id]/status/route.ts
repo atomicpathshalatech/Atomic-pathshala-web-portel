@@ -7,6 +7,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { chapterStatusTransitionSchema } from "@/lib/validation/chapter";
 import { canTransition, REVIEW_MANAGED_STATES, type ChapterStatusValue } from "@/lib/chapters/state-machine";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { assertChapterAccess } from "@/lib/chapters/access";
 
 /**
  * Chapter state-machine transition — backend-enforced via canTransition()
@@ -42,6 +43,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     } else {
       await requirePermission(session.user.id, PERMISSIONS.CHAPTER_UPDATE);
     }
+    await assertChapterAccess(session.user.id, params.id, "write");
 
     const currentStatus = chapter.status as ChapterStatusValue;
     if (!canTransition(currentStatus, nextStatus)) {

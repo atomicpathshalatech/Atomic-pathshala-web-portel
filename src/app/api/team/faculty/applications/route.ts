@@ -9,7 +9,7 @@ import { apiSuccess, handleApiError } from "@/lib/api/response";
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    await requirePermission(session?.user?.id, PERMISSIONS.TEACHER_READ);
+    await requirePermission(session?.user?.id, PERMISSIONS.FACULTY_DIRECTORY);
 
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");

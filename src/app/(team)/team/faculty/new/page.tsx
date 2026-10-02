@@ -14,7 +14,8 @@ export default async function NewFacultyPage() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) redirect("/login");
 
-  const canCreate = await hasPermission(session.user.id, PERMISSIONS.TEACHER_CREATE);
+  const canCreate =
+    (await hasPermission(session.user.id, PERMISSIONS.FACULTY_DIRECTORY)) && (await hasPermission(session.user.id, PERMISSIONS.TEACHER_CREATE));
   if (!canCreate) redirect("/team/faculty");
 
   return (

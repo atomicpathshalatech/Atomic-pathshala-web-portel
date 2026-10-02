@@ -8,6 +8,7 @@ import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { ChaptersBoard, type ChapterCard } from "@/components/team-portal/ChaptersBoard";
+import { chapterListWhere, getChapterScope } from "@/lib/chapters/access";
 
 export const metadata: Metadata = {
   title: "Chapters",
@@ -29,7 +30,11 @@ export default async function ChaptersListPage({
     hasPermission(session.user.id, PERMISSIONS.CHAPTER_REVIEW),
   ]);
 
+  // Teachers see only their own chapters (created by them or with a lecture
+  // they teach); Super Admin / "manage all chapters" sees every chapter.
+  const scope = await getChapterScope(session.user.id);
   const chapters = await prisma.chapter.findMany({
+    where: chapterListWhere(scope),
     select: {
       id: true,
       chapterId: true,

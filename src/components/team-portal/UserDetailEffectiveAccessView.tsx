@@ -140,6 +140,29 @@ const MODULES_MATRIX = [
       { code: "admin.audit.view", label: "Audit Logs" },
     ],
   },
+  {
+    module: "Chapters",
+    description: "Own chapters by default; \"All teachers' chapters\" lets this person see and edit every teacher's chapters",
+    actions: [
+      { code: "chapter.read", label: "View" },
+      { code: "chapter.create", label: "Create" },
+      { code: "chapter.update", label: "Edit" },
+      { code: "chapter.delete", label: "Delete" },
+      { code: "chapter.publish", label: "Publish" },
+      { code: "chapter.review", label: "Review" },
+      { code: "chapter.manage_all", label: "All teachers' chapters" },
+    ],
+  },
+  {
+    module: "Faculty",
+    description: "Faculty Directory: every educator's profile, applications, attendance & teaching watch time",
+    actions: [
+      { code: "faculty.directory", label: "Faculty Directory" },
+      { code: "teacher.create", label: "Add Teacher" },
+      { code: "teacher.update", label: "Edit Teacher" },
+      { code: "teacher.delete", label: "Delete Teacher" },
+    ],
+  },
 ];
 
 export function UserDetailEffectiveAccessView({ userId }: { userId: string }) {

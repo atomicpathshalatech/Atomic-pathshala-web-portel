@@ -8,6 +8,7 @@ import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { chapterReviewDecisionSchema } from "@/lib/validation/chapter";
 import type { ChapterStatusValue } from "@/lib/chapters/state-machine";
 import type { ChapterReviewAction, ChapterStatus } from "@prisma/client";
+import { assertChapterAccess } from "@/lib/chapters/access";
 
 const DECISION_TO_STATUS: Record<"APPROVE" | "REJECT" | "REQUEST_CHANGES", ChapterStatus> = {
   APPROVE: "APPROVED",
@@ -30,6 +31,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.CHAPTER_REVIEW);
+    await assertChapterAccess(session?.user?.id ?? "", params.id, "read");
 
     const chapter = await prisma.chapter.findUnique({ where: { id: params.id } });
     if (!chapter) return apiError("Chapter not found", 404);

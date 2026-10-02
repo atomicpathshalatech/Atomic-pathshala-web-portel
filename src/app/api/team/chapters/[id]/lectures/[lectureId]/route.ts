@@ -7,6 +7,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { computeISTScheduleDates } from "@/lib/date-utils";
 import { newTimeBlockReason, rescheduleBlockReason } from "@/lib/schedule/reschedule-guard";
+import { assertChapterAccess } from "@/lib/chapters/access";
 
 export async function PATCH(
   request: NextRequest,
@@ -16,6 +17,7 @@ export async function PATCH(
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.LECTURE_CREATE);
+    await assertChapterAccess(session?.user?.id ?? "", params.id, "write");
 
     const lecture = await prisma.lecture.findUnique({
       where: { id: params.lectureId, chapterId: params.id },
@@ -174,6 +176,7 @@ export async function DELETE(
       (await hasPermission(session.user.id, PERMISSIONS.LECTURE_DELETE)) ||
       (await hasPermission(session.user.id, PERMISSIONS.CHAPTER_UPDATE));
     if (!canDelete) throw new ForbiddenError("You do not have permission to delete this lecture.");
+    await assertChapterAccess(session.user.id, params.id, "write");
 
     const lecture = await prisma.lecture.findUnique({
       where: { id: params.lectureId, chapterId: params.id },

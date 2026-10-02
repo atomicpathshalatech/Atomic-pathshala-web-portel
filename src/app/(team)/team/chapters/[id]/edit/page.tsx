@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
+import { canAccessChapter, getChapterScope } from "@/lib/chapters/access";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { ChapterForm } from "@/components/team-portal/ChapterForm";
 import type { MediumValue } from "@/lib/validation/chapter";
@@ -17,7 +18,9 @@ export default async function EditChapterPage({ params }: { params: { id: string
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) redirect("/login");
 
-  const canUpdate = await hasPermission(session.user.id, PERMISSIONS.CHAPTER_UPDATE);
+  const canUpdate =
+    (await hasPermission(session.user.id, PERMISSIONS.CHAPTER_UPDATE)) &&
+    (await canAccessChapter(await getChapterScope(session.user.id), params.id, "write"));
   if (!canUpdate) redirect(`/team/chapters/${params.id}`);
 
   const chapter = await prisma.chapter.findUnique({

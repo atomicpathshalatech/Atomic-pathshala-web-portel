@@ -14,7 +14,7 @@ import { getLoginUrl } from "@/lib/email/app-url";
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
-    await requirePermission(session?.user?.id, PERMISSIONS.TEACHER_READ);
+    await requirePermission(session?.user?.id, PERMISSIONS.FACULTY_DIRECTORY);
 
     const teachers = await prisma.teacher.findMany({
       include: { user: true },

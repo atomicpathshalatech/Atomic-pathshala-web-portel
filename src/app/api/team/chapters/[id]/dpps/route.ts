@@ -8,6 +8,7 @@ import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { generateDppCode } from "@/lib/dpp/code";
 import { LanguageMode } from "@prisma/client";
 import { isDppSlotMandatory } from "@/lib/chapters/sequence";
+import { assertChapterAccess } from "@/lib/chapters/access";
 
 export async function GET(
   request: NextRequest,
@@ -17,6 +18,7 @@ export async function GET(
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.DPP_READ);
+    await assertChapterAccess(session?.user?.id ?? "", params.id, "read");
 
     const dpps = await prisma.dpp.findMany({
       where: { chapterId: params.id },
@@ -54,6 +56,7 @@ export async function POST(
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.DPP_CREATE);
+    await assertChapterAccess(session?.user?.id ?? "", params.id, "write");
 
     const chapter = await prisma.chapter.findUnique({
       where: { id: params.id },

@@ -38,7 +38,7 @@ export async function GET(_request: NextRequest) {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
 
-    const canRead = await hasPermission(session.user.id, PERMISSIONS.TEACHER_READ);
+    const canRead = await hasPermission(session.user.id, PERMISSIONS.FACULTY_DIRECTORY);
     if (!canRead) throw new ForbiddenError();
 
     const [teachers, batchSchedules] = await Promise.all([

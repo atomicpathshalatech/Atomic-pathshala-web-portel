@@ -20,6 +20,9 @@ export const PERMISSIONS = {
   TEACHER_CREATE: "teacher.create",
   TEACHER_UPDATE: "teacher.update",
   TEACHER_DELETE: "teacher.delete",
+  // The Faculty Directory (all educators, their profiles, applications,
+  // attendance & watch time). Super Admin only by default; grant per user.
+  FACULTY_DIRECTORY: "faculty.directory",
 
   // Course / Content
   COURSE_READ: "course.read",
@@ -120,6 +123,9 @@ export const PERMISSIONS = {
   // changes) — kept separate from CHAPTER_PUBLISH/CHAPTER_CREATE so
   // review authority doesn't default onto every chapter-authoring role.
   CHAPTER_REVIEW: "chapter.review",
+  // See and edit EVERY chapter, not only one's own (created by them or
+  // with a lecture they teach). Super Admin has it; grant to others per user.
+  CHAPTER_MANAGE_ALL: "chapter.manage_all",
 
   // Upload / manage the per-chapter Study Material library (modules, short
   // notes, mind maps, formula sheets, highlighted NCERT, NCERT exemplar).

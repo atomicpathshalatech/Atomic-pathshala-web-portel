@@ -16,7 +16,7 @@ export default async function FacultyListPage() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) redirect("/login");
 
-  const canRead = await hasPermission(session.user.id, PERMISSIONS.TEACHER_READ);
+  const canRead = await hasPermission(session.user.id, PERMISSIONS.FACULTY_DIRECTORY);
   if (!canRead) redirect("/team");
 
   const canCreate = await hasPermission(session.user.id, PERMISSIONS.TEACHER_CREATE);

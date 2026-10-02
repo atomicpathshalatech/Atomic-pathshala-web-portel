@@ -6,6 +6,7 @@ import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { LanguageMode, TestStatus } from "@prisma/client";
+import { assertChapterAccess } from "@/lib/chapters/access";
 
 export async function GET(
   request: NextRequest,
@@ -15,6 +16,7 @@ export async function GET(
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.TEST_READ);
+    await assertChapterAccess(session?.user?.id ?? "", params.id, "read");
 
     const tests = await prisma.test.findMany({
       where: { chapterId: params.id },
@@ -38,6 +40,7 @@ export async function POST(
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.TEST_CREATE);
+    await assertChapterAccess(session?.user?.id ?? "", params.id, "write");
 
     const chapter = await prisma.chapter.findUnique({
       where: { id: params.id },

@@ -9,7 +9,7 @@ import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions);
-    await requirePermission(session?.user?.id, PERMISSIONS.TEACHER_READ);
+    await requirePermission(session?.user?.id, PERMISSIONS.FACULTY_DIRECTORY);
 
     const application = await prisma.teacherApplication.findUnique({
       where: { id: params.id },

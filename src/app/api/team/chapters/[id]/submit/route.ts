@@ -6,12 +6,14 @@ import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { type ChapterStatusValue } from "@/lib/chapters/state-machine";
+import { assertChapterAccess } from "@/lib/chapters/access";
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.CHAPTER_UPDATE);
+    await assertChapterAccess(session?.user?.id ?? "", params.id, "write");
 
     const body = await request.json().catch(() => ({}));
     const { startDate, startTime = "10:00", durationMin = 90, weekdays } = body;
