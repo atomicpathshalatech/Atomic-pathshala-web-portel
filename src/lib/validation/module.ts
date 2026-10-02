@@ -14,7 +14,16 @@ export const MODULE_ELEMENT_TYPES = [
   "CHEMICAL_EQUATION",
   "CHEMICAL_STRUCTURE",
   "TABLE",
+  // A highlighted box from the source (Concept, Note, Example, Tip,
+  // Remember, Caution, Formula, Summary) — variant says which, label is the
+  // heading printed on the box (renamable, e.g. Example → Illustration).
+  "CALLOUT",
+  // One item per line.
+  "BULLETS",
 ] as const;
+
+export const MODULE_CALLOUT_VARIANTS = ["CONCEPT", "NOTE", "EXAMPLE", "TIP", "REMEMBER", "CAUTION", "FORMULA", "SUMMARY"] as const;
+export const MODULE_THEMES = ["ATOMIC_BLUE", "SUNRISE", "EMERALD", "ROYAL"] as const;
 
 // Metadata-only create — the source PDF itself is a separate multipart
 // upload (see /api/team/modules POST), same split as every other
@@ -107,6 +116,8 @@ export const moduleElementSchema = z.object({
   content: z.string(),
   style: moduleElementStyleSchema.optional(),
   tableData: z.array(z.array(z.string())).optional(),
+  variant: z.string().max(30).optional(),
+  label: z.string().max(80).optional(),
 });
 export type ModuleElementInput = z.infer<typeof moduleElementSchema>;
 
@@ -139,7 +150,23 @@ export const moduleExportSchema = z.object({
   versionId: z.string().optional(),
   includedFrontPage: z.boolean().optional(),
   includedWatermark: z.boolean().optional(),
+  // "premium": the colourful typeset design (headless Chromium, real fonts
+  // incl. Devanagari, KaTeX, callout boxes). "classic": the old jsPDF export.
+  design: z.enum(["premium", "classic"]).optional(),
+  theme: z.enum(MODULE_THEMES).optional(),
 });
+
+// Options for (re)processing an uploaded module PDF.
+export const moduleProcessSchema = z.object({
+  // Words / lines to drop everywhere (old running headers, old names, etc.).
+  removeWords: z.array(z.string().trim().min(1).max(120)).max(50).optional(),
+  // Box / heading label renames, e.g. { "Example": "Illustration" }.
+  renames: z.record(z.string().trim().max(60)).optional(),
+  // Pages to process (1-based, inclusive). Big books go in parts.
+  fromPage: z.number().int().min(1).optional(),
+  toPage: z.number().int().min(1).optional(),
+});
+export type ModuleProcessInput = z.infer<typeof moduleProcessSchema>;
 
 export const moduleVersionCreateSchema = z.object({
   label: z.string().min(1, "Label is required"),

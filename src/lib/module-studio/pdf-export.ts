@@ -65,7 +65,8 @@ async function tryFetchImageDataUrl(url: string): Promise<{ dataUrl: string; for
 // IMAGE blocks use — the same inline-image convention the Question Bank's
 // formula renderer already uses (src/lib/test-portal/formula.ts).
 function extractImageUrl(content: string): string | null {
-  const match = /!\[\]\((.+?)\)/.exec(content);
+  // Alt text may carry a size hint ("![w=42mm](url)").
+  const match = /!\[[^\]]*\]\((.+?)\)/.exec(content);
   return match?.[1] ?? null;
 }
 

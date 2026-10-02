@@ -50,3 +50,42 @@ export async function renderBookletPdf(html: string, opts: { timeoutMs?: number 
     await browser.close().catch(() => undefined);
   }
 }
+
+/**
+ * Prints a complete HTML document (e.g. the premium module notes) to an A4
+ * PDF — waits for web fonts and images, prints backgrounds, and can add a
+ * running header/footer.
+ */
+export async function renderHtmlPdf(
+  html: string,
+  opts: { timeoutMs?: number; headerTemplate?: string; footerTemplate?: string } = {}
+): Promise<Buffer> {
+  const timeout = opts.timeoutMs ?? 120_000;
+  const browser = await launchBrowser();
+  try {
+    const page = await browser.newPage();
+    await page.emulateMediaType("print");
+    await page.setContent(html, { waitUntil: "networkidle0", timeout });
+    await page.evaluate(() => document.fonts.ready);
+    await page.evaluate(async () => {
+      await Promise.all(
+        Array.from(document.images).map((img) =>
+          img.complete ? null : new Promise((r) => ((img.onload = r), (img.onerror = r)))
+        )
+      );
+    });
+    const withHeader = Boolean(opts.headerTemplate || opts.footerTemplate);
+    const pdf = await page.pdf({
+      format: "A4",
+      printBackground: true,
+      preferCSSPageSize: true,
+      displayHeaderFooter: withHeader,
+      headerTemplate: opts.headerTemplate ?? "<span></span>",
+      footerTemplate: opts.footerTemplate ?? "<span></span>",
+      timeout,
+    });
+    return Buffer.from(pdf);
+  } finally {
+    await browser.close().catch(() => undefined);
+  }
+}

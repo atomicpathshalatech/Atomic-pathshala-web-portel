@@ -7,7 +7,12 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { extractPdfPages, looksScanned } from "@/lib/module-studio/pdf-text";
 import { structurePageText } from "@/lib/module-studio/ai-extract";
-import type { ModuleElementInput } from "@/lib/validation/module";
+import { moduleProcessSchema, type ModuleElementInput } from "@/lib/validation/module";
+import { extractPremiumModule } from "@/lib/module-studio/premium-extract";
+import { uploadFile } from "@/lib/storage";
+
+// Rendering pages and reading them with the AI takes a while on big modules.
+export const maxDuration = 300;
 
 // Bounded concurrency for the per-page Gemini calls — fast enough for a
 // typical module without hammering the API, and keeps this synchronous
@@ -25,7 +30,7 @@ const AI_CONCURRENCY = 3;
  * long enough to risk a serverless function timeout — a real limitation of
  * doing this without a queue, not swept under the rug.
  */
-export async function POST(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
@@ -37,6 +42,8 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
       return apiError(`Cannot reprocess a module that is ${moduleRow.status.toLowerCase()}.`, 409);
     }
 
+    const options = moduleProcessSchema.parse(await request.json().catch(() => ({})));
+
     const job = await prisma.processingJob.create({
       data: { moduleId: moduleRow.id, stage: "ANALYZING", progress: 5 },
     });
@@ -46,6 +53,87 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
       const fileRes = await fetch(moduleRow.originalFileUrl);
       if (!fileRes.ok) throw new Error(`Could not download the source PDF (HTTP ${fileRes.status}).`);
       const buffer = Buffer.from(await fileRes.arrayBuffer());
+
+      // Premium pipeline: the AI reads each rendered page (layout, boxes,
+      // tables, questions) and every figure is cropped from the page itself.
+      // If headless Chromium isn't available it falls back to the text-only
+      // pipeline below.
+      let premium: Awaited<ReturnType<typeof extractPremiumModule>> | null = null;
+      try {
+        await prisma.processingJob.update({ where: { id: job.id }, data: { stage: "EXTRACTING", progress: 10 } });
+        premium = await extractPremiumModule(buffer, {
+          removeWords: options.removeWords,
+          renames: options.renames,
+          fromPage: options.fromPage,
+          toPage: options.toPage,
+          uploadImage: (png, name) =>
+            uploadFile({ key: `modules/${moduleRow.code}/${job.id}/${name}`, body: png, contentType: "image/png" }),
+          onProgress: async (done, total) => {
+            await prisma.processingJob.update({
+              where: { id: job.id },
+              data: { stage: "OCR_PROCESSING", progress: Math.min(90, 10 + Math.round((done / total) * 80)) },
+            });
+          },
+        });
+      } catch (premiumErr) {
+        console.warn("[module_premium_pipeline_fallback]", premiumErr);
+      }
+
+      if (premium && premium.pages.length) {
+        const scanned = premium.pages.filter((p) => p.scanned).length;
+        const premiumType = scanned === 0 ? "DIGITAL" : scanned === premium.pages.length ? "SCANNED" : "HYBRID";
+        const anyReview = premium.pages.some((p) => p.warnings.length > 0 || p.elements.length === 0);
+        await prisma.processingJob.update({ where: { id: job.id }, data: { stage: "RECONSTRUCTING_LAYOUT", progress: 92 } });
+        await prisma.$transaction([
+          ...premium.pages.map((r) =>
+            prisma.modulePage.upsert({
+              where: { moduleId_pageNumber: { moduleId: moduleRow.id, pageNumber: r.pageNumber } },
+              create: {
+                moduleId: moduleRow.id,
+                pageNumber: r.pageNumber,
+                width: r.width,
+                height: r.height,
+                pdfType: premiumType,
+                elements: r.elements,
+                ocrConfidence: r.warnings.length ? null : 0.9,
+                needsReview: r.warnings.length > 0 || r.elements.length === 0,
+                warnings: r.warnings,
+              },
+              update: {
+                width: r.width,
+                height: r.height,
+                pdfType: premiumType,
+                elements: r.elements,
+                ocrConfidence: r.warnings.length ? null : 0.9,
+                needsReview: r.warnings.length > 0 || r.elements.length === 0,
+                warnings: r.warnings,
+              },
+            })
+          ),
+          prisma.module.update({
+            where: { id: moduleRow.id },
+            data: { pageCount: premium.pageCount, pdfType: premiumType, status: anyReview ? "REVIEW_REQUIRED" : "READY" },
+          }),
+        ]);
+        await prisma.processingJob.update({
+          where: { id: job.id },
+          data: { stage: "READY_FOR_REVIEW", progress: 100, finishedAt: new Date() },
+        });
+        await prisma.auditLog.create({
+          data: {
+            userId: session.user.id,
+            action: "MODULE_PROCESSED",
+            entityType: "Module",
+            entityId: moduleRow.id,
+            metadata: { pipeline: "premium", pageCount: premium.pageCount, pages: premium.pages.length, options },
+          },
+        });
+        const finalModule = await prisma.module.findUnique({
+          where: { id: moduleRow.id },
+          include: { pages: { orderBy: { pageNumber: "asc" } } },
+        });
+        return apiSuccess({ module: finalModule });
+      }
 
       await prisma.processingJob.update({ where: { id: job.id }, data: { stage: "EXTRACTING", progress: 15 } });
       const { pages, pageCount } = await extractPdfPages(buffer);

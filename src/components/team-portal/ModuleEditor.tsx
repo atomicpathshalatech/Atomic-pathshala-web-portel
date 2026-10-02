@@ -28,7 +28,38 @@ type ElementRow = {
   content: string;
   style?: ElementStyle;
   tableData?: string[][];
+  variant?: string;
+  label?: string;
 };
+
+// Colour of each kind of box (same as the premium PDF).
+const CALLOUT_COLORS: Record<string, string> = {
+  CONCEPT: "#2563eb",
+  NOTE: "#d97706",
+  EXAMPLE: "#7c3aed",
+  TIP: "#059669",
+  REMEMBER: "#e11d48",
+  CAUTION: "#dc2626",
+  FORMULA: "#4338ca",
+  SUMMARY: "#0d9488",
+};
+
+const THEME_OPTIONS: { value: string; label: string; swatch: string }[] = [
+  { value: "ATOMIC_BLUE", label: "Atomic Blue", swatch: "#1d4ed8" },
+  { value: "SUNRISE", label: "Sunrise", swatch: "#ea580c" },
+  { value: "EMERALD", label: "Emerald", swatch: "#047857" },
+  { value: "ROYAL", label: "Royal", swatch: "#6d28d9" },
+];
+
+/** "Example => Illustration" (or "=", "→", ":") per line → { Example: "Illustration" }. */
+function parseRenames(text: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const line of text.split("\n")) {
+    const m = line.split(/\s*(?:=>|->|→|=)\s*/);
+    if (m.length === 2 && m[0]!.trim() && m[1]!.trim()) out[m[0]!.trim()] = m[1]!.trim();
+  }
+  return out;
+}
 
 type PageRow = {
   id: string;
@@ -78,6 +109,8 @@ const ELEMENT_TYPES = [
   "CHEMICAL_EQUATION",
   "CHEMICAL_STRUCTURE",
   "TABLE",
+  "CALLOUT",
+  "BULLETS",
 ];
 
 // Only the block types this editor gives a real, distinct authoring
@@ -96,6 +129,8 @@ const ADD_PALETTE: { type: string; label: string; icon: string }[] = [
   { type: "EQUATION", label: "Formula", icon: "functions" },
   { type: "IMAGE", label: "Image", icon: "image" },
   { type: "TABLE", label: "Table", icon: "table_chart" },
+  { type: "CALLOUT", label: "Box", icon: "lightbulb" },
+  { type: "BULLETS", label: "Bullets", icon: "format_list_bulleted" },
 ];
 
 const STATUS_STYLE: Record<string, string> = {
@@ -130,6 +165,8 @@ const TYPE_DEFAULTS: Record<string, TypeDefault> = {
   IMAGE: { fontFamily: "helvetica", fontSize: 9, bold: false, italic: false, align: "left", indentPx: 0 },
   PARAGRAPH: { fontFamily: "helvetica", fontSize: 10.5, bold: false, italic: false, align: "left", indentPx: 0 },
   TEXT: { fontFamily: "helvetica", fontSize: 10.5, bold: false, italic: false, align: "left", indentPx: 0 },
+  CALLOUT: { fontFamily: "helvetica", fontSize: 10.5, bold: false, italic: false, align: "left", indentPx: 0 },
+  BULLETS: { fontFamily: "helvetica", fontSize: 10.5, bold: false, italic: false, align: "left", indentPx: 0 },
 };
 
 function typeDefault(type: string): TypeDefault {
@@ -168,7 +205,8 @@ function elementCssStyle(el: ElementRow): CSSProperties {
 }
 
 function extractImgUrl(content: string): string | null {
-  const match = /!\[\]\((.+?)\)/.exec(content);
+  // Alt text may carry a size hint ("![w=42mm](url)").
+  const match = /!\[[^\]]*\]\((.+?)\)/.exec(content);
   return match?.[1] ?? null;
 }
 
@@ -201,6 +239,13 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
   const [exportVersionId, setExportVersionId] = useState("");
   const [includeWatermark, setIncludeWatermark] = useState(false);
   const [exporting, setExporting] = useState(false);
+  // Premium redesign: what to drop / rename while reading the old PDF, and the export look.
+  const [removeWordsText, setRemoveWordsText] = useState("");
+  const [renamesText, setRenamesText] = useState("Example => Illustration");
+  const [fromPage, setFromPage] = useState("");
+  const [toPage, setToPage] = useState("");
+  const [exportDesign, setExportDesign] = useState<"premium" | "classic">("premium");
+  const [exportTheme, setExportTheme] = useState("ATOMIC_BLUE");
 
   const pageEditsRef = useRef(pageEdits);
   useEffect(() => {
@@ -367,7 +412,20 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
     setProcessing(true);
     setError(null);
     try {
-      const res = await fetch(`/api/team/modules/${moduleId}/process`, { method: "POST" });
+      const removeWords = removeWordsText
+        .split(/[\n,]/)
+        .map((w) => w.trim())
+        .filter(Boolean);
+      const res = await fetch(`/api/team/modules/${moduleId}/process`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          removeWords,
+          renames: parseRenames(renamesText),
+          fromPage: Number(fromPage) || undefined,
+          toPage: Number(toPage) || undefined,
+        }),
+      });
       const body = await res.json();
       if (!body.success) {
         setError(body.error ?? "Processing failed.");
@@ -483,6 +541,8 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
           versionId: exportVersionId || undefined,
           includedWatermark: includeWatermark,
           includedFrontPage: true,
+          design: exportDesign,
+          theme: exportTheme,
         }),
       });
       const body = await res.json();
@@ -553,9 +613,48 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
             disabled={processing}
             className="bg-primary text-on-primary rounded-full px-5 py-2.5 font-label-md text-label-md disabled:opacity-60 hover:opacity-90 transition-opacity"
           >
-            {processing ? "Processing… (this can take a minute)" : data.pageCount ? "Reprocess" : "Run Extraction"}
+            {processing ? "Reading pages… (about 15 sec per page)" : data.pageCount ? "Reprocess" : "Run Extraction"}
           </button>
         </div>
+        <details className="rounded-xl border border-outline-variant/30 p-3" open={!data.pageCount}>
+          <summary className="cursor-pointer text-label-sm font-label-md text-on-surface select-none">
+            Premium redesign options — words to remove, labels to rename, pages
+          </summary>
+          <p className="text-label-sm text-on-surface-variant mt-2">
+            Each page is read by AI with its layout: headings, paragraphs, lists, boxes (Concept / Note / Example / Tip…), tables,
+            formulas and questions become editable blocks; every diagram and structure is cropped from the page exactly as printed.
+            Running headers, footers and page numbers are dropped automatically.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+            <label className="block">
+              <span className="text-label-sm text-on-surface-variant block mb-1">Words / lines to remove (one per line)</span>
+              <textarea
+                value={removeWordsText}
+                onChange={(e) => setRemoveWordsText(e.target.value)}
+                rows={4}
+                placeholder={"Old institute name\nOld website"}
+                className="w-full rounded-lg border border-outline-variant/40 px-3 py-2 text-label-sm bg-surface-container-lowest"
+              />
+            </label>
+            <label className="block">
+              <span className="text-label-sm text-on-surface-variant block mb-1">Rename box / heading labels (old =&gt; new, one per line)</span>
+              <textarea
+                value={renamesText}
+                onChange={(e) => setRenamesText(e.target.value)}
+                rows={4}
+                placeholder={"Example => Illustration\nKey Point => Atomic Insight"}
+                className="w-full rounded-lg border border-outline-variant/40 px-3 py-2 text-label-sm bg-surface-container-lowest font-mono"
+              />
+            </label>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 mt-3 text-label-sm text-on-surface-variant">
+            <span>Pages</span>
+            <input value={fromPage} onChange={(e) => setFromPage(e.target.value.replace(/\D/g, ""))} placeholder="from" className="w-16 rounded-lg border border-outline-variant/40 px-2 py-1 bg-surface-container-lowest" />
+            <span>to</span>
+            <input value={toPage} onChange={(e) => setToPage(e.target.value.replace(/\D/g, ""))} placeholder="to" className="w-16 rounded-lg border border-outline-variant/40 px-2 py-1 bg-surface-container-lowest" />
+            <span>(leave empty for all; a big book can be done 15–20 pages at a time)</span>
+          </div>
+        </details>
         <a
           href={data.originalFileUrl}
           target="_blank"
@@ -742,6 +841,7 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
                   onChangeType={(type) => updateElement(selectedPageId!, selectedElement.id, { type })}
                   onChangeStyle={(style) => updateElement(selectedPageId!, selectedElement.id, { style })}
                   onChangeTable={(tableData) => updateElement(selectedPageId!, selectedElement.id, { tableData })}
+                  onChangeMeta={(patch) => updateElement(selectedPageId!, selectedElement.id, patch)}
                   onUploadImage={() => triggerImageUpload(selectedPageId!, selectedElement.id)}
                   uploading={uploadingImageFor === selectedElement.id}
                   onDelete={() => removeElement(selectedPageId!, selectedElement.id)}
@@ -801,17 +901,54 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
                 </option>
               ))}
             </select>
+            <div className="flex items-center gap-2 text-label-sm">
+              {(["premium", "classic"] as const).map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => setExportDesign(d)}
+                  className={`flex-1 rounded-lg border px-3 py-1.5 ${exportDesign === d ? "border-primary bg-primary/10 text-primary font-semibold" : "border-outline-variant/40 text-on-surface-variant"}`}
+                >
+                  {d === "premium" ? "Premium colourful" : "Classic"}
+                </button>
+              ))}
+            </div>
+            {exportDesign === "premium" && (
+              <div className="grid grid-cols-2 gap-2">
+                {THEME_OPTIONS.map((t) => (
+                  <button
+                    key={t.value}
+                    type="button"
+                    onClick={() => setExportTheme(t.value)}
+                    className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-label-sm ${exportTheme === t.value ? "border-primary ring-1 ring-primary/40" : "border-outline-variant/40"}`}
+                  >
+                    <span className="w-4 h-4 rounded-full shrink-0" style={{ background: t.swatch }} />
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            )}
             <label className="flex items-center gap-2 text-label-sm text-on-surface-variant">
               <input type="checkbox" checked={includeWatermark} onChange={(e) => setIncludeWatermark(e.target.checked)} />
-              Include watermark
+              Include watermark (brand logo)
             </label>
+            {exportDesign === "premium" && data.pages.length > 0 && (
+              <a
+                href={`/api/team/modules/${moduleId}/preview?theme=${exportTheme}${includeWatermark ? "&watermark=1" : ""}`}
+                target="_blank"
+                rel="noreferrer"
+                className="block text-center w-full rounded-full border border-primary text-primary px-4 py-2 font-label-md text-label-md hover:bg-primary/5"
+              >
+                Preview premium design
+              </a>
+            )}
             <button
               type="button"
               onClick={runExport}
               disabled={exporting || data.pages.length === 0}
               className="w-full bg-primary text-on-primary rounded-full px-4 py-2.5 font-label-md text-label-md disabled:opacity-60 hover:opacity-90 transition-opacity"
             >
-              {exporting ? "Exporting…" : "Export Branded PDF"}
+              {exporting ? "Creating PDF… (up to a minute)" : exportDesign === "premium" ? "Export Premium PDF" : "Export Branded PDF"}
             </button>
           </div>
           {data.exportHistory.length > 0 && (
@@ -937,6 +1074,34 @@ function CanvasBlock({
   const isFormula = el.type === "EQUATION" || el.type === "CHEMICAL_EQUATION";
   const cssStyle = elementCssStyle(el);
 
+  if (el.type === "CALLOUT") {
+    const color = CALLOUT_COLORS[el.variant ?? "NOTE"] ?? CALLOUT_COLORS.NOTE!;
+    return (
+      <div onClick={onSelect} className={`rounded-lg p-2 ${ring}`} style={{ borderLeft: `4px solid ${color}`, background: `${color}0f` }}>
+        <span className="inline-block text-[10px] font-bold uppercase tracking-wide text-white rounded-full px-2 py-0.5 mb-1" style={{ background: color }}>
+          {el.label || (el.variant ?? "Note").toLowerCase()}
+        </span>
+        {previewMode ? (
+          <div style={cssStyle} dangerouslySetInnerHTML={{ __html: renderFormulaContent(el.content || "") || "" }} />
+        ) : (
+          <textarea
+            value={el.content}
+            onFocus={onSelect}
+            onChange={(e) => {
+              autoGrow(e.currentTarget);
+              onLiveChange({ content: e.target.value });
+            }}
+            onBlur={onBlurCommit}
+            rows={2}
+            placeholder="Box content…"
+            className="w-full resize-none bg-transparent outline-none overflow-hidden"
+            style={cssStyle}
+          />
+        )}
+      </div>
+    );
+  }
+
   if (previewMode) {
     const html = isFormula
       ? safeKatex(el.content)
@@ -981,6 +1146,7 @@ function PropertiesPanel({
   onChangeType,
   onChangeStyle,
   onChangeTable,
+  onChangeMeta,
   onUploadImage,
   uploading,
   onDelete,
@@ -989,6 +1155,7 @@ function PropertiesPanel({
   onChangeType: (type: string) => void;
   onChangeStyle: (style: ElementStyle) => void;
   onChangeTable: (tableData: string[][]) => void;
+  onChangeMeta: (patch: { variant?: string; label?: string }) => void;
   onUploadImage: () => void;
   uploading: boolean;
   onDelete: () => void;
@@ -1002,6 +1169,30 @@ function PropertiesPanel({
 
   return (
     <div className="space-y-3">
+      {el.type === "CALLOUT" && (
+        <div className="space-y-2 rounded-lg border border-outline-variant/30 p-2">
+          <label className="text-label-sm text-on-surface-variant block">Box kind</label>
+          <select
+            value={el.variant ?? "NOTE"}
+            onChange={(e) => onChangeMeta({ variant: e.target.value })}
+            className="w-full rounded-lg border border-outline-variant/40 px-2 py-1.5 text-label-sm bg-surface-container-lowest"
+          >
+            {Object.keys(CALLOUT_COLORS).map((v) => (
+              <option key={v} value={v}>
+                {v.charAt(0) + v.slice(1).toLowerCase()}
+              </option>
+            ))}
+          </select>
+          <label className="text-label-sm text-on-surface-variant block">Box heading</label>
+          <input
+            value={el.label ?? ""}
+            onChange={(e) => onChangeMeta({ label: e.target.value })}
+            placeholder="e.g. Illustration 3, Atomic Insight"
+            className="w-full rounded-lg border border-outline-variant/40 px-2 py-1.5 text-label-sm bg-surface-container-lowest"
+          />
+        </div>
+      )}
+      {el.type === "BULLETS" && <p className="text-label-sm text-on-surface-variant">One point per line.</p>}
       <div>
         <label className="text-label-sm text-on-surface-variant block mb-1">Block type</label>
         <select

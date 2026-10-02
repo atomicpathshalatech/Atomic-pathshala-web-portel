@@ -92,6 +92,12 @@ const nextConfig = {
         "node_modules/pdfjs-dist/build/pdf.min.mjs",
         "node_modules/pdfjs-dist/build/pdf.worker.min.mjs",
       ],
+      "/api/team/modules/[id]/process": [
+        "node_modules/@sparticuz/chromium/bin/**",
+        "node_modules/pdfjs-dist/build/pdf.min.mjs",
+        "node_modules/pdfjs-dist/build/pdf.worker.min.mjs",
+      ],
+      "/api/team/modules/[id]/export": ["node_modules/@sparticuz/chromium/bin/**"],
     },
   },
   async headers() {

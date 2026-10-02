@@ -8,6 +8,11 @@ import { moduleExportSchema, moduleElementSchema } from "@/lib/validation/module
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { uploadFile, StorageNotConfiguredError } from "@/lib/storage";
 import { generateModulePdf } from "@/lib/module-studio/pdf-export";
+import { buildPremiumModuleHtml, premiumHeaderFooter } from "@/lib/module-studio/premium-html";
+import { renderHtmlPdf } from "@/lib/pdf/html-to-pdf";
+
+// Printing the premium design in headless Chromium takes a while on big modules.
+export const maxDuration = 300;
 import { z } from "zod";
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
@@ -55,7 +60,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }));
     }
 
-    const pdfBuffer = await generateModulePdf({
+    const brand = moduleRow.brandProfile;
+    const pdfBuffer =
+      input.design === "classic"
+        ? await generateModulePdf({
       moduleTitle: moduleRow.title,
       pages: exportPages,
       brand: moduleRow.brandProfile
@@ -68,7 +76,24 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           }
         : null,
       includeWatermark: input.includedWatermark ?? false,
-    });
+    })
+        : await renderHtmlPdf(
+            buildPremiumModuleHtml({
+              title: moduleRow.title,
+              subject: moduleRow.subject,
+              chapter: moduleRow.chapter,
+              className: moduleRow.class,
+              facultyName: moduleRow.facultyName,
+              academicYear: moduleRow.academicYear,
+              theme: input.theme,
+              watermark: input.includedWatermark ?? false,
+              brand: brand
+                ? { name: brand.name, logoUrl: brand.logoUrl, tagline: brand.tagline, websiteUrl: brand.websiteUrl, primaryColor: brand.primaryColor }
+                : null,
+              pages: exportPages,
+            }),
+            premiumHeaderFooter({ title: moduleRow.title, brandName: brand?.name, website: brand?.websiteUrl, theme: input.theme })
+          );
 
     const fileName = `${moduleRow.code}-${Date.now()}.pdf`;
     const key = `module-exports/${moduleRow.code}/${fileName}`;
