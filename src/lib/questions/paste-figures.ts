@@ -1,5 +1,5 @@
 import "server-only";
-import { withRenderedImage, type Box } from "@/lib/pdf/page-renderer";
+import { cropFigure, decodeImage, type Box } from "@/lib/images/figure-crop";
 import { uploadFile } from "@/lib/storage";
 import type { ExtractedQuestionData } from "@/lib/questions/gemini-engine";
 
@@ -27,19 +27,22 @@ export async function attachPastedFigures(
   if (figures.length) {
     try {
       const buf = Buffer.from(image.base64.replace(/^data:[^,]+,/, ""), "base64");
-      const crops = await withRenderedImage(buf, image.mimeType, async (doc) => {
-        const out: { place: string; png: Buffer }[] = [];
-        for (const f of figures) {
-          const box = f.box.map((n) => Math.max(0, Math.min(1000, n))) as Box;
-          if (box[2] - box[0] < 8 || box[3] - box[1] < 8) continue;
-          const png = await doc.crop(1, box, { grow: true });
-          if (png) out.push({ place: String(f.place || "STATEMENT").toUpperCase(), png });
-        }
-        return out;
-      });
+      // Plain JS crop (milliseconds) — no headless browser for a pasted image.
+      const raster = decodeImage(buf, image.mimeType);
+      const crops: { place: string; png: Buffer }[] = [];
+      for (const f of figures) {
+        const box = f.box.map((n) => Math.max(0, Math.min(1000, n))) as Box;
+        if (box[2] - box[0] < 8 || box[3] - box[1] < 8) continue;
+        const png = cropFigure(raster, box, { grow: true });
+        if (png) crops.push({ place: String(f.place || "STATEMENT").toUpperCase(), png });
+      }
+      // Uploads in parallel.
+      const urls = await Promise.all(
+        crops.map((c, i) => uploadFile({ key: `questions/pasted/${keyPrefix}-${i}.png`, body: c.png, contentType: "image/png" }))
+      );
 
       for (const [i, c] of crops.entries()) {
-        const url = await uploadFile({ key: `questions/pasted/${keyPrefix}-${i}.png`, body: c.png, contentType: "image/png" });
+        const url = urls[i]!;
         const isOption = ["A", "B", "C", "D"].includes(c.place);
         const md = `![${isOption ? "70%" : "45%"}](${url})`;
         const put = (text: string) =>

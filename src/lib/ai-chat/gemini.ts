@@ -5,7 +5,7 @@ import {
   mapGeminiError,
 } from "@/lib/ai-chat/errors";
 import { getSystemPrompt } from "@/lib/ai-chat/prompts";
-import { GEMINI_FAST_MODELS, GEMINI_TEXT_MODELS, LightGoogleGenerativeAI, classifyGeminiFailure, isDeadKeyError, isRetiredModelError, readGeminiKeys, retryAfterMs, usableKeys, usableModels } from "@/lib/ai/gemini-models";
+import { GEMINI_FAST_MODELS, GEMINI_TEXT_MODELS, LightGoogleGenerativeAI, classifyGeminiFailure, isDeadKeyError, isOverloadError, isRetiredModelError, markModelBusy, readGeminiKeys, retryAfterMs, usableKeys, usableModels } from "@/lib/ai/gemini-models";
 import type {
   ChatRequestAttachment,
   ChatRequestBody,
@@ -269,6 +269,11 @@ export async function generateChatResponse(body: ChatRequestBody): Promise<strin
           if (classifyGeminiFailure(error, apiKey, modelName) === "next-key") continue;
           break;
         }
+        // A busy model (503) is busy for every key — go to the next model.
+        if (isOverloadError(error)) {
+          markModelBusy(modelName);
+          break;
+        }
 
         if (!isRetryableGeminiError(error)) {
           throw mapGeminiError(error);
@@ -339,6 +344,11 @@ export async function* generateChatResponseStream(
           if (classifyGeminiFailure(error, apiKey, modelName) === "next-key") continue;
           break;
         }
+        // A busy model (503) is busy for every key — go to the next model.
+        if (isOverloadError(error)) {
+          markModelBusy(modelName);
+          break;
+        }
 
         if (!isRetryableGeminiError(error)) {
           throw mapGeminiError(error);
@@ -394,6 +404,11 @@ export async function generateQuizQuestions(promptText: string): Promise<string>
         // A blocked/invalid key: try the next key. A retired model: next model.
         if (isDeadKeyError(error) || isRetiredModelError(error)) {
           if (classifyGeminiFailure(error, apiKey, modelName) === "next-key") continue;
+          break;
+        }
+        // A busy model (503) is busy for every key — go to the next model.
+        if (isOverloadError(error)) {
+          markModelBusy(modelName);
           break;
         }
 
@@ -452,6 +467,11 @@ export async function generateBoardExamContent(promptText: string): Promise<stri
           if (classifyGeminiFailure(error, apiKey, modelName) === "next-key") continue;
           break;
         }
+        // A busy model (503) is busy for every key — go to the next model.
+        if (isOverloadError(error)) {
+          markModelBusy(modelName);
+          break;
+        }
 
         if (!isRetryableGeminiError(error)) {
           throw mapGeminiError(error);
@@ -507,6 +527,11 @@ export async function generateStudyPlanContent(promptText: string): Promise<stri
           if (classifyGeminiFailure(error, apiKey, modelName) === "next-key") continue;
           break;
         }
+        // A busy model (503) is busy for every key — go to the next model.
+        if (isOverloadError(error)) {
+          markModelBusy(modelName);
+          break;
+        }
 
         if (!isRetryableGeminiError(error)) {
           throw mapGeminiError(error);
@@ -559,6 +584,11 @@ export async function generateCoachReply(promptText: string): Promise<string> {
         // A blocked/invalid key: try the next key. A retired model: next model.
         if (isDeadKeyError(error) || isRetiredModelError(error)) {
           if (classifyGeminiFailure(error, apiKey, modelName) === "next-key") continue;
+          break;
+        }
+        // A busy model (503) is busy for every key — go to the next model.
+        if (isOverloadError(error)) {
+          markModelBusy(modelName);
           break;
         }
 

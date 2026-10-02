@@ -28,6 +28,14 @@ const DEAD_KEY_MS = 6 * 60 * 60 * 1000;
 const RETIRED_MODEL_MS = 24 * 60 * 60 * 1000;
 const deadKeys = new Map<string, number>();
 const retiredModels = new Map<string, number>();
+// A model answering 503 "high demand" is busy for every key — skip it for a
+// short while instead of trying it again on each key (2–4 s per try).
+const busyModels = new Map<string, number>();
+const BUSY_MODEL_MS = 45_000;
+
+export function markModelBusy(model: string) {
+  busyModels.set(model, Date.now() + BUSY_MODEL_MS);
+}
 
 function message(err: unknown): string {
   const e = err as { message?: string; status?: number } | null;
@@ -83,8 +91,11 @@ export function markModelRetired(model: string) {
 /** The model list without models already found to be retired. Never empty. */
 export function usableModels(models: readonly string[] = GEMINI_TEXT_MODELS): string[] {
   const now = Date.now();
-  const live = models.filter((m) => (retiredModels.get(m) ?? 0) <= now);
-  return live.length ? live : [...models];
+  const notRetired = models.filter((m) => (retiredModels.get(m) ?? 0) <= now);
+  const free = notRetired.filter((m) => (busyModels.get(m) ?? 0) <= now);
+  // Busy models go last (still tried if nothing else works), retired ones never.
+  const ordered = [...free, ...notRetired.filter((m) => !free.includes(m))];
+  return ordered.length ? ordered : [...models];
 }
 
 /** The keys without ones found to be blocked/invalid. Never empty if keys exist. */
@@ -103,6 +114,7 @@ export function classifyGeminiFailure(err: unknown, key: string, model: string):
     markModelRetired(model);
     return "next-model";
   }
+  if (isOverloadError(err)) markModelBusy(model);
   return "next-model";
 }
 
