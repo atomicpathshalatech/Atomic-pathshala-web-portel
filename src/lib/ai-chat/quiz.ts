@@ -1,3 +1,4 @@
+import { parseAiJson } from "@/lib/ai/latex-json";
 const QUIZ_TIMER_DIRECTIVE = /^\s*\[ATOMIC_QUIZ_TIMER:(\d{1,4})\]\s*\n?/i;
 
 export function getQuizTimerSeconds(content: string) {
@@ -371,7 +372,7 @@ export function parseQuizJson(content: string): QuizQuestion[] | null {
   const raw = match?.[1] ?? content;
 
   try {
-    const parsed = JSON.parse(raw.trim()) as { questions?: unknown[] };
+    const parsed = parseAiJson(raw.trim()) as { questions?: unknown[] };
     if (!parsed.questions || !Array.isArray(parsed.questions) || parsed.questions.length === 0) {
       return null;
     }

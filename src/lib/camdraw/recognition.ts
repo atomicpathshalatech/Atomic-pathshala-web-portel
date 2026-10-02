@@ -5,6 +5,7 @@
  */
 
 import { geminiKeyManager } from "@/lib/ai/gemini-key-manager";
+import { parseAiJson } from "@/lib/ai/latex-json";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { CamDrawDocument, CamDrawElement, createEmptyCamDrawDocument } from "./types";
 import { normalizeGraphTopology, centerStructureOnCanvas } from "./graph";
@@ -146,7 +147,7 @@ Subject hint: ${options.hintSubject || "Chemistry"}.`;
       .replace(/```/g, "")
       .trim();
 
-    const parsed = JSON.parse(cleanedJson);
+    const parsed = parseAiJson(cleanedJson);
 
     if (parsed && Array.isArray(parsed.elements)) {
       const rawDoc: CamDrawDocument = {

@@ -11,6 +11,7 @@
  */
 
 import { geminiKeyManager } from "@/lib/ai/gemini-key-manager";
+import { parseAiJson } from "@/lib/ai/latex-json";
 import { executeGeminiWithFailover, formatSolutionSpacing } from "@/lib/questions/gemini-engine";
 import { loadServerPdfJs } from "@/lib/pdf/server-pdf";
 
@@ -294,7 +295,7 @@ RETURN STRICT JSON ARRAY OF QUESTIONS:
     const response = await model.generateContent(prompt);
     const text = response.response.text().trim();
     const cleanJson = text.replace(/^```json\s*/i, "").replace(/\s*```$/i, "").trim();
-    const parsed = JSON.parse(cleanJson);
+    const parsed = parseAiJson(cleanJson);
 
     if (!Array.isArray(parsed)) {
       throw new Error("AI extraction did not return a valid array of questions.");

@@ -3,6 +3,7 @@
 import React, { useMemo } from "react";
 import katex from "katex";
 import "katex/dist/katex.min.css";
+import { repairLatexControlChars, repairLostLatexBackslashes } from "@/lib/test-portal/formula";
 
 interface EquationLivePreviewProps {
   content: string;
@@ -126,7 +127,7 @@ function sanitizeLatexFormulas(input: string): string {
 function renderMathAndText(text: string): string {
   if (!text || !text.trim()) return "";
 
-  let processed = sanitizeLatexFormulas(text.trim());
+  let processed = sanitizeLatexFormulas(repairLostLatexBackslashes(repairLatexControlChars(text.trim())));
 
   // If text has raw exponents or subscripts without $ (e.g. {GSHSAU}^2 or H_2SO_4 or 1/2), prepare for KaTeX
   const hasUnwrappedMath =

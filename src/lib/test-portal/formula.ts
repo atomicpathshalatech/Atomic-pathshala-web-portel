@@ -137,6 +137,28 @@ export function cleanOcrArtifacts(input: string): string {
 /**
  * Sanitizes LaTeX formulas, tables, vector notations, environments, and OCR artifacts
  */
+/**
+ * Questions saved before the JSON fix lost the backslash completely
+ * ("\text{C}_6" → tab → "ext{C}_6", shown as "extC_6"). Inside $…$ math
+ * only, put the command back for the common cases.
+ */
+const LOST_BACKSLASH: [RegExp, string][] = [
+  [/(^|[^\\a-zA-Z])(extbf|extit|extrm|ext)\{/g, "$1\\t$2{"],
+  [/(^|[^\\a-zA-Z])rac\{/g, "$1\\frac{"],
+  [/(^|[^\\a-zA-Z])imes(?![a-zA-Z])/g, "$1\\times"],
+  [/(^|[^\\a-zA-Z])heta(?![a-zA-Z])/g, "$1\\theta"],
+  [/(^|[^\\a-zA-Z])ightarrow(?![a-zA-Z])/g, "$1\\rightarrow"],
+];
+export function repairLostLatexBackslashes(input: string): string {
+  if (!input || !/(ext|rac|imes|heta|ightarrow)/.test(input)) return input;
+  const fix = (math: string) => LOST_BACKSLASH.reduce((m, [re, to]) => m.replace(re, to), math);
+  return input.replace(/(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$)/g, (m) => {
+    // A "t" before "ext{" means the word was "text{" with its backslash dropped.
+    const inner = m.replace(/(^|[^\\a-zA-Z])t(ext\{)/g, "$1$2");
+    return fix(inner);
+  });
+}
+
 export function sanitizeLatexFormulas(input: string): string {
   if (!input) return "";
   let text = cleanOcrArtifacts(input);
@@ -447,7 +469,7 @@ const TABLE_TOKEN = (i: number) => `\u0000FXTABLE${i}\u0000`;
 
 export function renderFormulaContent(input: string): string {
   if (!input) return "";
-  const sanitized = sanitizeLatexFormulas(repairLatexControlChars(input));
+  const sanitized = sanitizeLatexFormulas(repairLostLatexBackslashes(repairLatexControlChars(input)));
   // Tables first, each replaced by a token the text renderer leaves alone.
   const tables: string[] = [];
   const withTokens = sanitized.replace(TABLE_RE, (whole, _e1, spec1, body1, _e2, spec2, body2) => {

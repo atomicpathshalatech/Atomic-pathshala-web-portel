@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { parseAiJson } from "@/lib/ai/latex-json";
 import { executeGeminiWithFailover } from "@/lib/questions/gemini-engine";
 import { AIProvider } from "./provider-interface";
 import {
@@ -46,7 +47,7 @@ export class GeminiProvider implements AIProvider {
       const cleanJson = text.replace(/^```json\s*/i, "").replace(/\s*```$/i, "").trim();
 
       try {
-        const parsed = JSON.parse(cleanJson);
+        const parsed = parseAiJson(cleanJson);
         if (Array.isArray(parsed.detectedTopics)) {
           return parsed.detectedTopics.map((t: any) => ({
             topic: String(t.topic || "").trim(),
@@ -91,7 +92,7 @@ export class GeminiProvider implements AIProvider {
       const text = response.response.text().trim();
       const cleanJson = text.replace(/^```json\s*/i, "").replace(/\s*```$/i, "").trim();
 
-      const parsed = JSON.parse(cleanJson);
+      const parsed = parseAiJson(cleanJson);
       const rawList = Array.isArray(parsed.questions) ? parsed.questions : Array.isArray(parsed) ? parsed : [];
 
       return rawList.map((item: any, idx: number) => {
@@ -242,7 +243,7 @@ export class GeminiProvider implements AIProvider {
       const cleanJson = text.replace(/^```json\s*/i, "").replace(/\s*```$/i, "").trim();
 
       try {
-        const parsed = JSON.parse(cleanJson);
+        const parsed = parseAiJson(cleanJson);
         return {
           isValid: Boolean(parsed.isValid),
           validationStatus: parsed.validationStatus || (parsed.isValid ? "PASSED" : "NEEDS_REVIEW"),

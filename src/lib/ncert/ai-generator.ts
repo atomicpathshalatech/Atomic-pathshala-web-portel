@@ -1,4 +1,5 @@
 import { executeGeminiWithFailover } from "@/lib/questions/gemini-engine";
+import { parseAiJson } from "@/lib/ai/latex-json";
 import { NCERTLanguage, NCERTQuestionType } from "@prisma/client";
 
 export interface CandidateNcertQuestion {
@@ -218,7 +219,7 @@ Respond with ONLY valid JSON adhering to this exact schema (no markdown fences, 
 
     let parsed: any[] = [];
     try {
-      parsed = JSON.parse(cleaned);
+      parsed = parseAiJson(cleaned);
     } catch (_) {
       try {
         // Replace unescaped newlines/tabs inside strings
