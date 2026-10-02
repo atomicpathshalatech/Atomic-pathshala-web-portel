@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { TeacherChapterHeader } from "./TeacherChapterHeader";
 import { UnifiedChapterScheduleTimeline } from "./UnifiedChapterScheduleTimeline";
@@ -20,6 +21,9 @@ import {
   ArrowRight,
   HelpCircle,
   X,
+  ArrowLeft,
+  SlidersHorizontal,
+  Smartphone,
 } from "lucide-react";
 
 import { ChapterReviewHistoryTimeline, ReviewHistoryItem } from "./ChapterReviewHistoryTimeline";
@@ -239,55 +243,40 @@ export function ChapterTeamViewWrapper({
   };
 
   return (
-    <div className="space-y-6">
-      {/* Top Experience View Switcher */}
-      <div className="flex items-center justify-between bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2.5 rounded-2xl shadow-sm">
-        <div className="flex items-center gap-2 pl-2">
-          <span
-            className={`w-2.5 h-2.5 rounded-full ${
-              isApproved
-                ? "bg-emerald-500"
-                : isUnderReview
-                ? "bg-amber-500 animate-pulse"
-                : "bg-blue-600"
-            }`}
-          />
-          <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
-            Chapter Experience View:
-          </span>
-        </div>
-
-        <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-950 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
-          <button
-            type="button"
-            onClick={() => setViewMode("manager")}
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition ${
-              viewMode === "manager"
-                ? "bg-blue-600 text-white shadow-md"
-                : "text-slate-500 hover:text-slate-900 dark:hover:text-white"
-            }`}
-          >
-            <span className="material-symbols-outlined text-sm">tune</span>
-            <span>Content Studio</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setViewMode("preview")}
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition ${
-              viewMode === "preview"
-                ? "bg-blue-600 text-white shadow-md"
-                : "text-slate-500 hover:text-slate-900 dark:hover:text-white"
-            }`}
-          >
-            <span className="material-symbols-outlined text-sm">phone_iphone</span>
-            <span>Student UI Reference</span>
-          </button>
+    <div className="space-y-4">
+      {/* Back to the list + Manage / Student preview switch */}
+      <div className="flex items-center justify-between gap-3">
+        <Link
+          href="/team/chapters"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 dark:hover:text-white transition"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          All chapters
+        </Link>
+        <div className="inline-flex items-center p-0.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 ring-1 ring-slate-200 dark:ring-slate-700">
+          {([
+            ["manager", "Manage", <SlidersHorizontal key="m" className="w-3.5 h-3.5" />],
+            ["preview", "Student view", <Smartphone key="p" className="w-3.5 h-3.5" />],
+          ] as const).map(([mode, label, icon]) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setViewMode(mode)}
+              className={`inline-flex items-center gap-1.5 px-3 h-8 rounded-[10px] text-xs font-semibold transition ${
+                viewMode === mode
+                  ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm"
+                  : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+              }`}
+            >
+              {icon}
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
       {viewMode === "manager" ? (
-        <div className="space-y-6">
+        <div className="space-y-5">
           {/* Teacher Chapter Overview Header */}
           <TeacherChapterHeader
             chapterId={chapterId}
