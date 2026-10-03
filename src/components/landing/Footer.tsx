@@ -65,9 +65,17 @@ export async function Footer() {
                   aria-label={s.label}
                   className="w-10 h-10 rounded-full bg-surface-variant/10 flex items-center justify-center hover:bg-primary transition-colors"
                 >
-                  <span className="material-symbols-outlined text-surface-container-lowest">
-                    {s.icon || "link"}
-                  </span>
+                  {/youtube/i.test(`${s.label} ${s.url}`) ? (
+                    // YouTube's own logo (red play button), so the channel link is recognisable.
+                    <svg viewBox="0 0 28 20" width="24" height="17" aria-hidden="true">
+                      <path fill="#FF0000" d="M27.4 3.1A3.5 3.5 0 0 0 25 .6C22.8 0 14 0 14 0S5.2 0 3 .6A3.5 3.5 0 0 0 .6 3.1C0 5.3 0 10 0 10s0 4.7.6 6.9A3.5 3.5 0 0 0 3 19.4c2.2.6 11 .6 11 .6s8.8 0 11-.6a3.5 3.5 0 0 0 2.4-2.5c.6-2.2.6-6.9.6-6.9s0-4.7-.6-6.9Z" />
+                      <path fill="#FFFFFF" d="M11.2 14.3 18.5 10l-7.3-4.3v8.6Z" />
+                    </svg>
+                  ) : (
+                    <span className="material-symbols-outlined text-surface-container-lowest">
+                      {s.icon || "link"}
+                    </span>
+                  )}
                 </a>
               ))}
             </div>

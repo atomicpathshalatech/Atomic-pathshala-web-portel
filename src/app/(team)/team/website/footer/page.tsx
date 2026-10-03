@@ -40,6 +40,7 @@ export default async function FooterPage() {
           contactPhone: settings.contactPhone,
           contactEmail: settings.contactEmail,
           address: settings.address,
+          socialLinks: socialLinkMap(settings.socialLinks),
         }}
         initialColumns={columns.map((c) => ({
           id: c.id,
@@ -49,4 +50,20 @@ export default async function FooterPage() {
       />
     </div>
   );
+}
+
+/** Social links as { youtube: url, … } — stored either as that map or as [{ label|platform, url }]. */
+function socialLinkMap(raw: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (Array.isArray(raw)) {
+    for (const x of raw) {
+      if (!x || typeof x !== "object") continue;
+      const o = x as Record<string, unknown>;
+      const key = String(o.platform ?? o.label ?? "").trim().toLowerCase();
+      if (key && typeof o.url === "string" && o.url) out[key] = o.url;
+    }
+  } else if (raw && typeof raw === "object") {
+    for (const [k, v] of Object.entries(raw as Record<string, unknown>)) if (typeof v === "string" && v) out[k.toLowerCase()] = v;
+  }
+  return out;
 }
