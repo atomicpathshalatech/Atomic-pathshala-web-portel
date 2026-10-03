@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 ﻿import "server-only";
 import { prisma } from "@/lib/db";
 import { uploadBufferToR2, createPresignedDownloadUrl } from "@/lib/storage/r2-client";
@@ -113,8 +114,7 @@ export async function finalizeWhiteboardSlides(sessionId: string): Promise<void>
     });
 
     // Create FileAsset
-    const fileAsset = await prisma.fileAsset.create({
-      data: {
+    const fileAsset = await upsertSlideAsset({
         ownerId: session.teacherId,
         fileType: "PDF",
         storageProvider: "r2",
@@ -130,7 +130,6 @@ export async function finalizeWhiteboardSlides(sessionId: string): Promise<void>
           pageCount: pagesData.length,
           type: "CLASS_SLIDES_PDF",
         },
-      },
     });
     pdfFileAssetId = fileAsset.id;
 
@@ -178,8 +177,7 @@ export async function finalizeWhiteboardSlides(sessionId: string): Promise<void>
       },
     });
 
-    const pptxAsset = await prisma.fileAsset.create({
-      data: {
+    const pptxAsset = await upsertSlideAsset({
         ownerId: session.teacherId,
         fileType: "DOCUMENT",
         storageProvider: "r2",
@@ -195,7 +193,6 @@ export async function finalizeWhiteboardSlides(sessionId: string): Promise<void>
           pageCount: pagesData.length,
           type: "CLASS_SLIDES_PPTX",
         },
-      },
     });
 
     await prisma.whiteboardSession.update({
@@ -230,4 +227,24 @@ export async function finalizeWhiteboardSlides(sessionId: string): Promise<void>
   } catch {
     // Non-blocking
   }
+}
+
+/**
+ * The slides file of a session always lives at the same storage key, so
+ * generating it again (a retry, or two finalizations racing) must replace the
+ * record — creating a second one failed on the unique key and left the
+ * session's notes marked FAILED although the file was uploaded.
+ */
+async function upsertSlideAsset(data: Prisma.FileAssetUncheckedCreateInput) {
+  return prisma.fileAsset.upsert({
+    where: { storageKey: data.storageKey },
+    create: data,
+    update: {
+      sizeBytes: data.sizeBytes,
+      originalFilename: data.originalFilename,
+      mimeType: data.mimeType,
+      status: "ACTIVE",
+      metadata: data.metadata,
+    },
+  });
 }
