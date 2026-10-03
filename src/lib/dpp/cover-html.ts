@@ -15,11 +15,14 @@ export type DppBrand = {
 };
 
 export const DEFAULT_DPP_BRAND: DppBrand = {
-  tagline: "Concept · Practice · Selection",
+  tagline: "Learn • Explore • Excel",
   youtubeUrl: "",
   telegramUrl: "",
   websiteUrl: "https://atomicpathshala.in",
 };
+
+/** Printed when a DPP has no exam set. */
+export const DEFAULT_DPP_EXAM = "NEET / CUET / JEE";
 
 export type DppCoverInfo = {
   dppNumberLabel: string; // "DPP 03" or the DPP code
@@ -77,29 +80,36 @@ export async function buildDppCoverQrs(brand: DppBrand): Promise<DppCoverQrs> {
   const [youtube, telegram, website] = await Promise.all([
     qrSvg(normalizeLink(brand.youtubeUrl)),
     qrSvg(normalizeLink(brand.telegramUrl)),
-    qrSvg(normalizeLink(brand.websiteUrl)),
+    qrSvg(normalizeLink(brand.websiteUrl) || DEFAULT_DPP_BRAND.websiteUrl),
   ]);
   return { youtube, telegram, website };
 }
 
-const DIFFICULTY_LABEL: Record<string, string> = { EASY: "Easy", MEDIUM: "Medium", HARD: "Hard" };
+// Outline icons of the detail rows (orange on a soft tile).
+const svg = (d: string) =>
+  `<svg viewBox="0 0 24 24" fill="none" stroke="#F26A1B" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const ICONS = {
+  chapter: svg(`<path d="M12 6.5C10.4 5.2 8 4.6 4 4.8v13c4-.2 6.4.4 8 1.7 1.6-1.3 4-1.9 8-1.7v-13c-4-.2-6.4.4-8 1.7z"/><path d="M12 6.5v13"/>`),
+  topic: svg(`<circle cx="11" cy="13" r="7.5"/><circle cx="11" cy="13" r="3.6"/><path d="M11 13l7.5-7.5M16 4.5l.4 3.1 3.1.4 1.5-2-3-.5-.5-3z"/>`),
+  teacher: svg(`<circle cx="12" cy="8" r="4"/><path d="M4.5 20.5c.8-4 3.7-6 7.5-6s6.700 2 7.500 6z"/>`),
+  questions: svg(`<path d="M6.500 3.500h8l4 4v13h-12z"/><path d="M14.500 3.500v4h4M9 12h6M9 15.500h6"/>`),
+  klass: svg(`<path d="M2.500 9.500L12 5l9.500 4.500L12 14z"/><path d="M6.500 11.800v4.200c1.500 1.600 3.300 2.400 5.500 2.400s4-.8 5.500-2.400v-4.200M21.500 9.500v5"/>`),
+  exam: svg(`<rect x="5" y="4.500" width="14" height="16.500" rx="2"/><path d="M9 4.500V3h6v1.500M8.500 10h7M8.500 13.500h7M8.500 17h4"/>`),
+  subtopic: svg(`<path d="M5 6h14M5 12h9M5 18h6"/>`),
+};
+const ICON_GLOBE = `<svg viewBox="0 0 24 24" fill="none" stroke="#F26A1B" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9.500"/><path d="M2.500 12h19M12 2.500c2.600 2.700 3.900 5.900 3.900 9.500s-1.300 6.800-3.900 9.500M12 2.500C9.400 5.200 8.100 8.400 8.100 12s1.300 6.800 3.900 9.500"/></svg>`;
 
-const fmtMarks = (n: number) => (n > 0 ? `+${n}` : String(n));
+function row(icon: string, label: string, value: string | null | undefined): string {
+  const v = (value ?? "").trim();
+  if (!v) return "";
+  return `<div class="dc-row"><span class="dc-ico">${icon}</span><span class="dc-k">${esc(label)}</span><span class="dc-colon">:</span><span class="dc-v">${esc(v)}</span></div>`;
+}
 
-const ICON_YT = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1.5" y="5" width="21" height="14" rx="4" fill="#FF0033"/><path d="M10 9v6l5.2-3z" fill="#fff"/></svg>`;
-const ICON_TG = `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10.5" fill="#229ED9"/><path d="M6.2 11.7l9.9-3.8c.5-.2.9.1.7.9l-1.7 7.9c-.1.6-.5.7-1 .4l-2.6-1.9-1.3 1.2c-.1.1-.3.3-.6.3l.2-2.7 4.9-4.4c.2-.2 0-.3-.3-.1l-6 3.8-2.6-.8c-.6-.2-.6-.6.1-.8z" fill="#fff"/></svg>`;
-const ICON_WEB = `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10.5" fill="#F57C00"/><path d="M12 3.5c2.3 2.3 3.4 5.2 3.4 8.5s-1.1 6.2-3.4 8.5M12 3.5C9.7 5.8 8.6 8.7 8.6 12s1.1 6.2 3.4 8.5M3.8 9h16.4M3.8 15h16.4" stroke="#fff" stroke-width="1.4" fill="none"/></svg>`;
-
-function linkCard(kind: string, icon: string, title: string, url: string, qr: string | undefined, cta: string) {
+function linkCard(url: string, qr: string | undefined, label: string): string {
   if (!url) return "";
   return `<a class="dc-link" href="${esc(url)}" target="_blank" rel="noopener">
-      <div class="dc-qr">${qr ?? ""}</div>
-      <div class="dc-link-text">
-        <div class="dc-link-title"><span class="dc-ico">${icon}</span>${esc(title)}</div>
-        <div class="dc-link-cta">${esc(cta)}</div>
-        <div class="dc-link-url">${esc(displayHost(url))}</div>
-      </div>
-      <span class="dc-sr">${esc(kind)}</span>
+      <span class="dc-qr">${qr ?? ""}</span>
+      <span class="dc-link-url">${ICON_GLOBE}<b>${esc(label)}</b></span>
     </a>`;
 }
 
@@ -108,142 +118,86 @@ export function renderDppCoverHtml(info: DppCoverInfo, brand: DppBrand, qrs: Dpp
   const youtube = normalizeLink(brand.youtubeUrl);
   const telegram = normalizeLink(brand.telegramUrl);
   const website = normalizeLink(brand.websiteUrl) || DEFAULT_DPP_BRAND.websiteUrl;
+  const number = info.dppNumberLabel.replace(/^DPP\s*/i, "") || info.dppNumberLabel;
+  const tagline = (brand.tagline || DEFAULT_DPP_BRAND.tagline)
+    .split(/\s*[•·|]\s*/)
+    .filter(Boolean)
+    .map((w) => esc(w))
+    .join(`<i>•</i>`);
 
-  // Two columns; long fields (chapter, topic, sub-topic) take a full row, and
-  // a short field left without a partner widens to fill its row.
-  const fields = (
-    [
-      ["Subject", info.subject, false],
-      ["Class", info.className, false],
-      ["Exam", info.exam, false],
-      ["Difficulty", info.difficulty ? DIFFICULTY_LABEL[info.difficulty] ?? info.difficulty : "", false],
-      ["Chapter", info.chapter, true],
-      ["Topic", info.topic, true],
-      ["Sub-topic", info.subTopic, true],
-      ["Teacher", info.teacher, false],
-      ["Questions", info.questionCount ? String(info.questionCount) : "", false],
-    ] as [string, string | null | undefined, boolean][]
-  )
-    .filter((r) => Boolean(r[1] && String(r[1]).trim()))
-    .map(([k, v, wide]) => ({ k, v: String(v).trim(), wide }));
-  for (let i = 0; i < fields.length; i++) {
-    const f = fields[i]!;
-    if (f.wide) continue;
-    if (fields[i + 1] && !fields[i + 1]!.wide) i++;
-    else f.wide = true;
-  }
-
-  const stats: [string, string][] = [];
-  if (info.questionCount) stats.push(["Questions", String(info.questionCount)]);
-  if (info.durationMin) stats.push(["Time", `${info.durationMin} min`]);
-  if (info.correctMarks != null) stats.push(["Correct", fmtMarks(info.correctMarks)]);
-  if (info.incorrectMarks != null) stats.push(["Wrong", info.incorrectMarks === 0 ? "0" : fmtMarks(info.incorrectMarks)]);
+  const rows = [
+    row(ICONS.chapter, "Chapter Name", info.chapter),
+    row(ICONS.topic, "Topic", info.topic),
+    row(ICONS.subtopic, "Sub-topic", info.subTopic),
+    row(ICONS.teacher, "Teacher", info.teacher),
+    row(ICONS.questions, "Total Questions", info.questionCount ? String(info.questionCount) : ""),
+    row(ICONS.klass, "Class", info.className),
+    row(ICONS.exam, "Exam", info.exam || DEFAULT_DPP_EXAM),
+  ].join("");
 
   const links = [
-    linkCard("YouTube", ICON_YT, "YouTube", youtube, qrs.youtube, "Scan to watch the lectures"),
-    linkCard("Telegram", ICON_TG, "Telegram", telegram, qrs.telegram, "Scan to join for notes & updates"),
-    linkCard("Website", ICON_WEB, "Website", website, qrs.website, "Tests, DPPs & results online"),
+    linkCard(website, qrs.website, displayHost(website)),
+    linkCard(youtube, qrs.youtube, "YouTube"),
+    linkCard(telegram, qrs.telegram, "Telegram"),
   ].filter(Boolean);
 
   return `
   <div class="page dpp-cover-page">
-    <div class="dc-band">
-      <div class="dc-brand">
+    <div class="dc-frame">
+      <div class="dc-wm">ATOMIC PATHSHALA</div>
+      <div class="dc-top">
         ${logoUrl ? `<div class="dc-logo"><img src="${esc(logoUrl)}" alt="Atomic Pathshala" /></div>` : ""}
-        <div>
-          <div class="dc-name">ATOMIC PATHSHALA</div>
-          <div class="dc-tagline">${esc(brand.tagline)}</div>
-        </div>
-      </div>
-      <div class="dc-no">
-        <div class="dc-no-label">${info.solutions ? "SOLUTIONS" : "DPP NO."}</div>
-        <div class="dc-no-value">${esc(info.dppNumberLabel.replace(/^DPP\s*/i, "") || info.dppNumberLabel)}</div>
-      </div>
-    </div>
-    <div class="dc-accent"></div>
-
-    <div class="dc-body">
-      <div class="dc-kicker">DAILY PRACTICE PROBLEM</div>
-      <h1 class="dc-title">${esc(info.name)}</h1>
-      ${info.chapter ? `<div class="dc-chapter">${esc(info.chapter)}${info.topic ? ` <span>›</span> ${esc(info.topic)}` : ""}</div>` : ""}
-
-      ${
-        stats.length
-          ? `<div class="dc-stats">${stats.map(([k, v]) => `<div class="dc-stat"><div class="dc-stat-v">${esc(v)}</div><div class="dc-stat-k">${esc(k)}</div></div>`).join("")}</div>`
-          : ""
-      }
-
-      <div class="dc-details">
-        ${fields.map((f) => `<div class="dc-row${f.wide ? " dc-wide" : ""}"><div class="dc-k">${esc(f.k)}</div><div class="dc-v">${esc(f.v)}</div></div>`).join("")}
+        <div class="dc-name">ATOMIC <span>PATHSHALA</span></div>
+        <div class="dc-tagline"><span class="dc-rule"></span><span class="dc-tag">${tagline}</span><span class="dc-rule"></span></div>
       </div>
 
-      <div class="dc-note">
-        <b>How to use this DPP:</b> attempt every question in one sitting within the time given, mark your answers,
-        then check the solutions and note the mistakes in your Mistake Book. Attempt it online in the Atomic Pathshala app for instant results.
+      <div class="dc-no">${info.solutions ? "DPP NO." : "DPP NO."} <span>${esc(number)}</span></div>
+
+      <div class="dc-rows">${rows}</div>
+
+      <div class="dc-connect">
+        <div class="dc-connect-title"><span class="dc-rule"></span><span>CONNECT WITH ATOMIC PATHSHALA</span><span class="dc-rule"></span></div>
+        <div class="dc-links">${links.join("")}</div>
       </div>
-    </div>
-
-    <div class="dc-connect">
-      <div class="dc-connect-title">CONNECT WITH ATOMIC PATHSHALA</div>
-      <div class="dc-links dc-links-${links.length}">${links.join("")}</div>
-    </div>
-
-    <div class="dc-foot">
-      <span>© Atomic Pathshala</span>
-      <a href="${esc(website)}" target="_blank" rel="noopener">${esc(displayHost(website))}</a>
-      <span>${esc(info.dppNumberLabel)}</span>
     </div>
   </div>`;
 }
 
 export const DPP_COVER_CSS = `
-  .dpp-cover-page { width: 210mm; height: 297mm; box-sizing: border-box; padding: 0 !important; display: flex !important; flex-direction: column !important; justify-content: flex-start !important;
-    background: #fff; color: #16181d; font-family: 'Montserrat', 'Noto Serif Devanagari', Arial, sans-serif; overflow: hidden; position: relative;
+  .dpp-cover-page { width: 210mm; height: 297mm; box-sizing: border-box; padding: 7mm !important; display: block !important;
+    background: #fff; color: #14181f; font-family: 'Montserrat', 'Noto Serif Devanagari', Arial, sans-serif; overflow: hidden; position: relative;
     -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .dpp-cover-page * { box-sizing: border-box; }
   .dpp-cover-page a { color: inherit; text-decoration: none; }
-  .dc-band { background: #16181d; color: #fff; display: flex; align-items: center; justify-content: space-between; padding: 11mm 14mm 9mm; }
-  .dc-brand { display: flex; align-items: center; gap: 5mm; }
-  .dc-logo { width: 21mm; height: 21mm; background: #fff; border-radius: 4.5mm; display: flex; align-items: center; justify-content: center; padding: 1.2mm; }
-  .dc-logo img { width: 100%; height: 100%; object-fit: contain; }
-  .dc-name { font-weight: 900; font-size: 21pt; letter-spacing: 2.2px; line-height: 1.05; }
-  .dc-tagline { margin-top: 1.6mm; color: #FF9A3C; font-weight: 700; font-size: 9.5pt; letter-spacing: 1.4px; text-transform: uppercase; }
-  .dc-no { text-align: center; border: 1.4px solid #F57C00; border-radius: 3.5mm; padding: 2.4mm 5mm 2mm; min-width: 30mm; }
-  .dc-no-label { font-size: 7.5pt; font-weight: 800; letter-spacing: 2px; color: #FF9A3C; }
-  .dc-no-value { font-size: 26pt; font-weight: 900; line-height: 1.05; font-family: 'JetBrains Mono', 'Montserrat', monospace; }
-  .dc-accent { height: 2.2mm; background: linear-gradient(90deg, #F57C00 0%, #FF9A3C 55%, #16181d 55.2%, #16181d 100%); }
-  .dc-body { padding: 8.5mm 14mm 0; flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
-  .dc-body > * { flex-shrink: 0; }
-  .dc-kicker { font-size: 10pt; font-weight: 800; letter-spacing: 5px; color: #F57C00; }
-  .dc-title { margin: 2mm 0 0; font-size: 23pt; line-height: 1.15; font-weight: 900; color: #16181d; text-wrap: balance; }
-  .dc-chapter { margin-top: 2mm; font-size: 12pt; font-weight: 700; color: #4a4f5a; }
-  .dc-chapter span { color: #F57C00; padding: 0 1mm; }
-  .dc-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3mm; margin-top: 5.5mm; }
-  .dc-stat { border: 1px solid #e3e5ea; border-radius: 3mm; padding: 2.2mm 2mm; text-align: center; background: #fafafb; }
-  .dc-stat-v { font-size: 14pt; font-weight: 900; font-family: 'JetBrains Mono', 'Montserrat', monospace; color: #16181d; }
-  .dc-stat-k { margin-top: 0.6mm; font-size: 7.5pt; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; color: #7a808c; }
-  .dc-details { margin-top: 5.5mm; border: 1.3px solid #16181d; border-radius: 3.5mm; overflow: hidden; display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: #e3e5ea; }
-  .dc-row { display: grid; grid-template-columns: 27mm 1fr; background: #fff; }
-  .dc-row.dc-wide { grid-column: 1 / -1; }
-  .dc-k { background: #f3f4f6; padding: 2.2mm 3.5mm; font-size: 7.5pt; font-weight: 800; letter-spacing: 1.3px; text-transform: uppercase; color: #5b616d; display: flex; align-items: center; }
-  .dc-v { padding: 2.2mm 3.5mm; font-size: 11pt; font-weight: 700; color: #16181d; font-family: 'Montserrat', 'Noto Serif Devanagari', Arial, sans-serif; }
-  .dc-note { margin-top: 5mm; border-left: 1.2mm solid #F57C00; background: #fff6ed; padding: 3mm 4.5mm; font-family: 'PT Serif', 'Noto Serif Devanagari', serif; font-size: 9.3pt; line-height: 1.45; color: #3a3f49; border-radius: 0 2.5mm 2.5mm 0; }
-  .dc-note b { font-family: 'Montserrat', Arial, sans-serif; color: #16181d; }
-  .dc-connect { padding: 4mm 14mm 0; flex-shrink: 0; }
-  .dc-connect-title { font-size: 8.5pt; font-weight: 800; letter-spacing: 3px; color: #5b616d; text-align: center; margin-bottom: 3.5mm; display: flex; align-items: center; gap: 3mm; }
-  .dc-connect-title::before, .dc-connect-title::after { content: ""; flex: 1; height: 1px; background: #d9dce2; }
-  .dc-links { display: grid; gap: 4mm; grid-template-columns: repeat(3, 1fr); }
-  .dc-links-1 { grid-template-columns: 1fr; max-width: 70mm; margin: 0 auto; }
-  .dc-links-2 { grid-template-columns: repeat(2, 1fr); max-width: 130mm; margin: 0 auto; }
-  .dc-link { display: flex; flex-direction: column; align-items: center; gap: 2mm; border: 1.2px solid #e0e2e7; border-radius: 3.5mm; padding: 3.5mm 3mm 3mm; background: #fff; position: relative; }
-  .dc-qr { width: 27mm; height: 27mm; }
+  .dc-frame { position: relative; height: 100%; border: 0.9mm solid #14181f; border-radius: 6mm; padding: 9mm 9mm 8mm; display: flex; flex-direction: column; overflow: hidden; }
+  .dc-wm { position: absolute; left: 50%; top: 56%; transform: translate(-50%, -50%); font-weight: 900; font-size: 36pt; letter-spacing: 4px; color: rgba(20, 24, 31, 0.03); white-space: nowrap; pointer-events: none; z-index: 0; }
+  .dc-frame > *:not(.dc-wm) { position: relative; z-index: 1; }
+  .dc-top { display: flex; flex-direction: column; align-items: center; }
+  .dc-logo { width: 25mm; height: 25mm; }
+  .dc-logo img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .dc-name { margin-top: 3.500mm; font-weight: 900; font-size: 32pt; letter-spacing: 0.5px; line-height: 1; color: #14181f; white-space: nowrap; }
+  .dc-name span { color: #F26A1B; }
+  .dc-tagline { margin-top: 3.500mm; width: 100%; display: flex; align-items: center; gap: 4mm; }
+  .dc-rule { flex: 1; height: 0.35mm; background: #F26A1B; opacity: 0.85; }
+  .dc-tag { font-size: 11.500pt; font-weight: 500; letter-spacing: 4.5px; text-transform: uppercase; color: #2a2f38; white-space: nowrap; }
+  .dc-tag i { font-style: normal; color: #F26A1B; padding: 0 3mm; }
+  .dc-no { align-self: center; margin-top: 7mm; border: 0.7mm solid #F26A1B; border-radius: 3.500mm; padding: 2mm 13mm 2.500mm; font-weight: 900; font-size: 36pt; line-height: 1.05; letter-spacing: 0.5px; color: #14181f; white-space: nowrap; }
+  .dc-no span { color: #F26A1B; }
+  .dc-rows { margin-top: 6mm; }
+  .dc-row { display: grid; grid-template-columns: 14mm 46mm 6mm 1fr; align-items: center; min-height: 15mm; border-bottom: 0.3mm solid #d9dce2; padding: 1.500mm 0; }
+  .dc-row:last-child { border-bottom: none; }
+  .dc-ico { width: 11.500mm; height: 11.500mm; border-radius: 2.800mm; background: #FDEDE2; display: flex; align-items: center; justify-content: center; }
+  .dc-ico svg { width: 7mm; height: 7mm; display: block; }
+  .dc-k { padding-left: 5mm; font-size: 9.500pt; font-weight: 600; letter-spacing: 2.4px; text-transform: uppercase; color: #3a404b; white-space: nowrap; }
+  .dc-colon { font-size: 10pt; font-weight: 600; color: #3a404b; text-align: center; }
+  .dc-v { border-left: 0.5mm solid #F26A1B; padding: 1mm 0 1mm 6mm; font-size: 14.500pt; font-weight: 700; color: #14181f; line-height: 1.25; }
+  .dc-connect { margin-top: auto; padding-top: 4mm; }
+  .dc-connect-title { display: flex; align-items: center; gap: 4mm; font-size: 9.500pt; font-weight: 600; letter-spacing: 3.2px; color: #2a2f38; white-space: nowrap; }
+  .dc-links { margin-top: 3mm; display: flex; justify-content: center; gap: 6mm; }
+  .dc-link { display: flex; flex-direction: column; align-items: center; gap: 2.500mm; border: 0.3mm solid #dfe2e7; border-radius: 3mm; padding: 3mm 8mm 2.500mm; background: #fff; }
+  .dc-qr { width: 25mm; height: 25mm; display: block; }
   .dc-qr svg { width: 100%; height: 100%; display: block; }
-  .dc-link-text { text-align: center; }
-  .dc-link-title { display: flex; align-items: center; justify-content: center; gap: 1.6mm; font-size: 10.5pt; font-weight: 900; color: #16181d; }
-  .dc-ico svg { width: 5mm; height: 5mm; display: block; }
-  .dc-link-cta { margin-top: 0.8mm; font-size: 7.5pt; color: #6b717d; font-weight: 600; }
-  .dc-link-url { margin-top: 0.8mm; font-size: 7.8pt; color: #F57C00; font-weight: 800; word-break: break-all; }
-  .dc-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-  .dc-foot { flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; padding: 3.5mm 14mm; margin-top: 5mm; background: #16181d; color: #c9ccd3; font-size: 8pt; font-weight: 700; letter-spacing: 1px; }
-  .dc-foot a { color: #FF9A3C !important; }
+  .dc-link-url { display: flex; align-items: center; gap: 1.800mm; font-size: 10pt; color: #F26A1B; }
+  .dc-link-url svg { width: 5mm; height: 5mm; }
+  .dc-link-url b { font-weight: 800; }
 `;

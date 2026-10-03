@@ -20,8 +20,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     await requirePermission(session.user.id, PERMISSIONS.DPP_READ);
     const backing = await ensureDppTest(params.id);
     if (!backing) return apiError("Add questions to this DPP before downloading it.", 409);
-    const type = request.nextUrl.searchParams.get("type") === "solutions" ? "solutions" : "questions";
-    return NextResponse.redirect(new URL(`/api/tests/${backing.testId}/pdf?type=${type}`, request.url), 302);
+    // One PDF: front page, questions, then the answer key and solutions.
+    return NextResponse.redirect(new URL(`/api/tests/${backing.testId}/pdf?type=solutions`, request.url), 302);
   } catch (error) {
     return handleApiError(error);
   }

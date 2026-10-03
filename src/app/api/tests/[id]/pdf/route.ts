@@ -53,7 +53,9 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       .format(testData.createdAt || new Date())
       .replace(/[/\\?%*:|"<>]/g, "-");
     const name = (testData.name || "Test").replace(/[/\\?%*:|"<>]/g, "_").trim();
-    const filename = `${name} - ${date} - ATOMIC PATHSHALA${withSolution ? " (Solutions)" : ""}.pdf`;
+    // A DPP with solutions is the complete DPP (questions + solutions), not a separate "Solutions" file.
+    const isDppPaper = String(testData.examType || "").toUpperCase() === "DPP";
+    const filename = `${name} - ${date} - ATOMIC PATHSHALA${withSolution && !isDppPaper ? " (Solutions)" : ""}.pdf`;
 
     const cached = await getR2ObjectMetadata(key).catch(() => ({ exists: false }));
     if (!cached.exists) {

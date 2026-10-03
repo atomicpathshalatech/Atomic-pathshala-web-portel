@@ -10,14 +10,25 @@ const DPP_TEST_PREFIX = "DPPT-";
 export async function buildDppCoverHtml(dppId: string, opts: { logoUrl: string | null; solutions: boolean }): Promise<string | null> {
   const dpp = await prisma.dpp.findUnique({
     where: { id: dppId },
-    include: { _count: { select: { questions: true } } },
+    include: { _count: { select: { questions: true } }, createdBy: { select: { name: true } } },
   });
   if (!dpp) return null;
+  // No number saved (older / chapter-made DPPs): its place among the chapter's DPPs, oldest first.
+  let numberLabel = dppNumberLabel(dpp);
+  if (!dpp.dppNumber) {
+    const earlier = await prisma.dpp.count({
+      where: {
+        createdAt: { lt: dpp.createdAt },
+        ...(dpp.chapterId ? { chapterId: dpp.chapterId } : { subject: dpp.subject, chapter: dpp.chapter }),
+      },
+    });
+    numberLabel = `DPP ${String(earlier + 1).padStart(2, "0")}`;
+  }
   const brand = await getDppBrand();
   const qrs = await buildDppCoverQrs(brand);
   return renderDppCoverHtml(
     {
-      dppNumberLabel: dppNumberLabel(dpp),
+      dppNumberLabel: numberLabel,
       name: dpp.name,
       subject: dpp.subject,
       className: dpp.className,
@@ -27,7 +38,7 @@ export async function buildDppCoverHtml(dppId: string, opts: { logoUrl: string |
       subTopic: dpp.subTopic,
       questionCount: dpp._count.questions,
       difficulty: dpp.difficulty,
-      teacher: dpp.facultyName,
+      teacher: dpp.facultyName || dpp.createdBy?.name || null,
       durationMin: dpp.estimatedTimeMin,
       correctMarks: dpp.correctMarks,
       incorrectMarks: dpp.negativeMarkingEnabled ? dpp.incorrectMarks : 0,

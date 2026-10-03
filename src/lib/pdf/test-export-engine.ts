@@ -342,6 +342,14 @@ export function generateTestPaperHtml(
   // rough-work pages or back cover — just a title strip and the questions.
   const isDpp = String(options.testPattern || test.examType || "").toUpperCase() === "DPP";
   const footerCode = isDpp ? "DPP" : test.code || "9610WMD801490250051";
+  // Footer, left: a DPP carries the brand in colour; a test its code.
+  const footerLeftHtml = isDpp
+    ? `<span class="footer-brand">ATOMIC <span>PATHSHALA</span></span>`
+    : `<span class="footer-barcode">${footerCode}</span>`;
+  // The batch box is printed only for a real batch (it used to say "PHASE - ALL").
+  const phaseBoxHtml = !isDpp && test.batchName ? `<div class="footer-phase-box">${test.batchName}</div>` : "";
+  // Header brand: in colour on a DPP.
+  const brandHeaderHtml = isDpp ? `ATOMIC <span class="brand-accent">PATHSHALA</span>` : brandName;
 
   const SITE_HOST = "ap.atomicpathshala.in";
   const SITE_URL = `https://${SITE_HOST}`;
@@ -913,9 +921,9 @@ export function generateTestPaperHtml(
         <div class="rough-watermark">SPACE FOR ROUGH WORK / रफ कार्य के लिए जगह</div>
       </div>
       <div class="page-running-footer">
-        <div class="footer-phase-box">${test.batchName || "PHASE - ALL"}</div>
+        ${phaseBoxHtml}
         <div class="footer-meta-row">
-          <span class="footer-barcode">${footerCode}</span>${SITE_LINK_HTML}
+          ${footerLeftHtml}${SITE_LINK_HTML}
           <span class="footer-date">${currentDateStr}</span>
         </div>
       </div>
@@ -927,7 +935,7 @@ export function generateTestPaperHtml(
   // Solutions booklet: answer key first, then each question followed by its
   // solution — no cover, rough pages or back cover.
   let questionPagesHtml = "";
-  if (!withSolution) {
+  if (!withSolution || isDpp) {
     test.sections.forEach((section, si) => {
       const dppStrip =
         isDpp && si === 0
@@ -954,9 +962,9 @@ export function generateTestPaperHtml(
         </div>
         <div class="content-body"><div class="questions-stream"></div></div>
         <div class="page-running-footer">
-          <div class="footer-phase-box">${test.batchName || "PHASE - ALL"}</div>
+          ${phaseBoxHtml}
           <div class="footer-meta-row">
-            <span class="footer-barcode">${footerCode}</span>${SITE_LINK_HTML}
+            ${footerLeftHtml}${SITE_LINK_HTML}
             <span class="footer-date">${currentDateStr}</span>
           </div>
         </div>
@@ -1520,6 +1528,14 @@ export function generateTestPaperHtml(
       align-items: center;
       margin-bottom: 1px;
     }
+
+    /* DPP pages: level watermark, brand in colour in the header and footer. */
+    .dpp-doc .page-watermark { transform: translate(-50%, -50%) rotate(0deg); }
+    .dpp-doc .watermark-text { color: rgba(0, 0, 0, 0.045); font-size: 36pt; letter-spacing: 4px; }
+    .dpp-doc .test-header-brand { color: #14181f; }
+    .dpp-doc .test-header-brand .brand-accent { color: #F26A1B; }
+    .footer-brand { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 9pt; letter-spacing: 0.4px; color: #14181f; }
+    .footer-brand span { color: #F26A1B; }
 
     .test-header-brand {
       font-family: 'Montserrat', sans-serif;
@@ -2175,7 +2191,7 @@ export function generateTestPaperHtml(
 ${isDpp && options.dppCoverHtml ? DPP_COVER_CSS : ""}
   </style>
 </head>
-<body>
+<body class="${isDpp ? "dpp-doc" : ""}">
 
   <!-- Screen-only toolbar. The PDF is made by the browser's own "Save as PDF"
        (real text, exact Hindi shaping and maths, small file) — not by
@@ -2188,13 +2204,13 @@ ${isDpp && options.dppCoverHtml ? DPP_COVER_CSS : ""}
   </div>
 
   <div class="doc-container" id="doc-container">
-    ${isDpp && options.dppCoverHtml ? options.dppCoverHtml : ""}${withSolution ? solutionsSectionHtml : isDpp ? questionPagesHtml : frontCoverHtml + questionPagesHtml + finalRoughPagesHtml + backCoverHtml}
+    ${isDpp && options.dppCoverHtml ? options.dppCoverHtml : ""}${isDpp ? questionPagesHtml + (withSolution ? solutionsSectionHtml : "") : withSolution ? solutionsSectionHtml : frontCoverHtml + questionPagesHtml + finalRoughPagesHtml + backCoverHtml}
   </div>
   ${contentPageTemplateHtml}
 
   <script>
     (function () {
-      var BRAND = ${JSON.stringify(brandName)};
+      var BRAND = ${JSON.stringify(brandHeaderHtml)};
       var AUTO_PRINT = ${autoPrint ? "true" : "false"};
       var SAFETY_PX = 8;
 

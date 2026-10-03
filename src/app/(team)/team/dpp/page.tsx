@@ -247,18 +247,11 @@ export default async function DppListPage({
                     {have > 0 && (
                       <>
                         <a
-                          href={`/api/team/dpp/${dpp.id}/pdf?type=questions`}
-                          title="Download DPP (question sheet PDF)"
+                          href={`/api/team/dpp/${dpp.id}/pdf`}
+                          title="Download DPP (questions + solutions, one PDF)"
                           className="h-8 w-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition"
                         >
                           <Download className="w-4 h-4" />
-                        </a>
-                        <a
-                          href={`/api/team/dpp/${dpp.id}/pdf?type=solutions`}
-                          title="Download solutions PDF"
-                          className="h-8 px-2 rounded-lg text-[11px] font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 inline-flex items-center"
-                        >
-                          Solutions
                         </a>
                       </>
                     )}

@@ -188,12 +188,9 @@ export function BatchPdfLibrary({
                       {d.chapter} · {d.questionCount} questions
                     </p>
                     <div className="mt-auto pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center gap-1">
-                      <a href={`/api/team/dpp/${d.id}/pdf?type=questions`} className={DL}>
+                      <a href={`/api/team/dpp/${d.id}/pdf`} className={DL} title="Questions + solutions, one PDF">
                         <span className="material-symbols-outlined text-sm">download</span>
                         PDF
-                      </a>
-                      <a href={`/api/team/dpp/${d.id}/pdf?type=solutions`} className={DL2}>
-                        Solutions
                       </a>
                     </div>
                   </div>

@@ -77,38 +77,22 @@ export default async function DppDetailPage({ params }: { params: { id: string }
           </span>
           {canPublish && <DppStatusActions dppId={dpp.id} status={dpp.status} />}
           <a
-            href={`/api/team/dpp/${dpp.id}/preview?type=questions`}
+            href={`/api/team/dpp/${dpp.id}/preview`}
             target="_blank"
             rel="noopener"
             className="h-8 px-3 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold inline-flex items-center gap-1"
-            title="See the whole DPP (front page + questions) before downloading"
+            title="See the whole DPP (front page, questions and solutions) before downloading"
           >
             <span className="material-symbols-outlined text-[16px]">visibility</span>
             Preview
           </a>
           <a
-            href={`/api/team/dpp/${dpp.id}/pdf?type=questions`}
+            href={`/api/team/dpp/${dpp.id}/pdf`}
             className="h-8 px-3 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 inline-flex items-center gap-1"
-            title="Download the DPP question sheet (PDF)"
+            title="Download the DPP — questions and solutions in one PDF"
           >
             <span className="material-symbols-outlined text-[16px]">download</span>
             DPP PDF
-          </a>
-          <a
-            href={`/api/team/dpp/${dpp.id}/pdf?type=solutions`}
-            className="h-8 px-3 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 inline-flex items-center gap-1"
-            title="Download the solutions (PDF)"
-          >
-            Solutions PDF
-          </a>
-          <a
-            href={`/api/team/dpp/${dpp.id}/preview?type=solutions`}
-            target="_blank"
-            rel="noopener"
-            className="h-8 px-3 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 inline-flex items-center gap-1"
-            title="Preview the solutions"
-          >
-            Preview Solutions
           </a>
           {canPublish && <DppBrandSettingsButton />}
         </div>

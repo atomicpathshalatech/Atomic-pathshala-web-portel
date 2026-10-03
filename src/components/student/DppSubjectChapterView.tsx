@@ -319,20 +319,11 @@ export function DppSubjectChapterView({
                                       {/* Question sheet + solutions PDFs, once the student has submitted. */}
                                       {dpp.testId && dpp.status === "COMPLETED" && (
                                         <a
-                                          href={`/api/tests/${dpp.testId}/pdf?type=questions`}
-                                          className="p-1.5 rounded-lg border border-outline-variant/30 hover:bg-surface-container text-on-surface-variant hover:text-primary transition"
-                                          title="Download DPP question sheet (PDF)"
-                                        >
-                                          <span className="material-symbols-outlined text-sm">download</span>
-                                        </a>
-                                      )}
-                                      {dpp.testId && dpp.status === "COMPLETED" && (
-                                        <a
                                           href={`/api/tests/${dpp.testId}/pdf?type=solutions`}
                                           className="px-2 py-1.5 rounded-lg border border-outline-variant/30 hover:bg-surface-container text-[11px] font-bold text-on-surface-variant hover:text-primary transition"
-                                          title="Solutions (PDF)"
+                                          title="Download the DPP with solutions (one PDF)"
                                         >
-                                          Solutions
+                                          DPP + Solutions
                                         </a>
                                       )}
 

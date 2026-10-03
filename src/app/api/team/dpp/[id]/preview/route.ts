@@ -24,8 +24,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
     const backing = await ensureDppTest(params.id);
     if (backing) {
-      const type = solutions ? "with-solution" : "without-solution";
-      return NextResponse.redirect(new URL(`/api/tests/${backing.testId}/export?type=${type}`, request.url), 302);
+      // The same single booklet the PDF is made from (questions + solutions).
+      return NextResponse.redirect(new URL(`/api/tests/${backing.testId}/export?type=with-solution`, request.url), 302);
     }
 
     // No questions yet: show just the front page.
