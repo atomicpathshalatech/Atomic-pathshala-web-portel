@@ -68,6 +68,8 @@ export default async function HomePage() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }} />
       <PublicHeader />
       <main className="overflow-x-hidden bg-white">
+        {/* The page keeps one H1 for search engines when the hero section isn't used. */}
+        {!sections.some((s) => s.type === "HERO" && s.visible !== false) && <h1 className="sr-only">{TITLE}</h1>}
         <HomeSections sections={sections} />
       </main>
       <PublicFooter socials={data.socials} />

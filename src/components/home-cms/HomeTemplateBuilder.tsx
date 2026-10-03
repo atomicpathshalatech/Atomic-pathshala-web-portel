@@ -254,7 +254,7 @@ export function HomeTemplateBuilder({
       {sections.length === 0 && perms.canCreate && (
         <div className="rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/50 p-6 text-center">
           <p className="text-base font-bold text-slate-900">Shuru kahan se karein?</p>
-          <p className="mt-1 text-sm text-slate-600">Abhi ka poora homepage (Hero, Banner, PYQ, Study Material, Tests, Courses, Teachers, Blog, FAQ…) yahan laayein, phir jo chahein badlein.</p>
+          <p className="mt-1 text-sm text-slate-600">Abhi ka poora homepage (Banner, PYQ, Study Material, Tests, Courses, Teachers, Blog, FAQ…) yahan laayein, phir jo chahein badlein.</p>
           <button type="button" disabled={busy} onClick={addDefaultLayout} className="mt-4 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50">
             {busy ? "Add ho raha hai…" : "Abhi ka homepage builder mein laayein"}
           </button>

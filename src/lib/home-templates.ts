@@ -427,8 +427,9 @@ export type LayoutSection = {
 };
 
 /** The homepage as shipped — shown until a Website Builder version is published, and the starting point in the builder. */
+// The hero (big heading + illustration) is not part of the default page; it
+// stays in the template library if an admin wants to add it back.
 export const DEFAULT_LAYOUT: LayoutSection[] = [
-  "HERO",
   "BANNER_SLIDER",
   "EXAM_SELECTOR",
   "SEARCH",
