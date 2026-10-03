@@ -212,12 +212,14 @@ export function LectureVideoPlayer({
   const callbacksRef = useRef({ onEnded, onTimeUpdate, onProgressPercentage });
   callbacksRef.current = { onEnded, onTimeUpdate, onProgressPercentage };
 
-  // Headless YouTube embed (controls=0 removes YouTube's own UI)
-  const youtubeHeadlessEmbedUrl = useMemo(() => {
+  // The standard YouTube embed: YouTube's own controls, logo and branding stay
+  // visible and nothing is drawn over the player (YouTube API Services
+  // policy). The JS API is on only to save progress and resume.
+  const youtubeEmbedUrl = useMemo(() => {
     if (!youtubeVideoId) return "";
     const origin = typeof window !== "undefined" && window.location.origin ? window.location.origin : "";
     const originParam = origin ? `&origin=${encodeURIComponent(origin)}` : "";
-    return `https://www.youtube.com/embed/${youtubeVideoId}?enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&disablekb=1&fs=0&iv_load_policy=3&cc_load_policy=0&autoplay=0&vq=hd1080${originParam}`;
+    return `https://www.youtube.com/embed/${youtubeVideoId}?enablejsapi=1&controls=1&rel=0&playsinline=1&fs=1&iv_load_policy=3&autoplay=0${originParam}`;
   }, [youtubeVideoId]);
 
   const activeWatermark = useMemo(() => {
@@ -964,6 +966,56 @@ export function LectureVideoPlayer({
   const iconCls = "material-symbols-outlined text-[18px] sm:text-[20px]";
   const fade = `transition-opacity duration-300 ${controlsVisible ? "opacity-100" : "opacity-0 pointer-events-none"}`;
 
+  // YouTube videos: the plain YouTube player, untouched. The student's
+  // watermark and the resume button sit below it, not on the video.
+  if (isYouTube) {
+    return (
+      <div className={`w-full ${className}`}>
+        <div ref={containerRef} className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden">
+          <iframe
+            id={ytPlayerElementId}
+            ref={iframeRef}
+            src={youtubeEmbedUrl}
+            title={title || "Atomic Pathshala Player"}
+            onLoad={() => {
+              try {
+                iframeRef.current?.contentWindow?.postMessage(
+                  JSON.stringify({ event: "listening", id: ytPlayerElementId }),
+                  "*"
+                );
+              } catch {}
+            }}
+            className="absolute inset-0 w-full h-full border-0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+            allowFullScreen
+          />
+        </div>
+        <div className="mt-1.5 px-1 flex items-center justify-between gap-2 text-[10px] text-slate-500">
+          <span className="font-mono truncate select-none">{activeWatermark}</span>
+          {showResumeBanner && !isLive && (
+            <span className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={applyResumeTime}
+                className="px-2.5 py-1 rounded-full bg-blue-600 text-white font-semibold hover:bg-blue-700 transition cursor-pointer"
+              >
+                Resume from {formatTime(savedResumeTime)}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowResumeBanner(false)}
+                className="px-1.5 py-1 rounded-full text-slate-500 hover:text-slate-800 cursor-pointer"
+                aria-label="Dismiss"
+              >
+                ✕
+              </button>
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       ref={containerRef}
@@ -989,7 +1041,7 @@ export function LectureVideoPlayer({
           <iframe
             id={ytPlayerElementId}
             ref={iframeRef}
-            src={youtubeHeadlessEmbedUrl}
+            src={youtubeEmbedUrl}
             title={title || "Atomic Pathshala Player"}
             onLoad={() => {
               try {
