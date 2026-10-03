@@ -174,7 +174,7 @@ export function ChapterTeamViewWrapper({
 
       const scheduledDate = new Date(current);
       const dayName = dayNames[scheduledDate.getDay()];
-      const formattedDate = scheduledDate.toLocaleDateString("en-IN", {
+      const formattedDate = scheduledDate.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", 
         day: "numeric",
         month: "short",
         year: "numeric",

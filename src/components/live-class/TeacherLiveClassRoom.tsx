@@ -3006,7 +3006,7 @@ export function TeacherLiveClassRoom({
                         ? "text-amber-300 bg-amber-950/60 border-amber-500/50 animate-pulse"
                         : "text-gray-300 bg-black/40 border-gray-700/60"
                     }`}
-                    title={`Time left until scheduled end (${new Date(scheduledEndMs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})`}
+                    title={`Time left until scheduled end (${new Date(scheduledEndMs).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit" })})`}
                   >
                     <span className="material-symbols-outlined text-xs">timer</span>
                     {formatHms(remainingSeconds)} left

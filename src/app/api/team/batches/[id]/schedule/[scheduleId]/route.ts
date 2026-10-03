@@ -210,8 +210,8 @@ export async function PATCH(
         await cancelScheduledNotifications(NotificationType.CLASS_REMINDER_15_MIN, schedule.id);
         await cancelScheduledNotifications(NotificationType.CLASS_STARTED, schedule.id);
 
-        const timeStr = schedule.startsAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-        const dateStr = schedule.startsAt.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
+        const timeStr = schedule.startsAt.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit" });
+        const dateStr = schedule.startsAt.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", month: "short", day: "numeric" });
 
         await triggerNotificationEvent({
           eventType: NotificationType.CLASS_RESCHEDULED,

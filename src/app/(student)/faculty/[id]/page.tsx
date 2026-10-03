@@ -271,7 +271,7 @@ export default async function FacultyProfilePage({ params }: { params: { id: str
                     <p className="text-xs font-bold text-slate-900 truncate">{schedule.title}</p>
                     <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1">
                       <Calendar className="w-3 h-3 text-slate-400" />
-                      {schedule.startsAt.toLocaleDateString("en-IN", {
+                      {schedule.startsAt.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", 
                         day: "numeric",
                         month: "short",
                         hour: "2-digit",

@@ -101,8 +101,8 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
     try {
       const { triggerNotificationEvent } = await import("@/lib/notifications/engine");
       const { NotificationType, NotificationCategory, NotificationPriority } = await import("@/lib/notifications/types");
-      const timeStr = slot.startTime.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
-      const dateStr = slot.startTime.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
+      const timeStr = slot.startTime.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit" });
+      const dateStr = slot.startTime.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", month: "short", day: "numeric" });
 
       await triggerNotificationEvent({
         eventType: NotificationType.GENERAL,

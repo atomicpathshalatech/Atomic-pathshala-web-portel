@@ -58,7 +58,7 @@ export async function generateDailyTargetsForStudent(userId: string): Promise<bo
   const targets: string[] = [];
 
   for (const c of todaysClasses) {
-    const timeStr = c.startsAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const timeStr = c.startsAt.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit" });
     targets.push(`Attend ${c.title} (${timeStr})`);
   }
 
