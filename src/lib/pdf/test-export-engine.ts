@@ -368,6 +368,10 @@ export function generateTestPaperHtml(
     month: "2-digit",
     year: "numeric",
   }).format(test.createdAt || new Date());
+  // Footer, right: a DPP carries its page number (filled in by renumber()), a test the date.
+  const footerRightHtml = isDpp
+    ? `<span class="footer-date js-footer-page-no"></span>`
+    : `<span class="footer-date">${currentDateStr}</span>`;
 
   // Deterministic series & form code
   const bookletSeries = test.code ? (test.code.length > 8 ? test.code.slice(0, 8) : test.code) : "AP-26";
@@ -930,7 +934,7 @@ export function generateTestPaperHtml(
         ${phaseBoxHtml}
         <div class="footer-meta-row">
           ${footerLeftHtml}${SITE_LINK_HTML}
-          <span class="footer-date">${currentDateStr}</span>
+          ${footerRightHtml}
         </div>
       </div>
     </div>
@@ -971,7 +975,7 @@ export function generateTestPaperHtml(
           ${phaseBoxHtml}
           <div class="footer-meta-row">
             ${footerLeftHtml}${SITE_LINK_HTML}
-            <span class="footer-date">${currentDateStr}</span>
+            ${footerRightHtml}
           </div>
         </div>
       </div>
@@ -2353,6 +2357,8 @@ ${isDpp && options.dppCoverHtml ? DPP_COVER_CSS : ""}
           var n = i + 1;
           var row = pages[i].querySelector('.test-header-row-1');
           if (row) row.innerHTML = headerRow(n);
+          var footerNo = pages[i].querySelector('.js-footer-page-no');
+          if (footerNo) footerNo.textContent = 'Page ' + n;
           var label = pages[i].querySelector('.js-sol-page-label');
           if (label) label.textContent = 'PAGE ' + n;
           if (pages[i].classList.contains('back-cover-page')) bookletPages = n;

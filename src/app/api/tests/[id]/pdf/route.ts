@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { apiError } from "@/lib/api/response";
 import { fetchCanonicalTestData, generateTestPaperHtml } from "@/lib/pdf/test-export-engine";
 import { renderBookletPdf } from "@/lib/pdf/html-to-pdf";
+import { inlineBookletImages } from "@/lib/pdf/inline-images";
 import { studentPaperBlockReason } from "@/lib/tests/paper-access";
 import { createPresignedDownloadUrl, getR2ObjectMetadata, uploadBufferToR2 } from "@/lib/storage/r2-client";
 import { brandLogoDataUrl } from "@/lib/pdf/brand-logo";
@@ -47,7 +48,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       dppCoverHtml: await buildDppCoverForTestCode(testData.code, { logoUrl, solutions: withSolution }),
     });
 
-    const version = createHash("sha1").update(html).digest("hex").slice(0, 16);
+    // "img2": PDFs made before figures were embedded printed them broken — make those again.
+    const version = createHash("sha1").update("img2").update(html).digest("hex").slice(0, 16);
     const key = `test-pdfs/${params.id}/${type}-${version}.pdf`;
     const date = new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" })
       .format(testData.createdAt || new Date())
@@ -59,7 +61,9 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
     const cached = await getR2ObjectMetadata(key).catch(() => ({ exists: false }));
     if (!cached.exists) {
-      const pdf = await renderBookletPdf(html);
+      const pdf = await renderBookletPdf(
+        await inlineBookletImages(html, { origin: request.nextUrl.origin, cookie: request.headers.get("cookie") })
+      );
       await uploadBufferToR2({ key, buffer: pdf, contentType: "application/pdf" });
     }
 
