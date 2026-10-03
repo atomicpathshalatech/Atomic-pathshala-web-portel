@@ -21,6 +21,18 @@ export const homeSectionTypeSchema = z.enum([
   "CONTACT",
   "SOCIAL_LINKS",
   "CUSTOM_HTML",
+  "BANNER_SLIDER",
+  "EXAM_SELECTOR",
+  "SEARCH",
+  "FREE_RESOURCES",
+  "PYQ_HUB",
+  "STUDY_MATERIAL",
+  "FREE_TESTS",
+  "TODAY_SCHEDULE",
+  "ATOMIC_GURU",
+  "YOUTUBE",
+  "WHY_US",
+  "TRUST",
 ]);
 
 // `config` is intentionally z.record(z.unknown()) rather than a discriminated

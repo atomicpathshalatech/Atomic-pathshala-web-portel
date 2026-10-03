@@ -2,17 +2,22 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ButtonLink, Icon, Section, SectionHeader, fmtCount } from "./ui";
+import { ButtonLink, Icon, Section, SectionHeader, fmtCount, hd, type Head } from "./ui";
 
 type Props = {
   pyqCounts: Record<string, Record<string, number>>;
   topChapters: { exam: string; subject: string; chapter: string; count: number }[];
+  head?: Head;
+  /** Exam tabs to show (ids from PYQ_EXAMS); all when empty. */
+  exams?: string[];
 };
 
 // Where each exam's PYQs are practised today: NEET in PYQ Practice (free
 // questions every day), JEE as previous-year papers in Study Material, Boards
 // in the Board Exam Hub.
-const TABS = [
+export const PYQ_EXAMS = ["NEET", "JEE Main", "JEE Advanced", "CBSE", "State Boards"];
+
+const ALL_TABS = [
   { id: "NEET", label: "NEET", subjects: ["Physics", "Chemistry", "Biology"], href: "/practice", cta: "Practice NEET PYQs", note: "Free questions every day in PYQ Practice." },
   { id: "JEE Main", label: "JEE Main", subjects: ["Physics", "Chemistry", "Mathematics"], href: "/study-material", cta: "Open JEE PYQ papers", note: "Previous-year papers in Study Material." },
   { id: "JEE Advanced", label: "JEE Advanced", subjects: ["Physics", "Chemistry", "Mathematics"], href: "/study-material", cta: "Open JEE PYQ papers", note: "Previous-year papers in Study Material." },
@@ -27,10 +32,12 @@ const WAYS = [
 ];
 
 /** PRACTICE REAL EXAM QUESTIONS — exam tabs → subjects → chapters, from the question bank. */
-export function PyqHub({ pyqCounts, topChapters }: Props) {
+export function PyqHub({ pyqCounts, topChapters, head, exams }: Props) {
+  const picked = exams?.length ? ALL_TABS.filter((t) => exams.includes(t.id)) : [];
+  const TABS = picked.length ? picked : ALL_TABS;
   const [tab, setTab] = useState(TABS[0]!.id);
   const [subject, setSubject] = useState<string | null>(null);
-  const t = TABS.find((x) => x.id === tab)!;
+  const t = TABS.find((x) => x.id === tab) ?? TABS[0]!;
   const counts = pyqCounts[tab] ?? {};
   const chapters = topChapters.filter((c) => c.exam === tab && (!subject || c.subject === subject)).slice(0, 6);
 
@@ -38,9 +45,7 @@ export function PyqHub({ pyqCounts, topChapters }: Props) {
     <Section id="pyq" tone="navy">
       <SectionHeader
         dark
-        eyebrow="PYQ hub"
-        title="Practice real exam questions"
-        subtitle="NEET, JEE and Board previous-year questions — chapter-wise, topic-wise and year-wise, with solutions."
+        {...hd(head, { eyebrow: "PYQ hub", title: "Practice real exam questions", subtitle: "NEET, JEE and Board previous-year questions — chapter-wise, topic-wise and year-wise, with solutions." })}
       />
 
       <div role="tablist" aria-label="Exam" className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0">

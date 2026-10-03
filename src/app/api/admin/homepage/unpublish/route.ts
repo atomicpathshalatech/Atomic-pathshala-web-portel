@@ -1,3 +1,4 @@
+import { revalidatePath } from "next/cache";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -37,6 +38,9 @@ export async function POST() {
         metadata: { versionNumber: version.versionNumber },
       },
     });
+
+    // Show the change on the homepage right away (not after the 60s refresh).
+    revalidatePath("/");
 
     return apiSuccess({ version });
   } catch (error) {

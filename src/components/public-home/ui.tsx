@@ -7,6 +7,12 @@ import type { ReactNode } from "react";
  * accent, a little orange only for highlights.
  */
 
+/** Admin-editable section heading (Website Builder); blank fields keep the default. */
+export type Head = { eyebrow?: string; title?: string; subtitle?: string };
+export function hd(h: Head | undefined, d: { eyebrow?: string; title: string; subtitle?: string }) {
+  return { eyebrow: h?.eyebrow || d.eyebrow, title: h?.title || d.title, subtitle: h?.subtitle || d.subtitle };
+}
+
 export const CONTAINER = "mx-auto w-full max-w-6xl px-4 sm:px-6";
 
 export function Section({ id, children, className = "", tone = "white" }: { id?: string; children: ReactNode; className?: string; tone?: "white" | "tint" | "navy" }) {
