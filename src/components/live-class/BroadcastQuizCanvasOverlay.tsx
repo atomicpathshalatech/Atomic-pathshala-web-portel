@@ -40,6 +40,11 @@ export function BroadcastQuizCanvasOverlay({
     activeQuiz.correctOption || "A"
   );
 
+  // The card is sized from the stage, so it never hangs outside a small board:
+  // about a quarter of the stage wide, between 220 and 300 px.
+  const cardWidth = Math.round(Math.min(300, Math.max(220, (containerWidth || 1200) * 0.26)));
+  const [fit, setFit] = useState(1);
+
   // Position state (relative to stage container)
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
@@ -48,10 +53,9 @@ export function BroadcastQuizCanvasOverlay({
   // Sync default position to top-right corner if not yet set
   useEffect(() => {
     if (!pos && containerWidth && containerHeight) {
-      const defaultWidth = 360;
       setPos({
-        x: Math.max(20, containerWidth - defaultWidth - 28),
-        y: 28,
+        x: Math.max(12, containerWidth - cardWidth - 16),
+        y: 16,
       });
     }
   }, [containerWidth, containerHeight, pos]);
@@ -149,7 +153,23 @@ export function BroadcastQuizCanvasOverlay({
 
   const stylePosition = pos
     ? { left: `${pos.x}px`, top: `${pos.y}px` }
-    : { right: "24px", top: "24px" };
+    : { right: "16px", top: "16px" };
+
+  // Keep the whole card on the stage: shrink it if it is taller than the
+  // stage, and pull it back inside if its position would push it out.
+  useEffect(() => {
+    const el = cardRef.current;
+    if (!el || !containerWidth || !containerHeight) return;
+    const h = el.offsetHeight;
+    const w = el.offsetWidth;
+    const nextFit = Math.min(1, (containerHeight - 20) / Math.max(1, h));
+    if (Math.abs(nextFit - fit) > 0.02) setFit(nextFit);
+    if (pos) {
+      const maxX = Math.max(8, containerWidth - w * nextFit - 8);
+      const maxY = Math.max(8, containerHeight - h * nextFit - 8);
+      if (pos.x > maxX || pos.y > maxY) setPos({ x: Math.min(pos.x, maxX), y: Math.min(pos.y, maxY) });
+    }
+  });
 
   if (isMinimized) {
     return (
@@ -195,11 +215,11 @@ export function BroadcastQuizCanvasOverlay({
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      style={stylePosition}
-      className="absolute z-40 select-none w-88 sm:w-96 rounded-2xl bg-[#0a0c16]/95 border-2 border-indigo-500/85 text-white shadow-2xl p-4 flex flex-col gap-3 backdrop-blur-xl animate-in zoom-in-95 fade-in duration-200 cursor-move"
+      style={{ ...stylePosition, width: cardWidth, zoom: fit }}
+      className="absolute z-40 select-none rounded-xl bg-[#0a0c16]/95 border-2 border-indigo-500/85 text-white shadow-2xl p-3 flex flex-col gap-2 backdrop-blur-xl animate-in zoom-in-95 fade-in duration-200 cursor-move"
     >
       {/* Broadcast Header */}
-      <div className="flex items-center justify-between gap-2 border-b border-slate-800/90 pb-2.5">
+      <div className="flex items-center justify-between gap-2 border-b border-slate-800/90 pb-1.5">
         <div className="flex items-center gap-2 min-w-0">
           <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-red-600/20 border border-red-500/50 text-red-400 text-[11px] font-black uppercase tracking-wider shrink-0">
             <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
@@ -259,7 +279,7 @@ export function BroadcastQuizCanvasOverlay({
 
       {/* Question Text */}
       <div className="px-0.5 space-y-1.5">
-        <h4 className="text-sm font-bold text-slate-100 leading-snug line-clamp-2">
+        <h4 className="text-xs font-bold text-slate-100 leading-snug line-clamp-2">
           {activeQuiz.questionText || "Live Quick Quiz (Select Option)"}
         </h4>
         {activeQuiz.status === "ACTIVE" && (
@@ -289,7 +309,7 @@ export function BroadcastQuizCanvasOverlay({
                   setSelectedRevealOption(opt.key);
                 }
               }}
-              className={`relative overflow-hidden rounded-xl border p-2.5 transition-all ${
+              className={`relative overflow-hidden rounded-lg border px-2 py-1.5 transition-all ${
                 isCorrect
                   ? "border-emerald-400 bg-emerald-950/40 ring-2 ring-emerald-500/50 shadow-lg shadow-emerald-900/20"
                   : "border-slate-800/80 bg-[#101322]/80 hover:border-slate-700"

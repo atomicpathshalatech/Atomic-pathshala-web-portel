@@ -1609,11 +1609,23 @@ export function TeacherLiveClassRoom({
     }
   }
 
+  /** Slides after a new one was put in: the server's order, keeping what this tab already holds for each slide. */
+  function mergeInsertedPage(prevPages: WhiteboardPage[], data: { page: WhiteboardPage; pages?: WhiteboardPage[] }): WhiteboardPage[] {
+    if (!data.pages) return [...prevPages.filter((p) => p.id !== data.page.id), data.page];
+    return data.pages.map((sp) => {
+      const local = prevPages.find((p) => p.id === sp.id);
+      return local ? { ...local, pageNumber: sp.pageNumber } : sp;
+    });
+  }
+
+  // A new slide goes right after the one on screen (not to the end).
   async function addPage() {
     if (!wbSession) return;
     try {
-      const data = await postJson(`/api/whiteboard/sessions/${wbSession.id}/pages`);
-      setWbSession((prev) => (prev ? { ...prev, pages: [...prev.pages, data.page], activePageNumber: data.page.pageNumber } : prev));
+      if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+      await flushAutosave();
+      const data = await postJson(`/api/whiteboard/sessions/${wbSession.id}/pages`, { afterPageNumber: wbSession.activePageNumber });
+      setWbSession((prev) => (prev ? { ...prev, pages: mergeInsertedPage(prev.pages, data), activePageNumber: data.page.pageNumber } : prev));
       engineRef.current?.loadObjects([]);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Could not add a page.");
@@ -1623,7 +1635,9 @@ export function TeacherLiveClassRoom({
   async function handleAddPageWithTemplate(bgValue: string) {
     if (!wbSession) return;
     try {
-      const data = await postJson(`/api/whiteboard/sessions/${wbSession.id}/pages`);
+      if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+      await flushAutosave();
+      const data = await postJson(`/api/whiteboard/sessions/${wbSession.id}/pages`, { afterPageNumber: wbSession.activePageNumber });
       const newPage = data.page as WhiteboardPage;
       await patchJson(`/api/whiteboard/sessions/${wbSession.id}/pages/${newPage.id}`, {
         background: bgValue,
@@ -1634,7 +1648,7 @@ export function TeacherLiveClassRoom({
         prev
           ? {
               ...prev,
-              pages: [...prev.pages.filter((p) => p.id !== newPage.id), updatedPage],
+              pages: mergeInsertedPage(prev.pages, { ...data, page: updatedPage }).map((p) => (p.id === updatedPage.id ? updatedPage : p)),
               activePageNumber: updatedPage.pageNumber,
             }
           : prev
