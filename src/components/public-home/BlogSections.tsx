@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { PublicBlogPost } from "@/lib/blog";
-import { ButtonLink, CardRail, Icon, Section, SectionHeader } from "./ui";
+import { ButtonLink, CardRail, Icon, Section, SectionHeader, hd, type Head } from "./ui";
 
 const IST = "Asia/Kolkata";
 export const blogDate = (iso: string) => new Date(iso).toLocaleDateString("en-IN", { timeZone: IST, day: "numeric", month: "short", year: "numeric" });
@@ -34,11 +34,11 @@ export function BlogCard({ post }: { post: PublicBlogPost }) {
 }
 
 /** Homepage: the latest published blog posts (hidden when there are none). */
-export function LatestBlogsSection({ posts }: { posts: PublicBlogPost[] }) {
+export function LatestBlogsSection({ posts, head }: { posts: PublicBlogPost[]; head?: Head }) {
   if (!posts.length) return null;
   return (
     <Section id="blog">
-      <SectionHeader eyebrow="Blog" title="Tips, strategies & updates" action={<ButtonLink href="/blog" variant="secondary">Read all posts</ButtonLink>} />
+      <SectionHeader {...hd(head, { eyebrow: "Blog", title: "Tips, strategies & updates" })} action={<ButtonLink href="/blog" variant="secondary">Read all posts</ButtonLink>} />
       <CardRail cols="sm:grid-cols-2 lg:grid-cols-3">
         {posts.map((p) => (
           <BlogCard key={p.slug} post={p} />

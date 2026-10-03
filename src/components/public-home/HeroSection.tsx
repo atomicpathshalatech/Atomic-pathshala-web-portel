@@ -88,42 +88,72 @@ function HeroVisual({ image }: { image: HeroImage }) {
   );
 }
 
-export function HeroSection({ image = null }: { image?: HeroImage }) {
+export type HeroContent = {
+  badge?: string;
+  heading?: string;
+  highlight?: string;
+  headingEnd?: string;
+  subheading?: string;
+  ctaText?: string;
+  ctaUrl?: string;
+  secondaryCtaText?: string;
+  secondaryCtaUrl?: string;
+  bullets?: string[];
+};
+
+const BULLET_ICONS = ["translate", "school", "lock_open", "check_circle"];
+
+export function HeroSection({ image = null, content = {} }: { image?: HeroImage; content?: HeroContent }) {
+  const c = content;
+  // Only the admin's own words when they set a heading; otherwise the default three-part line.
+  const custom = !!(c.heading || c.highlight || c.headingEnd);
+  const badge = c.badge ?? "NEET • JEE • BOARDS";
+  const bullets = c.bullets?.filter(Boolean).length ? c.bullets.filter(Boolean) : ["Hindi + English Medium", "Class 10, 11, 12", "Free resources with a free account"];
+  const isExternal = (u: string) => /^https?:\/\//i.test(u);
   return (
     <section className="relative overflow-hidden bg-gradient-to-b from-blue-50/70 via-white to-white">
       <div className={`${CONTAINER} grid items-center gap-8 py-10 sm:py-14 lg:grid-cols-[1.1fr_0.9fr] lg:py-20`}>
         <div>
-          <p className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-semibold text-blue-700 ring-1 ring-blue-100">
-            <span>NEET</span>
-            <span className="text-slate-300">•</span>
-            <span>JEE</span>
-            <span className="text-slate-300">•</span>
-            <span>BOARDS</span>
-          </p>
+          {badge && (
+            <p className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-semibold text-blue-700 ring-1 ring-blue-100">
+              {badge.split("•").map((part, i, all) => (
+                <span key={i} className="inline-flex items-center gap-2">
+                  <span>{part.trim()}</span>
+                  {i < all.length - 1 && <span className="text-slate-300">•</span>}
+                </span>
+              ))}
+            </p>
+          )}
           <h1 className="mt-4 text-[34px] leading-[1.1] font-extrabold tracking-tight text-[#0b1736] sm:text-5xl lg:text-[56px]">
-            Learn Better. <span className="text-blue-600">Practice More.</span> Score Higher.
+            {custom ? (
+              <>
+                {c.heading}
+                {c.highlight && <> <span className="text-blue-600">{c.highlight}</span></>}
+                {c.headingEnd && <> {c.headingEnd}</>}
+              </>
+            ) : (
+              <>
+                Learn Better. <span className="text-blue-600">Practice More.</span> Score Higher.
+              </>
+            )}
           </h1>
           <p className="mt-4 max-w-xl text-base text-slate-600 sm:text-lg">
-            Complete preparation for Class 10, 11, 12, NEET &amp; JEE with free classes, PYQs, notes, tests and expert guidance.
+            {c.subheading || "Complete preparation for Class 10, 11, 12, NEET & JEE with free classes, PYQs, notes, tests and expert guidance."}
           </p>
           <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-            <ButtonLink href="#free">
-              Explore Free Resources <Icon name="arrow_forward" className="text-[18px]" />
+            <ButtonLink href={c.ctaUrl || "#free"} external={isExternal(c.ctaUrl || "")}>
+              {c.ctaText || "Explore Free Resources"} <Icon name="arrow_forward" className="text-[18px]" />
             </ButtonLink>
-            <ButtonLink href="#courses" variant="secondary">
-              Explore Courses
+            <ButtonLink href={c.secondaryCtaUrl || "#courses"} variant="secondary" external={isExternal(c.secondaryCtaUrl || "")}>
+              {c.secondaryCtaText || "Explore Courses"}
             </ButtonLink>
           </div>
           <ul className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-600">
-            <li className="flex items-center gap-1.5">
-              <Icon name="translate" className="text-[18px] text-blue-600" /> Hindi + English Medium
-            </li>
-            <li className="flex items-center gap-1.5">
-              <Icon name="school" className="text-[18px] text-blue-600" /> Class 10, 11, 12
-            </li>
-            <li className="flex items-center gap-1.5">
-              <Icon name="lock_open" className="text-[18px] text-blue-600" /> Free resources with a free account
-            </li>
+            {bullets.map((b, i) => (
+              <li key={`${b}-${i}`} className="flex items-center gap-1.5">
+                <Icon name={BULLET_ICONS[i % BULLET_ICONS.length]!} className="text-[18px] text-blue-600" /> {b}
+              </li>
+            ))}
           </ul>
         </div>
         <HeroVisual image={image} />

@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { prisma } from "@/lib/db";
 import { cleanBatchName } from "@/lib/academic/canonical-courses";
 import { generateSlug } from "@/lib/teacher/profile";
@@ -100,7 +101,8 @@ function istToday(now = new Date()) {
   return { start, end: new Date(start.getTime() + 86_400_000) };
 }
 
-export async function getPublicHomeData(): Promise<PublicHomeData> {
+// cache(): the page (FAQ JSON-LD) and the sections share one load per request.
+export const getPublicHomeData = cache(async function getPublicHomeData(): Promise<PublicHomeData> {
   const { start, end } = istToday();
 
   const [materials, pyqGroups, series, batches, teachers, todayClasses, todayDpps, todayTests, students, questions, tests, footer, faqs] =
@@ -118,7 +120,7 @@ export async function getPublicHomeData(): Promise<PublicHomeData> {
         prisma.testSeries.findMany({
           where: { visibility: "PUBLIC", status: { notIn: ["DRAFT", "ARCHIVED"] } },
           orderBy: { createdAt: "desc" },
-          take: 6,
+          take: 24,
           select: {
             id: true,
             name: true,
@@ -135,7 +137,7 @@ export async function getPublicHomeData(): Promise<PublicHomeData> {
         prisma.batch.findMany({
           where: { status: { in: ["ACTIVE", "UPCOMING"] } },
           orderBy: [{ status: "asc" }, { createdAt: "desc" }],
-          take: 6,
+          take: 24,
           select: {
             id: true,
             name: true,
@@ -157,7 +159,7 @@ export async function getPublicHomeData(): Promise<PublicHomeData> {
             user: { status: "ACTIVE", role: { name: { in: ["TEACHER", "ACADEMIC_HEAD", "DEPARTMENT_HEAD", "FOUNDER"] } } },
           },
           orderBy: { createdAt: "asc" },
-          take: 8,
+          take: 40,
           select: { displayName: true, subjects: true, department: true, user: { select: { name: true, photoUrl: true } } },
         }),
         []
@@ -246,7 +248,7 @@ export async function getPublicHomeData(): Promise<PublicHomeData> {
     socials: socials.map((s) => ({ label: s.label, url: s.url })),
     faqs,
   };
-}
+});
 
 export type HomeBanner = { id: string; title: string; subtitle: string | null; imageUrl: string; mobileImageUrl: string | null; ctaUrl: string | null; openInNewTab: boolean };
 
