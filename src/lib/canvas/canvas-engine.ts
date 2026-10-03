@@ -605,6 +605,11 @@ export function floodFillImageData(
   return { minX, minY, maxX: maxX + 1, maxY: maxY + 1 };
 }
 
+/** How far each ink point moves toward the pointer (1 = raw, lower = smoother, more trailing). */
+const INK_SMOOTHING = 0.5;
+/** Points closer than this (virtual px) to the previous one are dropped. */
+const INK_MIN_STEP = 0.6;
+
 export class CanvasEngine {
   private baseCanvas: HTMLCanvasElement;
   private activeCanvas: HTMLCanvasElement;
@@ -628,6 +633,8 @@ export class CanvasEngine {
 
   private isPointerDown = false;
   private activePoints: StrokePoint[] = [];
+  /** The newest un-smoothed pointer position of the stroke being drawn. */
+  private lastRawPoint: StrokePoint | null = null;
   private shapeStart: { x: number; y: number } | null = null;
   private shapeEnd: { x: number; y: number } | null = null;
   private objects: StrokeObject[] = [];
@@ -835,6 +842,7 @@ export class CanvasEngine {
 
     if (this.currentTool === "pen" || this.currentTool === "highlighter" || this.currentTool === "highlighter-fade") {
       this.activePoints = [pt];
+      this.lastRawPoint = null;
       return;
     }
 
@@ -940,7 +948,22 @@ export class CanvasEngine {
       const pt = this.getPoint(evt);
 
       if (this.currentTool === "pen" || this.currentTool === "highlighter" || this.currentTool === "highlighter-fade") {
-        this.activePoints.push(pt);
+        // Ink smoothing: each point is eased toward the pointer instead of
+        // taken raw, so hand / mouse jitter does not show up as wobble in the
+        // line, and pressure is eased so the width does not pulse. The raw
+        // end point is added on pointer-up, so the stroke still ends exactly
+        // where the pen was lifted.
+        this.lastRawPoint = pt;
+        const last = this.activePoints[this.activePoints.length - 1];
+        if (!last) {
+          this.activePoints.push(pt);
+          continue;
+        }
+        const x = last.x + (pt.x - last.x) * INK_SMOOTHING;
+        const y = last.y + (pt.y - last.y) * INK_SMOOTHING;
+        if (Math.hypot(x - last.x, y - last.y) < INK_MIN_STEP) continue;
+        const lp = last.pressure ?? 0.5;
+        this.activePoints.push({ x, y, pressure: lp + ((pt.pressure ?? 0.5) - lp) * 0.3 });
         continue;
       }
 
@@ -1027,6 +1050,14 @@ export class CanvasEngine {
     }
 
     if (this.currentTool === "pen" || this.currentTool === "highlighter" || this.currentTool === "highlighter-fade") {
+      // The smoothed line trails the pointer a little: finish it at the real lift point.
+      const lastSmoothed = this.activePoints[this.activePoints.length - 1];
+      if (this.lastRawPoint && lastSmoothed && this.activePoints.length > 1) {
+        if (Math.hypot(this.lastRawPoint.x - lastSmoothed.x, this.lastRawPoint.y - lastSmoothed.y) > INK_MIN_STEP) {
+          this.activePoints.push({ x: this.lastRawPoint.x, y: this.lastRawPoint.y, pressure: lastSmoothed.pressure });
+        }
+      }
+      this.lastRawPoint = null;
       // Stored as a plain "highlighter" object (not a fourth tool value on
       // FreehandObject itself) so every existing render/hit-test/export
       // path already handles it - fadeExpiresAt is the only marker that

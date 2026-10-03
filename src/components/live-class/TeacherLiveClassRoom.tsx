@@ -368,7 +368,15 @@ export function TeacherLiveClassRoom({
   const [eraserRadius, setEraserRadius] = useState<number>(26); // "M"
   const [selectionCount, setSelectionCount] = useState(0);
   const [color, setColor] = useState<string>(PEN_PALETTE_COLORS[0] ?? "#ef4444");
-  const [size, setSize] = useState(5);
+  const [size, setSize] = useState(3);
+  // The pen and the highlighter each keep their own colour and thickness.
+  // They used to share one, so picking a highlighter colour (or another
+  // tool's size) silently changed the pen.
+  const inkMemoryRef = useRef<{ pen: { color: string; size: number }; highlighter: { color: string; size: number } }>({
+    pen: { color: PEN_PALETTE_COLORS[0] ?? "#ef4444", size: 3 },
+    highlighter: { color: HIGHLIGHT_COLORS[0] ?? "#fde047", size: 5 },
+  });
+  const prevInkGroupRef = useRef<"pen" | "highlighter" | null>("pen");
   // Cursor-following pen-dot / eraser-size-circle overlay (Live Board spec
   // Parts 6-7). Pure UI state — virtual (1920x1080) coordinates, same space
   // as everything else on this canvas — rendered as a plain absolutely
@@ -1189,6 +1197,20 @@ export function TeacherLiveClassRoom({
       engineRef.current.setTool(tool);
     }
   }, [tool]);
+  useEffect(() => {
+    const group = tool === "pen" ? "pen" : tool === "highlighter" || tool === "highlighter-fade" ? "highlighter" : null;
+    if (group) {
+      if (prevInkGroupRef.current !== group) {
+        // Came (back) to this tool: its own colour and thickness return.
+        const mem = inkMemoryRef.current[group];
+        setColor(mem.color);
+        setSize(mem.size);
+      } else {
+        inkMemoryRef.current[group] = { color, size };
+      }
+    }
+    prevInkGroupRef.current = group;
+  }, [tool, color, size]);
   useEffect(() => {
     if (engineRef.current) engineRef.current.currentColor = color;
   }, [color]);
@@ -3250,26 +3272,26 @@ export function TeacherLiveClassRoom({
         {/* Left Floating Quick Tool Palette Capsule (Screenshot 1) */}
         <aside className="absolute left-2 sm:left-3.5 top-1/2 -translate-y-1/2 z-30 select-none pointer-events-auto">
           <div className="flex flex-col items-center py-2 px-1.5 bg-[#141624]/95 backdrop-blur-md rounded-full border border-[#292d42] shadow-2xl gap-2">
-            {/* Active Tool Icon Indicator */}
-            <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-xs text-orange-400">
-              <span className="material-symbols-outlined text-sm">
-                {tool === "pen"
-                  ? (PEN_STYLES.find((s) => s.id === penStyle)?.icon || "edit")
-                  : tool === "highlighter" || tool === "highlighter-fade"
-                  ? "border_color"
-                  : tool === "stroke-eraser" || tool === "object-eraser"
-                  ? "ink_eraser"
-                  : tool === "text"
-                  ? "text_fields"
-                  : tool === "fill"
-                  ? "format_color_fill"
-                  : tool === "laser"
-                  ? "my_location"
-                  : tool === "select"
-                  ? "gesture"
-                  : "category"}
-              </span>
-            </div>
+            {/* Pen — always here, always the pen as it was last set (colour,
+                thickness, style). Other tools never change it. */}
+            <button
+              type="button"
+              onClick={() => {
+                setTool("pen");
+                setOpenPopup(null);
+              }}
+              className={`w-7 h-7 rounded-full flex items-center justify-center transition shadow ${
+                tool === "pen" ? "bg-blue-600 text-white ring-2 ring-blue-400" : "bg-white/10 text-gray-300 hover:text-white"
+              }`}
+              title="Pen (your last pen)"
+            >
+              <span className="material-symbols-outlined text-sm">{PEN_STYLES.find((ps) => ps.id === penStyle)?.icon || "edit"}</span>
+            </button>
+            <span
+              className="w-3 h-3 rounded-full border border-white/40"
+              style={{ backgroundColor: tool === "pen" ? color : inkMemoryRef.current.pen.color }}
+              title="Pen colour"
+            />
 
             <div className="w-4 h-[1px] bg-gray-700/60" />
 
@@ -3295,7 +3317,7 @@ export function TeacherLiveClassRoom({
 
             {/* 3 Size Dots (Screenshot 1 & 4) */}
             <div className="flex flex-col gap-2 items-center py-1">
-              {[2, 5, 9].map((sz) => (
+              {[2, 3, 5].map((sz) => (
                 <button
                   key={sz}
                   type="button"
@@ -3304,8 +3326,8 @@ export function TeacherLiveClassRoom({
                     size === sz ? "ring-2 ring-blue-400 ring-offset-1 ring-offset-[#141624]" : ""
                   }`}
                   style={{
-                    width: `${Math.max(6, sz * 1.5)}px`,
-                    height: `${Math.max(6, sz * 1.5)}px`,
+                    width: `${Math.max(6, sz * 2.2)}px`,
+                    height: `${Math.max(6, sz * 2.2)}px`,
                     backgroundColor: color,
                   }}
                   title={`${sz}px stroke size`}
@@ -3861,11 +3883,11 @@ export function TeacherLiveClassRoom({
               }}
             />
             {openPopup === "pen" && (
-              <div className="absolute bottom-full left-0 mb-3 z-50 bg-[#161722] border border-[#2d2e3b] rounded-2xl p-4 shadow-2xl w-[32rem] flex flex-col gap-4 text-white">
+              <div className="absolute bottom-full left-0 mb-3 z-50 bg-[#161722] border border-[#2d2e3b] rounded-xl p-3 shadow-2xl w-[21rem] flex flex-col gap-2.5 text-white">
                 {/* Header (Screenshot 3) */}
-                <div className="flex items-center justify-between border-b border-[#2d2e3b] pb-3">
+                <div className="flex items-center justify-between border-b border-[#2d2e3b] pb-2">
                   <div className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-blue-400 text-xl">
+                    <span className="material-symbols-outlined text-blue-400 text-base">
                       {PEN_STYLES.find((s) => s.id === penStyle)?.icon || "edit"}
                     </span>
                     <h3 className="text-sm font-bold text-gray-100">
@@ -3882,12 +3904,12 @@ export function TeacherLiveClassRoom({
                 </div>
 
                 {/* Thickness Slider with Live Dot (Screenshot 3) */}
-                <div className="bg-[#10111a] border border-[#242634] rounded-xl p-3 flex items-center justify-between gap-4">
-                  <span className="text-xs text-gray-300 font-medium">Thickness</span>
+                <div className="bg-[#10111a] border border-[#242634] rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2.5">
+                  <span className="text-[11px] text-gray-300 font-medium">Thickness</span>
                   <input
                     type="range"
                     min={1}
-                    max={30}
+                    max={20}
                     value={size}
                     onChange={(e) => setSize(Number(e.target.value))}
                     className="flex-1 accent-blue-500 h-1.5 bg-gray-700 rounded-lg cursor-pointer"
@@ -3906,23 +3928,23 @@ export function TeacherLiveClassRoom({
                 </div>
 
                 {/* Split: Pen Styles (Left) & Color Palette 3x4 Grid (Right) (Screenshot 3) */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-2.5">
                   {/* Left: Pen Styles */}
-                  <div className="bg-[#10111a] border border-[#242634] rounded-xl p-3 flex flex-col gap-2">
-                    <span className="text-xs font-semibold text-gray-400 mb-1">Pen Styles</span>
-                    <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-[#10111a] border border-[#242634] rounded-lg p-2 flex flex-col gap-1.5">
+                    <span className="text-[11px] font-semibold text-gray-400">Pen Styles</span>
+                    <div className="grid grid-cols-2 gap-1.5">
                       {PEN_STYLES.map((ps) => (
                         <button
                           key={ps.id}
                           type="button"
                           onClick={() => setPenStyle(ps.id)}
-                          className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs transition gap-1.5 ${
+                          className={`flex flex-col items-center justify-center p-1.5 rounded-lg border text-[10px] transition gap-0.5 ${
                             penStyle === ps.id
                               ? "bg-blue-600/20 border-blue-500 text-white font-semibold"
                               : "bg-[#161722] border-[#2d2e3b] text-gray-400 hover:text-gray-200 hover:border-gray-600"
                           }`}
                         >
-                          <span className="material-symbols-outlined text-lg">{ps.icon}</span>
+                          <span className="material-symbols-outlined text-base">{ps.icon}</span>
                           <span>{ps.label}</span>
                         </button>
                       ))}
@@ -3930,16 +3952,16 @@ export function TeacherLiveClassRoom({
                   </div>
 
                   {/* Right: 3x4 Color Grid (Screenshot 3) */}
-                  <div className="bg-[#10111a] border border-[#242634] rounded-xl p-3 flex flex-col justify-between">
+                  <div className="bg-[#10111a] border border-[#242634] rounded-lg p-2 flex flex-col justify-between">
                     <div>
-                      <span className="text-xs font-semibold text-gray-400 block mb-2 text-center">Color</span>
-                      <div className="grid grid-cols-3 gap-2 place-items-center">
+                      <span className="text-[11px] font-semibold text-gray-400 block mb-1.5 text-center">Color</span>
+                      <div className="grid grid-cols-4 gap-1.5 place-items-center">
                         {PEN_PALETTE_COLORS.map((c) => (
                           <button
                             key={c}
                             type="button"
                             onClick={() => setColor(c)}
-                            className={`w-8 h-8 rounded-xl border shadow-md transition transform hover:scale-110 ${
+                            className={`w-6 h-6 rounded-lg border shadow-md transition transform hover:scale-110 ${
                               color.toLowerCase() === c.toLowerCase()
                                 ? "ring-2 ring-blue-500 ring-offset-2 ring-offset-[#10111a] border-white"
                                 : "border-transparent"
@@ -3951,7 +3973,7 @@ export function TeacherLiveClassRoom({
                       </div>
                     </div>
 
-                    <label className="mt-3 flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-[#2d2e3b] bg-[#161722] hover:bg-[#202130] text-xs text-gray-300 font-medium cursor-pointer transition">
+                    <label className="mt-2 flex items-center justify-center gap-1.5 py-1 rounded-lg border border-[#2d2e3b] bg-[#161722] hover:bg-[#202130] text-xs text-gray-300 font-medium cursor-pointer transition">
                       <span className="material-symbols-outlined text-sm text-blue-400">colorize</span>
                       Custom
                       <input
