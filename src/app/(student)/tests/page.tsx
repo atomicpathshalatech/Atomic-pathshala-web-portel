@@ -340,7 +340,9 @@ export default async function StudentTestsPage() {
       batchSchedules = await prisma.batchSchedule.findMany({
         where: {
           batchId: { in: batchIds },
-          test: { isNot: null },
+          // DPPs open from the DPP section, not the test list.
+          type: { not: "DPP" },
+          test: { is: { OR: [{ testType: null }, { testType: { not: "DPP" } }] } },
         },
         include: {
           batch: { select: { id: true, name: true, code: true } },

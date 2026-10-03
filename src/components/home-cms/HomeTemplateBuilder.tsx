@@ -10,6 +10,7 @@ import {
   PYQ_EXAM_OPTIONS,
   TEMPLATES,
   TEMPLATE_BY_TYPE,
+  effectiveType,
   type Audience,
   type Field,
   type OptionSource,
@@ -59,6 +60,12 @@ async function callApi(url: string, method: string, body?: unknown) {
   return json.data;
 }
 
+// Show/edit a stored row as its real template (CUSTOM_HTML + config.template → e.g. BANNER_SLIDER).
+const normalize = (s: BuilderSection): BuilderSection => {
+  const config = (s.config ?? {}) as Record<string, unknown>;
+  return { ...s, config, type: effectiveType({ type: s.type, config }) };
+};
+
 const audienceOf = (s: BuilderSection) => ((typeof s.config.audience === "string" ? s.config.audience : "ALL") as Audience);
 const labelOf = (type: string) => TEMPLATE_BY_TYPE[type]?.label ?? type;
 
@@ -81,7 +88,7 @@ export function HomeTemplateBuilder({
   options: BuilderOptions;
   perms: Perms;
 }) {
-  const [sections, setSections] = useState(() => [...initialSections].sort((a, b) => a.order - b.order));
+  const [sections, setSections] = useState(() => initialSections.map(normalize).sort((a, b) => a.order - b.order));
   const [editingId, setEditingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -94,8 +101,8 @@ export function HomeTemplateBuilder({
   async function addSection(type: string, open = true) {
     const t = TEMPLATE_BY_TYPE[type];
     const data = await callApi("/api/admin/homepage/sections", "POST", { type, config: {} });
-    const s = data.section as BuilderSection;
-    setSections((list) => [...list, { ...s, config: (s.config ?? {}) as Record<string, unknown> }]);
+    const s = normalize(data.section as BuilderSection);
+    setSections((list) => [...list, s]);
     changed();
     if (open) {
       setEditingId(s.id);
@@ -120,8 +127,8 @@ export function HomeTemplateBuilder({
 
   async function saveSection(id: string, patch: Partial<BuilderSection>) {
     const data = await callApi(`/api/admin/homepage/sections/${id}`, "PATCH", patch);
-    const s = data.section as BuilderSection;
-    setSections((list) => list.map((x) => (x.id === id ? { ...x, ...s, config: (s.config ?? {}) as Record<string, unknown> } : x)));
+    const s = normalize(data.section as BuilderSection);
+    setSections((list) => list.map((x) => (x.id === id ? { ...x, ...s } : x)));
     changed();
   }
 
@@ -147,10 +154,10 @@ export function HomeTemplateBuilder({
         visibleMobile: s.visibleMobile,
         config: s.config,
       });
-      const copy = data.section as BuilderSection;
+      const copy = normalize(data.section as BuilderSection);
       // Place the copy right after the original.
       const list = [...sections];
-      list.splice(list.findIndex((x) => x.id === s.id) + 1, 0, { ...copy, config: (copy.config ?? {}) as Record<string, unknown> });
+      list.splice(list.findIndex((x) => x.id === s.id) + 1, 0, copy);
       await persistOrder(list);
       toast.success("Copy ban gayi.");
     } catch (err) {

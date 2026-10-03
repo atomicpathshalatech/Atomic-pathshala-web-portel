@@ -32,9 +32,14 @@ export default async function TestsListPage() {
   const isAdmin = await hasPermission(session.user.id, PERMISSIONS.TEST_PUBLISH);
   const canDelete = await hasPermission(session.user.id, PERMISSIONS.TEST_DELETE);
 
+  // A DPP's backing test (testType "DPP", see lib/dpp/dpp-test.ts) is managed
+  // from Team → DPP, never from this list.
+  const notDpp = { OR: [{ testType: null }, { testType: { not: "DPP" } }] };
+
   let tests;
   if (isAdmin) {
     tests = await prisma.test.findMany({
+      where: notDpp,
       include: {
         batchSchedule: { include: { batch: { select: { name: true } } } },
         sections: { select: { _count: { select: { questions: true } } } },
@@ -54,7 +59,7 @@ export default async function TestsListPage() {
       batchAssignments.forEach((b) => assignedBatchIds.add(b.batchId));
     }
     tests = await prisma.test.findMany({
-      where: { batchSchedule: { batchId: { in: Array.from(assignedBatchIds) } } },
+      where: { AND: [notDpp, { batchSchedule: { batchId: { in: Array.from(assignedBatchIds) } } }] },
       include: {
         batchSchedule: { include: { batch: { select: { name: true } } } },
         sections: { select: { _count: { select: { questions: true } } } },

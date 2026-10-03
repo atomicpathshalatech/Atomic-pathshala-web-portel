@@ -400,6 +400,17 @@ export const TEMPLATE_BY_TYPE: Record<string, Template> = Object.fromEntries(TEM
 /** Section types added for the template builder (also in the HomeSectionType enum migration). */
 export const NEW_TEMPLATE_TYPES = ["BANNER_SLIDER", "EXAM_SELECTOR", "SEARCH", "FREE_RESOURCES", "PYQ_HUB", "STUDY_MATERIAL", "FREE_TESTS", "TODAY_SCHEDULE", "ATOMIC_GURU", "YOUTUBE", "WHY_US", "TRUST"] as const;
 
+/**
+ * The template types above are stored as an existing database section type
+ * (CUSTOM_HTML) with the real template in `config.template`, so the builder
+ * works without a database enum change. This returns the real template type.
+ */
+export const TEMPLATE_STORAGE_TYPE = "CUSTOM_HTML";
+export function effectiveType(s: { type: string; config?: Record<string, unknown> | null }): string {
+  const t = s.config?.template;
+  return typeof t === "string" && t ? t : s.type;
+}
+
 export const MATERIAL_TYPE_LABELS: Record<string, string> = {
   MODULE: "Chapter Notes & Modules",
   SHORT_NOTES: "Revision Notes",

@@ -2,7 +2,7 @@ import { Fragment, type ReactNode } from "react";
 import { getActiveHomeBanners, getPublicHomeData } from "@/lib/public-home";
 import { getHomeHeroImage, getPublishedBlogPosts } from "@/lib/blog";
 import { getApprovedTestimonials } from "@/lib/homepage";
-import type { Audience, LayoutSection } from "@/lib/home-templates";
+import { effectiveType, type Audience, type LayoutSection } from "@/lib/home-templates";
 import { HomePageRenderer } from "@/components/home-cms/HomePageRenderer";
 import { HeroSection, type HeroContent } from "./HeroSection";
 import { BannerSlider } from "./BannerSlider";
@@ -37,7 +37,7 @@ const LEGACY = new Set(["FEATURES", "COURSE_GRID", "CATEGORY_GRID", "LOGO_PARTNE
  * data the listed sections need.
  */
 export async function HomeSections({ sections }: { sections: LayoutSection[] }) {
-  const list = sections.filter((s) => s.visible !== false && !(s.visibleDesktop === false && s.visibleMobile === false));
+  const list = sections.map((s) => ({ ...s, type: effectiveType(s) })).filter((s) => s.visible !== false && !(s.visibleDesktop === false && s.visibleMobile === false));
   const has = (...types: string[]) => list.some((s) => types.includes(s.type));
 
   const needsData = has("FREE_RESOURCES", "PYQ_HUB", "STUDY_MATERIAL", "FREE_TESTS", "TODAY_SCHEDULE", "BATCH_GRID", "TEACHER_GRID", "YOUTUBE", "TRUST", "FAQ");

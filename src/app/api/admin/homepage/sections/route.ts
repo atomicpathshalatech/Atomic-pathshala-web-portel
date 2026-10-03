@@ -7,6 +7,7 @@ import { requirePermission, UnauthorizedError, requireSuperAdmin } from "@/lib/r
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { sectionCreateSchema } from "@/lib/validation/homepage";
 import { apiSuccess, handleApiError } from "@/lib/api/response";
+import { NEW_TEMPLATE_TYPES, TEMPLATE_STORAGE_TYPE } from "@/lib/home-templates";
 
 /**
  * Lists the live DRAFT sections (never what the public site renders —
@@ -39,16 +40,21 @@ export async function POST(request: NextRequest) {
     const maxOrder = await prisma.homePageSection.aggregate({ _max: { order: true } });
     const order = input.order ?? (maxOrder._max.order ?? -1) + 1;
 
+    // Builder templates added later are stored as a base section type plus
+    // config.template (see effectiveType) — no database enum change needed.
+    const isTemplate = (NEW_TEMPLATE_TYPES as readonly string[]).includes(input.type);
+    const config = { ...(input.config ?? {}), ...(isTemplate ? { template: input.type } : {}) };
+
     const section = await prisma.homePageSection.create({
       data: {
-        type: input.type,
+        type: isTemplate ? TEMPLATE_STORAGE_TYPE : input.type,
         title: input.title,
         subtitle: input.subtitle,
         order,
         visible: input.visible ?? true,
         visibleDesktop: input.visibleDesktop ?? true,
         visibleMobile: input.visibleMobile ?? true,
-        config: (input.config ?? {}) as Prisma.InputJsonValue,
+        config: config as Prisma.InputJsonValue,
         background: input.background,
         padding: input.padding,
         createdById: session.user.id,
