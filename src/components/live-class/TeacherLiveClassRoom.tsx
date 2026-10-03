@@ -1806,16 +1806,18 @@ export function TeacherLiveClassRoom({
       // of "Export PDF." This used to send only `currentPage`, silently
       // discarding every other page even though the generator this hits
       // (generateWhiteboardPdf) already supports multi-page output.
-      const allPages = [...wbSession.pages]
-        .sort((a, b) => a.pageNumber - b.pageNumber)
-        .map((p) => ({ pageNumber: p.pageNumber, background: p.background, objects: p.objects }));
-
       const res = await fetch(`/api/whiteboard/sessions/${wbSession.id}/export-pdf`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: scheduleTitle || "Whiteboard",
-          pages: allPages,
+          // The server reads every saved slide itself; only the slide on
+          // screen travels (its newest strokes may not be autosaved yet).
+          currentPage: {
+            pageNumber: currentPage.pageNumber,
+            background: currentPage.background,
+            objects: engineRef.current?.getObjects?.() ?? currentPage.objects,
+          },
         }),
       });
 
@@ -1824,14 +1826,21 @@ export function TeacherLiveClassRoom({
         throw new Error(err?.error || "Could not export this lecture as a PDF.");
       }
 
-      const blob = await res.blob();
-      const objectUrl = URL.createObjectURL(blob);
       const safeTitle = (scheduleTitle || "Whiteboard").replace(/[^a-z0-9]/gi, "_");
       const link = document.createElement("a");
       link.download = `${safeTitle}.pdf`;
-      link.href = objectUrl;
-      link.click();
-      setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+      if ((res.headers.get("content-type") || "").includes("application/json")) {
+        // The file is in storage (a whole lecture is too big for a direct response).
+        const out = await res.json();
+        if (!out?.data?.url) throw new Error(out?.error || "Could not export this lecture as a PDF.");
+        link.href = out.data.url;
+        link.click();
+      } else {
+        const objectUrl = URL.createObjectURL(await res.blob());
+        link.href = objectUrl;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+      }
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Could not export this lecture as a PDF.");
     } finally {

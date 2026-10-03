@@ -21,6 +21,8 @@ export async function generateWhiteboardPdf(
     orientation: "landscape",
     unit: "pt",
     format: [960, 540],
+    // Deflate page and image streams: a 36-slide lecture was ~100 MB without it.
+    compress: true,
   });
 
   const logoBase64 = getLogoBase64();
@@ -225,7 +227,7 @@ async function drawSlideBackground(
     const img = await fetchBackgroundImage(bg);
     if (img) {
       try {
-        doc.addImage(img.dataUrl, img.format, 0, 0, w, h);
+        doc.addImage(img.dataUrl, img.format, 0, 0, w, h, undefined, "FAST");
         return;
       } catch (err) {
         console.warn("[PDF Generator] Background addImage failed, drawing clean theme:", err);
