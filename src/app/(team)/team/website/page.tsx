@@ -4,7 +4,8 @@ import { requireTeamSession } from "@/lib/auth/session";
 import { hasPermission, isSuperAdminUser } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { prisma } from "@/lib/db";
-import { HomeSectionBuilder } from "@/components/home-cms/HomeSectionBuilder";
+import { HomeTemplateBuilder } from "@/components/home-cms/HomeTemplateBuilder";
+import { getPublicHomeData } from "@/lib/public-home";
 import { SuperAdminOnlyNotice } from "@/components/team-portal/SuperAdminOnlyNotice";
 
 export const metadata: Metadata = {
@@ -32,8 +33,10 @@ export default async function HomeBuilderPage() {
     hasPermission(user.id, PERMISSIONS.HOME_PUBLISH),
     hasPermission(user.id, PERMISSIONS.HOME_REORDER),
     prisma.homePageSection.findMany({ orderBy: { order: "asc" } }),
-    prisma.homePageVersion.findFirst({ where: { unpublishedAt: null }, orderBy: { publishedAt: "desc" } }),
+    // Newest version decides what is live (an unpublished newest version = default homepage).
+    prisma.homePageVersion.findFirst({ orderBy: { publishedAt: "desc" } }),
   ]);
+  const home = await getPublicHomeData();
 
   return (
     <div className="space-y-stack-lg max-w-6xl">
@@ -41,7 +44,7 @@ export default async function HomeBuilderPage() {
         <div>
           <h1 className="font-headline-lg text-headline-lg text-on-surface">Website Builder</h1>
           <p className="font-body-md text-body-md text-on-surface-variant">
-            Build the public homepage from real sections — nothing here is live until you Publish.
+            Poora homepage yahan se: template chuniye, form bhariye, upar/neeche kariye, kaun dekhe chuniye — Preview karke Publish kariye.
           </p>
         </div>
         <nav className="flex flex-wrap gap-2">
@@ -78,16 +81,7 @@ export default async function HomeBuilderPage() {
         </nav>
       </div>
 
-      <div className="glass-card rounded-2xl p-5 flex flex-wrap items-center gap-4">
-        <div className={`w-3 h-3 rounded-full ${liveVersion ? "bg-green-500" : "bg-on-surface-variant/40"}`} />
-        <p className="font-label-md text-label-md text-on-surface">
-          {liveVersion
-            ? `Live: version ${liveVersion.versionNumber}, published ${liveVersion.publishedAt.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`
-            : "Nothing published yet — the site is showing the static fallback homepage."}
-        </p>
-      </div>
-
-      <HomeSectionBuilder
+      <HomeTemplateBuilder
         initialSections={sections.map((s) => ({
           id: s.id,
           type: s.type,
@@ -97,15 +91,15 @@ export default async function HomeBuilderPage() {
           visible: s.visible,
           visibleDesktop: s.visibleDesktop,
           visibleMobile: s.visibleMobile,
-          config: s.config as Record<string, unknown>,
-          background: s.background,
-          padding: s.padding,
+          config: (s.config ?? {}) as Record<string, unknown>,
         }))}
-        canCreate={canCreate}
-        canEdit={canEdit}
-        canDelete={canDelete}
-        canPublish={canPublish}
-        canReorder={canReorder}
+        live={liveVersion ? { versionNumber: liveVersion.versionNumber, publishedAt: liveVersion.publishedAt.toISOString(), unpublished: !!liveVersion.unpublishedAt } : null}
+        options={{
+          batches: home.batches.map((b) => ({ id: b.id, name: b.name })),
+          teachers: home.faculty.map((f) => ({ slug: f.slug, name: f.subjects.length ? `${f.name} (${f.subjects.join(", ")})` : f.name })),
+          testSeries: home.freeSeries.map((t) => ({ id: t.id, name: t.name })),
+        }}
+        perms={{ canCreate, canEdit, canDelete, canPublish, canReorder }}
       />
     </div>
   );

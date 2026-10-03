@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { Icon, Section } from "./ui";
+import { Icon, Section, hd, type Head } from "./ui";
 
 // The app's real search (notes, PYQs, tests, classes …) — only for signed-in users, loaded on demand.
 const GlobalSearchBar = dynamic(() => import("@/components/search/GlobalSearchBar").then((m) => m.GlobalSearchBar), { ssr: false });
@@ -24,7 +24,8 @@ const QUICK = [
  * visitors type a topic and are asked to log in (free) to see results, since
  * the search only covers content their account can open.
  */
-export function HomeSearch() {
+export function HomeSearch({ head }: { head?: Head } = {}) {
+  const h = hd(head, { title: "What are you looking for?", subtitle: "Find notes, PYQs, DPPs, tests and classes for any chapter or topic." });
   const { status } = useSession();
   const router = useRouter();
   const [q, setQ] = useState("");
@@ -32,8 +33,8 @@ export function HomeSearch() {
   return (
     <Section id="search" tone="tint">
       <div className="mx-auto max-w-3xl text-center">
-        <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">What are you looking for?</h2>
-        <p className="mt-2 text-sm sm:text-base text-slate-600">Find notes, PYQs, DPPs, tests and classes for any chapter or topic.</p>
+        <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">{h.title}</h2>
+        <p className="mt-2 text-sm sm:text-base text-slate-600">{h.subtitle}</p>
 
         <div className="mt-5 text-left">
           {status === "authenticated" ? (

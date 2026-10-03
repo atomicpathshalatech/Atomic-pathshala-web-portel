@@ -2,24 +2,27 @@ import Image from "next/image";
 import Link from "next/link";
 import type { PublicHomeData } from "@/lib/public-home";
 import { FAQAccordion, type FaqItem } from "@/components/landing/FAQAccordion";
-import { ButtonLink, CONTAINER, Icon, Section, SectionHeader, fmtCount } from "./ui";
+import { ButtonLink, CONTAINER, Icon, Section, SectionHeader, fmtCount, hd, type Head } from "./ui";
+
+export type IconText = { icon?: string; title?: string; text: string };
 
 /** WHY ATOMIC PATHSHALA — Learn → Practice → Test → Improve. */
-export function WhyAtomicPathshala() {
-  const steps = [
+export function WhyAtomicPathshala({ head, items }: { head?: Head; items?: IconText[] } = {}) {
+  const defaults = [
     { icon: "school", title: "Learn", text: "Live classes, recordings and chapter notes." },
     { icon: "edit_note", title: "Practice", text: "PYQs and daily practice problems." },
     { icon: "timer", title: "Test", text: "Exam-pattern tests with instant results." },
     { icon: "trending_up", title: "Improve", text: "Analysis, doubt support and revision." },
   ];
+  const steps = items?.length ? items : defaults;
   return (
     <Section id="why" tone="tint">
-      <SectionHeader eyebrow="Why Atomic Pathshala" title="One complete learning loop" subtitle="Everything you need, in one place — learn, practise, test and improve." />
+      <SectionHeader {...hd(head, { eyebrow: "Why Atomic Pathshala", title: "One complete learning loop", subtitle: "Everything you need, in one place — learn, practise, test and improve." })} />
       <ol className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {steps.map((s, i) => (
-          <li key={s.title} className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5">
+          <li key={`${s.title}-${i}`} className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5">
             <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
-              <Icon name={s.icon} className="text-[22px]" />
+              <Icon name={s.icon || "check_circle"} className="text-[22px]" />
             </span>
             <p className="mt-3 text-xs font-semibold text-slate-400">Step {i + 1}</p>
             <h3 className="text-base font-bold text-slate-900">{s.title}</h3>
@@ -32,22 +35,23 @@ export function WhyAtomicPathshala() {
 }
 
 /** TRUST — real platform numbers only; a number is shown only when it is meaningful. */
-export function TrustSection({ metrics }: { metrics: PublicHomeData["metrics"] }) {
+export function TrustSection({ metrics, head, showNumbers = true, items: promiseItems }: { metrics: PublicHomeData["metrics"]; head?: Head; showNumbers?: boolean; items?: IconText[] }) {
   const items = [
     { n: metrics.students, label: "Students learning", min: 100 },
     { n: metrics.questions, label: "Questions in our bank", min: 100 },
     { n: metrics.tests, label: "Tests published", min: 10 },
     { n: metrics.studyFiles, label: "Study material files", min: 20 },
-  ].filter((x) => x.n >= x.min);
-  const promises = [
+  ].filter((x) => showNumbers && x.n >= x.min);
+  const defaultPromises = [
     { icon: "translate", text: "Hindi + English medium" },
     { icon: "support_agent", text: "Doubt support with teachers & Atomic Guru" },
     { icon: "devices", text: "Works on mobile, tablet and laptop" },
     { icon: "lock", text: "Your data stays private" },
   ];
+  const promises = promiseItems?.length ? promiseItems : defaultPromises;
   return (
     <Section id="trust" tone="navy">
-      <SectionHeader dark eyebrow="Built for students" title="Learning you can rely on" />
+      <SectionHeader dark {...hd(head, { eyebrow: "Built for students", title: "Learning you can rely on" })} />
       {items.length > 0 && (
         <dl className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
           {items.map((x) => (
@@ -61,7 +65,7 @@ export function TrustSection({ metrics }: { metrics: PublicHomeData["metrics"] }
       <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {promises.map((p) => (
           <li key={p.text} className="flex items-center gap-3 rounded-2xl bg-white/[0.06] p-4 text-sm text-white/85 ring-1 ring-white/10">
-            <Icon name={p.icon} className="text-[22px] text-cyan-300" /> {p.text}
+            <Icon name={p.icon || "check_circle"} className="text-[22px] text-cyan-300" /> {p.text}
           </li>
         ))}
       </ul>
@@ -70,7 +74,8 @@ export function TrustSection({ metrics }: { metrics: PublicHomeData["metrics"] }
 }
 
 /** APP — the installable web app (PWA). */
-export function AppPromotion() {
+export function AppPromotion({ head, ctaText, ctaUrl }: { head?: Head; ctaText?: string; ctaUrl?: string } = {}) {
+  const h = hd(head, { title: "Study anywhere with the Atomic Pathshala app", subtitle: "Install it on your phone in seconds — classes, notes, DPPs and tests in one tap." });
   return (
     <Section id="app">
       <div className="flex flex-col items-start gap-5 rounded-3xl bg-gradient-to-br from-[#0b1736] to-blue-800 p-6 text-white sm:flex-row sm:items-center sm:justify-between sm:p-10">
@@ -79,12 +84,12 @@ export function AppPromotion() {
             <Icon name="install_mobile" className="text-[28px] text-cyan-300" />
           </span>
           <div>
-            <h2 className="text-xl sm:text-2xl font-bold tracking-tight">Study anywhere with the Atomic Pathshala app</h2>
-            <p className="mt-1 text-sm text-white/75">Install it on your phone in seconds — classes, notes, DPPs and tests in one tap.</p>
+            <h2 className="text-xl sm:text-2xl font-bold tracking-tight">{h.title}</h2>
+            <p className="mt-1 text-sm text-white/75">{h.subtitle}</p>
           </div>
         </div>
-        <ButtonLink href="/install" variant="light">
-          Install the app <Icon name="download" className="text-[18px]" />
+        <ButtonLink href={ctaUrl || "/install"} variant="light" external={!!ctaUrl && /^https?:\/\//i.test(ctaUrl)}>
+          {ctaText || "Install the app"} <Icon name="download" className="text-[18px]" />
         </ButtonLink>
       </div>
     </Section>
