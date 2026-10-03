@@ -145,6 +145,12 @@ export type FooterData = {
 };
 
 function parseSocial(raw: unknown): FooterSocial[] {
+  // Saved by Team → Website → Footer as { youtube: url, … }.
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    return Object.entries(raw as Record<string, unknown>)
+      .filter((e): e is [string, string] => typeof e[1] === "string" && e[1] !== "")
+      .map(([k, url]) => ({ label: k.charAt(0).toUpperCase() + k.slice(1), url, icon: null }));
+  }
   if (!Array.isArray(raw)) return [];
   return raw
     .map((x) => {

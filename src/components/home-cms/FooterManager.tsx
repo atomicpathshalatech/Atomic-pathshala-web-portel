@@ -10,6 +10,8 @@ type Settings = {
   contactPhone: string | null;
   contactEmail: string | null;
   address: string | null;
+  /** { youtube: url, … } */
+  socialLinks: Record<string, string>;
 };
 type Link = { id: string; label: string; url: string };
 type Column = { id: string; title: string; links: Link[] };
@@ -28,7 +30,16 @@ export function FooterManager({ initialSettings, initialColumns }: { initialSett
       const res = await fetch("/api/admin/footer/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(settings),
+        // Empty boxes go as null (an empty logo URL or email used to fail validation and block the save).
+        body: JSON.stringify({
+          logoUrl: settings.logoUrl?.trim() || null,
+          description: settings.description?.trim() || null,
+          copyrightText: settings.copyrightText?.trim() || null,
+          contactPhone: settings.contactPhone?.trim() || null,
+          contactEmail: settings.contactEmail?.trim() || null,
+          address: settings.address?.trim() || null,
+          socialLinks: Object.keys(settings.socialLinks).length ? settings.socialLinks : null,
+        }),
       });
       const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.error ?? "Could not save.");
@@ -105,6 +116,16 @@ export function FooterManager({ initialSettings, initialColumns }: { initialSett
           <input value={settings.contactEmail ?? ""} onChange={(e) => setSettings({ ...settings, contactEmail: e.target.value })} placeholder="Email" className="w-full rounded-lg border border-outline-variant/40 bg-surface px-3 py-2 text-body-md" />
           <input value={settings.address ?? ""} onChange={(e) => setSettings({ ...settings, address: e.target.value })} placeholder="Address" className="w-full rounded-lg border border-outline-variant/40 bg-surface px-3 py-2 text-body-md" />
         </div>
+        <input
+          value={settings.socialLinks.youtube ?? ""}
+          onChange={(e) => {
+            const url = e.target.value.trim();
+            const { youtube: _old, ...rest } = settings.socialLinks;
+            setSettings({ ...settings, socialLinks: url ? { ...rest, youtube: url } : rest });
+          }}
+          placeholder="YouTube channel URL (e.g. https://www.youtube.com/@atomicpathshala)"
+          className="w-full rounded-lg border border-outline-variant/40 bg-surface px-3 py-2 text-body-md"
+        />
         <input value={settings.copyrightText ?? ""} onChange={(e) => setSettings({ ...settings, copyrightText: e.target.value })} placeholder="Copyright text" className="w-full rounded-lg border border-outline-variant/40 bg-surface px-3 py-2 text-body-md" />
         <button type="submit" disabled={savingSettings} className="bg-primary text-on-primary px-5 py-2.5 rounded-xl text-label-md disabled:opacity-60">
           {savingSettings ? "Saving…" : "Save Settings"}
