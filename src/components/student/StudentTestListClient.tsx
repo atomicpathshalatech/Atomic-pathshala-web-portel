@@ -101,8 +101,8 @@ export function StudentTestListClient({ tests }: { tests: TestListItem[] }) {
                   </span>
                   <span className="flex items-center gap-1">
                     <span className="material-symbols-outlined text-base text-primary">calendar_today</span>
-                    {new Date(t.startsAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })} &middot;{" "}
-                    {new Date(t.startsAt).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true })}
+                    {new Date(t.startsAt).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short" })} &middot;{" "}
+                    {new Date(t.startsAt).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", minute: "2-digit", hour12: true })}
                   </span>
                 </div>
               </div>

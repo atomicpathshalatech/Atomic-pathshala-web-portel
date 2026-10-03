@@ -40,6 +40,44 @@ type QuestionState = "NOT_VISITED" | "NOT_ANSWERED" | "ANSWERED" | "MARKED_FOR_R
 
 const OPTION_KEYS = ["A", "B", "C", "D"] as const;
 
+/**
+ * Where the student is in a running attempt (question, language, palette
+ * marks), kept on the device so a refresh reopens the exam right there.
+ * Answers themselves are saved on the server on every click.
+ */
+type SavedProgress = { lang: "en" | "hi"; index: number; subject: string; states: Record<string, QuestionState> };
+const progressKey = (attemptId: string) => `ap:exam-progress:${attemptId}`;
+
+function readProgress(attemptId: string): SavedProgress | null {
+  try {
+    const raw = window.localStorage.getItem(progressKey(attemptId));
+    return raw ? (JSON.parse(raw) as SavedProgress) : null;
+  } catch {
+    return null;
+  }
+}
+
+function clearProgress(attemptId: string | undefined) {
+  if (!attemptId) return;
+  try {
+    window.localStorage.removeItem(progressKey(attemptId));
+  } catch {}
+}
+
+/** Palette states from the server's answers, keeping this device's visited / marked flags. */
+function initialStates(d: ExamAttemptData, saved: SavedProgress | null): Record<string, QuestionState> {
+  const states: Record<string, QuestionState> = {};
+  d.questions.forEach((q, idx) => {
+    const prev = saved?.states[q.id];
+    const marked = prev === "MARKED_FOR_REVIEW" || prev === "ANSWERED_AND_MARKED";
+    if (q.mySelection) states[q.id] = marked ? "ANSWERED_AND_MARKED" : "ANSWERED";
+    else if (marked) states[q.id] = "MARKED_FOR_REVIEW";
+    else if (prev && prev !== "NOT_VISITED") states[q.id] = "NOT_ANSWERED";
+    else states[q.id] = idx === 0 ? "NOT_ANSWERED" : "NOT_VISITED";
+  });
+  return states;
+}
+
 function formatClock(totalSec: number) {
   const s = Math.max(0, totalSec);
   const h = Math.floor(s / 3600);
@@ -87,6 +125,26 @@ export function ExamRunner({
   const [violationsCount, setViolationsCount] = useState(0);
   const submittedRef = useRef(false);
 
+  // Answers from the server; after a refresh, the same question, language and marks as before.
+  const startFrom = useCallback((d: ExamAttemptData) => {
+    const saved = typeof window === "undefined" ? null : readProgress(d.attempt.id);
+    const ans: Record<string, string | null> = {};
+    d.questions.forEach((q) => {
+      ans[q.id] = q.mySelection;
+    });
+    setAnswers(ans);
+    setQuestionStates(initialStates(d, saved));
+    const index = saved && saved.index >= 0 && saved.index < d.questions.length ? saved.index : 0;
+    setCurrentIndex(index);
+    const subject = d.questions[index]?.subject || d.questions[0]?.subject;
+    if (subject) setActiveSubject(subject);
+    if (saved) {
+      setDefaultLanguage(saved.lang);
+      setCurrentQuestionLang(saved.lang);
+      setPhase("RUNNING");
+    }
+  }, []);
+
   // 1. Fetch or initialize attempt data
   const loadData = useCallback(async () => {
     try {
@@ -102,61 +160,31 @@ export function ExamRunner({
         return;
       }
       setData(d);
-
-      // Initialize answers and states
-      const initialAns: Record<string, string | null> = {};
-      const initialStates: Record<string, QuestionState> = {};
-
-      d.questions.forEach((q, idx) => {
-        initialAns[q.id] = q.mySelection;
-        if (q.mySelection) {
-          initialStates[q.id] = "ANSWERED";
-        } else if (idx === 0) {
-          initialStates[q.id] = "NOT_ANSWERED";
-        } else {
-          initialStates[q.id] = "NOT_VISITED";
-        }
-      });
-
-      setAnswers(initialAns);
-      setQuestionStates(initialStates);
-
-      if (d.questions[0]?.subject) {
-        setActiveSubject(d.questions[0].subject);
-      }
+      startFrom(d);
     } catch {
       setLoadError("Could not connect to the exam server. Please check your internet connection.");
     } finally {
       setLoading(false);
     }
-  }, [testId, router]);
+  }, [testId, router, startFrom]);
 
   useEffect(() => {
     if (!initialData) {
       loadData();
     } else {
-      const initialAns: Record<string, string | null> = {};
-      const initialStates: Record<string, QuestionState> = {};
-
-      initialData.questions.forEach((q, idx) => {
-        initialAns[q.id] = q.mySelection;
-        if (q.mySelection) {
-          initialStates[q.id] = "ANSWERED";
-        } else if (idx === 0) {
-          initialStates[q.id] = "NOT_ANSWERED";
-        } else {
-          initialStates[q.id] = "NOT_VISITED";
-        }
-      });
-
-      setAnswers(initialAns);
-      setQuestionStates(initialStates);
-
-      if (initialData.questions[0]?.subject) {
-        setActiveSubject(initialData.questions[0].subject);
-      }
+      startFrom(initialData);
     }
-  }, [initialData, loadData]);
+  }, [initialData, loadData, startFrom]);
+
+  // Keep the student's place on this device while the exam runs.
+  const attemptId = data?.attempt?.id;
+  useEffect(() => {
+    if (phase !== "RUNNING" || !attemptId || submittedRef.current) return;
+    try {
+      const saved: SavedProgress = { lang: defaultLanguage, index: currentIndex, subject: activeSubject, states: questionStates };
+      window.localStorage.setItem(progressKey(attemptId), JSON.stringify(saved));
+    } catch {}
+  }, [phase, attemptId, defaultLanguage, currentIndex, activeSubject, questionStates]);
 
   // 2. Compute Subjects with Question Counts
   const subjectsList = useMemo(() => {
@@ -406,6 +434,7 @@ export function ExamRunner({
         return;
       }
 
+      clearProgress(data?.attempt?.id);
       toast.success(auto ? "Time expired. Test auto-submitted!" : "Test submitted successfully!");
       if (document.fullscreenElement) {
         document.exitFullscreen().catch(() => {});

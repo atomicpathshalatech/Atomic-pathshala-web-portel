@@ -345,10 +345,10 @@ export async function triggerNotificationEvent(
         batch_name: input.metadata?.batchName || "",
         teacher_name: input.metadata?.teacherName || "",
         class_name: input.metadata?.className || input.title,
-        class_date: input.metadata?.startsAt ? new Date(input.metadata.startsAt).toLocaleDateString("en-IN") : "",
-        class_time: input.metadata?.startsAt ? new Date(input.metadata.startsAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "",
+        class_date: input.metadata?.startsAt ? new Date(input.metadata.startsAt).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }) : "",
+        class_time: input.metadata?.startsAt ? new Date(input.metadata.startsAt).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit" }) : "",
         test_name: input.metadata?.testName || input.title,
-        test_time: input.metadata?.openTime ? new Date(input.metadata.openTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "",
+        test_time: input.metadata?.openTime ? new Date(input.metadata.openTime).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit" }) : "",
         course_name: input.metadata?.courseName || "",
       };
 

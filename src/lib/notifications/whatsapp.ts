@@ -139,7 +139,7 @@ export async function triggerUpcomingClassAlert(scheduleId: string) {
   if (!schedule) return;
 
   const title = `Class Starting in 15 Min: ${schedule.title}`;
-  const body = `Your live class with ${schedule.teacher?.user.name || "Faculty"} is about to start at ${schedule.startsAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}. Join your classroom now!`;
+  const body = `Your live class with ${schedule.teacher?.user.name || "Faculty"} is about to start at ${schedule.startsAt.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit" })}. Join your classroom now!`;
 
   for (const enrollment of schedule.batch.enrollments) {
     await dispatchNotification({

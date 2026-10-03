@@ -1425,7 +1425,7 @@ export function StudentLiveClassRoom({
   // Strictly NO PDF or PPTX download buttons appear on this immediate post-class screen.
   if (phase === "ended") {
     return (
-      <div className="min-h-screen-safe w-full bg-[#0b0d14] flex flex-col justify-center px-4">
+      <div className="min-h-screen-safe w-full bg-slate-50 flex flex-col justify-center px-4">
         <StudentPostClassFeedback
           sessionId={wbSession?.id || batchScheduleId}
           sessionTitle={scheduleTitle}
@@ -1467,160 +1467,66 @@ export function StudentLiveClassRoom({
     const minutes = Math.floor((Math.max(0, secondsUntilStart) % 3600) / 60);
     const seconds = Math.max(0, secondsUntilStart) % 60;
 
+    const pad = (n: number) => String(n).padStart(2, "0");
     return (
-      <div className="min-h-screen-safe w-full bg-[#0b0d14] text-white flex flex-col justify-between select-none">
-        {/* Top pre-class classroom header */}
-        <header className="h-14 px-4 sm:px-6 shrink-0 flex items-center justify-between border-b border-slate-800/80 bg-[#10131d]">
-          <div className="flex items-center gap-3 min-w-0">
-            <Link
-              href="/schedule"
-              className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center shrink-0 transition shadow-xs"
-              title="Back to Schedule"
-            >
-              <span className="material-symbols-outlined text-base">arrow_back</span>
-            </Link>
-            <div className="w-8 h-8 rounded-xl overflow-hidden p-0.5 bg-white/5 border border-white/10 shrink-0 flex items-center justify-center">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/brand/logo.png" alt="Atomic Pathshala" className="w-full h-full object-contain" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 truncate leading-tight">{batchName}</p>
-              <h1 className="text-sm font-bold truncate max-w-xs sm:max-w-md text-white leading-tight">{scheduleTitle}</h1>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="flex items-center gap-1.5 text-xs font-bold text-blue-400 border border-blue-500/40 bg-blue-950/60 px-3 py-1 rounded-full shadow-xs">
-              <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
-              CLASSROOM
-            </span>
+      <div className="min-h-screen-safe w-full bg-slate-50 text-slate-900 flex flex-col select-none">
+        {/* Slim header */}
+        <header className="h-12 px-3 sm:px-4 shrink-0 flex items-center gap-2.5 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
+          <Link href="/schedule" className="w-8 h-8 rounded-full hover:bg-slate-100 text-slate-700 flex items-center justify-center shrink-0" title="Back to Schedule">
+            <span className="material-symbols-outlined text-[20px]">arrow_back</span>
+          </Link>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/logo.png" alt="Atomic Pathshala" className="w-7 h-7 object-contain shrink-0" />
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold text-slate-500 truncate leading-tight">{batchName}</p>
+            <h1 className="text-xs font-bold truncate leading-tight">{scheduleTitle}</h1>
           </div>
         </header>
 
-        {/* Central pre-class classroom content */}
-        <main className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 flex flex-col lg:flex-row items-stretch justify-center gap-6 my-auto">
-          {/* Left Column: Hero & Countdown */}
-          <div className="flex-1 bg-[#121422] border border-slate-800 rounded-3xl p-6 sm:p-8 flex flex-col justify-between shadow-2xl space-y-6">
-            <div className="space-y-3">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-400 text-xs font-semibold">
-                <span className="material-symbols-outlined text-sm animate-spin">hourglass_top</span>
-                <span>Classroom is being prepared</span>
-              </div>
-              <h2 className="text-2xl sm:text-3xl font-black text-white leading-tight">
-                {scheduleTitle}
-              </h2>
-              <p className="text-sm text-slate-400">
-                Batch: <span className="text-blue-300 font-semibold">{batchName}</span>
+        <main className="flex-1 w-full max-w-md mx-auto p-3 sm:p-4 flex flex-col gap-3 justify-center">
+          {/* Class card */}
+          <div className="bg-white rounded-2xl p-4 shadow-[0_2px_12px_rgba(15,23,42,0.06)] space-y-3">
+            <div className="space-y-0.5">
+              <h2 className="text-base font-bold leading-snug">{scheduleTitle}</h2>
+              <p className="text-[11px] text-slate-500">
+                {[subject, chapterTitle, teacherName].filter(Boolean).join(" · ")}
               </p>
-              {(subject || chapterTitle) && (
-                <p className="text-sm text-slate-400">
-                  {subject && <span className="text-blue-300 font-semibold">{subject}</span>}
-                  {subject && chapterTitle && <span className="text-slate-600"> &middot; </span>}
-                  {chapterTitle && <span>{chapterTitle}</span>}
-                </p>
-              )}
             </div>
 
-            {/* Countdown / Status Box */}
-            <div className="bg-[#181a2c] border border-slate-800/80 rounded-2xl p-5 text-center space-y-3">
-              {secondsUntilStart > 0 ? (
-                <>
-                  <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Class Starts In</p>
-                  <div className="flex items-center justify-center gap-3 font-mono">
-                    <div className="bg-[#0e0f1a] border border-slate-700/60 rounded-xl px-3 py-2 min-w-[60px]">
-                      <span className="text-2xl sm:text-3xl font-black text-white">{String(hours).padStart(2, "0")}</span>
-                      <span className="block text-[9px] uppercase tracking-wider text-slate-500 font-sans mt-0.5">Hours</span>
-                    </div>
-                    <span className="text-2xl font-bold text-slate-600">:</span>
-                    <div className="bg-[#0e0f1a] border border-slate-700/60 rounded-xl px-3 py-2 min-w-[60px]">
-                      <span className="text-2xl sm:text-3xl font-black text-white">{String(minutes).padStart(2, "0")}</span>
-                      <span className="block text-[9px] uppercase tracking-wider text-slate-500 font-sans mt-0.5">Mins</span>
-                    </div>
-                    <span className="text-2xl font-bold text-slate-600">:</span>
-                    <div className="bg-[#0e0f1a] border border-slate-700/60 rounded-xl px-3 py-2 min-w-[60px]">
-                      <span className="text-2xl sm:text-3xl font-black text-blue-400">{String(seconds).padStart(2, "0")}</span>
-                      <span className="block text-[9px] uppercase tracking-wider text-slate-500 font-sans mt-0.5">Secs</span>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="space-y-2 py-2">
-                  <div className="w-10 h-10 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center mx-auto border border-blue-500/30">
-                    <span className="material-symbols-outlined text-xl animate-pulse">sensors</span>
-                  </div>
-                  <p className="text-base font-bold text-white">Starting Momentarily</p>
-                  <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                    Your educator is setting up the live canvas &amp; broadcast. You will be connected automatically when class begins.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Educator Card */}
-            <div className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-[#181a2c]/60 border border-slate-800">
-              <div className="w-12 h-12 rounded-xl bg-blue-600/20 text-blue-400 flex items-center justify-center font-bold text-lg border border-blue-500/30">
-                {teacherName ? teacherName.charAt(0).toUpperCase() : "E"}
+            {secondsUntilStart > 0 ? (
+              <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
+                <span className="text-[11px] font-semibold text-slate-500">Class starts in</span>
+                <span className="font-mono text-lg font-bold text-slate-900">
+                  {pad(hours)}:{pad(minutes)}:<span className="text-blue-600">{pad(seconds)}</span>
+                </span>
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5">
-                  <h4 className="text-sm font-bold text-white truncate">{teacherName || "Educator"}</h4>
-                  <span className="material-symbols-outlined text-xs text-blue-400" title="Verified Educator">verified</span>
-                </div>
-                <p className="text-xs text-slate-400">Atomic Pathshala Faculty</p>
+            ) : (
+              <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                <span className="text-[11px] font-semibold text-emerald-700">Starting soon — you will join automatically</span>
               </div>
-            </div>
-
-            {/* Preparation Tips */}
-            <div className="grid grid-cols-2 gap-2 text-xs text-slate-400">
-              <div className="flex items-center gap-2 p-2 rounded-xl bg-slate-900/60 border border-slate-800/60">
-                <span className="material-symbols-outlined text-blue-400 text-base">edit_note</span>
-                <span>Keep notebook &amp; pen ready</span>
-              </div>
-              <div className="flex items-center gap-2 p-2 rounded-xl bg-slate-900/60 border border-slate-800/60">
-                <span className="material-symbols-outlined text-emerald-400 text-base">wifi</span>
-                <span>Stable internet active</span>
-              </div>
-            </div>
+            )}
           </div>
 
-          {/* Right Column: Pre-Class Chat / Info Panel */}
-          {wbSession?.id && wbSession?.chatEnabled ? (
-            <div className="w-full lg:w-80 h-96 lg:h-auto flex flex-col bg-[#121422] border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
-              <div className="px-4 py-3 bg-[#0a0b12] border-b border-slate-800 flex items-center justify-between shrink-0">
-                <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-sm text-blue-400">chat</span>
-                  Pre-Class Discussion
-                </span>
-                <span className="text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2 py-0.5 rounded-full font-semibold">
-                  Chat Open
-                </span>
+          {/* Pre-class chat, when the teacher has it on */}
+          {wbSession?.id && wbSession?.chatEnabled && (
+            <div className="h-72 flex flex-col bg-white rounded-2xl overflow-hidden shadow-[0_2px_12px_rgba(15,23,42,0.06)]">
+              <div className="px-3 py-2 flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 shrink-0">
+                <span className="material-symbols-outlined text-[16px] text-blue-600">chat</span>
+                Chat
               </div>
               <div className="flex-1 min-h-0">
                 <MessagesPanel
                   whiteboardSessionId={wbSession.id}
                   currentUserId={currentUserId}
                   role="STUDENT"
-                  theme="dark"
+                  theme="light"
                   showOwnToggle={false}
                 />
               </div>
             </div>
-          ) : (
-            <div className="w-full lg:w-72 bg-[#121422] border border-slate-800 rounded-3xl p-6 flex flex-col justify-center items-center text-center space-y-3 shadow-2xl">
-              <div className="w-12 h-12 rounded-2xl bg-slate-800 text-slate-400 flex items-center justify-center">
-                <span className="material-symbols-outlined text-2xl">lock_clock</span>
-              </div>
-              <h3 className="text-sm font-bold text-white">Live Stage Locked</h3>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                Strokes, presentation slides, quizzes, and live broadcast will unlock the instant the educator starts the session.
-              </p>
-            </div>
           )}
         </main>
-
-        <footer className="h-10 px-4 flex items-center justify-center text-[11px] text-slate-500 border-t border-slate-800/60 bg-[#0d0e17]">
-          <span>Atomic Pathshala Live Teaching Classroom • Stay on this screen for automatic entry</span>
-        </footer>
       </div>
     );
   }

@@ -735,6 +735,65 @@ export function QuizMode({ onClose, showInstantFeedback = true }: QuizModeProps)
   const currentQuestion = questions[currentIndex] ?? null;
   const isLastQuestion = currentIndex === questions.length - 1;
 
+  // A running quiz is kept on this device, so a refresh reopens it on the
+  // same question with the answers given so far (and the clock still running).
+  const activeKey = typeof window === "undefined" ? "" : `ap:quiz-active:${window.location.pathname}`;
+  const restoredRef = useRef(false);
+  useEffect(() => {
+    if (restoredRef.current || !activeKey) return;
+    restoredRef.current = true;
+    try {
+      const raw = window.localStorage.getItem(activeKey);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as {
+        testName: string; quizId: string; level: QuizLevel; chapter?: string;
+        questions: QuizQuestion[]; entries: QuizConfigEntry[]; answers: Record<number, QuizAnswer>;
+        index: number; deadline: number; dbQuizId: string | null; attemptId: string | null;
+      };
+      if (!saved.questions?.length) return;
+      setTestName(saved.testName);
+      setQuizId(saved.quizId);
+      setActiveLevel(saved.level);
+      setActiveChapter(saved.chapter);
+      setQuestions(saved.questions);
+      setEntries(saved.entries);
+      setAnswersByIndex(saved.answers || {});
+      setCurrentIndex(Math.min(Math.max(0, saved.index || 0), saved.questions.length - 1));
+      setDbQuizId(saved.dbQuizId);
+      dbQuizIdRef.current = saved.dbQuizId;
+      setAttemptId(saved.attemptId);
+      attemptIdRef.current = saved.attemptId;
+      resultSubmittedRef.current = false;
+      setTotalRemaining(Math.max(0, Math.round((saved.deadline - Date.now()) / 1000)));
+      setStage("active");
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeKey]);
+
+  const deadlineRef = useRef(0);
+  useEffect(() => {
+    if (!activeKey) return;
+    try {
+      if (stage !== "active") {
+        // Finished or left: nothing to resume.
+        if (stage !== "loading" && restoredRef.current) window.localStorage.removeItem(activeKey);
+        return;
+      }
+      if (!deadlineRef.current || Math.abs(deadlineRef.current - (Date.now() + totalRemaining * 1000)) > 5000) {
+        deadlineRef.current = Date.now() + totalRemaining * 1000;
+      }
+      window.localStorage.setItem(
+        activeKey,
+        JSON.stringify({
+          testName, quizId, level: activeLevel, chapter: activeChapter, questions, entries,
+          answers: answersByIndex, index: currentIndex, deadline: deadlineRef.current, dbQuizId, attemptId,
+        })
+      );
+    } catch {}
+    // totalRemaining ticks every second; the deadline is written once (re-synced only if it drifts).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeKey, stage, currentIndex, answersByIndex, questions, attemptId, dbQuizId]);
+
   useEffect(() => {
     questionStartTimeRef.current = Date.now();
   }, [currentIndex]);

@@ -368,6 +368,10 @@ export function generateTestPaperHtml(
     month: "2-digit",
     year: "numeric",
   }).format(test.createdAt || new Date());
+  // Footer, right: a DPP carries its page number (filled in by renumber()), a test the date.
+  const footerRightHtml = isDpp
+    ? `<span class="footer-date js-footer-page-no"></span>`
+    : `<span class="footer-date">${currentDateStr}</span>`;
 
   // Deterministic series & form code
   const bookletSeries = test.code ? (test.code.length > 8 ? test.code.slice(0, 8) : test.code) : "AP-26";
@@ -845,16 +849,20 @@ export function generateTestPaperHtml(
     const num = withSolutionPart
       ? `<span class="q-num"><span class="q-num-box">${q.number}</span></span>`
       : `<span class="q-num">${q.number}.</span>`;
-    const parts = [
-      part("q-row-item q-stmt", `${num}<div class="q-body">${hiChunks[0]}</div>`, `${num}<div class="q-body">${enChunks[0]}</div>`, ` id="q-${q.number}"`),
-      ...hiChunks.slice(1).map((h, i) => part("q-fig q-cont", h, enChunks[i + 1]!)),
-    ];
-    const diagram = diagramFor(q);
+    // Solutions: only the number, answer and solution (the question is already printed above).
+    const solutionOnly = withSolutionPart;
+    const parts = solutionOnly
+      ? []
+      : [
+          part("q-row-item q-stmt", `${num}<div class="q-body">${hiChunks[0]}</div>`, `${num}<div class="q-body">${enChunks[0]}</div>`, ` id="q-${q.number}"`),
+          ...hiChunks.slice(1).map((h, i) => part("q-fig q-cont", h, enChunks[i + 1]!)),
+        ];
+    const diagram = solutionOnly ? "" : diagramFor(q);
     if (diagram) parts.push(part("q-fig", diagram, diagram));
-    if (q.options.some((o) => o.textEn || o.textHi)) {
+    if (!solutionOnly && q.options.some((o) => o.textEn || o.textHi)) {
       for (let k = 0; k < parts.length; k++) parts[k] = parts[k]!.replace('class="q-part ', 'class="q-part keep-next ');
     }
-    q.options.forEach((opt, i) => {
+    if (!solutionOnly) q.options.forEach((opt, i) => {
       if (!opt.textEn && !opt.textHi) return;
       const cell = (hi: boolean) =>
         `<span class="opt-key">${choiceLabel(q, i)})</span><span class="opt-text">${renderFormulaContent(
@@ -881,7 +889,9 @@ export function generateTestPaperHtml(
           }`;
         };
         parts.push(
-          i === 0
+          i === 0 && solutionOnly
+            ? part("sol-row-item q-stmt", `${num}<div class="q-body">${cell(true)}</div>`, `${num}<div class="q-body">${cell(false)}</div>`, ` id="sol-q-${q.number}"`)
+            : i === 0
             ? part("sol-row-item q-sol", cell(true), cell(false), ` id="sol-q-${q.number}"`)
             : part("q-sol q-sol-cont", cell(true), cell(false))
         );
@@ -924,7 +934,7 @@ export function generateTestPaperHtml(
         ${phaseBoxHtml}
         <div class="footer-meta-row">
           ${footerLeftHtml}${SITE_LINK_HTML}
-          <span class="footer-date">${currentDateStr}</span>
+          ${footerRightHtml}
         </div>
       </div>
     </div>
@@ -935,15 +945,20 @@ export function generateTestPaperHtml(
   // Solutions booklet: answer key first, then each question followed by its
   // solution — no cover, rough pages or back cover.
   let questionPagesHtml = "";
-  if (!withSolution || isDpp) {
+  {
     test.sections.forEach((section, si) => {
       const dppStrip =
         isDpp && si === 0
           ? `<div class="dpp-strip"><div class="dpp-strip-title">${test.name}</div><div class="dpp-strip-meta">${test.totalQuestions} Questions · ${test.durationMin} min · +${test.correctMarks} / ${test.incorrectMarks}</div></div>`
           : "";
+      // Under the subject name: its syllabus in a white box (tests).
+      const syllabusBox =
+        !isDpp && section.syllabus
+          ? `<div class="subject-syllabus keep-next"><b>Syllabus :</b> ${section.syllabus.replace(/</g, "&lt;")}</div>`
+          : "";
       questionPagesHtml += `
       <div class="q-flow" data-subject="SUBJECT : ${section.subject.toUpperCase().replace(/"/g, "&quot;")}">
-        ${dppStrip}${section.questions.map((q) => questionPartsHtml(q, false)).join("")}
+        ${dppStrip}${syllabusBox}${section.questions.map((q) => questionPartsHtml(q, false)).join("")}
       </div>`;
       // Rough page after each subject (page numbers are filled in after pagination).
       if (!isDpp) questionPagesHtml += renderSingleRoughPageHtml(0, section.subject);
@@ -954,7 +969,7 @@ export function generateTestPaperHtml(
   const contentPageTemplateHtml = `
     <template id="tpl-content-page">
       <div class="page content-page">
-        <div class="page-watermark"><div class="watermark-text">${brandName}</div></div>
+        <div class="page-watermark">${options.logoUrl ? `<img class="watermark-logo" src="${options.logoUrl}" alt="" />` : `<div class="watermark-text">${brandName}</div>`}</div>
         <div class="test-page-header">
           <div class="test-header-row-1"></div>
           <div class="test-header-subject-row"></div>
@@ -965,7 +980,7 @@ export function generateTestPaperHtml(
           ${phaseBoxHtml}
           <div class="footer-meta-row">
             ${footerLeftHtml}${SITE_LINK_HTML}
-            <span class="footer-date">${currentDateStr}</span>
+            ${footerRightHtml}
           </div>
         </div>
       </div>
@@ -1028,7 +1043,24 @@ export function generateTestPaperHtml(
     const columns: FormattedExportQuestion[][] = [];
     for (let i = 0; i < test.allQuestions.length; i += PER_COLUMN) columns.push(test.allQuestions.slice(i, i + PER_COLUMN));
     const answerKeyTables: string[] = [];
-    for (let t = 0; t < columns.length; t += COLUMNS_PER_TABLE) {
+    if (isDpp) {
+      // DPP: horizontal key — a row of question numbers over a row of answers, 15 per strip.
+      const PER_STRIP = 15;
+      const strips: string[] = [];
+      for (let i = 0; i < test.allQuestions.length; i += PER_STRIP) {
+        const chunk = test.allQuestions.slice(i, i + PER_STRIP);
+        strips.push(
+          `<tr><th>Q.</th>${chunk.map((q) => `<td class="ak-q">${q.number}</td>`).join("")}</tr>` +
+            `<tr><th>Ans.</th>${chunk.map((q) => `<td class="ak-a">${optionLetter(q)}</td>`).join("")}</tr>`
+        );
+      }
+      answerKeyTables.push(`
+        <div class="ak-block">
+          <div class="ak-title">ANSWER KEY / उत्तर कुंजी <span>${test.name} · ${test.allQuestions.length} Questions</span></div>
+          ${strips.map((rows) => `<table class="ak-table ak-horizontal"><tbody>${rows}</tbody></table>`).join("")}
+        </div>`);
+    }
+    for (let t = 0; t < (isDpp ? 0 : columns.length); t += COLUMNS_PER_TABLE) {
       const group = columns.slice(t, t + COLUMNS_PER_TABLE);
       const rows = Math.max(...group.map((c) => c.length));
       let body = "";
@@ -1065,7 +1097,7 @@ export function generateTestPaperHtml(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${test.name} - ${currentDateStr} - ATOMIC PATHSHALA${withSolution ? " (Solutions)" : ""}</title>
+  <title>${test.name} - ${currentDateStr} - ATOMIC PATHSHALA</title>
   
   <!-- Tailwind CSS Engine for Exact Aesthetic Rendering -->
   <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
@@ -1177,12 +1209,15 @@ export function generateTestPaperHtml(
       position: absolute;
       top: 50%;
       left: 50%;
-      transform: translate(-50%, -50%) rotate(-32deg);
+      transform: translate(-50%, -50%);
       pointer-events: none;
       z-index: 0;
       user-select: none;
       white-space: nowrap;
     }
+
+    /* The logo, level (0°), faint behind every page. */
+    .watermark-logo { display: block; width: 115mm; height: auto; opacity: 0.06; }
 
     .watermark-text {
       font-family: 'Montserrat', 'PT Serif', sans-serif;
@@ -2154,6 +2189,14 @@ export function generateTestPaperHtml(
     .ak-table th { background: #e2e8f0; font-weight: 700; }
     .ak-table td.ak-q { font-weight: 700; background: #f8fafc; }
     .ak-table .ak-gap { width: 10px; border: 0; background: transparent; }
+    .ak-table.ak-horizontal { margin: 0 auto 6px; }
+    .subject-syllabus {
+      margin: 4px 0 6px; padding: 5px 9px; background: #ffffff; color: #1f2937;
+      border: 1px solid #cbd5e1; border-radius: 4px;
+      font-family: 'Tinos', 'Times New Roman', serif; font-size: 10pt; line-height: 1.35;
+    }
+    .subject-syllabus b { color: #000000; }
+    .ak-table.ak-horizontal th, .ak-table.ak-horizontal td.ak-q, .ak-table.ak-horizontal td.ak-a { padding: 3px 6px; min-width: 22px; }
 
     /* Website link in every footer (clickable in the saved PDF) */
     .site-link { color: #1d4ed8 !important; text-decoration: none; font-family: 'Tinos', 'Times New Roman', serif; font-weight: 700; }
@@ -2197,14 +2240,14 @@ ${isDpp && options.dppCoverHtml ? DPP_COVER_CSS : ""}
        (real text, exact Hindi shaping and maths, small file) — not by
        screenshotting each page into a JPEG as before. -->
   <div class="print-toolbar no-print">
-    <div class="pt-title">${test.name} · ${brandName}${withSolution ? " (Solutions)" : ""}</div>
+    <div class="pt-title">${test.name} · ${brandName}</div>
     <div class="pt-status" id="pt-status">Preparing pages…</div>
     <button type="button" class="pt-btn" id="pt-print" disabled>Save as PDF</button>
     <div class="pt-hint">In the print window, choose <b>Save as PDF</b> as the destination.</div>
   </div>
 
   <div class="doc-container" id="doc-container">
-    ${isDpp && options.dppCoverHtml ? options.dppCoverHtml : ""}${isDpp ? questionPagesHtml + (withSolution ? solutionsSectionHtml : "") : withSolution ? solutionsSectionHtml : frontCoverHtml + questionPagesHtml + finalRoughPagesHtml + backCoverHtml}
+    ${isDpp && options.dppCoverHtml ? options.dppCoverHtml : ""}${isDpp ? questionPagesHtml + (withSolution ? solutionsSectionHtml : "") : withSolution ? frontCoverHtml + questionPagesHtml + solutionsSectionHtml : frontCoverHtml + questionPagesHtml + finalRoughPagesHtml + backCoverHtml}
   </div>
   ${contentPageTemplateHtml}
 
@@ -2328,6 +2371,8 @@ ${isDpp && options.dppCoverHtml ? DPP_COVER_CSS : ""}
           var n = i + 1;
           var row = pages[i].querySelector('.test-header-row-1');
           if (row) row.innerHTML = headerRow(n);
+          var footerNo = pages[i].querySelector('.js-footer-page-no');
+          if (footerNo) footerNo.textContent = 'Page ' + n;
           var label = pages[i].querySelector('.js-sol-page-label');
           if (label) label.textContent = 'PAGE ' + n;
           if (pages[i].classList.contains('back-cover-page')) bookletPages = n;

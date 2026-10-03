@@ -348,7 +348,7 @@ export function TestForm(props: Props) {
                 <option value="">No Timetable Binding</option>
                 {scheduleOptions.map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.batchName} — {s.title} ({new Date(s.startsAt).toLocaleDateString()})
+                    {s.batchName} — {s.title} ({new Date(s.startsAt).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })})
                   </option>
                 ))}
               </select>

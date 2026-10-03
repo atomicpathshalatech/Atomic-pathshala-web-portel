@@ -200,7 +200,7 @@ export default async function TeamHomePage() {
                         </div>
                         <p className="font-label-md text-label-md text-on-surface truncate">{s.title}</p>
                         <p className="text-label-sm text-on-surface-variant">
-                          {s.startsAt.toLocaleString(undefined, {
+                          {s.startsAt.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", 
                             month: "short",
                             day: "numeric",
                             hour: "numeric",

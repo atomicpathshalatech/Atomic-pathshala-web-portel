@@ -56,112 +56,49 @@ export function StudentPostClassFeedback({
     }
   }
 
+  const chip = (active: boolean) =>
+    `py-1.5 px-2 rounded-lg text-[11px] font-semibold transition ${
+      active ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+    }`;
+
   return (
-    <div className="max-w-xl mx-auto my-12 p-6 sm:p-8 bg-[#121420] text-white rounded-3xl border border-slate-800 shadow-2xl space-y-6">
-      <div className="text-center space-y-2">
-        <div className="w-16 h-16 rounded-2xl bg-blue-500/20 text-blue-400 flex items-center justify-center mx-auto border border-blue-500/30">
-          <span className="material-symbols-outlined text-3xl">school</span>
+    <div className="w-full max-w-sm mx-auto my-6 p-4 bg-white text-slate-900 rounded-2xl shadow-[0_2px_12px_rgba(15,23,42,0.08)] space-y-3">
+      <div className="flex items-center gap-3">
+        <span className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+          <span className="material-symbols-outlined text-[22px]">task_alt</span>
+        </span>
+        <div className="min-w-0">
+          <h2 className="text-sm font-bold text-slate-900">Class Ended · Thank you!</h2>
+          <p className="text-[11px] text-slate-500 truncate">{sessionTitle}</p>
         </div>
-        <h2 className="text-2xl font-black text-white">Class Ended</h2>
-        <p className="text-xs text-slate-400 max-w-md mx-auto">
-          The teacher has concluded this live teaching session for <span className="text-blue-300 font-semibold">{sessionTitle}</span>.
-        </p>
       </div>
 
       {submitted ? (
-        <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-2xl p-6 text-center space-y-3">
-          <span className="material-symbols-outlined text-emerald-400 text-3xl">sentiment_very_satisfied</span>
-          <h3 className="text-sm font-bold text-emerald-300">Feedback Submitted!</h3>
-          <p className="text-xs text-slate-400">
-            Your learning feedback has been recorded. Class Notes and the lecture recording will be available in your batch roadmap once processed.
-          </p>
-          <Link
-            href="/schedule"
-            className="inline-block mt-3 px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-lg shadow-blue-600/30"
-          >
-            Return to Schedule
+        <div className="rounded-xl bg-emerald-50 p-3 text-center space-y-2">
+          <p className="text-xs font-semibold text-emerald-700">Feedback submitted</p>
+          <p className="text-[11px] text-slate-500">Notes and the recording will appear in your batch.</p>
+          <Link href="/schedule" className="inline-block px-4 py-2 rounded-lg bg-blue-600 text-white text-xs font-semibold">
+            Back to Schedule
           </Link>
         </div>
       ) : (
-        <form onSubmit={handleSubmit} className="space-y-4 pt-2">
-          <div className="border-b border-slate-800/80 pb-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              How was today&apos;s class with {teacherName || "Educator"}?
-            </h3>
-          </div>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <p className="text-[11px] font-semibold text-slate-600">How was the class with {teacherName || "your teacher"}?</p>
 
-          {error && (
-            <div className="text-xs text-rose-400 bg-rose-950/60 border border-rose-500/40 rounded-xl p-3">
-              {error}
-            </div>
-          )}
+          {error && <div className="text-[11px] text-rose-600 bg-rose-50 rounded-lg p-2">{error}</div>}
 
-          {/* 1. Concept Understanding */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-300">Concept Understanding</label>
-            {/* 4 across is ~70px per cell on a 360px phone, which clips
-                "Crystal Clear". Two rows of two below sm. */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {[
-                { key: "POOR", label: "Difficult" },
-                { key: "AVERAGE", label: "Okay" },
-                { key: "GOOD", label: "Good" },
-                { key: "EXCELLENT", label: "Crystal Clear" },
-              ].map((opt) => (
-                <button
-                  key={opt.key}
-                  type="button"
-                  onClick={() => setUnderstandingLevel(opt.key as any)}
-                  className={`py-2 px-2 rounded-xl text-xs font-bold border transition ${
-                    understandingLevel === opt.key
-                      ? "bg-blue-600 border-blue-500 text-white shadow-md shadow-blue-600/30"
-                      : "bg-[#181a28] border-slate-800 text-slate-400 hover:text-white"
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* 2. Doubt Status */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-300">Were your doubts addressed?</label>
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { key: "NONE", label: "No Doubts" },
-                { key: "ALL_RESOLVED", label: "All Resolved" },
-                { key: "SOME_UNRESOLVED", label: "Some Left" },
-              ].map((opt) => (
-                <button
-                  key={opt.key}
-                  type="button"
-                  onClick={() => setDoubtStatus(opt.key as any)}
-                  className={`py-2 px-2 rounded-xl text-xs font-bold border transition ${
-                    doubtStatus === opt.key
-                      ? "bg-blue-600 border-blue-500 text-white shadow-md shadow-blue-600/30"
-                      : "bg-[#181a28] border-slate-800 text-slate-400 hover:text-white"
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* 3. Star Rating & Thumbs */}
-          <div className="flex items-center justify-between p-3 rounded-xl bg-[#181a28] border border-slate-800">
-            <span className="text-xs font-semibold text-slate-300">Overall Satisfaction</span>
-            <div className="flex items-center gap-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-slate-600">Rating</span>
+            <div className="flex items-center">
               {[1, 2, 3, 4, 5].map((star) => (
                 <button
                   key={star}
                   type="button"
                   onClick={() => setRating(star)}
-                  className="p-1 text-2xl text-amber-400 active:scale-95 transition-transform touch-manipulation cursor-pointer"
+                  className="p-0.5 text-amber-400 active:scale-95 transition-transform touch-manipulation"
                   title={`${star} star${star > 1 ? "s" : ""}`}
                 >
-                  <span className="material-symbols-outlined pointer-events-none select-none text-2xl">
+                  <span className="material-symbols-outlined pointer-events-none select-none text-[22px]">
                     {star <= rating ? "star" : "star_border"}
                   </span>
                 </button>
@@ -169,31 +106,50 @@ export function StudentPostClassFeedback({
             </div>
           </div>
 
-          {/* 4. Optional Comment */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-300">Any feedback or note for the teacher? (Optional)</label>
-            <textarea
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              placeholder="Tell your educator what helped most or what you'd like more practice on..."
-              className="w-full h-20 bg-[#181a28] border border-slate-800 rounded-xl p-3 text-xs text-white placeholder-slate-500 outline-none focus:border-blue-500 transition resize-none"
-            />
+          <div className="space-y-1">
+            <span className="text-[11px] text-slate-600">Understanding</span>
+            <div className="grid grid-cols-4 gap-1">
+              {[
+                { key: "POOR", label: "Difficult" },
+                { key: "AVERAGE", label: "Okay" },
+                { key: "GOOD", label: "Good" },
+                { key: "EXCELLENT", label: "Clear" },
+              ].map((opt) => (
+                <button key={opt.key} type="button" onClick={() => setUnderstandingLevel(opt.key as any)} className={chip(understandingLevel === opt.key)}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           </div>
 
-          <div className="flex items-center justify-between pt-2">
-            <Link
-              href="/schedule"
-              className="text-xs text-slate-400 hover:text-white transition underline underline-offset-4"
-            >
+          <div className="space-y-1">
+            <span className="text-[11px] text-slate-600">Doubts</span>
+            <div className="grid grid-cols-3 gap-1">
+              {[
+                { key: "NONE", label: "No doubts" },
+                { key: "ALL_RESOLVED", label: "Resolved" },
+                { key: "SOME_UNRESOLVED", label: "Some left" },
+              ].map((opt) => (
+                <button key={opt.key} type="button" onClick={() => setDoubtStatus(opt.key as any)} className={chip(doubtStatus === opt.key)}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <textarea
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="Note for the teacher (optional)"
+            className="w-full h-14 bg-slate-50 rounded-lg p-2 text-[11px] text-slate-900 placeholder-slate-400 outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+          />
+
+          <div className="flex items-center justify-between">
+            <Link href="/schedule" className="text-[11px] text-slate-500 hover:text-slate-900">
               Skip
             </Link>
-
-            <button
-              type="submit"
-              disabled={submitting}
-              className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-lg shadow-blue-600/30 disabled:opacity-60"
-            >
-              {submitting ? "Submitting..." : "Submit Learning Review"}
+            <button type="submit" disabled={submitting} className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold disabled:opacity-60">
+              {submitting ? "Submitting..." : "Submit"}
             </button>
           </div>
         </form>

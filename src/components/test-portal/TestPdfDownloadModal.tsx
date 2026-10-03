@@ -34,6 +34,8 @@ export function TestPdfDownloadModal({
 
   // Cover preview is for Team/Admin portal only - never on student side
   const canShowCoverPreview = showCoverPreview !== undefined ? showCoverPreview : Boolean(pathname?.startsWith("/team"));
+  // Students get one file: questions, then the answer key, then solutions.
+  const studentSide = !pathname?.startsWith("/team");
 
   const isModalOpen = controlledIsOpen !== undefined ? controlledIsOpen : internalOpen;
   const closeModal = controlledOnClose || (() => setInternalOpen(false));
@@ -100,6 +102,29 @@ export function TestPdfDownloadModal({
 
             {/* Modal Body: Two Primary Download Options */}
             <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1 min-h-0">
+              {studentSide && (
+                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 flex flex-col gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="w-10 h-10 rounded-xl bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-300 flex items-center justify-center shrink-0">
+                      <FileText className="w-5 h-5" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-slate-900 dark:text-white">Test PDF</p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">Questions → Answer key → Solutions, in one file</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleDownload(true)}
+                    className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold flex items-center justify-center gap-2 transition cursor-pointer"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>{preparing ? "Preparing PDF… download starts shortly" : "Download PDF"}</span>
+                  </button>
+                </div>
+              )}
+
+              {!studentSide && (<>
               <p className="text-xs text-slate-600 dark:text-slate-400">
                 Choose the export format you require. Both options are generated with full Atomic Pathshala branding, bilingual typesetting (Hindi + English), and mathematical formulas.
               </p>
@@ -193,6 +218,7 @@ export function TestPdfDownloadModal({
                   <span>{preparing === "solutions" ? "Preparing PDF… download starts shortly" : "Download Paper + Solutions PDF"}</span>
                 </button>
               </div>
+              </>)}
 
               {/* Cover Page Standalone Preview Quick Action - Team/Admin only, hidden on student side */}
               {canShowCoverPreview && (

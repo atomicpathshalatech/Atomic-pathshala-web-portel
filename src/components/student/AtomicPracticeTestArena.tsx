@@ -783,7 +783,7 @@ export function AtomicPracticeTestArena({
                         </span>
                         {t.startsAt && (
                           <span className="text-[10px] text-slate-400 font-medium">
-                            {new Date(t.startsAt).toLocaleDateString(undefined, {
+                            {new Date(t.startsAt).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", 
                               month: "short",
                               day: "numeric",
                               year: "numeric",

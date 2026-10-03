@@ -129,6 +129,7 @@ export function HorizontalScheduleCalendar({
   title = "My Schedule",
   subtitle = "live lectures and test",
   blockedReason,
+  initialBatchId,
 }: {
   schedules: ScheduleItem[];
   batches: BatchOption[];
@@ -141,8 +142,12 @@ export function HorizontalScheduleCalendar({
   // appeared to vanish, with no indication of why (too early, not
   // enrolled, cancelled, etc).
   blockedReason?: string | null;
+  /** Opens filtered to this batch (the batch page's "Batch Schedule" box). */
+  initialBatchId?: string | null;
 }) {
-  const [selectedBatchId, setSelectedBatchId] = useState<string>("ALL");
+  const [selectedBatchId, setSelectedBatchId] = useState<string>(() =>
+    initialBatchId && batches.some((b) => b.id === initialBatchId) ? initialBatchId : "ALL"
+  );
   const [selectedDateKey, setSelectedDateKey] = useState<string>(() => getISTDayKey(new Date()));
   // Day strip: 7 days in view, today in the middle, scrolls without limit both
   // ways (more days are added as either end comes near). Offsets are counted

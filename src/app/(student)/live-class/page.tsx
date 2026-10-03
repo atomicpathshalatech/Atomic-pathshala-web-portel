@@ -99,8 +99,8 @@ export default async function LiveClassesListPage() {
               </span>
             ) : (
               <span className="text-label-sm text-on-surface-variant">
-                {s.startsAt.toLocaleDateString(undefined, { day: "numeric", month: "short" })} ·{" "}
-                {s.startsAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                {s.startsAt.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short" })} ·{" "}
+                {s.startsAt.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit" })}
               </span>
             )}
           </div>

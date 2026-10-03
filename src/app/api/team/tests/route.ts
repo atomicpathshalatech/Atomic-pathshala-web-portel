@@ -153,8 +153,8 @@ export async function POST(request: NextRequest) {
           const { triggerNotificationEvent } = await import("@/lib/notifications/engine");
           const { NotificationType, NotificationCategory, NotificationPriority } = await import("@/lib/notifications/types");
 
-          const timeStr = schedule.startsAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-          const dateStr = schedule.startsAt.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
+          const timeStr = schedule.startsAt.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit" });
+          const dateStr = schedule.startsAt.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", month: "short", day: "numeric" });
 
           await triggerNotificationEvent({
             eventType: NotificationType.TEST_SCHEDULED,

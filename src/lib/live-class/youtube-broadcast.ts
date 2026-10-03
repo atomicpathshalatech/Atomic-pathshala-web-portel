@@ -60,7 +60,7 @@ export async function ensureYoutubeBroadcastForWhiteboard(
     subjectName ? `📚 Subject: ${subjectName}` : null,
     batchName ? `👥 Batch: ${batchName}` : null,
     `👨‍🏫 Educator: ${teacherName}`,
-    `🗓️ Date: ${scheduledStartTime.toLocaleDateString("en-IN")}`,
+    `🗓️ Date: ${scheduledStartTime.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })}`,
     ``,
     `Join Atomic Pathshala live lectures for concept explanation, doubt clearing, and question practice.`,
     `🌐 Official Portal: https://atomicpathshala.com`,

@@ -22,6 +22,8 @@ export type BatchClassItem = {
   chapterId: string | null;
   chapterTitle: string | null;
   subjectName: string;
+  /** Whiteboard session whose class-notes PDF is ready (All PDF → Class Notes). */
+  notesSessionId: string | null;
 };
 
 export type BatchChapterItem = { id: string; title: string; subjectId: string; subject: string; lectures: number; dpps: number };
@@ -35,6 +37,8 @@ export type BatchTestItem = {
   attemptStatus: "NOT_STARTED" | "IN_PROGRESS" | "SUBMITTED";
   /** Paper + solutions PDF, once the export route will hand it out. */
   pdfHref: string | null;
+  /** Set for a chapter test (All Content → Subject → Chapter). */
+  chapterId: string | null;
 };
 
 export type BatchFolderNode = {
@@ -49,6 +53,8 @@ export type BatchDppItem = {
   title: string;
   subject: string;
   chapter: string;
+  /** The batch chapter it belongs to (null when only its chapter name is known). */
+  chapterId: string | null;
   questionCount: number;
   durationMin: number;
   /** UPCOMING = not open yet; LOCKED = published but no questions yet. */
@@ -72,6 +78,12 @@ export type BatchTeacherCard = {
 
 export type BatchNotice = { id: string; title: string; body: string; createdAt: string; deepLink: string | null };
 
+/** A teacher's note on one of the batch's chapters. */
+export type BatchAnnouncement = { id: string; title: string; body: string; createdAt: string; chapterId: string; chapterTitle: string; author: string | null };
+
+/** A PDF file from the batch's materials (class notes, test syllabus …). */
+export type BatchPdfFile = { id: string; title: string; sizeBytes: number; subject: string | null };
+
 export type StudentBatchHomeData = {
   batch: { id: string; name: string; code: string; exam: string | null; thumbnailUrl: string | null; teachers: string[]; teacherCards: BatchTeacherCard[] };
   classes: BatchClassItem[];
@@ -80,9 +92,24 @@ export type StudentBatchHomeData = {
   dpps: BatchDppItem[];
   folders: BatchFolderNode[];
   notices: BatchNotice[];
+  announcements: BatchAnnouncement[];
+  /** Files filed under the auto-made "Class Notes" / "Test Syllabus" folders (shown in All PDF, not in Notes & Module). */
+  classNoteFiles: BatchPdfFile[];
+  syllabusFiles: BatchPdfFile[];
 };
 
-export async function loadStudentBatchHome(batchId: string, studentId: string, userId: string): Promise<StudentBatchHomeData | null> {
+/** Folders the app fills itself; their files are listed in All PDF instead of Notes & Module. */
+export const AUTO_PDF_FOLDER = /^(class notes|test syllabus|test series)$/i;
+
+/** "Isomerism (समावयवता)" → "isomerism" — chapter names typed in the DPP form vs. the chapter list. */
+const looseName = (s: string | null | undefined) =>
+  (s ?? "")
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/[^a-z0-9\u0900-\u097f]+/g, " ")
+    .trim();
+
+export async function loadStudentBatchHome(batchId: string, studentId: string, _userId: string): Promise<StudentBatchHomeData | null> {
   const batch = await prisma.batch.findUnique({
     where: { id: batchId },
     select: {
@@ -111,7 +138,7 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, u
   if (!batch) return null;
 
   const visibleChapter = { status: { in: ["PUBLISHED" as const, "APPROVED" as const] } };
-  const [schedules, assigned, courseChapters, seriesLinks, folders, notifications, broadcasts] = await Promise.all([
+  const [schedules, assigned, courseChapters, seriesLinks, folders, broadcasts] = await Promise.all([
     prisma.batchSchedule.findMany({
       where: { batchId, type: "LIVE_CLASS", status: { not: "CANCELLED" } },
       orderBy: { startsAt: "asc" },
@@ -124,7 +151,7 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, u
         status: true,
         type: true,
         teacher: { select: { user: { select: { name: true } } } },
-        liveWhiteboardSession: { select: { status: true, livePhase: true } },
+        liveWhiteboardSession: { select: { id: true, status: true, livePhase: true, pdfStatus: true } },
         chapter: { select: { id: true, title: true, subject: { select: { title: true } } } },
       },
     }),
@@ -153,12 +180,6 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, u
         },
       },
     }),
-    prisma.notification.findMany({
-      where: { userId, batchId },
-      orderBy: { createdAt: "desc" },
-      take: 30,
-      select: { id: true, title: true, body: true, createdAt: true, deepLink: true },
-    }),
     prisma.notificationBroadcast.findMany({
       where: { segmentType: "BATCH", segmentValue: batchId },
       orderBy: { createdAt: "desc" },
@@ -186,8 +207,12 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, u
     .map(({ order: _order, ...c }) => c);
 
   // DPPs: the batch's own DPP slots (each backed by a test) plus the
-  // practice DPPs written for this batch's chapters.
+  // practice DPPs written for this batch's chapters (by chapter, or by
+  // subject + chapter name for DPPs saved without a chapter link).
   const now = new Date();
+  const batchSubjects = Array.from(new Set([...chapterMap.values()].map((c) => c.subject)));
+  const chapterByName = new Map<string, BatchChapterItem & { order: number }>();
+  for (const c of chapterMap.values()) chapterByName.set(`${c.subject.toLowerCase()}|${looseName(c.title)}`, c);
   const [dppSlots, chapterDpps] = await Promise.all([
     prisma.batchSchedule.findMany({
       where: { batchId, type: "DPP", status: { not: "CANCELLED" } },
@@ -199,7 +224,7 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, u
         subject: true,
         notes: true,
         startsAt: true,
-        chapter: { select: { title: true, subject: { select: { title: true } } } },
+        chapter: { select: { id: true, title: true, subject: { select: { title: true } } } },
         test: {
           select: {
             id: true,
@@ -214,11 +239,20 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, u
     }),
     chapterMap.size
       ? prisma.dpp.findMany({
-          where: { chapterId: { in: [...chapterMap.keys()] }, status: { in: ["PUBLISHED", "ACTIVE"] } },
+          where: {
+            status: { in: ["PUBLISHED", "ACTIVE"] },
+            OR: [
+              { chapterId: { in: [...chapterMap.keys()] } },
+              // DPPs made from the DPP page keep their chapter by name only (no chapterId).
+              { chapterId: null, subject: { in: batchSubjects, mode: "insensitive" } },
+            ],
+          },
           orderBy: { createdAt: "desc" },
           select: {
             id: true,
             name: true,
+            subject: true,
+            chapter: true,
             estimatedTimeMin: true,
             questionTargetCount: true,
             chapterId: true,
@@ -254,6 +288,7 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, u
         title: d.title,
         subject: d.chapter?.subject.title ?? d.subject ?? "Practice",
         chapter: d.chapter?.title ?? d.notes ?? "Practice",
+        chapterId: d.chapter?.id ?? null,
         questionCount,
         durationMin: t?.durationMin ?? 0,
         status,
@@ -265,7 +300,11 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, u
       };
     }),
     ...chapterDpps.map((d): BatchDppItem => {
-      const ch = chapterMap.get(d.chapterId!)!;
+      const ch =
+        (d.chapterId ? chapterMap.get(d.chapterId) : undefined) ??
+        chapterByName.get(`${d.subject.toLowerCase()}|${looseName(d.chapter)}`) ??
+        null;
+      const subjectTitle = ch?.subject ?? batchSubjects.find((t) => t.toLowerCase() === d.subject.toLowerCase()) ?? d.subject;
       const ready = d._count.questions > 0;
       const backing = backingByDpp.get(d.id);
       const a = backing?.attempts[0] ?? d.attempts[0];
@@ -273,8 +312,9 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, u
       return {
         id: d.id,
         title: d.name,
-        subject: ch.subject,
-        chapter: ch.title,
+        subject: subjectTitle,
+        chapter: ch?.title ?? (d.chapter || "Other DPPs"),
+        chapterId: ch?.id ?? null,
         questionCount: d._count.questions || d.questionTargetCount,
         durationMin: d.estimatedTimeMin,
         status,
@@ -294,6 +334,8 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, u
       OR: [
         { batchSchedule: { batchId, type: { not: "DPP" } } },
         ...(seriesLinks.length ? [{ testSeriesId: { in: seriesLinks.map((s) => s.testSeriesId) } }] : []),
+        // Chapter tests of the batch's chapters.
+        ...(chapterMap.size ? [{ chapterId: { in: [...chapterMap.keys()] } }] : []),
       ],
     },
     orderBy: [{ openTime: "desc" }, { createdAt: "desc" }],
@@ -301,6 +343,8 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, u
     select: {
       id: true,
       name: true,
+      code: true,
+      chapterId: true,
       durationMin: true,
       openTime: true,
       closeTime: true,
@@ -309,18 +353,44 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, u
     },
   });
 
+  // Notice: only what staff announced to this batch — automatic
+  // notifications (class reminders, results …) stay in the app's bell.
   const seen = new Set<string>();
   const notices: BatchNotice[] = [];
-  for (const n of [
-    ...broadcasts.map((b) => ({ id: `b_${b.id}`, title: b.title, body: b.body, createdAt: b.createdAt, deepLink: null as string | null })),
-    ...notifications.map((n) => ({ id: n.id, title: n.title, body: n.body, createdAt: n.createdAt, deepLink: n.deepLink })),
-  ]) {
+  for (const n of broadcasts.map((b) => ({ id: `b_${b.id}`, title: b.title, body: b.body, createdAt: b.createdAt, deepLink: null as string | null }))) {
     const key = `${n.title}|${n.body}`;
     if (seen.has(key)) continue;
     seen.add(key);
     notices.push({ ...n, createdAt: n.createdAt.toISOString() });
   }
   notices.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  const chapterNotices = chapterMap.size
+    ? await prisma.chapterNotice.findMany({
+        where: { chapterId: { in: [...chapterMap.keys()] } },
+        orderBy: [{ isPinned: "desc" }, { createdAt: "desc" }],
+        take: 60,
+        select: { id: true, chapterId: true, title: true, content: true, authorName: true, createdAt: true },
+      })
+    : [];
+
+  // Auto-made PDF folders (with everything under them) → All PDF.
+  const visibleFolders = folders.filter(visible);
+  const underAuto = (f: (typeof folders)[number], depth = 0): string | null => {
+    if (AUTO_PDF_FOLDER.test(f.name.trim())) return f.name.trim().toLowerCase();
+    const parent = f.parentId ? byId.get(f.parentId) : undefined;
+    return parent && depth < 50 ? underAuto(parent, depth + 1) : null;
+  };
+  const classNoteFiles: BatchPdfFile[] = [];
+  const syllabusFiles: BatchPdfFile[] = [];
+  for (const f of visibleFolders) {
+    const kind = underAuto(f);
+    if (!kind) continue;
+    const subject = AUTO_PDF_FOLDER.test(f.name.trim()) ? null : f.name;
+    for (const file of f.files) {
+      (kind === "class notes" ? classNoteFiles : syllabusFiles).push({ id: file.id, title: file.title, sizeBytes: file.sizeBytes, subject });
+    }
+  }
 
   return {
     batch: {
@@ -352,9 +422,10 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, u
       chapterId: s.chapter?.id ?? null,
       chapterTitle: s.chapter?.title ?? null,
       subjectName: s.chapter?.subject.title ?? s.subject ?? "Other classes",
+      notesSessionId: s.liveWhiteboardSession?.pdfStatus === "READY" ? s.liveWhiteboardSession.id : null,
     })),
     chapters,
-    tests: tests.map((t) => {
+    tests: tests.filter((t) => !String(t.code ?? "").startsWith("DPPT-")).map((t) => {
       const st = t.attempts[0]?.status;
       return {
         id: t.id,
@@ -365,10 +436,22 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, u
         attemptStatus: !st ? "NOT_STARTED" : st === "IN_PROGRESS" ? "IN_PROGRESS" : "SUBMITTED",
         // Same rule as the export route: everyone gets the paper once the test time is over.
         pdfHref: st && st !== "IN_PROGRESS" && areResultsReleased(t) ? `/api/tests/${t.id}/pdf` : null,
+        chapterId: t.chapterId ?? null,
       };
     }),
     dpps,
-    folders: folders.filter(visible).map((f) => ({ id: f.id, parentId: f.parentId, name: f.name, files: f.files })),
+    folders: visibleFolders.filter((f) => !underAuto(f)).map((f) => ({ id: f.id, parentId: f.parentId, name: f.name, files: f.files })),
     notices: notices.slice(0, 40),
+    announcements: chapterNotices.map((n) => ({
+      id: n.id,
+      title: n.title,
+      body: n.content,
+      createdAt: n.createdAt.toISOString(),
+      chapterId: n.chapterId,
+      chapterTitle: chapterMap.get(n.chapterId)?.title ?? "Chapter",
+      author: n.authorName ?? null,
+    })),
+    classNoteFiles,
+    syllabusFiles,
   };
 }
