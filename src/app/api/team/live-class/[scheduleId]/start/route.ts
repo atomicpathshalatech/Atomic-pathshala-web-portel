@@ -358,9 +358,13 @@ export async function POST(
     // and only then do students see it live and get notified.
     let appYoutubeConnecting = false;
     if ((requestedTransport === "BOTH" || requestedTransport === "YOUTUBE") && !existingYtId) {
-      const fallBack = async (warning: string) => {
+      // An App Class whose YouTube broadcast cannot be created (quota used
+      // up, YouTube down) still has to run: it becomes an interactive App
+      // Class in the app's own room, instead of a class with no video.
+      const livekitReady = Boolean(process.env.LIVEKIT_URL && process.env.LIVEKIT_API_KEY && process.env.LIVEKIT_API_SECRET);
+      const fallBack = async (warning: string, toInteractive = false) => {
         youtubeSimulcastWarning = warning;
-        if (requestedTransport === "BOTH") {
+        if (requestedTransport === "BOTH" || (toInteractive && livekitReady)) {
           effectiveTransport = "LIVEKIT";
           await prisma.whiteboardSession.update({ where: { id: wbSession.id }, data: { videoTransport: "LIVEKIT" } }).catch(() => null);
           wbSession.videoTransport = "LIVEKIT";
@@ -399,9 +403,10 @@ export async function POST(
         const reason =
           youtubeError instanceof NoIngestCapacityError ? youtubeError.message : describeYoutubeError(youtubeError);
         await fallBack(
-          requestedTransport === "YOUTUBE"
+          requestedTransport === "YOUTUBE" && !livekitReady
             ? `Could not set up the YouTube broadcast. ${reason} You can paste your stream link in OBS Setup.`
-            : `Could not set up the YouTube broadcast. ${reason} Interactive App Class is active for all students.`
+            : `Could not set up the YouTube broadcast. ${reason} Interactive App Class is active for all students.`,
+          true
         );
       }
     }
