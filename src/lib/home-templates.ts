@@ -400,6 +400,17 @@ export const TEMPLATE_BY_TYPE: Record<string, Template> = Object.fromEntries(TEM
 /** Section types added for the template builder (also in the HomeSectionType enum migration). */
 export const NEW_TEMPLATE_TYPES = ["BANNER_SLIDER", "EXAM_SELECTOR", "SEARCH", "FREE_RESOURCES", "PYQ_HUB", "STUDY_MATERIAL", "FREE_TESTS", "TODAY_SCHEDULE", "ATOMIC_GURU", "YOUTUBE", "WHY_US", "TRUST"] as const;
 
+/**
+ * The template types above are stored as an existing database section type
+ * (CUSTOM_HTML) with the real template in `config.template`, so the builder
+ * works without a database enum change. This returns the real template type.
+ */
+export const TEMPLATE_STORAGE_TYPE = "CUSTOM_HTML";
+export function effectiveType(s: { type: string; config?: Record<string, unknown> | null }): string {
+  const t = s.config?.template;
+  return typeof t === "string" && t ? t : s.type;
+}
+
 export const MATERIAL_TYPE_LABELS: Record<string, string> = {
   MODULE: "Chapter Notes & Modules",
   SHORT_NOTES: "Revision Notes",
@@ -427,8 +438,9 @@ export type LayoutSection = {
 };
 
 /** The homepage as shipped — shown until a Website Builder version is published, and the starting point in the builder. */
+// The hero (big heading + illustration) is not part of the default page; it
+// stays in the template library if an admin wants to add it back.
 export const DEFAULT_LAYOUT: LayoutSection[] = [
-  "HERO",
   "BANNER_SLIDER",
   "EXAM_SELECTOR",
   "SEARCH",

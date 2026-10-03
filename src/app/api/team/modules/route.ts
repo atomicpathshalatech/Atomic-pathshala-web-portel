@@ -46,19 +46,47 @@ export async function POST(request: NextRequest) {
     if (!session?.user?.id) throw new UnauthorizedError();
     await requirePermission(session.user.id, PERMISSIONS.MODULE_CREATE);
 
-    const form = await request.formData();
-    const file = form.get("file");
-    if (!(file instanceof File)) return apiError("No PDF was uploaded.", 400);
-    if (file.type !== "application/pdf") return apiError("Please upload a PDF file.", 400);
-    if (file.size > MAX_BYTES) return apiError("PDF is too large — please keep it under 40MB.", 400);
-
-    const metaRaw = form.get("metadata");
-    const input = moduleCreateSchema.parse(metaRaw ? JSON.parse(String(metaRaw)) : {});
-
-    const buffer = Buffer.from(await file.arrayBuffer());
     const code = generateModuleCode();
-    const key = `modules/${code}/${file.name}`;
-    const url = await uploadFile({ key, body: buffer, contentType: file.type });
+    let input: ReturnType<typeof moduleCreateSchema.parse>;
+    let url: string;
+    let fileName: string;
+    let fileSize: number;
+
+    if (request.headers.get("content-type")?.includes("application/json")) {
+      // The browser already uploaded the PDF straight to storage
+      // (/api/files/upload-url → R2 → /api/files/complete) — large PDFs
+      // can't pass through a Vercel function (≈4.5MB request limit).
+      // Only a file this same user uploaded, as a public PDF, is accepted.
+      const body = (await request.json()) as { fileAssetId?: unknown; fileSize?: unknown; metadata?: unknown };
+      if (typeof body.fileAssetId !== "string") return apiError("No PDF was uploaded.", 400);
+      const asset = await prisma.fileAsset.findUnique({ where: { id: body.fileAssetId } });
+      if (!asset || asset.ownerId !== session.user.id || asset.status !== "ACTIVE" || asset.visibility !== "PUBLIC") {
+        return apiError("Uploaded PDF not found. Please upload it again.", 404);
+      }
+      if (asset.mimeType !== "application/pdf") return apiError("Please upload a PDF file.", 400);
+      fileSize = Number(asset.sizeBytes) || (typeof body.fileSize === "number" ? body.fileSize : 0);
+      if (fileSize > MAX_BYTES) return apiError("PDF is too large — please keep it under 40MB.", 400);
+      const publicBase = process.env.R2_PUBLIC_BASE_URL || process.env.STORAGE_PUBLIC_URL;
+      if (!publicBase) return apiError("File storage isn't configured for public files.", 503);
+      url = `${publicBase.replace(/\/$/, "")}/${asset.storageKey}`;
+      fileName = asset.originalFilename;
+      input = moduleCreateSchema.parse(body.metadata ?? {});
+    } else {
+      const form = await request.formData();
+      const file = form.get("file");
+      if (!(file instanceof File)) return apiError("No PDF was uploaded.", 400);
+      if (file.type !== "application/pdf") return apiError("Please upload a PDF file.", 400);
+      if (file.size > MAX_BYTES) return apiError("PDF is too large — please keep it under 40MB.", 400);
+
+      const metaRaw = form.get("metadata");
+      input = moduleCreateSchema.parse(metaRaw ? JSON.parse(String(metaRaw)) : {});
+
+      const buffer = Buffer.from(await file.arrayBuffer());
+      const key = `modules/${code}/${file.name}`;
+      url = await uploadFile({ key, body: buffer, contentType: file.type });
+      fileName = file.name;
+      fileSize = file.size;
+    }
 
     if (input.brandProfileId) {
       const brand = await prisma.brandProfile.findUnique({ where: { id: input.brandProfileId } });
@@ -77,8 +105,8 @@ export async function POST(request: NextRequest) {
         academicYear: input.academicYear || null,
         brandProfileId: input.brandProfileId || null,
         originalFileUrl: url,
-        originalFileName: file.name,
-        originalFileSize: file.size,
+        originalFileName: fileName,
+        originalFileSize: fileSize,
         createdById: session.user.id,
         status: "DRAFT",
       },
@@ -90,7 +118,7 @@ export async function POST(request: NextRequest) {
         action: "MODULE_CREATED",
         entityType: "Module",
         entityId: created.id,
-        metadata: { code, title: input.title, fileSize: file.size },
+        metadata: { code, title: input.title, fileSize },
       },
     });
 
