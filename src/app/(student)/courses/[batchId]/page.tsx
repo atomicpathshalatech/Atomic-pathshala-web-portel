@@ -5,7 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { CourseDetailMasterView } from "@/components/course-platform/CourseDetailMasterView";
 import { SAMPLE_COURSES } from "@/components/course-platform/sample-courses";
-import { StudentBatchHome, type BatchTab } from "@/components/student/batch/StudentBatchHome";
+import { StudentBatchHome, parseBatchTab } from "@/components/student/batch/StudentBatchHome";
 import { loadStudentBatchHome } from "@/lib/batch/student-batch-home";
 
 export const dynamic = "force-dynamic";
@@ -116,9 +116,7 @@ export default async function BatchCoursePage({
   if (isEnrolled && dbBatch && studentId && userId) {
     const data = await loadStudentBatchHome(dbBatch.id, studentId, userId);
     if (data) {
-      const t = searchParams?.tab;
-      const initialTab: BatchTab = t === "recorded" || t === "dpp" || t === "tests" || t === "material" || t === "notices" ? t : "classes";
-      return <StudentBatchHome data={data} initialTab={initialTab} />;
+      return <StudentBatchHome data={data} initialTab={parseBatchTab(searchParams?.tab)} />;
     }
   }
 

@@ -206,6 +206,7 @@ export default async function SchedulePage({
       title="My Schedule"
       subtitle={`${batches.length} Category${batches.length === 1 ? "" : "s"} • Live Classrooms, Tests & 1:1 Sessions`}
       blockedReason={blockedReason}
+      initialBatchId={searchParams?.batch ?? null}
     />
   );
 }
