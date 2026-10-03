@@ -27,7 +27,26 @@ const ENCODER_PREFERENCE = ["h264_nvenc", "h264_qsv", "h264_amf", "h264_mf", "li
 const PROFILES = {
   "1080p": { width: 1920, height: 1080, videoKbps: 4500 },
   "720p": { width: 1280, height: 720, videoKbps: 2500 },
+  // Low-network steps (see QUALITY_LADDER): the board stays readable, the
+  // class keeps moving instead of buffering.
+  "720p-low": { width: 1280, height: 720, videoKbps: 1400, audioKbps: 96 },
+  "480p": { width: 854, height: 480, videoKbps: 800, fps: 24, audioKbps: 64 },
+  "360p": { width: 640, height: 360, videoKbps: 450, fps: 20, audioKbps: 64 },
 };
+
+/**
+ * Best → lowest. A teacher on a weak connection cannot push 4.5 Mbps: FFmpeg
+ * then falls behind real time and YouTube viewers get a class that keeps
+ * buffering. When the run falls behind, it steps down this ladder (and back up
+ * one step after a long steady stretch).
+ */
+const QUALITY_LADDER = ["1080p", "720p", "720p-low", "480p", "360p"];
+/** Behind real time by this much for two checks in a row = the upload can't keep up. */
+const LAG_STEP_DOWN_MS = 4000;
+/** Ignore the first seconds of a run: start-up always looks slow. */
+const WARMUP_MS = 12_000;
+/** Steady for this long → try one step up again. */
+const STEP_UP_AFTER_MS = 6 * 60_000;
 
 /** Test-encodes one second with each candidate; returns the ones that really work. */
 function probeEncoders(ffmpegPath, candidates = ENCODER_PREFERENCE) {
@@ -69,6 +88,8 @@ function joinRtmpUrl(serverUrl, streamKey) {
 /** FFmpeg arguments for one run. Pure — unit tested. */
 function buildFfmpegArgs({ encoder, serverUrl, streamKey, fps = 30, profile = "1080p", audioKbps = 128 }) {
   const p = PROFILES[profile] || PROFILES["1080p"];
+  if (p.fps) fps = Math.min(fps, p.fps);
+  if (p.audioKbps) audioKbps = p.audioKbps;
   const pix = encoder === "libopenh264" || encoder === "h264_nvenc" ? "yuv420p" : "nv12";
   return [
     "-hide_banner",
@@ -135,7 +156,18 @@ class EncoderRun extends EventEmitter {
     this.serverUrl = serverUrl;
     this.streamKey = streamKey;
     this.fps = fps;
-    this.profile = profile;
+    this.profile = QUALITY_LADDER.includes(profile) ? profile : "1080p";
+    // Never go above what the class was started with; a failed step-up lowers this.
+    this.ceiling = QUALITY_LADDER.indexOf(this.profile);
+    this.startIndex = this.ceiling;
+    this.networkLimited = false;
+    this.lagStrikes = 0;
+    this.procStartedAt = 0;
+    this.firstOutAt = 0;
+    this.firstOutTimeMs = 0;
+    this.steadySince = 0;
+    this.lastStepUpAt = 0;
+    this.recentExits = [];
     this.spawnImpl = spawnImpl;
     this.generation = 0;
     this.state = "starting";
@@ -156,6 +188,8 @@ class EncoderRun extends EventEmitter {
       generation: this.generation,
       encoder: this.encoder,
       restarts: this.restarts,
+      quality: this.profile,
+      networkLimited: this.networkLimited,
       ...this.stats,
       ...(this.error ? { error: this.error } : {}),
     };
@@ -180,6 +214,11 @@ class EncoderRun extends EventEmitter {
     const proc = this.spawnImpl(this.ffmpegPath, args, { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
     this.proc = proc;
     this.lastProgressAt = Date.now();
+    this.procStartedAt = Date.now();
+    this.firstOutAt = 0;
+    this.firstOutTimeMs = 0;
+    this.lagStrikes = 0;
+    this.steadySince = 0;
     let progressBuf = "";
     proc.stdout.on("data", (d) => {
       progressBuf += d.toString();
@@ -197,6 +236,7 @@ class EncoderRun extends EventEmitter {
             this.state = "streaming";
             this.error = undefined;
           }
+          this.checkNetwork(p.outTimeMs);
         }
         this.emitStatus();
       }
@@ -217,6 +257,61 @@ class EncoderRun extends EventEmitter {
     this.emitStatus();
   }
 
+  /** How far this run's output is behind real time (ms). */
+  lagMs(outTimeMs, now = Date.now()) {
+    if (!this.firstOutAt) {
+      this.firstOutAt = now;
+      this.firstOutTimeMs = outTimeMs;
+      return 0;
+    }
+    return now - this.firstOutAt - (outTimeMs - this.firstOutTimeMs);
+  }
+
+  /**
+   * Called on every progress report. Output falling behind real time means the
+   * upload can't carry this bitrate → one step down. A long steady stretch →
+   * one step back up (a step-up that fails lowers the ceiling for good).
+   */
+  checkNetwork(outTimeMs, now = Date.now()) {
+    const lag = this.lagMs(outTimeMs, now);
+    if (now - this.procStartedAt < WARMUP_MS) return;
+    if (lag > LAG_STEP_DOWN_MS) {
+      this.steadySince = 0;
+      if (++this.lagStrikes >= 2) this.changeQuality(+1, `upload ~${Math.round(lag / 1000)} s behind`);
+      return;
+    }
+    this.lagStrikes = 0;
+    if (lag < 1500) {
+      if (!this.steadySince) this.steadySince = now;
+      const idx = QUALITY_LADDER.indexOf(this.profile);
+      if (idx > this.ceiling && now - this.steadySince > STEP_UP_AFTER_MS && now - this.lastStepUpAt > STEP_UP_AFTER_MS) {
+        this.lastStepUpAt = now;
+        this.steppedUpFrom = idx;
+        this.changeQuality(-1, "connection steady");
+      }
+    } else {
+      this.steadySince = 0;
+    }
+  }
+
+  /** Moves along the ladder (+1 = lower quality) and restarts FFmpeg at once. */
+  changeQuality(direction, why) {
+    const idx = QUALITY_LADDER.indexOf(this.profile);
+    const next = Math.min(QUALITY_LADDER.length - 1, Math.max(this.ceiling, idx + direction));
+    if (next === idx || this.stopping || this.adapting) return false;
+    // Stepped up and fell behind again: that level is too much for this line.
+    if (direction > 0 && this.steppedUpFrom !== undefined && idx < this.steppedUpFrom) {
+      this.ceiling = Math.max(this.ceiling, this.steppedUpFrom);
+    }
+    if (direction > 0) this.steppedUpFrom = undefined;
+    this.profile = QUALITY_LADDER[next];
+    this.networkLimited = next > this.startIndex;
+    this.stderrTail.push(`quality ${QUALITY_LADDER[idx]} -> ${this.profile} (${why})`);
+    this.adapting = true;
+    this.proc?.kill();
+    return true;
+  }
+
   onExit(proc, code) {
     if (proc !== this.proc) return;
     this.proc = null;
@@ -226,9 +321,35 @@ class EncoderRun extends EventEmitter {
       this.emitStatus();
       return;
     }
+    // A quality change: restart straight away at the new level (not a failure).
+    if (this.adapting) {
+      this.adapting = false;
+      this.state = "reconnecting";
+      this.error = undefined;
+      this.emitStatus();
+      this.restartTimer = setTimeout(() => {
+        if (this.stopping) return;
+        this.generation++;
+        this.spawnProcess();
+      }, 300);
+      return;
+    }
     // Unexpected exit (network drop, YouTube closed the connection, stall):
     // restart with backoff; the page re-sends a fresh WebM stream for the
-    // new generation.
+    // new generation. Dropping twice within two minutes also means the line
+    // can't hold this quality: come back one step lower.
+    const nowExit = Date.now();
+    this.recentExits = this.recentExits.filter((t) => nowExit - t < 120_000);
+    this.recentExits.push(nowExit);
+    if (this.recentExits.length >= 2) {
+      const idx = QUALITY_LADDER.indexOf(this.profile);
+      if (idx < QUALITY_LADDER.length - 1) {
+        this.profile = QUALITY_LADDER[idx + 1];
+        this.networkLimited = true;
+        this.stderrTail.push(`quality ${QUALITY_LADDER[idx]} -> ${this.profile} (connection dropped twice)`);
+        this.recentExits = [];
+      }
+    }
     const delay = BACKOFF_MS[Math.min(this.restarts, BACKOFF_MS.length - 1)];
     this.restarts++;
     this.state = "reconnecting";
@@ -284,6 +405,7 @@ class EncoderRun extends EventEmitter {
 module.exports = {
   ENCODER_PREFERENCE,
   PROFILES,
+  QUALITY_LADDER,
   probeEncoders,
   buildFfmpegArgs,
   parseProgressBlock,

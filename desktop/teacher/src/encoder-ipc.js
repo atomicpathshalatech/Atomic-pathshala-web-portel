@@ -107,7 +107,7 @@ function registerEncoderIpc({ ipcMain, trustedSender }) {
       if (status.state !== lastState || now - lastLogAt >= 10_000) {
         lastState = status.state;
         lastLogAt = now;
-        encoderLog(`${status.state} gen=${status.generation ?? 0} fps=${status.fps ?? "-"} speed=${status.speed ?? "-"} kbps=${status.bitrateKbps ?? "-"} dup=${status.dupFrames ?? "-"} drop=${status.droppedFrames ?? "-"} restarts=${status.restarts ?? 0}${status.error ? " error=" + String(status.error).slice(0, 300) : ""}`);
+        encoderLog(`${status.state} gen=${status.generation ?? 0} q=${status.quality ?? "-"} fps=${status.fps ?? "-"} speed=${status.speed ?? "-"} kbps=${status.bitrateKbps ?? "-"} dup=${status.dupFrames ?? "-"} drop=${status.droppedFrames ?? "-"} restarts=${status.restarts ?? 0}${status.error ? " error=" + String(status.error).slice(0, 300) : ""}`);
       }
       if (process.env.ATOMIC_STAGE_LOG === "1") console.log(`[stage] status ${status.state} ${status.bitrateKbps ?? ""}kbps fps=${status.fps ?? ""}${status.error ? " error=" + status.error : ""}`);
       for (const win of BrowserWindow.getAllWindows()) {

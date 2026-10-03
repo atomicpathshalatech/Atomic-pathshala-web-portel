@@ -3164,7 +3164,7 @@ export function TeacherLiveClassRoom({
               {desktopStreamError
                 ? `Built-in encoder: ${desktopStreamError}`
                 : desktopStream?.state === "streaming"
-                ? `On air · ${Math.round(desktopStream.bitrateKbps ?? 0)} kbps`
+                ? `On air · ${desktopStream.quality ? desktopStream.quality.replace("-low", "") + " · " : ""}${Math.round(desktopStream.bitrateKbps ?? 0)} kbps${desktopStream.networkLimited ? " · slow internet, quality lowered" : ""}`
                 : desktopStream?.state === "reconnecting"
                 ? "Reconnecting to YouTube…"
                 : "Starting…"}

@@ -13,6 +13,10 @@ export interface DesktopEncoderProbe {
 }
 
 export interface DesktopEncoderStatus {
+  /** Quality the encoder is sending right now (it steps down on a weak connection). */
+  quality?: string;
+  /** True while the quality is below what the class started with. */
+  networkLimited?: boolean;
   runId?: string;
   state: "unavailable" | "starting" | "streaming" | "reconnecting" | "stopped" | "failed";
   /** Encoder restart counter — the page records a fresh stream per generation. */
