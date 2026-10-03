@@ -33,6 +33,8 @@ type ScheduleEntry = {
     actualStartedAt?: string | null;
     actualEndedAt?: string | null;
   } | null;
+  /** YouTube id of the link the chapter's lecture already has. */
+  lectureYoutubeId?: string | null;
 };
 
 type TeacherOption = { id: string; user: { name: string } };
@@ -150,9 +152,10 @@ export function BatchScheduleManager({
     const diffMins = Math.max(15, Math.round((end.getTime() - start.getTime()) / (1000 * 60)));
     const isCommon = COMMON_DURATIONS.some((d) => d.minutes === diffMins);
     const isYt = entry.liveWhiteboardSession?.videoTransport === "YOUTUBE" || entry.liveWhiteboardSession?.videoTransport === "BOTH";
-    const ytId = entry.liveWhiteboardSession?.youtubeVideoId ?? "";
+    // The class's own link, else the one already added on the chapter's lecture.
+    const ytId = entry.liveWhiteboardSession?.youtubeVideoId || entry.lectureYoutubeId || "";
 
-    if (isYt && ytId) {
+    if (ytId) {
       setTeachingModel("MODEL_2_DUAL");
     } else if (isYt) {
       setTeachingModel("MODEL_1_APP");
@@ -166,7 +169,7 @@ export function BatchScheduleManager({
       type: entry.type,
       status: entry.status,
       teacherId: entry.teacherId ?? "",
-      videoTransport: isYt ? "YOUTUBE" : "LIVEKIT",
+      videoTransport: isYt || ytId ? "YOUTUBE" : "LIVEKIT",
       youtubeVideoId: ytId,
       startsAt: toISTDateTimeLocal(entry.startsAt),
       durationMinutes: isCommon ? diffMins : 60,
@@ -605,6 +608,9 @@ export function BatchScheduleManager({
                       value={form.youtubeVideoId}
                       onChange={(e) => setForm({ ...form, youtubeVideoId: e.target.value })}
                     />
+                    {editingId && form.youtubeVideoId && form.youtubeVideoId === schedules.find((x) => x.id === editingId)?.lectureYoutubeId && (
+                      <p className="text-[11px] text-emerald-600 font-semibold">Link already added on the chapter&apos;s lecture — nothing to paste.</p>
+                    )}
                   </div>
                 )}
               </div>

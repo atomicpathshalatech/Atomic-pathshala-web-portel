@@ -41,7 +41,14 @@ function formatSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-export function BatchFolderManager({ batchId }: { batchId: string }) {
+export function BatchFolderManager({
+  batchId,
+  canDelete = false,
+}: {
+  batchId: string;
+  /** Removing a folder / PDF is reserved for the Super Admin. */
+  canDelete?: boolean;
+}) {
   const [tree, setTree] = useState<FolderNode[]>([]);
   const [canManage, setCanManage] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -293,7 +300,7 @@ export function BatchFolderManager({ batchId }: { batchId: string }) {
                   {folder.isPublished ? "visibility" : "visibility_off"}
                 </span>
               </button>
-              <button
+              {canDelete && <button
                 type="button"
                 disabled={busy}
                 onClick={() => deleteFolder(folder)}
@@ -301,7 +308,7 @@ export function BatchFolderManager({ batchId }: { batchId: string }) {
                 className="w-9 h-9 rounded-lg flex items-center justify-center text-on-surface-variant hover:text-error hover:bg-error/10 transition disabled:opacity-40"
               >
                 <span className="material-symbols-outlined text-base">delete</span>
-              </button>
+              </button>}
             </div>
           )}
         </div>
@@ -330,7 +337,7 @@ export function BatchFolderManager({ batchId }: { batchId: string }) {
                   <span className="material-symbols-outlined text-sm">download</span>
                   Download
                 </a>
-                {canManage && (
+                {canManage && canDelete && (
                   <button
                     type="button"
                     disabled={busy}

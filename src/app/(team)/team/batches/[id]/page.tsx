@@ -6,6 +6,8 @@ import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { BatchDetailClient } from "@/components/team-portal/BatchDetailClient";
+import { extractYouTubeVideoId } from "@/lib/live-class/youtube";
+import { isSuperAdminUser } from "@/lib/rbac/guard";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -44,6 +46,7 @@ export default async function BatchDetailPage({ params }: { params: { id: string
         include: {
           teacher: { include: { user: true } },
           liveWhiteboardSession: true,
+          lecture: { select: { videoUrl: true, educatorVideoUrl: true } },
           chapter: {
             select: {
               id: true,
@@ -77,6 +80,11 @@ export default async function BatchDetailPage({ params }: { params: { id: string
   const importedChapterIds = Array.from(
     new Set(batch.schedules.map((s) => s.chapterId).filter((id): id is string => Boolean(id)))
   );
+
+  // Test series imported into this batch — their tests belong in All PDFs too.
+  const importedSeries = await prisma.batchTestSeries.findMany({ where: { batchId: batch.id }, select: { testSeriesId: true } });
+  const seriesIds = importedSeries.map((s) => s.testSeriesId);
+  const isSuperAdmin = await isSuperAdminUser(session.user.id);
 
   const [allTeachers, allStudents, classNoteSessions, chapterDpps, chapterTests] = await Promise.all([
     canUpdate
@@ -127,15 +135,23 @@ export default async function BatchDetailPage({ params }: { params: { id: string
         })
       : Promise.resolve([]),
 
-    importedChapterIds.length
+    importedChapterIds.length || seriesIds.length
       ? prisma.test.findMany({
-          where: { chapterId: { in: importedChapterIds }, archived: false },
+          where: {
+            archived: false,
+            OR: [
+              ...(importedChapterIds.length ? [{ chapterId: { in: importedChapterIds } }] : []),
+              ...(seriesIds.length ? [{ testSeriesId: { in: seriesIds } }] : []),
+            ],
+          },
           select: {
             id: true,
             name: true,
             code: true,
             status: true,
             durationMin: true,
+            openTime: true,
+            sections: { select: { subject: true }, orderBy: { order: "asc" } },
             testSeries: { select: { id: true, name: true } },
             chapter: { select: { title: true, subject: { select: { title: true } } } },
           },
@@ -168,7 +184,8 @@ export default async function BatchDetailPage({ params }: { params: { id: string
           user: { name: t.teacher.user.name },
         },
       }))}
-      enrollments={batch.enrollments.map((e) => ({
+      activeStudentCount={batch.enrollments.filter((e) => e.status === "ACTIVE").length}
+      enrollments={(canManageEnrollment ? batch.enrollments : []).map((e) => ({
         id: e.id,
         studentId: e.studentId,
         status: e.status,
@@ -198,8 +215,15 @@ export default async function BatchDetailPage({ params }: { params: { id: string
               livePhase: s.liveWhiteboardSession.livePhase,
               actualStartedAt: s.liveWhiteboardSession.actualStartedAt?.toISOString() ?? null,
               actualEndedAt: s.liveWhiteboardSession.actualEndedAt?.toISOString() ?? null,
+              videoTransport: s.liveWhiteboardSession.videoTransport,
+              youtubeVideoId: s.liveWhiteboardSession.youtubeVideoId,
             }
           : null,
+        // The YouTube link the chapter's lecture already has — editing the
+        // class here starts from it instead of asking for it again.
+        lectureYoutubeId:
+          (s.lecture?.videoUrl ? extractYouTubeVideoId(s.lecture.videoUrl) : null) ??
+          (s.lecture?.educatorVideoUrl ? extractYouTubeVideoId(s.lecture.educatorVideoUrl) : null),
         chapter: s.chapter
           ? {
               id: s.chapter.id,
@@ -213,6 +237,37 @@ export default async function BatchDetailPage({ params }: { params: { id: string
             }
           : null,
       }))}
+      calendarSchedules={batch.schedules
+        .filter((s) => !s.isTest)
+        .map((s) => ({
+          id: s.id,
+          title: s.title,
+          subject: s.subject,
+          type: s.type,
+          status: s.status,
+          startsAt: s.startsAt.toISOString(),
+          endsAt: s.endsAt.toISOString(),
+          batchId: batch.id,
+          batch: { id: batch.id, name: batch.name, code: batch.code },
+          teacher: s.teacher ? { id: s.teacher.id, user: { name: s.teacher.user.name, email: s.teacher.user.email } } : null,
+          lectureId: s.lectureId,
+          lectureVideoUrl: s.lecture?.videoUrl ?? null,
+          liveWhiteboardSession: s.liveWhiteboardSession
+            ? {
+                id: s.liveWhiteboardSession.id,
+                status: s.liveWhiteboardSession.status,
+                livePhase: s.liveWhiteboardSession.livePhase,
+                videoTransport: s.liveWhiteboardSession.videoTransport,
+                recordingStatus: s.liveWhiteboardSession.recordingStatus,
+                recordingStorageKey: s.liveWhiteboardSession.recordingStorageKey,
+                pdfStatus: s.liveWhiteboardSession.pdfStatus,
+                pdfStorageKey: s.liveWhiteboardSession.pdfStorageKey,
+                presentationUrl: s.liveWhiteboardSession.presentationUrl,
+                youtubeArchiveVideoUrl: s.liveWhiteboardSession.youtubeArchiveVideoUrl,
+                youtubeVideoId: s.liveWhiteboardSession.youtubeVideoId,
+              }
+            : null,
+        }))}
       classNotes={classNoteSessions.map((s) => ({
         sessionId: s.id,
         title: s.batchSchedule?.title || s.title,
@@ -234,8 +289,11 @@ export default async function BatchDetailPage({ params }: { params: { id: string
         code: t.code,
         status: t.status,
         durationMin: t.durationMin,
-        subject: t.chapter?.subject?.title || "General",
+        subject:
+          t.chapter?.subject?.title ||
+          (t.sections.length === 1 ? t.sections[0]!.subject : t.sections.length > 1 ? "Full Syllabus" : "General"),
         chapterTitle: t.chapter?.title ?? null,
+        scheduledAt: t.openTime ? t.openTime.toISOString() : null,
         series: t.testSeries ? { id: t.testSeries.id, name: t.testSeries.name } : null,
       }))}
       allTeachers={allTeachers}
@@ -243,6 +301,7 @@ export default async function BatchDetailPage({ params }: { params: { id: string
       canUpdate={canUpdate}
       canManageEnrollment={canManageEnrollment}
       canManageSchedule={canManageSchedule}
+      isSuperAdmin={isSuperAdmin}
     />
   );
 }

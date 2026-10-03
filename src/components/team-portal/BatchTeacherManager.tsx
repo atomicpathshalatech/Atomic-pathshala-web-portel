@@ -1,5 +1,6 @@
 "use client";
 
+import { BOX, BOX_GRID, FacultyCardBody } from "./batch-ui";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -95,27 +96,20 @@ export function BatchTeacherManager({
       {assigned.length === 0 ? (
         <p className="text-label-sm text-on-surface-variant">No teachers assigned yet.</p>
       ) : (
-        <ul className="space-y-2">
+        <ul className={BOX_GRID}>
           {assigned.map((a) => (
-            <li
-              key={a.id}
-              className="flex items-center justify-between gap-3 bg-surface-container-lowest rounded-lg px-3 py-2"
-            >
-              <div>
-                <p className="font-label-md text-label-md text-on-surface">{a.teacher.user.name}</p>
-                <p className="text-label-sm text-on-surface-variant">
-                  {a.teacher.department} · {a.teacher.employeeCode}
-                  {a.subject ? ` · ${a.subject}` : ""}
-                </p>
+            <li key={a.id} className={`${BOX} flex flex-col gap-3`}>
+              <FacultyCardBody name={a.teacher.user.name} department={a.teacher.department} code={a.teacher.employeeCode} subject={a.subject} />
+              <div className="mt-auto pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+                <button
+                  type="button"
+                  disabled={submitting}
+                  onClick={() => remove(a.teacherId)}
+                  className="h-8 px-2.5 rounded-lg text-[11px] font-semibold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 disabled:opacity-50"
+                >
+                  Remove
+                </button>
               </div>
-              <button
-                type="button"
-                disabled={submitting}
-                onClick={() => remove(a.teacherId)}
-                className="text-error hover:underline text-label-sm font-label-sm disabled:opacity-50"
-              >
-                Remove
-              </button>
             </li>
           ))}
         </ul>

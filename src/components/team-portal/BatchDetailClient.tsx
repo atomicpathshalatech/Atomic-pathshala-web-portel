@@ -16,6 +16,10 @@ import {
 } from "./BatchPdfLibrary";
 import { BatchNotificationManager } from "./BatchNotificationManager";
 import { BatchTestSeriesManager } from "./BatchTestSeriesManager";
+import { BatchContentBoard } from "./BatchContentBoard";
+import { BOX, BOX_GRID, FacultyCardBody } from "./batch-ui";
+import { HorizontalScheduleCalendar, type ScheduleItem } from "@/components/schedule/HorizontalScheduleCalendar";
+import { BatchSchedulePdfs } from "./BatchSchedulePdfs";
 import { cleanBatchName, formatDescriptionText } from "@/lib/academic/canonical-courses";
 
 type BatchDetailClientProps = {
@@ -70,7 +74,10 @@ type BatchDetailClientProps = {
       livePhase?: string;
       actualStartedAt?: string | null;
       actualEndedAt?: string | null;
+      videoTransport?: string | null;
+      youtubeVideoId?: string | null;
     } | null;
+    lectureYoutubeId?: string | null;
     /** Set when this schedule was created by importing a master chapter. */
     chapter: {
       id: string;
@@ -83,6 +90,8 @@ type BatchDetailClientProps = {
       testCount: number;
     } | null;
   }>;
+  /** This batch's classes, in the shape of the app-wide schedule calendar. */
+  calendarSchedules: ScheduleItem[];
   /** Collected material for the All PDFs tab — see BatchPdfLibrary. */
   classNotes: ClassNoteEntry[];
   dpps: DppEntry[];
@@ -92,6 +101,9 @@ type BatchDetailClientProps = {
   canUpdate: boolean;
   canManageEnrollment: boolean;
   canManageSchedule: boolean;
+  isSuperAdmin?: boolean;
+  /** Active students in the batch (the list itself is only sent to those who manage enrolments). */
+  activeStudentCount?: number;
 };
 
 const STATUS_STYLES: Record<string, string> = {
@@ -106,6 +118,7 @@ export function BatchDetailClient({
   teachers,
   enrollments,
   schedules,
+  calendarSchedules,
   classNotes,
   dpps,
   tests,
@@ -114,6 +127,8 @@ export function BatchDetailClient({
   canUpdate,
   canManageEnrollment,
   canManageSchedule,
+  isSuperAdmin = false,
+  activeStudentCount,
 }: BatchDetailClientProps) {
   const searchParams = useSearchParams();
   const VALID_TABS = ["flow", "pdfs", "materials", "timetable", "test-series", "teachers", "students", "notifications"] as const;
@@ -179,9 +194,7 @@ export function BatchDetailClient({
     return Array.from(byId.values());
   })();
 
-  const chapterSubjects = Array.from(new Set(importedChapters.map((c) => c.subjectTitle)));
-
-  const activeEnrollmentsCount = enrollments.filter((e) => e.status === "ACTIVE").length;
+  const activeEnrollmentsCount = activeStudentCount ?? enrollments.filter((e) => e.status === "ACTIVE").length;
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto pb-16">
@@ -406,63 +419,10 @@ export function BatchDetailClient({
               </button>
             </div>
           ) : (
-            <div className="space-y-4">
-              {chapterSubjects.map((subjectName) => {
-                const subjectChapters = importedChapters.filter((c) => c.subjectTitle === subjectName);
-                return (
-                  <div
-                    key={subjectName}
-                    className="glass-card rounded-3xl p-4 sm:p-6 border border-outline-variant/30 space-y-4 shadow-sm"
-                  >
-                    <div className="flex items-center justify-between gap-3 border-b border-outline-variant/20 pb-3">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold text-xs shrink-0">
-                          {subjectName[0]}
-                        </span>
-                        <h4 className="font-bold text-sm text-on-surface truncate">{subjectName}</h4>
-                      </div>
-                      <span className="text-xs text-on-surface-variant font-mono shrink-0">
-                        {subjectChapters.length} {subjectChapters.length === 1 ? "Chapter" : "Chapters"}
-                      </span>
-                    </div>
-
-                    <div className="space-y-2">
-                      {subjectChapters.map((c) => (
-                        <Link
-                          key={c.id}
-                          href={`/team/chapters/${c.id}`}
-                          className="p-3.5 rounded-2xl bg-surface-container-lowest border border-outline-variant/20 hover:border-primary/40 transition-colors flex flex-wrap items-center justify-between gap-2 text-xs"
-                        >
-                          <div className="space-y-1 min-w-0 pr-2 flex-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <p className="font-bold text-on-surface truncate">{c.title}</p>
-                              {c.chapterId && (
-                                <span className="text-[10px] font-mono text-on-surface-variant bg-surface-container-high px-1.5 py-0.5 rounded">
-                                  {c.chapterId}
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-[11px] text-on-surface-variant">
-                              {c.lectureCount} {c.lectureCount === 1 ? "lecture" : "lectures"} &middot;{" "}
-                              {c.dppCount} {c.dppCount === 1 ? "DPP" : "DPPs"} &middot;{" "}
-                              {c.testCount} {c.testCount === 1 ? "test" : "tests"} &middot;{" "}
-                              {c.sessionCount} scheduled {c.sessionCount === 1 ? "session" : "sessions"}
-                            </p>
-                          </div>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-primary/10 text-primary uppercase shrink-0">
-                            {c.status.replace(/_/g, " ")}
-                          </span>
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <BatchContentBoard chapters={importedChapters} />
           )}
         </div>
       )}
-
 
       {/* Tab 2: All PDFs */}
       {activeTab === "pdfs" && (
@@ -470,32 +430,47 @@ export function BatchDetailClient({
       )}
 
       {/* Tab 3: Syllabus & Schedule folders */}
-      {activeTab === "materials" && <BatchFolderManager batchId={batch.id} />}
+      {activeTab === "materials" && (
+        <div className="space-y-6">
+          <BatchSchedulePdfs batchId={batch.id} schedules={schedules} />
+          <BatchFolderManager batchId={batch.id} canDelete={isSuperAdmin} />
+        </div>
+      )}
 
-      {/* Tab 4: Schedule */}
+      {/* Tab 4: Schedule — the same calendar as the app-wide schedule, limited to this batch */}
       {activeTab === "timetable" && (
-        <section className="glass-card rounded-3xl p-6 md:p-8 border border-outline-variant/30 space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-headline-md text-headline-md font-bold text-on-surface">
-                Batch Timetable &amp; Live Sessions
-              </h3>
-              <p className="text-xs text-on-surface-variant mt-0.5">
-                Every lecture has required duration, auto-calculated end time, and strict batch/faculty overlap validation.
-              </p>
-            </div>
-          </div>
-
-          <BatchScheduleManager
-            batchId={batch.id}
-            schedules={schedules}
-            teachers={teachers.map((t) => ({
-              id: t.teacherId,
-              user: { name: t.teacher.user.name },
-            }))}
-            canManageSchedule={canManageSchedule}
+        <div className="space-y-6">
+          <HorizontalScheduleCalendar
+            schedules={calendarSchedules}
+            batches={[{ id: batch.id, name: cleanBatchName(batch.name), code: batch.code }]}
+            role="TEACHER"
+            title="Batch Schedule"
+            subtitle={`Only this batch · ${calendarSchedules.length} class${calendarSchedules.length === 1 ? "" : "es"}`}
           />
-        </section>
+
+          {canManageSchedule && (
+            <details className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 group" open={false}>
+              <summary className="cursor-pointer list-none px-4 py-3 flex items-center justify-between gap-3">
+                <span className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white">
+                  <span className="material-symbols-outlined text-base text-blue-600">edit_calendar</span>
+                  Manage timetable — add, edit or delete a class
+                </span>
+                <span className="material-symbols-outlined text-slate-400 transition-transform group-open:rotate-180">expand_more</span>
+              </summary>
+              <div className="px-4 pb-4 pt-1 border-t border-slate-100 dark:border-slate-800">
+                <BatchScheduleManager
+                  batchId={batch.id}
+                  schedules={schedules}
+                  teachers={teachers.map((t) => ({
+                    id: t.teacherId,
+                    user: { name: t.teacher.user.name },
+                  }))}
+                  canManageSchedule={canManageSchedule}
+                />
+              </div>
+            </details>
+          )}
+        </div>
       )}
 
       {/* Tab: Test Series Management */}
@@ -535,14 +510,10 @@ export function BatchDetailClient({
               allTeachers={allTeachers}
             />
           ) : (
-            <ul className="space-y-2">
+            <ul className={BOX_GRID}>
               {teachers.map((t) => (
-                <li key={t.id} className="bg-surface-container-lowest rounded-xl p-4 border border-outline-variant/20">
-                  <p className="font-bold text-sm text-on-surface">{t.teacher.user.name}</p>
-                  <p className="text-xs text-on-surface-variant">
-                    {t.teacher.department} · {t.teacher.employeeCode}
-                    {t.subject ? ` · Subject: ${t.subject}` : ""}
-                  </p>
+                <li key={t.id} className={BOX}>
+                  <FacultyCardBody name={t.teacher.user.name} department={t.teacher.department} code={t.teacher.employeeCode} subject={t.subject} />
                 </li>
               ))}
             </ul>
@@ -557,9 +528,11 @@ export function BatchDetailClient({
             <h3 className="font-headline-md text-headline-md font-bold text-on-surface">
               Enrolled Students ({activeEnrollmentsCount})
             </h3>
-            <p className="text-xs text-on-surface-variant mt-0.5">
-              Manage cohort access, active enrollments, and capacity limits.
-            </p>
+            {canManageEnrollment && (
+              <p className="text-xs text-on-surface-variant mt-0.5">
+                Manage cohort access, active enrollments, and capacity limits.
+              </p>
+            )}
           </div>
 
           {canManageEnrollment ? (
@@ -569,14 +542,18 @@ export function BatchDetailClient({
               allStudents={allStudents}
             />
           ) : (
-            <ul className="space-y-2">
-              {enrollments.map((e) => (
-                <li key={e.id} className="bg-surface-container-lowest rounded-xl p-3 border border-outline-variant/20">
-                  <p className="font-bold text-xs text-on-surface">{e.student.user.name}</p>
-                  <p className="text-[11px] text-on-surface-variant">{e.student.enrollmentNumber} · {e.status}</p>
-                </li>
-              ))}
-            </ul>
+            // Teachers see how many students the batch has — not who they are.
+            <div className="flex items-center gap-4 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 max-w-sm">
+              <span className="w-14 h-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center">
+                <span className="material-symbols-outlined text-3xl">groups</span>
+              </span>
+              <div>
+                <p className="text-3xl font-black text-slate-900 dark:text-white tabular-nums">{activeEnrollmentsCount}</p>
+                <p className="text-xs text-slate-500">
+                  students in this batch{batch.capacity ? ` · capacity ${batch.capacity}` : ""}
+                </p>
+              </div>
+            </div>
           )}
         </section>
       )}

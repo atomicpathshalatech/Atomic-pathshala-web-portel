@@ -94,8 +94,28 @@ export async function POST(
       }
     }
 
-    // Resolve teacher (defaults to the actual creator user)
+    // Resolve teacher. A teacher adding to their own chapter teaches it. When
+    // someone else (an admin) adds a lecture to a teacher's chapter, the
+    // lecture stays with the chapter's teacher — the one teaching its other
+    // lectures, else the teacher the chapter was created by — never the admin.
     let teacherId = passedTeacherId;
+    if (!teacherId) {
+      const ownTeacher = await prisma.teacher.findUnique({ where: { userId: session.user.id }, select: { id: true } });
+      const teachesHere = ownTeacher
+        ? (await prisma.lecture.count({ where: { chapterId: chapter.id, teacherId: ownTeacher.id } })) > 0
+        : false;
+      if ((chapter.createdById !== session.user.id || isAdmin) && !teachesHere) {
+        const lastLecture = await prisma.lecture.findFirst({
+          where: { chapterId: chapter.id },
+          orderBy: [{ order: "desc" }, { createdAt: "desc" }],
+          select: { teacherId: true },
+        });
+        const creatorTeacher = chapter.createdById
+          ? await prisma.teacher.findUnique({ where: { userId: chapter.createdById }, select: { id: true } })
+          : null;
+        teacherId = lastLecture?.teacherId ?? creatorTeacher?.id;
+      }
+    }
     if (!teacherId) {
       let myTeacher = await prisma.teacher.findUnique({ where: { userId: session.user.id } });
       if (!myTeacher) {

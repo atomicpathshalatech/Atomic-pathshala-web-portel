@@ -319,7 +319,7 @@ export function BatchTestSeriesManager({
                     No tests created in this series yet. Add tests from the master series to show them here.
                   </div>
                 ) : (
-                  <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                  <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     {tests.map((test: any) => {
                       const testScheduleStr = test.openTime
                         ? formatISTDateTime(test.openTime)
@@ -343,14 +343,14 @@ export function BatchTestSeriesManager({
                       return (
                         <div
                           key={test.id}
-                          className="p-4 sm:px-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition"
+                          className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 flex flex-col gap-3 hover:border-blue-300 dark:hover:border-blue-800 hover:shadow-md hover:shadow-blue-500/5 transition"
                         >
-                          <div className="space-y-1 min-w-0">
+                          <div className="space-y-2 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 text-[10px] font-bold uppercase">
                                 {test.testType || "Test"}
                               </span>
-                              <h5 className="font-extrabold text-sm text-slate-900 dark:text-white truncate">
+                              <h5 className="font-extrabold text-sm text-slate-900 dark:text-white w-full order-last leading-snug">
                                 {test.name}
                               </h5>
                               <span className="text-xs font-mono text-slate-400">
@@ -358,17 +358,15 @@ export function BatchTestSeriesManager({
                               </span>
                             </div>
 
-                            <div className="flex items-center gap-3 text-xs text-slate-500 flex-wrap">
+                            <div className="flex flex-col gap-1 text-xs text-slate-500">
                               <span className="flex items-center gap-1">
                                 <Calendar className="w-3.5 h-3.5 text-blue-600" />
                                 <span>{testScheduleStr}</span>
                               </span>
-                              <span>&middot;</span>
                               <span className="flex items-center gap-1">
                                 <Clock className="w-3.5 h-3.5 text-slate-400" />
                                 <span>{test.durationMin} Mins</span>
                               </span>
-                              <span>&middot;</span>
                               <span className="flex items-center gap-1">
                                 <BookOpen className="w-3.5 h-3.5 text-emerald-600" />
                                 <span>
@@ -382,7 +380,7 @@ export function BatchTestSeriesManager({
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto flex-wrap">
+                          <div className="mt-auto pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2 flex-wrap">
                             {/* Share Test Link */}
                             <ShareTestModal
                               testId={test.id}

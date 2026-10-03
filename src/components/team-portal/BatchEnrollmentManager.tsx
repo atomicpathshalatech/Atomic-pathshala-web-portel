@@ -1,5 +1,6 @@
 "use client";
 
+import { BOX, BOX_GRID } from "./batch-ui";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -144,19 +145,21 @@ export function BatchEnrollmentManager({
       {enrollments.length === 0 ? (
         <p className="text-label-sm text-on-surface-variant">No students enrolled yet.</p>
       ) : (
-        <ul className="space-y-2">
+        <ul className={BOX_GRID}>
           {enrollments.map((e) => (
-            <li
-              key={e.id}
-              className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-surface-container-lowest rounded-lg px-3 py-2"
-            >
-              <div>
-                <p className="font-label-md text-label-md text-on-surface">{e.student.user.name}</p>
-                <p className="text-label-sm text-on-surface-variant">
-                  {e.student.enrollmentNumber} · Class {e.student.class} · {e.student.targetExam}
-                </p>
+            <li key={e.id} className={`${BOX} flex flex-col gap-3`}>
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-black text-sm shrink-0">
+                  {(e.student.user.name || "?").trim().charAt(0).toUpperCase()}
+                </span>
+                <div className="min-w-0">
+                  <p className="font-bold text-sm text-slate-900 dark:text-white truncate">{e.student.user.name}</p>
+                  <p className="text-[11px] text-slate-500 truncate">
+                    {[e.student.enrollmentNumber, e.student.class ? `Class ${e.student.class}` : null, e.student.targetExam].filter(Boolean).join(" · ")}
+                  </p>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="mt-auto pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
                 <span className={`text-[11px] font-bold uppercase tracking-wide px-2 py-0.5 rounded ${STATUS_STYLES[e.status]}`}>
                   {e.status}
                 </span>
