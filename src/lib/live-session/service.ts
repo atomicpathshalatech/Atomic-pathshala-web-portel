@@ -300,6 +300,37 @@ export async function rescheduleOpenLiveSession(batchScheduleId: string, startsA
   });
 }
 
+/**
+ * The class's time lives on the schedule. A room whose own copy of it has
+ * drifted (the lecture was moved after its room was made — the room then
+ * counted down to the OLD day: "starts in 23 hours" on the day of the class)
+ * is put back on the schedule's time, until the class has actually started.
+ * Cheap when nothing is wrong: one read.
+ */
+export async function alignRoomClockWithSchedule(batchScheduleId: string): Promise<boolean> {
+  const wb = await prisma.whiteboardSession.findUnique({
+    where: { batchScheduleId },
+    select: {
+      status: true,
+      livePhase: true,
+      actualStartedAt: true,
+      scheduledStart: true,
+      scheduledEnd: true,
+      batchSchedule: { select: { startsAt: true, endsAt: true, isTest: true } },
+    },
+  });
+  if (!wb?.batchSchedule || wb.batchSchedule.isTest) return false;
+  if (wb.status === "ENDED" || wb.livePhase === "LIVE" || wb.livePhase === "ENDED" || wb.actualStartedAt) return false;
+  const { startsAt, endsAt } = wb.batchSchedule;
+  const sameStart = wb.scheduledStart?.getTime() === startsAt.getTime();
+  const sameEnd = wb.scheduledEnd?.getTime() === endsAt.getTime();
+  if (sameStart && sameEnd) return false;
+  // A room that has no times yet reads the schedule already — nothing to fix.
+  if (!wb.scheduledStart && !wb.scheduledEnd) return false;
+  await rescheduleOpenLiveSession(batchScheduleId, startsAt, endsAt);
+  return true;
+}
+
 /** Cancel: a not-yet-live occurrence becomes CANCELLED (and releases nothing — it never held a stream). */
 export async function cancelOpenLiveSession(batchScheduleId: string) {
   return prisma.liveSession.updateMany({

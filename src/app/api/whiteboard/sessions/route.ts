@@ -29,6 +29,10 @@ export async function POST(request: NextRequest) {
 
     const input = whiteboardSessionStartSchema.parse(await request.json());
 
+    {
+      const { alignRoomClockWithSchedule } = await import("@/lib/live-session/service");
+      await alignRoomClockWithSchedule(input.batchScheduleId).catch(() => false);
+    }
     const existing = await prisma.whiteboardSession.findUnique({
       where: { batchScheduleId: input.batchScheduleId },
       include: { pages: { orderBy: { pageNumber: "asc" } }, batchSchedule: true },

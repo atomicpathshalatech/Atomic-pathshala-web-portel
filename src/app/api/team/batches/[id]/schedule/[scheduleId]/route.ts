@@ -1,3 +1,4 @@
+import { extractYouTubeVideoId } from "@/lib/live-class/youtube";
 import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -9,6 +10,9 @@ import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { checkScheduleConflict } from "@/lib/batch/schedule-conflict";
 import { applyLateReschedulePenaltyIfDue } from "@/lib/batch/reschedule-penalty";
 import { clearAttemptsForSchedules } from "@/lib/team/resource-delete";
+
+/** A pasted YouTube link is stored as its video id (the player embeds by id). */
+const ytIdOf = (v: string | null | undefined) => (v && v.trim() ? extractYouTubeVideoId(v) ?? v.trim() : null);
 
 export async function PATCH(
   request: NextRequest,
@@ -135,14 +139,14 @@ export async function PATCH(
           where: { batchScheduleId: schedule.id },
           update: {
             ...(input.videoTransport && { videoTransport: input.videoTransport }),
-            ...(input.youtubeVideoId !== undefined && { youtubeVideoId: input.youtubeVideoId || null }),
+            ...(input.youtubeVideoId !== undefined && { youtubeVideoId: ytIdOf(input.youtubeVideoId) }),
           },
           create: {
             batchScheduleId: schedule.id,
             teacherId: resolvedTeacherId,
             title: schedule.title,
             videoTransport: input.videoTransport || "LIVEKIT",
-            youtubeVideoId: input.youtubeVideoId || null,
+            youtubeVideoId: ytIdOf(input.youtubeVideoId),
           },
         });
 

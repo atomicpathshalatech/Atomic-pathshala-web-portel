@@ -27,6 +27,11 @@ export default async function StudentLiveClassPage({
     redirect("/live-class");
   }
 
+  // The room's clock follows the schedule (see alignRoomClockWithSchedule).
+  {
+    const { alignRoomClockWithSchedule } = await import("@/lib/live-session/service");
+    await alignRoomClockWithSchedule(rawScheduleId).catch(() => false);
+  }
   // 1. Primary lookup by BatchSchedule ID
   let schedule = await prisma.batchSchedule.findUnique({
     where: { id: rawScheduleId },

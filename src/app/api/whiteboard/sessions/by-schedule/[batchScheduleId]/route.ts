@@ -78,6 +78,8 @@ export async function GET(
     let wbSession = await cache.getOrSet(
       `wb:schedule:${params.batchScheduleId}`,
       async () => {
+        const { alignRoomClockWithSchedule } = await import("@/lib/live-session/service");
+        await alignRoomClockWithSchedule(params.batchScheduleId).catch(() => false);
         let ws = await prisma.whiteboardSession.findUnique({
           where: { batchScheduleId: params.batchScheduleId },
           select: STUDENT_SAFE_SESSION_SELECT,
@@ -91,6 +93,11 @@ export async function GET(
           if (groupRoomId) {
             ws = await prisma.whiteboardSession.findUnique({ where: { id: groupRoomId }, select: STUDENT_SAFE_SESSION_SELECT });
           }
+        }
+        // A stored link (older rows) is served as its video id.
+        if (ws?.youtubeVideoId && ws.youtubeVideoId.length !== 11) {
+          const { extractYouTubeVideoId } = await import("@/lib/live-class/youtube");
+          ws = { ...ws, youtubeVideoId: extractYouTubeVideoId(ws.youtubeVideoId) ?? ws.youtubeVideoId };
         }
         return ws;
       },

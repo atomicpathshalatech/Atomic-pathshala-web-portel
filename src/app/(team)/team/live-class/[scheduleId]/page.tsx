@@ -26,6 +26,11 @@ export default async function TeacherLiveClassPage({
   const scheduleId = resolvedParams?.scheduleId;
   if (!scheduleId) notFound();
 
+  // The room's clock follows the schedule (see alignRoomClockWithSchedule).
+  {
+    const { alignRoomClockWithSchedule } = await import("@/lib/live-session/service");
+    await alignRoomClockWithSchedule(scheduleId).catch(() => false);
+  }
   let schedule = await prisma.batchSchedule.findUnique({
     where: { id: scheduleId },
     include: { batch: true, liveWhiteboardSession: true },

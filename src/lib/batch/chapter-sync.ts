@@ -77,6 +77,10 @@ export async function syncChapterLecturesIntoBatch(batchId: string, chapterId: s
           createdById: userId,
         },
       });
+      {
+        const { rescheduleOpenLiveSession } = await import("@/lib/live-session/service");
+        await rescheduleOpenLiveSession(scheduleKey, startsAt, endsAt);
+      }
       // An old class (YouTube recording) arrives as that recording, not as
       // an empty live class that would show "Cancelled".
       const { extractYouTubeVideoId } = await import("@/lib/live-class/youtube");

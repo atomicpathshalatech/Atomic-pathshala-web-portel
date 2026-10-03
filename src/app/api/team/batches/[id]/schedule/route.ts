@@ -1,3 +1,4 @@
+import { extractYouTubeVideoId } from "@/lib/live-class/youtube";
 import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -7,6 +8,9 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { batchScheduleCreateSchema } from "@/lib/validation/batch";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { checkScheduleConflict } from "@/lib/batch/schedule-conflict";
+
+/** A pasted YouTube link is stored as its video id (the player embeds by id). */
+const ytIdOf = (v: string | null | undefined) => (v && v.trim() ? extractYouTubeVideoId(v) ?? v.trim() : null);
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -102,7 +106,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           where: { batchScheduleId: schedule.id },
           update: {
             videoTransport,
-            youtubeVideoId: input.youtubeVideoId || null,
+            youtubeVideoId: ytIdOf(input.youtubeVideoId),
             scheduledStart: schedule.startsAt,
             scheduledEnd: schedule.endsAt,
           },
@@ -113,7 +117,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             status: "ACTIVE",
             livePhase: "SCHEDULED",
             videoTransport,
-            youtubeVideoId: input.youtubeVideoId || null,
+            youtubeVideoId: ytIdOf(input.youtubeVideoId),
             scheduledStart: schedule.startsAt,
             scheduledEnd: schedule.endsAt,
             pages: { create: { pageNumber: 1, objects: [] } },

@@ -113,6 +113,11 @@ export async function PATCH(
             ...(isPastCompletedClass && { status: "COMPLETED" }),
           },
         });
+        // The class's room (countdown, start window, auto-end) moves with it.
+        if (timingChanged && !isPastCompletedClass) {
+          const { rescheduleOpenLiveSession } = await import("@/lib/live-session/service");
+          await rescheduleOpenLiveSession(s.id, startsAt, endsAt);
+        }
 
         if (isPastCompletedClass && ytVideoId) {
           await prisma.whiteboardSession.upsert({
