@@ -845,16 +845,20 @@ export function generateTestPaperHtml(
     const num = withSolutionPart
       ? `<span class="q-num"><span class="q-num-box">${q.number}</span></span>`
       : `<span class="q-num">${q.number}.</span>`;
-    const parts = [
-      part("q-row-item q-stmt", `${num}<div class="q-body">${hiChunks[0]}</div>`, `${num}<div class="q-body">${enChunks[0]}</div>`, ` id="q-${q.number}"`),
-      ...hiChunks.slice(1).map((h, i) => part("q-fig q-cont", h, enChunks[i + 1]!)),
-    ];
-    const diagram = diagramFor(q);
+    // DPP solutions: only the number, answer and solution (the question is already printed above).
+    const solutionOnly = withSolutionPart && isDpp;
+    const parts = solutionOnly
+      ? []
+      : [
+          part("q-row-item q-stmt", `${num}<div class="q-body">${hiChunks[0]}</div>`, `${num}<div class="q-body">${enChunks[0]}</div>`, ` id="q-${q.number}"`),
+          ...hiChunks.slice(1).map((h, i) => part("q-fig q-cont", h, enChunks[i + 1]!)),
+        ];
+    const diagram = solutionOnly ? "" : diagramFor(q);
     if (diagram) parts.push(part("q-fig", diagram, diagram));
-    if (q.options.some((o) => o.textEn || o.textHi)) {
+    if (!solutionOnly && q.options.some((o) => o.textEn || o.textHi)) {
       for (let k = 0; k < parts.length; k++) parts[k] = parts[k]!.replace('class="q-part ', 'class="q-part keep-next ');
     }
-    q.options.forEach((opt, i) => {
+    if (!solutionOnly) q.options.forEach((opt, i) => {
       if (!opt.textEn && !opt.textHi) return;
       const cell = (hi: boolean) =>
         `<span class="opt-key">${choiceLabel(q, i)})</span><span class="opt-text">${renderFormulaContent(
@@ -881,7 +885,9 @@ export function generateTestPaperHtml(
           }`;
         };
         parts.push(
-          i === 0
+          i === 0 && solutionOnly
+            ? part("sol-row-item q-stmt", `${num}<div class="q-body">${cell(true)}</div>`, `${num}<div class="q-body">${cell(false)}</div>`, ` id="sol-q-${q.number}"`)
+            : i === 0
             ? part("sol-row-item q-sol", cell(true), cell(false), ` id="sol-q-${q.number}"`)
             : part("q-sol q-sol-cont", cell(true), cell(false))
         );
@@ -1028,7 +1034,24 @@ export function generateTestPaperHtml(
     const columns: FormattedExportQuestion[][] = [];
     for (let i = 0; i < test.allQuestions.length; i += PER_COLUMN) columns.push(test.allQuestions.slice(i, i + PER_COLUMN));
     const answerKeyTables: string[] = [];
-    for (let t = 0; t < columns.length; t += COLUMNS_PER_TABLE) {
+    if (isDpp) {
+      // DPP: horizontal key — a row of question numbers over a row of answers, 15 per strip.
+      const PER_STRIP = 15;
+      const strips: string[] = [];
+      for (let i = 0; i < test.allQuestions.length; i += PER_STRIP) {
+        const chunk = test.allQuestions.slice(i, i + PER_STRIP);
+        strips.push(
+          `<tr><th>Q.</th>${chunk.map((q) => `<td class="ak-q">${q.number}</td>`).join("")}</tr>` +
+            `<tr><th>Ans.</th>${chunk.map((q) => `<td class="ak-a">${optionLetter(q)}</td>`).join("")}</tr>`
+        );
+      }
+      answerKeyTables.push(`
+        <div class="ak-block">
+          <div class="ak-title">ANSWER KEY / उत्तर कुंजी <span>${test.name} · ${test.allQuestions.length} Questions</span></div>
+          ${strips.map((rows) => `<table class="ak-table ak-horizontal"><tbody>${rows}</tbody></table>`).join("")}
+        </div>`);
+    }
+    for (let t = 0; t < (isDpp ? 0 : columns.length); t += COLUMNS_PER_TABLE) {
       const group = columns.slice(t, t + COLUMNS_PER_TABLE);
       const rows = Math.max(...group.map((c) => c.length));
       let body = "";
@@ -2154,6 +2177,8 @@ export function generateTestPaperHtml(
     .ak-table th { background: #e2e8f0; font-weight: 700; }
     .ak-table td.ak-q { font-weight: 700; background: #f8fafc; }
     .ak-table .ak-gap { width: 10px; border: 0; background: transparent; }
+    .ak-table.ak-horizontal { margin: 0 auto 6px; }
+    .ak-table.ak-horizontal th, .ak-table.ak-horizontal td.ak-q, .ak-table.ak-horizontal td.ak-a { padding: 3px 6px; min-width: 22px; }
 
     /* Website link in every footer (clickable in the saved PDF) */
     .site-link { color: #1d4ed8 !important; text-decoration: none; font-family: 'Tinos', 'Times New Roman', serif; font-weight: 700; }
