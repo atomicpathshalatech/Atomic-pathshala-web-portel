@@ -35,7 +35,7 @@ export default function PrivacyPolicyPage() {
               </ul>
               <p><b>Information created while you study:</b> enrolled batches, classes attended, test and DPP attempts, answers, scores, progress and bookmarks.</p>
               <p><b>Technical information:</b> device and browser type, app version, IP address, login sessions and the notification token of your device (used to send you class and test alerts).</p>
-              <p><b>Payments:</b> payments are processed by our payment partner (Razorpay). We receive the payment status and reference, not your full card or bank details.</p>
+              <p><b>Payments:</b> fees may be paid offline (cash, UPI or bank transfer, recorded by our staff with a receipt) or, where offered, online. Online payments are processed by a third-party payment gateway; we receive only the payment status and reference, never your full card or bank details.</p>
             </>
           ),
         },
@@ -99,7 +99,7 @@ export default function PrivacyPolicyPage() {
               <ul>
                 <li>With your teachers and our staff, to teach and support you;</li>
                 <li>With a parent or guardian linked to a student account;</li>
-                <li>With service providers who run parts of the Platform for us (cloud hosting and storage, database, video and live-class services including YouTube, payment processing, SMS/email/WhatsApp and push-notification delivery, and AI services) — only for that purpose;</li>
+                <li>With service providers who run parts of the Platform for us (cloud hosting and storage, database, video and live-class services including YouTube, online payment processing where offered, SMS/email/WhatsApp and push-notification delivery, and AI services) — only for that purpose;</li>
                 <li>When required by law, a court order or a government authority, or to protect the safety of our users.</li>
               </ul>
               <p>Your rank and score may be shown to other students of your batch on leaderboards.</p>

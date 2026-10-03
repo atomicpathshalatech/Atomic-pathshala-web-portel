@@ -61,7 +61,7 @@ export default function TermsPage() {
           title: "Fees and payments",
           body: (
             <ul>
-              <li>Fees for batches and subscriptions are shown before you pay. Payments are processed securely by our payment partner.</li>
+              <li>Fees for batches and subscriptions are told to you before you pay. Fees may be paid offline (cash, UPI or bank transfer, with a receipt) or, where offered, online through a secure third-party payment gateway.</li>
               <li>Access is given for the batch or period you paid for.</li>
               <li>Refunds, if any, are given as per the refund terms shown for that batch or as agreed in writing with us.</li>
             </ul>
