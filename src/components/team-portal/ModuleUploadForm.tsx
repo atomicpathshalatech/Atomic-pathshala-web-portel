@@ -3,6 +3,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AcademicSelector } from "@/components/academic/AcademicSelector";
+import { uploadFileToR2 } from "@/lib/storage/upload-client";
+
+// Vercel rejects request bodies over ~4.5MB, so only small PDFs may use the server-upload fallback.
+const SERVER_UPLOAD_LIMIT = 4 * 1024 * 1024;
 
 type BrandProfileOption = { id: string; name: string };
 
@@ -19,6 +23,7 @@ export function ModuleUploadForm({ brandProfiles }: { brandProfiles: BrandProfil
   const [brandProfileId, setBrandProfileId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState(0);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -35,33 +40,54 @@ export function ModuleUploadForm({ brandProfiles }: { brandProfiles: BrandProfil
 
     setSubmitting(true);
     try {
-      const form = new FormData();
-      form.set("file", file);
-      form.set(
-        "metadata",
-        JSON.stringify({
-          title,
-          subject: subject || undefined,
-          class: classLabel || undefined,
-          batch: batch || undefined,
-          chapter: chapter || undefined,
-          facultyName: facultyName || undefined,
-          academicYear: academicYear || undefined,
-          brandProfileId: brandProfileId || undefined,
-        })
-      );
+      const metadata = {
+        title,
+        subject: subject || undefined,
+        class: classLabel || undefined,
+        batch: batch || undefined,
+        chapter: chapter || undefined,
+        facultyName: facultyName || undefined,
+        academicYear: academicYear || undefined,
+        brandProfileId: brandProfileId || undefined,
+      };
 
-      const res = await fetch("/api/team/modules", { method: "POST", body: form });
-      const body = await res.json();
-      if (!body.success) {
-        setError(body.error ?? "Could not upload this module.");
+      // Upload the PDF straight to storage first: a request through our server
+      // is capped at ~4.5MB on Vercel, which is why bigger modules failed with
+      // a "network error". Small files can still go through the server if the
+      // direct upload is blocked.
+      let res: Response;
+      try {
+        const uploaded = await uploadFileToR2(file, { prefix: "modules", fileType: "PDF", visibility: "PUBLIC", onProgress: setProgress });
+        res = await fetch("/api/team/modules", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fileAssetId: uploaded.fileAssetId, fileSize: file.size, metadata }),
+        });
+      } catch (directError) {
+        if (file.size > SERVER_UPLOAD_LIMIT) {
+          const why = directError instanceof Error ? directError.message.replace(/ Falling back to server upload\.?$/, "") : "";
+          throw new Error(`Could not upload this PDF to storage. ${why}`.trim());
+        }
+        const form = new FormData();
+        form.set("file", file);
+        form.set("metadata", JSON.stringify(metadata));
+        res = await fetch("/api/team/modules", { method: "POST", body: form });
+      }
+      const body = await res.json().catch(() => null);
+      if (!body?.success) {
+        setError(
+          body?.error ??
+            (res.status === 413 ? "PDF is too large to upload this way — please try again." : `Could not upload this module (error ${res.status}).`)
+        );
         setSubmitting(false);
+        setProgress(0);
         return;
       }
       router.push(`/team/modules/${body.data.module.id}`);
-    } catch {
-      setError("Network connection error. Please try again.");
+    } catch (err) {
+      setError(err instanceof Error && err.message ? err.message : "Network connection error. Please try again.");
       setSubmitting(false);
+      setProgress(0);
     }
   }
 
@@ -187,7 +213,7 @@ export function ModuleUploadForm({ brandProfiles }: { brandProfiles: BrandProfil
         disabled={submitting}
         className="bg-primary text-on-primary rounded-full px-5 py-2.5 font-label-md text-label-md disabled:opacity-60 hover:opacity-90 transition-opacity"
       >
-        {submitting ? "Uploading…" : "Upload Module"}
+        {submitting ? (progress > 0 && progress < 100 ? `Uploading… ${progress}%` : "Uploading…") : "Upload Module"}
       </button>
     </form>
   );
