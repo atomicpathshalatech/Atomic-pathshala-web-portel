@@ -196,8 +196,11 @@ export function MessagesPanel({
   useEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    const MIN_INTERVAL_MS = 4000;
-    const FALLBACK_INTERVAL_MS = 8000;
+    // Only the teacher's room reads the YouTube chat, and rarely: each read
+    // costs 5 of the day's 10,000 YouTube quota units (see the route).
+    if (role !== "TEACHER") return;
+    const MIN_INTERVAL_MS = 20_000;
+    const FALLBACK_INTERVAL_MS = 30_000;
 
     async function pollYouTube() {
       let nextDelay = FALLBACK_INTERVAL_MS;
@@ -234,7 +237,7 @@ export function MessagesPanel({
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [whiteboardSessionId]);
+  }, [whiteboardSessionId, role]);
 
   async function handleSend() {
     const body = draft.trim();

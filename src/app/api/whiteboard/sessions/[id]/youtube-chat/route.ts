@@ -41,7 +41,17 @@ type ChatCacheEntry = {
 // reduction paired with the client now honoring YouTube's own suggested
 // pollingIntervalMillis instead of a hardcoded 4s.
 const chatCache = new Map<string, ChatCacheEntry>();
-const CHAT_CACHE_TTL_MS = 4000;
+// One read of a YouTube live chat costs 5 quota units, out of 10,000 a day
+// for everything (creating each class's broadcast included). Read every 4 s
+// by every viewer, one 90-minute class used the whole day's quota by itself
+// and the next App class could not create its broadcast. So: only the
+// teacher's room reads it (students use the app's own chat), at most once
+// every 20 s, and after a quota error not again for 30 minutes.
+const CHAT_CACHE_TTL_MS = 20_000;
+const NO_CHAT_RETRY_MS = 60_000;
+const QUOTA_BACKOFF_MS = 30 * 60_000;
+const noChatUntil = new Map<string, number>();
+let quotaBlockedUntil = 0;
 
 function formatMessages(messages: Awaited<ReturnType<typeof fetchLiveChatMessages>>["messages"]) {
   return messages.map((m) => ({
@@ -79,13 +89,18 @@ export async function GET(
 
     if (!wbSession) return apiError("Whiteboard session not found", 404);
 
+    if (access.role !== "TEACHER" || Date.now() < quotaBlockedUntil) {
+      return apiSuccess({ messages: [], active: false, pollingIntervalMillis: 60_000 });
+    }
+
     if (!youtubeLiveConfigured()) {
       return apiSuccess({ messages: [], active: false });
     }
 
     let liveChatId = wbSession.youtubeLiveChatId;
-    if (!liveChatId && wbSession.youtubeVideoId) {
+    if (!liveChatId && wbSession.youtubeVideoId && Date.now() >= (noChatUntil.get(wbSession.id) ?? 0)) {
       liveChatId = await getLiveChatIdForVideo(wbSession.youtubeVideoId);
+      if (!liveChatId) noChatUntil.set(wbSession.id, Date.now() + NO_CHAT_RETRY_MS);
       if (liveChatId) {
         await prisma.whiteboardSession
           .update({
@@ -136,7 +151,7 @@ export async function GET(
     const response: CachedChatResponse = {
       messages: formattedMessages,
       nextPageToken: chatData.nextPageToken,
-      pollingIntervalMillis: chatData.pollingIntervalMillis,
+      pollingIntervalMillis: Math.max(CHAT_CACHE_TTL_MS, chatData.pollingIntervalMillis ?? 0),
       youtubeVotes,
     };
     chatCache.set(params.id, { fetchedAt: now, pageToken: chatData.nextPageToken, response });
@@ -145,6 +160,9 @@ export async function GET(
   } catch (error) {
     // If YouTube quota or token fails, gracefully return empty rather than breaking the UI
     console.warn("[youtube_chat_fetch_warning]", error);
+    if (/quota|dailyLimit|rateLimit/i.test(error instanceof Error ? error.message : String(error))) {
+      quotaBlockedUntil = Date.now() + QUOTA_BACKOFF_MS;
+    }
     return apiSuccess({ messages: [], active: false });
   }
 }

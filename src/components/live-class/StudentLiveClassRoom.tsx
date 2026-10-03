@@ -1,5 +1,6 @@
 "use client";
 
+import { useDeviceOrientationClass } from "@/lib/ui/use-device-orientation";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { getPusherClient } from "@/lib/realtime/pusher-client";
@@ -763,6 +764,8 @@ export function StudentLiveClassRoom({
   // Exactly one <VideoStrip> must ever be mounted per student
   // Client-only component (ssr: false), so the first render already picks
   // the right layout — a phone never mounts the desktop one, even briefly.
+  // Layout follows how the phone is held, not the viewport's shape (keyboard-safe).
+  useDeviceOrientationClass();
   const [isDesktopViewport, setIsDesktopViewport] = useState(
     () => typeof window === "undefined" || window.matchMedia("(min-width: 1024px)").matches
   );
@@ -1943,9 +1946,9 @@ export function StudentLiveClassRoom({
       {/* MOBILE & TABLET VIEW (< lg): Fullscreen Landscape / Tabbed Portrait View */}
       {/* ========================================================================= */}
       {!isDesktopViewport && (
-      <div className="lg:hidden flex-1 min-h-0 flex flex-col landscape:flex-row overflow-hidden bg-[#0b0d14] relative">
+      <div className="lg:hidden flex-1 min-h-0 flex flex-col ls:flex-row overflow-hidden bg-[#0b0d14] relative">
         {/* Mobile Media Area: In portrait takes top 40-45dvh; in LANDSCAPE takes 100% FULL SCREEN */}
-        <div className="w-full aspect-video max-h-[45vh] landscape:w-auto landscape:flex-1 landscape:min-w-0 landscape:h-full landscape:max-h-full landscape:aspect-auto shrink-0 bg-black relative flex items-center justify-center overflow-hidden border-b landscape:border-0 border-slate-800/80">
+        <div className="w-full aspect-video max-h-[45vh] ls:w-auto ls:flex-1 ls:min-w-0 ls:h-full ls:max-h-full ls:aspect-auto shrink-0 bg-black relative flex items-center justify-center overflow-hidden border-b ls:border-0 border-slate-800/80">
           {isYouTube ? (
             <div className="relative w-full h-full">
               <YouTubeLivePlayer
@@ -2061,7 +2064,7 @@ export function StudentLiveClassRoom({
           <button
             type="button"
             onClick={() => setMobileLandscapeShowChat(true)}
-            className="hidden landscape:flex items-center gap-1.5 absolute bottom-3 right-3 z-30 px-3 py-1.5 rounded-full bg-slate-900/90 hover:bg-slate-800 text-white border border-slate-700/80 shadow-2xl backdrop-blur-md text-xs font-bold transition active:scale-95 cursor-pointer"
+            className="hidden ls:flex items-center gap-1.5 absolute bottom-3 right-3 z-30 px-3 py-1.5 rounded-full bg-slate-900/90 hover:bg-slate-800 text-white border border-slate-700/80 shadow-2xl backdrop-blur-md text-xs font-bold transition active:scale-95 cursor-pointer"
           >
             <span className="material-symbols-outlined text-sm text-blue-400">chat</span>
             <span>Chat & Polls</span>
@@ -2072,16 +2075,16 @@ export function StudentLiveClassRoom({
           )}
         </div>
 
-        {/* In portrait: normal bottom half console. In landscape: floating slide-in drawer when requested */}
+        {/* In pt: normal bottom half console. In ls: floating slide-in drawer when requested */}
         <div
           className={`flex-1 min-h-0 bg-[#10121d] overflow-hidden ${
             mobileLandscapeShowChat
-              ? "landscape:w-72 landscape:max-w-[40vw] landscape:shrink-0 landscape:border-l landscape:border-slate-800 flex flex-col"
-              : "portrait:flex landscape:hidden"
+              ? "ls:w-72 ls:max-w-[40vw] ls:shrink-0 ls:border-l ls:border-slate-800 flex flex-col"
+              : "pt:flex ls:hidden"
           }`}
         >
           {/* Header in landscape drawer to allow closing */}
-          <div className="hidden landscape:flex items-center justify-between px-3 py-2 bg-[#0a0b12] border-b border-slate-800 shrink-0">
+          <div className="hidden ls:flex items-center justify-between px-3 py-2 bg-[#0a0b12] border-b border-slate-800 shrink-0">
             <span className="text-xs font-bold text-white flex items-center gap-1.5">
               <span className="material-symbols-outlined text-sm text-blue-400">forum</span>
               Live Interaction

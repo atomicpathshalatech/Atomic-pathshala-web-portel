@@ -164,7 +164,17 @@ const config: Config = {
       },
     },
   },
-  plugins: [require("@tailwindcss/forms"), require("@tailwindcss/container-queries")],
+  plugins: [
+    require("@tailwindcss/forms"),
+    require("@tailwindcss/container-queries"),
+    // ls: / pt: — how the DEVICE is held (class on <html>, see
+    // src/lib/ui/use-device-orientation.ts), not the viewport's shape: an open
+    // phone keyboard must not turn a portrait screen into "landscape".
+    function ({ addVariant }: { addVariant: (name: string, definition: string) => void }) {
+      addVariant("ls", "html.orient-landscape &");
+      addVariant("pt", "html:not(.orient-landscape) &");
+    },
+  ],
 };
 
 export default config;
