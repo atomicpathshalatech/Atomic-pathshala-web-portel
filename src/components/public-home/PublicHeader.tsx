@@ -7,11 +7,12 @@ import { useSession } from "next-auth/react";
 import { Icon } from "./ui";
 
 const NAV = [
-  { label: "Courses", href: "#courses" },
-  { label: "Free Resources", href: "#free" },
-  { label: "PYQs", href: "#pyq" },
-  { label: "Tests", href: "#tests" },
-  { label: "Study Material", href: "#material" },
+  { label: "Courses", href: "/#courses" },
+  { label: "Free Resources", href: "/#free" },
+  { label: "PYQs", href: "/#pyq" },
+  { label: "Tests", href: "/#tests" },
+  { label: "Study Material", href: "/#material" },
+  { label: "Blog", href: "/blog" },
 ];
 
 /** Where a signed-in user's "Dashboard" goes (same rule as the site navbar). */
@@ -58,7 +59,7 @@ export function PublicHeader() {
           </span>
         </Link>
 
-        <nav aria-label="Main" className="ml-6 hidden lg:flex items-center gap-1">
+        <nav aria-label="Main" className="ml-6 hidden xl:flex items-center gap-1 whitespace-nowrap">
           {NAV.map((n) => (
             <a key={n.href} href={n.href} className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:text-blue-700 hover:bg-blue-50/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
               {n.label}
@@ -67,7 +68,7 @@ export function PublicHeader() {
         </nav>
 
         <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
-          <a href="#search" aria-label="Search" className="flex h-11 w-11 items-center justify-center rounded-xl text-slate-600 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
+          <a href="/#search" aria-label="Search" className="flex h-11 w-11 items-center justify-center rounded-xl text-slate-600 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
             <Icon name="search" className="text-[22px]" />
           </a>
           {signedIn ? (
@@ -79,7 +80,7 @@ export function PublicHeader() {
               <Link href="/login" className="inline-flex min-h-[44px] items-center rounded-xl px-3 text-sm font-semibold text-slate-700 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
                 Login
               </Link>
-              <Link href="/register" className="hidden sm:inline-flex min-h-[44px] items-center rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+              <Link href="/register" className="hidden sm:inline-flex min-h-[44px] items-center whitespace-nowrap rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
                 Start Learning Free
               </Link>
             </>
@@ -90,7 +91,7 @@ export function PublicHeader() {
             aria-expanded={open}
             aria-controls="home-mobile-menu"
             aria-label={open ? "Close menu" : "Open menu"}
-            className="lg:hidden flex h-11 w-11 items-center justify-center rounded-xl text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            className="xl:hidden flex h-11 w-11 items-center justify-center rounded-xl text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
           >
             <Icon name={open ? "close" : "menu"} className="text-[24px]" />
           </button>
@@ -98,7 +99,7 @@ export function PublicHeader() {
       </div>
 
       {open && (
-        <nav id="home-mobile-menu" aria-label="Mobile" className="lg:hidden border-t border-slate-100 bg-white px-4 pb-4 pt-2 shadow-lg">
+        <nav id="home-mobile-menu" aria-label="Mobile" className="xl:hidden border-t border-slate-100 bg-white px-4 pb-4 pt-2 shadow-lg">
           <ul className="flex flex-col">
             {NAV.map((n) => (
               <li key={n.href}>

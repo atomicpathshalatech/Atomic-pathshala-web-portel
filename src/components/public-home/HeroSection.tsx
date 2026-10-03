@@ -64,7 +64,31 @@ function HeroArt() {
   );
 }
 
-export function HeroSection() {
+export type HeroImage = { imageUrl: string; mobileImageUrl: string | null; altText: string | null } | null;
+
+/** Admin-set hero picture (Team → Website → Homepage Hero Image), else the built-in illustration. */
+function HeroVisual({ image }: { image: HeroImage }) {
+  if (!image) return <HeroArt />;
+  return (
+    <div className="mx-auto w-full max-w-[520px]">
+      <picture>
+        {image.mobileImageUrl && <source media="(max-width: 639px)" srcSet={image.mobileImageUrl} />}
+        {/* eslint-disable-next-line @next/next/no-img-element -- CMS image from any host */}
+        <img
+          src={image.imageUrl}
+          alt={image.altText || "Atomic Pathshala"}
+          width={1000}
+          height={1000}
+          loading="eager"
+          decoding="async"
+          className="h-auto max-h-[460px] w-full rounded-3xl object-contain"
+        />
+      </picture>
+    </div>
+  );
+}
+
+export function HeroSection({ image = null }: { image?: HeroImage }) {
   return (
     <section className="relative overflow-hidden bg-gradient-to-b from-blue-50/70 via-white to-white">
       <div className={`${CONTAINER} grid items-center gap-8 py-10 sm:py-14 lg:grid-cols-[1.1fr_0.9fr] lg:py-20`}>
@@ -102,7 +126,7 @@ export function HeroSection() {
             </li>
           </ul>
         </div>
-        <HeroArt />
+        <HeroVisual image={image} />
       </div>
     </section>
   );

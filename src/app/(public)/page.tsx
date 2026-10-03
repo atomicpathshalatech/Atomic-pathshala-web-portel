@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
 import { FloatingGuruWidget } from "@/components/shared/FloatingGuruWidget";
 import { AppEntryGate } from "@/components/platform/AppEntryGate";
-import { getPublicHomeData } from "@/lib/public-home";
+import { getActiveHomeBanners, getPublicHomeData } from "@/lib/public-home";
+import { getHomeHeroImage, getPublishedBlogPosts } from "@/lib/blog";
 import { PublicHeader } from "@/components/public-home/PublicHeader";
 import { HeroSection } from "@/components/public-home/HeroSection";
+import { BannerSlider } from "@/components/public-home/BannerSlider";
+import { LatestBlogsSection } from "@/components/public-home/BlogSections";
 import { ExamSelector } from "@/components/public-home/ExamSelector";
 import { HomeSearch } from "@/components/public-home/HomeSearch";
 import { FreeLearningHub, StudyMaterialSection, FreeTestSection } from "@/components/public-home/LearningSections";
@@ -35,7 +38,7 @@ export const metadata: Metadata = {
 };
 
 export default async function HomePage() {
-  const data = await getPublicHomeData();
+  const [data, banners, heroImage, posts] = await Promise.all([getPublicHomeData(), getActiveHomeBanners(), getHomeHeroImage(), getPublishedBlogPosts(3)]);
   const faqs = resolveFaqs(data.faqs);
 
   const jsonLd = [
@@ -63,7 +66,8 @@ export default async function HomePage() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }} />
       <PublicHeader />
       <main className="overflow-x-hidden bg-white">
-        <HeroSection />
+        <HeroSection image={heroImage} />
+        <BannerSlider banners={banners} />
         <ExamSelector />
         <HomeSearch />
         <FreeLearningHub data={data} youtubeUrl={data.youtubeUrl} />
@@ -78,6 +82,7 @@ export default async function HomePage() {
         <WhyAtomicPathshala />
         <TrustSection metrics={data.metrics} />
         <AppPromotion />
+        <LatestBlogsSection posts={posts} />
         <HomeFAQ faqs={faqs} />
       </main>
       <PublicFooter socials={data.socials} />

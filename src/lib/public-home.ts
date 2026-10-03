@@ -247,3 +247,22 @@ export async function getPublicHomeData(): Promise<PublicHomeData> {
     faqs,
   };
 }
+
+export type HomeBanner = { id: string; title: string; subtitle: string | null; imageUrl: string; mobileImageUrl: string | null; ctaUrl: string | null; openInNewTab: boolean };
+
+/** All ACTIVE banners in their date window (Team → Website → Banners), for the homepage slider. */
+export async function getActiveHomeBanners(): Promise<HomeBanner[]> {
+  const now = new Date();
+  return safe(
+    prisma.banner.findMany({
+      where: {
+        status: "ACTIVE",
+        AND: [{ OR: [{ startAt: null }, { startAt: { lte: now } }] }, { OR: [{ endAt: null }, { endAt: { gte: now } }] }],
+      },
+      orderBy: [{ priority: "desc" }, { order: "asc" }, { createdAt: "desc" }],
+      take: 8,
+      select: { id: true, title: true, subtitle: true, imageUrl: true, mobileImageUrl: true, ctaUrl: true, openInNewTab: true },
+    }),
+    [],
+  );
+}

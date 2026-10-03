@@ -130,6 +130,7 @@ const FOOTER_COLS = [
     title: "Atomic Pathshala",
     links: [
       { label: "Faculty", href: "/teachers" },
+      { label: "Blog", href: "/blog" },
       { label: "About the Founder", href: "/about-founder" },
       { label: "Careers", href: "/careers/apply" },
       { label: "Install the App", href: "/install" },

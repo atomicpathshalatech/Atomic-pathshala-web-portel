@@ -51,6 +51,12 @@ export default async function HomeBuilderPage() {
           <Link href="/team/website/banners" className="text-label-sm text-primary hover:underline px-3 py-1.5 rounded-lg bg-primary/10">
             Banners
           </Link>
+          <Link href="/team/website/hero" className="text-label-sm text-primary hover:underline px-3 py-1.5 rounded-lg bg-primary/10">
+            Homepage Hero Image
+          </Link>
+          <Link href="/team/website/blog" className="text-label-sm text-primary hover:underline px-3 py-1.5 rounded-lg bg-primary/10">
+            Blog
+          </Link>
           <Link href="/team/website/media" className="text-label-sm text-primary hover:underline px-3 py-1.5 rounded-lg bg-primary/10">
             Media Library
           </Link>
