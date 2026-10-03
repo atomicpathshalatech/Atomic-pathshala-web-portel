@@ -3631,7 +3631,8 @@ export function TeacherLiveClassRoom({
           </div>
 
           {/* Broadcast On-Canvas Poll Overlay for Screen Capture / OBS / YouTube Viewers */}
-          {activeQuiz && activeQuiz.status !== "CLOSED" && (
+          {/* Not while the Poll / Quiz window is open: the same poll was shown twice, one on top of the other. */}
+          {activeQuiz && activeQuiz.status !== "CLOSED" && !pollOpen && (
             <BroadcastQuizCanvasOverlay
               activeQuiz={activeQuiz}
               quizMetrics={quizMetrics}
