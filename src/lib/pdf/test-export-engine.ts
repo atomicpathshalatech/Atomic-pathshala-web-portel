@@ -849,8 +849,8 @@ export function generateTestPaperHtml(
     const num = withSolutionPart
       ? `<span class="q-num"><span class="q-num-box">${q.number}</span></span>`
       : `<span class="q-num">${q.number}.</span>`;
-    // DPP solutions: only the number, answer and solution (the question is already printed above).
-    const solutionOnly = withSolutionPart && isDpp;
+    // Solutions: only the number, answer and solution (the question is already printed above).
+    const solutionOnly = withSolutionPart;
     const parts = solutionOnly
       ? []
       : [
@@ -945,15 +945,20 @@ export function generateTestPaperHtml(
   // Solutions booklet: answer key first, then each question followed by its
   // solution — no cover, rough pages or back cover.
   let questionPagesHtml = "";
-  if (!withSolution || isDpp) {
+  {
     test.sections.forEach((section, si) => {
       const dppStrip =
         isDpp && si === 0
           ? `<div class="dpp-strip"><div class="dpp-strip-title">${test.name}</div><div class="dpp-strip-meta">${test.totalQuestions} Questions · ${test.durationMin} min · +${test.correctMarks} / ${test.incorrectMarks}</div></div>`
           : "";
+      // Under the subject name: its syllabus in a white box (tests).
+      const syllabusBox =
+        !isDpp && section.syllabus
+          ? `<div class="subject-syllabus keep-next"><b>Syllabus :</b> ${section.syllabus.replace(/</g, "&lt;")}</div>`
+          : "";
       questionPagesHtml += `
       <div class="q-flow" data-subject="SUBJECT : ${section.subject.toUpperCase().replace(/"/g, "&quot;")}">
-        ${dppStrip}${section.questions.map((q) => questionPartsHtml(q, false)).join("")}
+        ${dppStrip}${syllabusBox}${section.questions.map((q) => questionPartsHtml(q, false)).join("")}
       </div>`;
       // Rough page after each subject (page numbers are filled in after pagination).
       if (!isDpp) questionPagesHtml += renderSingleRoughPageHtml(0, section.subject);
@@ -964,7 +969,7 @@ export function generateTestPaperHtml(
   const contentPageTemplateHtml = `
     <template id="tpl-content-page">
       <div class="page content-page">
-        <div class="page-watermark"><div class="watermark-text">${brandName}</div></div>
+        <div class="page-watermark">${options.logoUrl ? `<img class="watermark-logo" src="${options.logoUrl}" alt="" />` : `<div class="watermark-text">${brandName}</div>`}</div>
         <div class="test-page-header">
           <div class="test-header-row-1"></div>
           <div class="test-header-subject-row"></div>
@@ -1092,7 +1097,7 @@ export function generateTestPaperHtml(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${test.name} - ${currentDateStr} - ATOMIC PATHSHALA${withSolution ? " (Solutions)" : ""}</title>
+  <title>${test.name} - ${currentDateStr} - ATOMIC PATHSHALA</title>
   
   <!-- Tailwind CSS Engine for Exact Aesthetic Rendering -->
   <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
@@ -1204,12 +1209,15 @@ export function generateTestPaperHtml(
       position: absolute;
       top: 50%;
       left: 50%;
-      transform: translate(-50%, -50%) rotate(-32deg);
+      transform: translate(-50%, -50%);
       pointer-events: none;
       z-index: 0;
       user-select: none;
       white-space: nowrap;
     }
+
+    /* The logo, level (0°), faint behind every page. */
+    .watermark-logo { display: block; width: 115mm; height: auto; opacity: 0.06; }
 
     .watermark-text {
       font-family: 'Montserrat', 'PT Serif', sans-serif;
@@ -2182,6 +2190,12 @@ export function generateTestPaperHtml(
     .ak-table td.ak-q { font-weight: 700; background: #f8fafc; }
     .ak-table .ak-gap { width: 10px; border: 0; background: transparent; }
     .ak-table.ak-horizontal { margin: 0 auto 6px; }
+    .subject-syllabus {
+      margin: 4px 0 6px; padding: 5px 9px; background: #ffffff; color: #1f2937;
+      border: 1px solid #cbd5e1; border-radius: 4px;
+      font-family: 'Tinos', 'Times New Roman', serif; font-size: 10pt; line-height: 1.35;
+    }
+    .subject-syllabus b { color: #000000; }
     .ak-table.ak-horizontal th, .ak-table.ak-horizontal td.ak-q, .ak-table.ak-horizontal td.ak-a { padding: 3px 6px; min-width: 22px; }
 
     /* Website link in every footer (clickable in the saved PDF) */
@@ -2226,14 +2240,14 @@ ${isDpp && options.dppCoverHtml ? DPP_COVER_CSS : ""}
        (real text, exact Hindi shaping and maths, small file) — not by
        screenshotting each page into a JPEG as before. -->
   <div class="print-toolbar no-print">
-    <div class="pt-title">${test.name} · ${brandName}${withSolution ? " (Solutions)" : ""}</div>
+    <div class="pt-title">${test.name} · ${brandName}</div>
     <div class="pt-status" id="pt-status">Preparing pages…</div>
     <button type="button" class="pt-btn" id="pt-print" disabled>Save as PDF</button>
     <div class="pt-hint">In the print window, choose <b>Save as PDF</b> as the destination.</div>
   </div>
 
   <div class="doc-container" id="doc-container">
-    ${isDpp && options.dppCoverHtml ? options.dppCoverHtml : ""}${isDpp ? questionPagesHtml + (withSolution ? solutionsSectionHtml : "") : withSolution ? solutionsSectionHtml : frontCoverHtml + questionPagesHtml + finalRoughPagesHtml + backCoverHtml}
+    ${isDpp && options.dppCoverHtml ? options.dppCoverHtml : ""}${isDpp ? questionPagesHtml + (withSolution ? solutionsSectionHtml : "") : withSolution ? frontCoverHtml + questionPagesHtml + solutionsSectionHtml : frontCoverHtml + questionPagesHtml + finalRoughPagesHtml + backCoverHtml}
   </div>
   ${contentPageTemplateHtml}
 

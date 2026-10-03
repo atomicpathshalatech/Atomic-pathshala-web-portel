@@ -144,7 +144,7 @@ export function renderDppCoverHtml(info: DppCoverInfo, brand: DppBrand, qrs: Dpp
   return `
   <div class="page dpp-cover-page">
     <div class="dc-frame">
-      <div class="dc-wm">ATOMIC PATHSHALA</div>
+      ${logoUrl ? `<img class="dc-wm dc-wm-logo" src="${esc(logoUrl)}" alt="" />` : `<div class="dc-wm">ATOMIC PATHSHALA</div>`}
       <div class="dc-top">
         ${logoUrl ? `<div class="dc-logo"><img src="${esc(logoUrl)}" alt="Atomic Pathshala" /></div>` : ""}
         <div class="dc-name">ATOMIC <span>PATHSHALA</span></div>
@@ -171,6 +171,7 @@ export const DPP_COVER_CSS = `
   .dpp-cover-page a { color: inherit; text-decoration: none; }
   .dc-frame { position: relative; height: 100%; border: 0.9mm solid #14181f; border-radius: 6mm; padding: 9mm 9mm 8mm; display: flex; flex-direction: column; overflow: hidden; }
   .dc-wm { position: absolute; left: 50%; top: 56%; transform: translate(-50%, -50%); font-weight: 900; font-size: 36pt; letter-spacing: 4px; color: rgba(20, 24, 31, 0.03); white-space: nowrap; pointer-events: none; z-index: 0; }
+  .dc-wm-logo { width: 110mm; height: auto; opacity: 0.05; }
   .dc-frame > *:not(.dc-wm) { position: relative; z-index: 1; }
   .dc-top { display: flex; flex-direction: column; align-items: center; }
   .dc-logo { width: 25mm; height: 25mm; }
