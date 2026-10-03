@@ -6273,3 +6273,46 @@ model MistakeResolution {
   @@index([studentId])
   @@map("mistake_resolutions")
 }
+
+// ── Blog (Team → Website → Blog) ───────────────────────────────────────────
+// Posts are written in Markdown (rendered without raw HTML). Only PUBLISHED
+// posts are ever shown on the public /blog pages and the homepage.
+enum BlogPostStatus {
+  DRAFT
+  PUBLISHED
+}
+
+model BlogPost {
+  id              String         @id @default(cuid())
+  slug            String         @unique
+  title           String
+  excerpt         String?
+  coverImageUrl   String?
+  content         String         @default("")
+  category        String?
+  authorName      String?
+  status          BlogPostStatus @default(DRAFT)
+  publishedAt     DateTime?
+  seoTitle        String?
+  metaDescription String?
+  createdById     String
+  updatedById     String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([status, publishedAt])
+  @@map("blog_posts")
+}
+
+// Homepage hero centre image (Team → Website → Homepage Hero Image). A single
+// row; when no image is set the homepage shows its built-in illustration.
+model HomeHero {
+  id             String   @id @default("singleton")
+  imageUrl       String?
+  mobileImageUrl String?
+  altText        String?
+  updatedById    String?
+  updatedAt      DateTime @updatedAt
+
+  @@map("home_hero")
+}
