@@ -117,7 +117,7 @@ export async function buildBatchScheduleHtml(
         <td class="t">${esc(fmtTime(r.startsAt))} – ${esc(fmtTime(r.endsAt))}</td>
         <td class="c">${chapter ? `<span class="ch">${esc(chapter)}</span>` : ""}<b>${esc(title)}</b>${remark ? `<span class="rm">${esc(remark)}</span>` : ""}</td>
         ${subject ? "" : `<td>${esc(subjectOf(r))}</td>`}
-        <td>${esc(r.teacher?.displayName || r.teacher?.user?.name || "—")}</td>
+        <td>${esc(r.teacher?.user?.name || r.teacher?.displayName || "—")}</td>
         <td><span class="pill ${statusCls}">${statusLabel}</span></td>
         <td><span class="pill ${notesCls}">${notes}</span></td>
       </tr>`;
