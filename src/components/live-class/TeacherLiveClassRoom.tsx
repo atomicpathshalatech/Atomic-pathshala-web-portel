@@ -1835,6 +1835,48 @@ export function TeacherLiveClassRoom({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [wbSession?.id, wbSession?.activePageNumber, wbSession?.pages.length]);
 
+  // Copy of a slide, placed right after it (from the slide panel).
+  async function duplicatePage(page: WhiteboardPage) {
+    if (!wbSession) return;
+    try {
+      if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+      await flushAutosave();
+      const data = await postJson(`/api/whiteboard/sessions/${wbSession.id}/pages`, {
+        afterPageNumber: page.pageNumber,
+        duplicateOfPageId: page.id,
+      });
+      const copy = data.page as WhiteboardPage;
+      setWbSession((prev) =>
+        prev
+          ? { ...prev, pages: mergeInsertedPage(prev.pages, data).map((pg) => (pg.id === copy.id ? copy : pg)), activePageNumber: copy.pageNumber }
+          : prev
+      );
+      enginePageIdRef.current = copy.id;
+      lastLoadedPageIdRef.current = copy.id;
+      engineRef.current?.loadObjects(copy.objects ?? []);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Could not duplicate this slide.");
+    }
+  }
+
+  // Delete any slide from the slide panel (not only the one on screen).
+  async function deletePageById(page: WhiteboardPage) {
+    if (!wbSession || wbSession.pages.length <= 1) return;
+    if (!window.confirm(`Delete slide ${page.pageNumber}? This cannot be undone.`)) return;
+    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+    try {
+      await flushAutosave();
+      const data = await deleteJson(`/api/whiteboard/sessions/${wbSession.id}/pages/${page.id}`);
+      setWbSession((prev) => (prev ? { ...prev, pages: data.pages, activePageNumber: data.activePageNumber } : prev));
+      const nextActive = (data.pages as WhiteboardPage[]).find((pg) => pg.pageNumber === data.activePageNumber);
+      enginePageIdRef.current = nextActive?.id ?? null;
+      lastLoadedPageIdRef.current = nextActive?.id ?? null;
+      engineRef.current?.loadObjects(nextActive?.objects ?? []);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Could not delete this slide.");
+    }
+  }
+
   async function deleteCurrentPage() {
     if (!wbSession || !currentPage || wbSession.pages.length <= 1) return;
     if (!window.confirm("Delete this page? This can't be undone.")) return;
@@ -3304,7 +3346,7 @@ export function TeacherLiveClassRoom({
               type="button"
               onClick={() => {
                 setTool("pen");
-                setOpenPopup(null);
+                setOpenPopup((cur) => (cur === "pages" ? cur : null));
               }}
               className={`w-7 h-7 rounded-full flex items-center justify-center transition shadow ${
                 tool === "pen" ? "bg-blue-600 text-white ring-2 ring-blue-400" : "bg-white/10 text-gray-300 hover:text-white"
@@ -3886,7 +3928,8 @@ export function TeacherLiveClassRoom({
 
       {/* Bottom toolbar */}
       <footer className="live-toolbar flex items-center justify-between gap-1 px-2 sm:px-4 lg:px-6 border-t border-[#2d2e3b] bg-[#1a1b23] relative min-w-0">
-        {openPopup && <div className="fixed inset-0 z-30" onClick={() => setOpenPopup(null)} />}
+        {/* The slide panel stays open while the teacher writes: no click-away layer for it. */}
+        {openPopup && openPopup !== "pages" && <div className="fixed inset-0 z-30" onClick={() => setOpenPopup(null)} />}
 
         {/* Tools group. relative + z-40: see the backdrop-stacking comment
             above the backdrop div — without this, every button here (and
@@ -4328,42 +4371,72 @@ export function TeacherLiveClassRoom({
                 {wbSession.activePageNumber} <span className="text-gray-500 font-normal">/</span> {wbSession.pages.length}
               </span>
             </button>
+            {/* Slide panel: a slim strip on the right edge, over the stage —
+                it never resizes or moves the board. Each slide can be opened,
+                duplicated or deleted from here. */}
             {openPopup === "pages" && (
-              <div className="absolute bottom-full left-0 mb-2 z-40 bg-[#1a1b23] border border-[#2d2e3b] rounded-lg shadow-2xl w-[21rem] flex flex-col">
-                <div className="px-3 py-2 border-b border-[#2d2e3b]">
-                  <div className="text-xs font-bold text-white truncate">{scheduleTitle || "Whiteboard"}</div>
-                  <div className="text-[10px] text-gray-500">{wbSession.pages.length} page{wbSession.pages.length === 1 ? "" : "s"}</div>
+              <div className="fixed right-2 top-16 bottom-24 z-50 w-[152px] bg-[#1a1b23]/95 border border-[#2d2e3b] rounded-xl shadow-2xl flex flex-col">
+                <div className="px-2.5 py-1.5 border-b border-[#2d2e3b] flex items-center justify-between gap-1">
+                  <span className="text-[11px] font-bold text-white">
+                    Slides <span className="text-gray-500 font-medium">({wbSession.pages.length})</span>
+                  </span>
+                  <button type="button" onClick={() => setOpenPopup(null)} className="text-gray-400 hover:text-white" title="Close">
+                    <span className="material-symbols-outlined text-base">close</span>
+                  </button>
                 </div>
-                {/* Grid of real thumbnails, not a bare page-number list — a
-                    teacher with several pages of drawn content couldn't tell
-                    them apart before this, since "Page 3" carries no
-                    information about what's actually on it. */}
-                <div className="grid grid-cols-2 gap-2 p-2 max-h-80 overflow-y-auto">
-                  {wbSession.pages.map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => {
-                        switchToPage(p.pageNumber);
-                        setOpenPopup(null);
-                      }}
-                      className={`rounded-lg p-1 flex flex-col items-center gap-1 border transition-colors ${
-                        p.pageNumber === wbSession.activePageNumber
-                          ? "border-blue-500 bg-blue-900/20"
-                          : "border-transparent hover:bg-gray-800"
-                      }`}
-                    >
-                      <PageThumbnail background={p.background} objects={p.objects} />
-                      <span
-                        className={`text-[11px] font-medium ${
-                          p.pageNumber === wbSession.activePageNumber ? "text-blue-400" : "text-gray-400"
+                <div className="flex-1 overflow-y-auto p-1.5 flex flex-col gap-1.5">
+                  {wbSession.pages.map((p) => {
+                    const active = p.pageNumber === wbSession.activePageNumber;
+                    return (
+                      <div
+                        key={p.id}
+                        className={`relative rounded-lg p-1 border transition-colors ${
+                          active ? "border-blue-500 bg-blue-900/20" : "border-transparent hover:bg-gray-800"
                         }`}
                       >
-                        Page {p.pageNumber}
-                      </span>
-                    </button>
-                  ))}
+                        <button
+                          type="button"
+                          onClick={() => switchToPage(p.pageNumber)}
+                          className="block w-full [&_canvas]:w-full [&_canvas]:h-auto [&_canvas]:rounded"
+                          title={`Open slide ${p.pageNumber}`}
+                        >
+                          <PageThumbnail background={p.background} objects={p.objects} />
+                        </button>
+                        <div className="mt-0.5 flex items-center justify-between">
+                          <span className={`text-[10px] font-semibold ${active ? "text-blue-400" : "text-gray-400"}`}>{p.pageNumber}</span>
+                          <span className="flex items-center gap-0.5">
+                            <button
+                              type="button"
+                              onClick={() => duplicatePage(p)}
+                              className="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-700"
+                              title="Duplicate (copy) this slide"
+                            >
+                              <span className="material-symbols-outlined text-[15px]">content_copy</span>
+                            </button>
+                            <button
+                              type="button"
+                              disabled={wbSession.pages.length <= 1}
+                              onClick={() => deletePageById(p)}
+                              className="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-red-400 hover:bg-gray-700 disabled:opacity-30"
+                              title="Delete this slide"
+                            >
+                              <span className="material-symbols-outlined text-[15px]">delete</span>
+                            </button>
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
+                <button
+                  type="button"
+                  onClick={addPage}
+                  className="m-1.5 h-8 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-bold flex items-center justify-center gap-1"
+                  title="New blank slide after the current one"
+                >
+                  <span className="material-symbols-outlined text-sm">add</span>
+                  New slide
+                </button>
               </div>
             )}
           </div>

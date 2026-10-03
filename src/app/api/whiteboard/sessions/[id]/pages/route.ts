@@ -43,7 +43,15 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     if (wbSession.status === "ENDED") return apiError("This session has ended.", 409);
 
     const pageCount = await prisma.whiteboardPage.count({ where: { sessionId: params.id } });
-    const body = (await request.json().catch(() => null)) as { afterPageNumber?: unknown } | null;
+    const body = (await request.json().catch(() => null)) as { afterPageNumber?: unknown; duplicateOfPageId?: unknown } | null;
+    // Duplicate: the new slide starts as a copy of this one (same background and strokes).
+    const source =
+      typeof body?.duplicateOfPageId === "string"
+        ? await prisma.whiteboardPage.findFirst({
+            where: { id: body.duplicateOfPageId, sessionId: params.id },
+            select: { background: true, objects: true },
+          })
+        : null;
     const after = Number(body?.afterPageNumber);
     const insertAfter = Number.isInteger(after) && after >= 1 && after < pageCount ? after : null;
     const nextPageNumber = insertAfter ? insertAfter + 1 : pageCount + 1;
@@ -61,7 +69,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const results = await prisma.$transaction([
       ...behind.map((p) => prisma.whiteboardPage.update({ where: { id: p.id }, data: { pageNumber: p.pageNumber + 1 } })),
       prisma.whiteboardPage.create({
-        data: { sessionId: params.id, pageNumber: nextPageNumber, objects: [] },
+        data: {
+          sessionId: params.id,
+          pageNumber: nextPageNumber,
+          objects: (source?.objects ?? []) as object,
+          ...(source && { background: source.background }),
+        },
       }),
       prisma.whiteboardSession.update({
         where: { id: params.id },
