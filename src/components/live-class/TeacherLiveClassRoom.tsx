@@ -331,6 +331,14 @@ export function TeacherLiveClassRoom({
   const engineRef = useRef<CanvasEngine | null>(null);
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingObjectsRef = useRef<StrokeObject[] | null>(null);
+  // The slide those pending strokes belong to. A save always goes to THIS
+  // slide — never to "whichever slide is on screen when the save runs": a
+  // save that ran just after a slide change wrote the previous slide's
+  // strokes onto the new one (slides looked copied / strokes jumped slides).
+  const pendingPageIdRef = useRef<string | null>(null);
+  // The slide whose objects are in the canvas engine right now.
+  const enginePageIdRef = useRef<string | null>(null);
+  const currentPageIdRef = useRef<string | null>(null);
   const boardSaveRef = useRef<{
     inFlight: boolean;
     again: boolean;
@@ -1034,6 +1042,7 @@ export function TeacherLiveClassRoom({
   const [launchingQuiz, setLaunchingQuiz] = useState(false);
 
   const currentPage = wbSession?.pages.find((p) => p.pageNumber === wbSession.activePageNumber) ?? null;
+  currentPageIdRef.current = currentPage?.id ?? null;
   stageInfoRef.current = {
     background: currentPage?.background,
     cameraShape: wbSession?.cameraShape,
@@ -1103,6 +1112,7 @@ export function TeacherLiveClassRoom({
       activeCanvasRef.current,
       (objects) => {
         pendingObjectsRef.current = objects;
+        pendingPageIdRef.current = enginePageIdRef.current ?? currentPageIdRef.current;
         setSaveState("saving");
         if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
         autosaveTimer.current = setTimeout(() => flushAutosaveRef.current(), 50);
@@ -1153,7 +1163,10 @@ export function TeacherLiveClassRoom({
         body: JSON.stringify({ points, phase: "end" }),
       }).catch(() => {});
     };
-    if (currentPage) engine.loadObjects(currentPage.objects ?? []);
+    if (currentPage) {
+      enginePageIdRef.current = currentPage.id;
+      engine.loadObjects(currentPage.objects ?? []);
+    }
 
     // Keep the canvas backing store's pixel size synced to its actual
     // rendered box at all times, not just on browser-window resize. A
@@ -1187,6 +1200,7 @@ export function TeacherLiveClassRoom({
     engineRef.current.syncSize();
     if (currentPage && currentPage.id !== lastLoadedPageIdRef.current) {
       lastLoadedPageIdRef.current = currentPage.id;
+      enginePageIdRef.current = currentPage.id;
       engineRef.current.loadObjects(currentPage.objects ?? []);
     }
   }, [stageDimensions, currentPage?.id]);
@@ -1238,8 +1252,10 @@ export function TeacherLiveClassRoom({
       sync.again = true;
       return;
     }
-    const targetPage: WhiteboardPage | null =
-      currentPage ?? (wbSession.pages?.[0] ?? null);
+    // Only ever the slide the strokes were drawn on.
+    const targetPage: WhiteboardPage | null = pendingPageIdRef.current
+      ? wbSession.pages.find((pg) => pg.id === pendingPageIdRef.current) ?? null
+      : null;
     if (!targetPage) return;
 
     const objects = pendingObjectsRef.current;
@@ -1620,6 +1636,8 @@ export function TeacherLiveClassRoom({
     try {
       await patchJson(`/api/whiteboard/sessions/${wbSession.id}`, { activePageNumber: pageNumber });
       setWbSession((prev) => (prev ? { ...prev, activePageNumber: pageNumber } : prev));
+      enginePageIdRef.current = target.id;
+      lastLoadedPageIdRef.current = target.id;
       engineRef.current.loadObjects(target.objects ?? []);
     } catch (err) {
       // Was previously silent apart from the generic "offline" indicator -
@@ -1648,6 +1666,8 @@ export function TeacherLiveClassRoom({
       await flushAutosave();
       const data = await postJson(`/api/whiteboard/sessions/${wbSession.id}/pages`, { afterPageNumber: wbSession.activePageNumber });
       setWbSession((prev) => (prev ? { ...prev, pages: mergeInsertedPage(prev.pages, data), activePageNumber: data.page.pageNumber } : prev));
+      enginePageIdRef.current = data.page.id;
+      lastLoadedPageIdRef.current = data.page.id;
       engineRef.current?.loadObjects([]);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Could not add a page.");
@@ -1675,6 +1695,8 @@ export function TeacherLiveClassRoom({
             }
           : prev
       );
+      enginePageIdRef.current = updatedPage.id;
+      lastLoadedPageIdRef.current = updatedPage.id;
       engineRef.current?.loadObjects([]);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Could not add template page.");
@@ -1825,6 +1847,8 @@ export function TeacherLiveClassRoom({
       const nextActive = (data.pages as WhiteboardPage[]).find(
         (p) => p.pageNumber === data.activePageNumber
       );
+      enginePageIdRef.current = nextActive?.id ?? null;
+      lastLoadedPageIdRef.current = nextActive?.id ?? null;
       engineRef.current?.loadObjects(nextActive?.objects ?? []);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Could not delete this page.");
@@ -2589,6 +2613,8 @@ export function TeacherLiveClassRoom({
             }
           : prev
       );
+      enginePageIdRef.current = newPage.id;
+      lastLoadedPageIdRef.current = newPage.id;
       engineRef.current?.loadObjects(objects);
       await handleDeleteHandRaise(item.id);
     } catch (err) {
