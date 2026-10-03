@@ -127,45 +127,45 @@ export async function buildBatchScheduleHtml(
   const batchName = cleanBatchName(batch.name);
   const heading = subject ? `${subject} — Class Schedule` : "Class Schedule";
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(heading)} · ${esc(batchName)}</title>
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800;900&family=Noto+Sans+Devanagari:wght@500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Tinos:wght@400;700&family=Noto+Serif+Devanagari:wght@400;600&display=swap" rel="stylesheet">
 <style>
+  /* Plain and readable: Times New Roman (Tinos on the server), regular weight, no stretched letters. */
   @page { size: A4; margin: 12mm 11mm 14mm; }
   * { box-sizing: border-box; }
   html, body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  body { font-family: 'Montserrat', 'Noto Sans Devanagari', Arial, sans-serif; color: #16181d; font-size: 9.5pt; }
+  body { font-family: 'Times New Roman', 'Tinos', 'Noto Serif Devanagari', serif; color: #222; font-size: 11pt; font-weight: 400; }
   @media screen { body { max-width: 210mm; margin: 0 auto; padding: 12mm 11mm; } }
-  .head { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: #16181d; color: #fff; border-radius: 10px; padding: 12px 16px; }
+  .head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 0 8px; border-bottom: 1.5px solid #222; }
   .brand { display: flex; align-items: center; gap: 10px; }
-  .brand img { width: 40px; height: 40px; background: #fff; border-radius: 9px; padding: 2px; }
-  .brand b { font-size: 14pt; font-weight: 900; letter-spacing: 1.5px; display: block; }
-  .brand span { font-size: 8pt; color: #FF9A3C; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
-  .head .upd { text-align: right; font-size: 7.5pt; color: #c9ccd3; font-weight: 600; }
-  .head .upd b { display: block; color: #fff; font-size: 9pt; }
-  h1 { font-size: 17pt; font-weight: 900; margin: 14px 0 2px; }
-  .sub { color: #5b616d; font-weight: 600; font-size: 9pt; }
-  .stats { display: flex; gap: 8px; margin: 10px 0 12px; }
-  .stat { border: 1px solid #e3e5ea; border-radius: 8px; padding: 6px 12px; background: #fafafb; }
-  .stat b { font-size: 13pt; font-weight: 900; display: block; }
-  .stat span { font-size: 7pt; font-weight: 800; letter-spacing: 1.2px; color: #7a808c; text-transform: uppercase; }
+  .brand img { width: 38px; height: 38px; }
+  .brand b { font-size: 15pt; font-weight: 700; display: block; color: #222; }
+  .brand span { font-size: 10pt; color: #c2410c; }
+  .head .upd { text-align: right; font-size: 9pt; color: #666; }
+  .head .upd b { display: block; color: #222; font-size: 10pt; font-weight: 400; }
+  h1 { font-size: 16pt; font-weight: 700; margin: 12px 0 2px; }
+  .sub { color: #555; font-size: 10pt; }
+  .stats { display: flex; gap: 18px; margin: 8px 0 10px; font-size: 10pt; color: #555; }
+  .stat b { font-weight: 700; color: #222; margin-right: 3px; }
+  .stat span { }
   table { width: 100%; border-collapse: collapse; }
   thead { display: table-header-group; }
-  th { background: #f3f4f6; text-align: left; font-size: 7pt; letter-spacing: 1.2px; text-transform: uppercase; color: #5b616d; padding: 7px 8px; border-bottom: 1.5px solid #16181d; }
-  td { padding: 7px 8px; border-bottom: 1px solid #e6e8ec; vertical-align: top; font-weight: 600; }
+  th { text-align: left; font-size: 10pt; font-weight: 700; color: #222; padding: 6px 7px; border-top: 1px solid #222; border-bottom: 1px solid #222; }
+  td { padding: 6px 7px; border-bottom: 1px solid #ddd; vertical-align: top; font-weight: 400; }
   tr { break-inside: avoid; }
-  td.n { color: #9aa0ab; font-weight: 800; width: 26px; }
-  td.d b { display: block; white-space: nowrap; }
-  td.d span { color: #7a808c; font-size: 8pt; }
+  td.n { color: #777; width: 26px; }
+  td.d b { display: block; white-space: nowrap; font-weight: 400; }
+  td.d span { color: #777; font-size: 9.5pt; }
   td.t { white-space: nowrap; }
-  td.c b { display: block; font-weight: 800; }
-  .ch { display: block; color: #F57C00; font-size: 8pt; font-weight: 700; }
-  .rm { display: block; color: #b45309; font-size: 7.8pt; font-weight: 600; margin-top: 2px; }
-  .pill { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 7.6pt; font-weight: 800; background: #eef0f3; color: #4a4f5a; white-space: nowrap; }
-  .pill.ok { background: #dcfce7; color: #166534; }
-  .pill.bad { background: #fee2e2; color: #991b1b; }
-  .pill.up { background: #e0ecff; color: #1d4ed8; }
-  .pill.live { background: #16a34a; color: #fff; }
-  .empty { text-align: center; color: #7a808c; padding: 40px 0; }
-  .foot { margin-top: 10px; font-size: 7.5pt; color: #7a808c; text-align: center; }
+  td.c b { display: block; font-weight: 400; }
+  .ch { display: block; color: #c2410c; font-size: 10pt; }
+  .rm { display: block; color: #92400e; font-size: 9.5pt; margin-top: 2px; }
+  .pill { display: inline-block; padding: 1px 7px; border-radius: 99px; font-size: 9.5pt; background: #f1f1f1; color: #444; white-space: nowrap; }
+  .pill.ok { background: #e8f6ec; color: #166534; }
+  .pill.bad { background: #fdecec; color: #991b1b; }
+  .pill.up { background: #eaf1ff; color: #1d4ed8; }
+  .pill.live { background: #e8f6ec; color: #15803d; }
+  .empty { text-align: center; color: #777; padding: 40px 0; }
+  .foot { margin-top: 10px; font-size: 9pt; color: #777; text-align: center; }
 </style></head><body>
   <div class="head">
     <div class="brand">${logoUrl ? `<img src="${esc(logoUrl)}" alt="">` : ""}<div><b>ATOMIC PATHSHALA</b><span>${esc(batchName)}</span></div></div>

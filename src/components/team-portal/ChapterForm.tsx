@@ -12,6 +12,19 @@ export type CourseWithSubjects = {
   subjects: Array<{ id: string; title: string }>;
 };
 
+/** "Physical Chemistry" → "Chemistry", "Botany" / "Zoology" → "Biology" … */
+function plainSubjectName(title: string): string {
+  const lower = title.toLowerCase();
+  if (lower.includes("phys") && !lower.includes("chem")) return "Physics";
+  if (lower.includes("chem")) return "Chemistry";
+  if (lower.includes("bio") || lower.includes("botan") || lower.includes("zool")) return "Biology";
+  if (lower.includes("math")) return "Mathematics";
+  if (lower.includes("scien")) return "Science";
+  return title.split("(")[0]?.trim() || title;
+}
+
+const NEET_SUBJECTS = ["Physics", "Chemistry", "Biology"];
+
 export type ChapterFormInitialData = {
   id?: string;
   title: string;
@@ -70,12 +83,31 @@ export function ChapterForm({
 
   const selectedMedium = watch("medium");
 
-  // Filtered subjects based on course selection
+  // Subjects of the chosen course, each name once (a course can hold several
+  // rows that read the same, e.g. "Physical / Organic Chemistry"); a NEET
+  // course offers only Physics, Chemistry and Biology.
   const availableSubjects = useMemo(() => {
     if (!selectedCourseId) return [];
     const course = courses.find((c) => c.id === selectedCourseId);
-    return course ? course.subjects : [];
-  }, [courses, selectedCourseId]);
+    if (!course) return [];
+    const isNeet = /neet/i.test(course.title);
+    const byName = new Map<string, { id: string; title: string }>();
+    for (const s of course.subjects) {
+      const name = plainSubjectName(s.title);
+      if (isNeet && !NEET_SUBJECTS.includes(name)) continue;
+      const current = byName.get(name);
+      // Keep the chapter's own subject when editing; else the row named exactly like the subject, else the shortest name.
+      const better =
+        !current ||
+        (s.id === initialData?.subjectId) ||
+        (current.id !== initialData?.subjectId &&
+          (s.title.trim().toLowerCase() === name.toLowerCase() ||
+            (current.title.trim().toLowerCase() !== name.toLowerCase() && s.title.length < current.title.length)));
+      if (better) byName.set(name, { id: s.id, title: name });
+    }
+    const order = (n: string) => (NEET_SUBJECTS.includes(n) ? NEET_SUBJECTS.indexOf(n) : 99);
+    return [...byName.values()].sort((a, b) => order(a.title) - order(b.title) || a.title.localeCompare(b.title));
+  }, [courses, selectedCourseId, initialData?.subjectId]);
 
   function handleCourseChange(courseId: string) {
     setSelectedCourseId(courseId);
@@ -152,22 +184,11 @@ export function ChapterForm({
                 ? "No subjects in this course"
                 : "Select subject..."}
             </option>
-            {availableSubjects.map((s) => {
-              const lower = s.title.toLowerCase();
-              let displayTitle = s.title;
-              if (lower.includes("phys")) displayTitle = "Physics";
-              else if (lower.includes("chem")) displayTitle = "Chemistry";
-              else if (lower.includes("bio") || lower.includes("botan") || lower.includes("zool")) displayTitle = "Biology";
-              else if (lower.includes("math")) displayTitle = "Mathematics";
-              else if (lower.includes("scien")) displayTitle = "Science";
-              else displayTitle = s.title.split("(")[0]?.trim() || s.title;
-
-              return (
-                <option key={s.id} value={s.id}>
-                  {displayTitle}
-                </option>
-              );
-            })}
+            {availableSubjects.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.title}
+              </option>
+            ))}
           </select>
           {errors.subjectId && <p className={errorClass}>{errors.subjectId.message}</p>}
         </div>
