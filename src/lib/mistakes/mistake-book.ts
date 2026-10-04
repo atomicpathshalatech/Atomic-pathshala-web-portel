@@ -4,12 +4,12 @@ import { toLegacyQuestion } from "@/lib/questions/legacy";
 import { extractStructuredQuestionData } from "@/lib/ncert/question-pool";
 
 /**
- * Every question a student got wrong — in submitted tests, Atomic Guru
+ * Every question a student got wrong — in submitted tests and DPPs, Atomic Guru
  * practice (topic-wise / NEET quizzes) and NCERT page practice — one entry
  * per question, newest first, with whether they've marked it understood.
  */
 
-export type MistakeSource = "TEST_SERIES" | "ATOMIC_GURU" | "NCERT";
+export type MistakeSource = "TEST_SERIES" | "DPP" | "ATOMIC_GURU" | "NCERT";
 
 export interface UnifiedMistake {
   /** Stable per question: "test:<id>" | "guru:<id>" | "ncert:<id>". */
@@ -33,7 +33,16 @@ const LETTERS = ["A", "B", "C", "D", "E", "F"];
 async function testMistakes(studentId: string): Promise<UnifiedMistake[]> {
   const raw = await prisma.attemptAnswer.findMany({
     where: { attempt: { studentId, status: { in: ["SUBMITTED", "AUTO_SUBMITTED"] } }, isCorrect: false },
-    include: { question: { include: { translations: true } }, attempt: { include: { test: true } } },
+    include: {
+      question: { include: { translations: true } },
+      attempt: {
+        select: {
+          dppId: true,
+          dpp: { select: { name: true } },
+          test: { select: { name: true, code: true, testType: true, batchSchedule: { select: { type: true } } } },
+        },
+      },
+    },
     orderBy: { updatedAt: "desc" },
   });
   const out: UnifiedMistake[] = [];
@@ -51,10 +60,14 @@ async function testMistakes(studentId: string): Promise<UnifiedMistake[]> {
     const options = ["A", "B", "C", "D"]
       .map((k) => ({ key: k, label: String((leg as any)[`option${k}`] || ""), isCorrect: leg.correctOption === k, isStudentChoice: selected === k }))
       .filter((o) => !!o.label);
+    // DPPs are taken through the test engine too (a backing test "DPPT-…",
+    // testType DPP, or a batch DPP slot) — show them as DPP, not "Mock Test".
+    const t = w.attempt.test;
+    const isDpp = Boolean(w.attempt.dppId) || t?.testType === "DPP" || String(t?.code ?? "").startsWith("DPPT-") || t?.batchSchedule?.type === "DPP";
     const item: UnifiedMistake = {
       key,
-      source: "TEST_SERIES",
-      sourceName: w.attempt.test?.name ?? "Mock Test",
+      source: isDpp ? "DPP" : "TEST_SERIES",
+      sourceName: isDpp ? `DPP · ${w.attempt.dpp?.name ?? t?.name ?? "Practice"}` : t?.name ?? "Mock Test",
       subject: leg.subject || "General",
       chapter: leg.chapter || null,
       topic: null,

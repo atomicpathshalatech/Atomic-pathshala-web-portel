@@ -94,6 +94,7 @@ export default async function DppPortalPage() {
         },
         include: {
           batch: { select: { id: true, name: true } },
+          chapter: { select: { title: true, subject: { select: { title: true } } } },
           test: {
             include: {
               attempts: {
@@ -206,14 +207,15 @@ export default async function DppPortalPage() {
 
   // Insert Batch Schedule DPPs
   for (const b of batchDpps) {
-    const rawSubj = b.subject || "Physics";
+    const rawSubj = b.chapter?.subject?.title || b.subject || "Physics";
     const low = rawSubj.toLowerCase();
     if (low.includes("mental") || low.includes("science") || low.includes("math")) continue;
     let subjName = "Physics";
     if (low.includes("chem")) subjName = "Chemistry";
     else if (low.includes("bio") || low.includes("botany") || low.includes("zoology")) subjName = "Biology";
 
-    const chapterName = b.notes || "Live Batch Practice";
+    // The slot's own chapter first (it used to land in "Live Batch Practice").
+    const chapterName = b.chapter?.title || b.notes || "Live Batch Practice";
 
     if (!subjectMap[subjName]) {
       subjectMap[subjName] = {};
