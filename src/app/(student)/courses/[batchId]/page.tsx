@@ -5,7 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { CourseDetailMasterView } from "@/components/course-platform/CourseDetailMasterView";
 import { SAMPLE_COURSES } from "@/components/course-platform/sample-courses";
-import { StudentBatchHome, parseBatchTab } from "@/components/student/batch/StudentBatchHome";
+import { StudentBatchHome, type BatchTab } from "@/components/student/batch/StudentBatchHome";
 import { loadStudentBatchHome } from "@/lib/batch/student-batch-home";
 
 export const dynamic = "force-dynamic";
@@ -66,33 +66,15 @@ export default async function BatchCoursePage({
             },
           },
         },
-        // Only the fields the course page shows. The full whiteboard session
-        // row has a BigInt (YouTube upload offset) that can't be sent to the
-        // browser — batches with a YouTube-archived class crashed with
-        // "Something went wrong" — and it also carried the stream key.
         schedules: {
           orderBy: { startsAt: "asc" },
-          select: {
-            id: true,
-            title: true,
-            subject: true,
-            type: true,
-            status: true,
-            startsAt: true,
-            endsAt: true,
-            teacher: { select: { user: { select: { name: true } } } },
-            liveWhiteboardSession: {
-              select: {
-                id: true,
-                status: true,
-                livePhase: true,
-                actualStartedAt: true,
-                recordingStatus: true,
-                recordingStorageKey: true,
-                youtubeArchiveVideoUrl: true,
-                youtubeVideoId: true,
+          include: {
+            teacher: {
+              include: {
+                user: { select: { name: true } },
               },
             },
+            liveWhiteboardSession: true,
           },
         },
         _count: { select: { enrollments: true, schedules: true } },
@@ -132,13 +114,11 @@ export default async function BatchCoursePage({
   // 4. Enrolled student: their batch — classes, tests, study material and
   // announcements on one page with tabs (no pop-ups, no sales sections).
   if (isEnrolled && dbBatch && studentId && userId) {
-    try {
-      const data = await loadStudentBatchHome(dbBatch.id, studentId, userId);
-      if (data) {
-        return <StudentBatchHome data={data} initialTab={parseBatchTab(searchParams?.tab)} />;
-      }
-    } catch (err) {
-      console.error("Error loading student batch home view:", err);
+    const data = await loadStudentBatchHome(dbBatch.id, studentId, userId);
+    if (data) {
+      const t = searchParams?.tab;
+      const initialTab: BatchTab = t === "recorded" || t === "dpp" || t === "tests" || t === "material" || t === "notices" ? t : "classes";
+      return <StudentBatchHome data={data} initialTab={initialTab} />;
     }
   }
 
