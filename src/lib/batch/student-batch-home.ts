@@ -109,6 +109,17 @@ const looseName = (s: string | null | undefined) =>
     .replace(/[^a-z0-9\u0900-\u097f]+/g, " ")
     .trim();
 
+/**
+ * One list that fails to load (e.g. a single bad row) leaves that list empty
+ * instead of failing the whole batch page — a failed load used to drop the
+ * student onto the old "legacy" course view.
+ */
+const orEmpty = <T,>(label: string, p: PromiseLike<T[]>): Promise<T[]> =>
+  Promise.resolve(p).catch((err) => {
+    console.error(`[student batch home] ${label} failed to load:`, err);
+    return [] as T[];
+  });
+
 export async function loadStudentBatchHome(batchId: string, studentId: string, _userId: string): Promise<StudentBatchHomeData | null> {
   const batch = await prisma.batch.findUnique({
     where: { id: batchId },
@@ -139,7 +150,7 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, _
 
   const visibleChapter = { status: { in: ["PUBLISHED" as const, "APPROVED" as const] } };
   const [schedules, assigned, courseChapters, seriesLinks, folders, broadcasts] = await Promise.all([
-    prisma.batchSchedule.findMany({
+    orEmpty("classes", prisma.batchSchedule.findMany({
       where: { batchId, type: "LIVE_CLASS", status: { not: "CANCELLED" } },
       orderBy: { startsAt: "asc" },
       select: {
@@ -154,19 +165,19 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, _
         liveWhiteboardSession: { select: { id: true, status: true, livePhase: true, pdfStatus: true } },
         chapter: { select: { id: true, title: true, subject: { select: { title: true } } } },
       },
-    }),
-    prisma.batchChapter.findMany({
+    })),
+    orEmpty("batch chapters", prisma.batchChapter.findMany({
       where: { batchId, chapter: visibleChapter },
       select: { chapter: { select: { id: true, title: true, order: true, subject: { select: { id: true, title: true } }, _count: { select: { lectures: true, dpps: true } } } } },
-    }),
+    })),
     batch.courseId
-      ? prisma.chapter.findMany({
+      ? orEmpty("course chapters", prisma.chapter.findMany({
           where: { ...visibleChapter, subject: { courseId: batch.courseId } },
           select: { id: true, title: true, order: true, subject: { select: { id: true, title: true } }, _count: { select: { lectures: true, dpps: true } } },
-        })
+        }))
       : Promise.resolve([]),
-    prisma.batchTestSeries.findMany({ where: { batchId }, select: { testSeriesId: true } }),
-    prisma.batchFolder.findMany({
+    orEmpty("test series", prisma.batchTestSeries.findMany({ where: { batchId }, select: { testSeriesId: true } })),
+    orEmpty("folders", prisma.batchFolder.findMany({
       where: { batchId, isPublished: true },
       orderBy: [{ order: "asc" }, { name: "asc" }],
       select: {
@@ -179,13 +190,13 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, _
           select: { id: true, title: true, fileName: true, sizeBytes: true },
         },
       },
-    }),
-    prisma.notificationBroadcast.findMany({
+    })),
+    orEmpty("notices", prisma.notificationBroadcast.findMany({
       where: { segmentType: "BATCH", segmentValue: batchId },
       orderBy: { createdAt: "desc" },
       take: 30,
       select: { id: true, title: true, body: true, createdAt: true },
-    }),
+    })),
   ]);
 
   // A folder is visible only if every folder above it is published too.
@@ -228,7 +239,7 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, _
     chapterByName.set(`${(c.subject || "").toLowerCase()}|${looseName(c.title)}`, c);
   }
   const [dppSlots, chapterDpps] = await Promise.all([
-    prisma.batchSchedule.findMany({
+    orEmpty("DPP slots", prisma.batchSchedule.findMany({
       where: { batchId, type: "DPP", status: { not: "CANCELLED" } },
       orderBy: { startsAt: "desc" },
       take: 200,
@@ -250,9 +261,9 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, _
           },
         },
       },
-    }),
+    })),
     chapterMap.size
-      ? prisma.dpp.findMany({
+      ? orEmpty("chapter DPPs", prisma.dpp.findMany({
           where: {
             status: { in: ["PUBLISHED", "ACTIVE"] },
             OR: [
@@ -273,15 +284,15 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, _
             _count: { select: { questions: true } },
             attempts: { where: { studentId }, orderBy: { startedAt: "desc" }, take: 1, select: { status: true, score: true } },
           },
-        })
+        }))
       : Promise.resolve([]),
   ]);
   // Chapter DPPs are attempted through their backing test (code DPPT-<id>).
   const dppBacking = chapterDpps.length
-    ? await prisma.test.findMany({
+    ? await orEmpty("DPP tests", prisma.test.findMany({
         where: { code: { in: chapterDpps.map((d) => `DPPT-${d.id}`) } },
         select: { id: true, code: true, attempts: { where: { studentId }, orderBy: { startedAt: "desc" }, take: 1, select: { status: true, score: true } } },
-      })
+      }))
     : [];
   const backingByDpp = new Map(dppBacking.map((t) => [String(t.code).slice(5), t]));
   const attemptStatus = (a: { status: string } | undefined) =>
@@ -343,7 +354,7 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, _
     }),
   ];
 
-  const tests = await prisma.test.findMany({
+  const tests = await orEmpty("tests", prisma.test.findMany({
     where: {
       archived: false,
       status: { in: ["PUBLISHED", "APPROVED"] },
@@ -367,7 +378,7 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, _
       batchSchedule: { select: { startsAt: true, endsAt: true, type: true } },
       attempts: { where: { studentId }, select: { status: true } },
     },
-  });
+  }));
 
   // Notice: only what staff announced to this batch — automatic
   // notifications (class reminders, results …) stay in the app's bell.
@@ -382,12 +393,12 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, _
   notices.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   const chapterNotices = chapterMap.size
-    ? await prisma.chapterNotice.findMany({
+    ? await orEmpty("announcements", prisma.chapterNotice.findMany({
         where: { chapterId: { in: [...chapterMap.keys()] } },
         orderBy: [{ isPinned: "desc" }, { createdAt: "desc" }],
         take: 60,
         select: { id: true, chapterId: true, title: true, content: true, authorName: true, createdAt: true },
-      })
+      }))
     : [];
 
   // Auto-made PDF folders (with everything under them) → All PDF.
@@ -417,7 +428,7 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, _
       exam: batch.targetExam ?? null,
       thumbnailUrl: batch.thumbnailUrl ?? null,
       teachers: (batch.teachers ?? [])
-        .map((t) => t?.teacher?.displayName || t?.teacher?.user?.name || "")
+        .map((t) => t?.teacher?.user?.name || "")
         .filter(Boolean),
       teacherCards: (batch.teachers ?? [])
         .map(({ teacher: t }) => (t ? {
