@@ -3616,23 +3616,27 @@ export function TeacherLiveClassRoom({
                 // slightly by pen style/pressure at draw time, so `size`
                 // alone is the deliberately-approximate stand-in the spec
                 // asks for.
-                const diameterVirtualPx = isEraser ? eraserRadius * 2 : tool === "highlighter" || tool === "highlighter-fade" ? size * 3.5 : size;
+                const diameterVirtualPx = isEraser
+                  ? eraserRadius * 2
+                  : tool === "highlighter" || tool === "highlighter-fade"
+                  ? size * 3.5
+                  : Math.max(3, size * 2);
                 return (
                   <div
                     className="absolute rounded-full pointer-events-none"
                     style={{
                       left: `${(cursorPos.x / VIRTUAL_WIDTH) * 100}%`,
                       top: `${(cursorPos.y / VIRTUAL_HEIGHT) * 100}%`,
-                      width: `${(diameterVirtualPx / VIRTUAL_WIDTH) * 100}%`,
-                      height: `${(diameterVirtualPx / VIRTUAL_HEIGHT) * 100}%`,
-                      // Never smaller than 10 px, with a dark+white double ring:
-                      // a thin pen used to give a speck you could not find.
-                      minWidth: 10,
-                      minHeight: 10,
+                      width: isEraser ? `${(diameterVirtualPx / VIRTUAL_WIDTH) * 100}%` : Math.max(3, Math.min(10, size * 2.5)),
+                      height: isEraser ? `${(diameterVirtualPx / VIRTUAL_HEIGHT) * 100}%` : Math.max(3, Math.min(10, size * 2.5)),
+                      minWidth: isEraser ? 14 : 3,
+                      minHeight: isEraser ? 14 : 3,
                       transform: "translate(-50%, -50%)",
                       border: isEraser ? "1.5px solid rgba(30,30,30,0.65)" : "none",
                       backgroundColor: isEraser ? "rgba(255,255,255,0.35)" : color,
-                      boxShadow: isEraser ? "0 0 0 1px rgba(255,255,255,0.5)" : "0 0 0 1.5px rgba(0,0,0,0.7), 0 0 0 3px rgba(255,255,255,0.9)",
+                      boxShadow: isEraser
+                        ? "0 0 0 1px rgba(255,255,255,0.5)"
+                        : "0 0 0 0.75px rgba(0,0,0,0.7), 0 0 0 1.5px rgba(255,255,255,0.85)",
                     }}
                   />
                 );
