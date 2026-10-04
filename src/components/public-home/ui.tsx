@@ -15,24 +15,92 @@ export function hd(h: Head | undefined, d: { eyebrow?: string; title: string; su
 
 export const CONTAINER = "mx-auto w-full max-w-6xl px-4 sm:px-6";
 
-export function Section({ id, children, className = "", tone = "white" }: { id?: string; children: ReactNode; className?: string; tone?: "white" | "tint" | "navy" }) {
-  const bg = tone === "tint" ? "bg-slate-50" : tone === "navy" ? "bg-[#0b1736] text-white" : "bg-white";
+export function Section({
+  id,
+  children,
+  className = "",
+  tone = "white",
+  style,
+  dark,
+  padding,
+}: {
+  id?: string;
+  children: ReactNode;
+  className?: string;
+  tone?: "white" | "tint" | "gray" | "navy" | "dark" | "blue" | "indigo" | "gradient" | "gradient-light" | "custom" | string;
+  style?: React.CSSProperties;
+  dark?: boolean;
+  padding?: "normal" | "compact" | "spacious" | "none" | string;
+}) {
+  let bg = "bg-white";
+  if (tone === "tint" || tone === "gray" || tone === "slate") bg = "bg-slate-50";
+  else if (tone === "navy" || tone === "dark") bg = "bg-[#0b1736] text-white";
+  else if (tone === "blue") bg = "bg-blue-50/60 text-slate-900";
+  else if (tone === "indigo") bg = "bg-indigo-50/60 text-slate-900";
+  else if (tone === "gradient") bg = "bg-gradient-to-br from-[#0b1736] via-[#1e3a8a] to-[#0f172a] text-white";
+  else if (tone === "gradient-light") bg = "bg-gradient-to-b from-blue-50/70 via-white to-white";
+  else if (tone === "custom" || (typeof tone === "string" && (tone.startsWith("#") || tone.startsWith("rgb")))) {
+    bg = "";
+  }
+
+  const isDark = dark || tone === "navy" || tone === "dark" || tone === "gradient";
+
+  const py =
+    padding === "compact"
+      ? "py-6 sm:py-8"
+      : padding === "spacious"
+      ? "py-20 sm:py-28"
+      : padding === "none"
+      ? "py-0"
+      : "py-12 sm:py-16";
+
+  const customStyle: React.CSSProperties = {
+    ...style,
+    ...(typeof tone === "string" && (tone.startsWith("#") || tone.startsWith("rgb")) ? { backgroundColor: tone } : {}),
+  };
+
   return (
-    <section id={id} className={`${bg} py-12 sm:py-16 scroll-mt-20 ${className}`}>
+    <section id={id} style={customStyle} className={`${bg} ${isDark ? "text-white" : ""} ${py} scroll-mt-20 ${className}`}>
       <div className={CONTAINER}>{children}</div>
     </section>
   );
 }
 
-export function SectionHeader({ eyebrow, title, subtitle, action, dark = false }: { eyebrow?: string; title: string; subtitle?: string; action?: ReactNode; dark?: boolean }) {
+export function SectionHeader({
+  eyebrow,
+  title,
+  subtitle,
+  action,
+  dark = false,
+  align = "left",
+  accentColor,
+}: {
+  eyebrow?: string;
+  title: string;
+  subtitle?: string;
+  action?: ReactNode;
+  dark?: boolean;
+  align?: "left" | "center";
+  accentColor?: string;
+}) {
+  const isCenter = align === "center";
   return (
-    <div className="mb-6 sm:mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-      <div className="max-w-2xl">
-        {eyebrow && <p className={`text-xs font-semibold uppercase tracking-[0.14em] ${dark ? "text-cyan-300" : "text-blue-600"}`}>{eyebrow}</p>}
+    <div className={`mb-6 sm:mb-8 flex flex-col gap-3 ${isCenter ? "items-center text-center mx-auto" : "sm:flex-row sm:items-end sm:justify-between"}`}>
+      <div className={isCenter ? "max-w-3xl mx-auto" : "max-w-2xl"}>
+        {eyebrow && (
+          <p
+            style={accentColor ? { color: accentColor } : undefined}
+            className={`text-xs font-semibold uppercase tracking-[0.14em] ${
+              accentColor ? "" : dark ? "text-cyan-300" : "text-blue-600"
+            }`}
+          >
+            {eyebrow}
+          </p>
+        )}
         <h2 className={`mt-1 text-2xl sm:text-3xl font-bold tracking-tight ${dark ? "text-white" : "text-slate-900"}`}>{title}</h2>
         {subtitle && <p className={`mt-2 text-sm sm:text-base ${dark ? "text-slate-300" : "text-slate-600"}`}>{subtitle}</p>}
       </div>
-      {action && <div className="shrink-0">{action}</div>}
+      {action && <div className={isCenter ? "mt-2" : "shrink-0"}>{action}</div>}
     </div>
   );
 }

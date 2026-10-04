@@ -148,6 +148,50 @@ export async function HomeSections({ sections }: { sections: LayoutSection[] }) 
     list.map(async (s, i) => {
       let node = await render(s);
       if (!node) return null;
+
+      const c = (s.config ?? {}) as Config;
+      const bg = (s.background || (c.bgColor as string) || "").trim();
+      const customBg = (c.customBg as string || "").trim();
+      const textColor = (c.textColor as string || "").trim();
+      const padding = (s.padding || (c.padding as string) || "").trim();
+
+      // Custom background & color styling wrapper
+      if (bg || customBg || textColor || padding) {
+        let bgClass = "";
+        const inlineStyle: React.CSSProperties = {};
+
+        if (customBg) {
+          inlineStyle.backgroundColor = customBg;
+        } else if (bg.startsWith("#") || bg.startsWith("rgb")) {
+          inlineStyle.backgroundColor = bg;
+        } else if (bg === "navy" || bg === "dark") {
+          bgClass = "bg-[#0b1736] text-white";
+        } else if (bg === "tint" || bg === "gray" || bg === "slate") {
+          bgClass = "bg-slate-50";
+        } else if (bg === "blue") {
+          bgClass = "bg-blue-50/70";
+        } else if (bg === "indigo") {
+          bgClass = "bg-indigo-50/70";
+        } else if (bg === "gradient") {
+          bgClass = "bg-gradient-to-br from-[#0b1736] via-[#1e3a8a] to-[#0f172a] text-white";
+        } else if (bg === "white") {
+          bgClass = "bg-white";
+        }
+
+        if (textColor) inlineStyle.color = textColor;
+
+        let padClass = "";
+        if (padding === "compact") padClass = "[&>section]:py-6 [&>section]:sm:py-8";
+        else if (padding === "spacious") padClass = "[&>section]:py-20 [&>section]:sm:py-28";
+        else if (padding === "none") padClass = "[&>section]:py-0";
+
+        node = (
+          <div className={`${bgClass} ${padClass}`} style={Object.keys(inlineStyle).length ? inlineStyle : undefined}>
+            {node}
+          </div>
+        );
+      }
+
       // Device visibility
       if (s.visibleDesktop === false) node = <div className="md:hidden">{node}</div>;
       else if (s.visibleMobile === false) node = <div className="hidden md:block">{node}</div>;

@@ -28,6 +28,8 @@ export type BuilderSection = {
   visible: boolean;
   visibleDesktop: boolean;
   visibleMobile: boolean;
+  background?: string | null;
+  padding?: string | null;
   config: Record<string, unknown>;
 };
 
@@ -420,6 +422,11 @@ function SectionForm({
   const [title, setTitle] = useState(section.title ?? "");
   const [subtitle, setSubtitle] = useState(section.subtitle ?? "");
   const [config, setConfig] = useState<Record<string, unknown>>(section.config ?? {});
+  const [background, setBackground] = useState((section.background || (section.config?.bgColor as string) || "white").trim());
+  const [customBg, setCustomBg] = useState(((section.config?.customBg as string) || (section.background?.startsWith("#") ? section.background : "")).trim());
+  const [accentColor, setAccentColor] = useState(((section.config?.accentColor as string) || "").trim());
+  const [padding, setPadding] = useState((section.padding || (section.config?.padding as string) || "normal").trim());
+  const [align, setAlign] = useState(((section.config?.align as string) || "left").trim());
   const [desktop, setDesktop] = useState(section.visibleDesktop);
   const [mobile, setMobile] = useState(section.visibleMobile);
   const [json, setJson] = useState(() => JSON.stringify(section.config ?? {}, null, 2));
@@ -441,7 +448,23 @@ function SectionForm({
       return;
     }
     setSaving(true);
-    await onSave({ title: title.trim() || null, subtitle: subtitle.trim() || null, visibleDesktop: desktop, visibleMobile: mobile, config: finalConfig });
+    const bgVal = background === "custom" ? customBg.trim() : background.trim();
+    await onSave({
+      title: title.trim() || null,
+      subtitle: subtitle.trim() || null,
+      visibleDesktop: desktop,
+      visibleMobile: mobile,
+      background: bgVal || null,
+      padding: padding || null,
+      config: {
+        ...finalConfig,
+        bgColor: bgVal || undefined,
+        customBg: background === "custom" ? customBg.trim() : undefined,
+        accentColor: accentColor.trim() || undefined,
+        padding: padding || undefined,
+        align: align || undefined,
+      },
+    });
     setSaving(false);
   }
 
@@ -449,18 +472,113 @@ function SectionForm({
     <div className="space-y-4 border-t border-slate-100 bg-slate-50/70 px-5 py-5">
       {template?.note && <p className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-800">{template.note}</p>}
 
+      {/* 🎨 Rang, Theme aur Appearance Controls */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+        <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+          <MIcon name="palette" className="text-[18px] text-blue-600" />
+          <span>Section Design, Rang aur Theme</span>
+        </p>
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {/* Background Color Preset */}
+          <div>
+            <label className={labelCls}>Background Colour (पृष्ठभूमि रंग)</label>
+            <select
+              value={background}
+              onChange={(e) => {
+                const val = e.target.value;
+                setBackground(val);
+                if (val !== "custom") setCustomBg("");
+              }}
+              className={input}
+            >
+              <option value="white">⚪ White (सफेद)</option>
+              <option value="tint">🔘 Light Gray / Slate (हल्का ग्रे)</option>
+              <option value="blue">🔵 Soft Blue Tint (हल्का नीला)</option>
+              <option value="indigo">🟣 Soft Indigo (हल्का बैंगनी)</option>
+              <option value="navy">🌌 Deep Navy (डार्क नेवी / डार्क थीम)</option>
+              <option value="gradient">🌈 Royal Blue Gradient (रॉयल ग्रेडिएंट)</option>
+              <option value="custom">🎨 Custom Hex Code (अपनी पसंद का रंग)</option>
+            </select>
+            {background === "custom" && (
+              <div className="mt-2 flex items-center gap-2">
+                <input
+                  type="color"
+                  value={customBg || "#ffffff"}
+                  onChange={(e) => setCustomBg(e.target.value)}
+                  className="h-9 w-9 rounded-lg border border-slate-200 cursor-pointer p-0.5"
+                />
+                <input
+                  type="text"
+                  placeholder="#ffffff"
+                  value={customBg}
+                  onChange={(e) => setCustomBg(e.target.value)}
+                  className={`${input} font-mono`}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Primary / Accent Color */}
+          <div>
+            <label className={labelCls}>Accent / Highlight Color</label>
+            <select
+              value={accentColor}
+              onChange={(e) => setAccentColor(e.target.value)}
+              className={input}
+            >
+              <option value="">🔵 Default Blue (डिफ़ॉल्ट नीला)</option>
+              <option value="#4f46e5">🟣 Indigo / Purple (बैंगनी)</option>
+              <option value="#059669">🟢 Emerald Green (हरा)</option>
+              <option value="#d97706">🟠 Amber / Gold (सुनहरा/ऑरेंज)</option>
+              <option value="#e11d48">🔴 Rose / Crimson (लाल/गुलाबी)</option>
+              <option value="#0891b2">🔷 Cyan / Teal (आसमानी)</option>
+              <option value="#0b1736">🌑 Deep Navy (गहरा नेवी)</option>
+            </select>
+          </div>
+
+          {/* Padding / Spacing */}
+          <div>
+            <label className={labelCls}>Spacing / Gap (ऊपर-नीचे का गैप)</label>
+            <select
+              value={padding}
+              onChange={(e) => setPadding(e.target.value)}
+              className={input}
+            >
+              <option value="normal">Normal (सामान्य)</option>
+              <option value="compact">Compact (कम गैप)</option>
+              <option value="spacious">Spacious (ज़्यादा गैप)</option>
+              <option value="none">None (बिना किसी गैप के)</option>
+            </select>
+          </div>
+
+          {/* Text Alignment */}
+          <div>
+            <label className={labelCls}>Text Alignment</label>
+            <select
+              value={align}
+              onChange={(e) => setAlign(e.target.value)}
+              className={input}
+            >
+              <option value="left">Left Aligned (बाईं ओर)</option>
+              <option value="center">Center Aligned (बीच में)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
       {(template?.header ?? true) && (
         <div className="grid gap-3 sm:grid-cols-3">
           <div>
-            <label className={labelCls}>Chhota upar ka text</label>
+            <label className={labelCls}>Chhota upar ka text (Badge / Eyebrow)</label>
             <input value={typeof config.eyebrow === "string" ? config.eyebrow : ""} onChange={(e) => set("eyebrow", e.target.value)} placeholder="Default" className={input} />
           </div>
           <div>
-            <label className={labelCls}>Heading</label>
+            <label className={labelCls}>Heading (मुख्य शीर्षक)</label>
             <input value={title} maxLength={200} onChange={(e) => setTitle(e.target.value)} placeholder="Default heading" className={input} />
           </div>
           <div>
-            <label className={labelCls}>Neeche ka text</label>
+            <label className={labelCls}>Neeche ka text (विवरण)</label>
             <input value={subtitle} maxLength={300} onChange={(e) => setSubtitle(e.target.value)} placeholder="Default" className={input} />
           </div>
           <p className="text-[11px] text-slate-500 sm:col-span-3">Khali chhodenge to default text dikhega.</p>

@@ -8,7 +8,8 @@ import { PublicHeader } from "@/components/public-home/PublicHeader";
 import { HomeSections } from "@/components/public-home/HomeSections";
 import { PublicFooter, resolveFaqs } from "@/components/public-home/TrustSections";
 
-export const revalidate = 60;
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const SITE = "https://ap.atomicpathshala.in";
 const TITLE = "Atomic Pathshala — NEET, JEE & Board Exam Preparation";
