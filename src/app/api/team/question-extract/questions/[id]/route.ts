@@ -25,6 +25,7 @@ export async function PUT(
       statement,
       statementHi,
       options,
+      optionsHi,
       correctAnswer,
       solution,
       solutionHi,
@@ -56,6 +57,11 @@ export async function PUT(
         status,
         reviewReasons,
         isEdited: true,
+        // Edited Hindi options (no column of their own) — kept next to the
+        // original extraction; the importer uses this copy first.
+        ...(optionsHi !== undefined
+          ? { originalSnapshot: { ...((existing.originalSnapshot as Record<string, unknown>) ?? {}), currentOptionsHi: optionsHi } }
+          : {}),
       },
     });
 

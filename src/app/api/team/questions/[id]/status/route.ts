@@ -28,6 +28,13 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         isPublished,
         publishedById: isPublished ? session.user.id : null,
         publishedAt: isPublished ? new Date() : null,
+        // Keep the review status in step with the toggle — a published
+        // question left at DRAFT / REVIEW_x looked unapproved elsewhere.
+        ...(isPublished
+          ? { status: "PUBLISHED" }
+          : existing.status === "PUBLISHED"
+            ? { status: "REVIEW_2" }
+            : {}),
       },
     });
 

@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { toQuestionType, toDifficulty } from "@/lib/questions/create-with-code";
 import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
@@ -57,9 +58,11 @@ export async function POST(request: NextRequest) {
     }
 
     const newQ = rawList[0]!;
+    const batchTopics = Array.isArray(existing.batch.topics) ? (existing.batch.topics as string[]) : [];
     const { report, scores } = await runQuestionValidationPipeline({
       question: newQ,
       aiProvider: defaultAiProvider,
+      allowedTopics: batchTopics,
     });
 
     const updated = await prisma.aiGeneratedQuestion.update({
@@ -82,6 +85,31 @@ export async function POST(request: NextRequest) {
         editSource: "AI",
       },
     });
+
+    // Keep the linked Question Bank draft in step — it used to keep the old
+    // (rejected) text while the batch showed the new one.
+    if (existing.draftQuestionId) {
+      const draft = await prisma.question.findUnique({ where: { id: existing.draftQuestionId }, select: { id: true, status: true } });
+      if (draft && draft.status === "DRAFT") {
+        const tr: { language: string; statement: string; options: any; correctOptionIds: any; solution: string | null }[] = [];
+        if (newQ.statementEn?.trim()) tr.push({ language: "ENGLISH", statement: newQ.statementEn.trim(), options: newQ.optionsEn, correctOptionIds: newQ.correctAnswer, solution: newQ.solutionEn || null });
+        if (newQ.statementHi?.trim()) tr.push({ language: "HINDI", statement: newQ.statementHi.trim(), options: newQ.optionsHi || {}, correctOptionIds: newQ.correctAnswer, solution: newQ.solutionHi || null });
+        await prisma.$transaction([
+          prisma.questionTranslation.deleteMany({ where: { questionId: draft.id } }),
+          prisma.question.update({
+            where: { id: draft.id },
+            data: {
+              topic: newQ.topic,
+              subTopic: newQ.subTopic || null,
+              type: toQuestionType(newQ.questionType),
+              difficulty: toDifficulty(newQ.difficulty),
+              solution: newQ.solutionEn || newQ.solutionHi || null,
+              translations: { create: tr },
+            },
+          }),
+        ]);
+      }
+    }
 
     return apiSuccess({ question: updated, report, scores });
   } catch (error) {

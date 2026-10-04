@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { withNewQuestionCode } from "@/lib/questions/create-with-code";
 import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
@@ -36,7 +37,8 @@ export async function POST(request: NextRequest) {
       data.chapterId || undefined
     );
 
-    const question = await prisma.question.create({
+    // A typed-in code is kept; otherwise the question gets the next 8-digit Question ID.
+    const create = (questionCode: string | null) => prisma.question.create({
       data: {
         subject,
         chapter,
@@ -44,7 +46,7 @@ export async function POST(request: NextRequest) {
         subTopic: data.subTopic || null,
         category: data.category || null,
         pyqSource: data.pyqSource || null,
-        questionCode: data.questionCode || null,
+        questionCode,
         type: data.type,
         difficulty: data.difficulty,
         tags: legacyTagsToString(data.tags),
@@ -61,6 +63,7 @@ export async function POST(request: NextRequest) {
       },
       include: { translations: true },
     });
+    const question = data.questionCode ? await create(data.questionCode) : await withNewQuestionCode(subject, (code) => create(code));
 
     await prisma.auditLog.create({
       data: {

@@ -250,6 +250,12 @@ export interface QuestionValidationReport {
   bilingualEquivalent: boolean;
   bilingualDiscrepancies?: string[];
   issues: string[];
+  /** True only when the independent AI solver actually ran and its answer was compared. */
+  aiValidated?: boolean;
+  /** AI judgement: does the question test the requested topic(s)? */
+  topicRelevant?: boolean;
+  /** Scores returned by the AI auditor (not invented). */
+  qualityScore?: QuestionQualityScores;
 }
 
 export interface QuestionQualityScores {

@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { withNewQuestionCode } from "@/lib/questions/create-with-code";
 import { requirePermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { questionSchema } from "@/lib/validation/question";
@@ -154,8 +155,10 @@ export async function POST(request: NextRequest) {
 
     const { subject, chapter } = await resolveSubjectChapterNames(prisma, data.subjectId, data.chapterId);
 
-    const question = await prisma.question.create({
+    // Every question gets its Question ID at creation (it used to stay empty here).
+    const question = await withNewQuestionCode(subject, (questionCode) => prisma.question.create({
       data: {
+        questionCode,
         subject,
         chapter,
         type: legacyTypeToQuestionType(data.type),
@@ -169,7 +172,7 @@ export async function POST(request: NextRequest) {
         },
       },
       include: { translations: true },
-    });
+    }));
 
     await prisma.auditLog.create({
       data: {

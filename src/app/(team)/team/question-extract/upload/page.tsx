@@ -4,6 +4,7 @@ import React, { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
+import { uploadFileToR2 } from "@/lib/storage/upload-client";
 import {
   UploadCloud,
   FileText,
@@ -133,8 +134,21 @@ export default function QuestionExtractUploadPage() {
     const toastId = toast.loading("Initializing extraction job & running layout boundary detection...");
 
     try {
+      // The PDF goes straight to storage first — posting it through our server
+      // is capped at ~4.5 MB on Vercel, which is why big papers failed.
+      let fileAssetId: string | null = null;
+      if (file) {
+        toast.loading("Uploading PDF...", { id: toastId });
+        const uploaded = await uploadFileToR2(file, {
+          prefix: "pdf",
+          fileType: "PDF",
+          visibility: "PUBLIC",
+          onProgress: (p) => toast.loading(`Uploading PDF... ${p}%`, { id: toastId }),
+        });
+        fileAssetId = uploaded.fileAssetId;
+      }
+
       const formData = new FormData();
-      if (file) formData.append("file", file);
       formData.append("sourceName", effectiveSourceName);
       formData.append("startNumber", String(startNumber));
       formData.append("endNumber", String(endNumber));
@@ -160,17 +174,19 @@ export default function QuestionExtractUploadPage() {
         if (generalYear) formData.append("year", generalYear);
       }
 
+      const payload = Object.fromEntries(Array.from(formData.entries()).map(([k, v]) => [k, String(v)]));
       const res = await fetch("/api/team/question-extract/upload", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...payload, fileAssetId }),
       });
 
-      const json = await res.json();
-      if (!res.ok || !json.success) {
-        throw new Error(json.error || "Failed to process extraction job.");
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.success) {
+        throw new Error(json?.error || `Failed to start the extraction job (error ${res.status}).`);
       }
 
-      toast.success(`Extraction job created! Extracted ${json.data.report?.extractedCount || 0} questions.`, {
+      toast.success("Extraction started — the job page shows its progress.", {
         id: toastId,
       });
 

@@ -1,6 +1,6 @@
 import { GenerationLanguage, NeetDifficulty } from "./types";
 
-export const PROMPT_VERSION = "v1.0";
+export const PROMPT_VERSION = "v1.1";
 
 /**
  * Builds the strict NEET Question Generation Prompt
@@ -16,7 +16,9 @@ export function buildQuestionGenerationPrompt({
   language,
   sourceText,
   sourceImageDescriptions,
+  avoidStatements,
 }: {
+  avoidStatements?: string[];
   method: "AI" | "PDF";
   subject: string;
   chapter: string;
@@ -48,7 +50,7 @@ export function buildQuestionGenerationPrompt({
 CRITICAL SOURCE-GROUNDED GENERATION POLICY (BY PDF MODE):
 You must generate questions SOLELY and STRICTLY from the provided SOURCE REFERENCE below.
 - Do NOT invent facts, definitions, or statements not supported by this text.
-- If the source context is insufficient for a specific question, use only standard NCERT Class 11/12 statements directly relevant to this specific chapter.
+- If the source context is insufficient for a specific question, use only standard NCERT Class 11/12 statements of the SAME selected topic — never another topic or chapter.
 - For every question generated, cite the "sourceExcerpt" with a short 1-2 sentence verbatim reference from the source.
 ${
   sourceImageDescriptions && sourceImageDescriptions.length > 0
@@ -78,9 +80,19 @@ ACADEMIC METADATA:
 - Subject: ${subject}
 - Chapter: ${chapter}
 - Constrained Topics: ${selectedTopics.length > 0 ? selectedTopics.join(", ") : "All core chapter topics"}
+${
+  selectedTopics.length > 0
+    ? `TOPIC RULE (STRICT): every question must test one of the constrained topics above, and its "topic" field must be EXACTLY one of: ${selectedTopics.map((t) => JSON.stringify(t)).join(", ")}. Spread the questions across these topics. Never write a question on another topic or another chapter.`
+    : ""
+}
 - Subtopics: ${selectedSubtopics && selectedSubtopics.length > 0 ? selectedSubtopics.join(", ") : "Relevant subtopics"}
 - Target Language: ${language} (Options: ENGLISH, HINDI, BOTH)
 
+${
+  avoidStatements && avoidStatements.length > 0
+    ? `ALREADY WRITTEN IN THIS BATCH — do NOT repeat or paraphrase these; test different facts/concepts:\n${avoidStatements.map((t, i) => `${i + 1}. ${t.slice(0, 160)}`).join("\n")}\n`
+    : ""
+}
 GENERATION QUOTAS TO PRODUCE:
 ${typeInstructions}
 
@@ -112,6 +124,12 @@ MANDATORY STATEMENT COMPLETENESS RULES:
 - A question statement must be 100% self-contained so that a student can read and solve it without missing parts.
 
 ${
+  language === "HINDI"
+    ? `LANGUAGE: Hindi-medium batch — "statementHi", "optionsHi" and "solutionHi" are REQUIRED and are the primary text. Also give the English version in "statementEn"/"optionsEn"/"solutionEn".\n`
+    : language === "BOTH"
+      ? `LANGUAGE: Bilingual batch — BOTH the English fields and ALL Hindi fields ("statementHi", "optionsHi" with A–D, "solutionHi") are REQUIRED for every question.\n`
+      : ""
+}${
   language === "BOTH" || language === "HINDI"
     ? `BILINGUAL QUALITY RULES:
 - Statement and options MUST be provided in authentic Hindi (Devanagari script) using official NCERT standard scientific terminology (e.g. 'विद्युत धारा', 'कोशिका झिल्ली', 'प्रकाश संश्लेषण', 'प्रत्यावर्ती धारा').
@@ -190,7 +208,10 @@ export function buildQuestionValidationPrompt(question: {
   subject: string;
   chapter: string;
   questionType: string;
+  topic?: string;
+  allowedTopics?: string[];
 }): string {
+  const topics = question.allowedTopics?.length ? question.allowedTopics : question.topic ? [question.topic] : [];
   return `You are the Chief Academic Auditor for National Medical Entrance Examination (NEET) at Atomic Pathshala.
 Perform an independent, adversarial validation of the following question.
 
@@ -198,10 +219,13 @@ QUESTION TO AUDIT:
 Subject: ${question.subject}
 Chapter: ${question.chapter}
 Type: ${question.questionType}
+${question.topic ? `Tagged Topic: ${question.topic}` : ""}
+${topics.length ? `Requested Topic(s): ${topics.join(", ")}` : ""}
 Statement (English): ${question.statementEn}
 ${question.statementHi ? `Statement (Hindi): ${question.statementHi}` : ""}
 Options (English):
 ${JSON.stringify(question.optionsEn, null, 2)}
+${question.optionsHi ? `Options (Hindi):\n${JSON.stringify(question.optionsHi, null, 2)}` : ""}
 Claimed Correct Answer: Option (${question.correctAnswer.join(", ")})
 Claimed Solution: ${question.solutionEn || "None provided"}
 
@@ -212,7 +236,9 @@ INDEPENDENT VERIFICATION STEPS:
 4. Are any other options also potentially or partially correct? (Ambiguity Check)
 5. Is the question scientifically sound and completely within the NEET curriculum?
 6. Does the provided solution logically and mathematically lead to the claimed answer?
-7. If bilingual: Are the English and Hindi statements logically equivalent?
+7. If bilingual: Are the English and Hindi statements AND options logically equivalent (same facts, same option order)?
+8. Topic relevance: does the question actually test the requested topic(s) of this chapter? Set "topicRelevant" false if it tests a different topic or chapter.
+Be strict: if you are not confident the claimed answer is the only correct one, set validationStatus to "NEEDS_REVIEW" (or "ANSWER_VALIDATION_FAILED" if your answer differs).
 
 Return a STRICT JSON object with these exact keys:
 {
@@ -227,6 +253,7 @@ Return a STRICT JSON object with these exact keys:
   "solutionConsistentWithAnswer": true,
   "bilingualEquivalent": true,
   "bilingualDiscrepancies": [],
+  "topicRelevant": true,
   "qualityScore": {
     "contentAccuracy": 98,
     "answerConfidence": 100,

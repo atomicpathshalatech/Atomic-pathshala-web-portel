@@ -82,6 +82,7 @@ export interface ExtractedAiQuestion {
   reviewReasons: string[];
   isBilingual: boolean;
   autoTranslated: boolean;
+  sourceLanguage?: "ENGLISH" | "HINDI" | "BILINGUAL";
 }
 
 /**
@@ -119,11 +120,47 @@ export async function extractTextFromPdfBuffer(
     for (let p = 1; p <= pageCount; p++) {
       const page = await doc.getPage(p);
       const textContent = await page.getTextContent();
-      const rawPageText = textContent.items
-        .map((item: any) => ("str" in item ? item.str : ""))
-        .join(" ")
-        .replace(/\s+/g, " ")
-        .trim();
+      // Keep the printed lines (the old code joined the whole page into one
+      // line, so question numbers, options and the two columns of a paper ran
+      // together). Items are grouped into lines by their y position; a page
+      // with two columns is read left column first, then right.
+      const items = (textContent.items as any[])
+        .filter((it) => "str" in it && String(it.str).trim() !== "")
+        .map((it) => ({ str: String(it.str), x: Number(it.transform?.[4] ?? 0), y: Number(it.transform?.[5] ?? 0), w: Number(it.width ?? 0), h: Math.abs(Number(it.transform?.[3] ?? it.height ?? 10)) || 10 }));
+      const viewport = page.getViewport({ scale: 1 });
+      const mid = viewport.width / 2;
+      const leftShare = items.length ? items.filter((it) => it.x + it.w <= mid + 4).length / items.length : 1;
+      const rightShare = items.length ? items.filter((it) => it.x >= mid - 4).length / items.length : 0;
+      const twoColumns = items.length > 40 && leftShare > 0.3 && rightShare > 0.3 && leftShare + rightShare > 0.9;
+      const toLines = (list: typeof items) => {
+        const sorted = [...list].sort((a, b) => b.y - a.y || a.x - b.x);
+        const lines: { y: number; parts: typeof items }[] = [];
+        for (const it of sorted) {
+          const line = lines.find((l) => Math.abs(l.y - it.y) < 3);
+          if (line) line.parts.push(it);
+          else lines.push({ y: it.y, parts: [it] });
+        }
+        return lines
+          .sort((a, b) => b.y - a.y)
+          .map((l) => {
+            // Join pieces WITHOUT a space when they touch: Hindi (Devanagari)
+            // words arrive as several glyph runs, and a space between each
+            // one turned "प्रश्न" into "प  श् न".
+            const parts = l.parts.sort((a, b) => a.x - b.x);
+            let out = "";
+            parts.forEach((p, i) => {
+              const prev = parts[i - 1];
+              const gap = prev ? p.x - (prev.x + prev.w) : 0;
+              out += prev && gap > Math.max(1, p.h * 0.18) && !/\s$/.test(out) && !/^\s/.test(p.str) ? ` ${p.str}` : p.str;
+            });
+            return out.replace(/\s+/g, " ").trim();
+          })
+          .filter(Boolean);
+      };
+      const rawPageText = (twoColumns
+        ? [...toLines(items.filter((it) => it.x < mid)), ...toLines(items.filter((it) => it.x >= mid))]
+        : toLines(items)
+      ).join("\n");
 
       pages.push({ pageNumber: p, text: rawPageText });
     }
@@ -164,7 +201,13 @@ export async function extractQuestionsWithAiChunk({
   subjectContext,
   chapterContext,
   sourceName,
+  pageImages,
+  firstPage,
 }: {
+  /** Page images (base64 JPEG) — used for scanned pages and PDFs whose text layer is unreadable (e.g. legacy Hindi fonts). */
+  pageImages?: string[];
+  /** Page number of the first page in this chunk (for sourcePage). */
+  firstPage?: number;
   textChunk: string;
   startNumber: number;
   endNumber: number;
@@ -178,6 +221,10 @@ export async function extractQuestionsWithAiChunk({
       generationConfig: {
         responseMimeType: "application/json",
         temperature: 0.1,
+        // Bilingual questions + solutions are long: with the default output
+        // limit the JSON was cut off, parsing failed and the whole document
+        // fell back to the weak regex parser.
+        maxOutputTokens: 32768,
       },
     });
 
@@ -187,10 +234,14 @@ Target Range: Question ${startNumber} to Question ${endNumber}
 Default Subject Context: "${subjectContext || "Auto Detect"}"
 Default Chapter Context: "${chapterContext || "General"}"
 
-DOCUMENT TEXT:
+${
+  pageImages?.length
+    ? `DOCUMENT: the ${pageImages.length} attached page image(s)${firstPage ? ` (pages ${firstPage}–${firstPage + pageImages.length - 1} of the PDF; use these real page numbers for "sourcePage")` : ""}. Read the printed text from the images.`
+    : `DOCUMENT TEXT (page markers "--- [Page N] ---" give the real page number for "sourcePage"):
 """
 ${textChunk}
-"""
+"""`
+}
 
 YOUR INSTRUCTIONS:
 1. EXTRACT ALL QUESTIONS IN THE DOCUMENT:
@@ -198,7 +249,11 @@ YOUR INSTRUCTIONS:
    - Extract the question statement and all 4 options (A, B, C, D).
    - Use standard LaTeX notation $...$ for all mathematical symbols, fractions, powers, square roots, vectors, and chemical equations (e.g. $\\text{H}_2\\text{SO}_4$, $\\text{Ca}^{2+}$, $\\frac{a}{b}$).
 
-2. AUTOMATIC BILINGUAL EXTRACTION & TRANSLATION:
+2. LANGUAGE — PRESERVE THE ORIGINAL (CRITICAL):
+   - Copy the printed question EXACTLY in the language it is printed in. Never replace the printed wording with your own translation or paraphrase.
+   - Set "sourceLanguage": "ENGLISH", "HINDI" or "BILINGUAL" (both printed).
+   - A language that is NOT printed may be translated (rules below) and then "autoTranslated": true.
+   AUTOMATIC BILINGUAL EXTRACTION & TRANSLATION:
    - If the source is in English only:
      * Extract English into "statement" and "options" { A, B, C, D }.
      * Automatically generate accurate NCERT Hindi translation (Devanagari script) in "statementHi" and "optionsHi" { A, B, C, D }.
@@ -238,8 +293,10 @@ YOUR INSTRUCTIONS:
        हल (Solution) : [चरण-दर-चरण हल]
        अंतिम उत्तर (Final Answer) : विकल्प (X)
 
-5. SCIENTIFICALLY VERIFIED CORRECT ANSWER:
-   - Identify printed answer key or deduce the 100% correct answer ("A", "B", "C", or "D") in "correctAnswer".
+5. CORRECT ANSWER:
+   - If an answer key / answer is printed, use it and set "answerKeySource": "ANSWER_KEY_SECTION".
+   - Otherwise solve it and set "answerKeySource": "DEDUCED_AI"; if you cannot be sure, leave "correctAnswer" as "" — never guess.
+   - Options printed as (1)(2)(3)(4) map to A, B, C, D. Multiple-correct answers as "A,C".
 
    - MATCH THE COLUMN / ANY TABLE — write it exactly like the printed paper, as a table in the statement:
      one header row, a "---|---" divider row, then ONE ROW PER LINE, columns separated by " | ", rows separated by \\n.
@@ -299,10 +356,14 @@ RETURN STRICT JSON ARRAY OF QUESTIONS:
   }
 ]`;
 
-    const response = await model.generateContent(prompt);
+    const parts = pageImages?.length
+      ? [prompt, ...pageImages.map((b64) => ({ inlineData: { mimeType: "image/jpeg", data: b64.replace(/^data:[^,]+,/, "") } }))]
+      : prompt;
+    const response = await model.generateContent(parts as any);
     const text = response.response.text().trim();
     const cleanJson = text.replace(/^```json\s*/i, "").replace(/\s*```$/i, "").trim();
-    const parsed = parseAiJson(cleanJson);
+    const parsedRaw = parseAiJson(cleanJson);
+    const parsed = Array.isArray(parsedRaw) ? parsedRaw : Array.isArray(parsedRaw?.questions) ? parsedRaw.questions : parsedRaw;
 
     if (!Array.isArray(parsed)) {
       throw new Error("AI extraction did not return a valid array of questions.");
@@ -349,8 +410,16 @@ RETURN STRICT JSON ARRAY OF QUESTIONS:
         reviewReasons.push("⚠️ Incomplete Options: One or more options (A-D) could not be extracted.");
       }
 
-      // Check missing answer
-      const correctAnswer = (q.correctAnswer || "A").toUpperCase().slice(0, 1);
+      // Answer: no silent "A" default — a missing key is flagged for review.
+      const rawAns = Array.isArray(q.correctAnswer) ? q.correctAnswer.join(",") : String(q.correctAnswer ?? "");
+      const ansKeys = rawAns
+        .toUpperCase()
+        .split(/[\s,;/&]+/)
+        .map((a: string) => ({ "1": "A", "2": "B", "3": "C", "4": "D" } as Record<string, string>)[a.replace(/[()]/g, "")] ?? a.replace(/[()]/g, ""))
+        .filter((a: string) => /^[A-D]$/.test(a));
+      const isNumeric = /INTEGER|NUMERICAL/i.test(String(q.questionType || ""));
+      const correctAnswer = isNumeric ? rawAns.trim() : Array.from(new Set(ansKeys)).join(",");
+      if (!correctAnswer) reviewReasons.push("⚠️ Answer not found — set the correct option.");
 
       const isClean = reviewReasons.length === 0;
       const status: ExtractedAiQuestion["status"] = isClean ? "VERIFIED" : "REVIEW_REQUIRED";
@@ -362,7 +431,7 @@ RETURN STRICT JSON ARRAY OF QUESTIONS:
         statementHi: statementHi || null,
         options,
         optionsHi: optionsHi.A ? optionsHi : undefined,
-        correctAnswer: correctAnswer || "A",
+        correctAnswer,
         answerKeySource: q.answerKeySource || "AI_PARSER",
         solution: formatSolutionSpacing(q.solution || ""),
         solutionHi: formatSolutionSpacing(q.solutionHi || ""),
@@ -392,7 +461,12 @@ RETURN STRICT JSON ARRAY OF QUESTIONS:
         },
         reviewReasons,
         isBilingual: Boolean(statement && statementHi),
-        autoTranslated: Boolean(q.autoTranslated || (statement && statementHi)),
+        autoTranslated: Boolean(q.autoTranslated),
+        sourceLanguage: (q.sourceLanguage === "HINDI" || q.sourceLanguage === "BILINGUAL" || q.sourceLanguage === "ENGLISH"
+          ? q.sourceLanguage
+          : statementHi && !statement
+            ? "HINDI"
+            : "ENGLISH") as "ENGLISH" | "HINDI" | "BILINGUAL",
       };
     });
   });

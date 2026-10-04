@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { recoverStaleBatch } from "@/lib/ai-question-engine/job-runner";
 
 export async function GET(
   request: NextRequest,
@@ -35,6 +36,18 @@ export async function GET(
 
     if (!batch) {
       return apiError("Generation batch not found.", 404);
+    }
+
+    // A batch whose background job was cut off would otherwise spin forever.
+    if (await recoverStaleBatch(batch)) {
+      const fresh = await prisma.aiGenerationBatch.findUnique({
+        where: { id: params.id },
+        include: {
+          sourcePdf: { select: { id: true, resourceId: true, fileName: true, fileUrl: true, pageCount: true } },
+          questions: { orderBy: { questionIndex: "asc" } },
+        },
+      });
+      return apiSuccess({ batch: fresh });
     }
 
     return apiSuccess({ batch });

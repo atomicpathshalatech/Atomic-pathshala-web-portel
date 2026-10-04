@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { isUsableQuestion } from "@/lib/questions/create-with-code";
 import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
@@ -27,7 +28,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       select: { id: true, isPublished: true, status: true },
     });
 
-    const notPublished = candidates.filter((q) => !q.isPublished || q.status !== "PUBLISHED");
+    // Published by review (status PUBLISHED) or by the publish toggle
+    // (isPublished) — either one makes it usable; requiring BOTH rejected
+    // approved questions as "pending review".
+    const notPublished = candidates.filter((q) => !isUsableQuestion(q));
     if (notPublished.length > 0) {
       return apiError(
         "Only reviewed and published questions can be attached to a DPP. Selected question(s) are pending review.",

@@ -34,6 +34,8 @@ export interface AIProvider {
     language: GenerationLanguage;
     sourceText?: string;
     sourceImageDescriptions?: Array<{ id: string; page: number; description: string }>;
+    /** Stop starting new chunks after this time (epoch ms) and return what was made. */
+    deadlineMs?: number;
   }): Promise<RawAiGeneratedQuestion[]>;
 
   validateQuestion(question: {
@@ -46,5 +48,7 @@ export interface AIProvider {
     subject: string;
     chapter: string;
     questionType: string;
+    topic?: string;
+    allowedTopics?: string[];
   }): Promise<QuestionValidationReport>;
 }

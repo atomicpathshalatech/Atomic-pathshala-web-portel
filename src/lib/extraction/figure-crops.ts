@@ -48,21 +48,33 @@ async function locateFigures(images: string[]): Promise<Located[]> {
   );
 }
 
-/** Renders the PDF, locates the figures and crops them. Pages beyond `maxPages` are skipped. */
-export async function cropQuestionFigures(pdf: Buffer, opts: { maxPages?: number } = {}): Promise<CroppedFigure[]> {
+/**
+ * Renders the PDF, locates the figures and crops them.
+ * - `pages`: only these pages (e.g. the pages that have a figure question).
+ *   Each page is its own AI call — with 3 pages per call the model often
+ *   returned the wrong page index, so crops came from the wrong page.
+ * - Without `pages`, the first `maxPages` pages (default 60) are scanned.
+ * - `deadlineMs`: stop starting new pages after this time.
+ */
+export async function cropQuestionFigures(pdf: Buffer, opts: { maxPages?: number; pages?: number[]; deadlineMs?: number } = {}): Promise<CroppedFigure[]> {
   return withRenderedPdf(pdf, async (doc) => {
-    const last = Math.min(doc.pageCount, opts.maxPages ?? 60);
+    const list = (opts.pages?.length ? opts.pages : Array.from({ length: Math.min(doc.pageCount, opts.maxPages ?? 60) }, (_, i) => i + 1))
+      .filter((n) => n >= 1 && n <= doc.pageCount)
+      .sort((a, b) => a - b);
+    const perCall = opts.pages?.length ? 1 : PAGES_PER_CALL;
     const crops: CroppedFigure[] = [];
-    for (let first = 1; first <= last; first += PAGES_PER_CALL) {
-      const numbers = Array.from({ length: Math.min(PAGES_PER_CALL, last - first + 1) }, (_, i) => first + i);
+    for (let i = 0; i < list.length; i += perCall) {
+      if (opts.deadlineMs && Date.now() > opts.deadlineMs) break;
+      const numbers = list.slice(i, i + perCall);
       const images = await Promise.all(numbers.map((n) => doc.jpeg(n)));
       const found = await locateFigures(images).catch((err) => {
-        console.warn("[figure-crops] locate failed for pages", first, err);
+        console.warn("[figure-crops] locate failed for pages", numbers, err);
         return [] as Located[];
       });
       for (const f of found) {
-        if (f.page < 1 || f.page > numbers.length) continue;
-        const absPage = numbers[f.page - 1]!;
+        const idx = numbers.length === 1 ? 1 : f.page; // single page: ignore the model's page index
+        if (idx < 1 || idx > numbers.length) continue;
+        const absPage = numbers[idx - 1]!;
         const box = f.box.map((n) => Math.max(0, Math.min(1000, n))) as [number, number, number, number];
         if (box[2] - box[0] < 8 || box[3] - box[1] < 8) continue;
         // Grows past a tight box (labels like CH3 / NO2 / the O of C=O),

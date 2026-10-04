@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { withNewQuestionCode } from "@/lib/questions/create-with-code";
 import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
@@ -68,6 +69,13 @@ export async function GET(request: NextRequest) {
           },
         },
       ];
+    }
+
+    // ?usable=1 — only reviewed & published questions (DPP / test pickers):
+    // listing drafts there made "Attach" fail with "pending review".
+    if (searchParams.get("usable") === "1") {
+      const usable = { OR: [{ isPublished: true }, { status: "PUBLISHED" }] };
+      where.AND = [...(Array.isArray(where.AND) ? where.AND : []), usable];
     }
 
     const [questions, total] = await Promise.all([
@@ -167,7 +175,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 1. Concurrency-Safe 8-Digit Question ID Generation
-    const questionCode = await generateQuestionId(prisma, subject);
+    const firstQuestionCode = await generateQuestionId(prisma, subject);
 
     // 2. Similarity & Duplicate Analysis
     const simReport = await analyzeQuestionSimilarity(prisma, {
@@ -204,7 +212,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 4. Create Master Question Record (Always created as UNDER REVIEW / DRAFT)
-    const question = await prisma.question.create({
+    const question = await withNewQuestionCode(subject, (questionCode) => prisma.question.create({
       data: {
         subject: subject.trim(),
         chapter: chapter?.trim() || null,
@@ -258,7 +266,8 @@ export async function POST(request: NextRequest) {
         translations: true,
         createdBy: { select: { name: true, email: true } },
       },
-    });
+    }), firstQuestionCode);
+    const questionCode = question.questionCode;
 
     // 4.1 Persist Permanent Reference & Solution Assets if provided
     if (referenceImageUrl?.trim()) {
