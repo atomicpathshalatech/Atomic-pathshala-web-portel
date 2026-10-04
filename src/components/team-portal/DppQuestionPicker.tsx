@@ -52,6 +52,7 @@ export function DppQuestionPicker({
     try {
       const params = new URLSearchParams();
       params.set("limit", "50");
+      params.set("usable", "1"); // only questions that can actually be attached
       if (scope === "chapter") {
         if (dppSubject) params.set("subject", dppSubject);
         const q = search.trim() || chapterName;

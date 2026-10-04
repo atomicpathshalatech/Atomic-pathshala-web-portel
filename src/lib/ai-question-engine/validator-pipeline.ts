@@ -1,79 +1,124 @@
 import { prisma } from "@/lib/db";
 import { analyzeQuestionSimilarity } from "@/lib/questions/similarity";
+import { isOptionBasedType } from "@/lib/questions/create-with-code";
 import { AIProvider } from "./provider-interface";
+import { matchSelectedTopic } from "./gemini-provider";
 import {
   QuestionQualityScores,
   QuestionValidationReport,
   RawAiGeneratedQuestion,
 } from "./types";
 
+const AI_CHECK_TIMEOUT_MS = 60_000;
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`AI check timed out after ${Math.round(ms / 1000)}s`)), ms);
+    p.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(t);
+        reject(e);
+      }
+    );
+  });
+}
+
+const sameAnswer = (a: string[] = [], b: string[] = []) => {
+  const x = Array.from(new Set(a.map((s) => s.trim().toUpperCase()))).sort().join(",");
+  const y = Array.from(new Set(b.map((s) => s.trim().toUpperCase()))).sort().join(",");
+  return x !== "" && x === y;
+};
+
 /**
- * Multi-Stage Enterprise Validation Engine
- * 1. Structural Schema Check
- * 2. Independent AI Solver & Answer Verification
- * 3. Solution Consistency & Reasoning Verification
- * 4. Cross-Question Semantic Duplicate Detection
- * 5. Bilingual Consistency Verification
- * 6. Internal QA Indicator Score
+ * Multi-stage validation for one AI-generated question.
+ *
+ * Before this fix the "independent AI solver" was never called: the report
+ * copied the generator's own answer as "solver verified", and every quality
+ * score was a hard-coded 95–97 — so any question with a well-formed JSON
+ * shape PASSED, including wrong answers and off-topic questions. Now:
+ *  1. Structural checks (options, answer key in options, solution, languages).
+ *  2. Topic check against the topics the teacher selected.
+ *  3. Duplicate check (question bank + this batch).
+ *  4. The AI auditor really solves it; a different answer → ANSWER_VALIDATION_FAILED,
+ *     ambiguity / unsound / off-topic → NEEDS_REVIEW. If the audit can't run,
+ *     the question goes to review (never auto-passes).
+ *  5. Quality scores come from the auditor; without an audit they stay 0.
  */
 export async function runQuestionValidationPipeline({
   question,
   aiProvider,
   batchQuestionsSoFar = [],
+  allowedTopics = [],
 }: {
   question: RawAiGeneratedQuestion;
   aiProvider: AIProvider;
   batchQuestionsSoFar?: RawAiGeneratedQuestion[];
+  /** Topics the teacher selected for the batch (empty = any topic of the chapter). */
+  allowedTopics?: string[];
 }): Promise<{
   report: QuestionValidationReport;
   scores: QuestionQualityScores;
 }> {
   const issues: string[] = [];
+  const blocking: string[] = []; // problems that make the question unusable as-is
 
   // ==========================================
   // STAGE 1: STRUCTURAL VALIDATION
   // ==========================================
-  if (!question.statementEn?.trim() && !question.statementHi?.trim()) {
-    issues.push("Question statement is completely empty.");
-  }
+  const hasEn = Boolean(question.statementEn?.trim());
+  const hasHi = Boolean(question.statementHi?.trim());
+  if (!hasEn && !hasHi) blocking.push("Question statement is completely empty.");
 
-  const isMcq =
-    question.questionType === "SINGLE_CORRECT" ||
-    question.questionType === "MULTIPLE_CORRECT" ||
-    question.questionType === "ASSERTION_REASON" ||
-    question.questionType === "TWO_STATEMENT" ||
-    question.questionType === "CORRECT_INCORRECT_STATEMENT" ||
-    question.questionType === "MATCH_THE_FOLLOWING";
+  const optionBased = isOptionBasedType(question.questionType);
+  const optsEn = (question.optionsEn || {}) as Record<string, string>;
+  const optsHi = (question.optionsHi || {}) as Record<string, string>;
+  const filled = (o: Record<string, string>) => ["A", "B", "C", "D"].filter((k) => String(o[k] ?? "").trim());
 
-  if (isMcq) {
-    if (!question.optionsEn?.A || !question.optionsEn?.B) {
-      issues.push("Question lacks required multiple choice options (A/B).");
-    }
-    if (!question.correctAnswer || question.correctAnswer.length === 0) {
-      issues.push("No correct answer indicated.");
+  if (optionBased) {
+    const primary = hasEn ? optsEn : optsHi;
+    if (filled(primary).length < 4) blocking.push("Options A–D are incomplete.");
+    if (!question.correctAnswer?.length) {
+      blocking.push("No correct answer given.");
     } else {
-      const validKeys = Object.keys(question.optionsEn || {});
-      const invalidKeys = question.correctAnswer.filter((k) => !validKeys.includes(k));
-      if (invalidKeys.length > 0) {
-        issues.push(`Correct answer '${invalidKeys.join(", ")}' is not in options.`);
+      const invalid = question.correctAnswer.filter((k) => !["A", "B", "C", "D"].includes(k) || !String(primary[k] ?? "").trim());
+      if (invalid.length) blocking.push(`Correct answer '${invalid.join(", ")}' is not one of the options.`);
+      if (question.questionType.toUpperCase().includes("SINGLE") && question.correctAnswer.length !== 1) {
+        blocking.push("Single-correct question has more than one answer marked.");
       }
     }
+  } else if (!question.correctAnswer?.length) {
+    blocking.push("No numerical answer given.");
   }
 
-  if (question.language === "BOTH") {
-    if (!question.statementHi?.trim()) {
-      issues.push("Bilingual requested but Hindi statement is missing.");
-    }
+  if (!question.solutionEn?.trim() && !question.solutionHi?.trim()) issues.push("Solution is missing.");
+
+  // Languages actually requested must be present (statement AND options).
+  if (question.language === "BOTH" || question.language === "HINDI") {
+    if (!hasHi) blocking.push("Hindi statement is missing.");
+    if (optionBased && filled(optsHi).length < 4) blocking.push("Hindi options are missing or incomplete.");
+  }
+  if ((question.language === "BOTH" || question.language === "ENGLISH") && !hasEn) {
+    blocking.push("English statement is missing.");
   }
 
   // ==========================================
-  // STAGE 2: DUPLICATE DETECTION (AGAINST BANK & CURRENT BATCH)
+  // STAGE 2: TOPIC RELEVANCE (selected topics)
+  // ==========================================
+  if (allowedTopics.length > 0 && !matchSelectedTopic(question.topic || "", allowedTopics)) {
+    issues.push(`Topic "${question.topic || "—"}" is not one of the selected topics (${allowedTopics.join(", ")}).`);
+  }
+
+  // ==========================================
+  // STAGE 3: DUPLICATE DETECTION (BANK + CURRENT BATCH)
   // ==========================================
   let highestSimScore = 0;
   let dupRisk: QuestionValidationReport["duplicateRisk"] = "NONE";
   let potentialDuplicateCode: string | undefined;
 
-  // 2A. Check against existing Question Bank
   try {
     const simReport = await analyzeQuestionSimilarity(prisma, {
       statementEn: question.statementEn,
@@ -84,129 +129,113 @@ export async function runQuestionValidationPipeline({
       optionsEn: question.optionsEn,
       optionsHi: question.optionsHi,
     });
-
     highestSimScore = simReport.highestScore;
     dupRisk = simReport.duplicateRisk;
     if (simReport.highestMatch) {
       potentialDuplicateCode = simReport.highestMatch.questionCode;
       if (simReport.highestScore >= 85) {
-        issues.push(
-          `High semantic similarity (${simReport.highestScore}%) with existing question ${simReport.highestMatch.questionCode}.`
-        );
+        issues.push(`High similarity (${simReport.highestScore}%) with existing question ${simReport.highestMatch.questionCode}.`);
       }
     }
   } catch (err) {
     console.warn("[Validator] Bank similarity check warning:", err);
   }
 
-  // 2B. Check within current generation batch
+  const key = (t?: string) => (t || "").toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
   for (const prevQ of batchQuestionsSoFar) {
-    if (prevQ.statementEn && question.statementEn) {
-      const cleanA = question.statementEn.toLowerCase().replace(/[^\w]/g, "");
-      const cleanB = prevQ.statementEn.toLowerCase().replace(/[^\w]/g, "");
-      if (cleanA === cleanB && cleanA.length > 20) {
-        highestSimScore = 100;
-        dupRisk = "CRITICAL";
-        issues.push(`Identical duplicate within current batch (Q#${prevQ.questionIndex}).`);
-        break;
-      }
+    const a = key(question.statementEn || question.statementHi);
+    const b = key(prevQ.statementEn || prevQ.statementHi);
+    if (a.length > 20 && a === b) {
+      highestSimScore = 100;
+      dupRisk = "CRITICAL";
+      blocking.push(`Identical duplicate of Q#${prevQ.questionIndex} in this batch.`);
+      break;
     }
   }
 
   // ==========================================
-  // STAGE 3: HEURISTIC & CONSISTENCY VERIFICATION
+  // STAGE 4: INDEPENDENT AI SOLVER (fail-closed)
   // ==========================================
-  const optionKeys = Object.keys(question.optionsEn || {});
-  const hasValidOptions = optionKeys.length >= 2 && optionKeys.every((k) => Boolean((question.optionsEn as any)[k]?.trim()));
-  const hasValidAnswer =
-    question.correctAnswer &&
-    question.correctAnswer.length > 0 &&
-    question.correctAnswer.every((a) => optionKeys.includes(a));
-
-  if (!hasValidOptions && isMcq) {
-    issues.push("Options are incomplete or missing option content.");
-  }
-  if (!hasValidAnswer && isMcq) {
-    issues.push(`Correct answer '${question.correctAnswer?.join(",")}' is not among available options.`);
-  }
-  if (!question.solutionEn?.trim() && !question.solutionHi?.trim()) {
-    issues.push("Step-by-step NCERT solution is missing.");
-  }
-
-  // Fast check: verify solution mentions the final answer
-  let solutionConsistentWithAnswer = true;
-  if (hasValidAnswer && question.solutionEn) {
-    const solLower = question.solutionEn.toLowerCase();
-    const ansKey = question.correctAnswer[0]?.toLowerCase();
-    if (ansKey && !solLower.includes(`option (${ansKey})`) && !solLower.includes(`option ${ansKey}`) && !solLower.includes(`(${ansKey})`) && !solLower.includes(` ${ansKey} `)) {
-      // Small consistency check warning
-      solutionConsistentWithAnswer = true; // lenient to avoid false positives
+  let ai: QuestionValidationReport | null = null;
+  let aiError: string | null = null;
+  if (blocking.length === 0) {
+    try {
+      ai = await withTimeout(
+        aiProvider.validateQuestion({
+          statementEn: question.statementEn || question.statementHi || "",
+          statementHi: question.statementHi,
+          optionsEn: hasEn ? optsEn : optsHi,
+          optionsHi: question.optionsHi,
+          correctAnswer: question.correctAnswer,
+          solutionEn: question.solutionEn || question.solutionHi,
+          subject: question.subject,
+          chapter: question.chapter,
+          questionType: question.questionType,
+          topic: question.topic,
+          allowedTopics,
+        }),
+        AI_CHECK_TIMEOUT_MS
+      );
+    } catch (err) {
+      aiError = err instanceof Error ? err.message : String(err);
+      issues.push("Independent AI answer check could not run — please verify the answer manually.");
     }
   }
 
-  const aiValResult: QuestionValidationReport = {
-    isValid: issues.length === 0,
-    validationStatus: issues.length === 0 ? "PASSED" : "NEEDS_REVIEW",
-    solverVerifiedAnswer: question.correctAnswer,
-    solverConfidence: 96,
-    solverReasoning: "Structural schema and NCERT consistency verified.",
-    isAmbiguous: false,
-    isScientificallySound: true,
-    solutionConsistentWithAnswer,
-    duplicateScore: highestSimScore,
-    duplicateRisk: dupRisk,
-    bilingualEquivalent: Boolean(question.statementHi ? question.statementEn : true),
-    bilingualDiscrepancies: [],
-    issues,
-  };
+  let status: QuestionValidationReport["validationStatus"] = blocking.length > 0 ? "FAILED" : "PASSED";
 
-  let finalStatus: QuestionValidationReport["validationStatus"] = "PASSED";
-  if (issues.length > 0) {
-    finalStatus = "NEEDS_REVIEW";
+  if (ai) {
+    if (ai.solverVerifiedAnswer?.length && !sameAnswer(ai.solverVerifiedAnswer, question.correctAnswer)) {
+      issues.push(`AI solver got answer (${ai.solverVerifiedAnswer.join(", ")}) but the question says (${question.correctAnswer.join(", ")}).`);
+      status = "ANSWER_VALIDATION_FAILED";
+    }
+    if (ai.isAmbiguous) issues.push(`Ambiguous: ${ai.ambiguityReason || "more than one option may be correct."}`);
+    if (ai.isScientificallySound === false) issues.push("Auditor flagged the question as scientifically unsound.");
+    if (ai.solutionConsistentWithAnswer === false) issues.push("Solution does not lead to the marked answer.");
+    if (ai.topicRelevant === false) issues.push("Auditor: the question does not test the requested topic.");
+    if (question.language === "BOTH" && ai.bilingualEquivalent === false) {
+      issues.push(`Hindi and English versions differ${ai.bilingualDiscrepancies?.length ? `: ${ai.bilingualDiscrepancies.join("; ")}` : "."}`);
+      if (status === "PASSED") status = "BILINGUAL_VALIDATION_FAILED";
+    }
+    for (const i of ai.issues || []) issues.push(i);
+    if (status === "PASSED" && (ai.validationStatus === "FAILED" || ai.validationStatus === "ANSWER_VALIDATION_FAILED")) status = ai.validationStatus;
+    if (ai.solverConfidence > 0 && ai.solverConfidence < 80) issues.push(`Low solver confidence (${ai.solverConfidence}%).`);
   }
 
-  // ==========================================
-  // STAGE 4: INTERNAL QA QUALITY SCORE METRICS
-  // ==========================================
-  const contentAccuracy = Math.max(50, Math.min(100, aiValResult.isScientificallySound ? 96 : 60));
-  const answerConfidence =
-    finalStatus === "NEEDS_REVIEW" ? 75 : Math.max(60, aiValResult.solverConfidence || 95);
-  const ncertAlignment = question.pyqStyle === "STANDARD" ? 95 : 97;
-  const neetRelevance = question.difficulty === "ULTRA" ? 98 : 95;
-  const languageQuality = aiValResult.bilingualEquivalent ? 96 : 70;
-  const overallScore = Math.round(
-    contentAccuracy * 0.3 +
-      answerConfidence * 0.3 +
-      ncertAlignment * 0.15 +
-      neetRelevance * 0.15 +
-      languageQuality * 0.1
-  );
+  if (status === "PASSED" && (issues.length > 0 || !ai)) status = "NEEDS_REVIEW";
 
-  const scores: QuestionQualityScores = {
-    contentAccuracy,
-    answerConfidence,
-    ncertAlignment,
-    neetRelevance,
-    languageQuality,
-    overallScore,
-  };
+  // ==========================================
+  // STAGE 5: QUALITY SCORES (from the auditor, not invented)
+  // ==========================================
+  const scores: QuestionQualityScores = ai?.qualityScore
+    ? { ...ai.qualityScore }
+    : { contentAccuracy: 0, answerConfidence: 0, ncertAlignment: 0, neetRelevance: 0, languageQuality: 0, overallScore: 0 };
+  if (ai && !ai.qualityScore) {
+    const conf = ai.solverConfidence || 0;
+    scores.answerConfidence = conf;
+    scores.overallScore = status === "PASSED" ? conf : Math.min(conf, 60);
+  }
 
   const report: QuestionValidationReport = {
-    isValid: finalStatus === "PASSED",
-    validationStatus: finalStatus,
-    solverVerifiedAnswer: aiValResult.solverVerifiedAnswer,
-    solverConfidence: answerConfidence,
-    solverReasoning: aiValResult.solverReasoning,
-    isAmbiguous: aiValResult.isAmbiguous,
-    ambiguityReason: aiValResult.ambiguityReason,
-    isScientificallySound: aiValResult.isScientificallySound,
-    solutionConsistentWithAnswer: aiValResult.solutionConsistentWithAnswer,
+    isValid: status === "PASSED",
+    validationStatus: status,
+    solverVerifiedAnswer: ai?.solverVerifiedAnswer,
+    solverConfidence: ai?.solverConfidence ?? 0,
+    solverReasoning:
+      ai?.solverReasoning || (aiError ? `AI check failed: ${aiError}` : blocking.length ? "Not audited — fix the structural problems first." : ""),
+    isAmbiguous: ai?.isAmbiguous ?? false,
+    ambiguityReason: ai?.ambiguityReason,
+    isScientificallySound: ai?.isScientificallySound ?? true,
+    solutionConsistentWithAnswer: ai?.solutionConsistentWithAnswer ?? true,
     duplicateScore: highestSimScore,
     duplicateRisk: dupRisk,
     potentialDuplicateCode,
-    bilingualEquivalent: aiValResult.bilingualEquivalent,
-    bilingualDiscrepancies: aiValResult.bilingualDiscrepancies,
-    issues: Array.from(new Set([...issues, ...aiValResult.issues])),
+    bilingualEquivalent: ai?.bilingualEquivalent ?? true,
+    bilingualDiscrepancies: ai?.bilingualDiscrepancies ?? [],
+    issues: Array.from(new Set([...blocking, ...issues])),
+    aiValidated: Boolean(ai),
+    topicRelevant: ai?.topicRelevant,
+    qualityScore: ai?.qualityScore,
   };
 
   return { report, scores };

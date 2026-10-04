@@ -19,6 +19,8 @@ import {
   Download,
 } from "lucide-react";
 import { ExtractionReportData } from "@/lib/extraction/validator";
+import { recoverStaleExtractionJob } from "@/lib/extraction/process-job";
+import { ExtractionJobProgress } from "@/components/team-portal/extraction/ExtractionJobProgress";
 
 export const metadata: Metadata = {
   title: "Extraction Job Dashboard & Report",
@@ -46,6 +48,8 @@ export default async function ExtractionJobDetailPage({
   });
 
   if (!job) notFound();
+  // A job whose background run was cut off would otherwise show PROCESSING for ever.
+  if (await recoverStaleExtractionJob(job)) redirect(`/team/question-extract/${job.id}`);
 
   const report = (job.reportJson as ExtractionReportData | null) || {
     sourceName: job.sourceName,
@@ -76,6 +80,8 @@ export default async function ExtractionJobDetailPage({
         <ChevronLeft className="w-4 h-4" />
         <span>Back to All Extraction Jobs</span>
       </Link>
+
+      {job.status === "PROCESSING" && <ExtractionJobProgress progress={job.progress} step={job.currentStep} />}
 
       {/* 1. Job Header Card */}
       <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">

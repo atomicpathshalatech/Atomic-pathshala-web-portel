@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { withNewQuestionCode } from "@/lib/questions/create-with-code";
 import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
@@ -153,7 +154,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. CREATE NEW AUTO-SAVED DRAFT
-    const questionCode = await generateQuestionId(prisma as any, subject);
+    const firstQuestionCode = await generateQuestionId(prisma as any, subject);
     const categoryName = `AI_DRAFT:${source.toUpperCase()}`;
     const autoTags = ["AI_AUTO_DRAFT", `SOURCE_${source.toUpperCase()}`, tags].filter(Boolean).join(", ");
 
@@ -186,7 +187,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const created = await prisma.question.create({
+    const created = await withNewQuestionCode(subject, (questionCode) => prisma.question.create({
       data: {
         questionCode,
         subject: subject.trim() || "Biology",
@@ -227,7 +228,8 @@ export async function POST(request: NextRequest) {
           },
         },
       },
-    });
+    }), firstQuestionCode);
+    const questionCode = created.questionCode;
 
     if (refImg) {
       await prisma.questionAsset.create({

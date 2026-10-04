@@ -6,6 +6,7 @@ import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { QuestionType, Difficulty } from "@prisma/client";
+import { withNewQuestionCode } from "@/lib/questions/create-with-code";
 
 function mapQuestionTypeToPrisma(typeStr: string): QuestionType {
   const upper = typeStr.toUpperCase();
@@ -54,9 +55,26 @@ export async function POST(request: NextRequest) {
     }
 
     const savedIds: string[] = [];
+    let newlyCreated = 0;
     const now = new Date();
 
     for (const aiQ of aiQuestions) {
+      // Already in the Question Bank (the generator drafts it automatically) —
+      // reuse that row instead of creating a second copy of the same question.
+      if (aiQ.draftQuestionId) {
+        const existing = await prisma.question.findUnique({ where: { id: aiQ.draftQuestionId }, select: { id: true, status: true } });
+        if (existing) {
+          if (submitToReview && existing.status === "DRAFT") {
+            await prisma.question.update({ where: { id: existing.id }, data: { status: "REVIEW_1", review1Status: "PENDING" } });
+          }
+          if (!aiQ.isSavedToDraft) {
+            await prisma.aiGeneratedQuestion.update({ where: { id: aiQ.id }, data: { isSavedToDraft: true, savedAt: now } });
+          }
+          savedIds.push(existing.id);
+          continue;
+        }
+      }
+
       // Build translation records
       const translations: any[] = [];
       const optionsEn = (aiQ.optionsEn as Record<string, string>) || {};
@@ -97,8 +115,9 @@ export async function POST(request: NextRequest) {
       ].join(", ");
 
       // Create canonical Question row in Question Bank
-      const createdQuestion = await prisma.question.create({
+      const createdQuestion = await withNewQuestionCode(aiQ.subject, (questionCode) => prisma.question.create({
         data: {
+          questionCode,
           subject: aiQ.subject,
           chapter: aiQ.chapter,
           topic: aiQ.topic,
@@ -132,7 +151,7 @@ export async function POST(request: NextRequest) {
             },
           },
         },
-      });
+      }));
 
       // Update AI generated question pointer
       await prisma.aiGeneratedQuestion.update({
@@ -145,6 +164,7 @@ export async function POST(request: NextRequest) {
       });
 
       savedIds.push(createdQuestion.id);
+      newlyCreated++;
     }
 
     // Increment batch savedDraftCount
@@ -152,7 +172,8 @@ export async function POST(request: NextRequest) {
       await prisma.aiGenerationBatch.update({
         where: { id: aiQuestions[0].batchId },
         data: {
-          savedDraftCount: { increment: savedIds.length },
+          // Only new rows — reused auto-drafts were already counted by the generator.
+          savedDraftCount: { increment: newlyCreated },
         },
       });
     }

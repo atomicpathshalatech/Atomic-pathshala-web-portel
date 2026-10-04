@@ -7,6 +7,10 @@ import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { startGenerationJob } from "@/lib/ai-question-engine/job-runner";
 import { GenerationLanguage, NeetDifficulty } from "@/lib/ai-question-engine/types";
 
+// The batch runs in the background of this request (waitUntil) — give it the
+// full 300 s; the worker keeps inside that budget.
+export const maxDuration = 300;
+
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);

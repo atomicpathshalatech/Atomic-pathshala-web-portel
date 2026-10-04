@@ -8,8 +8,7 @@
  */
 
 import { prisma } from "@/lib/db";
-import { generateQuestionId } from "@/lib/questions/id-generator";
-import { QuestionType, Difficulty } from "@prisma/client";
+import { withNewQuestionCode, toQuestionType, toDifficulty, isOptionBasedType } from "@/lib/questions/create-with-code";
 
 export interface ImportToDraftResult {
   importedCount: number;
@@ -39,7 +38,6 @@ export async function importVerifiedQuestionsToDraft(
   let skippedCount = 0;
 
   for (const eq of job.questions) {
-    const questionCode = await generateQuestionId(prisma, eq.subject || "General");
     const pyqExam = eq.pyqExam || job.pyqExam || (job.examName?.includes("JEE Adv") ? "JEE_ADVANCED" : job.examName?.includes("JEE") ? "JEE_MAINS" : job.examName?.includes("NEET") ? "NEET" : null);
     const pyqYear = eq.pyqYear ?? (job.pyqYear ?? (job.year ? parseInt(job.year, 10) || null : null));
     const pyqMonth = eq.pyqMonth || job.pyqMonth || null;
@@ -70,21 +68,47 @@ export async function importVerifiedQuestionsToDraft(
       eq.questionType,
     ].filter(Boolean);
 
-    // Map question type to Prisma enum where applicable
-    let pType: QuestionType = QuestionType.SINGLE_CORRECT;
-    if (eq.questionType === "ASSERTION_REASON") pType = QuestionType.ASSERTION_REASON;
-    else if (eq.questionType.includes("MATCH")) pType = QuestionType.MATCH_COLUMN;
-    else if (eq.questionType === "NUMERICAL") pType = QuestionType.INTEGER;
+    // One shared type mapping — MULTI_CORRECT used to become SINGLE_CORRECT and
+    // INTEGER answers were stored as MCQs.
+    const pType = toQuestionType(eq.questionType);
 
-    // Create Question in Question Bank as DRAFT
-    const createdQuestion = await prisma.question.create({
+    // Hindi options are kept in the extraction snapshot (the table has no
+    // Hindi-options column); the Hindi translation used to get the ENGLISH options.
+    const snapshot = (eq.originalSnapshot ?? {}) as { optionsHi?: Record<string, string> | null; currentOptionsHi?: Record<string, string> | null };
+    const hiSource = snapshot.currentOptionsHi ?? snapshot.optionsHi ?? null;
+    const optionsHi = hiSource && Object.values(hiSource).some((v) => String(v ?? "").trim()) ? hiSource : null;
+    const rawAnswer = String(eq.correctAnswer ?? "").trim();
+    const correct = isOptionBasedType(eq.questionType)
+      ? rawAnswer.split(/[\s,;/&]+/).map((x) => x.trim().toUpperCase()).filter((x) => /^[A-D]$/.test(x))
+      : rawAnswer ? [rawAnswer] : [];
+    if (correct.length === 0) {
+      // No usable answer — leave it for review instead of importing a wrong key.
+      skippedCount++;
+      continue;
+    }
+
+    // Claim the row first so a double-click / second import can't create a
+    // second Question Bank copy of the same extracted question.
+    const claimed = await prisma.extractedQuestion.updateMany({
+      where: { id: eq.id, draftQuestionId: null, status: "VERIFIED" },
+      data: { status: "IMPORTING" },
+    });
+    if (claimed.count === 0) {
+      skippedCount++;
+      continue;
+    }
+
+    // Create Question in Question Bank as DRAFT (with its Question ID)
+    let createdQuestion;
+    try {
+    createdQuestion = await withNewQuestionCode(eq.subject || "General", (questionCode) => prisma.question.create({
       data: {
         subject: eq.subject || "General",
         chapter: eq.chapter || job.chapter || null,
         topic: eq.topic || null,
         subTopic: eq.subTopic || null,
         type: pType,
-        difficulty: (eq.difficulty as Difficulty) || Difficulty.MEDIUM,
+        difficulty: toDifficulty(eq.difficulty),
         category: pyqExam ? `${pyqExam}_PYQ` : `Source: ${job.sourceName}`,
         pyqExam,
         pyqYear,
@@ -105,7 +129,7 @@ export async function importVerifiedQuestionsToDraft(
               language: "ENGLISH",
               statement: eq.statement,
               options: eq.options as any,
-              correctOptionIds: [eq.correctAnswer],
+              correctOptionIds: correct,
               solution: eq.solution || null,
             },
             ...(eq.statementHi
@@ -113,8 +137,8 @@ export async function importVerifiedQuestionsToDraft(
                   {
                     language: "HINDI",
                     statement: eq.statementHi,
-                    options: eq.options as any,
-                    correctOptionIds: [eq.correctAnswer],
+                    options: (optionsHi ?? eq.options) as any,
+                    correctOptionIds: correct,
                     solution: eq.solutionHi || eq.solution || null,
                   },
                 ]
@@ -122,7 +146,11 @@ export async function importVerifiedQuestionsToDraft(
           ],
         },
       },
-    });
+    }));
+    } catch (err) {
+      await prisma.extractedQuestion.update({ where: { id: eq.id }, data: { status: "VERIFIED" } }).catch(() => {});
+      throw err;
+    }
 
     // Mark ExtractedQuestion as IMPORTED and link draft ID
     await prisma.extractedQuestion.update({

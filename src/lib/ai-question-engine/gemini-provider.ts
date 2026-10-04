@@ -14,6 +14,51 @@ import {
   RawAiGeneratedQuestion,
 } from "./types";
 
+const norm = (t: string) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+
+/** The AI's topic label → one of the topics the teacher selected (exact, contains, or word overlap); null if none fits. */
+export function matchSelectedTopic(raw: string, selected: string[]): string | null {
+  if (!selected.length) return raw || null;
+  const r = norm(raw || "");
+  if (!r) return null;
+  const exact = selected.find((t) => norm(t) === r);
+  if (exact) return exact;
+  const contains = selected.find((t) => norm(t).includes(r) || r.includes(norm(t)));
+  if (contains) return contains;
+  const words = new Set(r.split(" ").filter((w) => w.length > 3));
+  let best: { t: string; score: number } | null = null;
+  for (const t of selected) {
+    const tw = norm(t).split(" ").filter((w) => w.length > 3);
+    const score = tw.length ? tw.filter((w) => words.has(w)).length / tw.length : 0;
+    if (score > (best?.score ?? 0)) best = { t, score };
+  }
+  return best && best.score >= 0.5 ? best.t : null;
+}
+
+/** Splits `counts` (type → n) so the chunks add up exactly to the plan (largest remainder). */
+export function splitCounts(counts: Record<string, number>, chunkTotal: number, remaining: Record<string, number>): Record<string, number> {
+  const left = Object.entries(remaining).filter(([, n]) => n > 0);
+  const totalLeft = left.reduce((a, [, n]) => a + n, 0);
+  if (!totalLeft) return {};
+  const target = Math.min(chunkTotal, totalLeft);
+  const raw = left.map(([k, n]) => ({ k, exact: (n / totalLeft) * target }));
+  const out: Record<string, number> = {};
+  let used = 0;
+  for (const r of raw) {
+    out[r.k] = Math.min(remaining[r.k]!, Math.floor(r.exact));
+    used += out[r.k]!;
+  }
+  for (const r of raw.sort((a, b) => (b.exact % 1) - (a.exact % 1))) {
+    if (used >= target) break;
+    if ((out[r.k] ?? 0) < remaining[r.k]!) {
+      out[r.k] = (out[r.k] ?? 0) + 1;
+      used++;
+    }
+  }
+  void counts;
+  return Object.fromEntries(Object.entries(out).filter(([, n]) => n > 0));
+}
+
 export class GeminiProvider implements AIProvider {
   name = "Gemini";
 
@@ -76,6 +121,7 @@ export class GeminiProvider implements AIProvider {
     language: GenerationLanguage;
     sourceText?: string;
     sourceImageDescriptions?: Array<{ id: string; page: number; description: string }>;
+    avoidStatements?: string[];
   }): Promise<RawAiGeneratedQuestion[]> {
     const prompt = buildQuestionGenerationPrompt(params);
 
@@ -85,6 +131,9 @@ export class GeminiProvider implements AIProvider {
         generationConfig: {
           responseMimeType: "application/json",
           temperature: 0.2,
+          // Bilingual questions with solutions are long — the default output
+          // limit cut the JSON off mid-question and the whole chunk was lost.
+          maxOutputTokens: 16384,
         },
       });
 
@@ -99,12 +148,21 @@ export class GeminiProvider implements AIProvider {
         const optionsEn = item.optionsEn || {};
         const optionsHi = item.optionsHi || undefined;
 
-        let correctAnswer = Array.isArray(item.correctAnswer)
+        // No answer from the model = no answer (it used to default to "A",
+        // silently giving wrong keys that then passed validation).
+        let correctAnswer: string[] = Array.isArray(item.correctAnswer)
           ? item.correctAnswer.map(String)
-          : [String(item.correctAnswer || "A")];
+          : item.correctAnswer != null && String(item.correctAnswer).trim()
+            ? String(item.correctAnswer).split(/[\s,;/&]+/)
+            : [];
+        correctAnswer = correctAnswer.map((c: string) => c.toUpperCase().replace(/[^A-Z0-9.\-]/g, "").trim()).filter(Boolean);
+        // "1"-"4" as printed in many papers → A-D
+        correctAnswer = correctAnswer.map((c) => ({ "1": "A", "2": "B", "3": "C", "4": "D" })[c] ?? c);
 
-        // Sanitize correct answer
-        correctAnswer = correctAnswer.map((c: string) => c.toUpperCase().trim());
+        // Topic must be one of the selected topics; an unknown label is kept
+        // as-is and flagged by the validator instead of being silently relabelled.
+        const rawTopic = String(item.topic || "").trim();
+        const matchedTopic = matchSelectedTopic(rawTopic, params.selectedTopics);
 
         return {
           questionIndex: typeof item.questionIndex === "number" ? item.questionIndex : idx + 1,
@@ -129,7 +187,7 @@ export class GeminiProvider implements AIProvider {
           solutionHi: item.solutionHi ? String(item.solutionHi).trim() : undefined,
           subject: params.subject,
           chapter: params.chapter,
-          topic: String(item.topic || params.selectedTopics[0] || "General Topic").trim(),
+          topic: matchedTopic || rawTopic || params.selectedTopics[0] || "General Topic",
           subTopic: item.subTopic ? String(item.subTopic).trim() : undefined,
           difficulty: (item.difficulty as NeetDifficulty) || "MEDIUM",
           questionType: String(item.questionType || "SINGLE_CORRECT"),
@@ -155,6 +213,7 @@ export class GeminiProvider implements AIProvider {
     language: GenerationLanguage;
     sourceText?: string;
     sourceImageDescriptions?: Array<{ id: string; page: number; description: string }>;
+    deadlineMs?: number;
   }): Promise<RawAiGeneratedQuestion[]> {
     const totalRequested = Object.values(params.questionTypeCounts).reduce((a, b) => a + b, 0);
 
@@ -162,54 +221,47 @@ export class GeminiProvider implements AIProvider {
       return this.generateSingleBatch(params);
     }
 
-    // Chunk generation into manageable sub-batches (max 5 questions per call)
+    // Chunk generation into manageable sub-batches (max 5 questions per call).
+    // Each chunk gets an exact share of the type and difficulty plan (the old
+    // Math.max(1, …) gave every chunk at least one of every type, so the plan
+    // was overshot), and the stems already written so it doesn't repeat them.
     const CHUNK_SIZE = 5;
-    const numChunks = Math.ceil(totalRequested / CHUNK_SIZE);
     const accumulatedQuestions: RawAiGeneratedQuestion[] = [];
+    const typesLeft: Record<string, number> = { ...params.questionTypeCounts };
+    const diffLeft: Record<string, number> = { ...params.difficultyMix };
+    let failures = 0;
 
-    for (let chunkIdx = 0; chunkIdx < numChunks; chunkIdx++) {
-      const remainingTotal = totalRequested - accumulatedQuestions.length;
-      const currentChunkTarget = Math.min(CHUNK_SIZE, remainingTotal);
-      if (currentChunkTarget <= 0) break;
-
-      const subTypeCounts: Record<string, number> = {};
-      const subDiffMix: Record<NeetDifficulty, number> = { EASY: 0, MEDIUM: 0, HARD: 0, ULTRA: 0 };
-
-      // Allocate question types for this chunk
-      for (const [type, totalTypeCount] of Object.entries(params.questionTypeCounts)) {
-        if (totalTypeCount > 0) {
-          const chunkTypeCount = Math.max(1, Math.round((totalTypeCount / totalRequested) * currentChunkTarget));
-          subTypeCounts[type] = chunkTypeCount;
-        }
-      }
-
-      // Allocate difficulty mix for this chunk
-      for (const [diff, totalDiffCount] of Object.entries(params.difficultyMix)) {
-        if (totalDiffCount > 0) {
-          const chunkDiffCount = Math.max(0, Math.round((totalDiffCount / totalRequested) * currentChunkTarget));
-          subDiffMix[diff as NeetDifficulty] = chunkDiffCount;
-        }
-      }
+    while (accumulatedQuestions.length < totalRequested && failures < 3) {
+      if (params.deadlineMs && Date.now() > params.deadlineMs && accumulatedQuestions.length > 0) break;
+      const currentChunkTarget = Math.min(CHUNK_SIZE, totalRequested - accumulatedQuestions.length);
+      const subTypeCounts = splitCounts(params.questionTypeCounts, currentChunkTarget, typesLeft);
+      const chunkSize = Object.values(subTypeCounts).reduce((a, b) => a + b, 0) || currentChunkTarget;
+      const subDiff = splitCounts(params.difficultyMix, chunkSize, diffLeft);
+      const subDiffMix = { EASY: 0, MEDIUM: 0, HARD: 0, ULTRA: 0 } as Record<NeetDifficulty, number>;
+      for (const [k, n] of Object.entries(subDiff)) subDiffMix[k as NeetDifficulty] = n;
 
       try {
         const chunkQuestions = await this.generateSingleBatch({
           ...params,
-          questionTypeCounts: Object.keys(subTypeCounts).length > 0 ? subTypeCounts : { SINGLE_CORRECT: currentChunkTarget },
+          questionTypeCounts: Object.keys(subTypeCounts).length > 0 ? subTypeCounts : { SINGLE_CORRECT: chunkSize },
           difficultyMix: subDiffMix,
+          avoidStatements: accumulatedQuestions.map((q) => q.statementEn || q.statementHi || "").filter(Boolean).slice(-25),
         });
-
+        if (chunkQuestions.length === 0) {
+          failures++;
+          continue;
+        }
+        for (const [k, n] of Object.entries(subTypeCounts)) typesLeft[k] = Math.max(0, (typesLeft[k] ?? 0) - n);
+        for (const [k, n] of Object.entries(subDiff)) diffLeft[k] = Math.max(0, (diffLeft[k] ?? 0) - n);
         for (const q of chunkQuestions) {
+          if (accumulatedQuestions.length >= totalRequested) break;
           q.questionIndex = accumulatedQuestions.length + 1;
           accumulatedQuestions.push(q);
-          if (accumulatedQuestions.length >= totalRequested) break;
         }
       } catch (chunkErr) {
-        console.warn(`[GeminiProvider] Chunk ${chunkIdx + 1}/${numChunks} generation error:`, chunkErr);
-        if (accumulatedQuestions.length > 0) {
-          break; // Return partial successful batch if we already generated questions
-        } else {
-          throw chunkErr;
-        }
+        failures++;
+        console.warn(`[GeminiProvider] Chunk generation error (${failures}/3):`, chunkErr);
+        if (failures >= 3 && accumulatedQuestions.length === 0) throw chunkErr;
       }
     }
 
@@ -226,6 +278,8 @@ export class GeminiProvider implements AIProvider {
     subject: string;
     chapter: string;
     questionType: string;
+    topic?: string;
+    allowedTopics?: string[];
   }): Promise<QuestionValidationReport> {
     const prompt = buildQuestionValidationPrompt(question);
 
@@ -235,6 +289,7 @@ export class GeminiProvider implements AIProvider {
         generationConfig: {
           responseMimeType: "application/json",
           temperature: 0.1,
+          maxOutputTokens: 4096,
         },
       });
 
@@ -242,15 +297,30 @@ export class GeminiProvider implements AIProvider {
       const text = response.response.text().trim();
       const cleanJson = text.replace(/^```json\s*/i, "").replace(/\s*```$/i, "").trim();
 
-      try {
+      // An unreadable audit is NOT a pass — the caller marks the question for review.
+      {
         const parsed = parseAiJson(cleanJson);
+        const qs = parsed.qualityScore && typeof parsed.qualityScore === "object" ? parsed.qualityScore : null;
+        const num = (v: unknown, d: number) => (Number.isFinite(Number(v)) ? Math.max(0, Math.min(100, Number(v))) : d);
         return {
+          aiValidated: true,
+          topicRelevant: parsed.topicRelevant === undefined ? undefined : Boolean(parsed.topicRelevant),
+          qualityScore: qs
+            ? {
+                contentAccuracy: num(qs.contentAccuracy, 0),
+                answerConfidence: num(qs.answerConfidence, 0),
+                ncertAlignment: num(qs.ncertAlignment, 0),
+                neetRelevance: num(qs.neetRelevance, 0),
+                languageQuality: num(qs.languageQuality, 0),
+                overallScore: num(qs.overallScore, 0),
+              }
+            : undefined,
           isValid: Boolean(parsed.isValid),
           validationStatus: parsed.validationStatus || (parsed.isValid ? "PASSED" : "NEEDS_REVIEW"),
           solverVerifiedAnswer: Array.isArray(parsed.solverVerifiedAnswer)
             ? parsed.solverVerifiedAnswer.map(String)
             : undefined,
-          solverConfidence: Number(parsed.solverConfidence) || 95,
+          solverConfidence: num(parsed.solverConfidence, 0),
           solverReasoning: String(parsed.solverReasoning || ""),
           isAmbiguous: Boolean(parsed.isAmbiguous),
           ambiguityReason: parsed.ambiguityReason ? String(parsed.ambiguityReason) : undefined,
@@ -263,20 +333,6 @@ export class GeminiProvider implements AIProvider {
             ? parsed.bilingualDiscrepancies.map(String)
             : [],
           issues: Array.isArray(parsed.issues) ? parsed.issues.map(String) : [],
-        };
-      } catch (err) {
-        return {
-          isValid: true,
-          validationStatus: "PASSED",
-          solverConfidence: 90,
-          solverReasoning: "Automatic heuristic verification pass.",
-          isAmbiguous: false,
-          isScientificallySound: true,
-          solutionConsistentWithAnswer: true,
-          duplicateScore: 0,
-          duplicateRisk: "NONE",
-          bilingualEquivalent: true,
-          issues: [],
         };
       }
     });

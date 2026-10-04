@@ -91,6 +91,8 @@ export default async function ReviewRequiredQueuePage({
           questions={job.questions.map((q) => ({
             ...q,
             options: q.options as any,
+            // Hindi options live in the snapshot (edited copy first, else as extracted).
+            optionsHi: ((q.originalSnapshot as any)?.currentOptionsHi ?? (q.originalSnapshot as any)?.optionsHi ?? undefined) as any,
             status: q.status as any,
             reviewReasons: (q.reviewReasons as string[]) || [],
           }))}

@@ -33,7 +33,8 @@ export async function GET(request: NextRequest) {
 
     const questions = await prisma.question.findMany({
       where: {
-        isPublished: true,
+        // Reviewed & published by either flag (see isUsableQuestion).
+        OR: [{ isPublished: true }, { status: "PUBLISHED" }],
         ...(difficulty && { difficulty }),
         ...(search && {
           translations: { some: { statement: { contains: search, mode: "insensitive" as const } } },
@@ -44,8 +45,9 @@ export async function GET(request: NextRequest) {
         type: true,
         difficulty: true,
         subject: true,
+        // English first, else the Hindi statement (Hindi-only questions showed blank).
         translations: {
-          where: { language: "ENGLISH" },
+          orderBy: { language: "asc" },
           select: { statement: true },
         },
       },
