@@ -1924,18 +1924,18 @@ export function TeacherLiveClassRoom({
         direction,
       });
       if (data?.pages) {
+        const sorted = (data.pages as WhiteboardPage[]).sort((a, b) => a.pageNumber - b.pageNumber);
+        const newActive = data.activePageNumber ?? wbSession.activePageNumber;
         setWbSession((prev) =>
           prev
             ? {
                 ...prev,
-                pages: data.pages,
-                activePageNumber: data.activePageNumber ?? prev.activePageNumber,
+                pages: sorted,
+                activePageNumber: newActive,
               }
             : prev
         );
-        const activePg = (data.pages as WhiteboardPage[]).find(
-          (p) => p.pageNumber === (data.activePageNumber ?? wbSession.activePageNumber)
-        );
+        const activePg = sorted.find((p) => p.pageNumber === newActive);
         if (activePg) {
           enginePageIdRef.current = activePg.id;
           lastLoadedPageIdRef.current = activePg.id;
@@ -1943,6 +1943,7 @@ export function TeacherLiveClassRoom({
         }
       }
     } catch (err) {
+      console.error("[movePage error]", err);
       setLoadError(err instanceof Error ? err.message : "Could not reorder slides.");
     }
   }
@@ -4460,7 +4461,7 @@ export function TeacherLiveClassRoom({
                   </button>
                 </div>
                 <div className="flex-1 overflow-y-auto p-1.5 flex flex-col gap-1.5">
-                  {wbSession.pages.map((p) => {
+                  {[...wbSession.pages].sort((a, b) => a.pageNumber - b.pageNumber).map((p, idx, arr) => {
                     const active = p.pageNumber === wbSession.activePageNumber;
                     return (
                       <div
@@ -4482,35 +4483,47 @@ export function TeacherLiveClassRoom({
                           <span className="flex items-center gap-0.5">
                             <button
                               type="button"
-                              disabled={p.pageNumber <= 1}
-                              onClick={() => movePage(p, "up")}
-                              className="w-5 h-5 rounded flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-700 disabled:opacity-20"
+                              disabled={idx === 0}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                movePage(p, "up");
+                              }}
+                              className="w-5 h-5 rounded flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-700 disabled:opacity-20 cursor-pointer"
                               title="Move slide up"
                             >
                               <span className="material-symbols-outlined text-[13px]">arrow_upward</span>
                             </button>
                             <button
                               type="button"
-                              disabled={p.pageNumber >= wbSession.pages.length}
-                              onClick={() => movePage(p, "down")}
-                              className="w-5 h-5 rounded flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-700 disabled:opacity-20"
+                              disabled={idx === arr.length - 1}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                movePage(p, "down");
+                              }}
+                              className="w-5 h-5 rounded flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-700 disabled:opacity-20 cursor-pointer"
                               title="Move slide down"
                             >
                               <span className="material-symbols-outlined text-[13px]">arrow_downward</span>
                             </button>
                             <button
                               type="button"
-                              onClick={() => duplicatePage(p)}
-                              className="w-5 h-5 rounded flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-700"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                duplicatePage(p);
+                              }}
+                              className="w-5 h-5 rounded flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-700 cursor-pointer"
                               title="Duplicate (copy) this slide"
                             >
                               <span className="material-symbols-outlined text-[13px]">content_copy</span>
                             </button>
                             <button
                               type="button"
-                              disabled={wbSession.pages.length <= 1}
-                              onClick={() => deletePageById(p)}
-                              className="w-5 h-5 rounded flex items-center justify-center text-gray-400 hover:text-red-400 hover:bg-gray-700 disabled:opacity-20"
+                              disabled={arr.length <= 1}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deletePageById(p);
+                              }}
+                              className="w-5 h-5 rounded flex items-center justify-center text-gray-400 hover:text-red-400 hover:bg-gray-700 disabled:opacity-20 cursor-pointer"
                               title="Delete this slide"
                             >
                               <span className="material-symbols-outlined text-[13px]">delete</span>

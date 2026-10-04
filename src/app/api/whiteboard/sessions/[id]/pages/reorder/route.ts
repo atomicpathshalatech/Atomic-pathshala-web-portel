@@ -7,7 +7,7 @@ import { resolveWhiteboardAccess } from "@/lib/whiteboard/access";
 import { pushBoardUpdated, pushPageChanged } from "@/lib/whiteboard/board-mirror";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+async function handleReorder(request: NextRequest, params: { id: string }) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
@@ -43,11 +43,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const currentPage = allPages[currentIndex]!;
     const targetPage = allPages[targetIndex]!;
 
+    const tempPageNumber = -Math.floor(Date.now() % 1000000) - 1000;
+
     // Swap page numbers in a transaction (use a temporary negative index to avoid collision)
     await prisma.$transaction([
       prisma.whiteboardPage.update({
         where: { id: currentPage.id },
-        data: { pageNumber: -999 },
+        data: { pageNumber: tempPageNumber },
       }),
       prisma.whiteboardPage.update({
         where: { id: targetPage.id },
@@ -67,6 +69,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         data: { activePageNumber: newActiveNumber },
       });
       await pushPageChanged(params.id, newActiveNumber);
+    } else if (wbSession.activePageNumber === targetPage.pageNumber) {
+      newActiveNumber = currentPage.pageNumber;
+      await prisma.whiteboardSession.update({
+        where: { id: params.id },
+        data: { activePageNumber: newActiveNumber },
+      });
+      await pushPageChanged(params.id, newActiveNumber);
     }
 
     await pushBoardUpdated(params.id, newActiveNumber, 0);
@@ -80,4 +89,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   } catch (error) {
     return handleApiError(error);
   }
+}
+
+export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+  return handleReorder(request, params);
+}
+
+export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+  return handleReorder(request, params);
 }
