@@ -189,7 +189,7 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, _
   ]);
 
   // A folder is visible only if every folder above it is published too.
-  const byId = new Map(folders.map((f) => [f.id, f]));
+  const byId = new Map((folders ?? []).map((f) => [f.id, f]));
   // (byId holds only published folders, so an unpublished ancestor breaks the chain.)
   const visible = (f: (typeof folders)[number], depth = 0): boolean => {
     if (!f.parentId) return true;
@@ -198,21 +198,35 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, _
   };
 
   const chapterMap = new Map<string, BatchChapterItem & { order: number }>();
-  for (const c of [...assigned.map((a) => a.chapter), ...courseChapters]) {
-    if (chapterMap.has(c.id)) continue;
-    chapterMap.set(c.id, { id: c.id, title: c.title, subjectId: c.subject.id, subject: c.subject.title, lectures: c._count.lectures, dpps: c._count.dpps, order: c.order ?? 0 });
+  const allRawChapters = [
+    ...(assigned ?? []).map((a) => a?.chapter).filter(Boolean),
+    ...(courseChapters ?? []).filter(Boolean),
+  ];
+  for (const c of allRawChapters) {
+    if (!c || !c.id || chapterMap.has(c.id)) continue;
+    chapterMap.set(c.id, {
+      id: c.id,
+      title: c.title || "Chapter",
+      subjectId: c.subject?.id || "",
+      subject: c.subject?.title || "General",
+      lectures: c._count?.lectures ?? 0,
+      dpps: c._count?.dpps ?? 0,
+      order: c.order ?? 0,
+    });
   }
   const chapters = [...chapterMap.values()]
-    .sort((a, b) => a.subject.localeCompare(b.subject) || a.order - b.order || a.title.localeCompare(b.title))
+    .sort((a, b) => (a.subject || "").localeCompare(b.subject || "") || a.order - b.order || (a.title || "").localeCompare(b.title || ""))
     .map(({ order: _order, ...c }) => c);
 
   // DPPs: the batch's own DPP slots (each backed by a test) plus the
   // practice DPPs written for this batch's chapters (by chapter, or by
   // subject + chapter name for DPPs saved without a chapter link).
   const now = new Date();
-  const batchSubjects = Array.from(new Set([...chapterMap.values()].map((c) => c.subject)));
+  const batchSubjects = Array.from(new Set([...chapterMap.values()].map((c) => c.subject).filter(Boolean)));
   const chapterByName = new Map<string, BatchChapterItem & { order: number }>();
-  for (const c of chapterMap.values()) chapterByName.set(`${c.subject.toLowerCase()}|${looseName(c.title)}`, c);
+  for (const c of chapterMap.values()) {
+    chapterByName.set(`${(c.subject || "").toLowerCase()}|${looseName(c.title)}`, c);
+  }
   const [dppSlots, chapterDpps] = await Promise.all([
     prisma.batchSchedule.findMany({
       where: { batchId, type: "DPP", status: { not: "CANCELLED" } },
@@ -273,50 +287,52 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, _
   const attemptStatus = (a: { status: string } | undefined) =>
     !a ? ("PENDING" as const) : a.status === "IN_PROGRESS" ? ("IN_PROGRESS" as const) : ("COMPLETED" as const);
   const dpps: BatchDppItem[] = [
-    ...dppSlots.map((d): BatchDppItem => {
+    ...(dppSlots ?? []).map((d): BatchDppItem => {
       const t = d.test;
       const questionCount = (t?.sections ?? []).reduce(
-        (n, sec) => n + Math.min(sec.targetCount > 0 ? sec.targetCount : Infinity, sec._count.questions),
+        (n, sec) => n + Math.min(sec.targetCount > 0 ? sec.targetCount : Infinity, sec._count?.questions ?? 0),
         0
       );
       const published = Boolean(t && t.status === "PUBLISHED" && !t.archived && questionCount > 0);
-      const upcoming = d.startsAt > now;
-      const a = t?.attempts[0];
+      const upcoming = d.startsAt ? new Date(d.startsAt) > now : false;
+      const a = t?.attempts?.[0];
       const status = upcoming ? "UPCOMING" : !published ? "LOCKED" : attemptStatus(a);
       return {
         id: d.id,
-        title: d.title,
-        subject: d.chapter?.subject.title ?? d.subject ?? "Practice",
+        title: d.title || "DPP",
+        subject: d.chapter?.subject?.title ?? d.subject ?? "Practice",
         chapter: d.chapter?.title ?? d.notes ?? "Practice",
         chapterId: d.chapter?.id ?? null,
         questionCount,
         durationMin: t?.durationMin ?? 0,
         status,
         score: a?.score ?? null,
-        opensAt: d.startsAt.toISOString(),
+        opensAt: d.startsAt ? new Date(d.startsAt).toISOString() : null,
         href: status === "UPCOMING" || status === "LOCKED" || !t ? null : status === "COMPLETED" ? `/tests/${t.id}/result` : `/tests/${t.id}/attempt`,
         // DPP solutions open once the student has submitted it.
         pdfHref: status === "COMPLETED" && t && a?.status !== "IN_PROGRESS" ? `/api/tests/${t.id}/pdf` : null,
       };
     }),
-    ...chapterDpps.map((d): BatchDppItem => {
+    ...(chapterDpps ?? []).map((d): BatchDppItem => {
+      const subKey = (d.subject || "").toLowerCase();
+      const chapKey = looseName(d.chapter);
       const ch =
         (d.chapterId ? chapterMap.get(d.chapterId) : undefined) ??
-        chapterByName.get(`${d.subject.toLowerCase()}|${looseName(d.chapter)}`) ??
+        chapterByName.get(`${subKey}|${chapKey}`) ??
         null;
-      const subjectTitle = ch?.subject ?? batchSubjects.find((t) => t.toLowerCase() === d.subject.toLowerCase()) ?? d.subject;
-      const ready = d._count.questions > 0;
+      const subjectTitle = ch?.subject ?? batchSubjects.find((t) => (t || "").toLowerCase() === subKey) ?? d.subject ?? "Practice";
+      const ready = (d._count?.questions ?? 0) > 0;
       const backing = backingByDpp.get(d.id);
-      const a = backing?.attempts[0] ?? d.attempts[0];
+      const a = backing?.attempts?.[0] ?? d.attempts?.[0];
       const status = !ready ? "LOCKED" : attemptStatus(a);
       return {
         id: d.id,
-        title: d.name,
+        title: d.name || "DPP",
         subject: subjectTitle,
         chapter: ch?.title ?? (d.chapter || "Other DPPs"),
         chapterId: ch?.id ?? null,
-        questionCount: d._count.questions || d.questionTargetCount,
-        durationMin: d.estimatedTimeMin,
+        questionCount: d._count?.questions || d.questionTargetCount || 0,
+        durationMin: d.estimatedTimeMin || 0,
         status,
         score: a?.score ?? null,
         opensAt: null,
@@ -357,11 +373,11 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, _
   // notifications (class reminders, results …) stay in the app's bell.
   const seen = new Set<string>();
   const notices: BatchNotice[] = [];
-  for (const n of broadcasts.map((b) => ({ id: `b_${b.id}`, title: b.title, body: b.body, createdAt: b.createdAt, deepLink: null as string | null }))) {
+  for (const n of (broadcasts ?? []).map((b) => ({ id: `b_${b.id}`, title: b.title || "Notice", body: b.body || "", createdAt: b.createdAt, deepLink: null as string | null }))) {
     const key = `${n.title}|${n.body}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    notices.push({ ...n, createdAt: n.createdAt.toISOString() });
+    notices.push({ ...n, createdAt: n.createdAt ? new Date(n.createdAt).toISOString() : new Date().toISOString() });
   }
   notices.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
@@ -375,8 +391,9 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, _
     : [];
 
   // Auto-made PDF folders (with everything under them) → All PDF.
-  const visibleFolders = folders.filter(visible);
+  const visibleFolders = (folders ?? []).filter(visible);
   const underAuto = (f: (typeof folders)[number], depth = 0): string | null => {
+    if (!f?.name) return null;
     if (AUTO_PDF_FOLDER.test(f.name.trim())) return f.name.trim().toLowerCase();
     const parent = f.parentId ? byId.get(f.parentId) : undefined;
     return parent && depth < 50 ? underAuto(parent, depth + 1) : null;
@@ -386,67 +403,77 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, _
   for (const f of visibleFolders) {
     const kind = underAuto(f);
     if (!kind) continue;
-    const subject = AUTO_PDF_FOLDER.test(f.name.trim()) ? null : f.name;
-    for (const file of f.files) {
-      (kind === "class notes" ? classNoteFiles : syllabusFiles).push({ id: file.id, title: file.title, sizeBytes: file.sizeBytes, subject });
+    const subject = f.name && AUTO_PDF_FOLDER.test(f.name.trim()) ? null : f.name;
+    for (const file of f.files ?? []) {
+      (kind === "class notes" ? classNoteFiles : syllabusFiles).push({ id: file.id, title: file.title || file.fileName || "File", sizeBytes: file.sizeBytes || 0, subject });
     }
   }
 
   return {
     batch: {
       id: batch.id,
-      name: batch.name,
-      code: batch.code,
+      name: batch.name || "Batch",
+      code: batch.code || "",
       exam: batch.targetExam ?? null,
       thumbnailUrl: batch.thumbnailUrl ?? null,
-      teachers: batch.teachers.map((t) => t.teacher.user.name).filter(Boolean),
-      teacherCards: batch.teachers.map(({ teacher: t }) => ({
-        id: t.id,
-        name: t.displayName || t.user.name,
-        photoUrl: t.user.photoUrl ?? null,
-        subjects: t.subjects,
-        experienceYears: t.experienceYears ?? null,
-        bio: t.bio ?? null,
-      })),
+      teachers: (batch.teachers ?? [])
+        .map((t) => t?.teacher?.displayName || t?.teacher?.user?.name || "")
+        .filter(Boolean),
+      teacherCards: (batch.teachers ?? [])
+        .map(({ teacher: t }) => (t ? {
+          id: t.id || "",
+          name: t.displayName || t.user?.name || "Faculty",
+          photoUrl: t.user?.photoUrl ?? null,
+          subjects: Array.isArray(t.subjects) ? t.subjects : [],
+          experienceYears: t.experienceYears ?? null,
+          bio: t.bio ?? null,
+        } : null))
+        .filter(Boolean) as BatchTeacherCard[],
     },
-    classes: schedules.map((s) => ({
+    classes: (schedules ?? []).map((s) => ({
       id: s.id,
-      title: s.title,
-      subject: s.subject,
-      teacherName: s.teacher?.user.name ?? null,
-      startsAt: s.startsAt.toISOString(),
-      endsAt: s.endsAt.toISOString(),
-      status: s.status,
-      type: s.type,
-      liveWhiteboardSession: s.liveWhiteboardSession,
+      title: s.title || "Live Class",
+      subject: s.subject || null,
+      teacherName: s.teacher?.user?.name ?? null,
+      startsAt: s.startsAt ? new Date(s.startsAt).toISOString() : new Date().toISOString(),
+      endsAt: s.endsAt ? new Date(s.endsAt).toISOString() : new Date().toISOString(),
+      status: s.status || "SCHEDULED",
+      type: s.type || "LIVE_CLASS",
+      liveWhiteboardSession: s.liveWhiteboardSession || null,
       chapterId: s.chapter?.id ?? null,
       chapterTitle: s.chapter?.title ?? null,
-      subjectName: s.chapter?.subject.title ?? s.subject ?? "Other classes",
+      subjectName: s.chapter?.subject?.title ?? s.subject ?? "Other classes",
       notesSessionId: s.liveWhiteboardSession?.pdfStatus === "READY" ? s.liveWhiteboardSession.id : null,
     })),
     chapters,
-    tests: tests.filter((t) => !String(t.code ?? "").startsWith("DPPT-")).map((t) => {
-      const st = t.attempts[0]?.status;
+    tests: (tests ?? []).filter((t) => !String(t.code ?? "").startsWith("DPPT-")).map((t) => {
+      const st = t.attempts?.[0]?.status;
+      let isReleased = false;
+      try {
+        isReleased = areResultsReleased(t);
+      } catch {
+        isReleased = false;
+      }
       return {
         id: t.id,
-        name: t.name,
-        durationMin: t.durationMin,
-        openTime: t.openTime?.toISOString() ?? null,
-        closeTime: t.closeTime?.toISOString() ?? null,
+        name: t.name || "Test",
+        durationMin: t.durationMin || 0,
+        openTime: t.openTime ? new Date(t.openTime).toISOString() : null,
+        closeTime: t.closeTime ? new Date(t.closeTime).toISOString() : null,
         attemptStatus: !st ? "NOT_STARTED" : st === "IN_PROGRESS" ? "IN_PROGRESS" : "SUBMITTED",
         // Same rule as the export route: everyone gets the paper once the test time is over.
-        pdfHref: st && st !== "IN_PROGRESS" && areResultsReleased(t) ? `/api/tests/${t.id}/pdf` : null,
+        pdfHref: st && st !== "IN_PROGRESS" && isReleased ? `/api/tests/${t.id}/pdf` : null,
         chapterId: t.chapterId ?? null,
       };
     }),
     dpps,
-    folders: visibleFolders.filter((f) => !underAuto(f)).map((f) => ({ id: f.id, parentId: f.parentId, name: f.name, files: f.files })),
+    folders: visibleFolders.filter((f) => !underAuto(f)).map((f) => ({ id: f.id, parentId: f.parentId, name: f.name || "Folder", files: f.files ?? [] })),
     notices: notices.slice(0, 40),
-    announcements: chapterNotices.map((n) => ({
+    announcements: (chapterNotices ?? []).map((n) => ({
       id: n.id,
-      title: n.title,
-      body: n.content,
-      createdAt: n.createdAt.toISOString(),
+      title: n.title || "Announcement",
+      body: n.content || "",
+      createdAt: n.createdAt ? new Date(n.createdAt).toISOString() : new Date().toISOString(),
       chapterId: n.chapterId,
       chapterTitle: chapterMap.get(n.chapterId)?.title ?? "Chapter",
       author: n.authorName ?? null,

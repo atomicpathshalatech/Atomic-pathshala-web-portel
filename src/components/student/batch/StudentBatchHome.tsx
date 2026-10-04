@@ -145,7 +145,7 @@ export function StudentBatchHome({ data, initialTab }: { data: StudentBatchHomeD
         ) : data.batch.thumbnailUrl ? (
           <img src={data.batch.thumbnailUrl} alt="" className="w-10 h-10 rounded-xl object-cover shrink-0" />
         ) : (
-          <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center text-base font-black shrink-0">{data.batch.name.charAt(0)}</div>
+          <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center text-base font-black shrink-0">{(data.batch.name || "B").charAt(0)}</div>
         )}
         <div className="min-w-0">
           <p className="text-[10px] font-semibold text-slate-500 flex items-center gap-1">
@@ -680,7 +680,7 @@ function ContentTab({ data, now, nav, go }: { data: StudentBatchHomeData; now: D
 /* ---------- Notes and Module (batch folders) ---------- */
 
 const INFO = "__batch_info__";
-const isInfoFolder = (name: string) => /^(batch\s*info|brochure)$/i.test(name.trim());
+const isInfoFolder = (name: string | null | undefined) => /^(batch\s*info|brochure)$/i.test((name || "").trim());
 
 function NotesTab({ folders, teachers, nav, go }: { folders: StudentBatchHomeData["folders"]; teachers: StudentBatchHomeData["batch"]["teacherCards"]; nav: Nav; go: (n: Partial<Nav>) => void }) {
   const path = nav.k ? nav.k.split("/").filter(Boolean) : [];
@@ -688,13 +688,13 @@ function NotesTab({ folders, teachers, nav, go }: { folders: StudentBatchHomeDat
   const current = path[path.length - 1] ?? null;
   // The admin's own "Batch Info" / "Brochure" folder is shown inside the
   // pinned Batch Info folder, not twice.
-  const infoFolders = folders.filter((f) => !f.parentId && isInfoFolder(f.name));
-  const children = current === INFO ? [] : folders.filter((f) => f.parentId === current && !(current === null && isInfoFolder(f.name)));
-  const files = current === INFO ? infoFolders.flatMap((f) => f.files) : current ? folders.find((f) => f.id === current)?.files ?? [] : [];
-  const nameOf = (id: string) => (id === INFO ? "Batch Info" : folders.find((f) => f.id === id)?.name ?? "");
+  const infoFolders = (folders ?? []).filter((f) => !f.parentId && isInfoFolder(f?.name));
+  const children = current === INFO ? [] : (folders ?? []).filter((f) => f.parentId === current && !(current === null && isInfoFolder(f?.name)));
+  const files = current === INFO ? infoFolders.flatMap((f) => f.files ?? []) : current ? (folders ?? []).find((f) => f.id === current)?.files ?? [] : [];
+  const nameOf = (id: string) => (id === INFO ? "Batch Info" : (folders ?? []).find((f) => f.id === id)?.name ?? "");
   const countIn = (id: string): number =>
-    (folders.find((f) => f.id === id)?.files.length ?? 0) + folders.filter((f) => f.parentId === id).reduce((n, f) => n + countIn(f.id), 0);
-  const infoFileCount = infoFolders.reduce((n, f) => n + f.files.length, 0);
+    ((folders ?? []).find((f) => f.id === id)?.files?.length ?? 0) + (folders ?? []).filter((f) => f.parentId === id).reduce((n, f) => n + countIn(f.id), 0);
+  const infoFileCount = infoFolders.reduce((n, f) => n + (f.files?.length ?? 0), 0);
 
   return (
     <div className="space-y-2">
@@ -706,7 +706,7 @@ function NotesTab({ folders, teachers, nav, go }: { folders: StudentBatchHomeDat
           <span className="min-w-0 flex-1">
             <span className="block text-xs font-semibold">Batch Info</span>
             <span className="block text-[10px] text-white/80">
-              {plural(teachers.length, "teacher")}
+              {plural((teachers ?? []).length, "teacher")}
               {infoFileCount ? ` · brochure & ${plural(infoFileCount, "file")}` : ""}
             </span>
           </span>
@@ -717,7 +717,7 @@ function NotesTab({ folders, teachers, nav, go }: { folders: StudentBatchHomeDat
       {current === INFO && (
         <section className="space-y-2">
           <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-0.5">Your teachers</h3>
-          {teachers.length === 0 ? (
+          {!teachers || teachers.length === 0 ? (
             <Empty text="Teachers will be listed here." />
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -726,12 +726,12 @@ function NotesTab({ folders, teachers, nav, go }: { folders: StudentBatchHomeDat
                   {t.photoUrl ? (
                     <img src={t.photoUrl} alt="" className="w-11 h-11 rounded-lg object-cover shrink-0" />
                   ) : (
-                    <div className="w-11 h-11 rounded-lg bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 flex items-center justify-center text-base font-bold shrink-0">{t.name.charAt(0)}</div>
+                    <div className="w-11 h-11 rounded-lg bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 flex items-center justify-center text-base font-bold shrink-0">{(t.name || "T").charAt(0)}</div>
                   )}
                   <div className="min-w-0">
-                    <p className="text-xs font-semibold text-slate-900 dark:text-white">{t.name}</p>
+                    <p className="text-xs font-semibold text-slate-900 dark:text-white">{t.name || "Faculty"}</p>
                     <p className="text-[10px] font-semibold text-blue-600">
-                      {[t.subjects.join(", "), t.experienceYears ? `${t.experienceYears} yrs experience` : null].filter(Boolean).join(" · ")}
+                      {[(t.subjects ?? []).join(", "), t.experienceYears ? `${t.experienceYears} yrs experience` : null].filter(Boolean).join(" · ")}
                     </p>
                     {t.bio && <p className="text-[10px] text-slate-500 mt-0.5 line-clamp-3">{t.bio}</p>}
                   </div>

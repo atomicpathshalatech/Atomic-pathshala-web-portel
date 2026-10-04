@@ -132,9 +132,13 @@ export default async function BatchCoursePage({
   // 4. Enrolled student: their batch — classes, tests, study material and
   // announcements on one page with tabs (no pop-ups, no sales sections).
   if (isEnrolled && dbBatch && studentId && userId) {
-    const data = await loadStudentBatchHome(dbBatch.id, studentId, userId);
-    if (data) {
-      return <StudentBatchHome data={data} initialTab={parseBatchTab(searchParams?.tab)} />;
+    try {
+      const data = await loadStudentBatchHome(dbBatch.id, studentId, userId);
+      if (data) {
+        return <StudentBatchHome data={data} initialTab={parseBatchTab(searchParams?.tab)} />;
+      }
+    } catch (err) {
+      console.error("Error loading student batch home view:", err);
     }
   }
 
