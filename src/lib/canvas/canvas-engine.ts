@@ -606,9 +606,9 @@ export function floodFillImageData(
 }
 
 /** How far each ink point moves toward the pointer (1 = raw, lower = smoother, more trailing). */
-const INK_SMOOTHING = 0.5;
+const INK_SMOOTHING = 0.65;
 /** Points closer than this (virtual px) to the previous one are dropped. */
-const INK_MIN_STEP = 0.6;
+const INK_MIN_STEP = 0.3;
 
 export class CanvasEngine {
   private baseCanvas: HTMLCanvasElement;
@@ -1312,23 +1312,23 @@ export class CanvasEngine {
       let lineWidth: number;
       let alpha = 1;
       if (penStyle === "fountain") {
-        lineWidth = Math.max(0.4, size * (0.15 + pressure * 2.4));
+        lineWidth = Math.max(0.2, size * (0.15 + pressure * 2.0));
       } else if (penStyle === "chisel") {
         const ang = Math.atan2(p2.y - p1.y, p2.x - p1.x);
-        lineWidth = Math.max(1, size * (0.3 + 1.5 * Math.abs(Math.sin(ang - CHISEL_NIB))));
+        lineWidth = Math.max(0.4, size * (0.3 + 1.5 * Math.abs(Math.sin(ang - CHISEL_NIB))));
       } else if (penStyle === "art") {
         // brush: wider, feathered via a soft self-glow + reduced opacity
-        lineWidth = Math.max(1, size * (1.1 + pressure * 1.5));
+        lineWidth = Math.max(0.5, size * (1.1 + pressure * 1.5));
         alpha = 0.7;
         ctx.shadowColor = color;
         ctx.shadowBlur = size * 0.9;
       } else if (penStyle === "graphite") {
         // pencil: thin + grainy alpha jitter
-        lineWidth = Math.max(0.5, size * (0.35 + pressure * 0.7));
+        lineWidth = Math.max(0.2, size * (0.3 + pressure * 0.7));
         alpha = 0.5 + Math.random() * 0.4;
       } else {
         // hard-tipped (default)
-        lineWidth = Math.max(0.75, size * (0.45 + pressure * 1.35));
+        lineWidth = size <= 1 ? Math.max(0.2, size * (0.3 + pressure * 0.7)) : Math.max(0.3, size * (0.4 + pressure * 1.2));
       }
 
       ctx.globalAlpha = alpha;

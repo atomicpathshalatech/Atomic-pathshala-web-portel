@@ -376,12 +376,12 @@ export function TeacherLiveClassRoom({
   const [eraserRadius, setEraserRadius] = useState<number>(26); // "M"
   const [selectionCount, setSelectionCount] = useState(0);
   const [color, setColor] = useState<string>(PEN_PALETTE_COLORS[0] ?? "#ef4444");
-  const [size, setSize] = useState(3);
+  const [size, setSize] = useState(0.8);
   // The pen and the highlighter each keep their own colour and thickness.
   // They used to share one, so picking a highlighter colour (or another
   // tool's size) silently changed the pen.
   const inkMemoryRef = useRef<{ pen: { color: string; size: number }; highlighter: { color: string; size: number } }>({
-    pen: { color: PEN_PALETTE_COLORS[0] ?? "#ef4444", size: 3 },
+    pen: { color: PEN_PALETTE_COLORS[0] ?? "#ef4444", size: 0.8 },
     highlighter: { color: HIGHLIGHT_COLORS[0] ?? "#fde047", size: 5 },
   });
   const prevInkGroupRef = useRef<"pen" | "highlighter" | null>("pen");
@@ -1631,6 +1631,8 @@ export function TeacherLiveClassRoom({
     if (!wbSession || !engineRef.current) return;
     if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
     await flushAutosave();
+    pendingObjectsRef.current = null;
+    pendingPageIdRef.current = null;
     const target = wbSession.pages.find((p) => p.pageNumber === pageNumber);
     if (!target) return;
     try {
@@ -1664,6 +1666,8 @@ export function TeacherLiveClassRoom({
     try {
       if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
       await flushAutosave();
+      pendingObjectsRef.current = null;
+      pendingPageIdRef.current = null;
       const data = await postJson(`/api/whiteboard/sessions/${wbSession.id}/pages`, { afterPageNumber: wbSession.activePageNumber });
       setWbSession((prev) => (prev ? { ...prev, pages: mergeInsertedPage(prev.pages, data), activePageNumber: data.page.pageNumber } : prev));
       enginePageIdRef.current = data.page.id;
@@ -1679,6 +1683,8 @@ export function TeacherLiveClassRoom({
     try {
       if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
       await flushAutosave();
+      pendingObjectsRef.current = null;
+      pendingPageIdRef.current = null;
       const data = await postJson(`/api/whiteboard/sessions/${wbSession.id}/pages`, { afterPageNumber: wbSession.activePageNumber });
       const newPage = data.page as WhiteboardPage;
       await patchJson(`/api/whiteboard/sessions/${wbSession.id}/pages/${newPage.id}`, {
@@ -1841,6 +1847,8 @@ export function TeacherLiveClassRoom({
     try {
       if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
       await flushAutosave();
+      pendingObjectsRef.current = null;
+      pendingPageIdRef.current = null;
       const data = await postJson(`/api/whiteboard/sessions/${wbSession.id}/pages`, {
         afterPageNumber: page.pageNumber,
         duplicateOfPageId: page.id,
@@ -1866,6 +1874,8 @@ export function TeacherLiveClassRoom({
     if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
     try {
       await flushAutosave();
+      pendingObjectsRef.current = null;
+      pendingPageIdRef.current = null;
       const data = await deleteJson(`/api/whiteboard/sessions/${wbSession.id}/pages/${page.id}`);
       setWbSession((prev) => (prev ? { ...prev, pages: data.pages, activePageNumber: data.activePageNumber } : prev));
       const nextActive = (data.pages as WhiteboardPage[]).find((pg) => pg.pageNumber === data.activePageNumber);
@@ -1882,6 +1892,9 @@ export function TeacherLiveClassRoom({
     if (!window.confirm("Delete this page? This can't be undone.")) return;
     if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
     try {
+      await flushAutosave();
+      pendingObjectsRef.current = null;
+      pendingPageIdRef.current = null;
       const data = await deleteJson(`/api/whiteboard/sessions/${wbSession.id}/pages/${currentPage.id}`);
       setWbSession((prev) =>
         prev ? { ...prev, pages: data.pages, activePageNumber: data.activePageNumber } : prev
@@ -1894,6 +1907,43 @@ export function TeacherLiveClassRoom({
       engineRef.current?.loadObjects(nextActive?.objects ?? []);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Could not delete this page.");
+    }
+  }
+
+  async function movePage(page: WhiteboardPage, direction: "up" | "down") {
+    if (!wbSession) return;
+    const targetPageNumber = direction === "up" ? page.pageNumber - 1 : page.pageNumber + 1;
+    if (targetPageNumber < 1 || targetPageNumber > wbSession.pages.length) return;
+    try {
+      if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+      await flushAutosave();
+      pendingObjectsRef.current = null;
+      pendingPageIdRef.current = null;
+      const data = await patchJson(`/api/whiteboard/sessions/${wbSession.id}/pages/reorder`, {
+        pageId: page.id,
+        direction,
+      });
+      if (data?.pages) {
+        setWbSession((prev) =>
+          prev
+            ? {
+                ...prev,
+                pages: data.pages,
+                activePageNumber: data.activePageNumber ?? prev.activePageNumber,
+              }
+            : prev
+        );
+        const activePg = (data.pages as WhiteboardPage[]).find(
+          (p) => p.pageNumber === (data.activePageNumber ?? wbSession.activePageNumber)
+        );
+        if (activePg) {
+          enginePageIdRef.current = activePg.id;
+          lastLoadedPageIdRef.current = activePg.id;
+          engineRef.current?.loadObjects(activePg.objects ?? []);
+        }
+      }
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Could not reorder slides.");
     }
   }
 
@@ -3973,27 +4023,47 @@ export function TeacherLiveClassRoom({
                   </button>
                 </div>
 
-                {/* Thickness Slider with Live Dot (Screenshot 3) */}
-                <div className="bg-[#10111a] border border-[#242634] rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2.5">
-                  <span className="text-[11px] text-gray-300 font-medium">Thickness</span>
-                  <input
-                    type="range"
-                    min={1}
-                    max={20}
-                    value={size}
-                    onChange={(e) => setSize(Number(e.target.value))}
-                    className="flex-1 accent-blue-500 h-1.5 bg-gray-700 rounded-lg cursor-pointer"
-                  />
-                  <span className="text-xs font-mono font-bold text-gray-200 w-8 text-right">{size}px</span>
-                  <div className="w-9 h-9 rounded-full bg-[#1b1c28] border border-[#2d2e3b] flex items-center justify-center shrink-0">
-                    <div
-                      className="rounded-full transition-all"
-                      style={{
-                        width: Math.max(3, Math.min(22, size)),
-                        height: Math.max(3, Math.min(22, size)),
-                        backgroundColor: color,
-                      }}
+                {/* Thickness Slider with Live Dot & Fine-tip Presets */}
+                <div className="bg-[#10111a] border border-[#242634] rounded-lg p-2 flex flex-col gap-2">
+                  <div className="flex items-center justify-between gap-2.5">
+                    <span className="text-[11px] text-gray-300 font-medium">Thickness</span>
+                    <input
+                      type="range"
+                      min={0.3}
+                      max={10}
+                      step={0.1}
+                      value={size}
+                      onChange={(e) => setSize(Number(e.target.value))}
+                      className="flex-1 accent-blue-500 h-1.5 bg-gray-700 rounded-lg cursor-pointer"
                     />
+                    <span className="text-xs font-mono font-bold text-gray-200 w-10 text-right">{size.toFixed(1)}px</span>
+                    <div className="w-8 h-8 rounded-full bg-[#1b1c28] border border-[#2d2e3b] flex items-center justify-center shrink-0">
+                      <div
+                        className="rounded-full transition-all"
+                        style={{
+                          width: Math.max(2, Math.min(20, size * 2.5)),
+                          height: Math.max(2, Math.min(20, size * 2.5)),
+                          backgroundColor: color,
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 pt-1 border-t border-[#242634]/60">
+                    <span className="text-[10px] text-gray-400 font-semibold mr-1">Presets:</span>
+                    {[0.5, 0.8, 1.5, 3.0].map((sz) => (
+                      <button
+                        key={sz}
+                        type="button"
+                        onClick={() => setSize(sz)}
+                        className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold transition ${
+                          Math.abs(size - sz) < 0.05
+                            ? "bg-blue-600 text-white"
+                            : "bg-[#1b1c28] text-gray-400 hover:text-white hover:bg-gray-700"
+                        }`}
+                      >
+                        {sz}px
+                      </button>
+                    ))}
                   </div>
                 </div>
 
@@ -4408,20 +4478,38 @@ export function TeacherLiveClassRoom({
                           <span className="flex items-center gap-0.5">
                             <button
                               type="button"
+                              disabled={p.pageNumber <= 1}
+                              onClick={() => movePage(p, "up")}
+                              className="w-5 h-5 rounded flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-700 disabled:opacity-20"
+                              title="Move slide up"
+                            >
+                              <span className="material-symbols-outlined text-[13px]">arrow_upward</span>
+                            </button>
+                            <button
+                              type="button"
+                              disabled={p.pageNumber >= wbSession.pages.length}
+                              onClick={() => movePage(p, "down")}
+                              className="w-5 h-5 rounded flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-700 disabled:opacity-20"
+                              title="Move slide down"
+                            >
+                              <span className="material-symbols-outlined text-[13px]">arrow_downward</span>
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => duplicatePage(p)}
-                              className="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-700"
+                              className="w-5 h-5 rounded flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-700"
                               title="Duplicate (copy) this slide"
                             >
-                              <span className="material-symbols-outlined text-[15px]">content_copy</span>
+                              <span className="material-symbols-outlined text-[13px]">content_copy</span>
                             </button>
                             <button
                               type="button"
                               disabled={wbSession.pages.length <= 1}
                               onClick={() => deletePageById(p)}
-                              className="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-red-400 hover:bg-gray-700 disabled:opacity-30"
+                              className="w-5 h-5 rounded flex items-center justify-center text-gray-400 hover:text-red-400 hover:bg-gray-700 disabled:opacity-20"
                               title="Delete this slide"
                             >
-                              <span className="material-symbols-outlined text-[15px]">delete</span>
+                              <span className="material-symbols-outlined text-[13px]">delete</span>
                             </button>
                           </span>
                         </div>

@@ -217,7 +217,7 @@ export async function generateWhiteboardPptx(
       slide.background = { color: "FFFFFF" };
     }
 
-    // 2. Render ink: freehand strokes, shapes, and text
+    // 2. Render ink: freehand strokes, shapes, text, and rasters
     for (const obj of p.objects || []) {
       if (obj.type === "stroke") {
         // pptxgenjs has no native freehand path, so a stroke is rendered as
@@ -232,6 +232,19 @@ export async function generateWhiteboardPptx(
         renderNativeShape(slide, obj, scaleX, scaleY);
       } else if (obj.type === "text") {
         renderNativeText(slide, obj, scaleX, scaleY);
+      } else if (obj.type === "raster" && (obj as any).dataUrl) {
+        try {
+          const rObj = obj as any;
+          slide.addImage({
+            data: rObj.dataUrl,
+            x: rObj.x * scaleX,
+            y: rObj.y * scaleY,
+            w: rObj.width * scaleX,
+            h: rObj.height * scaleY,
+          });
+        } catch (err) {
+          console.warn("[PPTX Generator] Raster addImage error:", err);
+        }
       }
     }
 
@@ -350,10 +363,11 @@ function renderNativeText(slide: any, textObj: any, scaleX: number, scaleY: numb
 }
 
 function renderNativeShape(slide: any, obj: any, scaleX: number, scaleY: number) {
-  const { shape, color, size, start, end } = obj;
+  const { shape, color, size, start, end, fill } = obj;
   if (!start || !end) return;
 
   const hexColor = normalizeHex(color);
+  const fillOption = fill ? { color: normalizeHex(fill) } : { type: "none" };
   const lineWidth = Math.max(1, (size || 3) * 0.6);
 
   const x1 = start.x * scaleX;
@@ -367,23 +381,23 @@ function renderNativeShape(slide: any, obj: any, scaleX: number, scaleY: number)
   const h = Math.max(0.05, Math.abs(y2 - y1));
 
   try {
-    if (shape === "rectangle") {
+    if (shape === "rectangle" || shape === "square") {
       slide.addShape("rect", {
         x: minX,
         y: minY,
         w,
         h,
         line: { color: hexColor, width: lineWidth },
-        fill: { type: "none" },
+        fill: fillOption,
       });
-    } else if (shape === "circle") {
+    } else if (shape === "circle" || shape === "ellipse") {
       slide.addShape("ellipse", {
         x: minX,
         y: minY,
         w,
         h,
         line: { color: hexColor, width: lineWidth },
-        fill: { type: "none" },
+        fill: fillOption,
       });
     } else if (shape === "line") {
       slide.addShape("line", {
@@ -400,7 +414,7 @@ function renderNativeShape(slide: any, obj: any, scaleX: number, scaleY: number)
         w,
         h,
         line: { color: hexColor, width: lineWidth },
-        fill: { type: "none" },
+        fill: fillOption,
       });
     } else if (shape === "arrow") {
       // pptxgenjs has a native "line" shape with arrowhead end-cap support,

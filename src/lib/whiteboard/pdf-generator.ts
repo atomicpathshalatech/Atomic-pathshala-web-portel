@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import { StrokeObject, VIRTUAL_WIDTH, VIRTUAL_HEIGHT } from "@/lib/canvas/canvas-engine";
 import { SLIDE_WATERMARK, getLogoBase64 } from "@/lib/whiteboard/branding";
+import { SHAPE_RENDERERS } from "@/lib/canvas/shapes/registry";
 
 export interface PageDataForExport {
   pageNumber: number;
@@ -44,7 +45,7 @@ export async function generateWhiteboardPdf(
     // 1. Draw Background (Includes PPT Background Image, Official Header Template & Branding)
     await drawSlideBackground(doc, p.background, pdfWidth, pdfHeight, sessionTitle, logoBase64);
 
-    // 2. Render all strokes, shapes, and text
+    // 2. Render all strokes, shapes, text, and rasters
     for (const obj of p.objects || []) {
       if (obj.type === "stroke") {
         renderStroke(doc, obj, scale);
@@ -52,6 +53,13 @@ export async function generateWhiteboardPdf(
         renderShape(doc, obj, scale);
       } else if (obj.type === "text") {
         renderText(doc, obj, scale);
+      } else if (obj.type === "raster" && (obj as any).dataUrl) {
+        try {
+          const rObj = obj as any;
+          doc.addImage(rObj.dataUrl, "PNG", rObj.x * scale, rObj.y * scale, rObj.width * scale, rObj.height * scale);
+        } catch (err) {
+          console.warn("[PDF Generator] Raster addImage error:", err);
+        }
       }
     }
 
@@ -415,9 +423,18 @@ function renderStroke(doc: jsPDF, stroke: any, scale: number) {
   const points = stroke.points;
   if (!points || points.length < 2) return;
 
+  const isHighlighter = stroke.tool === "highlighter" || stroke.tool === "highlighter-fade";
   const { r, g, b } = hexToRgb(stroke.color || "#1A1A1A");
+
+  try {
+    if (isHighlighter && (doc as any).GState) {
+      doc.saveGraphicsState();
+      doc.setGState(new (doc as any).GState({ opacity: 0.35 }));
+    }
+  } catch {}
+
   doc.setDrawColor(r, g, b);
-  doc.setLineWidth(Math.max(0.5, (stroke.size || 3) * scale));
+  doc.setLineWidth(Math.max(0.5, (isHighlighter ? (stroke.size || 5) * 3.5 : (stroke.size || 3)) * scale));
   doc.setLineCap("round");
   doc.setLineJoin("round");
 
@@ -426,6 +443,12 @@ function renderStroke(doc: jsPDF, stroke: any, scale: number) {
     const p2 = points[i + 1];
     doc.line(p1.x * scale, p1.y * scale, p2.x * scale, p2.y * scale);
   }
+
+  try {
+    if (isHighlighter && (doc as any).GState) {
+      doc.restoreGraphicsState();
+    }
+  } catch {}
 }
 
 /** Mirrors CanvasEngine.drawText()/measureText() in canvas-engine.ts — same
@@ -452,37 +475,102 @@ function renderText(doc: jsPDF, textObj: any, scale: number) {
 }
 
 function renderShape(doc: jsPDF, shapeObj: any, scale: number) {
-  const { shape, color, size, start, end } = shapeObj;
+  const { shape, color, size, start, end, fill } = shapeObj;
   if (!start || !end) return;
 
+  const renderer = SHAPE_RENDERERS[shape];
+  if (renderer && doc.context2d) {
+    const ctx = doc.context2d as any;
+    ctx.save();
+    // Provide shims for missing context2d methods on jsPDF
+    if (!ctx.roundRect) {
+      ctx.roundRect = function (x: number, y: number, w: number, h: number, r: number = 8) {
+        const radius = Math.min(r, Math.abs(w) / 2, Math.abs(h) / 2);
+        this.beginPath();
+        this.moveTo(x + radius, y);
+        this.lineTo(x + w - radius, y);
+        this.quadraticCurveTo(x + w, y, x + w, y + radius);
+        this.lineTo(x + w, y + h - radius);
+        this.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+        this.lineTo(x + radius, y + h);
+        this.quadraticCurveTo(x, y + h, x, y + h - radius);
+        this.lineTo(x, y + radius);
+        this.quadraticCurveTo(x, y, x + radius, y);
+        this.closePath();
+      };
+    }
+    if (!ctx.ellipse) {
+      ctx.ellipse = function (
+        x: number,
+        y: number,
+        rx: number,
+        ry: number,
+        rotation: number = 0,
+        startAngle: number = 0,
+        endAngle: number = 2 * Math.PI
+      ) {
+        this.save();
+        this.translate(x, y);
+        this.rotate(rotation);
+        this.scale(rx, ry);
+        this.arc(0, 0, 1, startAngle, endAngle);
+        this.restore();
+      };
+    }
+
+    ctx.scale(scale, scale);
+    try {
+      renderer({
+        ctx: ctx as unknown as CanvasRenderingContext2D,
+        start,
+        end,
+        color: color || "#1A1A1A",
+        size: Math.max(0.5, size || 3),
+        fill,
+      });
+    } catch (err) {
+      console.warn("[PDF Generator] Shape render error:", shape, err);
+    } finally {
+      ctx.restore();
+    }
+    return;
+  }
+
+  // Fallback vector primitives if no renderer or context2d
   const { r, g, b } = hexToRgb(color || "#1A1A1A");
   doc.setDrawColor(r, g, b);
-  doc.setFillColor(r, g, b);
+  if (fill) {
+    const fRgb = hexToRgb(fill);
+    doc.setFillColor(fRgb.r, fRgb.g, fRgb.b);
+  } else {
+    doc.setFillColor(r, g, b);
+  }
   doc.setLineWidth(Math.max(0.5, (size || 3) * scale));
 
   const x1 = start.x * scale;
   const y1 = start.y * scale;
   const x2 = end.x * scale;
   const y2 = end.y * scale;
+  const drawMode = fill ? "FD" : "S";
 
   if (shape === "line") {
     doc.line(x1, y1, x2, y2);
-  } else if (shape === "rectangle") {
+  } else if (shape === "rectangle" || shape === "square") {
     const rx = Math.min(x1, x2);
     const ry = Math.min(y1, y2);
     const rw = Math.abs(x2 - x1);
     const rh = Math.abs(y2 - y1);
-    doc.rect(rx, ry, rw, rh, "S");
-  } else if (shape === "circle") {
+    doc.rect(rx, ry, rw, rh, drawMode);
+  } else if (shape === "circle" || shape === "ellipse") {
     const cx = (x1 + x2) / 2;
     const cy = (y1 + y2) / 2;
     const rx = Math.abs(x2 - x1) / 2;
     const ry = Math.abs(y2 - y1) / 2;
-    doc.ellipse(cx, cy, rx, ry, "S");
+    doc.ellipse(cx, cy, rx, ry, drawMode);
   } else if (shape === "triangle") {
     const topX = (x1 + x2) / 2;
     const topY = y1;
-    doc.triangle(topX, topY, x1, y2, x2, y2, "S");
+    doc.triangle(topX, topY, x1, y2, x2, y2, drawMode);
   } else if (shape === "arrow") {
     doc.line(x1, y1, x2, y2);
     const angle = Math.atan2(y2 - y1, x2 - x1);
