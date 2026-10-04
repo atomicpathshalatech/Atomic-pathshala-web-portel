@@ -66,15 +66,33 @@ export default async function BatchCoursePage({
             },
           },
         },
+        // Only the fields the course page shows. The full whiteboard session
+        // row has a BigInt (YouTube upload offset) that can't be sent to the
+        // browser — batches with a YouTube-archived class crashed with
+        // "Something went wrong" — and it also carried the stream key.
         schedules: {
           orderBy: { startsAt: "asc" },
-          include: {
-            teacher: {
-              include: {
-                user: { select: { name: true } },
+          select: {
+            id: true,
+            title: true,
+            subject: true,
+            type: true,
+            status: true,
+            startsAt: true,
+            endsAt: true,
+            teacher: { select: { user: { select: { name: true } } } },
+            liveWhiteboardSession: {
+              select: {
+                id: true,
+                status: true,
+                livePhase: true,
+                actualStartedAt: true,
+                recordingStatus: true,
+                recordingStorageKey: true,
+                youtubeArchiveVideoUrl: true,
+                youtubeVideoId: true,
               },
             },
-            liveWhiteboardSession: true,
           },
         },
         _count: { select: { enrollments: true, schedules: true } },

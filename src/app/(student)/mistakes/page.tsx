@@ -24,6 +24,7 @@ export default async function MistakeBookPage({
   const solvedList = everything.filter((m) => m.solved);
   const allMistakes = view === "solved" ? solvedList : toReview;
   const testMistakes = allMistakes.filter((m) => m.source === "TEST_SERIES");
+  const dppMistakes = allMistakes.filter((m) => m.source === "DPP");
   const guruMistakes = allMistakes.filter((m) => m.source === "ATOMIC_GURU");
   const ncertMistakes = allMistakes.filter((m) => m.source === "NCERT");
   const qs = (o: Record<string, string | undefined>) =>
@@ -36,6 +37,8 @@ export default async function MistakeBookPage({
   let filtered = allMistakes;
   if (filterSource === "TESTS") {
     filtered = filtered.filter((m) => m.source === "TEST_SERIES");
+  } else if (filterSource === "DPP") {
+    filtered = filtered.filter((m) => m.source === "DPP");
   } else if (filterSource === "GURU") {
     filtered = filtered.filter((m) => m.source === "ATOMIC_GURU");
   } else if (filterSource === "NCERT") {
@@ -115,6 +118,17 @@ export default async function MistakeBookPage({
           <span>Mock Tests ({testMistakes.length})</span>
         </Link>
         <Link
+          href={`/mistakes?${qs({ subject: filterSubject, source: "DPP" })}`}
+          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+            filterSource === "DPP"
+              ? "bg-violet-600 text-white shadow-xs"
+              : "bg-surface-container-high text-on-surface-variant hover:text-on-surface"
+          }`}
+        >
+          <span className="material-symbols-outlined text-sm">assignment</span>
+          <span>DPP ({dppMistakes.length})</span>
+        </Link>
+        <Link
           href={`/mistakes?${qs({ subject: filterSubject, source: "GURU" })}`}
           className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
             filterSource === "GURU"
@@ -177,7 +191,7 @@ export default async function MistakeBookPage({
               ? "When you understand a question, tap \"I understood it\" and it moves here."
               : filterSubject
               ? `No mistakes found under ${filterSubject}.`
-              : "No wrong answers to review from tests, Atomic Guru or NCERT practice."}
+              : "No wrong answers to review from tests, DPPs, Atomic Guru or NCERT practice."}
           </p>
         </div>
       ) : (
@@ -195,6 +209,10 @@ export default async function MistakeBookPage({
                   {item.source === "ATOMIC_GURU" ? (
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-400/30">
                       Atomic Guru Practice
+                    </span>
+                  ) : item.source === "DPP" ? (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-500/15 text-violet-700 dark:text-violet-300">
+                      {item.sourceName}
                     </span>
                   ) : item.source === "NCERT" ? (
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
