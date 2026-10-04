@@ -46,6 +46,7 @@ interface DualColumnQuestionStudioProps {
   subjects?: { name: string; count: number; total: number; sectionId?: string }[];
   initialQuestions?: QuestionEntry[];
   backHref?: string;
+  isPublished?: boolean;
   onSave?: (question: QuestionEntry) => Promise<void>;
 }
 
@@ -62,6 +63,7 @@ export function DualColumnQuestionStudio({
   ],
   initialQuestions,
   backHref = "/team/tests",
+  isPublished = false,
 }: DualColumnQuestionStudioProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isSidebarHidden, setIsSidebarHidden] = useState(false);
@@ -755,6 +757,27 @@ export function DualColumnQuestionStudio({
             </button>
           </div>
         </header>
+
+        {isPublished && (
+          <div className="mx-4 sm:mx-8 mt-4 p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+            <div className="flex items-center gap-2.5">
+              <span className="material-symbols-outlined text-amber-600 text-xl shrink-0">lock</span>
+              <div className="leading-relaxed">
+                <span className="font-bold">Yeh Test PUBLISHED hai:</span> Test paper structure locked hai. Agar kisi question ka answer, statement ya Hindi/English solution update karna hai, to Question Bank me Question ID (<b>{currentQ.id || currentQ.questionCode || `#${currentQuestionNumber}`}</b>) se edit karein — updates automatically live sync ho jayenge.
+              </div>
+            </div>
+            {currentQ.id && (
+              <Link
+                href={`/team/questions?search=${currentQ.questionCode || currentQ.id}`}
+                target="_blank"
+                className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shrink-0 flex items-center gap-1.5 self-start sm:self-auto shadow-2xs"
+              >
+                <span>Edit in Question Bank</span>
+                <span className="material-symbols-outlined text-sm">open_in_new</span>
+              </Link>
+            )}
+          </div>
+        )}
 
         {/* WORKSPACE BODY */}
         {!isQuestionPopulated ? (

@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { RescheduleTestModal } from "@/components/team-portal/RescheduleTestModal";
 import { ShareTestModal } from "@/components/test-portal/ShareTestModal";
+import { formatISTDate, formatISTTime } from "@/lib/date-utils";
 
 export interface SeriesTestItem {
   id: string;
@@ -132,6 +133,10 @@ export function SeriesTestsList({
         const allQuestionsAdded = assignedCount > 0 && assignedCount >= targetCount;
         const displayCode = t.code || t.id.slice(0, 5).toUpperCase();
 
+        const displaySchedule = t.openTime
+          ? `${formatISTDate(t.openTime)} · ${formatISTTime(t.openTime)}${t.closeTime ? ` – ${formatISTTime(t.closeTime)}` : ""}`
+          : null;
+
         return (
           <div
             key={t.id}
@@ -144,25 +149,43 @@ export function SeriesTestsList({
               </div>
 
               <div className="min-w-0">
-                <h4 className="font-bold text-sm sm:text-base text-slate-900 dark:text-white truncate">
-                  {t.name}
-                </h4>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Code: {displayCode} · {t.durationMin} min · {assignedCount}/{targetCount} questions
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h4 className="font-bold text-sm sm:text-base text-slate-900 dark:text-white truncate">
+                    {t.name}
+                  </h4>
+                  <span className="text-[11px] font-mono font-bold bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-800 shrink-0">
+                    Code: {displayCode}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                  {displaySchedule && (
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">
+                      📅 {displaySchedule} ·
+                    </span>
+                  )}
+                  <span>{t.durationMin} min</span>
+                  <span>·</span>
+                  <span>{assignedCount}/{targetCount} questions</span>
                 </p>
               </div>
             </div>
 
-            {/* Right: Actions (Add Question Pill, Review Link, Status, 3-Dots) */}
+            {/* Right: Actions (Add/Edit Question Pill, Review Link, Share, 3-Dots) */}
             <div className="flex items-center gap-3 shrink-0">
-              {/* Add Question Pill Button (Replaces Manage) */}
+              {/* Add / Edit Question Button (Add Question when 0, Edit Questions when > 0) */}
               <Link
                 href={`/team/tests/${t.id}/author`}
-                className="px-3.5 py-1.5 rounded-full bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 font-semibold text-xs transition flex items-center gap-1.5 shadow-2xs"
-                title="Add and author questions for this test"
+                className={`px-3.5 py-1.5 rounded-full font-semibold text-xs transition flex items-center gap-1.5 shadow-2xs ${
+                  assignedCount === 0
+                    ? "bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300"
+                    : "bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200"
+                }`}
+                title={assignedCount === 0 ? "Add and author questions for this test" : "Edit questions for this test"}
               >
-                <span className="material-symbols-outlined text-[16px]">add_circle</span>
-                <span>Add Question</span>
+                <span className="material-symbols-outlined text-[16px]">
+                  {assignedCount === 0 ? "add_circle" : "edit_note"}
+                </span>
+                <span>{assignedCount === 0 ? "Add Question" : "Edit Questions"}</span>
               </Link>
 
               {/* Review Link - Clickable ONLY when all questions are added */}
@@ -180,19 +203,6 @@ export function SeriesTestsList({
                   title={`Add all ${targetCount} questions to unlock Review (${assignedCount}/${targetCount} added)`}
                 >
                   Review
-                </span>
-              )}
-
-              {/* Status Badge - Hidden when DRAFT */}
-              {t.status && t.status !== "DRAFT" && (
-                <span
-                  className={`px-3 py-1 rounded-full text-[11px] font-bold tracking-wide uppercase ${
-                    t.status === "PUBLISHED" || t.status === "ACTIVE"
-                      ? "bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300"
-                      : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
-                  }`}
-                >
-                  {t.status}
                 </span>
               )}
 

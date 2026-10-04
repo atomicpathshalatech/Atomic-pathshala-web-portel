@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { resolveStudentForTest } from "@/lib/test-series/access";
 import { getStoredTestAnalysis } from "@/lib/test-engine/analysis-engine";
 import { StudentResultDashboard } from "@/components/student/result/StudentResultDashboard";
+import { DppResultDashboard } from "@/components/student/result/DppResultDashboard";
 import { areResultsReleased, resultsReleaseAt } from "@/lib/tests/schedule-rules";
 import { formatISTDateTime } from "@/lib/date-utils";
 
@@ -65,6 +66,10 @@ export default async function TestResultPage({ params }: { params: { id: string 
         </p>
       </div>
     );
+  }
+
+  if (analysis.isDpp) {
+    return <DppResultDashboard analysis={analysis} />;
   }
 
   return <StudentResultDashboard analysis={analysis} />;

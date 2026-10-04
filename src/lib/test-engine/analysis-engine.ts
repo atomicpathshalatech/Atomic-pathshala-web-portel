@@ -183,6 +183,9 @@ export type FullTestAnalysisResult = {
   ncertPlan: NcertRecommendation[];
   actionPlan: ActionPlanItem[];
   questionReviews: QuestionReviewItem[];
+  isDpp?: boolean;
+  testType?: string | null;
+  dppId?: string | null;
 };
 
 type ErrorCategoryKey =
@@ -1027,6 +1030,12 @@ export async function calculateAndStoreTestAnalysis(
     ncertPlan,
     actionPlan,
     questionReviews,
+    isDpp:
+      (test.testType?.toUpperCase() === "DPP") ||
+      Boolean(test.chapterId) ||
+      (test.code?.startsWith("DPPT-") ?? false),
+    testType: test.testType,
+    dppId: test.code?.startsWith("DPPT-") ? test.code.replace("DPPT-", "") : null,
   };
 }
 
@@ -1041,7 +1050,15 @@ export async function getStoredTestAnalysis(
     include: {
       attempt: {
         include: {
-          test: { select: { name: true } },
+          test: {
+            select: {
+              name: true,
+              code: true,
+              testType: true,
+              chapterId: true,
+              batchSchedule: { select: { type: true } },
+            },
+          },
           student: { select: { targetExam: true } },
         },
       },
@@ -1181,6 +1198,13 @@ export async function getStoredTestAnalysis(
     ncertPlan: (analysis.ncertPlan as any) || [],
     actionPlan: (analysis.actionPlan as any) || [],
     questionReviews: storedReviews,
+    isDpp:
+      (analysis.attempt.test?.testType?.toUpperCase() === "DPP") ||
+      Boolean(analysis.attempt.test?.chapterId) ||
+      (analysis.attempt.test?.code?.startsWith("DPPT-")) ||
+      (analysis.attempt.test?.batchSchedule?.type?.toUpperCase() === "DPP"),
+    testType: analysis.attempt.test?.testType,
+    dppId: analysis.attempt.test?.code?.startsWith("DPPT-") ? analysis.attempt.test.code.replace("DPPT-", "") : null,
   };
 }
 

@@ -118,6 +118,8 @@ export default async function TestAuthorPage({ params }: { params: { id: string 
     0
   );
 
+  const isPublished = (test.status as string) === "APPROVED" || (test.status as string) === "PUBLISHED" || (test.status as string) === "ACTIVE";
+
   return (
     <DualColumnQuestionStudio
       mode="test"
@@ -127,6 +129,7 @@ export default async function TestAuthorPage({ params }: { params: { id: string 
       subjects={subjects.length > 0 ? subjects : undefined}
       initialQuestions={initialQuestions.length > 0 ? initialQuestions : undefined}
       backHref={`/team/tests/${test.id}`}
+      isPublished={isPublished}
     />
   );
 }
