@@ -4572,16 +4572,24 @@ export function TeacherLiveClassRoom({
                 it never resizes or moves the board. Each slide can be opened,
                 duplicated or deleted from here. */}
             {openPopup === "pages" && (
-              <div className="fixed right-2 top-16 bottom-24 z-50 w-[152px] bg-[#1a1b23]/95 border border-[#2d2e3b] rounded-xl shadow-2xl flex flex-col">
-                <div className="px-2.5 py-1.5 border-b border-[#2d2e3b] flex items-center justify-between gap-1">
-                  <span className="text-[11px] font-bold text-white">
-                    Slides <span className="text-gray-500 font-medium">({wbSession.pages.length})</span>
-                  </span>
-                  <button type="button" onClick={() => setOpenPopup(null)} className="text-gray-400 hover:text-white" title="Close">
+              <div className="fixed right-3 top-16 bottom-24 z-50 w-[230px] bg-[#1a1b23]/95 backdrop-blur-md border border-[#2d2e3b] rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+                <div className="px-3.5 py-2.5 border-b border-[#2d2e3b] flex items-center justify-between gap-1 bg-[#14151e]/80">
+                  <div className="flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-blue-400 text-sm">view_carousel</span>
+                    <span className="text-xs font-bold text-white">
+                      Slides <span className="text-gray-400 font-normal">({wbSession.pages.length})</span>
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setOpenPopup(null)}
+                    className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-gray-800 transition"
+                    title="Close"
+                  >
                     <span className="material-symbols-outlined text-base">close</span>
                   </button>
                 </div>
-                <div className="flex-1 overflow-y-auto p-1.5 flex flex-col gap-1.5">
+                <div className="flex-1 overflow-y-auto p-2.5 flex flex-col gap-2.5 custom-scrollbar">
                   {[...wbSession.pages].sort((a, b) => a.pageNumber - b.pageNumber).map((p, idx, arr) => {
                     const active = p.pageNumber === wbSession.activePageNumber;
                     const isDragging = draggedSlideId === p.id;
@@ -4616,37 +4624,37 @@ export function TeacherLiveClassRoom({
                           e.preventDefault();
                           handleDropReorder(idx);
                         }}
-                        className={`relative rounded-lg p-1 border transition-all duration-150 select-none ${
+                        className={`relative rounded-xl p-1.5 border transition-all duration-150 select-none ${
                           isDragging
-                            ? "opacity-35 scale-95 border-dashed border-blue-400 bg-blue-950/30"
+                            ? "opacity-30 scale-95 border-dashed border-blue-400 bg-blue-950/30"
                             : isDragOver
                             ? "border-t-2 border-t-blue-500 border-x-transparent border-b-transparent bg-blue-500/10 scale-[1.02]"
                             : active
-                            ? "border-blue-500 bg-blue-900/20"
-                            : "border-transparent hover:bg-gray-800"
+                            ? "border-blue-500/80 bg-blue-900/20 shadow-md ring-1 ring-blue-500/30"
+                            : "border-[#2d2e3b]/60 hover:border-gray-600 bg-[#14151e]/40 hover:bg-[#14151e]/80"
                         }`}
                       >
-                        <div className="flex items-center gap-1 mb-0.5 cursor-grab active:cursor-grabbing">
+                        <div className="flex items-center gap-1.5 mb-1 cursor-grab active:cursor-grabbing px-0.5">
                           <span
                             className="material-symbols-outlined text-[13px] text-gray-500 hover:text-gray-300"
-                            title="Drag to reorder"
+                            title="Drag to reorder slide"
                           >
                             drag_indicator
                           </span>
-                          <span className={`text-[10px] font-semibold ${active ? "text-blue-400" : "text-gray-400"}`}>
+                          <span className={`text-[11px] font-semibold ${active ? "text-blue-400" : "text-gray-300"}`}>
                             Slide {p.pageNumber}
                           </span>
                         </div>
                         <button
                           type="button"
                           onClick={() => switchToPage(p.pageNumber)}
-                          className="block w-full [&_canvas]:w-full [&_canvas]:h-auto [&_canvas]:rounded cursor-pointer hover:opacity-90"
+                          className="block w-full cursor-pointer hover:opacity-95 transition"
                           title={`Open slide ${p.pageNumber}`}
                         >
                           <PageThumbnail background={p.background} objects={p.objects} />
                         </button>
-                        <div className="mt-1 flex items-center justify-between">
-                          <span className="flex items-center gap-0.5 ml-auto">
+                        <div className="mt-1.5 flex items-center justify-between px-0.5">
+                          <span className="flex items-center gap-1 ml-auto">
                             <button
                               type="button"
                               disabled={idx === 0}
@@ -4703,10 +4711,10 @@ export function TeacherLiveClassRoom({
                 <button
                   type="button"
                   onClick={addPage}
-                  className="m-1.5 h-8 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-bold flex items-center justify-center gap-1"
+                  className="m-2 h-9 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-lg transition"
                   title="New blank slide after the current one"
                 >
-                  <span className="material-symbols-outlined text-sm">add</span>
+                  <span className="material-symbols-outlined text-base">add</span>
                   New slide
                 </button>
               </div>

@@ -1,51 +1,57 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import type { StrokeObject } from "@/lib/canvas/canvas-engine";
 import { renderPageThumbnail } from "@/lib/canvas/thumbnail-renderer";
 
-/** Fixed 16:9 thumbnail size (CSS px) — matches the virtual canvas's own
- * aspect ratio so nothing is stretched. Small enough that rendering every
- * thumbnail in an open preview panel is cheap regardless of page count;
- * each is a handful of ctx calls on this small a canvas, not a
- * full-resolution re-render. */
-const THUMB_WIDTH = 160;
-const THUMB_HEIGHT = 90;
+/** Fixed 16:9 thumbnail size (CSS px) */
+const THUMB_WIDTH = 200;
+const THUMB_HEIGHT = 112;
 
-export function PageThumbnail({ background, objects }: { background: string; objects: StrokeObject[] }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+export const PageThumbnail = React.memo(
+  function PageThumbnail({ background, objects }: { background: string; objects: StrokeObject[] }) {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const drawnRef = useRef<{ bg: string; count: number }>({ bg: "", count: -1 });
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext("2d");
-    if (!ctx) return;
-    let cancelled = false;
-    const draw = () => {
-      if (cancelled || !ctx) return;
-      // An image background/raster object can't draw synchronously the
-      // first time (the browser has to fetch it) — renderPageThumbnail
-      // draws whatever's ready immediately and calls this back once more
-      // per image that finishes loading, so the thumbnail fills in
-      // instead of staying permanently blank.
-      renderPageThumbnail(ctx, { background, objects }, THUMB_WIDTH, THUMB_HEIGHT, draw);
-    };
-    draw();
-    return () => {
-      cancelled = true;
-    };
-    // objects is a fresh array reference on every autosave/page-switch (see
-    // TeacherLiveClassRoom's wbSession state), so a plain dependency on the
-    // array itself (not a stringified diff) is exactly the right amount of
-    // re-rendering — once per real content change, not once per keystroke
-    // inside an unrelated part of the app.
-  }, [background, objects]);
+    useEffect(() => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      let cancelled = false;
 
-  return (
-    <canvas
-      ref={canvasRef}
-      width={THUMB_WIDTH}
-      height={THUMB_HEIGHT}
-      className="w-full h-full rounded border border-[#2d2e3b] bg-white block"
-    />
-  );
-}
+      const draw = () => {
+        if (cancelled || !canvas) return;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        drawnRef.current = { bg: background, count: objects?.length ?? 0 };
+        renderPageThumbnail(ctx, { background, objects }, THUMB_WIDTH, THUMB_HEIGHT, () => {
+          if (!cancelled) {
+            requestAnimationFrame(draw);
+          }
+        });
+      };
+
+      // Non-blocking animation frame schedule
+      const raf = requestAnimationFrame(draw);
+      return () => {
+        cancelled = true;
+        cancelAnimationFrame(raf);
+      };
+    }, [background, objects]);
+
+    return (
+      <canvas
+        ref={canvasRef}
+        width={THUMB_WIDTH}
+        height={THUMB_HEIGHT}
+        className="w-full aspect-[16/9] rounded-lg border border-[#2d2e3b] bg-white block shadow-sm pointer-events-none"
+      />
+    );
+  },
+  (prev, next) => {
+    if (prev.background !== next.background) return false;
+    if (prev.objects === next.objects) return true;
+    if ((prev.objects?.length ?? 0) !== (next.objects?.length ?? 0)) return false;
+    // Fast comparison when same length
+    return JSON.stringify(prev.objects) === JSON.stringify(next.objects);
+  }
+);
