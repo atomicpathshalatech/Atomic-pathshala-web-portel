@@ -25,13 +25,19 @@ export function QuestionIdBadge({
   };
 
   const getPrefixInfo = (code?: string | null) => {
-    if (!code || code.length < 2) return "Prefix: Dynamic";
-    const prefix = code.slice(0, 2);
-    if (prefix === "80" || prefix === "81") return "Physics (80)";
-    if (prefix === "82") return "Chemistry (82)";
-    if (prefix === "83") return "Biology (83)";
-    if (prefix === "84") return "Mathematics (84)";
-    return "Standard Prefix";
+    if (!code || code.length < 3) return "Prefix: Dynamic";
+    const prefix = code.slice(0, 3).toUpperCase();
+    if (prefix === "P26") return "Physics (P26)";
+    if (prefix === "C25") return "Chemistry (C25)";
+    if (prefix === "B24") return "Biology (B24)";
+    if (prefix === "M23") return "Mathematics (M23)";
+    if (prefix === "S22") return "Science (S22)";
+    // Fallback for legacy 8-digit codes
+    if (code.startsWith("80") || code.startsWith("81")) return "Physics (Legacy)";
+    if (code.startsWith("82")) return "Chemistry (Legacy)";
+    if (code.startsWith("83")) return "Biology (Legacy)";
+    if (code.startsWith("84")) return "Math (Legacy)";
+    return "Canonical Prefix";
   };
 
   return (
@@ -44,10 +50,10 @@ export function QuestionIdBadge({
         <div>
           <div className="flex items-center gap-2">
             <span className="text-[11px] font-mono font-extrabold text-blue-600 dark:text-blue-400 tracking-wider">
-              QUESTION ID
+              CANONICAL QUESTION ID
             </span>
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold">
-              8-Digit Standard
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-semibold border border-blue-200 dark:border-blue-800/50">
+              10-Digit Standard
             </span>
           </div>
 

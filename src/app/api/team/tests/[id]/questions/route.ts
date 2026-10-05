@@ -50,14 +50,22 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const section = await getOrCreateDefaultSection(params.id);
 
     const [candidates, existingLinks] = await Promise.all([
-      prisma.question.findMany({ where: { id: { in: input.questionIds } } }),
+      prisma.question.findMany({
+        where: {
+          OR: [
+            { id: { in: input.questionIds } },
+            { questionCode: { in: input.questionIds } },
+          ],
+        },
+      }),
       prisma.sectionQuestion.findMany({ where: { sectionId: section.id }, select: { questionId: true } }),
     ]);
 
     const existingIds = new Set(existingLinks.map((l) => l.questionId));
     const foundIds = new Set(candidates.map((q) => q.id));
-    const missing = input.questionIds.filter((id) => !foundIds.has(id));
-    const alreadyAdded = input.questionIds.filter((id) => existingIds.has(id));
+    const foundCodes = new Set(candidates.map((q) => q.questionCode).filter(Boolean));
+    const missing = input.questionIds.filter((id) => !foundIds.has(id) && !foundCodes.has(id));
+    const alreadyAdded = candidates.filter((q) => existingIds.has(q.id)).map((q) => q.questionCode || q.id);
 
     const toAdd = candidates.filter((q) => !existingIds.has(q.id));
 
