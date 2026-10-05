@@ -59,9 +59,6 @@ export interface ChapterAuditSummary {
 
 const BATCH_SIZE = 25;
 
-/**
- * Executes a controlled bulk Chapter AI Audit in chunks of 25 questions.
- */
 export async function runChapterAiAudit(
   prisma: PrismaClient,
   options: {
@@ -69,16 +66,17 @@ export async function runChapterAiAudit(
     chapter: string;
     limit?: number;
     batchSize?: number;
+    deepAudit?: boolean;
   }
 ): Promise<ChapterAuditSummary> {
-  const { subject, chapter, limit = 500, batchSize = BATCH_SIZE } = options;
+  const { subject, chapter, limit, batchSize = BATCH_SIZE, deepAudit = false } = options;
 
   const questions = await prisma.question.findMany({
     where: {
       subject: { equals: subject, mode: "insensitive" },
       chapter: { equals: chapter, mode: "insensitive" },
     },
-    take: limit,
+    take: limit && limit > 0 ? limit : undefined, // Unbounded: audits entire chapter
     include: {
       translations: true,
     },

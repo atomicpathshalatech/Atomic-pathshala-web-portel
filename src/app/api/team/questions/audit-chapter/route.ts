@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const { subject, chapter, limit = 500, batchSize = 25 } = body;
+    const { subject, chapter, limit, batchSize = 25, deepAudit = false } = body;
 
     if (!subject || !chapter) {
       return NextResponse.json(
@@ -31,8 +31,9 @@ export async function POST(req: NextRequest) {
     const report = await runChapterAiAudit(prisma as any, {
       subject,
       chapter,
-      limit: typeof limit === "number" ? Math.min(Math.max(1, limit), 1000) : 500,
-      batchSize: typeof batchSize === "number" ? Math.min(Math.max(5, batchSize), 50) : 25,
+      limit: typeof limit === "number" && limit > 0 ? limit : undefined,
+      batchSize: typeof batchSize === "number" ? Math.min(Math.max(5, batchSize), 100) : 25,
+      deepAudit: Boolean(deepAudit),
     });
 
     return NextResponse.json({

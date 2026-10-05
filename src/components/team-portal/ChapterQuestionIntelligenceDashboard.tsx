@@ -18,6 +18,7 @@ import {
   Brain,
 } from "lucide-react";
 import type { ChapterAuditSummary } from "@/lib/questions/chapter-audit-engine";
+import { QuestionReviewWorkspaceModal } from "./QuestionReviewWorkspaceModal";
 
 interface ChapterQuestionIntelligenceDashboardProps {
   subjectName: string;
@@ -30,6 +31,8 @@ export function ChapterQuestionIntelligenceDashboard({
 }: ChapterQuestionIntelligenceDashboardProps) {
   const [loading, setLoading] = useState(false);
   const [auditData, setAuditData] = useState<ChapterAuditSummary | null>(null);
+  const [selectedReviewQuestion, setSelectedReviewQuestion] = useState<any | null>(null);
+  const [loadingQuestionId, setLoadingQuestionId] = useState<string | null>(null);
 
   const fetchAuditMetrics = async () => {
     setLoading(true);
@@ -272,30 +275,72 @@ export function ChapterQuestionIntelligenceDashboard({
       {/* Critical Issues Box */}
       {criticalIssuesList.length > 0 && (
         <div className="p-5 rounded-3xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 space-y-3">
-          <h4 className="text-xs font-bold text-rose-800 dark:text-rose-200 uppercase tracking-wider flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-rose-600" />
-            Critical Issues Requiring Attention ({criticalIssuesList.length})
-          </h4>
-          <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-bold text-rose-800 dark:text-rose-200 uppercase tracking-wider flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-rose-600" />
+              Critical Issues Requiring Attention ({criticalIssuesList.length})
+            </h4>
+            <span className="text-[10px] font-semibold text-rose-700 bg-rose-100 dark:bg-rose-900/50 px-2 py-0.5 rounded-full">
+              Full AI Audit Flagged
+            </span>
+          </div>
+          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
             {criticalIssuesList.map((c, idx) => (
-              <div key={idx} className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-rose-200 dark:border-rose-900/40 text-xs flex items-start justify-between gap-3">
-                <div className="space-y-0.5 min-w-0">
+              <div key={idx} className="p-3 bg-white dark:bg-slate-900 rounded-2xl border border-rose-200 dark:border-rose-900/40 text-xs flex items-center justify-between gap-3 shadow-xs">
+                <div className="space-y-1 min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="font-mono font-bold text-rose-600 bg-rose-50 dark:bg-rose-950 px-1.5 py-0.5 rounded text-[10px]">
+                    <span className="font-mono font-black text-rose-600 bg-rose-50 dark:bg-rose-950 px-2 py-0.5 rounded-md text-[11px] border border-rose-200">
                       {c.canonicalId}
                     </span>
-                    <span className="text-slate-700 dark:text-slate-300 truncate">{c.statementSnippet}</span>
+                    <span className="text-slate-800 dark:text-slate-200 font-medium truncate">{c.statementSnippet}</span>
                   </div>
-                  <ul className="list-disc list-inside text-rose-600 dark:text-rose-400 text-[11px] font-medium">
+                  <ul className="list-disc list-inside text-rose-600 dark:text-rose-400 text-[11px] font-medium pl-1">
                     {c.issues.map((err, errIdx) => (
                       <li key={errIdx}>{err}</li>
                     ))}
                   </ul>
                 </div>
+
+                <button
+                  type="button"
+                  disabled={loadingQuestionId === c.questionId}
+                  onClick={async () => {
+                    setLoadingQuestionId(c.questionId);
+                    try {
+                      const res = await fetch(`/api/team/questions/bilingual/${c.questionId}`);
+                      const json = await res.json();
+                      if (json.success && json.data?.question) {
+                        setSelectedReviewQuestion(json.data.question);
+                      } else {
+                        toast.error("Could not load question details for review.");
+                      }
+                    } catch {
+                      toast.error("Network error opening review modal.");
+                    } finally {
+                      setLoadingQuestionId(null);
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs shrink-0 shadow-xs transition flex items-center gap-1 cursor-pointer"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  <span>{loadingQuestionId === c.questionId ? "Loading..." : "Review & Fix"}</span>
+                </button>
               </div>
             ))}
           </div>
         </div>
+      )}
+
+      {/* Review Workspace Modal */}
+      {selectedReviewQuestion && (
+        <QuestionReviewWorkspaceModal
+          question={selectedReviewQuestion}
+          onClose={() => setSelectedReviewQuestion(null)}
+          onSuccess={() => {
+            setSelectedReviewQuestion(null);
+            fetchAuditMetrics();
+          }}
+        />
       )}
     </div>
   );
