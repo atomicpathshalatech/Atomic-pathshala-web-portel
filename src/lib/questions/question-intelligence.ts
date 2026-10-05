@@ -136,16 +136,6 @@ export interface QuestionIntelligenceReport {
   promptVersion: string;
 }
 
-/**
- * Format canonical references for question and solution
- */
-export function formatQuestionReference(canonicalId: string, version: number = 1): string {
-  return `QR-${canonicalId.toUpperCase()}-V${version}`;
-}
-
-export function formatSolutionReference(canonicalId: string, version: number = 1): string {
-  return `SR-${canonicalId.toUpperCase()}-V${version}`;
-}
 
 /**
  * Validates quality score breakdown and checks all critical gates

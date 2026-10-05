@@ -41,6 +41,11 @@ export interface StartJobParams {
   selectedSubtopics?: string[];
   difficulties: NeetDifficulty[];
   questionTypes: string[];
+  primaryNature?: string;
+  cognitiveLevel?: string;
+  sourceMode?: "NCERT_ONLY" | "NCERT_PYQ" | "NCERT_VERIFIED" | "OPEN_ACADEMIC";
+  imageMode?: "NCERT_FIGURE_ONLY" | "NCERT_GENERATED" | "GENERATED_DIAGRAM" | "USER_UPLOADED" | "NONE";
+  figurePreference?: "AUTO" | "MANUAL";
   language: GenerationLanguage;
   totalQuestions: number;
   generationPlan: GenerationPlan;
@@ -171,6 +176,37 @@ async function runGenerationJobWorker(batchId: string, params: StartJobParams, s
         data: { progress: 15, currentStep: "Reading the PDF sections for the selected topics..." },
       });
       ({ sourceText, sourceImages } = await loadSourceContext(params.sourcePdfId, params.selectedTopics));
+    } else if (
+      params.imageMode === "NCERT_FIGURE_ONLY" ||
+      params.primaryNature === "Diagram-Based" ||
+      params.questionTypes.includes("DIAGRAM_BASED") ||
+      params.questionTypes.includes("IMAGE_BASED")
+    ) {
+      // Automatic NCERT Figure Discovery (Section 99, 100, 111)
+      await prisma.aiGenerationBatch.update({
+        where: { id: batchId },
+        data: { progress: 15, currentStep: "Inspecting NCERT repository for authentic textbook diagrams..." },
+      });
+
+      const matchingImages = await prisma.aiSourcePdfImage.findMany({
+        where: {
+          OR: [
+            { topic: { contains: params.chapter, mode: "insensitive" } },
+            { associatedText: { contains: params.chapter, mode: "insensitive" } },
+            { sourcePdf: { fileName: { contains: params.chapter, mode: "insensitive" } } },
+            { sourcePdf: { fileName: { contains: params.subject, mode: "insensitive" } } },
+          ],
+        },
+        take: 20,
+      });
+
+      if (matchingImages.length > 0) {
+        sourceImages = matchingImages.map((img) => ({
+          id: img.id,
+          page: img.pageNumber,
+          description: img.associatedText || img.topic || `NCERT Figure on page ${img.pageNumber}`,
+        }));
+      }
     }
 
     const questionTypeCounts: Record<string, number> = {};

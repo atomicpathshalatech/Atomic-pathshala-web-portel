@@ -55,6 +55,13 @@ export function AiQuestionStudio() {
   const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
   const [selectedSubtopics, setSelectedSubtopics] = useState<string[]>([]);
 
+  // NCERT & Visual Intelligence Config (Sections 93-132)
+  const [sourceMode, setSourceMode] = useState<string>("NCERT_ONLY");
+  const [primaryNature, setPrimaryNature] = useState<string>("Diagram-Based");
+  const [imageMode, setImageMode] = useState<string>("NCERT_FIGURE_ONLY");
+  const [figurePreference, setFigurePreference] = useState<string>("AUTO");
+  const [cognitiveLevel, setCognitiveLevel] = useState<string>("L3 Apply");
+
   // Generation Config
   const [difficulties, setDifficulties] = useState<NeetDifficulty[]>(["MEDIUM"]);
   const [questionTypes, setQuestionTypes] = useState<string[]>(["SINGLE_CORRECT"]);
@@ -250,6 +257,11 @@ export function AiQuestionStudio() {
         selectedSubtopics,
         difficulties,
         questionTypes,
+        primaryNature,
+        cognitiveLevel,
+        sourceMode,
+        imageMode,
+        figurePreference,
         language,
         totalQuestions,
         generationPlan,
@@ -652,6 +664,16 @@ export function AiQuestionStudio() {
               onDifficultiesChange={setDifficulties}
               questionTypes={questionTypes}
               onQuestionTypesChange={setQuestionTypes}
+              sourceMode={sourceMode}
+              onSourceModeChange={setSourceMode}
+              primaryNature={primaryNature}
+              onPrimaryNatureChange={setPrimaryNature}
+              imageMode={imageMode}
+              onImageModeChange={setImageMode}
+              figurePreference={figurePreference}
+              onFigurePreferenceChange={setFigurePreference}
+              cognitiveLevel={cognitiveLevel}
+              onCognitiveLevelChange={setCognitiveLevel}
               language={language}
               onLanguageChange={setLanguage}
               totalQuestions={totalQuestions}

@@ -38,6 +38,16 @@ interface Props {
   onDifficultiesChange: (d: NeetDifficulty[]) => void;
   questionTypes: string[];
   onQuestionTypesChange: (qt: string[]) => void;
+  sourceMode?: string;
+  onSourceModeChange?: (s: string) => void;
+  primaryNature?: string;
+  onPrimaryNatureChange?: (n: string) => void;
+  imageMode?: string;
+  onImageModeChange?: (im: string) => void;
+  figurePreference?: string;
+  onFigurePreferenceChange?: (fp: string) => void;
+  cognitiveLevel?: string;
+  onCognitiveLevelChange?: (cl: string) => void;
   language: GenerationLanguage;
   onLanguageChange: (l: GenerationLanguage) => void;
   totalQuestions: number;
@@ -64,6 +74,16 @@ export function TaxonomyConfigStep({
   onDifficultiesChange,
   questionTypes,
   onQuestionTypesChange,
+  sourceMode = "NCERT_ONLY",
+  onSourceModeChange,
+  primaryNature = "Diagram-Based",
+  onPrimaryNatureChange,
+  imageMode = "NCERT_FIGURE_ONLY",
+  onImageModeChange,
+  figurePreference = "AUTO",
+  onFigurePreferenceChange,
+  cognitiveLevel = "L3 Apply",
+  onCognitiveLevelChange,
   language,
   onLanguageChange,
   totalQuestions,
@@ -542,7 +562,175 @@ export function TaxonomyConfigStep({
         </div>
       </div>
 
-      {/* 5. Quantity, Balanced Auto-Mix & Language (Section 22, 25) */}
+      {/* 5. NCERT-FIRST & VISUAL DIAGRAM INTELLIGENCE (Sections 93-132) */}
+      <div className="bg-white border-2 border-emerald-500/30 rounded-3xl p-6 space-y-5 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+          <div>
+            <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span>NCERT Grounding &amp; Diagram Intelligence Engine</span>
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Configures authentic textbook diagram extraction, strict NCERT grounding, and cognitive levels.
+            </p>
+          </div>
+          <span className="text-[11px] font-extrabold px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 self-start sm:self-auto">
+            NCERT-First Engine Active
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {/* Source Mode */}
+          <div>
+            <label className="text-xs font-bold text-slate-800 block mb-2">
+              Source Mode (Grounding Truth)
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { id: "NCERT_ONLY", label: "● NCERT Only", desc: "Strictly textbook factual" },
+                { id: "NCERT_PYQ", label: "NCERT + PYQ", desc: "Textbook with PYQ styles" },
+                { id: "NCERT_VERIFIED", label: "NCERT + Verified", desc: "Curated faculty sources" },
+                { id: "OPEN_ACADEMIC", label: "Open Academic", desc: "General NEET syllabus" },
+              ].map((m) => {
+                const isSelected = sourceMode === m.id;
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => onSourceModeChange?.(m.id)}
+                    className={`p-2.5 rounded-2xl border text-left transition ${
+                      isSelected
+                        ? "bg-emerald-50 border-emerald-500 text-emerald-950 font-bold shadow-xs"
+                        : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    <div className="text-xs font-extrabold">{m.label}</div>
+                    <div className="text-[10px] text-slate-500 font-normal">{m.desc}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Image Mode */}
+          <div>
+            <label className="text-xs font-bold text-slate-800 block mb-2">
+              Image Mode (Mandatory Figure Policy)
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { id: "NCERT_FIGURE_ONLY", label: "● NCERT Figure Only", desc: "Extracted authentic diagram" },
+                { id: "NCERT_GENERATED", label: "NCERT + Generated", desc: "Textbook + AI diagram" },
+                { id: "GENERATED_DIAGRAM", label: "Generated Diagram", desc: "Synthetic scientific figure" },
+                { id: "NONE", label: "Text Only (No Image)", desc: "Standard text question" },
+              ].map((im) => {
+                const isSelected = imageMode === im.id;
+                return (
+                  <button
+                    key={im.id}
+                    type="button"
+                    onClick={() => onImageModeChange?.(im.id)}
+                    className={`p-2.5 rounded-2xl border text-left transition ${
+                      isSelected
+                        ? "bg-blue-50 border-blue-500 text-blue-950 font-bold shadow-xs"
+                        : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    <div className="text-xs font-extrabold">{im.label}</div>
+                    <div className="text-[10px] text-slate-500 font-normal">{im.desc}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Question Nature & Visual Requirement */}
+          <div>
+            <label className="text-xs font-bold text-slate-800 block mb-2">
+              Question Nature
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                "Diagram-Based",
+                "Conceptual",
+                "Numerical",
+                "Application-Based",
+                "Graph-Based",
+                "Multi-Concept",
+              ].map((nat) => {
+                const isSelected = primaryNature === nat;
+                return (
+                  <button
+                    key={nat}
+                    type="button"
+                    onClick={() => onPrimaryNatureChange?.(nat)}
+                    className={`py-2 px-2.5 rounded-xl border text-xs font-bold text-center transition ${
+                      isSelected
+                        ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                        : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    {nat}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Cognitive Level & Figure Preference */}
+          <div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-bold text-slate-800 block mb-2">
+                  Cognitive Depth
+                </label>
+                <select
+                  value={cognitiveLevel}
+                  onChange={(e) => onCognitiveLevelChange?.(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none"
+                >
+                  <option value="L1 Recall">L1 Recall (Direct fact)</option>
+                  <option value="L2 Understand">L2 Understand (Concept)</option>
+                  <option value="L3 Apply">L3 Apply (Application)</option>
+                  <option value="L4 Analyze">L4 Analyze (Multi-step)</option>
+                  <option value="L5 Evaluate">L5 Evaluate (Evaluation)</option>
+                  <option value="L6 Synthesis">L6 Synthesis (Multi-concept)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-800 block mb-2">
+                  NCERT Figure Selection
+                </label>
+                <div className="flex gap-2">
+                  {[
+                    { id: "AUTO", label: "● Auto Select" },
+                    { id: "MANUAL", label: "○ Manual" },
+                  ].map((fp) => {
+                    const isSelected = figurePreference === fp.id;
+                    return (
+                      <button
+                        key={fp.id}
+                        type="button"
+                        onClick={() => onFigurePreferenceChange?.(fp.id)}
+                        className={`flex-1 py-2 px-2 rounded-xl border text-xs font-bold text-center transition ${
+                          isSelected
+                            ? "bg-slate-900 text-white border-slate-900"
+                            : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
+                        }`}
+                      >
+                        {fp.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 6. Quantity, Balanced Auto-Mix & Language (Section 22, 25) */}
       <div className="bg-slate-50 border border-slate-200 rounded-3xl p-6 space-y-4">
         <h3 className="text-sm font-black text-slate-900">
           Batch Volume &amp; Examination Language

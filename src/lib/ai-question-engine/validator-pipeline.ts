@@ -96,6 +96,25 @@ export async function runQuestionValidationPipeline({
 
   if (!question.solutionEn?.trim() && !question.solutionHi?.trim()) issues.push("Solution is missing.");
 
+  // Visual / Image Dependency Enforcement (Section 93, 102, 119)
+  const isVisualType =
+    question.questionType === "DIAGRAM_BASED" ||
+    question.questionType === "IMAGE_BASED" ||
+    question.questionType === "GRAPH_BASED" ||
+    question.primaryNature === "Diagram-Based" ||
+    question.primaryNature === "Graph-Based" ||
+    question.requiresImage;
+
+  if (isVisualType) {
+    if (!question.sourceImageId && !question.requiresImage) {
+      blocking.push("Visual question requested but no image/diagram asset is attached.");
+    }
+    const depScore = question.imageDependencyScore ?? (question.sourceImageId ? 85 : 0);
+    if (depScore < 60 && !blocking.length) {
+      issues.push(`Image dependency score is low (${depScore}% < 60%). The question may not strictly require the diagram.`);
+    }
+  }
+
   // Languages actually requested must be present (statement AND options).
   if (question.language === "BOTH" || question.language === "HINDI") {
     if (!hasHi) blocking.push("Hindi statement is missing.");

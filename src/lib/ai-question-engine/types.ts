@@ -4,6 +4,12 @@ export type GenerationMethod = "AI" | "PDF";
 
 export type GenerationLanguage = "ENGLISH" | "HINDI" | "BOTH";
 
+export type SourceMode = "NCERT_ONLY" | "NCERT_PYQ" | "NCERT_VERIFIED" | "OPEN_ACADEMIC";
+
+export type ImageSourceMode = "NCERT_FIGURE_ONLY" | "NCERT_GENERATED" | "GENERATED_DIAGRAM" | "USER_UPLOADED" | "NONE";
+
+export type FigureSelectionMode = "AUTO" | "MANUAL";
+
 export type PyqClassification = "STANDARD" | "PYQ_STYLE" | "PYQ_INSPIRED";
 
 export interface NeetQuestionTypeDef {
@@ -226,9 +232,19 @@ export interface RawAiGeneratedQuestion {
   subTopic?: string;
   difficulty: NeetDifficulty;
   questionType: string;
+  primaryNature?: string;
+  cognitiveLevel?: string;
   pyqStyle: PyqClassification;
   language: GenerationLanguage;
   requiresImage?: boolean;
+  imageDependencyScore?: number; // 0 - 100
+  ncertFigureReference?: {
+    file?: string;
+    page?: number;
+    figureNumber?: string;
+    assetId?: string;
+    caption?: string;
+  };
   sourcePageNumbers?: number[];
   sourceExcerpt?: string;
   sourceImageId?: string;
@@ -249,6 +265,9 @@ export interface QuestionValidationReport {
   potentialDuplicateCode?: string;
   bilingualEquivalent: boolean;
   bilingualDiscrepancies?: string[];
+  imageDependencyScore?: number;
+  ncertGroundingScore?: number;
+  cropConfidence?: number;
   issues: string[];
   /** True only when the independent AI solver actually ran and its answer was compared. */
   aiValidated?: boolean;
