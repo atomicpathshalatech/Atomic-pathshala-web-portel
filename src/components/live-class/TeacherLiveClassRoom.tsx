@@ -155,10 +155,9 @@ const SHORTCUTS: { label: string; combo: string }[] = [
 // back when the canvas was always a white background).
 const PEN_COLORS = ["#ef4444", "#3b82f6", "#22c55e", "#eab308", "#ffffff"];
 export const PEN_PALETTE_COLORS = [
-  "#ef4444", "#f97316", "#eab308",
-  "#22c55e", "#6366f1", "#3b82f6",
-  "#06b6d4", "#ec4899", "#15803d",
-  "#000000", "#64748b", "#ffffff",
+  "#000000", "#ef4444", "#f97316", "#eab308",
+  "#22c55e", "#06b6d4", "#3b82f6", "#8b5cf6",
+  "#ec4899", "#15803d", "#64748b", "#ffffff",
 ];
 
 export const PEN_STYLES = [
@@ -172,10 +171,10 @@ export const PEN_STYLES = [
 
 export type PenStyleId = typeof PEN_STYLES[number]["id"];
 
-const HIGHLIGHT_COLORS = ["#ef4444", "#eab308", "#22c55e", "#3b82f6"];
+const HIGHLIGHT_COLORS = ["#facc15", "#4ade80", "#60a5fa", "#f87171", "#c084fc", "#fb923c"];
 export const LEFT_BAR_COLORS = [
   "#000000", "#ef4444", "#f97316", "#eab308",
-  "#22c55e", "#06b6d4", "#3b82f6",
+  "#22c55e", "#06b6d4", "#3b82f6", "#8b5cf6",
   "#ec4899", "#ffffff",
 ];
 const SIZE_PRESETS: { label: string; value: number }[] = [
@@ -2122,11 +2121,139 @@ export function TeacherLiveClassRoom({
     }
   }, [wbSession, currentPage, scheduleTitle, exportingPdf, flushAutosave]);
 
-  // ---- Slide background (More menu / Theme modal) --------------------------
+  async function handleLoadLocalPdf(file: File) {
+    if (pdfConversionInFlightRef.current || !wbSession) return;
+    setOpenPopup(null);
+    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+    await flushAutosave();
+
+    setPdfLoadState({ loading: true, progress: "Reading PDF document…", error: null });
+    const sessionId = wbSession.id;
+    let firstNewPageNumber: number | null = null;
+    pdfConversionInFlightRef.current = true;
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdfjsLib = await import("pdfjs-dist");
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+      const doc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const existingPageCount = wbSession.pages.length;
+
+      const currentPg = wbSession.pages.find((p) => p.pageNumber === wbSession.activePageNumber) ?? null;
+      const reuseCurrentPage =
+        existingPageCount === 1 &&
+        currentPg != null &&
+        (currentPg.objects?.length ?? 0) === 0 &&
+        !isBackgroundImageUrl(currentPg.background);
+
+      const prepared: { pageId: string; pageNumber: number; dataUrl: string }[] = [];
+      for (let i = 1; i <= doc.numPages; i++) {
+        setPdfLoadState({
+          loading: true,
+          progress: `Preparing slide ${i} of ${doc.numPages}…`,
+          error: null,
+        });
+
+        const pdfPage = await doc.getPage(i);
+        const unscaledViewport = pdfPage.getViewport({ scale: 1 });
+        const scaleX = VIRTUAL_WIDTH / unscaledViewport.width;
+        const scaleY = VIRTUAL_HEIGHT / unscaledViewport.height;
+        const fitScale = Math.min(scaleX, scaleY);
+        const scaledViewport = pdfPage.getViewport({ scale: fitScale });
+
+        const offscreen = document.createElement("canvas");
+        offscreen.width = VIRTUAL_WIDTH;
+        offscreen.height = VIRTUAL_HEIGHT;
+        const offCtx = offscreen.getContext("2d");
+        if (!offCtx) throw new Error("Could not prepare the page image (canvas unavailable).");
+        offCtx.fillStyle = "#ffffff";
+        offCtx.fillRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+
+        const offsetX = Math.round((VIRTUAL_WIDTH - scaledViewport.width) / 2);
+        const offsetY = Math.round((VIRTUAL_HEIGHT - scaledViewport.height) / 2);
+        offCtx.save();
+        offCtx.translate(offsetX, offsetY);
+        await pdfPage.render({ canvasContext: offCtx, viewport: scaledViewport }).promise;
+        offCtx.restore();
+        const dataUrl = offscreen.toDataURL("image/png");
+
+        let targetPageId: string;
+        let targetPageNumber: number;
+        if (i === 1 && reuseCurrentPage) {
+          targetPageId = currentPg!.id;
+          targetPageNumber = currentPg!.pageNumber;
+        } else {
+          const data = await postJson(`/api/whiteboard/sessions/${sessionId}/pages`);
+          const newPage = data.page as WhiteboardPage;
+          setWbSession((prev) =>
+            prev ? { ...prev, pages: [...prev.pages, newPage], activePageNumber: newPage.pageNumber } : prev
+          );
+          targetPageId = newPage.id;
+          targetPageNumber = newPage.pageNumber;
+        }
+
+        prepared.push({ pageId: targetPageId, pageNumber: targetPageNumber, dataUrl });
+      }
+
+      firstNewPageNumber = prepared[0]?.pageNumber ?? null;
+      if (firstNewPageNumber !== null) {
+        await switchToPage(firstNewPageNumber);
+      }
+
+      if (prepared.length > 0) {
+        setPdfLoadState({
+          loading: true,
+          progress: `Uploading ${prepared.length} slide${prepared.length === 1 ? "" : "s"}…`,
+          error: null,
+        });
+
+        const UPLOAD_CONCURRENCY = 6;
+        let firstUploadError: string | null = null;
+        for (let start = 0; start < prepared.length; start += UPLOAD_CONCURRENCY) {
+          const batch = prepared.slice(start, start + UPLOAD_CONCURRENCY);
+          await Promise.all(
+            batch.map(async ({ pageId, dataUrl }) => {
+              try {
+                const background = await uploadPageBackgroundImage(sessionId, pageId, dataUrl);
+                setWbSession((prev) =>
+                  prev
+                    ? { ...prev, pages: prev.pages.map((p) => (p.id === pageId ? { ...p, background } : p)) }
+                    : prev
+                );
+              } catch (err) {
+                firstUploadError =
+                  firstUploadError ?? (err instanceof Error ? err.message : "Could not upload a rendered slide image.");
+              }
+            })
+          );
+        }
+        if (firstUploadError) throw new Error(firstUploadError);
+      }
+
+      setPdfLoadState({ loading: false, progress: null, error: null });
+    } catch (err) {
+      if (firstNewPageNumber !== null) switchToPage(firstNewPageNumber).catch(() => undefined);
+      setPdfLoadState({
+        loading: false,
+        progress: null,
+        error: err instanceof Error ? err.message : "Could not load the presentation PDF.",
+      });
+    } finally {
+      pdfConversionInFlightRef.current = false;
+    }
+  }
+
+  // ---- Slide background (More menu / Theme modal / PDF upload) --------------
   async function handleBackgroundFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = ""; // allow re-selecting the same file later
     if (!file || !wbSession || !currentPage) return;
+
+    if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+      handleLoadLocalPdf(file);
+      return;
+    }
+
     setUploadingBackground(true);
     setOpenPopup(null);
     try {
@@ -2995,7 +3122,7 @@ export function TeacherLiveClassRoom({
       <input
         ref={backgroundFileInputRef}
         type="file"
-        accept="image/jpeg,image/png,image/webp"
+        accept="image/jpeg,image/png,image/webp,application/pdf,.pdf,.ppt,.pptx"
         onChange={handleBackgroundFileChange}
         className="hidden"
       />
@@ -4882,9 +5009,9 @@ export function TeacherLiveClassRoom({
                   }}
                 />
                 <MoreGridBtn
-                  icon={uploadingBackground ? "hourglass_empty" : "image"}
-                  label={uploadingBackground ? "Uploading…" : "Upload File"}
-                  disabled={uploadingBackground}
+                  icon={uploadingBackground || pdfLoadState.loading ? "hourglass_empty" : "upload_file"}
+                  label={uploadingBackground || pdfLoadState.loading ? "Loading…" : "Upload PDF / Slide"}
+                  disabled={uploadingBackground || pdfLoadState.loading}
                   onClick={() => {
                     setOpenPopup(null);
                     backgroundFileInputRef.current?.click();
@@ -4893,10 +5020,14 @@ export function TeacherLiveClassRoom({
                 <MoreGridBtn
                   icon={pdfLoadState.loading ? "hourglass_empty" : "picture_as_pdf"}
                   label={pdfLoadState.loading ? "Loading…" : "Load Presentation"}
-                  disabled={pdfLoadState.loading || !wbSession.presentationUrl}
+                  disabled={pdfLoadState.loading}
                   onClick={() => {
                     setOpenPopup(null);
-                    handleLoadPresentationPdf();
+                    if (wbSession.presentationUrl) {
+                      handleLoadPresentationPdf();
+                    } else {
+                      backgroundFileInputRef.current?.click();
+                    }
                   }}
                 />
                 <MoreGridBtn

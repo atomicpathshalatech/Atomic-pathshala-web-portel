@@ -606,9 +606,9 @@ export function floodFillImageData(
 }
 
 /** How far each ink point moves toward the pointer (1 = raw, lower = smoother, more trailing). */
-const INK_SMOOTHING = 0.65;
+const INK_SMOOTHING = 0.52;
 /** Points closer than this (virtual px) to the previous one are dropped. */
-const INK_MIN_STEP = 0.3;
+const INK_MIN_STEP = 0.2;
 
 export class CanvasEngine {
   private baseCanvas: HTMLCanvasElement;
@@ -1251,7 +1251,9 @@ export class CanvasEngine {
     ctx.globalAlpha = (isHighlighter ? 0.35 : 1) * extraAlpha;
     ctx.globalCompositeOperation = "source-over";
 
-    if (isHighlighter || points.length === 2) {
+    if (isHighlighter) {
+      ctx.globalAlpha = 0.45 * extraAlpha;
+      ctx.lineWidth = Math.max(8, size * 3.5);
       ctx.beginPath();
       ctx.moveTo(points[0]!.x, points[0]!.y);
       if (points.length === 2) {
@@ -1266,7 +1268,28 @@ export class CanvasEngine {
         const last = points[points.length - 1]!;
         ctx.lineTo(last.x, last.y);
       }
-      ctx.lineWidth = size * (isHighlighter ? 3.5 : 1);
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+
+    if (penStyle === "hard" || !penStyle) {
+      ctx.globalAlpha = 1 * extraAlpha;
+      ctx.lineWidth = Math.max(0.5, size);
+      ctx.beginPath();
+      ctx.moveTo(points[0]!.x, points[0]!.y);
+      if (points.length === 2) {
+        ctx.lineTo(points[1]!.x, points[1]!.y);
+      } else {
+        for (let i = 1; i < points.length - 1; i++) {
+          const p1 = points[i]!;
+          const p2 = points[i + 1]!;
+          const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+          ctx.quadraticCurveTo(p1.x, p1.y, mid.x, mid.y);
+        }
+        const last = points[points.length - 1]!;
+        ctx.lineTo(last.x, last.y);
+      }
       ctx.stroke();
       ctx.restore();
       return;
@@ -1286,7 +1309,7 @@ export class CanvasEngine {
       ]) {
         void pass;
         ctx.shadowBlur = blur;
-        ctx.globalAlpha = alpha;
+        ctx.globalAlpha = alpha * extraAlpha;
         for (let i = 0; i < points.length - 1; i++) {
           const p1 = points[i]!;
           const p2 = points[i + 1]!;
@@ -1312,26 +1335,21 @@ export class CanvasEngine {
       let lineWidth: number;
       let alpha = 1;
       if (penStyle === "fountain") {
-        lineWidth = Math.max(0.2, size * (0.15 + pressure * 2.0));
+        lineWidth = Math.max(0.5, size * (0.3 + pressure * 1.5));
       } else if (penStyle === "chisel") {
         const ang = Math.atan2(p2.y - p1.y, p2.x - p1.x);
-        lineWidth = Math.max(0.4, size * (0.3 + 1.5 * Math.abs(Math.sin(ang - CHISEL_NIB))));
+        lineWidth = Math.max(0.6, size * (0.4 + 1.6 * Math.abs(Math.sin(ang - CHISEL_NIB))));
       } else if (penStyle === "art") {
-        // brush: wider, feathered via a soft self-glow + reduced opacity
-        lineWidth = Math.max(0.5, size * (1.1 + pressure * 1.5));
-        alpha = 0.7;
-        ctx.shadowColor = color;
-        ctx.shadowBlur = size * 0.9;
+        lineWidth = Math.max(0.8, size * (1.0 + pressure * 1.2));
+        alpha = 0.85;
       } else if (penStyle === "graphite") {
-        // pencil: thin + grainy alpha jitter
-        lineWidth = Math.max(0.2, size * (0.3 + pressure * 0.7));
-        alpha = 0.5 + Math.random() * 0.4;
+        lineWidth = Math.max(0.4, size * (0.5 + pressure * 0.7));
+        alpha = 0.75 + Math.random() * 0.25;
       } else {
-        // hard-tipped (default)
-        lineWidth = size <= 1 ? Math.max(0.2, size * (0.3 + pressure * 0.7)) : Math.max(0.3, size * (0.4 + pressure * 1.2));
+        lineWidth = Math.max(0.5, size);
       }
 
-      ctx.globalAlpha = alpha;
+      ctx.globalAlpha = alpha * extraAlpha;
       ctx.beginPath();
       ctx.moveTo(startPt.x, startPt.y);
       ctx.quadraticCurveTo(p1.x, p1.y, endPt.x, endPt.y);
