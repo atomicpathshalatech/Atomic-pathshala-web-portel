@@ -7,6 +7,7 @@ import { TeacherChapterHeader } from "./TeacherChapterHeader";
 import { UnifiedChapterScheduleTimeline } from "./UnifiedChapterScheduleTimeline";
 import { ChapterDetailView, ChapterDetailData } from "@/components/chapter-detail/ChapterDetailView";
 import { ChapterReviewActions } from "./ChapterReviewActions";
+import { ChapterQuestionIntelligenceDashboard } from "./ChapterQuestionIntelligenceDashboard";
 import { SecureDeleteResourceModal } from "@/components/common/SecureDeleteResourceModal";
 import { toast } from "sonner";
 import {
@@ -78,7 +79,7 @@ export function ChapterTeamViewWrapper({
   assignedBatches = [],
 }: ChapterTeamViewWrapperProps) {
   const router = useRouter();
-  const [viewMode, setViewMode] = useState<"manager" | "preview">("manager");
+  const [viewMode, setViewMode] = useState<"manager" | "intelligence" | "preview">("manager");
   const [status, setStatus] = useState<string>(initialStatus);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
@@ -256,6 +257,7 @@ export function ChapterTeamViewWrapper({
         <div className="inline-flex items-center p-0.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 ring-1 ring-slate-200 dark:ring-slate-700">
           {([
             ["manager", "Manage", <SlidersHorizontal key="m" className="w-3.5 h-3.5" />],
+            ["intelligence", "Question Intelligence", <Sparkles key="i" className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />],
             ["preview", "Student view", <Smartphone key="p" className="w-3.5 h-3.5" />],
           ] as const).map(([mode, label, icon]) => (
             <button
@@ -428,6 +430,11 @@ export function ChapterTeamViewWrapper({
             )}
           </div>
         </div>
+      ) : viewMode === "intelligence" ? (
+        <ChapterQuestionIntelligenceDashboard
+          subjectName={subjectTitle || studentPreviewData.subjectName || "General"}
+          chapterName={chapterTitle}
+        />
       ) : (
         <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#090b14] overflow-hidden shadow-2xl">
           <ChapterDetailView
