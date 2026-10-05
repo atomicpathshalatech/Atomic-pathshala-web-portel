@@ -573,9 +573,20 @@ export function AiDraftsFolderView({
                       )}
                     </button>
 
-                    <span className="font-mono text-xs font-black text-slate-800 bg-slate-100 px-2.5 py-1 rounded-xl">
-                      #{item.questionCode || item.id.slice(-8)}
-                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (item.questionCode) {
+                          navigator.clipboard.writeText(item.questionCode);
+                          toast.success(`Copied Question ID: ${item.questionCode}`);
+                        }
+                      }}
+                      title="Click to copy canonical Question ID"
+                      className="font-mono text-xs font-black text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 px-2.5 py-1 rounded-xl border border-blue-200 dark:border-blue-800 transition flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>{item.questionCode || item.id.slice(-8)}</span>
+                    </button>
 
                     <span className={`text-[11px] font-extrabold px-2.5 py-0.5 rounded-full border ${sourceBadgeClass}`}>
                       {sourceLabel}
