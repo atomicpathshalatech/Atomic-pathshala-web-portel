@@ -302,30 +302,20 @@ export async function GET(
       if (newest) uploadedNotes = `/api/files/${newest.id}/open`;
     }
 
-    if (wbSession) {
-      // Check original presentation uploaded before/during class
-      const presUrl = wbSession.presentationUrl;
-      if (presUrl) {
-        hasOriginalSlides = true;
-        originalFilename =
-          wbSession.presentationName || `${schedule.title.replace(/[^a-zA-Z0-9_-]/g, "_")}_Presentation.pdf`;
-        originalPreviewUrl = await resolveOriginalUrl(
-          presUrl,
-          originalFilename,
-          "inline"
-        );
-        originalDownloadUrl = await resolveOriginalUrl(
-          presUrl,
-          originalFilename,
-          "attachment"
-        );
-      }
-
-      // Check annotated PDF export
+    // Authoritative Single Notes Priority Rule:
+    // 1. If teacher uploaded manual notes, show ONLY teacher notes (whiteboard is replaced/hidden).
+    // 2. If teacher did NOT upload, fallback to the default whiteboard exported boardwork PDF.
+    if (uploadedNotes) {
+      notesStatus = "READY";
+      notesFilename = `${schedule.title.replace(/[^a-zA-Z0-9_-]/g, "_")}_Notes.pdf`;
+      notesPreviewUrl = uploadedNotes;
+      notesDownloadUrl = uploadedNotes;
+      hasOriginalSlides = false;
+    } else if (wbSession) {
+      // Check annotated PDF export from whiteboard
       let activePdfKey = wbSession.pdfStorageKey;
       if (!activePdfKey || wbSession.pdfStatus !== "READY") {
-        // If class has completed and has pages, attempt on-demand generation
-        if (!uploadedNotes && wbSession.pages.length > 0 && wbSession.status === "ENDED") {
+        if (wbSession.pages.length > 0 && wbSession.status === "ENDED") {
           const { finalizeWhiteboardSlides } = await import("@/lib/whiteboard/finalization");
           await finalizeWhiteboardSlides(wbSession.id).catch((err) =>
             console.warn("[on_demand_finalize_error]", err)
@@ -345,7 +335,7 @@ export async function GET(
 
       if (activePdfKey && wbSession.pdfStatus === "READY") {
         notesStatus = "READY";
-        notesFilename = `${schedule.title.replace(/[^a-zA-Z0-9_-]/g, "_")}_Boardwork.pdf`;
+        notesFilename = `${schedule.title.replace(/[^a-zA-Z0-9_-]/g, "_")}_Notes.pdf`;
         notesPreviewUrl = await createPresignedDownloadUrl({
           key: activePdfKey,
           expiresInSeconds: 3600,
@@ -360,49 +350,17 @@ export async function GET(
         });
       } else if (wbSession.pdfStatus === "GENERATING") {
         notesStatus = "PROCESSING";
-      }
-
-      // If teacher uploaded manual slide notes, ensure they are registered as original slides
-      if (uploadedNotes) {
-        hasOriginalSlides = true;
-        originalFilename = `${schedule.title.replace(/[^a-zA-Z0-9_-]/g, "_")}_Teacher_Notes.pdf`;
-        originalPreviewUrl = uploadedNotes;
-        originalDownloadUrl = uploadedNotes;
-
-        // If no whiteboard notes exist, the uploaded notes are the primary notes
-        if (!notesPreviewUrl) {
-          notesStatus = "READY";
-          notesPreviewUrl = uploadedNotes;
-          notesDownloadUrl = uploadedNotes;
-          notesFilename = originalFilename;
-        }
-      } else if (hasOriginalSlides && (originalPreviewUrl || originalDownloadUrl)) {
-        // Fallback: If annotated export is not available, original slides serve as class notes
-        if (!notesPreviewUrl) {
-          notesStatus = "READY";
-          notesPreviewUrl = originalPreviewUrl;
-          notesDownloadUrl = originalDownloadUrl;
-          notesFilename = originalFilename;
-        }
-      } else if (schedule.lecture?.slidesUrl && !notesPreviewUrl) {
+      } else if (schedule.lecture?.slidesUrl) {
         notesStatus = "READY";
         notesPreviewUrl = schedule.lecture.slidesUrl;
         notesDownloadUrl = schedule.lecture.slidesUrl;
         notesFilename = `${schedule.title.replace(/[^a-zA-Z0-9_-]/g, "_")}_Notes.pdf`;
       }
-    } else {
-      // Non-whiteboard class (e.g. video link pasted or past class)
-      const directNotes = uploadedNotes || schedule.lecture?.slidesUrl;
-      if (directNotes) {
-        notesStatus = "READY";
-        notesFilename = `${schedule.title.replace(/[^a-zA-Z0-9_-]/g, "_")}_Teacher_Notes.pdf`;
-        notesPreviewUrl = directNotes;
-        notesDownloadUrl = directNotes;
-        hasOriginalSlides = true;
-        originalPreviewUrl = directNotes;
-        originalDownloadUrl = directNotes;
-        originalFilename = notesFilename;
-      }
+    } else if (schedule.lecture?.slidesUrl) {
+      notesStatus = "READY";
+      notesPreviewUrl = schedule.lecture.slidesUrl;
+      notesDownloadUrl = schedule.lecture.slidesUrl;
+      notesFilename = `${schedule.title.replace(/[^a-zA-Z0-9_-]/g, "_")}_Notes.pdf`;
     }
 
     return apiSuccess({

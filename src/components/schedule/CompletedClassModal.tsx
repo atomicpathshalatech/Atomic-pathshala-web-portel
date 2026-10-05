@@ -294,34 +294,10 @@ export function CompletedClassModal({
               {/* Notes Action Toolbar */}
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div className="flex items-center gap-2">
-                  {assets?.notes?.hasOriginalSlides && assets.notes.originalDownloadUrl && (
-                    <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-900 border border-white/10 text-xs shadow-inner">
-                      <button
-                        type="button"
-                        onClick={() => setNotesType("original")}
-                        className={`py-1.5 px-3 rounded-lg font-bold text-xs transition cursor-pointer flex items-center gap-1.5 ${
-                          notesType === "original"
-                            ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
-                            : "text-slate-400 hover:text-white"
-                        }`}
-                      >
-                        <span className="material-symbols-outlined text-sm">upload_file</span>
-                        <span>Teacher Slide Notes (शिक्षक नोट्स)</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setNotesType("annotated")}
-                        className={`py-1.5 px-3 rounded-lg font-bold text-xs transition cursor-pointer flex items-center gap-1.5 ${
-                          notesType === "annotated"
-                            ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
-                            : "text-slate-400 hover:text-white"
-                        }`}
-                      >
-                        <span className="material-symbols-outlined text-sm">draw</span>
-                        <span>Whiteboard Notes (बोर्डवर्क PDF)</span>
-                      </button>
-                    </div>
-                  )}
+                  <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5 bg-slate-900 px-3 py-1.5 rounded-xl border border-white/10">
+                    <span className="material-symbols-outlined text-sm text-blue-400">description</span>
+                    <span>Class Notes PDF</span>
+                  </span>
                 </div>
 
                 {assets?.notes?.status === "READY" && (activeNotesPreviewUrl || activeNotesDownloadUrl) && (
