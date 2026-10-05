@@ -35,6 +35,7 @@ import {
   getMasterNcertChapters,
   getAllMasterNcertChapters,
 } from "@/lib/academic/master-ncert-catalog";
+import { QuestionReviewWorkspaceModal } from "./QuestionReviewWorkspaceModal";
 
 export interface QuestionRow {
   id: string;
@@ -954,131 +955,16 @@ export function QuestionManagementTable({
         </div>
       </div>
 
-      {/* 4. REVIEW ACTION MODAL (Strict Review 1 & Review 2 Workflow) */}
+      {/* 4. COMPREHENSIVE QUESTION REVIEW WORKSPACE MODAL */}
       {reviewModalQuestion && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div>
-                <h3 className="font-extrabold text-base text-slate-900 flex items-center gap-2">
-                  {reviewModalQuestion.stage === "REVIEW_1" ? (
-                    <>
-                      <UserCheck className="w-5 h-5 text-amber-600" />
-                      <span>Stage 1: Subject Expert Review</span>
-                    </>
-                  ) : (
-                    <>
-                      <ShieldCheck className="w-5 h-5 text-blue-600" />
-                      <span>Stage 2: Academic Lead Final Approval &amp; Publishing</span>
-                    </>
-                  )}
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Question ID: {reviewModalQuestion.question.questionCode || reviewModalQuestion.question.id.slice(0, 8)}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setReviewModalQuestion(null)}
-                className="text-slate-400 hover:text-slate-600"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Question Brief */}
-            <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 text-xs space-y-2">
-              <span className="font-bold text-slate-700 block">Statement:</span>
-              <p className="text-slate-900 line-clamp-3">
-                {reviewModalQuestion.question.translations[0]?.statement || "—"}
-              </p>
-
-              {(reviewModalQuestion.question as any).camDrawData && (
-                <div className="p-3 bg-white rounded-xl border border-slate-200 flex justify-center">
-                  <CamDrawRenderer
-                    document={(reviewModalQuestion.question as any).camDrawData}
-                    theme="light"
-                    maxHeight={160}
-                  />
-                </div>
-              )}
-            </div>
-
-            <form onSubmit={handleReviewDecision} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">Review Decision *</label>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setReviewAction("APPROVE")}
-                    className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 ${
-                      reviewAction === "APPROVE"
-                        ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
-                        : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
-                    }`}
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                    <span>{reviewModalQuestion.stage === "REVIEW_2" ? "Publish" : "Approve"}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setReviewAction("REQUEST_CHANGES")}
-                    className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 ${
-                      reviewAction === "REQUEST_CHANGES"
-                        ? "bg-amber-600 text-white border-amber-600 shadow-sm"
-                        : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
-                    }`}
-                  >
-                    <AlertCircle className="w-3.5 h-3.5" />
-                    <span>Need Fix</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setReviewAction("REJECT")}
-                    className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 ${
-                      reviewAction === "REJECT"
-                        ? "bg-rose-600 text-white border-rose-600 shadow-sm"
-                        : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
-                    }`}
-                  >
-                    <X className="w-3.5 h-3.5" />
-                    <span>Reject</span>
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">Reviewer Notes / Feedback</label>
-                <textarea
-                  rows={3}
-                  placeholder="Add feedback for author or approval remarks..."
-                  value={reviewNotes}
-                  onChange={(e) => setReviewNotes(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-900 outline-none focus:border-blue-500"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setReviewModalQuestion(null)}
-                  className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-700"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submittingReview}
-                  className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs shadow-md transition disabled:opacity-50"
-                >
-                  {submittingReview ? "Processing..." : "Confirm Review"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <QuestionReviewWorkspaceModal
+          question={reviewModalQuestion.question as any}
+          onClose={() => setReviewModalQuestion(null)}
+          onSuccess={() => {
+            setReviewModalQuestion(null);
+            router.refresh();
+          }}
+        />
       )}
 
       {/* 5. REVISION HISTORY MODAL */}
