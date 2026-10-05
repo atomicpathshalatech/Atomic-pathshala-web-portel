@@ -1767,8 +1767,26 @@ export function StudentLiveClassRoom({
 
         {/* Right Fixed Sidebar (Teacher Video on Top + Live Chat Console on Bottom) */}
         <aside className="w-80 xl:w-88 h-full shrink-0 flex flex-col bg-[#10121d] rounded-2xl border border-slate-800/80 overflow-hidden shadow-2xl">
-          {/* Audio / WebRTC connection for student participation (no floating camera overlay on student screen) */}
-          {(!isYouTube || isApprovedSpeaker || teacherAudioConnected || teacherVideoConnected) && (
+          {/* Teacher Video in Sidebar for App / WebRTC Classes */}
+          {!isYouTube ? (
+            <div className="w-full shrink-0 border-b border-[#2d2e3b] p-3 bg-[#13151f]">
+              <div className="relative w-full aspect-video rounded-xl overflow-hidden border border-slate-700/80 bg-black shadow-lg">
+                <VideoStrip
+                  whiteboardSessionId={wbSession?.id || batchScheduleId}
+                  variant="panel"
+                  role="STUDENT"
+                  teacherName={teacherName}
+                  isApprovedSpeaker={isApprovedSpeaker}
+                  speakerRequestType={speakerRequestType}
+                  speakerToken={speakerToken}
+                  teacherAudioConnected={teacherAudioConnected}
+                  teacherVideoConnected={teacherVideoConnected}
+                  teacherConnectionToken={teacherConnectionToken}
+                  onEndCall={handleEndCall}
+                />
+              </div>
+            </div>
+          ) : (isApprovedSpeaker || teacherAudioConnected || teacherVideoConnected) ? (
             <div className="hidden">
               <VideoStrip
                 whiteboardSessionId={wbSession?.id || batchScheduleId}
@@ -1784,7 +1802,7 @@ export function StudentLiveClassRoom({
                 onEndCall={handleEndCall}
               />
             </div>
-          )}
+          ) : null}
 
           {/* Approved Speaker Banner */}
           {isApprovedSpeaker && (
