@@ -345,7 +345,7 @@ export async function GET(
 
       if (activePdfKey && wbSession.pdfStatus === "READY") {
         notesStatus = "READY";
-        notesFilename = `${schedule.title.replace(/[^a-zA-Z0-9_-]/g, "_")}_Notes.pdf`;
+        notesFilename = `${schedule.title.replace(/[^a-zA-Z0-9_-]/g, "_")}_Boardwork.pdf`;
         notesPreviewUrl = await createPresignedDownloadUrl({
           key: activePdfKey,
           expiresInSeconds: 3600,
@@ -360,29 +360,49 @@ export async function GET(
         });
       } else if (wbSession.pdfStatus === "GENERATING") {
         notesStatus = "PROCESSING";
+      }
+
+      // If teacher uploaded manual slide notes, ensure they are registered as original slides
+      if (uploadedNotes) {
+        hasOriginalSlides = true;
+        originalFilename = `${schedule.title.replace(/[^a-zA-Z0-9_-]/g, "_")}_Teacher_Notes.pdf`;
+        originalPreviewUrl = uploadedNotes;
+        originalDownloadUrl = uploadedNotes;
+
+        // If no whiteboard notes exist, the uploaded notes are the primary notes
+        if (!notesPreviewUrl) {
+          notesStatus = "READY";
+          notesPreviewUrl = uploadedNotes;
+          notesDownloadUrl = uploadedNotes;
+          notesFilename = originalFilename;
+        }
       } else if (hasOriginalSlides && (originalPreviewUrl || originalDownloadUrl)) {
         // Fallback: If annotated export is not available, original slides serve as class notes
-        notesStatus = "READY";
-        notesPreviewUrl = originalPreviewUrl;
-        notesDownloadUrl = originalDownloadUrl;
-        notesFilename = originalFilename;
-      } else if (schedule.lecture?.slidesUrl) {
+        if (!notesPreviewUrl) {
+          notesStatus = "READY";
+          notesPreviewUrl = originalPreviewUrl;
+          notesDownloadUrl = originalDownloadUrl;
+          notesFilename = originalFilename;
+        }
+      } else if (schedule.lecture?.slidesUrl && !notesPreviewUrl) {
         notesStatus = "READY";
         notesPreviewUrl = schedule.lecture.slidesUrl;
         notesDownloadUrl = schedule.lecture.slidesUrl;
         notesFilename = `${schedule.title.replace(/[^a-zA-Z0-9_-]/g, "_")}_Notes.pdf`;
       }
-    } else if (schedule.lecture?.slidesUrl) {
-      notesStatus = "READY";
-      notesPreviewUrl = schedule.lecture.slidesUrl;
-      notesDownloadUrl = schedule.lecture.slidesUrl;
-      notesFilename = `${schedule.title.replace(/[^a-zA-Z0-9_-]/g, "_")}_Notes.pdf`;
-    }
-    if (uploadedNotes) {
-      notesStatus = "READY";
-      notesPreviewUrl = uploadedNotes;
-      notesDownloadUrl = uploadedNotes;
-      notesFilename = `${schedule.title.replace(/[^a-zA-Z0-9_-]/g, "_")}_Notes.pdf`;
+    } else {
+      // Non-whiteboard class (e.g. video link pasted or past class)
+      const directNotes = uploadedNotes || schedule.lecture?.slidesUrl;
+      if (directNotes) {
+        notesStatus = "READY";
+        notesFilename = `${schedule.title.replace(/[^a-zA-Z0-9_-]/g, "_")}_Teacher_Notes.pdf`;
+        notesPreviewUrl = directNotes;
+        notesDownloadUrl = directNotes;
+        hasOriginalSlides = true;
+        originalPreviewUrl = directNotes;
+        originalDownloadUrl = directNotes;
+        originalFilename = notesFilename;
+      }
     }
 
     return apiSuccess({

@@ -295,28 +295,30 @@ export function CompletedClassModal({
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div className="flex items-center gap-2">
                   {assets?.notes?.hasOriginalSlides && assets.notes.originalDownloadUrl && (
-                    <div className="flex items-center gap-1 p-0.5 rounded-lg bg-slate-900 border border-white/10 text-xs">
-                      <button
-                        type="button"
-                        onClick={() => setNotesType("annotated")}
-                        className={`py-1 px-2.5 rounded-md font-bold text-[11px] transition cursor-pointer ${
-                          notesType === "annotated"
-                            ? "bg-blue-600 text-white shadow-xs"
-                            : "text-slate-400 hover:text-white"
-                        }`}
-                      >
-                        Annotated Board
-                      </button>
+                    <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-900 border border-white/10 text-xs shadow-inner">
                       <button
                         type="button"
                         onClick={() => setNotesType("original")}
-                        className={`py-1 px-2.5 rounded-md font-bold text-[11px] transition cursor-pointer ${
+                        className={`py-1.5 px-3 rounded-lg font-bold text-xs transition cursor-pointer flex items-center gap-1.5 ${
                           notesType === "original"
-                            ? "bg-blue-600 text-white shadow-xs"
+                            ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
                             : "text-slate-400 hover:text-white"
                         }`}
                       >
-                        Original Slides
+                        <span className="material-symbols-outlined text-sm">upload_file</span>
+                        <span>Teacher Slide Notes (शिक्षक नोट्स)</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNotesType("annotated")}
+                        className={`py-1.5 px-3 rounded-lg font-bold text-xs transition cursor-pointer flex items-center gap-1.5 ${
+                          notesType === "annotated"
+                            ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
+                            : "text-slate-400 hover:text-white"
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-sm">draw</span>
+                        <span>Whiteboard Notes (बोर्डवर्क PDF)</span>
                       </button>
                     </div>
                   )}
