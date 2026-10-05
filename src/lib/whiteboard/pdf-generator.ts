@@ -83,7 +83,7 @@ export async function generateWhiteboardPdf(
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
     doc.setTextColor(150, 150, 150);
-    doc.text(`Atomic Pathshala • ${sessionTitle} • Slide ${p.pageNumber} of ${pages.length}`, 20, pdfHeight - 12);
+    doc.text(`Atomic Pathshala • ${sessionTitle} • Slide ${i + 1} of ${pages.length}`, 20, pdfHeight - 12);
   }
 
   const arrayBuffer = doc.output("arraybuffer");

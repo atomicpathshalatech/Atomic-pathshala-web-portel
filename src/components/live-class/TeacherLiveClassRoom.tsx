@@ -2074,19 +2074,20 @@ export function TeacherLiveClassRoom({
     if (!wbSession || !currentPage || exportingPdf) return;
     setExportingPdf(true);
     try {
-      // The whole lecture, not just whatever slide happens to be on screen
-      // right now — a teacher who's drawn 20 pages expects a 20-page PDF out
-      // of "Export PDF." This used to send only `currentPage`, silently
-      // discarding every other page even though the generator this hits
-      // (generateWhiteboardPdf) already supports multi-page output.
+      if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+      await flushAutosave();
+
+      const sortedPages = [...wbSession.pages].sort((a, b) => a.pageNumber - b.pageNumber);
+      const orderedPageIds = sortedPages.map((p) => p.id);
+
       const res = await fetch(`/api/whiteboard/sessions/${wbSession.id}/export-pdf`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: scheduleTitle || "Whiteboard",
-          // The server reads every saved slide itself; only the slide on
-          // screen travels (its newest strokes may not be autosaved yet).
+          orderedPageIds,
           currentPage: {
+            id: currentPage.id,
             pageNumber: currentPage.pageNumber,
             background: currentPage.background,
             objects: engineRef.current?.getObjects?.() ?? currentPage.objects,
@@ -2119,7 +2120,7 @@ export function TeacherLiveClassRoom({
     } finally {
       setExportingPdf(false);
     }
-  }, [wbSession, currentPage, scheduleTitle, exportingPdf]);
+  }, [wbSession, currentPage, scheduleTitle, exportingPdf, flushAutosave]);
 
   // ---- Slide background (More menu / Theme modal) --------------------------
   async function handleBackgroundFileChange(e: React.ChangeEvent<HTMLInputElement>) {

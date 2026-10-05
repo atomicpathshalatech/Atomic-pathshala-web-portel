@@ -12,10 +12,8 @@ export const maxDuration = 120;
 
 /**
  * On-demand PDF export for the whiteboard toolbar's "download" button —
- * generates a PDF straight from whatever the client currently has in memory
- * (not from saved DB state, and not the class-end finalization pipeline,
- * which also generates PPTX / uploads to R2 / marks the session finalized —
- * side effects that don't belong to a mid-class "export current slide" click).
+ * generates a PDF in the exact sequence of slides with no duplicates, no missing pages,
+ * and with current canvas strokes accurately merged.
  */
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -28,28 +26,59 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const body = await request.json().catch(() => ({}));
     const title = typeof body?.title === "string" ? body.title : "Class Notes";
 
-    // The whole lecture comes from the saved board. Sending every page's
-    // strokes in the request (the old way) went over the request-size limit
-    // on a long class — a 36-slide lecture could not be exported at all.
-    // Only the slide on screen is sent, so strokes not autosaved yet are in.
-    let pages = body?.pages as PageDataForExport[] | undefined;
-    if (!Array.isArray(pages) || pages.length === 0) {
-      const saved = await prisma.whiteboardPage.findMany({
-        where: { sessionId: params.id },
-        select: { pageNumber: true, background: true, objects: true },
-        orderBy: { pageNumber: "asc" },
-      });
-      pages = saved.map((p) => ({ pageNumber: p.pageNumber, background: p.background, objects: (p.objects ?? []) as unknown as PageDataForExport["objects"] }));
-      const current = body?.currentPage as PageDataForExport | undefined;
-      if (current && typeof current.pageNumber === "number" && Array.isArray(current.objects)) {
-        const i = pages.findIndex((p) => p.pageNumber === current.pageNumber);
-        if (i >= 0) pages[i] = { ...pages[i]!, objects: current.objects, background: current.background ?? pages[i]!.background };
-        else pages.push({ pageNumber: current.pageNumber, background: current.background ?? "blank", objects: current.objects });
-      }
+    // Fetch all pages belonging to this session
+    const saved = await prisma.whiteboardPage.findMany({
+      where: { sessionId: params.id },
+      select: { id: true, pageNumber: true, background: true, objects: true },
+    });
+
+    if (saved.length === 0) {
+      return apiError("This board has no slides to export yet.", 400);
     }
 
-    if (pages.length === 0) {
-      return apiError("This board has no slides to export yet.", 400);
+    // Determine the authoritative page sequence (matching client ordered IDs or database pageNumber)
+    let orderedSaved: typeof saved = [];
+    if (Array.isArray(body?.orderedPageIds) && body.orderedPageIds.length > 0) {
+      const pageMap = new Map(saved.map((p) => [p.id, p]));
+      for (const id of body.orderedPageIds) {
+        const found = pageMap.get(id);
+        if (found) {
+          orderedSaved.push(found);
+          pageMap.delete(id);
+        }
+      }
+      // Append any remaining pages (if any)
+      for (const remaining of pageMap.values()) {
+        orderedSaved.push(remaining);
+      }
+    } else {
+      orderedSaved = [...saved].sort((a, b) => a.pageNumber - b.pageNumber);
+    }
+
+    // Convert to PageDataForExport with strictly sequential 1-based page numbering (1, 2, ... N)
+    const pages: PageDataForExport[] = orderedSaved.map((p, idx) => ({
+      pageNumber: idx + 1,
+      background: p.background,
+      objects: (p.objects ?? []) as unknown as PageDataForExport["objects"],
+    }));
+
+    // Update the on-screen active slide's latest strokes in-place (never duplicating or inserting extra slides)
+    const current = body?.currentPage;
+    if (current && Array.isArray(current.objects)) {
+      let targetIdx = -1;
+      if (current.id) {
+        targetIdx = orderedSaved.findIndex((p) => p.id === current.id);
+      }
+      if (targetIdx === -1 && typeof current.pageNumber === "number") {
+        targetIdx = current.pageNumber - 1;
+      }
+      if (targetIdx >= 0 && targetIdx < pages.length) {
+        pages[targetIdx] = {
+          pageNumber: targetIdx + 1,
+          background: current.background ?? pages[targetIdx]!.background,
+          objects: current.objects,
+        };
+      }
     }
 
     const { generateWhiteboardPdf } = await import("@/lib/whiteboard/pdf-generator");
@@ -57,8 +86,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     const filename = `${(title || "Class_Notes").replace(/[^a-zA-Z0-9_-]/g, "_")}.pdf`;
 
-    // A whole lecture is bigger than a response may be, so the file goes to
-    // storage and the browser downloads it from there.
+    // Try uploading to R2 storage for presigned URL download
     try {
       const { uploadBufferToR2, createPresignedDownloadUrl } = await import("@/lib/storage/r2-client");
       const key = `whiteboard-exports/${params.id}/${Date.now()}.pdf`;
@@ -73,6 +101,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     } catch (storageErr) {
       console.warn("[whiteboard_export_storage_fallback]", storageErr);
     }
+
     return new Response(pdfBuffer, {
       status: 200,
       headers: {
