@@ -174,7 +174,7 @@ export type PenStyleId = typeof PEN_STYLES[number]["id"];
 
 const HIGHLIGHT_COLORS = ["#ef4444", "#eab308", "#22c55e", "#3b82f6"];
 export const LEFT_BAR_COLORS = [
-  "#ef4444", "#f97316", "#eab308",
+  "#000000", "#ef4444", "#f97316", "#eab308",
   "#22c55e", "#06b6d4", "#3b82f6",
   "#ec4899", "#ffffff",
 ];
@@ -250,6 +250,23 @@ function slideBackgroundStyle(background: string | undefined): React.CSSProperti
     default:
       return { backgroundColor: "#ffffff" };
   }
+}
+
+function getHydratedObjects(sessionId?: string | null, pageId?: string | null, serverObjects?: any[] | null): any[] {
+  const fallback = Array.isArray(serverObjects) ? serverObjects : [];
+  if (typeof window === "undefined" || !sessionId || !pageId) return fallback;
+  try {
+    const raw = localStorage.getItem(`atomic_wb_backup_${sessionId}_${pageId}`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        if (fallback.length === 0 || parsed.length >= fallback.length) {
+          return parsed;
+        }
+      }
+    }
+  } catch {}
+  return fallback;
 }
 
 async function getJson(url: string) {
@@ -1022,6 +1039,10 @@ export function TeacherLiveClassRoom({
   const [rightTab, setRightTab] = useState<"messages" | "questions" | "roster">("messages");
   const [unreadMessages, setUnreadMessages] = useState(0);
 
+  // Slide drag and drop reordering state
+  const [draggedSlideId, setDraggedSlideId] = useState<string | null>(null);
+  const [dragOverSlideIndex, setDragOverSlideIndex] = useState<number | null>(null);
+
   const [activeQuiz, setActiveQuiz] = useState<ActiveQuiz | null>(null);
   useEffect(() => {
     activeQuizIdRef.current = activeQuiz?.id ?? null;
@@ -1068,6 +1089,12 @@ export function TeacherLiveClassRoom({
           if (sess && (!sess.pages || sess.pages.length === 0)) {
             sess.pages = [{ id: "temp-p1", pageNumber: 1, objects: [], background: "blank" }];
           }
+          if (sess?.pages && sess?.id) {
+            sess.pages = sess.pages.map((p: any) => ({
+              ...p,
+              objects: getHydratedObjects(sess.id, p.id, p.objects),
+            }));
+          }
           setWbSession(sess);
           if (
             sess?.livePhase === "ENDING" ||
@@ -1112,7 +1139,13 @@ export function TeacherLiveClassRoom({
       activeCanvasRef.current,
       (objects) => {
         pendingObjectsRef.current = objects;
-        pendingPageIdRef.current = enginePageIdRef.current ?? currentPageIdRef.current;
+        const targetPageId = enginePageIdRef.current ?? currentPageIdRef.current;
+        pendingPageIdRef.current = targetPageId;
+        if (typeof window !== "undefined" && wbSession?.id && targetPageId) {
+          try {
+            localStorage.setItem(`atomic_wb_backup_${wbSession.id}_${targetPageId}`, JSON.stringify(objects));
+          } catch {}
+        }
         setSaveState("saving");
         if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
         autosaveTimer.current = setTimeout(() => flushAutosaveRef.current(), 50);
@@ -1165,7 +1198,8 @@ export function TeacherLiveClassRoom({
     };
     if (currentPage) {
       enginePageIdRef.current = currentPage.id;
-      engine.loadObjects(currentPage.objects ?? []);
+      const initialObjs = getHydratedObjects(wbSession.id, currentPage.id, currentPage.objects);
+      engine.loadObjects(initialObjs);
     }
 
     // Keep the canvas backing store's pixel size synced to its actual
@@ -1201,9 +1235,10 @@ export function TeacherLiveClassRoom({
     if (currentPage && currentPage.id !== lastLoadedPageIdRef.current) {
       lastLoadedPageIdRef.current = currentPage.id;
       enginePageIdRef.current = currentPage.id;
-      engineRef.current.loadObjects(currentPage.objects ?? []);
+      const objs = getHydratedObjects(wbSession?.id, currentPage.id, currentPage.objects);
+      engineRef.current.loadObjects(objs);
     }
-  }, [stageDimensions, currentPage?.id]);
+  }, [stageDimensions, currentPage?.id, wbSession?.id]);
 
   useEffect(() => {
     if (engineRef.current) {
@@ -1263,11 +1298,17 @@ export function TeacherLiveClassRoom({
     const baseVersion = sync.versions[targetPage.id] ?? targetPage.version;
 
     sync.inFlight = true;
+    if (typeof window !== "undefined" && wbSession?.id && targetPage?.id) {
+      try {
+        localStorage.setItem(`atomic_wb_backup_${wbSession.id}_${targetPage.id}`, JSON.stringify(objects));
+      } catch {}
+    }
     try {
       const res = await fetch(`/api/whiteboard/sessions/${wbSession.id}/pages/${targetPage.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ objects, ...(baseVersion !== undefined && { baseVersion }) }),
+        keepalive: true,
       });
       const json = await res.json().catch(() => null);
       if (res.status === 409 && json?.details?.currentVersion != null && sync.conflictRetries < 3) {
@@ -1640,7 +1681,8 @@ export function TeacherLiveClassRoom({
       setWbSession((prev) => (prev ? { ...prev, activePageNumber: pageNumber } : prev));
       enginePageIdRef.current = target.id;
       lastLoadedPageIdRef.current = target.id;
-      engineRef.current.loadObjects(target.objects ?? []);
+      const objs = getHydratedObjects(wbSession.id, target.id, target.objects);
+      engineRef.current.loadObjects(objs);
     } catch (err) {
       // Was previously silent apart from the generic "offline" indicator -
       // logged now so a stale/ended-session 409 (or any other switchToPage
@@ -1939,12 +1981,90 @@ export function TeacherLiveClassRoom({
         if (activePg) {
           enginePageIdRef.current = activePg.id;
           lastLoadedPageIdRef.current = activePg.id;
-          engineRef.current?.loadObjects(activePg.objects ?? []);
+          const objs = getHydratedObjects(wbSession.id, activePg.id, activePg.objects);
+          engineRef.current?.loadObjects(objs);
         }
       }
     } catch (err) {
       console.error("[movePage error]", err);
       setLoadError(err instanceof Error ? err.message : "Could not reorder slides.");
+    }
+  }
+
+  async function handleDropReorder(targetIndex: number) {
+    if (!wbSession || !draggedSlideId) return;
+    const sorted = [...wbSession.pages].sort((a, b) => a.pageNumber - b.pageNumber);
+    const fromIndex = sorted.findIndex((p) => p.id === draggedSlideId);
+    if (fromIndex === -1 || fromIndex === targetIndex) {
+      setDraggedSlideId(null);
+      setDragOverSlideIndex(null);
+      return;
+    }
+
+    // PowerPoint-style array reorder
+    const nextPages = [...sorted];
+    const [movedPage] = nextPages.splice(fromIndex, 1);
+    nextPages.splice(targetIndex, 0, movedPage!);
+
+    // Re-index page numbers 1-based
+    const updatedSorted = nextPages.map((pg, idx) => ({ ...pg, pageNumber: idx + 1 }));
+    const orderedIds = updatedSorted.map((pg) => pg.id);
+
+    // Active page tracking
+    const activePage = sorted.find((p) => p.pageNumber === wbSession.activePageNumber);
+    let newActiveNumber = wbSession.activePageNumber;
+    if (activePage) {
+      const newActiveIdx = updatedSorted.findIndex((p) => p.id === activePage.id);
+      if (newActiveIdx !== -1) newActiveNumber = newActiveIdx + 1;
+    }
+
+    // Optimistic UI update for instantaneous fluid feel
+    setWbSession((prev) =>
+      prev
+        ? {
+            ...prev,
+            pages: updatedSorted,
+            activePageNumber: newActiveNumber,
+          }
+        : prev
+    );
+    setDraggedSlideId(null);
+    setDragOverSlideIndex(null);
+
+    try {
+      if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+      await flushAutosave();
+      pendingObjectsRef.current = null;
+      pendingPageIdRef.current = null;
+
+      const data = await patchJson(`/api/whiteboard/sessions/${wbSession.id}/pages/reorder`, {
+        orderedPageIds: orderedIds,
+      });
+
+      if (data?.pages) {
+        const serverSorted = (data.pages as WhiteboardPage[]).sort((a, b) => a.pageNumber - b.pageNumber);
+        const serverActive = data.activePageNumber ?? newActiveNumber;
+        setWbSession((prev) =>
+          prev
+            ? {
+                ...prev,
+                pages: serverSorted,
+                activePageNumber: serverActive,
+              }
+            : prev
+        );
+        const activePg = serverSorted.find((p) => p.pageNumber === serverActive);
+        if (activePg) {
+          enginePageIdRef.current = activePg.id;
+          lastLoadedPageIdRef.current = activePg.id;
+          const objs = getHydratedObjects(wbSession.id, activePg.id, activePg.objects);
+          engineRef.current?.loadObjects(objs);
+        }
+      }
+    } catch (err) {
+      console.error("[reorder error]", err);
+      setWbSession((prev) => (prev ? { ...prev, pages: sorted } : prev));
+      setLoadError("Could not reorder slides. Please try again.");
     }
   }
 
@@ -4463,24 +4583,69 @@ export function TeacherLiveClassRoom({
                 <div className="flex-1 overflow-y-auto p-1.5 flex flex-col gap-1.5">
                   {[...wbSession.pages].sort((a, b) => a.pageNumber - b.pageNumber).map((p, idx, arr) => {
                     const active = p.pageNumber === wbSession.activePageNumber;
+                    const isDragging = draggedSlideId === p.id;
+                    const isDragOver = dragOverSlideIndex === idx && !isDragging;
+
                     return (
                       <div
                         key={p.id}
-                        className={`relative rounded-lg p-1 border transition-colors ${
-                          active ? "border-blue-500 bg-blue-900/20" : "border-transparent hover:bg-gray-800"
+                        draggable={true}
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData("text/plain", p.id);
+                          e.dataTransfer.effectAllowed = "move";
+                          setDraggedSlideId(p.id);
+                        }}
+                        onDragEnd={() => {
+                          setDraggedSlideId(null);
+                          setDragOverSlideIndex(null);
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = "move";
+                          if (dragOverSlideIndex !== idx) {
+                            setDragOverSlideIndex(idx);
+                          }
+                        }}
+                        onDragLeave={() => {
+                          if (dragOverSlideIndex === idx) {
+                            setDragOverSlideIndex(null);
+                          }
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          handleDropReorder(idx);
+                        }}
+                        className={`relative rounded-lg p-1 border transition-all duration-150 select-none ${
+                          isDragging
+                            ? "opacity-35 scale-95 border-dashed border-blue-400 bg-blue-950/30"
+                            : isDragOver
+                            ? "border-t-2 border-t-blue-500 border-x-transparent border-b-transparent bg-blue-500/10 scale-[1.02]"
+                            : active
+                            ? "border-blue-500 bg-blue-900/20"
+                            : "border-transparent hover:bg-gray-800"
                         }`}
                       >
+                        <div className="flex items-center gap-1 mb-0.5 cursor-grab active:cursor-grabbing">
+                          <span
+                            className="material-symbols-outlined text-[13px] text-gray-500 hover:text-gray-300"
+                            title="Drag to reorder"
+                          >
+                            drag_indicator
+                          </span>
+                          <span className={`text-[10px] font-semibold ${active ? "text-blue-400" : "text-gray-400"}`}>
+                            Slide {p.pageNumber}
+                          </span>
+                        </div>
                         <button
                           type="button"
                           onClick={() => switchToPage(p.pageNumber)}
-                          className="block w-full [&_canvas]:w-full [&_canvas]:h-auto [&_canvas]:rounded"
+                          className="block w-full [&_canvas]:w-full [&_canvas]:h-auto [&_canvas]:rounded cursor-pointer hover:opacity-90"
                           title={`Open slide ${p.pageNumber}`}
                         >
                           <PageThumbnail background={p.background} objects={p.objects} />
                         </button>
-                        <div className="mt-0.5 flex items-center justify-between">
-                          <span className={`text-[10px] font-semibold ${active ? "text-blue-400" : "text-gray-400"}`}>{p.pageNumber}</span>
-                          <span className="flex items-center gap-0.5">
+                        <div className="mt-1 flex items-center justify-between">
+                          <span className="flex items-center gap-0.5 ml-auto">
                             <button
                               type="button"
                               disabled={idx === 0}
