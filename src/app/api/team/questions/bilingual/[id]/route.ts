@@ -7,6 +7,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 import { bilingualQuestionSchema } from "@/lib/validation/question-v2";
 import { resolveSubjectChapterNames, legacyTagsToString } from "@/lib/questions/legacy";
+import { generateQuestionId } from "@/lib/questions/id-generator";
 
 function toOptionsJson(t: { optionA?: string; optionB?: string; optionC?: string; optionD?: string }) {
   const options: Record<string, string> = {};
@@ -105,7 +106,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
           subTopic: data.subTopic || null,
           category: data.category || null,
           pyqSource: data.pyqSource || null,
-          questionCode: data.questionCode || null,
+          questionCode: existing.questionCode || data.questionCode || (await generateQuestionId(prisma, subject)),
           type: data.type,
           difficulty: data.difficulty,
           tags: legacyTagsToString(data.tags),

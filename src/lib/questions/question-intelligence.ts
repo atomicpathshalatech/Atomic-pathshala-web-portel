@@ -249,3 +249,55 @@ export function validateCompactSolution(
     isCompliant: lineCount <= maxLines,
   };
 }
+
+/**
+ * SECTION 16: REFERENCE MANAGEMENT SYSTEM
+ * Formats canonical standardized reference identifiers.
+ */
+export function formatQuestionReference(questionCode: string, versionNumber: number = 1): string {
+  const code = (questionCode || "UNKNOWN").trim().toUpperCase();
+  const v = Math.max(1, versionNumber);
+  return `QR-${code}-V${v}`;
+}
+
+export function formatSolutionReference(questionCode: string, versionNumber: number = 1): string {
+  const code = (questionCode || "UNKNOWN").trim().toUpperCase();
+  const v = Math.max(1, versionNumber);
+  return `SR-${code}-V${v}`;
+}
+
+export function formatNcertReference(
+  questionCode: string,
+  classLevel: number | string,
+  chapterNumber: number | string,
+  topicNumber?: number | string
+): string {
+  const code = (questionCode || "UNKNOWN").trim().toUpperCase();
+  const cls = String(classLevel).padStart(2, "0");
+  const ch = String(chapterNumber).padStart(2, "0");
+  const tp = topicNumber ? `-T${String(topicNumber).padStart(2, "0")}` : "";
+  return `NCERT-${code}-P${cls}-C${ch}${tp}`;
+}
+
+export function formatPyqReference(
+  exam: string,
+  year: number | string,
+  questionCode: string
+): string {
+  const ex = (exam || "NEET").trim().toUpperCase();
+  const yr = String(year).trim();
+  const code = (questionCode || "UNKNOWN").trim().toUpperCase();
+  return `PYQ-${ex}-${yr}-${code}`;
+}
+
+export function formatAiGenerationReference(
+  questionCode: string,
+  batchNumber: number | string,
+  groupNumber?: number | string
+): string {
+  const code = (questionCode || "UNKNOWN").trim().toUpperCase();
+  const b = typeof batchNumber === "number" ? `B${String(batchNumber).padStart(3, "0")}` : String(batchNumber);
+  const g = groupNumber !== undefined ? (typeof groupNumber === "number" ? `-G${String(groupNumber).padStart(2, "0")}` : `-${groupNumber}`) : "";
+  return `AI-${code}-${b}${g}`;
+}
+
