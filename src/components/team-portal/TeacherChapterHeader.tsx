@@ -188,7 +188,7 @@ export function TeacherChapterHeader({
               <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-amber-500 text-white text-[10px] font-bold flex items-center justify-center">{noticeCount}</span>
             )}
           </button>
-          <Link href="/team/guru" className={softBtn}>
+          <Link href="/team/messages" className={softBtn}>
             <MessageSquare className="w-3.5 h-3.5 text-blue-600" />
             Discussion
           </Link>

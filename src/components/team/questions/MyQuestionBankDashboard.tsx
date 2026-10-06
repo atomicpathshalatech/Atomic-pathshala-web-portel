@@ -355,7 +355,7 @@ export function MyQuestionBankDashboard({
           )}
 
           <Link
-            href="/team/questions/create"
+            href="/team/questions/new"
             className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl shadow-sm transition-colors"
           >
             <Sparkles className="w-4 h-4" />
@@ -634,7 +634,7 @@ export function MyQuestionBankDashboard({
                       </Link>
 
                       <Link
-                        href={`/team/questions/create?subject=${encodeURIComponent(a.subject)}&chapter=${encodeURIComponent(a.chapter)}&topic=${encodeURIComponent(a.topic || "")}`}
+                        href={`/team/questions/new?subject=${encodeURIComponent(a.subject)}&chapter=${encodeURIComponent(a.chapter)}&topic=${encodeURIComponent(a.topic || "")}`}
                         className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 px-3 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl transition-colors"
                       >
                         <Plus className="w-3.5 h-3.5" />

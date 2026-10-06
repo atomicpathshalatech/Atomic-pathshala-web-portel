@@ -732,7 +732,7 @@ export function ChatApp({
             setError(null);
           }}
           onDeleteChat={deleteChat}
-          onOpenQuiz={() => router.push("/quiz")}
+          onOpenQuiz={() => router.push("/guru/quiz")}
         />
       </div>
 
@@ -755,7 +755,7 @@ export function ChatApp({
               onDeleteChat={deleteChat}
               onClose={() => setSidebarOpen(false)}
               onOpenQuiz={() => {
-                router.push("/quiz");
+                router.push("/guru/quiz");
                 setSidebarOpen(false);
               }}
             />
