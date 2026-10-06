@@ -28,6 +28,12 @@ import {
   Image as ImageIcon,
   Compass,
   Hash,
+  UserPlus,
+  CheckSquare,
+  Square,
+  Users,
+  MessageSquare,
+  AlertTriangle,
 } from "lucide-react";
 import { FormulaText } from "@/components/test-portal/FormulaText";
 import { SecureDeleteResourceModal } from "@/components/common/SecureDeleteResourceModal";
@@ -75,11 +81,21 @@ export interface QuestionRow {
   review2ById: string | null;
   review2At: string | Date | null;
   review2Notes: string | null;
+  assignedToId?: string | null;
+  assignedById?: string | null;
+  assignedAt?: string | Date | null;
+  correctionStatus?: string | null;
+  correctionNotes?: string | null;
+  correctionSubmittedAt?: string | Date | null;
+  correctionSubmittedById?: string | null;
   createdBy?: { id: string; name: string | null; email: string | null } | null;
   editedBy?: { id: string; name: string | null; email: string | null } | null;
   review1By?: { id: string; name: string | null; email: string | null } | null;
   review2By?: { id: string; name: string | null; email: string | null } | null;
   publishedBy?: { id: string; name: string | null; email: string | null } | null;
+  assignedTo?: { id: string; name: string | null; email: string | null } | null;
+  assignedBy?: { id: string; name: string | null; email: string | null } | null;
+  correctionSubmittedBy?: { id: string; name: string | null; email: string | null } | null;
   translations: Array<{
     id: string;
     language: string;
@@ -106,6 +122,10 @@ interface Props {
     review2: number;
     draft: number;
     aiDraft?: number;
+    pendingAssignment?: number;
+    inCorrection?: number;
+    submittedForReview?: number;
+    rework?: number;
   };
   usersList: Array<{ id: string; name: string | null; email: string }>;
   teamMembersList?: Array<{ id: string; name: string | null; email: string }>;
@@ -176,6 +196,126 @@ export function QuestionManagementTable({
   const [canonicalMigratorOpen, setCanonicalMigratorOpen] = useState(false);
   const [standaloneReviewQuestion, setStandaloneReviewQuestion] = useState<QuestionRow | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+
+  // Multi-Selection State for Bulk Assignment & Sign-off
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [assignModalOpen, setAssignModalOpen] = useState(false);
+  const [assignTargetIds, setAssignTargetIds] = useState<string[]>([]);
+  const [assigneeId, setAssigneeId] = useState(usersList[0]?.id || "");
+  const [assignNotes, setAssignNotes] = useState("");
+  const [assignDueDate, setAssignDueDate] = useState("");
+  const [assigning, setAssigning] = useState(false);
+
+  // Rework Modal State
+  const [reworkModalOpen, setReworkModalOpen] = useState(false);
+  const [reworkTargetId, setReworkTargetId] = useState<string | null>(null);
+  const [reworkNotes, setReworkNotes] = useState("");
+  const [submittingRework, setSubmittingRework] = useState(false);
+
+  // Direct Assign Action Handler
+  const handleDirectAssign = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!assigneeId || assignTargetIds.length === 0) {
+      toast.error("Please select a faculty and questions to assign.");
+      return;
+    }
+    setAssigning(true);
+    try {
+      const res = await fetch("/api/team/questions/assign-direct", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          questionIds: assignTargetIds,
+          assignedToId: assigneeId,
+          notes: assignNotes,
+          dueDate: assignDueDate || undefined,
+        }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        toast.error(json.error || "Failed to assign questions.");
+        return;
+      }
+      toast.success(json.data?.message || `Successfully assigned ${assignTargetIds.length} question(s)!`);
+      setAssignModalOpen(false);
+      setSelectedIds([]);
+      setAssignNotes("");
+      router.refresh();
+    } catch {
+      toast.error("Network error assigning questions.");
+    } finally {
+      setAssigning(false);
+    }
+  };
+
+  // Admin Direct Sign-Off Handler (1-Click Approval)
+  const handleAdminSignOff = async (qId: string) => {
+    try {
+      const res = await fetch("/api/team/questions/admin-review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          questionId: qId,
+          action: "APPROVE",
+        }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        toast.error(json.error || "Sign-off approval failed.");
+        return;
+      }
+      toast.success("Question approved & signed-off! Now live & published.");
+      router.refresh();
+    } catch {
+      toast.error("Network error during sign-off.");
+    }
+  };
+
+  // Admin Send Back for Rework Handler
+  const handleAdminReworkSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reworkTargetId) return;
+    setSubmittingRework(true);
+    try {
+      const res = await fetch("/api/team/questions/admin-review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          questionId: reworkTargetId,
+          action: "REWORK",
+          notes: reworkNotes,
+        }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        toast.error(json.error || "Failed to send back for rework.");
+        return;
+      }
+      toast.info("Sent back for rework with feedback comments.");
+      setReworkModalOpen(false);
+      setReworkNotes("");
+      setReworkTargetId(null);
+      router.refresh();
+    } catch {
+      toast.error("Network error submitting rework feedback.");
+    } finally {
+      setSubmittingRework(false);
+    }
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === questions.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(questions.map((q) => q.id));
+    }
+  };
+
+  const toggleSelectOne = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
 
   const handleCopyQuestionCode = (code: string) => {
     navigator.clipboard.writeText(code);
@@ -331,12 +471,12 @@ export function QuestionManagementTable({
 
   return (
     <div className="space-y-6">
-      {/* 1. TOP SUMMARY STAT CARDS */}
+      {/* 1. TOP WORKFLOW STAT CARDS */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <button
           type="button"
           onClick={() => handleQuickStatusTab("")}
-          className={`p-4 rounded-2xl border text-left transition ${
+          className={`p-3.5 rounded-2xl border text-left transition ${
             !status ? "bg-blue-50/80 border-blue-500 shadow-sm" : "bg-white border-slate-200 hover:border-slate-300"
           }`}
         >
@@ -347,14 +487,14 @@ export function QuestionManagementTable({
         <button
           type="button"
           onClick={() => handleQuickStatusTab("PUBLISHED")}
-          className={`p-4 rounded-2xl border text-left transition ${
+          className={`p-3.5 rounded-2xl border text-left transition ${
             status === "PUBLISHED"
               ? "bg-emerald-50/80 border-emerald-500 shadow-sm"
               : "bg-white border-slate-200 hover:border-slate-300"
           }`}
         >
           <div className="flex items-center justify-between">
-            <p className="text-xs font-bold text-emerald-700">Published (Live)</p>
+            <p className="text-xs font-bold text-emerald-700">Approved / Live</p>
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
           </div>
           <h3 className="text-2xl font-black text-emerald-700 mt-1">{counts.published}</h3>
@@ -362,47 +502,86 @@ export function QuestionManagementTable({
 
         <button
           type="button"
-          onClick={() => handleQuickStatusTab("REVIEW_2")}
-          className={`p-4 rounded-2xl border text-left transition ${
-            status === "REVIEW_2"
-              ? "bg-blue-50/80 border-blue-500 shadow-sm"
-              : "bg-white border-slate-200 hover:border-slate-300"
+          onClick={() => {
+            const params = new URLSearchParams(searchParams?.toString() || "");
+            params.set("status", "SUBMITTED");
+            params.set("page", "1");
+            router.push(`/team/questions?${params.toString()}`);
+          }}
+          className={`p-3.5 rounded-2xl border text-left transition ${
+            searchParams?.get("status") === "SUBMITTED"
+              ? "bg-amber-100/80 border-amber-600 shadow-sm"
+              : "bg-amber-50/50 border-amber-200 hover:border-amber-300"
           }`}
         >
           <div className="flex items-center justify-between">
-            <p className="text-xs font-bold text-blue-700">In Review 2</p>
-            <Clock className="w-3.5 h-3.5 text-blue-600" />
+            <p className="text-xs font-bold text-amber-900">Sign-Off Pending</p>
+            <Clock className="w-3.5 h-3.5 text-amber-600 animate-pulse" />
           </div>
-          <h3 className="text-2xl font-black text-blue-700 mt-1">{counts.review2}</h3>
+          <h3 className="text-2xl font-black text-amber-900 mt-1">{counts.submittedForReview ?? 0}</h3>
         </button>
 
         <button
           type="button"
-          onClick={() => handleQuickStatusTab("REVIEW_1")}
-          className={`p-4 rounded-2xl border text-left transition ${
-            status === "REVIEW_1"
-              ? "bg-amber-50/80 border-amber-500 shadow-sm"
-              : "bg-white border-slate-200 hover:border-slate-300"
+          onClick={() => {
+            const params = new URLSearchParams(searchParams?.toString() || "");
+            params.set("status", "ASSIGNED");
+            params.set("page", "1");
+            router.push(`/team/questions?${params.toString()}`);
+          }}
+          className={`p-3.5 rounded-2xl border text-left transition ${
+            searchParams?.get("status") === "ASSIGNED"
+              ? "bg-blue-100/80 border-blue-600 shadow-sm"
+              : "bg-blue-50/50 border-blue-200 hover:border-blue-300"
           }`}
         >
           <div className="flex items-center justify-between">
-            <p className="text-xs font-bold text-amber-700">In Review 1</p>
-            <Clock className="w-3.5 h-3.5 text-amber-600" />
+            <p className="text-xs font-bold text-blue-900">In Correction</p>
+            <Edit2 className="w-3.5 h-3.5 text-blue-600" />
           </div>
-          <h3 className="text-2xl font-black text-amber-700 mt-1">{counts.review1}</h3>
+          <h3 className="text-2xl font-black text-blue-900 mt-1">{counts.inCorrection ?? 0}</h3>
         </button>
 
         <button
           type="button"
-          onClick={() => handleQuickStatusTab("DRAFT")}
-          className={`p-4 rounded-2xl border text-left transition ${
-            status === "DRAFT"
-              ? "bg-slate-100 border-slate-500 shadow-sm"
-              : "bg-white border-slate-200 hover:border-slate-300"
+          onClick={() => {
+            const params = new URLSearchParams(searchParams?.toString() || "");
+            params.set("status", "PENDING_ASSIGN");
+            params.set("page", "1");
+            router.push(`/team/questions?${params.toString()}`);
+          }}
+          className={`p-3.5 rounded-2xl border text-left transition ${
+            searchParams?.get("status") === "PENDING_ASSIGN"
+              ? "bg-indigo-100/80 border-indigo-600 shadow-sm"
+              : "bg-indigo-50/50 border-indigo-200 hover:border-indigo-300"
           }`}
         >
-          <p className="text-xs font-bold text-slate-500">Drafts / Changes</p>
-          <h3 className="text-2xl font-black text-slate-700 mt-1">{counts.draft}</h3>
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-bold text-indigo-900">Needs Assignment</p>
+            <UserPlus className="w-3.5 h-3.5 text-indigo-600" />
+          </div>
+          <h3 className="text-2xl font-black text-indigo-900 mt-1">{counts.pendingAssignment ?? counts.draft}</h3>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            const params = new URLSearchParams(searchParams?.toString() || "");
+            params.set("status", "REWORK");
+            params.set("page", "1");
+            router.push(`/team/questions?${params.toString()}`);
+          }}
+          className={`p-3.5 rounded-2xl border text-left transition ${
+            searchParams?.get("status") === "REWORK"
+              ? "bg-rose-100/80 border-rose-600 shadow-sm"
+              : "bg-rose-50/50 border-rose-200 hover:border-rose-300"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-bold text-rose-900">Rework Required</p>
+            <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+          </div>
+          <h3 className="text-2xl font-black text-rose-900 mt-1">{counts.rework ?? 0}</h3>
         </button>
 
         <Link
@@ -704,12 +883,21 @@ export function QuestionManagementTable({
           <table className="w-full text-left border-collapse">
             <thead className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
               <tr>
-                <th className="px-6 py-4">Question Preview &amp; ID</th>
-                <th className="px-5 py-4">Subject / Topic / Sub-topic</th>
-                <th className="px-4 py-4">Difficulty &amp; Type</th>
-                <th className="px-5 py-4">Workflow Status</th>
-                <th className="px-5 py-4">Reviews &amp; Auditing</th>
-                <th className="px-6 py-4 text-right">Actions</th>
+                <th className="px-3 py-4 w-10 text-center">
+                  <button type="button" onClick={toggleSelectAll} className="text-slate-400 hover:text-slate-600">
+                    {selectedIds.length === questions.length && questions.length > 0 ? (
+                      <CheckSquare className="w-4 h-4 text-blue-600" />
+                    ) : (
+                      <Square className="w-4 h-4" />
+                    )}
+                  </button>
+                </th>
+                <th className="px-5 py-4">Question Preview &amp; ID</th>
+                <th className="px-4 py-4">Subject / Topic</th>
+                <th className="px-3 py-4">Difficulty &amp; Type</th>
+                <th className="px-4 py-4">Workflow &amp; Assignee</th>
+                <th className="px-4 py-4">Auditing</th>
+                <th className="px-5 py-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs">
@@ -718,11 +906,23 @@ export function QuestionManagementTable({
                 const statementHi = q.translations.find((t) => t.language === "HINDI")?.statement;
                 const primaryStatement = statementEn || statementHi || q.translations[0]?.statement || "—";
                 const displayCode = q.questionCode || `Q-${q.id.slice(0, 6).toUpperCase()}`;
+                const isSelected = selectedIds.includes(q.id);
 
                 return (
-                  <tr key={q.id} className="hover:bg-slate-50/60 transition group">
+                  <tr key={q.id} className={`hover:bg-slate-50/60 transition group ${isSelected ? "bg-blue-50/30" : ""}`}>
+                    {/* 0. Row Checkbox */}
+                    <td className="px-3 py-4 w-10 text-center">
+                      <button type="button" onClick={() => toggleSelectOne(q.id)} className="text-slate-400 hover:text-slate-600">
+                        {isSelected ? (
+                          <CheckSquare className="w-4 h-4 text-blue-600" />
+                        ) : (
+                          <Square className="w-4 h-4" />
+                        )}
+                      </button>
+                    </td>
+
                     {/* 1. Question Preview & ID */}
-                    <td className="px-6 py-4 max-w-sm">
+                    <td className="px-5 py-4 max-w-sm">
                       <div className="space-y-1">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <button
@@ -781,12 +981,12 @@ export function QuestionManagementTable({
                     </td>
 
                     {/* 2. Subject / Topic / Sub-topic */}
-                    <td className="px-5 py-4">
+                    <td className="px-4 py-4">
                       <div className="space-y-0.5">
                         <span className="font-bold text-blue-700 block">{q.subject || "General"}</span>
-                        {q.chapter && <span className="text-slate-600 block truncate max-w-[180px]">{q.chapter}</span>}
+                        {q.chapter && <span className="text-slate-600 block truncate max-w-[160px]">{q.chapter}</span>}
                         {q.subTopic && (
-                          <span className="text-[10px] text-slate-400 block truncate max-w-[180px]">
+                          <span className="text-[10px] text-slate-400 block truncate max-w-[160px]">
                             ↳ {q.subTopic}
                           </span>
                         )}
@@ -794,7 +994,7 @@ export function QuestionManagementTable({
                     </td>
 
                     {/* 3. Difficulty & Type */}
-                    <td className="px-4 py-4">
+                    <td className="px-3 py-4">
                       <div className="space-y-1">
                         <span
                           className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
@@ -813,43 +1013,50 @@ export function QuestionManagementTable({
                       </div>
                     </td>
 
-                    {/* 4. Workflow Status */}
-                    <td className="px-5 py-4">
-                      <div className="space-y-1">
-                        {q.status === "PUBLISHED" ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                    {/* 4. Workflow Status & Assignee */}
+                    <td className="px-4 py-4">
+                      <div className="space-y-1.5">
+                        {q.correctionStatus === "SUBMITTED" ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300 animate-pulse">
+                            <Clock className="w-3 h-3 text-amber-700" />
+                            Sign-Off Pending
+                          </span>
+                        ) : q.correctionStatus === "ASSIGNED" || q.correctionStatus === "IN_CORRECTION" ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-900 border border-blue-200">
+                            <Edit2 className="w-2.5 h-2.5 text-blue-700" />
+                            In Correction
+                          </span>
+                        ) : q.correctionStatus === "REWORK" ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-900 border border-rose-200">
+                            <AlertTriangle className="w-2.5 h-2.5 text-rose-700" />
+                            Rework Required
+                          </span>
+                        ) : q.status === "PUBLISHED" ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
                             <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                            Published
-                          </span>
-                        ) : q.status === "REVIEW_2" ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 animate-pulse">
-                            <Clock className="w-3 h-3 text-blue-600" />
-                            Review 2 Pending
-                          </span>
-                        ) : q.status === "REVIEW_1" ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
-                            <Clock className="w-3 h-3 text-amber-600" />
-                            Review 1 Pending
-                          </span>
-                        ) : q.status === "REJECTED" ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800">
-                            <AlertCircle className="w-3 h-3 text-rose-600" />
-                            Rejected
+                            Live Published
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">
                             Draft
                           </span>
                         )}
 
-                        <span className="text-[10px] text-slate-400 block">
-                          By: {q.createdBy?.name || q.createdBy?.email || "Team"}
-                        </span>
+                        {q.assignedTo ? (
+                          <span className="text-[10px] text-indigo-700 font-semibold flex items-center gap-1 truncate max-w-[150px]">
+                            <Users className="w-3 h-3 shrink-0" />
+                            {q.assignedTo.name || q.assignedTo.email}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 block">
+                            Unassigned
+                          </span>
+                        )}
 
                         {q._count?.reports && q._count.reports > 0 ? (
                           <Link
                             href={`/team/questions/reports?search=${encodeURIComponent(q.questionCode || q.id)}`}
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200 transition mt-1"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200 transition"
                             title={`${q._count.reports} student report(s) filed. Click to review.`}
                           >
                             <Flag className="w-2.5 h-2.5 text-amber-700" />
@@ -860,14 +1067,12 @@ export function QuestionManagementTable({
                     </td>
 
                     {/* 5. Review Details & Auditing */}
-                    <td className="px-5 py-4">
+                    <td className="px-4 py-4">
                       <div className="space-y-1 text-[11px]">
                         <div className="flex items-center gap-1 text-slate-600">
                           <span className="font-bold text-[10px]">R1:</span>
                           {q.review1Status === "APPROVED" ? (
-                            <span className="text-emerald-600 font-bold">✓ Approved ({q.review1By?.name || "Lead"})</span>
-                          ) : q.review1Status === "CHANGES_REQUESTED" ? (
-                            <span className="text-amber-600">Changes Req.</span>
+                            <span className="text-emerald-600 font-bold">✓ ({q.review1By?.name || "Lead"})</span>
                           ) : q.status === "REVIEW_1" ? (
                             <span className="text-amber-600 font-medium">Pending...</span>
                           ) : (
@@ -878,7 +1083,7 @@ export function QuestionManagementTable({
                         <div className="flex items-center gap-1 text-slate-600">
                           <span className="font-bold text-[10px]">R2:</span>
                           {q.review2Status === "APPROVED" ? (
-                            <span className="text-emerald-600 font-bold">✓ Approved ({q.review2By?.name || "Admin"})</span>
+                            <span className="text-emerald-600 font-bold">✓ ({q.review2By?.name || "Admin"})</span>
                           ) : q.status === "REVIEW_2" ? (
                             <span className="text-blue-600 font-medium">Pending...</span>
                           ) : (
@@ -895,10 +1100,51 @@ export function QuestionManagementTable({
                     </td>
 
                     {/* 6. Actions */}
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
+                    <td className="px-5 py-4 text-right">
+                      <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                        {/* Admin Sign-Off Action (if submitted for correction) */}
+                        {q.correctionStatus === "SUBMITTED" && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleAdminSignOff(q.id)}
+                              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] shadow-sm transition flex items-center gap-1 cursor-pointer"
+                              title="Sign-off & Approve this question (Publish live)"
+                            >
+                              <Check className="w-3 h-3" />
+                              <span>Sign-off</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setReworkTargetId(q.id);
+                                setReworkModalOpen(true);
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-[11px] shadow-sm transition flex items-center gap-1 cursor-pointer"
+                              title="Send back for Rework with comments"
+                            >
+                              <AlertTriangle className="w-3 h-3" />
+                              <span>Rework</span>
+                            </button>
+                          </>
+                        )}
+
+                        {/* Assign to Faculty */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAssignTargetIds([q.id]);
+                            setAssignModalOpen(true);
+                          }}
+                          className="px-2.5 py-1 rounded-lg border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 font-bold text-[11px] transition flex items-center gap-1 cursor-pointer"
+                          title="Assign Question to Reviewer / Faculty"
+                        >
+                          <UserPlus className="w-3 h-3 text-indigo-600" />
+                          <span>{q.assignedToId ? "Re-assign" : "Assign"}</span>
+                        </button>
+
                         {/* Draft -> Submit to Review 1 */}
-                        {q.status === "DRAFT" && (
+                        {q.status === "DRAFT" && !q.correctionStatus && (
                           <button
                             type="button"
                             onClick={() => handleSubmitToReview1(q.id)}
@@ -946,11 +1192,11 @@ export function QuestionManagementTable({
                         <button
                           type="button"
                           onClick={() => setStandaloneReviewQuestion(q)}
-                          className="px-2.5 py-1.5 rounded-lg border border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold transition flex items-center gap-1 shadow-2xs"
-                          title="Run Live AI Verification, Scientific Accuracy & Option Consistency Check"
+                          className="px-2 py-1 rounded-lg border border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold transition flex items-center gap-1 shadow-2xs"
+                          title="Run Live AI Verification"
                         >
                           <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                          <span className="text-[11px] font-bold">AI Review</span>
+                          <span className="text-[11px] font-bold">AI</span>
                         </button>
 
                         {/* View Question in Student CBT Interface */}
@@ -961,17 +1207,16 @@ export function QuestionManagementTable({
                             setViewQuestionIndex(idx >= 0 ? idx : 0);
                             setShowSolution(false);
                           }}
-                          className="px-2.5 py-1.5 rounded-lg border border-blue-200 bg-blue-50/80 hover:bg-blue-100 text-blue-700 hover:text-blue-800 font-bold transition flex items-center gap-1 shadow-2xs"
-                          title="View Question in Student CBT Test Interface"
+                          className="px-2 py-1 rounded-lg border border-blue-200 bg-blue-50/80 hover:bg-blue-100 text-blue-700 hover:text-blue-800 font-bold transition flex items-center gap-1 shadow-2xs"
+                          title="View CBT Interface"
                         >
                           <Eye className="w-3.5 h-3.5 text-blue-600" />
-                          <span className="text-[11px] font-bold">View</span>
                         </button>
 
                         {/* Edit Question */}
                         <Link
                           href={`/team/questions/${q.id}/edit`}
-                          className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 hover:text-blue-600 transition"
+                          className="p-1 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 hover:text-blue-600 transition"
                           title="Edit Question"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
@@ -981,7 +1226,7 @@ export function QuestionManagementTable({
                         <button
                           type="button"
                           onClick={() => handleOpenHistory(q)}
-                          className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 hover:text-blue-600 transition"
+                          className="p-1 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 hover:text-blue-600 transition"
                           title="View Revision History"
                         >
                           <History className="w-3.5 h-3.5" />
@@ -997,7 +1242,7 @@ export function QuestionManagementTable({
                               title: q.translations[0]?.statement.slice(0, 50) || "Question Entry",
                             })
                           }
-                          className="p-1.5 rounded-lg border border-slate-200 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition"
+                          className="p-1 rounded-lg border border-slate-200 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition"
                           title="Secure Delete Question"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -1486,6 +1731,225 @@ export function QuestionManagementTable({
           </div>
         );
       })()}
+
+      {/* 8. BULK SELECTION FLOATING BAR */}
+      {selectedIds.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900/95 text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-slate-700 backdrop-blur-md flex items-center gap-3.5 animate-in fade-in slide-in-from-bottom-4">
+          <span className="text-xs font-bold text-slate-200">
+            {selectedIds.length} question(s) selected
+          </span>
+
+          <button
+            type="button"
+            onClick={() => {
+              setAssignTargetIds(selectedIds);
+              setAssignModalOpen(true);
+            }}
+            className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow cursor-pointer"
+          >
+            <UserPlus className="w-3.5 h-3.5" />
+            <span>Assign to Faculty</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={async () => {
+              if (confirm(`Approve and Sign-off all ${selectedIds.length} selected questions?`)) {
+                try {
+                  const res = await fetch("/api/team/questions/admin-review", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      questionIds: selectedIds,
+                      action: "APPROVE",
+                    }),
+                  });
+                  const json = await res.json();
+                  if (json.success) {
+                    toast.success(`Successfully approved ${selectedIds.length} questions!`);
+                    setSelectedIds([]);
+                    router.refresh();
+                  } else {
+                    toast.error(json.error || "Batch approval failed.");
+                  }
+                } catch {
+                  toast.error("Network error during batch approval.");
+                }
+              }
+            }}
+            className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow cursor-pointer"
+          >
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            <span>Batch Sign-Off</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedIds([])}
+            className="text-xs text-slate-400 hover:text-white px-2 cursor-pointer"
+          >
+            Deselect All
+          </button>
+        </div>
+      )}
+
+      {/* 9. ASSIGN QUESTIONS MODAL */}
+      {assignModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-blue-100 dark:bg-blue-900/60 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                  <UserPlus className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Assign {assignTargetIds.length} Question(s)
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Direct assignment to SME / Teacher / Question Reviewer
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAssignModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleDirectAssign} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Assign To Faculty / Reviewer
+                </label>
+                <select
+                  value={assigneeId}
+                  onChange={(e) => setAssigneeId(e.target.value)}
+                  required
+                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-white outline-none focus:border-blue-500"
+                >
+                  <option value="">Select Faculty...</option>
+                  {(teamMembersList && teamMembersList.length > 0 ? teamMembersList : usersList).map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name || u.email} ({u.email})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Due Date (Optional)
+                </label>
+                <input
+                  type="date"
+                  value={assignDueDate}
+                  onChange={(e) => setAssignDueDate(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-white outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Correction Instructions / Review Notes
+                </label>
+                <textarea
+                  value={assignNotes}
+                  onChange={(e) => setAssignNotes(e.target.value)}
+                  placeholder="e.g. Verify Option B and NCERT reference; correct formula formatting."
+                  rows={3}
+                  className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none focus:border-blue-500 resize-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setAssignModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={assigning || !assigneeId}
+                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-xs font-bold text-white shadow transition flex items-center gap-1.5"
+                >
+                  {assigning ? (
+                    <span>Assigning...</span>
+                  ) : (
+                    <>
+                      <UserPlus className="w-3.5 h-3.5" />
+                      <span>Confirm Assignment</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 10. REWORK FEEDBACK MODAL */}
+      {reworkModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-rose-100 dark:bg-rose-900/60 flex items-center justify-center text-rose-600 dark:text-rose-400">
+                  <AlertTriangle className="w-4 h-4" />
+                </div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Send Back for Rework
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReworkModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAdminReworkSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Feedback for Faculty / Reviewer
+                </label>
+                <textarea
+                  value={reworkNotes}
+                  onChange={(e) => setReworkNotes(e.target.value)}
+                  required
+                  placeholder="Explain what needs correction (e.g. Option C has a typographical error, please provide detailed step-by-step solution)."
+                  rows={4}
+                  className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none focus:border-rose-500 resize-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setReworkModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingRework || !reworkNotes.trim()}
+                  className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-xs font-bold text-white shadow transition flex items-center gap-1.5"
+                >
+                  {submittingRework ? "Sending..." : "Send Back for Rework"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

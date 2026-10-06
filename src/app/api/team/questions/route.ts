@@ -70,6 +70,23 @@ export async function GET(request: NextRequest) {
       where.type = type as any;
     }
 
+    const assignedToId = searchParams.get("assignedToId")?.trim();
+    const correctionStatus = searchParams.get("correctionStatus")?.trim();
+
+    if (assignedToId && assignedToId !== "ALL") {
+      if (assignedToId === "ME" && session?.user?.id) {
+        where.assignedToId = session.user.id;
+      } else if (assignedToId === "UNASSIGNED") {
+        where.assignedToId = null;
+      } else {
+        where.assignedToId = assignedToId;
+      }
+    }
+
+    if (correctionStatus && correctionStatus !== "ALL") {
+      where.correctionStatus = correctionStatus;
+    }
+
     if (onlyPublished) {
       where.isPublished = true;
       where.status = "PUBLISHED";
@@ -77,6 +94,15 @@ export async function GET(request: NextRequest) {
       if (status === "PUBLISHED") {
         where.isPublished = true;
         where.status = "PUBLISHED";
+      } else if (status === "SUBMITTED") {
+        where.correctionStatus = "SUBMITTED";
+      } else if (status === "ASSIGNED") {
+        where.correctionStatus = { in: ["ASSIGNED", "IN_CORRECTION"] };
+      } else if (status === "PENDING_ASSIGN") {
+        where.assignedToId = null;
+        where.status = { not: "PUBLISHED" };
+      } else if (status === "REWORK") {
+        where.correctionStatus = "REWORK";
       } else if (status === "DRAFT") {
         where.status = "DRAFT";
       } else if (status === "REVIEW_1") {
@@ -85,6 +111,8 @@ export async function GET(request: NextRequest) {
         where.status = "REVIEW_2";
       } else if (status === "REJECTED") {
         where.status = "REJECTED";
+      } else {
+        where.status = status;
       }
     }
 
@@ -104,7 +132,18 @@ export async function GET(request: NextRequest) {
       where.editedById = editedById;
     }
 
-    const [questions, total, publishedCount, review1Count, review2Count, draftCount] = await Promise.all([
+    const [
+      questions,
+      total,
+      publishedCount,
+      review1Count,
+      review2Count,
+      draftCount,
+      pendingAssignmentCount,
+      inCorrectionCount,
+      submittedForReviewCount,
+      reworkCount,
+    ] = await Promise.all([
       prisma.question.findMany({
         where,
         include: {
@@ -114,6 +153,8 @@ export async function GET(request: NextRequest) {
           review1By: { select: { id: true, name: true, email: true } },
           review2By: { select: { id: true, name: true, email: true } },
           publishedBy: { select: { id: true, name: true, email: true } },
+          assignedTo: { select: { id: true, name: true, email: true } },
+          correctionSubmittedBy: { select: { id: true, name: true, email: true } },
         },
         orderBy: { createdAt: "desc" },
         skip: (page - 1) * pageSize,
@@ -124,6 +165,10 @@ export async function GET(request: NextRequest) {
       prisma.question.count({ where: { status: "REVIEW_1" } }),
       prisma.question.count({ where: { status: "REVIEW_2" } }),
       prisma.question.count({ where: { status: "DRAFT" } }),
+      prisma.question.count({ where: { assignedToId: null, status: { not: "PUBLISHED" } } }),
+      prisma.question.count({ where: { correctionStatus: { in: ["ASSIGNED", "IN_CORRECTION"] } } }),
+      prisma.question.count({ where: { correctionStatus: "SUBMITTED" } }),
+      prisma.question.count({ where: { correctionStatus: "REWORK" } }),
     ]);
 
     return apiSuccess({
@@ -136,6 +181,10 @@ export async function GET(request: NextRequest) {
         review1: review1Count,
         review2: review2Count,
         draft: draftCount,
+        pendingAssignment: pendingAssignmentCount,
+        inCorrection: inCorrectionCount,
+        submittedForReview: submittedForReviewCount,
+        rework: reworkCount,
         total: publishedCount + review1Count + review2Count + draftCount,
       },
     });

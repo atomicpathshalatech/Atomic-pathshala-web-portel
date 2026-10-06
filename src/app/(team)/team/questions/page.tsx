@@ -26,6 +26,8 @@ export default async function QuestionBankPage({
     difficulty?: string;
     type?: string;
     status?: string;
+    assignedToId?: string;
+    correctionStatus?: string;
     createdById?: string;
     reviewedById?: string;
     editedById?: string;
@@ -84,10 +86,33 @@ export default async function QuestionBankPage({
     where.type = searchParams.type as any;
   }
 
+  if (searchParams.assignedToId && searchParams.assignedToId !== "ALL") {
+    if (searchParams.assignedToId === "ME") {
+      where.assignedToId = session.user.id;
+    } else if (searchParams.assignedToId === "UNASSIGNED") {
+      where.assignedToId = null;
+    } else {
+      where.assignedToId = searchParams.assignedToId;
+    }
+  }
+
+  if (searchParams.correctionStatus && searchParams.correctionStatus !== "ALL") {
+    where.correctionStatus = searchParams.correctionStatus;
+  }
+
   if (searchParams.status && searchParams.status !== "ALL") {
     if (searchParams.status === "PUBLISHED") {
       where.isPublished = true;
       where.status = "PUBLISHED";
+    } else if (searchParams.status === "SUBMITTED") {
+      where.correctionStatus = "SUBMITTED";
+    } else if (searchParams.status === "ASSIGNED") {
+      where.correctionStatus = { in: ["ASSIGNED", "IN_CORRECTION"] };
+    } else if (searchParams.status === "PENDING_ASSIGN") {
+      where.assignedToId = null;
+      where.status = { not: "PUBLISHED" };
+    } else if (searchParams.status === "REWORK") {
+      where.correctionStatus = "REWORK";
     } else {
       where.status = searchParams.status;
     }
@@ -191,6 +216,10 @@ export default async function QuestionBankPage({
     review2Count,
     draftCount,
     aiDraftCount,
+    pendingAssignmentCount,
+    inCorrectionCount,
+    submittedForReviewCount,
+    reworkCount,
     usersList,
     teamMembersList,
   ] = await Promise.all([
@@ -203,6 +232,8 @@ export default async function QuestionBankPage({
         review1By: { select: { id: true, name: true, email: true } },
         review2By: { select: { id: true, name: true, email: true } },
         publishedBy: { select: { id: true, name: true, email: true } },
+        assignedTo: { select: { id: true, name: true, email: true } },
+        correctionSubmittedBy: { select: { id: true, name: true, email: true } },
         _count: { select: { reports: true } },
       },
       orderBy: { createdAt: "desc" },
@@ -226,6 +257,27 @@ export default async function QuestionBankPage({
           { tags: { contains: "ATOMIC_GURU" } },
           { tags: { contains: "NCERT" } },
         ],
+      },
+    }),
+    prisma.question.count({
+      where: {
+        assignedToId: null,
+        status: { not: "PUBLISHED" },
+      },
+    }),
+    prisma.question.count({
+      where: {
+        correctionStatus: { in: ["ASSIGNED", "IN_CORRECTION"] },
+      },
+    }),
+    prisma.question.count({
+      where: {
+        correctionStatus: "SUBMITTED",
+      },
+    }),
+    prisma.question.count({
+      where: {
+        correctionStatus: "REWORK",
       },
     }),
     // All Creators for Created By (existing behavior)
@@ -324,6 +376,10 @@ export default async function QuestionBankPage({
             review2: review2Count,
             draft: draftCount,
             aiDraft: aiDraftCount,
+            pendingAssignment: pendingAssignmentCount,
+            inCorrection: inCorrectionCount,
+            submittedForReview: submittedForReviewCount,
+            rework: reworkCount,
           }}
           usersList={usersList || []}
           teamMembersList={teamMembersList || usersList || []}

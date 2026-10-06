@@ -77,13 +77,42 @@ export function MyQuestionBankDashboard({
   currentUserId: string;
   facultyList: FacultyUser[];
 }) {
-  const [activeTab, setActiveTab] = useState<"assignments" | "review1" | "review2" | "revision" | "audit">("assignments");
+  const [activeTab, setActiveTab] = useState<"assigned_questions" | "assignments" | "review1" | "review2" | "revision" | "audit">("assigned_questions");
   const [assignments, setAssignments] = useState<QuestionAssignmentItem[]>(initialAssignments);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [selectedSubject, setSelectedSubject] = useState("ALL");
   const [viewAll, setViewAll] = useState(isAssignAdmin);
   const [showCreateModal, setShowCreateModal] = useState(false);
+
+  // Assigned Direct Questions & Corrections State
+  const [assignedQuestions, setAssignedQuestions] = useState<any[]>([]);
+  const [assignedCorrectionFilter, setAssignedCorrectionFilter] = useState<string>("ALL");
+  const [assignedLoading, setAssignedLoading] = useState(false);
+  const [correctionModalQuestion, setCorrectionModalQuestion] = useState<any | null>(null);
+  const [correctionForm, setCorrectionForm] = useState<{
+    statement: string;
+    options: Array<{ id: string; text: string }>;
+    correctOptionIds: string[];
+    solution: string;
+    explanation: string;
+    difficulty: string;
+    notes: string;
+  }>({
+    statement: "",
+    options: [
+      { id: "1", text: "" },
+      { id: "2", text: "" },
+      { id: "3", text: "" },
+      { id: "4", text: "" },
+    ],
+    correctOptionIds: ["1"],
+    solution: "",
+    explanation: "",
+    difficulty: "MEDIUM",
+    notes: "",
+  });
+  const [submittingCorrection, setSubmittingCorrection] = useState(false);
 
   // Review Queue State
   const [reviewQuestions, setReviewQuestions] = useState<any[]>([]);
@@ -128,6 +157,41 @@ export function MyQuestionBankDashboard({
     }
   };
 
+  // Fetch Direct Assigned Questions for Faculty
+  const fetchAssignedQuestions = async () => {
+    setAssignedLoading(true);
+    try {
+      const query = new URLSearchParams();
+      query.set("assignedToId", viewAll ? "ALL" : "ME");
+      if (selectedSubject !== "ALL") query.set("subject", selectedSubject);
+      if (search) query.set("search", search);
+      if (assignedCorrectionFilter !== "ALL") {
+        if (assignedCorrectionFilter === "IN_CORRECTION") {
+          query.set("status", "ASSIGNED");
+        } else if (assignedCorrectionFilter === "SUBMITTED") {
+          query.set("status", "SUBMITTED");
+        } else if (assignedCorrectionFilter === "REWORK") {
+          query.set("status", "REWORK");
+        } else if (assignedCorrectionFilter === "APPROVED") {
+          query.set("status", "PUBLISHED");
+        }
+      }
+      query.set("limit", "100");
+
+      const res = await fetch(`/api/team/questions?${query.toString()}`);
+      const data = await res.json();
+      if (data?.data?.questions) {
+        setAssignedQuestions(data.data.questions);
+      } else {
+        setAssignedQuestions([]);
+      }
+    } catch (err) {
+      console.error("Failed to load assigned questions", err);
+    } finally {
+      setAssignedLoading(false);
+    }
+  };
+
   // Fetch Review Queue Questions based on active tab
   const fetchReviewQueue = async () => {
     setReviewLoading(true);
@@ -168,13 +232,87 @@ export function MyQuestionBankDashboard({
 
   useEffect(() => {
     refreshAssignments();
+    if (activeTab === "assigned_questions") {
+      fetchAssignedQuestions();
+    }
   }, [viewAll]);
 
   useEffect(() => {
-    if (activeTab === "review1" || activeTab === "review2" || activeTab === "revision") {
+    if (activeTab === "assigned_questions") {
+      fetchAssignedQuestions();
+    } else if (activeTab === "review1" || activeTab === "review2" || activeTab === "revision") {
       fetchReviewQueue();
     }
-  }, [activeTab, selectedSubject, search]);
+  }, [activeTab, selectedSubject, search, assignedCorrectionFilter]);
+
+  // Open Correction Modal with prefilled question data
+  const handleOpenCorrection = (q: any) => {
+    const t = q.translations?.find((tr: any) => tr.language === "ENGLISH") || q.translations?.[0] || {};
+    let parsedOptions = [
+      { id: "1", text: "" },
+      { id: "2", text: "" },
+      { id: "3", text: "" },
+      { id: "4", text: "" },
+    ];
+    if (Array.isArray(t.options) && t.options.length > 0) {
+      parsedOptions = t.options.map((opt: any, idx: number) => {
+        if (typeof opt === "string") return { id: String(idx + 1), text: opt };
+        return { id: opt.id || String(idx + 1), text: opt.text || opt.statement || "" };
+      });
+    }
+
+    let parsedCorrectIds: string[] = ["1"];
+    if (Array.isArray(t.correctOptionIds) && t.correctOptionIds.length > 0) {
+      parsedCorrectIds = t.correctOptionIds.map(String);
+    }
+
+    setCorrectionForm({
+      statement: t.statement || "",
+      options: parsedOptions,
+      correctOptionIds: parsedCorrectIds,
+      solution: t.solution || q.solution || "",
+      explanation: t.explanation || "",
+      difficulty: q.difficulty || "MEDIUM",
+      notes: q.correctionNotes || "",
+    });
+    setCorrectionModalQuestion(q);
+  };
+
+  // Submit Correction Handler
+  const handleSubmitCorrection = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!correctionModalQuestion) return;
+    setSubmittingCorrection(true);
+    try {
+      const res = await fetch("/api/team/questions/submit-correction", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          questionId: correctionModalQuestion.id,
+          statement: correctionForm.statement,
+          options: correctionForm.options,
+          correctOptionIds: correctionForm.correctOptionIds,
+          solution: correctionForm.solution,
+          explanation: correctionForm.explanation,
+          difficulty: correctionForm.difficulty,
+          notes: correctionForm.notes,
+        }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        alert(data.error || "Failed to submit question correction");
+        return;
+      }
+      alert("Correction submitted successfully! Awaiting Admin review and sign-off.");
+      setCorrectionModalQuestion(null);
+      await fetchAssignedQuestions();
+      await refreshAssignments();
+    } catch (err: any) {
+      alert(err.message || "Failed to submit correction");
+    } finally {
+      setSubmittingCorrection(false);
+    }
+  };
 
   // Aggregate global stats across all displayed assignments
   const totalAssignedQuestions = assignments.reduce((acc, a) => acc + (a.targetCount || 0), 0);
@@ -367,6 +505,18 @@ export function MyQuestionBankDashboard({
       {/* Navigation Sub-Tabs */}
       <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-2 overflow-x-auto">
         <button
+          onClick={() => setActiveTab("assigned_questions")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-colors whitespace-nowrap ${
+            activeTab === "assigned_questions"
+              ? "bg-blue-600 text-white shadow-sm shadow-blue-500/20"
+              : "text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40"
+          }`}
+        >
+          <Edit2 className="w-4 h-4" />
+          My Assigned Questions &amp; Corrections ({assignedQuestions.length})
+        </button>
+
+        <button
           onClick={() => setActiveTab("assignments")}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-colors whitespace-nowrap ${
             activeTab === "assignments"
@@ -375,7 +525,7 @@ export function MyQuestionBankDashboard({
           }`}
         >
           <BookOpen className="w-4 h-4" />
-          Assigned Worksets ({assignments.length})
+          Chapter Worksets ({assignments.length})
         </button>
 
         <button
@@ -430,14 +580,14 @@ export function MyQuestionBankDashboard({
       {/* Metric Breakdown Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm">
-          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Target Target</span>
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Assigned Tasks</span>
           <div className="mt-2 flex items-baseline justify-between">
-            <span className="text-2xl font-bold text-slate-900 dark:text-white">{totalAssignedQuestions}</span>
+            <span className="text-2xl font-bold text-slate-900 dark:text-white">{assignedQuestions.length}</span>
             <span className="text-xs font-semibold text-blue-600 bg-blue-50 dark:bg-blue-950 px-2 py-0.5 rounded-full">
-              Assigned
+              Direct
             </span>
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">{totalCreatedQuestions} authored</p>
+          <p className="text-[11px] text-slate-400 mt-1">{totalAssignedQuestions} target in sets</p>
         </div>
 
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm">
@@ -459,7 +609,7 @@ export function MyQuestionBankDashboard({
         </div>
 
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm">
-          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Published & Live</span>
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Published &amp; Live</span>
           <div className="mt-2 flex items-baseline justify-between">
             <span className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{totalPublished}</span>
             <CheckCircle2 className="w-4 h-4 text-emerald-500" />
@@ -468,12 +618,12 @@ export function MyQuestionBankDashboard({
         </div>
 
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm">
-          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Needs Revision</span>
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Needs Revision / Rework</span>
           <div className="mt-2 flex items-baseline justify-between">
             <span className="text-2xl font-bold text-rose-600 dark:text-rose-400">{totalRejected}</span>
             <AlertCircle className="w-4 h-4 text-rose-500" />
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">Rejected/Changes</p>
+          <p className="text-[11px] text-slate-400 mt-1">Feedback Attached</p>
         </div>
 
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm">
@@ -517,6 +667,180 @@ export function MyQuestionBankDashboard({
           ))}
         </div>
       </div>
+
+      {/* TAB 0: ASSIGNED QUESTIONS & CORRECTIONS */}
+      {activeTab === "assigned_questions" && (
+        <div className="space-y-4">
+          {/* Status Sub-Filters */}
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-slate-900 p-4 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-bold text-slate-500 mr-1">Correction Status:</span>
+              {[
+                { id: "ALL", label: "All Assigned", color: "bg-slate-100 text-slate-700" },
+                { id: "IN_CORRECTION", label: "In Correction", color: "bg-blue-50 text-blue-700" },
+                { id: "REWORK", label: "Rework Required", color: "bg-rose-50 text-rose-700" },
+                { id: "SUBMITTED", label: "Submitted (Awaiting Sign-off)", color: "bg-amber-50 text-amber-700" },
+                { id: "APPROVED", label: "Approved / Live", color: "bg-emerald-50 text-emerald-700" },
+              ].map((filterTab) => (
+                <button
+                  key={filterTab.id}
+                  onClick={() => setAssignedCorrectionFilter(filterTab.id)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                    assignedCorrectionFilter === filterTab.id
+                      ? "bg-blue-600 text-white shadow-sm"
+                      : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200"
+                  }`}
+                >
+                  {filterTab.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="text-xs text-slate-500">
+              Showing <b>{assignedQuestions.length}</b> assigned question(s)
+            </div>
+          </div>
+
+          {/* Assigned Questions List */}
+          {assignedLoading ? (
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-12 text-center">
+              <RefreshCw className="w-8 h-8 text-blue-600 animate-spin mx-auto mb-3" />
+              <p className="text-xs font-medium text-slate-500">Loading assigned questions...</p>
+            </div>
+          ) : assignedQuestions.length === 0 ? (
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-12 text-center">
+              <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
+              <h3 className="text-base font-semibold text-slate-800 dark:text-slate-200">No questions found in this filter</h3>
+              <p className="text-xs text-slate-400 mt-1">
+                You have no pending questions matching the selected correction filter.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {assignedQuestions.map((q) => {
+                const primaryT = q.translations?.find((t: any) => t.language === "ENGLISH") || q.translations?.[0];
+                const isRework = q.correctionStatus === "REWORK";
+                const isSubmitted = q.correctionStatus === "SUBMITTED";
+                const isApproved = q.correctionStatus === "APPROVED" || q.isPublished || q.status === "PUBLISHED";
+
+                return (
+                  <div
+                    key={q.id}
+                    className={`bg-white dark:bg-slate-900 border rounded-2xl p-5 shadow-sm transition-colors ${
+                      isRework
+                        ? "border-rose-300 dark:border-rose-900 bg-rose-50/20"
+                        : isSubmitted
+                        ? "border-amber-300 dark:border-amber-900 bg-amber-50/20"
+                        : isApproved
+                        ? "border-emerald-300 dark:border-emerald-900 bg-emerald-50/20"
+                        : "border-slate-200 dark:border-slate-800 hover:border-slate-300"
+                    }`}
+                  >
+                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono text-xs font-bold text-blue-600 dark:text-blue-400">
+                            {q.questionCode || `Q-${q.id.slice(0, 8)}`}
+                          </span>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                            {q.subject}
+                          </span>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                            {q.category || q.chapter || "General"}
+                          </span>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                            {q.difficulty}
+                          </span>
+
+                          {/* Correction Status Badge */}
+                          {isRework ? (
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-200 flex items-center gap-1">
+                              <AlertCircle className="w-3 h-3" />
+                              REWORK REQUIRED
+                            </span>
+                          ) : isSubmitted ? (
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-1">
+                              <Clock className="w-3 h-3 animate-pulse" />
+                              SUBMITTED FOR SIGN-OFF
+                            </span>
+                          ) : isApproved ? (
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3" />
+                              APPROVED &amp; LIVE
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 border border-blue-200 flex items-center gap-1">
+                              <Edit2 className="w-3 h-3" />
+                              IN CORRECTION
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Statement Preview */}
+                        <div className="mt-3 text-sm text-slate-900 dark:text-white line-clamp-3">
+                          <FormulaText text={primaryT?.statement || "No statement text provided"} />
+                        </div>
+
+                        {/* Admin Feedback Box for Rework */}
+                        {q.correctionNotes && (
+                          <div className="mt-3 p-3 rounded-xl bg-rose-50 border border-rose-200 dark:bg-rose-950/40 dark:border-rose-900 text-xs text-rose-900 dark:text-rose-200 flex items-start gap-2">
+                            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                            <div>
+                              <b className="font-bold">Admin Review Feedback:</b> {q.correctionNotes}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex items-center gap-2 flex-wrap shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenCorrection(q)}
+                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                          <span>{isRework ? "Fix & Resubmit" : "Submit Correction"}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSelectedQuestionForModal({
+                              id: q.id,
+                              questionCode: q.questionCode,
+                              subject: q.subject,
+                              chapter: q.category || q.chapter,
+                              topic: q.topic,
+                              type: q.type || "SINGLE_CORRECT",
+                              difficulty: q.difficulty,
+                              status: q.status,
+                              version: q.version || 1,
+                              translations: q.translations || [],
+                            })
+                          }
+                          className="px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl transition flex items-center gap-1.5"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>Preview</span>
+                        </button>
+
+                        <Link
+                          href={`/team/questions/${q.id}/edit`}
+                          className="px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl transition flex items-center gap-1.5"
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          <span>Full Studio</span>
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* TAB 1: ASSIGNED WORKSETS */}
       {activeTab === "assignments" && (
@@ -1031,6 +1355,181 @@ export function MyQuestionBankDashboard({
             refreshAssignments();
           }}
         />
+      )}
+
+      {/* Modal: Faculty Submit Correction Dialog */}
+      {correctionModalQuestion && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 flex items-center justify-center font-bold text-xs">
+                  <Edit2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
+                    Submit Question Correction
+                  </h3>
+                  <p className="text-[11px] font-mono text-slate-500">
+                    {correctionModalQuestion.questionCode || `Q-${correctionModalQuestion.id.slice(0, 8)}`} • {correctionModalQuestion.subject}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setCorrectionModalQuestion(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Admin Rework Callout if applicable */}
+            {correctionModalQuestion.correctionNotes && (
+              <div className="mt-4 p-3 rounded-2xl bg-rose-50 border border-rose-200 dark:bg-rose-950/40 dark:border-rose-900 text-xs text-rose-900 dark:text-rose-200 flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <div>
+                  <b className="font-bold">Admin Feedback to Fix:</b> {correctionModalQuestion.correctionNotes}
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handleSubmitCorrection} className="space-y-4 mt-4">
+              {/* Question Statement */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Question Statement / Problem (Supports LaTeX $...$) *
+                </label>
+                <textarea
+                  rows={4}
+                  required
+                  value={correctionForm.statement}
+                  onChange={(e) => setCorrectionForm({ ...correctionForm, statement: e.target.value })}
+                  className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 font-sans"
+                />
+              </div>
+
+              {/* Options */}
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                  Options &amp; Correct Answer Key *
+                </label>
+                {correctionForm.options.map((opt, idx) => {
+                  const optLabels = ["A", "B", "C", "D", "E", "F"];
+                  const isCorrect = correctionForm.correctOptionIds.includes(opt.id);
+
+                  return (
+                    <div
+                      key={opt.id}
+                      className={`flex items-center gap-2 p-2 rounded-xl border transition ${
+                        isCorrect
+                          ? "bg-emerald-50/60 border-emerald-300 dark:bg-emerald-950/30 dark:border-emerald-800"
+                          : "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCorrectionForm({
+                            ...correctionForm,
+                            correctOptionIds: [opt.id],
+                          });
+                        }}
+                        className={`w-7 h-7 rounded-lg text-xs font-black flex items-center justify-center cursor-pointer transition ${
+                          isCorrect
+                            ? "bg-emerald-600 text-white shadow-xs"
+                            : "bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-300"
+                        }`}
+                        title="Mark as correct option"
+                      >
+                        {optLabels[idx] || opt.id}
+                      </button>
+
+                      <input
+                        type="text"
+                        value={opt.text}
+                        placeholder={`Option ${optLabels[idx] || idx + 1} text`}
+                        onChange={(e) => {
+                          const updated = [...correctionForm.options];
+                          updated[idx] = { id: updated[idx]?.id || String(idx + 1), text: e.target.value };
+                          setCorrectionForm({ ...correctionForm, options: updated });
+                        }}
+                        className="flex-1 px-3 py-1.5 text-xs bg-transparent border-none focus:outline-none focus:ring-0 text-slate-800 dark:text-slate-200"
+                      />
+
+                      {isCorrect && (
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full shrink-0">
+                          Correct Answer
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Solution / Step-by-Step Explanation */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Detailed Solution &amp; Step-by-Step Explanation *
+                </label>
+                <textarea
+                  rows={3}
+                  value={correctionForm.solution}
+                  placeholder="Enter step-by-step mathematical or scientific derivation..."
+                  onChange={(e) => setCorrectionForm({ ...correctionForm, solution: e.target.value })}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Difficulty Level
+                  </label>
+                  <select
+                    value={correctionForm.difficulty}
+                    onChange={(e) => setCorrectionForm({ ...correctionForm, difficulty: e.target.value })}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
+                  >
+                    <option value="EASY">EASY</option>
+                    <option value="MEDIUM">MEDIUM</option>
+                    <option value="HARD">HARD</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Faculty Notes for Admin
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Fixed Option C typo, verified NCERT page 142"
+                    value={correctionForm.notes}
+                    onChange={(e) => setCorrectionForm({ ...correctionForm, notes: e.target.value })}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setCorrectionModalQuestion(null)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingCorrection}
+                  className="px-5 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-md shadow-blue-500/20 disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>{submittingCorrection ? "Submitting..." : "Submit for Admin Sign-off"}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* Modal: Unbounded AI Chapter Audit */}

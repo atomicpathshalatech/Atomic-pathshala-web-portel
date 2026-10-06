@@ -3504,11 +3504,15 @@ export function TeacherLiveClassRoom({
             </button>
           )}
 
+        </div>
+
+        {/* Pinned Right-Hand Action Bar (Never scrolled out of view on any resolution) */}
+        <div className="shrink-0 z-20 flex items-center gap-2 pl-2 sm:pl-3 border-l border-[#2d2e3b]">
           {stagePreviewAvailable && (
             <button
               type="button"
               onClick={() => setStagePreviewOpen((o) => !o)}
-              className={`text-xs font-semibold border px-3 py-1.5 rounded-md transition ${
+              className={`text-xs font-semibold border px-2.5 py-1.5 rounded-md transition ${
                 stagePreviewOpen ? "text-white border-sky-500 bg-sky-900/40" : "text-gray-300 border-gray-600 hover:bg-gray-700"
               }`}
               title="Show exactly what the class video (YouTube) shows"
@@ -3520,7 +3524,7 @@ export function TeacherLiveClassRoom({
           <button
             type="button"
             onClick={() => setSettingsOpen(true)}
-            className="text-xs font-semibold text-gray-300 border border-gray-600 px-3 py-1.5 rounded-md hover:bg-gray-700 transition"
+            className="text-xs font-semibold text-gray-300 border border-gray-600 px-2.5 py-1.5 rounded-md hover:bg-gray-700 transition"
           >
             Settings
           </button>
@@ -3529,25 +3533,26 @@ export function TeacherLiveClassRoom({
             <button
               type="button"
               onClick={() => setConfirmingEnd(true)}
-              className="text-xs font-semibold text-red-400 border border-red-900/50 px-3.5 py-1.5 rounded-md hover:bg-red-950/40 transition"
+              className="text-xs font-bold text-white bg-red-600 hover:bg-red-700 border border-red-500 px-3.5 py-1.5 rounded-lg shadow-md hover:shadow-red-600/30 transition active:scale-95 flex items-center gap-1.5"
             >
+              <span className="material-symbols-outlined text-sm">call_end</span>
               End class
             </button>
           ) : (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-400">End for everyone?</span>
+            <div className="flex items-center gap-1.5 bg-red-950/90 border border-red-500/60 p-1 rounded-lg">
+              <span className="text-[11px] font-medium text-red-200 pl-1 hidden sm:inline">End class?</span>
               <button
                 type="button"
                 disabled={ending}
                 onClick={endClass}
-                className="text-xs font-semibold text-white bg-red-600 hover:bg-red-500 px-3 py-1.5 rounded-md disabled:opacity-60 transition"
+                className="text-xs font-bold text-white bg-red-600 hover:bg-red-500 px-3 py-1 rounded-md disabled:opacity-60 transition shadow"
               >
                 {ending ? "Ending…" : "Confirm"}
               </button>
               <button
                 type="button"
                 onClick={() => setConfirmingEnd(false)}
-                className="text-xs text-gray-400 hover:text-white px-2"
+                className="text-xs text-gray-300 hover:text-white px-1.5"
               >
                 Cancel
               </button>
