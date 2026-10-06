@@ -78,6 +78,9 @@ export async function PATCH(
       data: {
         title: input.title,
         subject: input.subject || null,
+        topic: input.topic || null,
+        durationMinutes: input.durationMinutes || null,
+        youtubeUrl: input.youtubeUrl || null,
         type: input.type,
         status: input.status,
         teacherId: input.teacherId || null,
@@ -205,6 +208,11 @@ export async function PATCH(
           actionType: "VIEW_SCHEDULE",
           actionUrl: `/batches/${params.id}`,
         });
+
+        // Trigger WhatsApp cancellation alert
+        import("@/lib/whatsapp/engine")
+          .then((m) => m.triggerClassCancelledWhatsApp(schedule.id))
+          .catch((err) => console.warn("[WHATSAPP_CANCEL_ALERT_ERR]", err));
       } else if (isLiveClassReschedule) {
         // Invalidate old reminder and start jobs
         await cancelScheduledNotifications(NotificationType.CLASS_REMINDER_15_MIN, schedule.id);
@@ -229,6 +237,11 @@ export async function PATCH(
             startsAt: schedule.startsAt.toISOString(),
           },
         });
+
+        // Trigger WhatsApp reschedule alert
+        import("@/lib/whatsapp/engine")
+          .then((m) => m.triggerClassRescheduledWhatsApp(schedule.id, existing.startsAt, existing.endsAt))
+          .catch((err) => console.warn("[WHATSAPP_RESCHEDULE_ALERT_ERR]", err));
 
         // Re-enqueue new 15m reminder and start job based on new schedule
         const now = new Date();

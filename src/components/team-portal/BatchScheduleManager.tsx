@@ -226,6 +226,12 @@ export function BatchScheduleManager({
           form.type === "LIVE_CLASS" && teachingModel === "MODEL_2_DUAL"
             ? form.youtubeVideoId.trim() || undefined
             : undefined,
+        youtubeUrl: form.youtubeVideoId?.trim()
+          ? form.youtubeVideoId.includes("http")
+            ? form.youtubeVideoId.trim()
+            : `https://www.youtube.com/watch?v=${form.youtubeVideoId.trim()}`
+          : undefined,
+        durationMinutes: duration,
         startsAt: startsAtDate.toISOString(),
         endsAt: endsAtDate.toISOString(),
         notes: form.notes.trim() || undefined,

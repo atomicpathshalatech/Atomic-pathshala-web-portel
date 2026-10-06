@@ -67,14 +67,32 @@ export const batchScheduleCreateSchema = z
   .object({
     title: z.string().min(2, "Title is required"),
     subject: z.string().optional(),
+    topic: z.string().optional(),
+    durationMinutes: z.coerce.number().int().positive().optional(),
+    youtubeUrl: z.string().optional().or(z.literal("")),
     type: z.enum(SCHEDULE_SESSION_TYPE_OPTIONS).default("LIVE_CLASS"),
     teacherId: z.string().optional().or(z.literal("")),
     chapterId: z.string().optional().or(z.literal("")),
     videoTransport: z.enum(["LIVEKIT", "YOUTUBE", "BOTH"]).default("LIVEKIT"),
     youtubeVideoId: z.string().optional(),
     startsAt: z.coerce.date({ required_error: "Start time is required" }),
-    endsAt: z.coerce.date({ required_error: "End time is required" }),
+    endsAt: z.coerce.date().optional(),
     notes: z.string().max(1000, "Keep it under 1000 characters").optional(),
+  })
+  .transform((data) => {
+    // If endsAt is missing or durationMinutes is provided, calculate endsAt automatically
+    let calculatedEndsAt = data.endsAt;
+    if (!calculatedEndsAt && data.durationMinutes) {
+      calculatedEndsAt = new Date(data.startsAt.getTime() + data.durationMinutes * 60_000);
+    } else if (!calculatedEndsAt) {
+      calculatedEndsAt = new Date(data.startsAt.getTime() + 60 * 60_000); // default 60 min
+    }
+    const duration = data.durationMinutes || Math.round((calculatedEndsAt.getTime() - data.startsAt.getTime()) / 60_000);
+    return {
+      ...data,
+      endsAt: calculatedEndsAt,
+      durationMinutes: duration,
+    };
   })
   .refine((data) => data.endsAt > data.startsAt, {
     message: "End time must be after the start time",
@@ -87,6 +105,9 @@ export const batchScheduleUpdateSchema = z
   .object({
     title: z.string().min(2, "Title is required"),
     subject: z.string().optional(),
+    topic: z.string().optional(),
+    durationMinutes: z.coerce.number().int().positive().optional(),
+    youtubeUrl: z.string().optional().or(z.literal("")),
     type: z.enum(SCHEDULE_SESSION_TYPE_OPTIONS),
     status: z.enum(SCHEDULE_SESSION_STATUS_OPTIONS),
     teacherId: z.string().optional().or(z.literal("")),
@@ -94,8 +115,22 @@ export const batchScheduleUpdateSchema = z
     videoTransport: z.enum(["LIVEKIT", "YOUTUBE", "BOTH"]).optional(),
     youtubeVideoId: z.string().optional(),
     startsAt: z.coerce.date(),
-    endsAt: z.coerce.date(),
+    endsAt: z.coerce.date().optional(),
     notes: z.string().max(1000, "Keep it under 1000 characters").optional(),
+  })
+  .transform((data) => {
+    let calculatedEndsAt = data.endsAt;
+    if (!calculatedEndsAt && data.durationMinutes) {
+      calculatedEndsAt = new Date(data.startsAt.getTime() + data.durationMinutes * 60_000);
+    } else if (!calculatedEndsAt) {
+      calculatedEndsAt = new Date(data.startsAt.getTime() + 60 * 60_000);
+    }
+    const duration = data.durationMinutes || Math.round((calculatedEndsAt.getTime() - data.startsAt.getTime()) / 60_000);
+    return {
+      ...data,
+      endsAt: calculatedEndsAt,
+      durationMinutes: duration,
+    };
   })
   .refine((data) => data.endsAt > data.startsAt, {
     message: "End time must be after the start time",

@@ -123,6 +123,9 @@ model User {
   brandProfilesCreated   BrandProfile[]    @relation("BrandProfileCreatedBy")
   extractionJobs         ExtractionJob[]   @relation("ExtractionJobCreatedBy")
   aiSourcePdfs           AiSourcePdf[]     @relation("AiSourcePdfUploadedBy")
+  questionAssignmentsAssigned QuestionAssignment[] @relation("QuestionAssignmentAssignedBy")
+  questionAssignmentsReceived QuestionAssignment[] @relation("QuestionAssignmentAssignedTo")
+  whatsAppCampaignsCreated    WhatsAppCampaign[]   @relation("WhatsAppCampaignCreatedBy")
   aiGenerationBatches    AiGenerationBatch[] @relation("AiGenerationBatchCreatedBy")
   taxonomyTopicMemories  TaxonomyTopicMemory[] @relation("TaxonomyTopicMemoryCreatedBy")
   ncertUploads           NcertDocument[]       @relation("NCERTUploadedBy")
@@ -267,6 +270,7 @@ model Student {
   lectureIssueReports LectureIssueReport[]
   lectureNotes        LectureNote[]
   xpEvents         XPEvent[]
+  whatsAppContacts WhatsAppContact[]
   user             User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // --- Test Portal integration (imported from Atomic Test Portal) --------
@@ -546,6 +550,8 @@ model Batch {
   orders      BatchOrder[]
   chapterAssignments BatchChapter[]
   testSeries  BatchTestSeries[]
+  whatsAppContacts WhatsAppContact[]
+  whatsAppCampaigns WhatsAppCampaign[]
 
   @@index([status])
   @@index([targetExam])
@@ -711,6 +717,9 @@ model BatchSchedule {
   batchId     String
   title       String
   subject     String?
+  topic       String?
+  durationMinutes Int?
+  youtubeUrl  String?
   type        ScheduleSessionType   @default(LIVE_CLASS)
   status      ScheduleSessionStatus @default(SCHEDULED)
   teacherId   String?
@@ -6328,4 +6337,222 @@ model HomeHero {
   updatedAt      DateTime @updatedAt
 
   @@map("home_hero")
+}
+
+// ============================================================================
+// QUESTION ASSIGNMENT & TEACHER QUESTION BANK
+// ============================================================================
+
+enum QuestionAssignmentStatus {
+  ASSIGNED
+  IN_PROGRESS
+  SUBMITTED
+  UNDER_REVIEW
+  COMPLETED
+  REJECTED
+}
+
+model QuestionAssignment {
+  id              String                   @id @default(cuid())
+  title           String
+  description     String?
+  subject         String
+  chapter         String
+  topic           String?
+  targetCount     Int                      @default(0)
+  difficulty      String?
+  status          QuestionAssignmentStatus @default(ASSIGNED)
+  assignedToId    String
+  assignedById    String
+  dueDate         DateTime?
+  notes           String?
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+
+  assignedTo      User                     @relation("QuestionAssignmentAssignedTo", fields: [assignedToId], references: [id], onDelete: Cascade)
+  assignedBy      User                     @relation("QuestionAssignmentAssignedBy", fields: [assignedById], references: [id], onDelete: Cascade)
+
+  @@index([assignedToId])
+  @@index([assignedById])
+  @@index([status])
+  @@index([subject, chapter])
+  @@map("question_assignments")
+}
+
+// ============================================================================
+// WHATSAPP AUTOMATION, CONTACTS & CAMPAIGNS
+// ============================================================================
+
+enum WhatsAppContactStatus {
+  ACTIVE
+  OPTED_OUT
+  INVALID
+}
+
+enum WhatsAppContactSource {
+  MANUAL
+  CSV_IMPORT
+  GOOGLE_SHEET
+  STUDENT_SYNC
+}
+
+model WhatsAppContact {
+  id              String                @id @default(cuid())
+  name            String
+  phone           String
+  cleanPhone      String
+  email           String?
+  source          WhatsAppContactSource @default(MANUAL)
+  status          WhatsAppContactStatus @default(ACTIVE)
+  tags            String[]              @default([])
+  studentId       String?
+  batchId         String?
+  customAttributes Json?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  student         Student?              @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  batch           Batch?                @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  campaignRecipients WhatsAppCampaignRecipient[]
+
+  @@unique([phone])
+  @@index([cleanPhone])
+  @@index([status])
+  @@index([studentId])
+  @@index([batchId])
+  @@map("whatsapp_contacts")
+}
+
+enum WhatsAppQueueStatus {
+  PENDING
+  PROCESSING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  SKIPPED
+  CANCELLED
+}
+
+enum WhatsAppMessageType {
+  STUDENT_CLASS_DIGEST
+  TEACHER_CLASS_REMINDER
+  CLASS_RESCHEDULED
+  CLASS_CANCELLED
+  DOUBT_CONFIRMATION
+  DOUBT_REMINDER
+  CAMPAIGN_BROADCAST
+  CUSTOM
+}
+
+model WhatsAppMessageQueue {
+  id              String              @id @default(cuid())
+  recipientPhone  String
+  recipientName   String?
+  messageType     WhatsAppMessageType
+  templateName    String?
+  templateData    Json?
+  bodyText        String
+  idempotencyKey  String              @unique
+  status          WhatsAppQueueStatus @default(PENDING)
+  scheduledFor    DateTime            @default(now())
+  sentAt          DateTime?
+  deliveredAt     DateTime?
+  failedAt        DateTime?
+  attempts        Int                 @default(0)
+  maxAttempts     Int                 @default(3)
+  errorMessage    String?
+  providerResponse Json?
+  metadata        Json?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@index([status, scheduledFor])
+  @@index([recipientPhone])
+  @@index([messageType])
+  @@map("whatsapp_message_queue")
+}
+
+model WhatsAppAutomationSetting {
+  id                      String   @id @default("singleton")
+  digestEnabled           Boolean  @default(true)
+  digestSendTime          String   @default("22:00")
+  teacherReminderEnabled  Boolean  @default(true)
+  teacherReminderMinutes  Int      @default(30)
+  rescheduleAlertEnabled  Boolean  @default(true)
+  cancelAlertEnabled      Boolean  @default(true)
+  doubtConfirmationEnabled Boolean @default(true)
+  doubtReminderEnabled    Boolean  @default(true)
+  doubtReminderMinutes    Int      @default(60)
+  provider                String   @default("INTERAKT")
+  apiKey                  String?
+  apiSecret               String?
+  phoneNumberId           String?
+  updatedById             String?
+  updatedAt               DateTime @updatedAt
+
+  @@map("whatsapp_automation_settings")
+}
+
+enum WhatsAppCampaignStatus {
+  DRAFT
+  SCHEDULED
+  RUNNING
+  PAUSED
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model WhatsAppCampaign {
+  id              String                 @id @default(cuid())
+  name            String
+  description     String?
+  templateName    String
+  templateParams  Json?
+  status          WhatsAppCampaignStatus @default(DRAFT)
+  targetBatchId   String?
+  targetTags      String[]               @default([])
+  totalAudience   Int                    @default(0)
+  sentCount       Int                    @default(0)
+  deliveredCount  Int                    @default(0)
+  readCount       Int                    @default(0)
+  failedCount     Int                    @default(0)
+  scheduledAt     DateTime?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdById     String
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  createdBy       User                   @relation("WhatsAppCampaignCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  batch           Batch?                 @relation(fields: [targetBatchId], references: [id], onDelete: SetNull)
+  recipients      WhatsAppCampaignRecipient[]
+
+  @@index([status])
+  @@index([createdById])
+  @@map("whatsapp_campaigns")
+}
+
+model WhatsAppCampaignRecipient {
+  id              String              @id @default(cuid())
+  campaignId      String
+  contactId       String?
+  phone           String
+  name            String?
+  status          WhatsAppQueueStatus @default(PENDING)
+  queueMessageId  String?
+  sentAt          DateTime?
+  deliveredAt     DateTime?
+  errorMessage    String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  campaign        WhatsAppCampaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contact         WhatsAppContact?    @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@unique([campaignId, phone])
+  @@index([campaignId, status])
+  @@index([contactId])
+  @@map("whatsapp_campaign_recipients")
 }

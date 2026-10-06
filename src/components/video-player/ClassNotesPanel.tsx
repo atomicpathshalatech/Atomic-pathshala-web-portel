@@ -21,7 +21,13 @@ export function ClassNotesPanel({ classId, fallbackPdfUrl }: { classId: string; 
       try {
         const res = await fetch(`/api/schedule/${classId}/assets`);
         const json = await res.json();
-        if (active && res.ok && json.success) setNotes(json.data.notes);
+        if (active && res.ok && json.success) {
+          const notesData = json.data.notes;
+          setNotes(notesData);
+          if (notesData?.hasOriginalSlides && (notesData.originalPreviewUrl || notesData.originalDownloadUrl)) {
+            setNotesType("original");
+          }
+        }
       } catch {
         // Falls through to fallbackPdfUrl / "unavailable".
       } finally {
@@ -34,22 +40,25 @@ export function ClassNotesPanel({ classId, fallbackPdfUrl }: { classId: string; 
   }, [classId]);
 
   const ready = notes?.status === "READY" ? notes : null;
+  const hasTeacherUpload = Boolean(ready?.hasOriginalSlides && (ready.originalPreviewUrl || ready.originalDownloadUrl));
+  const effectiveType = hasTeacherUpload ? "original" : notesType;
+
   const previewUrl =
     (ready &&
-      (notesType === "original"
+      (effectiveType === "original"
         ? ready.originalPreviewUrl || ready.originalDownloadUrl
         : ready.previewUrl || ready.downloadUrl)) ||
     fallbackPdfUrl ||
     null;
   const downloadUrl =
     (ready &&
-      (notesType === "original"
+      (effectiveType === "original"
         ? ready.originalDownloadUrl || ready.originalPreviewUrl
         : ready.downloadUrl || ready.previewUrl)) ||
     fallbackPdfUrl ||
     null;
   const filename =
-    notesType === "original" ? notes?.originalFilename || "original_slides.pdf" : notes?.filename || "class_notes.pdf";
+    effectiveType === "original" ? notes?.originalFilename || "teacher_slide_notes.pdf" : notes?.filename || "class_notes.pdf";
 
   if (loading) {
     return <p className="text-xs text-slate-400 py-8 text-center">Loading notes…</p>;
@@ -72,23 +81,16 @@ export function ClassNotesPanel({ classId, fallbackPdfUrl }: { classId: string; 
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        {ready?.hasOriginalSlides && ready.originalDownloadUrl ? (
-          <div className="flex items-center gap-1 p-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-[11px] font-bold">
-            {(["annotated", "original"] as const).map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => setNotesType(t)}
-                className={`py-1 px-2.5 rounded-md transition ${
-                  notesType === t ? "bg-blue-600 text-white" : "text-slate-500 dark:text-slate-400"
-                }`}
-              >
-                {t === "annotated" ? "Annotated Board" : "Original Slides"}
-              </button>
-            ))}
-          </div>
+        {hasTeacherUpload ? (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 text-xs font-bold border border-emerald-200 dark:border-emerald-800">
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            Teacher Slide Notes (शिक्षक नोट्स)
+          </span>
         ) : (
-          <span />
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold">
+            <span className="w-2 h-2 rounded-full bg-blue-500" />
+            Whiteboard Notes (बोर्डवर्क PDF)
+          </span>
         )}
         <div className="flex items-center gap-2">
           <button

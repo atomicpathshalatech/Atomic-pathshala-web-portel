@@ -121,6 +121,13 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
       console.error("[doubt-booking] teacher notification error:", err);
     }
 
+    try {
+      const { triggerDoubtBookingWhatsApp } = await import("@/lib/whatsapp/engine");
+      await triggerDoubtBookingWhatsApp(booking.id);
+    } catch (waErr) {
+      console.warn("[DOUBT_WHATSAPP_CONFIRM_ERR]", waErr);
+    }
+
     return apiSuccess({ booking }, 201);
   } catch (error) {
     return handleApiError(error);

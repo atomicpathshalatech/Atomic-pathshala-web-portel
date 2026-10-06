@@ -20,6 +20,7 @@ const NAV_SECTIONS: { title?: string; items: { href: string; label: string; icon
     title: "Teaching",
     items: [
       { href: "/team/my-schedule", label: "My Schedule", icon: "calendar_month", permission: PERMISSIONS.WHITEBOARD_ACCESS },
+      { href: "/team/my-question-bank", label: "My Question Bank", icon: "inventory_2", permission: PERMISSIONS.QUESTION_READ },
       { href: "/team/doubt-booking", label: "Doubt Book Session", icon: "event_available", permission: PERMISSIONS.WHITEBOARD_ACCESS },
       { href: "/team/batches", label: "Batches", icon: "groups", permission: PERMISSIONS.BATCH_READ },
       { href: "/team/chapters", label: "Chapters", icon: "auto_stories", permission: PERMISSIONS.CHAPTER_READ },
@@ -82,6 +83,7 @@ const NAV_SECTIONS: { title?: string; items: { href: string; label: string; icon
     title: "Growth",
     items: [
       { href: "/team/leads", label: "CRM / Leads", icon: "person_search", permission: PERMISSIONS.LEAD_READ },
+      { href: "/team/whatsapp", label: "WhatsApp Automation", icon: "chat", permission: PERMISSIONS.WHATSAPP_READ },
       { href: "/team/coupons", label: "Coupons", icon: "confirmation_number", permission: PERMISSIONS.COUPON_READ },
       { href: "/team/notifications", label: "Notifications", icon: "campaign", permission: PERMISSIONS.NOTIFICATION_READ },
     ],

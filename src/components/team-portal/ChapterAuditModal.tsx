@@ -31,6 +31,8 @@ interface ChapterAuditModalProps {
   onClose: () => void;
   initialSubject?: string;
   initialChapter?: string;
+  subject?: string;
+  chapter?: string;
 }
 
 export function ChapterAuditModal({
@@ -38,9 +40,13 @@ export function ChapterAuditModal({
   onClose,
   initialSubject = "Physics",
   initialChapter = "",
+  subject,
+  chapter,
 }: ChapterAuditModalProps) {
-  const [selectedSubject, setSelectedSubject] = useState(initialSubject || "Physics");
-  const [selectedChapter, setSelectedChapter] = useState(initialChapter || "");
+  const effectiveSubject = subject || initialSubject || "Physics";
+  const effectiveChapter = chapter || initialChapter || "";
+  const [selectedSubject, setSelectedSubject] = useState(effectiveSubject);
+  const [selectedChapter, setSelectedChapter] = useState(effectiveChapter);
   const [loading, setLoading] = useState(false);
   const [auditData, setAuditData] = useState<ChapterAuditSummary | null>(null);
   const [selectedReviewQuestion, setSelectedReviewQuestion] = useState<any | null>(null);
