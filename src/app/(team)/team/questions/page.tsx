@@ -1,3 +1,4 @@
+import React, { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -234,35 +235,11 @@ export default async function QuestionBankPage({
       orderBy: { name: "asc" },
       take: 100,
     }),
-    // Team Members only for Reviewed By (excludes normal registered students)
+    // Team Members only for Reviewed By
     prisma.user.findMany({
       where: {
         status: "ACTIVE",
-        role: {
-          name: { notIn: ["STUDENT", "PARENT"] },
-        },
-        OR: [
-          { staffInvitation: { isNot: null } },
-          { staffInvitationsSent: { some: {} } },
-          { teacher: { isNot: null } },
-          {
-            role: {
-              name: {
-                in: [
-                  "ADMIN",
-                  "SUPER_ADMIN",
-                  "SUB_ADMIN",
-                  "FOUNDER",
-                  "TEACHER",
-                  "QUESTION_TEAM",
-                  "CONTENT_TEAM",
-                  "SME",
-                  "ACADEMIC_HEAD",
-                ],
-              },
-            },
-          },
-        ],
+        roleId: { not: null },
       },
       select: { id: true, name: true, email: true },
       orderBy: { name: "asc" },
@@ -325,29 +302,36 @@ export default async function QuestionBankPage({
         )}
       </div>
 
-      {/* Main Question Management Table & Filters */}
-      <QuestionManagementTable
-        questions={questions.map((q) => ({
-          ...q,
-          isBilingual: q.translations.length > 1 || Boolean(q.questionCode) || Boolean(q.pyqSource),
-        }))}
-        totalCount={total}
-        currentPage={page}
-        pageSize={pageSize}
-        counts={{
-          total: totalQuestions,
-          published: publishedCount,
-          review1: review1Count,
-          review2: review2Count,
-          draft: draftCount,
-          aiDraft: aiDraftCount,
-        }}
-        usersList={usersList}
-        teamMembersList={teamMembersList}
-        canCreate={canCreate}
-        canVerify={canVerify}
-        currentUserId={session.user.id}
-      />
+      {/* Main Question Management Table & Filters with Suspense */}
+      <Suspense fallback={
+        <div className="p-12 text-center bg-white rounded-3xl border border-slate-200 space-y-3">
+          <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-xs text-slate-500 font-medium">Loading Question Bank &amp; Filters...</p>
+        </div>
+      }>
+        <QuestionManagementTable
+          questions={(questions || []).map((q) => ({
+            ...q,
+            isBilingual: (q.translations?.length || 0) > 1 || Boolean(q.questionCode) || Boolean(q.pyqSource),
+          }))}
+          totalCount={total}
+          currentPage={page}
+          pageSize={pageSize}
+          counts={{
+            total: totalQuestions,
+            published: publishedCount,
+            review1: review1Count,
+            review2: review2Count,
+            draft: draftCount,
+            aiDraft: aiDraftCount,
+          }}
+          usersList={usersList || []}
+          teamMembersList={teamMembersList || usersList || []}
+          canCreate={canCreate}
+          canVerify={canVerify}
+          currentUserId={session.user.id}
+        />
+      </Suspense>
     </div>
   );
 }

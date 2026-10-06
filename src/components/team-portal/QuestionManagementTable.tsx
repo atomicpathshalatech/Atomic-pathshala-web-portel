@@ -130,19 +130,19 @@ export function QuestionManagementTable({
   const searchParams = useSearchParams();
 
   // Filters State
-  const [search, setSearch] = useState(searchParams.get("search") || "");
-  const [subject, setSubject] = useState(searchParams.get("subject") || "");
-  const [chapter, setChapter] = useState(searchParams.get("chapter") || "");
-  const [topic, setTopic] = useState(searchParams.get("topic") || "");
-  const [subTopic, setSubTopic] = useState(searchParams.get("subTopic") || "");
-  const [difficulty, setDifficulty] = useState(searchParams.get("difficulty") || "");
-  const [type, setType] = useState(searchParams.get("type") || "");
-  const [status, setStatus] = useState(searchParams.get("status") || "");
-  const [createdById, setCreatedById] = useState(searchParams.get("createdById") || "");
-  const [reviewedById, setReviewedById] = useState(searchParams.get("reviewedById") || "");
-  const [editedById, setEditedById] = useState(searchParams.get("editedById") || "");
-  const [source, setSource] = useState(searchParams.get("source") || "");
-  const [pyqCategory, setPyqCategory] = useState(searchParams.get("pyqCategory") || "");
+  const [search, setSearch] = useState(searchParams?.get("search") || "");
+  const [subject, setSubject] = useState(searchParams?.get("subject") || "");
+  const [chapter, setChapter] = useState(searchParams?.get("chapter") || "");
+  const [topic, setTopic] = useState(searchParams?.get("topic") || "");
+  const [subTopic, setSubTopic] = useState(searchParams?.get("subTopic") || "");
+  const [difficulty, setDifficulty] = useState(searchParams?.get("difficulty") || "");
+  const [type, setType] = useState(searchParams?.get("type") || "");
+  const [status, setStatus] = useState(searchParams?.get("status") || "");
+  const [createdById, setCreatedById] = useState(searchParams?.get("createdById") || "");
+  const [reviewedById, setReviewedById] = useState(searchParams?.get("reviewedById") || "");
+  const [editedById, setEditedById] = useState(searchParams?.get("editedById") || "");
+  const [source, setSource] = useState(searchParams?.get("source") || "");
+  const [pyqCategory, setPyqCategory] = useState(searchParams?.get("pyqCategory") || "");
 
   // CBT Question View / Preview Modal State
   const [viewQuestionIndex, setViewQuestionIndex] = useState<number | null>(null);
@@ -223,7 +223,7 @@ export function QuestionManagementTable({
 
   const handleQuickStatusTab = (statusTab: string) => {
     setStatus(statusTab);
-    const params = new URLSearchParams(searchParams.toString());
+    const params = new URLSearchParams(searchParams?.toString() || "");
     if (statusTab) {
       params.set("status", statusTab);
     } else {
@@ -1033,7 +1033,7 @@ export function QuestionManagementTable({
               <button
                 type="button"
                 onClick={() => {
-                  const params = new URLSearchParams(searchParams.toString());
+                  const params = new URLSearchParams(searchParams?.toString() || "");
                   params.set("page", String(currentPage - 1));
                   router.push(`/team/questions?${params.toString()}`);
                 }}
@@ -1047,7 +1047,7 @@ export function QuestionManagementTable({
               <button
                 type="button"
                 onClick={() => {
-                  const params = new URLSearchParams(searchParams.toString());
+                  const params = new URLSearchParams(searchParams?.toString() || "");
                   params.set("page", String(currentPage + 1));
                   router.push(`/team/questions?${params.toString()}`);
                 }}
