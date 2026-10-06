@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { UnifiedQuestionEditor } from "@/components/questions/UnifiedQuestionEditor";
 import { FormulaText } from "@/components/test-portal/FormulaText";
-import type { DppImportValidationItem, DppQuickImportSummary } from "@/app/api/team/dpp/[id]/quick-import/route";
+import type { DppImportValidationItem, DppQuickImportSummary } from "@/lib/questions/dpp-quick-import";
 
 type QuestionApiRow = {
   id: string;
