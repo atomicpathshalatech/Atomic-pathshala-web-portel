@@ -27,6 +27,7 @@ import {
   Flag,
   Image as ImageIcon,
   Compass,
+  Hash,
 } from "lucide-react";
 import { FormulaText } from "@/components/test-portal/FormulaText";
 import { SecureDeleteResourceModal } from "@/components/common/SecureDeleteResourceModal";
@@ -36,6 +37,8 @@ import {
   getAllMasterNcertChapters,
 } from "@/lib/academic/master-ncert-catalog";
 import { QuestionReviewWorkspaceModal } from "./QuestionReviewWorkspaceModal";
+import { ChapterAuditModal } from "./ChapterAuditModal";
+import { CanonicalIdMigratorModal } from "./CanonicalIdMigratorModal";
 
 export interface QuestionRow {
   id: string;
@@ -167,6 +170,19 @@ export function QuestionManagementTable({
     resourceId: string;
     title: string;
   } | null>(null);
+
+  // Chapter AI Audit Modal & Canonical ID Migrator Modal
+  const [auditModalOpen, setAuditModalOpen] = useState(false);
+  const [canonicalMigratorOpen, setCanonicalMigratorOpen] = useState(false);
+  const [standaloneReviewQuestion, setStandaloneReviewQuestion] = useState<QuestionRow | null>(null);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+
+  const handleCopyQuestionCode = (code: string) => {
+    navigator.clipboard.writeText(code);
+    setCopiedCode(code);
+    toast.success(`Copied Question ID: ${code}`);
+    setTimeout(() => setCopiedCode(null), 2000);
+  };
 
   const applyFilters = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -409,7 +425,77 @@ export function QuestionManagementTable({
         </Link>
       </div>
 
-      {/* 2. STRUCTURED FILTER BAR (Comprehensive yet clean) */}
+      {/* 2. AI QUESTION INTELLIGENCE & CANONICAL ID ACTION BAR */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-4 rounded-3xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white shadow-lg shadow-blue-500/15">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-white/15 backdrop-blur-md flex items-center justify-center font-bold text-white border border-white/20 shrink-0">
+            <Sparkles className="w-5 h-5 text-amber-300 animate-pulse" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="font-extrabold text-sm tracking-tight">AI Chapter Question Intelligence &amp; Verification</h3>
+              <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-amber-400 text-slate-950">
+                100% Unbounded
+              </span>
+            </div>
+            <p className="text-xs text-blue-100 opacity-90 mt-0.5">
+              Audit all questions in any chapter for scientific accuracy, answer keys, solutions, and cognitive depth with 1-click review.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap shrink-0">
+          <button
+            type="button"
+            onClick={() => setCanonicalMigratorOpen(true)}
+            className="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+            title="Scan repository and assign official 10-character canonical IDs (P26, C25, B24, M23, S22)"
+          >
+            <Hash className="w-3.5 h-3.5 text-blue-200" />
+            <span>Standardize 10-Digit IDs</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setAuditModalOpen(true)}
+            className="px-5 py-2 rounded-full bg-white text-blue-700 hover:bg-blue-50 text-xs font-black shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center gap-2 cursor-pointer"
+          >
+            <Sparkles className="w-4 h-4 text-amber-500" />
+            <span>⚡ Run AI Chapter Audit</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 2.1 CONTEXTUAL ACTIVE CHAPTER BANNER */}
+      {chapter && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40 border border-blue-200 dark:border-blue-800 rounded-3xl shadow-sm">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-blue-100 dark:bg-blue-900/60 flex items-center justify-center text-blue-700 dark:text-blue-300 shrink-0">
+              <BookOpen className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                Filtered Chapter: <span className="text-blue-700 dark:text-blue-400 font-extrabold">{chapter}</span>
+                {subject ? ` (${subject})` : ""}
+              </p>
+              <p className="text-[11px] text-slate-500">
+                {totalCount} total questions in this chapter repository.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setAuditModalOpen(true)}
+            className="px-5 py-2 rounded-full bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs shadow-md shadow-blue-500/20 active:scale-95 transition flex items-center gap-1.5 cursor-pointer w-full sm:w-auto justify-center"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+            <span>Audit All Questions in {chapter}</span>
+          </button>
+        </div>
+      )}
+
+      {/* 3. STRUCTURED FILTER BAR (Comprehensive yet clean) */}
       <form onSubmit={applyFilters} className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-3">
         {/* Row 1: Search, Subject, Topic, Sub-Topic, Difficulty */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
@@ -638,10 +724,18 @@ export function QuestionManagementTable({
                     {/* 1. Question Preview & ID */}
                     <td className="px-6 py-4 max-w-sm">
                       <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded text-[10px] border border-blue-200">
-                            {displayCode}
-                          </span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => handleCopyQuestionCode(displayCode)}
+                            className="font-mono font-extrabold text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-md text-[11px] border border-blue-200 transition flex items-center gap-1 cursor-pointer group/id"
+                            title={`Click to copy Canonical ID: ${displayCode}`}
+                          >
+                            <span>{displayCode}</span>
+                            <span className="material-symbols-outlined text-[11px] text-blue-400 group-hover/id:text-blue-700">
+                              {copiedCode === displayCode ? "check" : "content_copy"}
+                            </span>
+                          </button>
                           <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
                             v{q.version || 1}
                           </span>
@@ -848,6 +942,17 @@ export function QuestionManagementTable({
                           </button>
                         )}
 
+                        {/* Inline AI Quality & Accuracy Verification */}
+                        <button
+                          type="button"
+                          onClick={() => setStandaloneReviewQuestion(q)}
+                          className="px-2.5 py-1.5 rounded-lg border border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold transition flex items-center gap-1 shadow-2xs"
+                          title="Run Live AI Verification, Scientific Accuracy & Option Consistency Check"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                          <span className="text-[11px] font-bold">AI Review</span>
+                        </button>
+
                         {/* View Question in Student CBT Interface */}
                         <button
                           type="button"
@@ -966,6 +1071,36 @@ export function QuestionManagementTable({
           }}
         />
       )}
+
+      {/* 4.1 STANDALONE QUESTION AI VERIFY & REVIEW MODAL */}
+      {standaloneReviewQuestion && (
+        <QuestionReviewWorkspaceModal
+          question={standaloneReviewQuestion as any}
+          onClose={() => setStandaloneReviewQuestion(null)}
+          onSuccess={() => {
+            setStandaloneReviewQuestion(null);
+            router.refresh();
+          }}
+        />
+      )}
+
+      {/* 4.2 FULL 100% CHAPTER AI QUESTION AUDIT MODAL */}
+      <ChapterAuditModal
+        isOpen={auditModalOpen}
+        onClose={() => setAuditModalOpen(false)}
+        initialSubject={subject || "Physics"}
+        initialChapter={chapter || ""}
+      />
+
+      {/* 4.3 CANONICAL 10-DIGIT ID MIGRATOR MODAL */}
+      <CanonicalIdMigratorModal
+        isOpen={canonicalMigratorOpen}
+        onClose={() => setCanonicalMigratorOpen(false)}
+        onSuccess={() => {
+          setCanonicalMigratorOpen(false);
+          router.refresh();
+        }}
+      />
 
       {/* 5. REVISION HISTORY MODAL */}
       {historyModalQuestion && (

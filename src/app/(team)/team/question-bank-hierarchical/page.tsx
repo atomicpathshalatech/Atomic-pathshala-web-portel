@@ -14,6 +14,8 @@ import { HierarchicalSearchFilter } from "@/components/question-bank-hierarchica
 import { HierarchicalTreeView } from "@/components/question-bank-hierarchical/HierarchicalTreeView";
 import { HierarchicalMindmapView } from "@/components/question-bank-hierarchical/HierarchicalMindmapView";
 import { RevisionDashboardView } from "@/components/question-bank-hierarchical/RevisionDashboardView";
+import { ChapterAuditModal } from "@/components/team-portal/ChapterAuditModal";
+import { Sparkles } from "lucide-react";
 
 export default function QuestionBankHierarchicalPage() {
   const [loading, setLoading] = useState(true);
@@ -34,6 +36,7 @@ export default function QuestionBankHierarchicalPage() {
   const [selectedBreadcrumbs, setSelectedBreadcrumbs] = useState<
     { id: string; name: string; level: any }[]
   >([]);
+  const [auditModalOpen, setAuditModalOpen] = useState(false);
 
   useEffect(() => {
     fetchHierarchyData();
@@ -190,7 +193,16 @@ export default function QuestionBankHierarchicalPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setAuditModalOpen(true)}
+              className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-500 hover:to-indigo-500 text-white font-extrabold text-xs shadow-lg shadow-blue-500/20 active:scale-95 transition flex items-center gap-2 cursor-pointer"
+            >
+              <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
+              <span>⚡ Run AI Chapter Audit</span>
+            </button>
+
             <Link
               href="/team/questions"
               className="px-5 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs transition flex items-center gap-1.5"
@@ -318,6 +330,15 @@ export default function QuestionBankHierarchicalPage() {
           }}
         />
       )}
+
+      {/* 100% Chapter AI Question Audit Modal */}
+      <ChapterAuditModal
+        isOpen={auditModalOpen}
+        onClose={() => {
+          setAuditModalOpen(false);
+          fetchHierarchyData();
+        }}
+      />
     </div>
   );
 }
