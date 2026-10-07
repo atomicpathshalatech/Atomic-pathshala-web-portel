@@ -199,7 +199,9 @@ const COMMON_ENGLISH_WORDS = new Set([
   "doing", "some", "basic", "principles", "techniques", "classification", "nomenclature", "isomerism",
   "general", "organic", "chemistry", "hydrocarbons", "purification", "characterisation", "compounds",
   "easy", "learn", "subrule", "ex", "booster", "section", "option", "question", "topic", "contents",
-  "chapter", "module", "medium", "class", "division", "neet", "jee", "ncert", "cbse", "iupac"
+  "chapter", "module", "medium", "class", "division", "neet", "jee", "aipmt", "ncert", "cbse", "iupac",
+  "none", "both", "all", "correct", "incorrect", "sp", "sp2", "sp3", "dsp2", "sp3d", "sp3d2", "ch3", "ch2",
+  "ch", "cooh", "cocl", "conh2", "coor", "nh2", "no2", "c2h5", "c6h5", "h2o", "co2", "hcl", "oh", "me", "et"
 ]);
 
 /**
@@ -218,32 +220,53 @@ export function convertKrutiDevToUnicode(text: string): string {
 function convertKrutiDevLine(line: string): string {
   if (!line.trim()) return line;
 
-  // Protect parenthesized English phrases like "( Some Basic Principles and Techniques Classification & Nomenclature )"
   const preservedTokens: string[] = [];
-  let protectedLine = line.replace(/\(([^()]*)\)/g, (_match, inner) => {
-    const isEnglishOrMath = /^[A-Za-z0-9\s\.\,\-\+\=\/\:\&]+$/.test(inner.trim());
-    if (isEnglishOrMath) {
-      const idx = preservedTokens.length;
-      preservedTokens.push(`(${inner})`);
-      return `___PRESERVED_TOKEN_${idx}___`;
-    }
-    return `(${inner})`;
-  });
-
-  // Protect chemistry formulas and standalone English terms
-  protectedLine = protectedLine.replace(/\b[A-Za-z0-9]+(?:[\-\=\#][A-Za-z0-9]+)+\b/g, (match) => {
+  const protect = (str: string) => {
     const idx = preservedTokens.length;
-    preservedTokens.push(match);
+    preservedTokens.push(str);
     return `___PRESERVED_TOKEN_${idx}___`;
+  };
+
+  let protectedLine = line;
+
+  // 1. Protect Question Numbers: Q.1, Q. 2, Que. 1, Question 1
+  protectedLine = protectedLine.replace(/\b(?:Q|Que|Question)\s*[\.\:\-\s]*\d+\b/gi, (match) => protect(match));
+
+  // 2. Protect Option markers: (1), (2), (3), (4), (A), (B), (C), (D), (a), (b), (c), (d), [1], [2], etc.
+  protectedLine = protectedLine.replace(/[\(\[]\s*[0-9A-Za-z]\s*[\)\]]/g, (match) => protect(match));
+
+  // 3. Protect Exam Tags: [NEET 2024], [AIPMT Pre.-2012], etc.
+  protectedLine = protectedLine.replace(/\[\s*(?:NEET|AIPMT|JEE|CBSE|NCERT)[^\]]*\]/gi, (match) => protect(match));
+
+  // 4. Protect parenthesized English phrases or formulas
+  protectedLine = protectedLine.replace(/\(([^()]*)\)/g, (fullMatch, inner) => {
+    const isEnglishOrMath = /^[A-Za-z0-9\s\.\,\-\+\=\/\:\&\#\^\_\*\~]+$/.test(inner.trim());
+    if (isEnglishOrMath) {
+      return protect(fullMatch);
+    }
+    return fullMatch;
   });
 
-  // Convert tokens
+  // 5. Protect Hybridization terms: sp, sp2, sp3, sp3d, dsp2
+  protectedLine = protectedLine.replace(/\b(?:sp|sp2|sp3|dsp2|sp3d|sp3d2)\b/gi, (match) => protect(match));
+
+  // 6. Protect Degree indicators: 1°, 2°, 3°, 4°
+  protectedLine = protectedLine.replace(/\b\d+°(?:\s*[A-Za-z])?\b/g, (match) => protect(match));
+
+  // 7. Protect Chemistry Formulas & Chains: HC≡C-CH=CH-CH3, CH3-(CH2)2-CH2-, C6H14, etc.
+  protectedLine = protectedLine.replace(/\b[A-Za-z0-9]+(?:[\s\-\=\#\≡\\–\—][A-Za-z0-9]+)+\b/g, (match) => protect(match));
+  protectedLine = protectedLine.replace(/\b(?:CH3|CH2|CH|CHO|COOH|COCl|CONH2|COOR|SO3H|NH2|NO2|C2H5|C6H5|H2O|CO2|HCl|HNO3|H2SO4|NaOH|KOH|CH4|C2H6|C3H8|C4H10|C5H12|C6H14|C7H16|C8H18|C9H20|C10H22|C16H32|C9H16|C7H14|C5H6|C6H6|C6H8|C4H4)\b/g, (match) => protect(match));
+
+  // 8. Protect Comma-separated Numbers / Alphanumerics: "3, 0, 5", "sp, sp2", "2, 3, 4"
+  protectedLine = protectedLine.replace(/(?<=[0-9A-Za-z°])\s*,\s*(?=[0-9A-Za-z°])/g, () => protect(", "));
+
+  // Convert remaining tokens
   const convertedWords = protectedLine.split(/(\s+)/).map((token) => {
     if (!token.trim() || token.startsWith("___PRESERVED_TOKEN_")) {
       return token;
     }
-    const cleanWord = token.toLowerCase().replace(/[^a-z]/g, "");
-    if (COMMON_ENGLISH_WORDS.has(cleanWord)) {
+    const cleanWord = token.toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (COMMON_ENGLISH_WORDS.has(cleanWord) || /^\d+$/.test(cleanWord)) {
       return token;
     }
     return convertKrutiToken(token);

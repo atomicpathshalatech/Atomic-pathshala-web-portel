@@ -112,8 +112,8 @@ async function runTest() {
   console.log(`  - File Size: ${rebrandingResult.fileSizeBytes} bytes`);
   console.log(`  - Applied Preset: ${rebrandingResult.appliedPreset}`);
 
-  if (rebrandingResult.pageCount !== 3) {
-    throw new Error(`Page count mismatch: expected 3, got ${rebrandingResult.pageCount}`);
+  if (rebrandingResult.pageCount !== 4) {
+    throw new Error(`Page count mismatch: expected 4 (1 cover + 3 content), got ${rebrandingResult.pageCount}`);
   }
 
   // 3. Run Verification Engine

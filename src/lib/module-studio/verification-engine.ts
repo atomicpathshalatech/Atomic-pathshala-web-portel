@@ -51,14 +51,17 @@ export function generateModuleVerificationReport(params: {
   const metrics: ModuleVerificationMetric[] = [];
 
   // 1. Page Count Validation
-  const pageMatch = originalPageCount === brandedPageCount && originalPageCount > 0;
+  const hasCoverPage = brandedPageCount === originalPageCount + 1;
+  const pageMatch = (brandedPageCount === originalPageCount || hasCoverPage) && originalPageCount > 0;
   metrics.push({
     category: "PAGE_COUNT",
     name: "Page Count Consistency",
     status: pageMatch ? "PASS" : "FAIL",
     score: pageMatch ? 100 : 0,
     details: pageMatch
-      ? `Original and branded documents have identical page counts (${originalPageCount} pages).`
+      ? hasCoverPage
+        ? `Page count verified: ${originalPageCount} content pages + 1 branded front cover = ${brandedPageCount} total pages.`
+        : `Original and branded documents have identical page counts (${originalPageCount} pages).`
       : `Page count mismatch: Original has ${originalPageCount} pages, but Branded has ${brandedPageCount} pages.`,
   });
 
