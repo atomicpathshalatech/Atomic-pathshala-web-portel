@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db";
 import { canStudentJoinClass, getEffectiveScheduleStatus } from "@/lib/schedule/access-rules";
+import { areResultsReleased } from "@/lib/tests/schedule-rules";
 
 const IST = "Asia/Kolkata";
 const dayKey = (d: string | Date) => new Date(d).toLocaleDateString("en-CA", { timeZone: IST });
@@ -279,11 +280,19 @@ export async function loadStudentBatchHome(
       },
     }),
     prisma.batchSchedule.findMany({
-      where: { batchId, type: "DPP", status: { not: "CANCELLED" } },
+      where: {
+        batchId,
+        type: "DPP",
+        status: { not: "CANCELLED" },
+        test: {
+          status: { in: ["PUBLISHED", "APPROVED"] },
+          sections: { some: { questions: { some: {} } } },
+        },
+      },
       orderBy: { startsAt: "desc" },
       take: 100,
       include: {
-        chapter: { select: { title: true, subject: { select: { title: true } } } },
+        chapter: { select: { id: true, title: true, subject: { select: { title: true } } } },
         test: {
           include: {
             sections: { select: { targetCount: true, _count: { select: { questions: true } } } },
@@ -386,9 +395,11 @@ export async function loadStudentBatchHome(
     notifications,
     broadcasts,
   ] = await Promise.all([
-    // Direct Chapter DPPs (Multi-relationship matching)
+    // Direct Chapter DPPs (Only published with actual questions)
     prisma.dpp.findMany({
       where: {
+        status: { in: ["PUBLISHED", "ACTIVE"] },
+        questions: { some: {} },
         OR: [
           ...(chapterIds.length ? [{ chapterId: { in: chapterIds } }] : []),
           ...(chapterTitles.length ? [{ chapter: { in: chapterTitles } }] : []),
@@ -412,6 +423,7 @@ export async function loadStudentBatchHome(
     prisma.test.findMany({
       where: {
         archived: false,
+        status: { in: ["PUBLISHED", "APPROVED"] },
         OR: [
           { batchSchedule: { batchId } },
           ...(testSeriesIds.length ? [{ testSeriesId: { in: testSeriesIds } }] : []),
@@ -423,6 +435,7 @@ export async function loadStudentBatchHome(
       orderBy: [{ openTime: "desc" }, { createdAt: "desc" }],
       take: 100,
       include: {
+        batchSchedule: { select: { startsAt: true, endsAt: true, type: true } },
         chapter: { select: { title: true, subject: { select: { title: true } } } },
         sections: { select: { marksPerQuestion: true, targetCount: true, _count: { select: { questions: true } } } },
         attempts: {
@@ -534,7 +547,8 @@ export async function loadStudentBatchHome(
 
     const att = d.attempts[0];
     const qCount = d._count.questions || d.questionTargetCount || 10;
-    const status = (att?.status === "SUBMITTED" || att?.status === "AUTO_SUBMITTED")
+    const isSubmitted = att?.status === "SUBMITTED" || att?.status === "AUTO_SUBMITTED";
+    const status = isSubmitted
       ? "COMPLETED"
       : att?.status === "IN_PROGRESS"
       ? "IN_PROGRESS"
@@ -555,8 +569,8 @@ export async function loadStudentBatchHome(
       incorrectCount: null,
       accuracy: null,
       opensAt: null,
-      pdfUrl: `/api/dpp/${d.id}/pdf`,
-      href: status === "COMPLETED" ? `/practice?dppId=${d.id}&result=1` : `/practice?dppId=${d.id}`,
+      pdfUrl: isSubmitted ? `/api/dpp/${d.id}/pdf` : null,
+      href: `/dpp/${d.id}/attempt`,
     });
   }
 
@@ -570,10 +584,11 @@ export async function loadStudentBatchHome(
       0
     );
     const a = t?.attempts[0];
+    const isSubmitted = a?.status === "SUBMITTED" || a?.status === "AUTO_SUBMITTED";
     const isUpcoming = d.startsAt > now;
     const status = isUpcoming
       ? "UPCOMING"
-      : a?.status === "SUBMITTED"
+      : isSubmitted
       ? "COMPLETED"
       : a?.status === "IN_PROGRESS"
       ? "IN_PROGRESS"
@@ -594,8 +609,8 @@ export async function loadStudentBatchHome(
       incorrectCount: null,
       accuracy: null,
       opensAt: d.startsAt.toISOString(),
-      pdfUrl: t ? `/api/tests/${t.id}/pdf` : null,
-      href: status === "UPCOMING" || !t ? null : status === "COMPLETED" ? `/tests/${t.id}/result` : `/tests/${t.id}/attempt`,
+      pdfUrl: isSubmitted && t ? `/api/tests/${t.id}/pdf` : null,
+      href: status === "UPCOMING" || !t ? null : `/tests/${t.id}/attempt`,
     });
   }
 
@@ -603,7 +618,10 @@ export async function loadStudentBatchHome(
   const testItems: BatchTestItem[] = rawTests.map((t) => {
     const a = t.attempts[0];
     const totalMarks = t.sections.reduce((acc, s) => acc + (s.targetCount || s._count.questions || 1) * (s.marksPerQuestion || 4), 0);
+    const isSubmitted = a?.status === "SUBMITTED" || a?.status === "AUTO_SUBMITTED";
     const attemptStatus = !a ? "NOT_STARTED" : a.status === "IN_PROGRESS" ? "IN_PROGRESS" : "SUBMITTED";
+    const resultsReleased = areResultsReleased(t, now);
+    const canAccessPdf = isSubmitted && resultsReleased;
 
     return {
       id: t.id,
@@ -615,13 +633,13 @@ export async function loadStudentBatchHome(
       openTime: t.openTime?.toISOString() ?? null,
       closeTime: t.closeTime?.toISOString() ?? null,
       attemptStatus,
-      score: a?.score ?? null,
+      score: isSubmitted && resultsReleased ? (a?.score ?? null) : null,
       maxScore: totalMarks || 720,
       accuracy: null,
       correctCount: null,
       incorrectCount: null,
-      questionPdfUrl: `/api/tests/${t.id}/pdf`,
-      solutionPdfUrl: `/api/tests/${t.id}/pdf?type=solutions`,
+      questionPdfUrl: canAccessPdf ? `/api/tests/${t.id}/pdf` : null,
+      solutionPdfUrl: canAccessPdf ? `/api/tests/${t.id}/pdf?type=solutions` : null,
     };
   });
 
@@ -690,7 +708,7 @@ export async function loadStudentBatchHome(
       startsAt: testDate,
       endsAt: t.closeTime,
       status: isSubmitted ? "SUBMITTED" : isInProgress ? "AVAILABLE" : "AVAILABLE",
-      actionLabel: isSubmitted ? "View Result" : isInProgress ? "Resume Test" : "Start Test",
+      actionLabel: isSubmitted ? "Test Analysis" : isInProgress ? "Resume Test" : "Start Test",
       actionHref: isSubmitted ? `/tests/${t.id}/result` : `/tests/${t.id}/attempt`,
       score: t.score,
       durationMin: t.durationMin,
@@ -716,7 +734,7 @@ export async function loadStudentBatchHome(
       startsAt: dppDate,
       endsAt: null,
       status: isCompleted ? "SUBMITTED" : isInProgress ? "AVAILABLE" : "AVAILABLE",
-      actionLabel: isCompleted ? "View Result" : isInProgress ? "Resume DPP" : "Attempt DPP",
+      actionLabel: isCompleted ? "DPP Analysis" : isInProgress ? "Resume DPP" : "Attempt DPP",
       actionHref: d.href,
       score: d.score,
       durationMin: d.durationMin,
@@ -731,15 +749,16 @@ export async function loadStudentBatchHome(
   // 8. Build Centralized "All PDFs" Library
   const allPdfs: BatchPdfItem[] = [];
 
-  // 8.1 DPP PDFs
+  // 8.1 DPP PDFs (Only after submission)
   for (const d of dppItems) {
+    if (!d.pdfUrl) continue;
     allPdfs.push({
       id: `pdf_dpp_${d.id}`,
       title: `${d.title} (Practice Sheet)`,
       category: "DPP",
       subject: d.subject,
       chapter: d.chapter,
-      fileUrl: d.pdfUrl || `/api/dpp/${d.id}/pdf`,
+      fileUrl: d.pdfUrl,
       fileName: `${d.code || "DPP"}.pdf`,
       sizeBytes: 150000,
       allowDownload: true,
@@ -748,21 +767,23 @@ export async function loadStudentBatchHome(
     });
   }
 
-  // 8.2 Test PDFs
+  // 8.2 Test PDFs (Only after submission and scheduled test window ends)
   for (const t of testItems) {
-    allPdfs.push({
-      id: `pdf_test_${t.id}`,
-      title: `${t.name} (Question Paper)`,
-      category: "TESTS",
-      subject: t.subject,
-      chapter: t.chapter,
-      fileUrl: t.questionPdfUrl || `/api/tests/${t.id}/pdf`,
-      fileName: `${t.name}.pdf`,
-      sizeBytes: 250000,
-      allowDownload: true,
-      createdAt: t.openTime || new Date().toISOString(),
-      sourceType: "TEST_PDF",
-    });
+    if (t.questionPdfUrl) {
+      allPdfs.push({
+        id: `pdf_test_${t.id}`,
+        title: `${t.name} (Question Paper)`,
+        category: "TESTS",
+        subject: t.subject,
+        chapter: t.chapter,
+        fileUrl: t.questionPdfUrl,
+        fileName: `${t.name}.pdf`,
+        sizeBytes: 250000,
+        allowDownload: true,
+        createdAt: t.openTime || new Date().toISOString(),
+        sourceType: "TEST_PDF",
+      });
+    }
 
     if (t.solutionPdfUrl) {
       allPdfs.push({

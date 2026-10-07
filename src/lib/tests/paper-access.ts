@@ -15,7 +15,7 @@ export async function studentPaperBlockReason(
   userId: string,
   role: string | undefined,
   testId: string,
-  withSolution: boolean
+  _withSolution: boolean
 ): Promise<string | null> {
   if (role !== "STUDENT" && role !== "PARENT") return null;
   const dbTest = await prisma.test.findUnique({
@@ -36,21 +36,30 @@ export async function studentPaperBlockReason(
     : false;
   if (!dbTest || !published) return "This paper isn't published yet.";
 
+  const student = await prisma.student.findUnique({ where: { userId }, select: { id: true } });
+  if (!student) return "Student account not found.";
+
+  const attempt = await prisma.attempt.findFirst({
+    where: { testId, studentId: student.id, status: { in: ["SUBMITTED", "AUTO_SUBMITTED"] } },
+    select: { id: true },
+  });
+
   if (isDppTest(dbTest)) {
-    if (withSolution) {
-      const student = await prisma.student.findUnique({ where: { userId }, select: { id: true } });
-      const done = student
-        ? await prisma.attempt.findFirst({
-            where: { testId, studentId: student.id, status: { in: ["SUBMITTED", "AUTO_SUBMITTED"] } },
-            select: { id: true },
-          })
-        : null;
-      if (!done) return "DPP solutions open after you submit the DPP.";
+    if (!attempt) {
+      return "DPP PDF is available only after you submit the DPP.";
     }
     return null;
   }
-  if (withSolution && !areResultsReleased(dbTest)) {
-    return `The test solutions open for everyone after the test time is over (${resultsReleaseAt(dbTest)?.toISOString()}).`;
+
+  // Regular Test: Must be submitted AND scheduled test time must be over
+  if (!attempt) {
+    return "Test PDF is available only after you submit your test.";
   }
+
+  if (!areResultsReleased(dbTest)) {
+    const releaseTime = resultsReleaseAt(dbTest);
+    return `Test PDF opens for everyone after the test scheduled time is over (${releaseTime ? releaseTime.toISOString() : "scheduled window"}).`;
+  }
+
   return null;
 }

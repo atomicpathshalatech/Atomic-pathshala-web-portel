@@ -21,15 +21,43 @@ export async function resolveStudentForSeries(userId: string, testSeriesId: stri
 
   if (series.visibility === "PUBLIC") return { series, student };
 
-  if (series.className && student.class !== series.className) return { series, student: null };
-  if (series.course && student.targetExam !== series.course) return { series, student: null };
+  // 1. Direct check: is the student enrolled in any active batch linked to this test series via BatchTestSeries?
+  const batchLinked = await prisma.batchTestSeries.findFirst({
+    where: {
+      testSeriesId: series.id,
+      batch: {
+        enrollments: {
+          some: {
+            studentId: student.id,
+            status: "ACTIVE",
+          },
+        },
+      },
+    },
+  });
+  if (batchLinked) return { series, student };
 
+  // 2. Check targetBatch field if specified
   if (series.targetBatch) {
     const enrolled = await prisma.batchEnrollment.findFirst({
-      where: { studentId: student.id, status: "ACTIVE", batch: { name: series.targetBatch } },
+      where: {
+        studentId: student.id,
+        status: "ACTIVE",
+        batch: {
+          OR: [
+            { name: series.targetBatch },
+            { code: series.targetBatch },
+            { id: series.targetBatch },
+          ],
+        },
+      },
     });
-    if (!enrolled) return { series, student: null };
+    if (enrolled) return { series, student };
   }
+
+  // 3. Optional class and course filters
+  if (series.className && student.class !== series.className) return { series, student: null };
+  if (series.course && student.targetExam !== series.course) return { series, student: null };
 
   return { series, student };
 }
