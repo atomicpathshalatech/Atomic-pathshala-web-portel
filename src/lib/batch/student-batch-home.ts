@@ -1,11 +1,41 @@
 import "server-only";
 import { prisma } from "@/lib/db";
+import { canStudentJoinClass, getEffectiveScheduleStatus } from "@/lib/schedule/access-rules";
 
-/**
- * Everything an enrolled student's batch page shows, in one place (PW/Allen
- * style): classes (live, upcoming, recorded) + chapters, the batch's tests,
- * its study-material folders, and its announcements.
- */
+const IST = "Asia/Kolkata";
+const dayKey = (d: string | Date) => new Date(d).toLocaleDateString("en-CA", { timeZone: IST });
+const timeFmt = (d: string | Date) =>
+  new Date(d).toLocaleTimeString("en-IN", { timeZone: IST, hour: "numeric", minute: "2-digit", hour12: true });
+
+export type AcademicEventType = "LIVE_CLASS" | "TEST" | "DPP" | "OTHER";
+
+export type AcademicEventStatus =
+  | "LIVE_NOW"
+  | "UPCOMING"
+  | "COMPLETED"
+  | "AVAILABLE"
+  | "ATTEMPTED"
+  | "SUBMITTED"
+  | "CANCELLED";
+
+export type AcademicEvent = {
+  id: string;
+  type: AcademicEventType;
+  title: string;
+  subject: string;
+  chapter: string | null;
+  teacherName: string | null;
+  dateKey: string; // YYYY-MM-DD
+  startsAt: string;
+  endsAt: string | null;
+  status: AcademicEventStatus;
+  actionLabel: string;
+  actionHref: string | null;
+  score: number | null;
+  durationMin: number | null;
+  questionCount: number | null;
+  pdfUrl: string | null;
+};
 
 export type BatchClassItem = {
   id: string;
@@ -16,44 +46,89 @@ export type BatchClassItem = {
   endsAt: string;
   status: string;
   type: string;
-  liveWhiteboardSession: { status?: string; livePhase?: string } | null;
-  /** For the Recorded folders: Subject → Chapter. */
+  liveWhiteboardSession: { id?: string; status?: string; livePhase?: string; youtubeVideoId?: string | null } | null;
   chapterId: string | null;
   chapterTitle: string | null;
   subjectName: string;
+  notesPdfUrl?: string | null;
 };
 
-export type BatchChapterItem = { id: string; title: string; subjectId: string; subject: string; lectures: number; dpps: number };
+export type BatchChapterItem = {
+  id: string;
+  title: string;
+  subjectId: string;
+  subject: string;
+  lectures: number;
+  dpps: number;
+  tests: number;
+};
 
 export type BatchTestItem = {
   id: string;
   name: string;
+  subject: string;
+  chapter: string | null;
   durationMin: number;
+  totalMarks: number;
   openTime: string | null;
   closeTime: string | null;
   attemptStatus: "NOT_STARTED" | "IN_PROGRESS" | "SUBMITTED";
-};
-
-export type BatchFolderNode = {
-  id: string;
-  parentId: string | null;
-  name: string;
-  files: { id: string; title: string; fileName: string; sizeBytes: number }[];
+  score: number | null;
+  maxScore: number | null;
+  accuracy: number | null;
+  correctCount: number | null;
+  incorrectCount: number | null;
+  questionPdfUrl: string | null;
+  solutionPdfUrl: string | null;
 };
 
 export type BatchDppItem = {
   id: string;
+  code: string;
   title: string;
   subject: string;
   chapter: string;
+  chapterId: string | null;
   questionCount: number;
   durationMin: number;
-  /** UPCOMING = not open yet; LOCKED = published but no questions yet. */
-  status: "UPCOMING" | "LOCKED" | "PENDING" | "IN_PROGRESS" | "COMPLETED";
+  status: "AVAILABLE" | "UPCOMING" | "LOCKED" | "IN_PROGRESS" | "COMPLETED";
   score: number | null;
+  correctCount: number | null;
+  incorrectCount: number | null;
+  accuracy: number | null;
   opensAt: string | null;
-  /** Where Attempt / Result goes. */
+  pdfUrl: string | null;
   href: string | null;
+};
+
+export type BatchPdfCategory = "CLASS_NOTES" | "DPP" | "TESTS" | "MODULES" | "SYLLABUS";
+
+export type BatchPdfItem = {
+  id: string;
+  title: string;
+  category: BatchPdfCategory;
+  subject: string;
+  chapter: string | null;
+  fileUrl: string;
+  fileName: string;
+  sizeBytes: number;
+  allowDownload: boolean;
+  createdAt: string;
+  sourceType: "CLASS_ATTACHMENT" | "DPP_PDF" | "TEST_PDF" | "MODULE" | "BATCH_FILE";
+};
+
+export type BatchModuleItem = {
+  id: string;
+  code: string;
+  title: string;
+  subject: string;
+  chapter: string | null;
+  facultyName: string | null;
+  pageCount: number;
+  fileUrl: string;
+  fileName: string;
+  allowDownload: boolean;
+  createdAt: string;
 };
 
 export type BatchTeacherCard = {
@@ -65,19 +140,74 @@ export type BatchTeacherCard = {
   bio: string | null;
 };
 
-export type BatchNotice = { id: string; title: string; body: string; createdAt: string; deepLink: string | null };
+export type BatchDoubtSlotItem = {
+  id: string;
+  teacherId: string;
+  teacherName: string;
+  teacherPhotoUrl: string | null;
+  subject: string;
+  startsAt: string;
+  endsAt: string;
+  durationMinutes: number;
+  isBooked: boolean;
+};
+
+export type StudentDoubtBookingItem = {
+  id: string;
+  teacherName: string;
+  topic: string | null;
+  startsAt: string;
+  endsAt: string;
+  status: string;
+  meetingUrl: string | null;
+};
+
+export type BatchFolderNode = {
+  id: string;
+  parentId: string | null;
+  name: string;
+  files: { id: string; title: string; fileName: string; sizeBytes: number; allowDownload?: boolean }[];
+};
+
+export type BatchNotice = {
+  id: string;
+  title: string;
+  body: string;
+  createdAt: string;
+  deepLink: string | null;
+};
 
 export type StudentBatchHomeData = {
-  batch: { id: string; name: string; code: string; exam: string | null; thumbnailUrl: string | null; teachers: string[]; teacherCards: BatchTeacherCard[] };
+  batch: {
+    id: string;
+    name: string;
+    code: string;
+    exam: string | null;
+    thumbnailUrl: string | null;
+    teachers: string[];
+    teacherCards: BatchTeacherCard[];
+  };
+  timelineEvents: AcademicEvent[];
   classes: BatchClassItem[];
   chapters: BatchChapterItem[];
   tests: BatchTestItem[];
   dpps: BatchDppItem[];
+  allPdfs: BatchPdfItem[];
+  modules: BatchModuleItem[];
+  doubtSlots: BatchDoubtSlotItem[];
+  studentBookings: StudentDoubtBookingItem[];
   folders: BatchFolderNode[];
   notices: BatchNotice[];
 };
 
-export async function loadStudentBatchHome(batchId: string, studentId: string, userId: string): Promise<StudentBatchHomeData | null> {
+export async function loadStudentBatchHome(
+  batchId: string,
+  studentId: string,
+  userId: string
+): Promise<StudentBatchHomeData | null> {
+  const now = new Date();
+
+  // 1. Fetch Batch with Course & Teachers
   const batch = await prisma.batch.findUnique({
     where: { id: batchId },
     select: {
@@ -105,35 +235,159 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, u
   });
   if (!batch) return null;
 
-  const visibleChapter = { status: { in: ["PUBLISHED" as const, "APPROVED" as const] } };
-  const [schedules, assigned, courseChapters, seriesLinks, folders, notifications, broadcasts] = await Promise.all([
-    prisma.batchSchedule.findMany({
-      where: { batchId, type: "LIVE_CLASS", status: { not: "CANCELLED" } },
-      orderBy: { startsAt: "asc" },
-      select: {
-        id: true,
-        title: true,
-        subject: true,
-        startsAt: true,
-        endsAt: true,
-        status: true,
-        type: true,
-        teacher: { select: { user: { select: { name: true } } } },
-        liveWhiteboardSession: { select: { status: true, livePhase: true } },
-        chapter: { select: { id: true, title: true, subject: { select: { title: true } } } },
-      },
-    }),
+  const teacherIds = batch.teachers.map((t) => t.teacher.id);
+
+  // 2. Fetch Assigned Chapters & Course Chapters
+  const [assignedChapters, courseChapters] = await Promise.all([
     prisma.batchChapter.findMany({
-      where: { batchId, chapter: visibleChapter },
-      select: { chapter: { select: { id: true, title: true, order: true, subject: { select: { id: true, title: true } }, _count: { select: { lectures: true, dpps: true } } } } },
+      where: { batchId },
+      select: {
+        chapter: {
+          select: {
+            id: true,
+            title: true,
+            order: true,
+            status: true,
+            subject: { select: { id: true, title: true } },
+            _count: { select: { lectures: true, dpps: true, tests: true } },
+          },
+        },
+      },
     }),
     batch.courseId
       ? prisma.chapter.findMany({
-          where: { ...visibleChapter, subject: { courseId: batch.courseId } },
-          select: { id: true, title: true, order: true, subject: { select: { id: true, title: true } }, _count: { select: { lectures: true, dpps: true } } },
+          where: { subject: { courseId: batch.courseId } },
+          select: {
+            id: true,
+            title: true,
+            order: true,
+            status: true,
+            subject: { select: { id: true, title: true } },
+            _count: { select: { lectures: true, dpps: true, tests: true } },
+          },
         })
       : Promise.resolve([]),
+  ]);
+
+  const chapterMap = new Map<string, BatchChapterItem & { order: number }>();
+  for (const c of [...assignedChapters.map((a) => a.chapter), ...courseChapters]) {
+    if (!c || chapterMap.has(c.id)) continue;
+    chapterMap.set(c.id, {
+      id: c.id,
+      title: c.title,
+      subjectId: c.subject.id,
+      subject: c.subject.title,
+      lectures: c._count.lectures,
+      dpps: c._count.dpps,
+      tests: c._count.tests,
+      order: c.order ?? 0,
+    });
+  }
+
+  const chapters = [...chapterMap.values()]
+    .sort((a, b) => a.subject.localeCompare(b.subject) || a.order - b.order || a.title.localeCompare(b.title))
+    .map(({ order: _order, ...c }) => c);
+
+  const chapterIds: string[] = Array.from(chapterMap.keys());
+  const chapterTitles: string[] = Array.from(chapterMap.values()).map((c) => c.title);
+  const subjectTitles: string[] = Array.from(new Set(Array.from(chapterMap.values()).map((c) => c.subject)));
+
+  // 3. Parallel Queries for Batch Schedules, DPPs, Tests, Folders, Modules, Doubts & Notifications
+  const [
+    schedules,
+    dppSchedules,
+    chapterDpps,
+    batchTestSeries,
+    rawTests,
+    folders,
+    modules,
+    doubtSlots,
+    studentBookings,
+    notifications,
+    broadcasts,
+  ] = await Promise.all([
+    // Live & Recorded Classes
+    prisma.batchSchedule.findMany({
+      where: { batchId, type: "LIVE_CLASS" },
+      orderBy: { startsAt: "asc" },
+      include: {
+        teacher: { select: { user: { select: { name: true } } } },
+        liveWhiteboardSession: { select: { id: true, status: true, livePhase: true, youtubeVideoId: true } },
+        chapter: { select: { id: true, title: true, subject: { select: { title: true } } } },
+      },
+    }),
+
+    // DPPs in Schedule
+    prisma.batchSchedule.findMany({
+      where: { batchId, type: "DPP", status: { not: "CANCELLED" } },
+      orderBy: { startsAt: "desc" },
+      take: 100,
+      include: {
+        chapter: { select: { title: true, subject: { select: { title: true } } } },
+        test: {
+          include: {
+            sections: { select: { targetCount: true, _count: { select: { questions: true } } } },
+            attempts: {
+              where: { studentId },
+              orderBy: { startedAt: "desc" },
+              take: 1,
+              select: { status: true, score: true },
+            },
+          },
+        },
+      },
+    }),
+
+    // Direct Chapter DPPs (Multi-relationship matching)
+    prisma.dpp.findMany({
+      where: {
+        OR: [
+          ...(chapterIds.length ? [{ chapterId: { in: chapterIds } }] : []),
+          ...(chapterTitles.length ? [{ chapter: { in: chapterTitles } }] : []),
+          ...(subjectTitles.length ? [{ subject: { in: subjectTitles } }] : []),
+        ],
+      },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+      include: {
+        _count: { select: { questions: true } },
+        attempts: {
+          where: { studentId },
+          orderBy: { startedAt: "desc" },
+          take: 1,
+          select: { status: true, score: true, startedAt: true, submittedAt: true },
+        },
+      },
+    }),
+
+    // Test Series Links
     prisma.batchTestSeries.findMany({ where: { batchId }, select: { testSeriesId: true } }),
+
+    // Batch Tests
+    prisma.test.findMany({
+      where: {
+        archived: false,
+        OR: [
+          { batchSchedule: { batchId, type: { not: "DPP" } } },
+          ...(chapterIds.length ? [{ chapterId: { in: chapterIds } }] : []),
+          ...(batch.courseId ? [{ chapter: { subject: { courseId: batch.courseId } } }] : []),
+        ],
+      },
+      orderBy: [{ openTime: "desc" }, { createdAt: "desc" }],
+      take: 100,
+      include: {
+        chapter: { select: { title: true, subject: { select: { title: true } } } },
+        sections: { select: { marksPerQuestion: true, targetCount: true, _count: { select: { questions: true } } } },
+        attempts: {
+          where: { studentId },
+          orderBy: { startedAt: "desc" },
+          take: 1,
+          select: { status: true, score: true, submittedAt: true },
+        },
+      },
+    }),
+
+    // Batch Folders & Files
     prisma.batchFolder.findMany({
       where: { batchId, isPublished: true },
       orderBy: [{ order: "asc" }, { name: "asc" }],
@@ -148,12 +402,73 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, u
         },
       },
     }),
+
+    // Modules & Notes assigned to this batch or subject/chapter
+    prisma.module.findMany({
+      where: {
+        status: { in: ["READY", "PUBLISHED", "DRAFT"] },
+        OR: [
+          { batch: { in: [batch.id, batch.code, batch.name] } },
+          ...(subjectTitles.length ? [{ subject: { in: subjectTitles } }] : []),
+          ...(chapterTitles.length ? [{ chapter: { in: chapterTitles } }] : []),
+        ],
+      },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+      include: {
+        exportHistory: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { id: true, fileUrl: true, fileName: true, fileSize: true },
+        },
+      },
+    }),
+
+    // Available Faculty Doubt Slots
+    teacherIds.length
+      ? prisma.doubtSlot.findMany({
+          where: {
+            teacherId: { in: teacherIds },
+            status: "OPEN",
+            startTime: { gte: now },
+          },
+          orderBy: { startTime: "asc" },
+          take: 20,
+          include: {
+            teacher: {
+              select: {
+                displayName: true,
+                subjects: true,
+                user: { select: { name: true, photoUrl: true } },
+              },
+            },
+          },
+        })
+      : Promise.resolve([]),
+
+    // Student's Doubt Bookings
+    prisma.doubtBooking.findMany({
+      where: {
+        studentId,
+        status: "CONFIRMED",
+      },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+      include: {
+        slot: { select: { startTime: true, endTime: true } },
+        teacher: { select: { displayName: true, user: { select: { name: true } } } },
+      },
+    }),
+
+    // In-app Notifications
     prisma.notification.findMany({
       where: { userId, batchId },
       orderBy: { createdAt: "desc" },
       take: 30,
       select: { id: true, title: true, body: true, createdAt: true, deepLink: true },
     }),
+
+    // Batch Broadcasts
     prisma.notificationBroadcast.findMany({
       where: { segmentType: "BATCH", segmentValue: batchId },
       orderBy: { createdAt: "desc" },
@@ -162,142 +477,351 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, u
     }),
   ]);
 
-  // A folder is visible only if every folder above it is published too.
-  const byId = new Map(folders.map((f) => [f.id, f]));
-  // (byId holds only published folders, so an unpublished ancestor breaks the chain.)
-  const visible = (f: (typeof folders)[number], depth = 0): boolean => {
-    if (!f.parentId) return true;
-    const parent = byId.get(f.parentId);
-    return Boolean(parent) && depth < 50 && visible(parent!, depth + 1);
-  };
+  // 4. Transform DPPs
+  const dppItems: BatchDppItem[] = [];
+  const seenDppIds = new Set<string>();
 
-  const chapterMap = new Map<string, BatchChapterItem & { order: number }>();
-  for (const c of [...assigned.map((a) => a.chapter), ...courseChapters]) {
-    if (chapterMap.has(c.id)) continue;
-    chapterMap.set(c.id, { id: c.id, title: c.title, subjectId: c.subject.id, subject: c.subject.title, lectures: c._count.lectures, dpps: c._count.dpps, order: c.order ?? 0 });
+  for (const d of chapterDpps) {
+    if (seenDppIds.has(d.id)) continue;
+    seenDppIds.add(d.id);
+
+    const att = d.attempts[0];
+    const qCount = d._count.questions || d.questionTargetCount || 10;
+    const status = (att?.status === "SUBMITTED" || att?.status === "AUTO_SUBMITTED")
+      ? "COMPLETED"
+      : att?.status === "IN_PROGRESS"
+      ? "IN_PROGRESS"
+      : "AVAILABLE";
+
+    dppItems.push({
+      id: d.id,
+      code: d.code,
+      title: d.name,
+      subject: d.subject || "Practice",
+      chapter: d.chapter || "Chapter Practice",
+      chapterId: d.chapterId,
+      questionCount: qCount,
+      durationMin: d.estimatedTimeMin || 30,
+      status,
+      score: att?.score ?? null,
+      correctCount: null,
+      incorrectCount: null,
+      accuracy: null,
+      opensAt: null,
+      pdfUrl: `/api/team/dpp/${d.id}/pdf`,
+      href: status === "COMPLETED" ? `/practice?dppId=${d.id}&result=1` : `/practice?dppId=${d.id}`,
+    });
   }
-  const chapters = [...chapterMap.values()]
-    .sort((a, b) => a.subject.localeCompare(b.subject) || a.order - b.order || a.title.localeCompare(b.title))
-    .map(({ order: _order, ...c }) => c);
 
-  // DPPs: the batch's own DPP slots (each backed by a test) plus the
-  // practice DPPs written for this batch's chapters.
-  const now = new Date();
-  const [dppSlots, chapterDpps] = await Promise.all([
-    prisma.batchSchedule.findMany({
-      where: { batchId, type: "DPP", status: { not: "CANCELLED" } },
-      orderBy: { startsAt: "desc" },
-      take: 200,
-      select: {
-        id: true,
-        title: true,
-        subject: true,
-        notes: true,
-        startsAt: true,
-        chapter: { select: { title: true, subject: { select: { title: true } } } },
-        test: {
-          select: {
-            id: true,
-            status: true,
-            archived: true,
-            durationMin: true,
-            sections: { select: { targetCount: true, _count: { select: { questions: true } } } },
-            attempts: { where: { studentId }, orderBy: { startedAt: "desc" }, take: 1, select: { status: true, score: true } },
-          },
-        },
-      },
-    }),
-    chapterMap.size
-      ? prisma.dpp.findMany({
-          where: { chapterId: { in: [...chapterMap.keys()] }, status: { in: ["PUBLISHED", "ACTIVE"] } },
-          orderBy: { createdAt: "desc" },
-          select: {
-            id: true,
-            name: true,
-            estimatedTimeMin: true,
-            questionTargetCount: true,
-            chapterId: true,
-            _count: { select: { questions: true } },
-            attempts: { where: { studentId }, orderBy: { startedAt: "desc" }, take: 1, select: { status: true, score: true } },
-          },
-        })
-      : Promise.resolve([]),
-  ]);
-  const attemptStatus = (a: { status: string } | undefined) =>
-    !a ? ("PENDING" as const) : a.status === "IN_PROGRESS" ? ("IN_PROGRESS" as const) : ("COMPLETED" as const);
-  const dpps: BatchDppItem[] = [
-    ...dppSlots.map((d): BatchDppItem => {
-      const t = d.test;
-      const questionCount = (t?.sections ?? []).reduce(
-        (n, sec) => n + Math.min(sec.targetCount > 0 ? sec.targetCount : Infinity, sec._count.questions),
-        0
-      );
-      const published = Boolean(t && t.status === "PUBLISHED" && !t.archived && questionCount > 0);
-      const upcoming = d.startsAt > now;
-      const a = t?.attempts[0];
-      const status = upcoming ? "UPCOMING" : !published ? "LOCKED" : attemptStatus(a);
-      return {
-        id: d.id,
-        title: d.title,
-        subject: d.chapter?.subject.title ?? d.subject ?? "Practice",
-        chapter: d.chapter?.title ?? d.notes ?? "Practice",
-        questionCount,
-        durationMin: t?.durationMin ?? 0,
-        status,
-        score: a?.score ?? null,
-        opensAt: d.startsAt.toISOString(),
-        href: status === "UPCOMING" || status === "LOCKED" || !t ? null : status === "COMPLETED" ? `/tests/${t.id}/result` : `/tests/${t.id}/attempt`,
-      };
-    }),
-    ...chapterDpps.map((d): BatchDppItem => {
-      const ch = chapterMap.get(d.chapterId!)!;
-      const ready = d._count.questions > 0;
-      const status = !ready ? "LOCKED" : attemptStatus(d.attempts[0]);
-      return {
-        id: d.id,
-        title: d.name,
-        subject: ch.subject,
-        chapter: ch.title,
-        questionCount: d._count.questions || d.questionTargetCount,
-        durationMin: d.estimatedTimeMin,
-        status,
-        score: d.attempts[0]?.score ?? null,
-        opensAt: null,
-        href: ready ? `/practice?dppId=${d.id}` : null,
-      };
-    }),
-  ];
+  for (const d of dppSchedules) {
+    if (seenDppIds.has(d.id)) continue;
+    seenDppIds.add(d.id);
 
-  const tests = await prisma.test.findMany({
-    where: {
-      archived: false,
-      status: { in: ["PUBLISHED", "APPROVED"] },
-      OR: [
-        { batchSchedule: { batchId, type: { not: "DPP" } } },
-        ...(seriesLinks.length ? [{ testSeriesId: { in: seriesLinks.map((s) => s.testSeriesId) } }] : []),
-      ],
-    },
-    orderBy: [{ openTime: "desc" }, { createdAt: "desc" }],
-    take: 60,
-    select: {
-      id: true,
-      name: true,
-      durationMin: true,
-      openTime: true,
-      closeTime: true,
-      attempts: { where: { studentId }, select: { status: true } },
-    },
+    const t = d.test;
+    const qCount = (t?.sections ?? []).reduce(
+      (n, sec) => n + Math.min(sec.targetCount > 0 ? sec.targetCount : Infinity, sec._count.questions),
+      0
+    );
+    const a = t?.attempts[0];
+    const isUpcoming = d.startsAt > now;
+    const status = isUpcoming
+      ? "UPCOMING"
+      : a?.status === "SUBMITTED"
+      ? "COMPLETED"
+      : a?.status === "IN_PROGRESS"
+      ? "IN_PROGRESS"
+      : "AVAILABLE";
+
+    dppItems.push({
+      id: d.id,
+      code: `DPP-${d.id.slice(-6).toUpperCase()}`,
+      title: d.title,
+      subject: d.chapter?.subject.title ?? d.subject ?? "Practice",
+      chapter: d.chapter?.title ?? d.notes ?? "Practice",
+      chapterId: null,
+      questionCount: qCount,
+      durationMin: t?.durationMin ?? 30,
+      status,
+      score: a?.score ?? null,
+      correctCount: null,
+      incorrectCount: null,
+      accuracy: null,
+      opensAt: d.startsAt.toISOString(),
+      pdfUrl: null,
+      href: status === "UPCOMING" || !t ? null : status === "COMPLETED" ? `/tests/${t.id}/result` : `/tests/${t.id}/attempt`,
+    });
+  }
+
+  // 5. Transform Tests
+  const testItems: BatchTestItem[] = rawTests.map((t) => {
+    const a = t.attempts[0];
+    const totalMarks = t.sections.reduce((acc, s) => acc + (s.targetCount || s._count.questions || 1) * (s.marksPerQuestion || 4), 0);
+    const attemptStatus = !a ? "NOT_STARTED" : a.status === "IN_PROGRESS" ? "IN_PROGRESS" : "SUBMITTED";
+
+    return {
+      id: t.id,
+      name: t.name,
+      subject: t.chapter?.subject.title ?? "Comprehensive Test",
+      chapter: t.chapter?.title ?? null,
+      durationMin: t.durationMin,
+      totalMarks: totalMarks || 720,
+      openTime: t.openTime?.toISOString() ?? null,
+      closeTime: t.closeTime?.toISOString() ?? null,
+      attemptStatus,
+      score: a?.score ?? null,
+      maxScore: totalMarks || 720,
+      accuracy: null,
+      correctCount: null,
+      incorrectCount: null,
+      questionPdfUrl: `/api/team/tests/${t.id}/pdf`,
+      solutionPdfUrl: attemptStatus === "SUBMITTED" ? `/api/team/tests/${t.id}/solution-pdf` : null,
+    };
   });
 
-  const seen = new Set<string>();
+  // 6. Transform Classes
+  const classItems: BatchClassItem[] = schedules.map((s) => ({
+    id: s.id,
+    title: s.title,
+    subject: s.subject,
+    teacherName: s.teacher?.user.name ?? null,
+    startsAt: s.startsAt.toISOString(),
+    endsAt: s.endsAt.toISOString(),
+    status: s.status,
+    type: s.type,
+    liveWhiteboardSession: s.liveWhiteboardSession,
+    chapterId: s.chapter?.id ?? null,
+    chapterTitle: s.chapter?.title ?? null,
+    subjectName: s.chapter?.subject.title ?? s.subject ?? "General",
+    notesPdfUrl: null,
+  }));
+
+  // 7. Build Unified Academic Events for Batch Timeline (Today & Upcoming)
+  const timelineEvents: AcademicEvent[] = [];
+
+  // Live classes -> timeline events
+  for (const c of classItems) {
+    const effectiveStatus = getEffectiveScheduleStatus(c, now);
+    const joinRule = canStudentJoinClass(c, now);
+    const isLive = effectiveStatus === "LIVE";
+    const isCompleted = effectiveStatus === "COMPLETED";
+    const isCancelled = effectiveStatus === "CANCELLED";
+
+    timelineEvents.push({
+      id: `class_${c.id}`,
+      type: "LIVE_CLASS",
+      title: c.title,
+      subject: c.subjectName,
+      chapter: c.chapterTitle,
+      teacherName: c.teacherName,
+      dateKey: dayKey(c.startsAt),
+      startsAt: c.startsAt,
+      endsAt: c.endsAt,
+      status: isLive ? "LIVE_NOW" : isCompleted ? "COMPLETED" : isCancelled ? "CANCELLED" : "UPCOMING",
+      actionLabel: isLive ? "Join Live" : isCompleted ? "Watch Recording" : joinRule.allowed ? "Enter Class" : timeFmt(c.startsAt),
+      actionHref: isCompleted ? `/watch/${c.id}` : `/live-class/${c.id}`,
+      score: null,
+      durationMin: Math.round((new Date(c.endsAt).getTime() - new Date(c.startsAt).getTime()) / 60000) || 60,
+      questionCount: null,
+      pdfUrl: null,
+    });
+  }
+
+  // Tests -> timeline events
+  for (const t of testItems) {
+    const isSubmitted = t.attemptStatus === "SUBMITTED";
+    const isInProgress = t.attemptStatus === "IN_PROGRESS";
+    const testDate = t.openTime || new Date().toISOString();
+
+    timelineEvents.push({
+      id: `test_${t.id}`,
+      type: "TEST",
+      title: t.name,
+      subject: t.subject,
+      chapter: t.chapter,
+      teacherName: "Examination Cell",
+      dateKey: dayKey(testDate),
+      startsAt: testDate,
+      endsAt: t.closeTime,
+      status: isSubmitted ? "SUBMITTED" : isInProgress ? "AVAILABLE" : "AVAILABLE",
+      actionLabel: isSubmitted ? "View Result" : isInProgress ? "Resume Test" : "Start Test",
+      actionHref: isSubmitted ? `/tests/${t.id}/result` : `/tests/${t.id}/attempt`,
+      score: t.score,
+      durationMin: t.durationMin,
+      questionCount: null,
+      pdfUrl: t.questionPdfUrl,
+    });
+  }
+
+  // DPPs -> timeline events
+  for (const d of dppItems) {
+    const dppDate = d.opensAt || new Date().toISOString();
+    const isCompleted = d.status === "COMPLETED";
+    const isInProgress = d.status === "IN_PROGRESS";
+
+    timelineEvents.push({
+      id: `dpp_${d.id}`,
+      type: "DPP",
+      title: d.title,
+      subject: d.subject,
+      chapter: d.chapter,
+      teacherName: null,
+      dateKey: dayKey(dppDate),
+      startsAt: dppDate,
+      endsAt: null,
+      status: isCompleted ? "SUBMITTED" : isInProgress ? "AVAILABLE" : "AVAILABLE",
+      actionLabel: isCompleted ? "View Result" : isInProgress ? "Resume DPP" : "Attempt DPP",
+      actionHref: d.href,
+      score: d.score,
+      durationMin: d.durationMin,
+      questionCount: d.questionCount,
+      pdfUrl: d.pdfUrl,
+    });
+  }
+
+  // Sort timeline chronologically
+  timelineEvents.sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
+
+  // 8. Build Centralized "All PDFs" Library
+  const allPdfs: BatchPdfItem[] = [];
+
+  // 8.1 DPP PDFs
+  for (const d of dppItems) {
+    allPdfs.push({
+      id: `pdf_dpp_${d.id}`,
+      title: `${d.title} (Practice Sheet)`,
+      category: "DPP",
+      subject: d.subject,
+      chapter: d.chapter,
+      fileUrl: d.pdfUrl || `/api/team/dpp/${d.id}/pdf`,
+      fileName: `${d.code || "DPP"}.pdf`,
+      sizeBytes: 150000,
+      allowDownload: true,
+      createdAt: d.opensAt || new Date().toISOString(),
+      sourceType: "DPP_PDF",
+    });
+  }
+
+  // 8.2 Test PDFs
+  for (const t of testItems) {
+    allPdfs.push({
+      id: `pdf_test_${t.id}`,
+      title: `${t.name} (Question Paper)`,
+      category: "TESTS",
+      subject: t.subject,
+      chapter: t.chapter,
+      fileUrl: t.questionPdfUrl || `/api/team/tests/${t.id}/pdf`,
+      fileName: `${t.name}.pdf`,
+      sizeBytes: 250000,
+      allowDownload: true,
+      createdAt: t.openTime || new Date().toISOString(),
+      sourceType: "TEST_PDF",
+    });
+
+    if (t.solutionPdfUrl) {
+      allPdfs.push({
+        id: `pdf_test_sol_${t.id}`,
+        title: `${t.name} (Solutions & Key)`,
+        category: "TESTS",
+        subject: t.subject,
+        chapter: t.chapter,
+        fileUrl: t.solutionPdfUrl,
+        fileName: `${t.name}-Solutions.pdf`,
+        sizeBytes: 350000,
+        allowDownload: true,
+        createdAt: t.openTime || new Date().toISOString(),
+        sourceType: "TEST_PDF",
+      });
+    }
+  }
+
+  // 8.3 Modules & Notes
+  const moduleItems: BatchModuleItem[] = modules.map((m) => {
+    const exportFile = m.exportHistory[0];
+    const fileUrl = exportFile?.fileUrl || m.originalFileUrl;
+    const fileName = exportFile?.fileName || m.originalFileName || `${m.code}.pdf`;
+
+    allPdfs.push({
+      id: `pdf_mod_${m.id}`,
+      title: `${m.title} (Module)`,
+      category: "MODULES",
+      subject: m.subject || "All Subjects",
+      chapter: m.chapter || null,
+      fileUrl,
+      fileName,
+      sizeBytes: exportFile?.fileSize || m.originalFileSize || 1000000,
+      allowDownload: true,
+      createdAt: m.createdAt.toISOString(),
+      sourceType: "MODULE",
+    });
+
+    return {
+      id: m.id,
+      code: m.code,
+      title: m.title,
+      subject: m.subject || "General",
+      chapter: m.chapter || null,
+      facultyName: m.facultyName || null,
+      pageCount: m.pageCount || 1,
+      fileUrl,
+      fileName,
+      allowDownload: true,
+      createdAt: m.createdAt.toISOString(),
+    };
+  });
+
+  // 8.4 Batch Folder Files (Syllabus, Brochure, Class Notes)
+  for (const f of folders) {
+    const isSyllabus = /syllabus|schedule|brochure|planner/i.test(f.name);
+    for (const file of f.files) {
+      allPdfs.push({
+        id: `pdf_file_${file.id}`,
+        title: file.title || file.fileName,
+        category: isSyllabus ? "SYLLABUS" : "CLASS_NOTES",
+        subject: f.name,
+        chapter: null,
+        fileUrl: `/api/batch-materials/${file.id}?inline=1`,
+        fileName: file.fileName,
+        sizeBytes: file.sizeBytes,
+        allowDownload: true,
+        createdAt: new Date().toISOString(),
+        sourceType: "BATCH_FILE",
+      });
+    }
+  }
+
+  // 9. Transform Doubt Slots & Bookings
+  const doubtSlotItems: BatchDoubtSlotItem[] = doubtSlots.map((s) => ({
+    id: s.id,
+    teacherId: s.teacherId,
+    teacherName: s.teacher.displayName || s.teacher.user.name,
+    teacherPhotoUrl: s.teacher.user.photoUrl ?? null,
+    subject: s.teacher.subjects[0] || "Academic Doubt",
+    startsAt: s.startTime.toISOString(),
+    endsAt: s.endTime.toISOString(),
+    durationMinutes: Math.round((s.endTime.getTime() - s.startTime.getTime()) / 60000) || 15,
+    isBooked: s.status === "BOOKED",
+  }));
+
+  const studentBookingItems: StudentDoubtBookingItem[] = studentBookings.map((b) => ({
+    id: b.id,
+    teacherName: b.teacher.displayName || b.teacher.user.name,
+    topic: b.topic || "1-to-1 Academic Doubt Session",
+    startsAt: b.slot.startTime.toISOString(),
+    endsAt: b.slot.endTime.toISOString(),
+    status: b.status,
+    meetingUrl: `/api/doubt-booking/bookings/${b.id}/join`,
+  }));
+
+  // 10. Transform Notices
+  const seenNotices = new Set<string>();
   const notices: BatchNotice[] = [];
   for (const n of [
     ...broadcasts.map((b) => ({ id: `b_${b.id}`, title: b.title, body: b.body, createdAt: b.createdAt, deepLink: null as string | null })),
     ...notifications.map((n) => ({ id: n.id, title: n.title, body: n.body, createdAt: n.createdAt, deepLink: n.deepLink })),
   ]) {
     const key = `${n.title}|${n.body}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
+    if (seenNotices.has(key)) continue;
+    seenNotices.add(key);
     notices.push({ ...n, createdAt: n.createdAt.toISOString() });
   }
   notices.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -319,34 +843,16 @@ export async function loadStudentBatchHome(batchId: string, studentId: string, u
         bio: t.bio ?? null,
       })),
     },
-    classes: schedules.map((s) => ({
-      id: s.id,
-      title: s.title,
-      subject: s.subject,
-      teacherName: s.teacher?.user.name ?? null,
-      startsAt: s.startsAt.toISOString(),
-      endsAt: s.endsAt.toISOString(),
-      status: s.status,
-      type: s.type,
-      liveWhiteboardSession: s.liveWhiteboardSession,
-      chapterId: s.chapter?.id ?? null,
-      chapterTitle: s.chapter?.title ?? null,
-      subjectName: s.chapter?.subject.title ?? s.subject ?? "Other classes",
-    })),
+    timelineEvents,
+    classes: classItems,
     chapters,
-    tests: tests.map((t) => {
-      const st = t.attempts[0]?.status;
-      return {
-        id: t.id,
-        name: t.name,
-        durationMin: t.durationMin,
-        openTime: t.openTime?.toISOString() ?? null,
-        closeTime: t.closeTime?.toISOString() ?? null,
-        attemptStatus: !st ? "NOT_STARTED" : st === "IN_PROGRESS" ? "IN_PROGRESS" : "SUBMITTED",
-      };
-    }),
-    dpps,
-    folders: folders.filter(visible).map((f) => ({ id: f.id, parentId: f.parentId, name: f.name, files: f.files })),
+    tests: testItems,
+    dpps: dppItems,
+    allPdfs,
+    modules: moduleItems,
+    doubtSlots: doubtSlotItems,
+    studentBookings: studentBookingItems,
+    folders: folders.map((f) => ({ id: f.id, parentId: f.parentId, name: f.name, files: f.files })),
     notices: notices.slice(0, 40),
   };
 }

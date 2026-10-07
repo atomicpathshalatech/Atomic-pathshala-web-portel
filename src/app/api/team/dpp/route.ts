@@ -85,6 +85,8 @@ export async function POST(request: NextRequest) {
             name: data.name,
             subject,
             chapter: chapter ?? "Unclassified",
+            chapterId: data.chapterId || undefined,
+            status: "ACTIVE",
             facultyName: data.facultyName || null,
             difficulty: data.difficulty,
             languageMode: data.languageMode,

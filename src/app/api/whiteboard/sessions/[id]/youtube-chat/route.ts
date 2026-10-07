@@ -89,7 +89,7 @@ export async function GET(
 
     if (!wbSession) return apiError("Whiteboard session not found", 404);
 
-    if (access.role !== "TEACHER" || Date.now() < quotaBlockedUntil) {
+    if (Date.now() < quotaBlockedUntil) {
       return apiSuccess({ messages: [], active: false, pollingIntervalMillis: 60_000 });
     }
 

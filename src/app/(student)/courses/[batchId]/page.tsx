@@ -116,8 +116,9 @@ export default async function BatchCoursePage({
   if (isEnrolled && dbBatch && studentId && userId) {
     const data = await loadStudentBatchHome(dbBatch.id, studentId, userId);
     if (data) {
-      const t = searchParams?.tab;
-      const initialTab: BatchTab = t === "recorded" || t === "dpp" || t === "tests" || t === "material" || t === "notices" ? t : "classes";
+      const t = searchParams?.tab as BatchTab | undefined;
+      const validTabs: BatchTab[] = ["timeline", "classes", "recorded", "dpp", "tests", "pdfs", "modules", "faculty", "notices"];
+      const initialTab: BatchTab = t && validTabs.includes(t) ? t : "timeline";
       return <StudentBatchHome data={data} initialTab={initialTab} />;
     }
   }
