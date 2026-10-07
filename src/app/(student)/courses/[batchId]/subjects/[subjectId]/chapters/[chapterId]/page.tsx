@@ -17,19 +17,20 @@ export default async function ChapterPage({
   params,
   searchParams,
 }: {
-  params: { batchId: string; subjectId: string; chapterId: string };
+  params: { batchId: string; subjectId: string; chapterId: string } | Promise<{ batchId: string; subjectId: string; chapterId: string }>;
   searchParams: { locked?: string; required?: string; submitted?: string };
 }) {
   const { student } = await requireStudentSession();
+  const resolvedParams = await Promise.resolve(params);
 
   const chapter = await prisma.chapter.findUnique({
-    where: { id: params.chapterId },
+    where: { id: resolvedParams.chapterId },
     include: {
       subject: { include: { course: true } },
     },
   });
 
-  if (!chapter || (chapter.status !== "PUBLISHED" && chapter.status !== "APPROVED") || chapter.subjectId !== params.subjectId) {
+  if (!chapter || (chapter.status !== "PUBLISHED" && chapter.status !== "APPROVED") || chapter.subjectId !== resolvedParams.subjectId) {
     notFound();
   }
 
@@ -70,7 +71,7 @@ export default async function ChapterPage({
     prisma.batchSchedule.findMany({
       where: {
         chapterId: chapter.id,
-        batchId: params.batchId,
+        batchId: resolvedParams.batchId,
         lectureId: null,
       },
       orderBy: { startsAt: "asc" },
@@ -119,7 +120,7 @@ export default async function ChapterPage({
   // Build 1-to-1 Roadmap steps: from lectures and standalone scheduled live classes
   const lectureSteps: RoadmapTopicGroup[] = lectures.map((l, idx) => {
     const matchedSchedule =
-      l.batchSchedules?.find((s) => s.batchId === params.batchId) ||
+      l.batchSchedules?.find((s) => s.batchId === resolvedParams.batchId) ||
       l.batchSchedules?.[0];
 
     let isCancelled = false;
@@ -228,8 +229,8 @@ export default async function ChapterPage({
   });
 
   const startHref = firstUnlocked
-    ? `/courses/${params.batchId}/subjects/${chapter.subject.id}/chapters/${chapter.id}/lectures/${firstUnlocked.id}`
-    : `/courses/${params.batchId}/subjects/${chapter.subject.id}/chapters/${chapter.id}/lectures/${lectures[0]?.id || ""}`;
+    ? `/courses/${resolvedParams.batchId}/subjects/${chapter.subject.id}/chapters/${chapter.id}/lectures/${firstUnlocked.id}`
+    : `/courses/${resolvedParams.batchId}/subjects/${chapter.subject.id}/chapters/${chapter.id}/lectures/${lectures[0]?.id || ""}`;
 
   const detailData: ChapterDetailData = {
     id: chapter.id,
@@ -280,7 +281,7 @@ export default async function ChapterPage({
   return (
     <ChapterDetailView
       data={detailData}
-      backHref={`/courses/${params.batchId}/subjects/${chapter.subject.id}`}
+      backHref={`/courses/${resolvedParams.batchId}/subjects/${chapter.subject.id}`}
     />
   );
 }

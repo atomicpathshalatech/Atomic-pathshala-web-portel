@@ -38,46 +38,89 @@ export default async function MyQuestionBankPage() {
   // Calculate live question statistics per assignment
   const assignmentsWithStats = await Promise.all(
     assignments.map(async (a) => {
-      const [total, draft, review1, review2, published, rejected] = await Promise.all([
+      const cleanChap = a.chapter
+        .replace(/^\[class\s*\d+\]\s*/i, "")
+        .replace(/^ch\s*\d+:\s*/i, "")
+        .replace(/^\d+[\.:\s-]+/i, "")
+        .trim();
+
+      const chapterFilter = {
+        subject: { equals: a.subject, mode: "insensitive" as const },
+        OR: [
+          { chapter: { contains: cleanChap, mode: "insensitive" as const } },
+          { category: { contains: cleanChap, mode: "insensitive" as const } },
+        ],
+      };
+
+      const [
+        total,
+        aiAudited,
+        reviewed,
+        pendingReview,
+        published,
+        revision,
+        rework,
+        draft,
+        review1,
+        review2,
+      ] = await Promise.all([
+        prisma.question.count({ where: chapterFilter }),
         prisma.question.count({
           where: {
-            subject: { equals: a.subject, mode: "insensitive" },
-            category: { equals: a.chapter, mode: "insensitive" },
+            ...chapterFilter,
+            aiVerified: true,
           },
         }),
         prisma.question.count({
           where: {
-            subject: { equals: a.subject, mode: "insensitive" },
-            category: { equals: a.chapter, mode: "insensitive" },
-            status: "DRAFT",
+            ...chapterFilter,
+            status: { in: ["REVIEW_2", "PUBLISHED"] },
           },
         }),
         prisma.question.count({
           where: {
-            subject: { equals: a.subject, mode: "insensitive" },
-            category: { equals: a.chapter, mode: "insensitive" },
-            status: "REVIEW_1",
+            ...chapterFilter,
+            status: { in: ["DRAFT", "REVIEW_1"] },
           },
         }),
         prisma.question.count({
           where: {
-            subject: { equals: a.subject, mode: "insensitive" },
-            category: { equals: a.chapter, mode: "insensitive" },
-            status: "REVIEW_2",
-          },
-        }),
-        prisma.question.count({
-          where: {
-            subject: { equals: a.subject, mode: "insensitive" },
-            category: { equals: a.chapter, mode: "insensitive" },
+            ...chapterFilter,
             status: "PUBLISHED",
           },
         }),
         prisma.question.count({
           where: {
-            subject: { equals: a.subject, mode: "insensitive" },
-            category: { equals: a.chapter, mode: "insensitive" },
-            status: "REJECTED",
+            ...chapterFilter,
+            OR: [
+              { status: "REJECTED" },
+              { review1Status: "CHANGES_REQUESTED" },
+              { review2Status: "CHANGES_REQUESTED" },
+            ],
+          },
+        }),
+        prisma.question.count({
+          where: {
+            ...chapterFilter,
+            correctionStatus: "REWORK",
+          },
+        }),
+        prisma.question.count({
+          where: {
+            ...chapterFilter,
+            status: "DRAFT",
+          },
+        }),
+        prisma.question.count({
+          where: {
+            ...chapterFilter,
+            status: "REVIEW_1",
+          },
+        }),
+        prisma.question.count({
+          where: {
+            ...chapterFilter,
+            status: "REVIEW_2",
           },
         }),
       ]);
@@ -89,21 +132,27 @@ export default async function MyQuestionBankPage() {
         subject: a.subject,
         chapter: a.chapter,
         topic: a.topic,
-        targetCount: a.targetCount,
+        targetCount: total || a.targetCount || 0,
         difficulty: a.difficulty,
         status: a.status,
         dueDate: a.dueDate?.toISOString() || null,
+        instructions: a.instructions || a.notes,
         notes: a.notes,
         assignedTo: { id: a.assignedTo.id, name: a.assignedTo.name, email: a.assignedTo.email },
         assignedBy: a.assignedBy ? { id: a.assignedBy.id, name: a.assignedBy.name } : undefined,
         createdAt: a.createdAt.toISOString(),
         liveStats: {
           total,
+          aiAudited,
+          reviewed,
+          pendingReview,
+          published,
+          revision,
+          rework,
           draft,
           review1,
           review2,
-          published,
-          rejected,
+          rejected: revision,
         },
       };
     })
@@ -125,7 +174,7 @@ export default async function MyQuestionBankPage() {
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <MyQuestionBankDashboard
-        initialAssignments={assignmentsWithStats}
+        initialAssignments={assignmentsWithStats as any}
         isAssignAdmin={isAssignAdmin}
         currentUserId={session.user.id}
         facultyList={facultyList}

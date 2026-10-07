@@ -5,6 +5,8 @@ import { Navbar } from "@/components/landing/Navbar";
 import { Footer } from "@/components/landing/Footer";
 import { FacultyDirectoryList } from "@/components/teacher/FacultyDirectoryList";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Expert Faculty Directory | Atomic Pathshala",
   description:

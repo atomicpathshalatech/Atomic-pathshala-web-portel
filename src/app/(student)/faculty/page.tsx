@@ -3,6 +3,8 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { CheckCircle, Award, Briefcase, GraduationCap } from "lucide-react";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Our Expert Faculty — Atomic Pathshala",
   description: "Meet the top educators and subject matter experts at Atomic Pathshala.",

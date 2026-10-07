@@ -1,50 +1,33 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/db";
-import { hasPermission } from "@/lib/rbac/guard";
+import { requirePermission, UnauthorizedError } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
-import { runChapterAiAudit } from "@/lib/questions/chapter-audit-engine";
+import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
+import { auditChapterBatch } from "@/lib/questions/ai-audit-engine";
+
+export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-    }
+    if (!session?.user?.id) throw new UnauthorizedError();
+    await requirePermission(session.user.id, PERMISSIONS.QUESTION_VERIFY);
 
-    const canRead = await hasPermission(session.user.id, PERMISSIONS.QUESTION_READ);
-    if (!canRead) {
-      return NextResponse.json({ success: false, error: "Forbidden: insufficient permissions" }, { status: 403 });
-    }
-
-    const body = await req.json().catch(() => ({}));
-    const { subject, chapter, limit, batchSize = 25, deepAudit = false } = body;
+    const body = await req.json();
+    const { subject, chapter } = body;
 
     if (!subject || !chapter) {
-      return NextResponse.json(
-        { success: false, error: "Both subject and chapter are required for chapter audit." },
-        { status: 400 }
-      );
+      return apiError("Subject and Chapter are required to run AI Chapter Audit", 400);
     }
 
-    const report = await runChapterAiAudit(prisma as any, {
-      subject,
-      chapter,
-      limit: typeof limit === "number" && limit > 0 ? limit : undefined,
-      batchSize: typeof batchSize === "number" ? Math.min(Math.max(5, batchSize), 100) : 25,
-      deepAudit: Boolean(deepAudit),
-    });
+    const summary = await auditChapterBatch(subject, chapter);
 
-    return NextResponse.json({
-      success: true,
-      data: report,
+    return apiSuccess({
+      summary,
+      message: `Audited ${summary.auditedCount} questions (${summary.cachedCount} preserved/cached, ${summary.verifiedCount} AI Verified, ${summary.failedCount} Failed)`,
     });
   } catch (error) {
-    console.error("[audit-chapter] Error:", error);
-    return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "Internal error" },
-      { status: 500 }
-    );
+    return handleApiError(error);
   }
 }

@@ -99,6 +99,11 @@ export function directConversationChannel(conversationId: string) {
 
 export const DIRECT_MESSAGE_EVENTS = {
   NEW_MESSAGE: "new-message",
+  MESSAGE_UPDATED: "message-updated",
+  MESSAGE_DELETED: "message-deleted",
   MESSAGES_READ: "messages-read",
+  MESSAGES_DELIVERED: "messages-delivered",
+  TYPING_STATUS: "typing-status",
+  CONVERSATION_UPDATED: "conversation-updated",
 } as const;
 

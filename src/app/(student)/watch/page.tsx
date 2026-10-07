@@ -4,6 +4,8 @@ import { prisma } from "@/lib/db";
 import { AtomicVideoPlayer } from "@/components/student/AtomicVideoPlayer";
 import { createPresignedDownloadUrl } from "@/lib/storage/r2-client";
 
+export const dynamic = "force-dynamic";
+
 function RecordingNotReady({ title, status }: { title: string; status?: string }) {
   const failed = status === "FAILED" || status === "RECORDING_FAILED";
   return (

@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const type = searchParams.get("type"); // "TEACHER" | "STUDENT" | "ADMIN"
+    const type = searchParams.get("type"); // "TEACHER" | "STUDENT" | "ADMIN" | "BATCH" | "DOUBT"
     const query = (searchParams.get("q") || "").trim().toLowerCase();
 
     const userRole = (session.user as any).role || "STUDENT";
@@ -26,6 +26,7 @@ export async function GET(request: NextRequest) {
 
     let teachers: any[] = [];
     let students: any[] = [];
+    let batches: any[] = [];
 
     // Fetch teachers if requested or if caller is student/admin
     if (type === "TEACHER" || !type) {
@@ -90,6 +91,31 @@ export async function GET(request: NextRequest) {
       }));
     }
 
+    // Fetch batches
+    if (type === "BATCH" || !type) {
+      const rawBatches = await prisma.batch.findMany({
+        where: query
+          ? {
+              OR: [
+                { name: { contains: query, mode: "insensitive" } },
+                { code: { contains: query, mode: "insensitive" } },
+                { targetExam: { contains: query, mode: "insensitive" } },
+              ],
+            }
+          : undefined,
+        take: 30,
+      });
+
+      batches = rawBatches.map((b) => ({
+        id: b.id,
+        name: b.name,
+        code: b.code,
+        targetExam: b.targetExam,
+        type: "BATCH",
+        subtitle: `${b.code} • ${b.targetExam || "Batch Cohort"}`,
+      }));
+    }
+
     const adminRecipient = {
       id: "admin",
       userId: "admin",
@@ -102,6 +128,7 @@ export async function GET(request: NextRequest) {
     return apiSuccess({
       teachers,
       students,
+      batches,
       admin: adminRecipient,
     });
   } catch (error) {

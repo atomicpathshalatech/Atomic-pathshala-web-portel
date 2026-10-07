@@ -466,13 +466,22 @@ model TeacherTestimonial {
 }
 
 model TeacherDirectConversation {
-  id          String   @id @default(cuid())
-  studentId   String?
-  teacherId   String?
-  adminUserId String?
-  type        String   @default("TEACHER_STUDENT") // "TEACHER_STUDENT" | "STUDENT_ADMIN" | "TEACHER_ADMIN"
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                String   @id @default(cuid())
+  studentId         String?
+  teacherId         String?
+  adminUserId       String?
+  batchId           String?
+  title             String?
+  description       String?
+  iconUrl           String?
+  type              String   @default("TEACHER_STUDENT") // "TEACHER_STUDENT" | "STUDENT_ADMIN" | "TEACHER_ADMIN" | "BATCH_GROUP" | "DOUBT_EXPERT" | "ANNOUNCEMENT"
+  isPinned          Boolean  @default(false)
+  isArchived        Boolean  @default(false)
+  isMuted           Boolean  @default(false)
+  onlyAdminsCanPost Boolean  @default(false)
+  metadata          Json?    @default("{}")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   student   Student?               @relation(fields: [studentId], references: [id], onDelete: Cascade)
   teacher   Teacher?               @relation(fields: [teacherId], references: [id], onDelete: Cascade)
@@ -482,25 +491,41 @@ model TeacherDirectConversation {
   @@index([studentId])
   @@index([teacherId])
   @@index([adminUserId])
+  @@index([batchId])
   @@index([type])
   @@map("teacher_direct_conversations")
 }
 
 model TeacherDirectMessage {
-  id              String   @id @default(cuid())
+  id              String    @id @default(cuid())
   conversationId  String
   senderUserId    String
-  senderRole      String   // "STUDENT" | "TEACHER" | "ADMIN"
+  senderRole      String    // "STUDENT" | "TEACHER" | "ADMIN"
   recipientUserId String?
-  recipientRole   String?  // "STUDENT" | "TEACHER" | "ADMIN"
+  recipientRole   String?   // "STUDENT" | "TEACHER" | "ADMIN"
   body            String
+  mediaUrl        String?
+  mediaType       String?   // "IMAGE" | "VIDEO" | "AUDIO" | "DOCUMENT" | "VOICE"
+  mediaName       String?
+  mediaSize       Int?
+  replyToId       String?
+  isForwarded     Boolean   @default(false)
+  isEdited        Boolean   @default(false)
+  isDeleted       Boolean   @default(false)
+  deletedFor      Json?     @default("[]")
+  reactions       Json?     @default("{}")
+  starredBy       Json?     @default("[]")
+  pinnedAt        DateTime?
+  deliveredAt     DateTime?
   readAt          DateTime?
-  createdAt       DateTime @default(now())
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @default(now()) @updatedAt
 
   conversation TeacherDirectConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   @@index([conversationId, createdAt])
   @@index([recipientUserId, readAt])
+  @@index([senderUserId])
   @@map("teacher_direct_messages")
 }
 
@@ -2443,6 +2468,22 @@ model Question {
   correctionSubmittedAt   DateTime?
   correctionSubmittedById String?
 
+  microConcept            String?
+  examLevel               String?   @default("NEET") // NEET | JEE_MAIN | JEE_ADVANCED | CUET | BOARD | FOUNDATION | OLYMPIAD | OTHER
+  aiVerified              Boolean   @default(false)
+  aiAuditStatus           String?   @default("PENDING") // PENDING | PROCESSING | VERIFIED | FAILED | NEEDS_REVIEW | MODIFIED
+  aiAuditVersion          Int       @default(1)
+  aiAuditedAt             DateTime?
+  aiAuditResult           Json?
+  aiAuditScore            Int?
+  aiAuditIssues           Json?
+  aiAuditModel            String?
+  aiAuditPromptVersion    String?
+  aiAuditHash             String?
+  lastHumanEditedAt       DateTime?
+  lastHumanEditedById     String?
+  needsReaudit            Boolean   @default(true)
+
   createdBy             User?                 @relation("QuestionCreatedBy", fields: [createdById], references: [id])
   publishedBy           User?                 @relation("QuestionPublishedBy", fields: [publishedById], references: [id])
   review1By             User?                 @relation("QuestionReview1By", fields: [review1ById], references: [id])
@@ -2460,6 +2501,7 @@ model Question {
   answers               AttemptAnswer[]
   assets                QuestionAsset[]
   revisionAttempts      RevisionQuestionAttempt[]
+  auditLogs             QuestionAuditLog[]
 
   @@index([subject])
   @@index([difficulty])
@@ -2467,6 +2509,8 @@ model Question {
   @@index([correctionStatus])
   @@index([isPublished])
   @@index([pyqExam, pyqYear])
+  @@index([aiVerified])
+  @@index([aiAuditStatus])
   @@map("questions")
 }
 
@@ -4931,20 +4975,38 @@ model AcademicTopic {
 }
 
 model AcademicSubtopic {
-  id             String        @id @default(cuid())
+  id             String                 @id @default(cuid())
   topicId        String
   subtopicNumber String? // e.g. "1.1.1", "2.3.1"
   title          String
   titleHindi     String?
-  displayOrder   Int           @default(0)
-  isSystem       Boolean       @default(true)
-  isActive       Boolean       @default(true)
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  topic          AcademicTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  displayOrder   Int                    @default(0)
+  isSystem       Boolean                @default(true)
+  isActive       Boolean                @default(true)
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  topic          AcademicTopic          @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  microConcepts  AcademicMicroConcept[]
 
   @@index([topicId])
   @@map("academic_subtopics")
+}
+
+model AcademicMicroConcept {
+  id            String           @id @default(cuid())
+  subtopicId    String
+  conceptNumber String? // e.g. "1.1.1.a"
+  title         String
+  titleHindi    String?
+  displayOrder  Int              @default(0)
+  isSystem      Boolean          @default(true)
+  isActive      Boolean          @default(true)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  subtopic      AcademicSubtopic @relation(fields: [subtopicId], references: [id], onDelete: Cascade)
+
+  @@index([subtopicId])
+  @@map("academic_micro_concepts")
 }
 
 model ProgramMapping {
@@ -6371,7 +6433,7 @@ enum QuestionAssignmentStatus {
 
 model QuestionAssignment {
   id              String                   @id @default(cuid())
-  title           String
+  title           String                   @default("Chapter Review Assignment")
   description     String?
   subject         String
   chapter         String
@@ -6382,6 +6444,7 @@ model QuestionAssignment {
   assignedToId    String
   assignedById    String
   dueDate         DateTime?
+  instructions    String?                  @db.Text
   notes           String?
   createdAt       DateTime                 @default(now())
   updatedAt       DateTime                 @updatedAt
@@ -6394,6 +6457,29 @@ model QuestionAssignment {
   @@index([status])
   @@index([subject, chapter])
   @@map("question_assignments")
+}
+
+model QuestionAuditLog {
+  id            String   @id @default(cuid())
+  questionId    String
+  contentHash   String
+  aiModel       String
+  promptVersion String
+  score         Int
+  decision      String // VERIFIED | MODIFIED | NEEDS_HUMAN_REVIEW | FAILED
+  confidence    Float?
+  findings      Json
+  suggestions   Json?
+  issues        Json?
+  durationMs    Int?
+  errorStatus   String?
+  createdAt     DateTime @default(now())
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([questionId])
+  @@index([contentHash])
+  @@map("question_audit_logs")
 }
 
 // ============================================================================

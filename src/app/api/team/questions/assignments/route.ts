@@ -41,62 +41,111 @@ export async function GET(req: NextRequest) {
       orderBy: { createdAt: "desc" },
     });
 
-    // Compute live question stats for each assignment based on Subject & Chapter
+    // Compute comprehensive live question stats for each assigned chapter
     const assignmentStats = await Promise.all(
       assignments.map(async (a) => {
-        const [total, draft, review1, review2, published, rejected] = await Promise.all([
+        const cleanChap = a.chapter
+          .replace(/^\[class\s*\d+\]\s*/i, "")
+          .replace(/^ch\s*\d+:\s*/i, "")
+          .replace(/^\d+[\.:\s-]+/i, "")
+          .trim();
+
+        const chapterFilter = {
+          subject: { equals: a.subject, mode: "insensitive" as const },
+          OR: [
+            { chapter: { contains: cleanChap, mode: "insensitive" as const } },
+            { category: { contains: cleanChap, mode: "insensitive" as const } },
+          ],
+        };
+
+        const [
+          total,
+          aiAudited,
+          reviewed,
+          pendingReview,
+          published,
+          revision,
+          rework,
+          draft,
+          review1,
+          review2,
+        ] = await Promise.all([
+          prisma.question.count({ where: chapterFilter }),
           prisma.question.count({
             where: {
-              subject: { equals: a.subject, mode: "insensitive" },
-              category: { equals: a.chapter, mode: "insensitive" },
+              ...chapterFilter,
+              aiVerified: true,
             },
           }),
           prisma.question.count({
             where: {
-              subject: { equals: a.subject, mode: "insensitive" },
-              category: { equals: a.chapter, mode: "insensitive" },
-              status: "DRAFT",
+              ...chapterFilter,
+              status: { in: ["REVIEW_2", "PUBLISHED"] },
             },
           }),
           prisma.question.count({
             where: {
-              subject: { equals: a.subject, mode: "insensitive" },
-              category: { equals: a.chapter, mode: "insensitive" },
-              status: "REVIEW_1",
+              ...chapterFilter,
+              status: { in: ["DRAFT", "REVIEW_1"] },
             },
           }),
           prisma.question.count({
             where: {
-              subject: { equals: a.subject, mode: "insensitive" },
-              category: { equals: a.chapter, mode: "insensitive" },
-              status: "REVIEW_2",
-            },
-          }),
-          prisma.question.count({
-            where: {
-              subject: { equals: a.subject, mode: "insensitive" },
-              category: { equals: a.chapter, mode: "insensitive" },
+              ...chapterFilter,
               status: "PUBLISHED",
             },
           }),
           prisma.question.count({
             where: {
-              subject: { equals: a.subject, mode: "insensitive" },
-              category: { equals: a.chapter, mode: "insensitive" },
-              status: "REJECTED",
+              ...chapterFilter,
+              OR: [
+                { status: "REJECTED" },
+                { review1Status: "CHANGES_REQUESTED" },
+                { review2Status: "CHANGES_REQUESTED" },
+              ],
+            },
+          }),
+          prisma.question.count({
+            where: {
+              ...chapterFilter,
+              correctionStatus: "REWORK",
+            },
+          }),
+          prisma.question.count({
+            where: {
+              ...chapterFilter,
+              status: "DRAFT",
+            },
+          }),
+          prisma.question.count({
+            where: {
+              ...chapterFilter,
+              status: "REVIEW_1",
+            },
+          }),
+          prisma.question.count({
+            where: {
+              ...chapterFilter,
+              status: "REVIEW_2",
             },
           }),
         ]);
 
         return {
           ...a,
+          targetCount: total || a.targetCount || 0,
           liveStats: {
             total,
+            aiAudited,
+            reviewed,
+            pendingReview,
+            published,
+            revision,
+            rework,
             draft,
             review1,
             review2,
-            published,
-            rejected,
+            rejected: revision,
           },
         };
       })
@@ -115,10 +164,10 @@ export async function POST(req: NextRequest) {
     await requirePermission(session.user.id, PERMISSIONS.QUESTION_ASSIGN);
 
     const body = await req.json();
-    const { title, description, subject, chapter, topic, targetCount, difficulty, assignedToId, dueDate, notes } = body;
+    const { subject, chapter, assignedToId, instructions, notes } = body;
 
-    if (!title || !subject || !chapter || !assignedToId) {
-      return apiError("Title, subject, chapter, and assigned teacher are required", 400);
+    if (!subject || !chapter || !assignedToId) {
+      return apiError("Subject, Chapter, and Assigned Faculty are required", 400);
     }
 
     const assignedUser = await prisma.user.findUnique({ where: { id: assignedToId } });
@@ -126,22 +175,58 @@ export async function POST(req: NextRequest) {
       return apiError("Assigned user not found", 404);
     }
 
+    const cleanChap = chapter
+      .replace(/^\[class\s*\d+\]\s*/i, "")
+      .replace(/^ch\s*\d+:\s*/i, "")
+      .replace(/^\d+[\.:\s-]+/i, "")
+      .trim();
+
+    // Check total questions in this chapter
+    const totalQuestionsInChapter = await prisma.question.count({
+      where: {
+        subject: { equals: subject.trim(), mode: "insensitive" },
+        OR: [
+          { chapter: { contains: cleanChap, mode: "insensitive" } },
+          { category: { contains: cleanChap, mode: "insensitive" } },
+        ],
+      },
+    });
+
+    // Auto-generate title for clean chapter assignment
+    const title = `${subject.trim()} — ${cleanChap}`;
+
     const assignment = await prisma.questionAssignment.create({
       data: {
-        title: title.trim(),
-        description: description?.trim() || null,
+        title,
         subject: subject.trim(),
-        chapter: chapter.trim(),
-        topic: topic?.trim() || null,
-        targetCount: parseInt(targetCount || "0", 10) || 0,
-        difficulty: difficulty || null,
+        chapter: cleanChap,
+        targetCount: totalQuestionsInChapter,
         assignedToId,
         assignedById: session.user.id,
-        dueDate: dueDate ? new Date(dueDate) : null,
-        notes: notes?.trim() || null,
+        instructions: (instructions || notes)?.trim() || null,
+        notes: (instructions || notes)?.trim() || null,
+        status: "ASSIGNED",
       },
       include: {
         assignedTo: { select: { id: true, name: true, email: true } },
+      },
+    });
+
+    // Automatically associate unassigned questions in this chapter to the assigned reviewer
+    await prisma.question.updateMany({
+      where: {
+        subject: { equals: subject.trim(), mode: "insensitive" },
+        OR: [
+          { chapter: { contains: cleanChap, mode: "insensitive" } },
+          { category: { contains: cleanChap, mode: "insensitive" } },
+        ],
+        assignedToId: null,
+      },
+      data: {
+        assignedToId,
+        assignedById: session.user.id,
+        assignedAt: new Date(),
+        correctionStatus: "ASSIGNED",
       },
     });
 

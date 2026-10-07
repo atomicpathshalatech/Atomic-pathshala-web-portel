@@ -12,12 +12,13 @@ export const metadata: Metadata = {
 export default async function SubjectPage({
   params,
 }: {
-  params: { batchId: string; subjectId: string };
+  params: { batchId: string; subjectId: string } | Promise<{ batchId: string; subjectId: string }>;
 }) {
   const { student } = await requireStudentSession();
+  const resolvedParams = await Promise.resolve(params);
 
   const subject = await prisma.subject.findUnique({
-    where: { id: params.subjectId },
+    where: { id: resolvedParams.subjectId },
     include: {
       course: true,
       chapters: {
@@ -53,7 +54,7 @@ export default async function SubjectPage({
             Courses
           </Link>
           <span className="material-symbols-outlined text-sm">chevron_right</span>
-          <Link href={`/courses/${params.batchId}`} className="hover:text-primary">
+          <Link href={`/courses/${resolvedParams.batchId}`} className="hover:text-primary">
             {subject.course.title}
           </Link>
           <span className="material-symbols-outlined text-sm">chevron_right</span>
@@ -71,7 +72,7 @@ export default async function SubjectPage({
           {subject.chapters.map((c) => (
             <li key={c.id}>
               <Link
-                href={`/courses/${params.batchId}/subjects/${subject.id}/chapters/${c.id}`}
+                href={`/courses/${resolvedParams.batchId}/subjects/${subject.id}/chapters/${c.id}`}
                 className="glass-card rounded-xl p-4 flex items-center justify-between gap-3 hover:shadow-md transition-all block"
               >
                 <div>

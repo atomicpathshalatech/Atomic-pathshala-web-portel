@@ -34,6 +34,7 @@ export type AcademicEvent = {
   actionLabel: string;
   actionHref: string | null;
   score: number | null;
+  maxScore?: number | null;
   durationMin: number | null;
   questionCount: number | null;
   pdfUrl: string | null;
@@ -57,6 +58,15 @@ export type BatchClassItem = {
   notesPdfUrl?: string | null;
 };
 
+export type BatchLectureItem = {
+  id: string;
+  title: string;
+  duration: number;
+  videoUrl?: string | null;
+  slidesUrl?: string | null;
+  order: number;
+};
+
 export type BatchChapterItem = {
   id: string;
   title: string;
@@ -65,6 +75,7 @@ export type BatchChapterItem = {
   lectures: number;
   dpps: number;
   tests: number;
+  lectureList?: BatchLectureItem[];
 };
 
 export type BatchTestItem = {
@@ -76,14 +87,19 @@ export type BatchTestItem = {
   totalMarks: number;
   openTime: string | null;
   closeTime: string | null;
+  isUpcoming: boolean;
   attemptStatus: "NOT_STARTED" | "IN_PROGRESS" | "SUBMITTED";
   score: number | null;
   maxScore: number | null;
   accuracy: number | null;
   correctCount: number | null;
   incorrectCount: number | null;
+  unattemptedCount: number | null;
   questionPdfUrl: string | null;
   solutionPdfUrl: string | null;
+  actionLabel: string;
+  actionHref: string | null;
+  submittedAt?: string | null;
 };
 
 export type BatchDppItem = {
@@ -96,16 +112,22 @@ export type BatchDppItem = {
   questionCount: number;
   durationMin: number;
   status: "AVAILABLE" | "UPCOMING" | "LOCKED" | "IN_PROGRESS" | "COMPLETED";
+  isAttempted: boolean;
   score: number | null;
+  maxScore: number | null;
   correctCount: number | null;
   incorrectCount: number | null;
+  unattemptedCount: number | null;
   accuracy: number | null;
+  timeTakenSec: number | null;
   opensAt: string | null;
+  submittedAt: string | null;
   pdfUrl: string | null;
   href: string | null;
+  actionLabel: string;
 };
 
-export type BatchPdfCategory = "CLASS_NOTES" | "DPP" | "TESTS" | "MODULES" | "SYLLABUS";
+export type BatchPdfCategory = "ALL" | "CLASS_NOTES" | "DPP" | "TESTS" | "MODULES" | "SYLLABUS" | "PLANNER";
 
 export type BatchPdfItem = {
   id: string;
@@ -142,6 +164,7 @@ export type BatchTeacherCard = {
   subjects: string[];
   experienceYears: string | null;
   bio: string | null;
+  department?: string | null;
 };
 
 export type BatchDoubtSlotItem = {
@@ -153,6 +176,7 @@ export type BatchDoubtSlotItem = {
   startsAt: string;
   endsAt: string;
   durationMinutes: number;
+  status: "OPEN" | "BOOKED" | "COMPLETED";
   isBooked: boolean;
 };
 
@@ -162,8 +186,9 @@ export type StudentDoubtBookingItem = {
   topic: string | null;
   startsAt: string;
   endsAt: string;
-  status: string;
+  status: string; // "CONFIRMED" | "COMPLETED" | "CANCELLED"
   meetingUrl: string | null;
+  createdAt: string;
 };
 
 export type BatchFolderNode = {
@@ -187,6 +212,7 @@ export type StudentBatchHomeData = {
     name: string;
     code: string;
     exam: string | null;
+    description: string | null;
     thumbnailUrl: string | null;
     teachers: string[];
     teacherCards: BatchTeacherCard[];
@@ -219,6 +245,7 @@ export async function loadStudentBatchHome(
       name: true,
       code: true,
       targetExam: true,
+      description: true,
       thumbnailUrl: true,
       courseId: true,
       testSeries: { select: { testSeriesId: true } },
@@ -231,6 +258,7 @@ export async function loadStudentBatchHome(
               subjects: true,
               experienceYears: true,
               bio: true,
+              department: true,
               user: { select: { name: true, photoUrl: true } },
             },
           },
@@ -247,14 +275,22 @@ export async function loadStudentBatchHome(
   const [assignedChapters, courseChapters, schedules, dppSchedules] = await Promise.all([
     prisma.batchChapter.findMany({
       where: { batchId },
-      select: {
+      include: {
         chapter: {
-          select: {
-            id: true,
-            title: true,
-            order: true,
-            status: true,
+          include: {
             subject: { select: { id: true, title: true } },
+            lectures: {
+              where: { status: "PUBLISHED" },
+              orderBy: { order: "asc" },
+              select: {
+                id: true,
+                title: true,
+                durationMin: true,
+                videoUrl: true,
+                slidesUrl: true,
+                order: true,
+              },
+            },
             _count: { select: { lectures: true, dpps: true, tests: true } },
           },
         },
@@ -263,12 +299,20 @@ export async function loadStudentBatchHome(
     batch.courseId
       ? prisma.chapter.findMany({
           where: { subject: { courseId: batch.courseId } },
-          select: {
-            id: true,
-            title: true,
-            order: true,
-            status: true,
+          include: {
             subject: { select: { id: true, title: true } },
+            lectures: {
+              where: { status: "PUBLISHED" },
+              orderBy: { order: "asc" },
+              select: {
+                id: true,
+                title: true,
+                durationMin: true,
+                videoUrl: true,
+                slidesUrl: true,
+                order: true,
+              },
+            },
             _count: { select: { lectures: true, dpps: true, tests: true } },
           },
         })
@@ -318,7 +362,12 @@ export async function loadStudentBatchHome(
               where: { studentId },
               orderBy: { startedAt: "desc" },
               take: 1,
-              select: { status: true, score: true },
+              select: {
+                status: true,
+                score: true,
+                submittedAt: true,
+                answers: { select: { isCorrect: true, timeTakenSec: true } },
+              },
             },
           },
         },
@@ -337,6 +386,14 @@ export async function loadStudentBatchHome(
       lectures: c._count.lectures,
       dpps: c._count.dpps,
       tests: c._count.tests,
+      lectureList: (c.lectures || []).map((l) => ({
+        id: l.id,
+        title: l.title,
+        duration: l.durationMin || 45,
+        videoUrl: l.videoUrl,
+        slidesUrl: l.slidesUrl,
+        order: l.order,
+      })),
       order: c.order ?? 0,
     });
   }
@@ -373,7 +430,22 @@ export async function loadStudentBatchHome(
         ...(rawChapterTitles.size ? [{ title: { in: Array.from(rawChapterTitles) } }] : []),
       ],
     },
-    select: { id: true, title: true, subject: { select: { id: true, title: true } }, _count: { select: { lectures: true, dpps: true, tests: true } } },
+    include: {
+      subject: { select: { id: true, title: true } },
+      lectures: {
+        where: { status: "PUBLISHED" },
+        orderBy: { order: "asc" },
+        select: {
+          id: true,
+          title: true,
+          durationMin: true,
+          videoUrl: true,
+          slidesUrl: true,
+          order: true,
+        },
+      },
+      _count: { select: { lectures: true, dpps: true, tests: true } },
+    },
   });
 
   for (const c of matchedDbChapters) {
@@ -389,6 +461,14 @@ export async function loadStudentBatchHome(
         lectures: c._count.lectures,
         dpps: c._count.dpps,
         tests: c._count.tests,
+        lectureList: (c.lectures || []).map((l) => ({
+          id: l.id,
+          title: l.title,
+          duration: l.durationMin || 45,
+          videoUrl: l.videoUrl,
+          slidesUrl: l.slidesUrl,
+          order: l.order,
+        })),
         order: 0,
       });
     }
@@ -432,7 +512,19 @@ export async function loadStudentBatchHome(
           where: { studentId },
           orderBy: { startedAt: "desc" },
           take: 1,
-          select: { status: true, score: true, startedAt: true, submittedAt: true },
+          select: {
+            id: true,
+            status: true,
+            score: true,
+            startedAt: true,
+            submittedAt: true,
+            answers: {
+              select: {
+                isCorrect: true,
+                timeTakenSec: true,
+              },
+            },
+          },
         },
       },
     }),
@@ -460,7 +552,18 @@ export async function loadStudentBatchHome(
           where: { studentId },
           orderBy: { startedAt: "desc" },
           take: 1,
-          select: { status: true, score: true, submittedAt: true },
+          select: {
+            id: true,
+            status: true,
+            score: true,
+            submittedAt: true,
+            answers: {
+              select: {
+                isCorrect: true,
+                timeTakenSec: true,
+              },
+            },
+          },
         },
       },
     }),
@@ -511,10 +614,11 @@ export async function loadStudentBatchHome(
             startTime: { gte: now },
           },
           orderBy: { startTime: "asc" },
-          take: 20,
+          take: 30,
           include: {
             teacher: {
               select: {
+                id: true,
                 displayName: true,
                 subjects: true,
                 user: { select: { name: true, photoUrl: true } },
@@ -528,10 +632,9 @@ export async function loadStudentBatchHome(
     prisma.doubtBooking.findMany({
       where: {
         studentId,
-        status: "CONFIRMED",
       },
       orderBy: { createdAt: "desc" },
-      take: 10,
+      take: 20,
       include: {
         slot: { select: { startTime: true, endTime: true } },
         teacher: { select: { displayName: true, user: { select: { name: true } } } },
@@ -555,7 +658,7 @@ export async function loadStudentBatchHome(
     }),
   ]);
 
-  // 4. Transform DPPs
+  // 4. Transform DPPs with Attempt Data Preservation
   const dppItems: BatchDppItem[] = [];
   const seenDppIds = new Set<string>();
 
@@ -572,6 +675,14 @@ export async function loadStudentBatchHome(
       ? "IN_PROGRESS"
       : "AVAILABLE";
 
+    const answers = att?.answers || [];
+    const correctCount = isSubmitted ? answers.filter((a) => a.isCorrect === true).length : null;
+    const incorrectCount = isSubmitted ? answers.filter((a) => a.isCorrect === false).length : null;
+    const unattemptedCount = isSubmitted ? Math.max(0, qCount - answers.length) : null;
+    const totalAttempted = (correctCount || 0) + (incorrectCount || 0);
+    const accuracy = isSubmitted && totalAttempted > 0 ? Math.round(((correctCount || 0) / totalAttempted) * 100) : null;
+    const timeTakenSec = isSubmitted ? answers.reduce((s, a) => s + (a.timeTakenSec || 0), 0) : null;
+
     dppItems.push({
       id: d.id,
       code: d.code,
@@ -582,13 +693,19 @@ export async function loadStudentBatchHome(
       questionCount: qCount,
       durationMin: d.estimatedTimeMin || 30,
       status,
+      isAttempted: isSubmitted,
       score: att?.score ?? null,
-      correctCount: null,
-      incorrectCount: null,
-      accuracy: null,
+      maxScore: qCount * (d.correctMarks || 4),
+      correctCount,
+      incorrectCount,
+      unattemptedCount,
+      accuracy,
+      timeTakenSec,
       opensAt: null,
+      submittedAt: att?.submittedAt ? att.submittedAt.toISOString() : null,
       pdfUrl: isSubmitted ? `/api/dpp/${d.id}/pdf` : null,
       href: `/dpp/${d.id}/attempt`,
+      actionLabel: isSubmitted ? "View Result" : att?.status === "IN_PROGRESS" ? "Resume DPP" : "Attempt DPP",
     });
   }
 
@@ -612,6 +729,13 @@ export async function loadStudentBatchHome(
       ? "IN_PROGRESS"
       : "AVAILABLE";
 
+    const answers = a?.answers || [];
+    const correctCount = isSubmitted ? answers.filter((ans) => ans.isCorrect === true).length : null;
+    const incorrectCount = isSubmitted ? answers.filter((ans) => ans.isCorrect === false).length : null;
+    const unattemptedCount = isSubmitted ? Math.max(0, qCount - answers.length) : null;
+    const totalAttempted = (correctCount || 0) + (incorrectCount || 0);
+    const accuracy = isSubmitted && totalAttempted > 0 ? Math.round(((correctCount || 0) / totalAttempted) * 100) : null;
+
     dppItems.push({
       id: d.id,
       code: `DPP-${d.id.slice(-6).toUpperCase()}`,
@@ -622,24 +746,50 @@ export async function loadStudentBatchHome(
       questionCount: qCount,
       durationMin: t?.durationMin ?? 30,
       status,
+      isAttempted: isSubmitted,
       score: a?.score ?? null,
-      correctCount: null,
-      incorrectCount: null,
-      accuracy: null,
+      maxScore: qCount * 4,
+      correctCount,
+      incorrectCount,
+      unattemptedCount,
+      accuracy,
+      timeTakenSec: null,
       opensAt: d.startsAt.toISOString(),
+      submittedAt: a?.submittedAt ? a.submittedAt.toISOString() : null,
       pdfUrl: isSubmitted && t ? `/api/tests/${t.id}/pdf` : null,
       href: status === "UPCOMING" || !t ? null : `/tests/${t.id}/attempt`,
+      actionLabel: isSubmitted ? "View Result" : status === "UPCOMING" ? `Opens at ${timeFmt(d.startsAt)}` : "Attempt DPP",
     });
   }
 
-  // 5. Transform Tests
+  // 5. Transform Tests (Both Upcoming and Completed)
   const testItems: BatchTestItem[] = rawTests.map((t) => {
     const a = t.attempts[0];
     const totalMarks = t.sections.reduce((acc, s) => acc + (s.targetCount || s._count.questions || 1) * (s.marksPerQuestion || 4), 0);
     const isSubmitted = a?.status === "SUBMITTED" || a?.status === "AUTO_SUBMITTED";
     const attemptStatus = !a ? "NOT_STARTED" : a.status === "IN_PROGRESS" ? "IN_PROGRESS" : "SUBMITTED";
-    const resultsReleased = areResultsReleased(t, now);
-    const canAccessPdf = isSubmitted && resultsReleased;
+    const isUpcoming = !!t.openTime && new Date(t.openTime) > now;
+    const answers = a?.answers || [];
+    const correctCount = isSubmitted ? answers.filter((ans) => ans.isCorrect === true).length : null;
+    const incorrectCount = isSubmitted ? answers.filter((ans) => ans.isCorrect === false).length : null;
+    const totalQuestions = t.sections.reduce((acc, s) => acc + (s.targetCount || s._count.questions || 0), 0);
+    const unattemptedCount = isSubmitted ? Math.max(0, totalQuestions - answers.length) : null;
+    const totalAttempted = (correctCount || 0) + (incorrectCount || 0);
+    const accuracy = isSubmitted && totalAttempted > 0 ? Math.round(((correctCount || 0) / totalAttempted) * 100) : null;
+
+    let actionLabel = "Start Test";
+    let actionHref: string | null = `/tests/${t.id}/attempt`;
+
+    if (isSubmitted) {
+      actionLabel = "Review Attempt";
+      actionHref = `/tests/${t.id}/result`;
+    } else if (isUpcoming) {
+      actionLabel = `Opens at ${timeFmt(t.openTime!)}`;
+      actionHref = null;
+    } else if (attemptStatus === "IN_PROGRESS") {
+      actionLabel = "Resume Test";
+      actionHref = `/tests/${t.id}/attempt`;
+    }
 
     return {
       id: t.id,
@@ -648,55 +798,55 @@ export async function loadStudentBatchHome(
       chapter: t.chapter?.title ?? null,
       durationMin: t.durationMin,
       totalMarks: totalMarks || 720,
-      openTime: t.openTime?.toISOString() ?? null,
-      closeTime: t.closeTime?.toISOString() ?? null,
+      openTime: t.openTime ? t.openTime.toISOString() : null,
+      closeTime: t.closeTime ? t.closeTime.toISOString() : null,
+      isUpcoming,
       attemptStatus,
-      score: isSubmitted && resultsReleased ? (a?.score ?? null) : null,
+      score: a?.score ?? null,
       maxScore: totalMarks || 720,
-      accuracy: null,
-      correctCount: null,
-      incorrectCount: null,
-      questionPdfUrl: canAccessPdf ? `/api/tests/${t.id}/pdf` : null,
-      solutionPdfUrl: canAccessPdf ? `/api/tests/${t.id}/pdf?type=solutions` : null,
+      accuracy,
+      correctCount,
+      incorrectCount,
+      unattemptedCount,
+      questionPdfUrl: isSubmitted ? `/api/tests/${t.id}/pdf` : null,
+      solutionPdfUrl: isSubmitted ? `/api/tests/${t.id}/solutions-pdf` : null,
+      actionLabel,
+      actionHref,
+      submittedAt: a?.submittedAt ? a.submittedAt.toISOString() : null,
     };
   });
 
-  // 6. Transform Classes
+  // 6. Transform Live & Scheduled Classes
   const classItems: BatchClassItem[] = schedules.map((s) => {
-    const teacherName = s.teacher?.displayName || s.teacher?.user.name || null;
-    const teacherPhotoUrl = s.teacher?.user.photoUrl || null;
-    const notesPdfUrl =
-      s.lecture?.slidesUrl ||
-      (s.liveWhiteboardSession?.pdfStatus === "READY" && s.liveWhiteboardSession?.id
-        ? `/api/whiteboard/sessions/${s.liveWhiteboardSession.id}/slides?format=pdf`
-        : null) ||
-      s.liveWhiteboardSession?.presentationUrl ||
-      null;
+    const effectiveStatus = getEffectiveScheduleStatus(s, now);
+    const subjName = s.chapter?.subject.title || s.subject || "Class";
+    const chTitle = s.chapter?.title || s.topic || null;
+    const notesPdfUrl = s.lecture?.slidesUrl || s.liveWhiteboardSession?.presentationUrl || null;
 
     return {
       id: s.id,
       title: s.title,
       subject: s.subject,
-      teacherName,
-      teacherPhotoUrl,
+      teacherName: s.teacher?.displayName || s.teacher?.user.name || "Faculty",
+      teacherPhotoUrl: s.teacher?.user.photoUrl || null,
       startsAt: s.startsAt.toISOString(),
       endsAt: s.endsAt.toISOString(),
-      status: s.status,
+      status: effectiveStatus,
       type: s.type,
       liveWhiteboardSession: s.liveWhiteboardSession,
-      chapterId: s.chapter?.id ?? null,
-      chapterTitle: s.chapter?.title ?? null,
-      subjectName: s.chapter?.subject.title ?? s.subject ?? "General",
+      chapterId: s.chapterId,
+      chapterTitle: chTitle,
+      subjectName: subjName,
       notesPdfUrl,
     };
   });
 
-  // 7. Build Unified Academic Events for Batch Timeline (Today & Upcoming)
+  // 7. Assemble Unified Timeline Events for the "Schedule" Tab
   const timelineEvents: AcademicEvent[] = [];
 
-  // Live classes -> timeline events
+  // 7.1 Classes -> timeline events
   for (const c of classItems) {
-    const effectiveStatus = getEffectiveScheduleStatus(c, now);
+    const effectiveStatus = c.status;
     const joinRule = canStudentJoinClass(c, now);
     const isLive = effectiveStatus === "LIVE";
     const isCompleted = effectiveStatus === "COMPLETED";
@@ -724,7 +874,7 @@ export async function loadStudentBatchHome(
     });
   }
 
-  // Tests -> timeline events
+  // 7.2 Scheduled Tests -> timeline events (Ensures Tests also appear in Schedule!)
   for (const t of testItems) {
     const isSubmitted = t.attemptStatus === "SUBMITTED";
     const isInProgress = t.attemptStatus === "IN_PROGRESS";
@@ -741,41 +891,14 @@ export async function loadStudentBatchHome(
       dateKey: dayKey(testDate),
       startsAt: testDate,
       endsAt: t.closeTime,
-      status: isSubmitted ? "SUBMITTED" : isInProgress ? "AVAILABLE" : "AVAILABLE",
-      actionLabel: isSubmitted ? "Test Analysis" : isInProgress ? "Resume Test" : "Start Test",
-      actionHref: isSubmitted ? `/tests/${t.id}/result` : `/tests/${t.id}/attempt`,
+      status: isSubmitted ? "SUBMITTED" : t.isUpcoming ? "UPCOMING" : "AVAILABLE",
+      actionLabel: isSubmitted ? "Test Analysis" : isInProgress ? "Resume Test" : t.isUpcoming ? `Opens at ${timeFmt(testDate)}` : "Start Test",
+      actionHref: isSubmitted ? `/tests/${t.id}/result` : t.isUpcoming ? null : `/tests/${t.id}/attempt`,
       score: t.score,
+      maxScore: t.maxScore,
       durationMin: t.durationMin,
       questionCount: null,
       pdfUrl: t.questionPdfUrl,
-      notesPdfUrl: null,
-    });
-  }
-
-  // DPPs -> timeline events
-  for (const d of dppItems) {
-    const dppDate = d.opensAt || new Date().toISOString();
-    const isCompleted = d.status === "COMPLETED";
-    const isInProgress = d.status === "IN_PROGRESS";
-
-    timelineEvents.push({
-      id: `dpp_${d.id}`,
-      type: "DPP",
-      title: d.title,
-      subject: d.subject,
-      chapter: d.chapter,
-      teacherName: null,
-      teacherPhotoUrl: null,
-      dateKey: dayKey(dppDate),
-      startsAt: dppDate,
-      endsAt: null,
-      status: isCompleted ? "SUBMITTED" : isInProgress ? "AVAILABLE" : "AVAILABLE",
-      actionLabel: isCompleted ? "DPP Analysis" : isInProgress ? "Resume DPP" : "Attempt DPP",
-      actionHref: d.href,
-      score: d.score,
-      durationMin: d.durationMin,
-      questionCount: d.questionCount,
-      pdfUrl: d.pdfUrl,
       notesPdfUrl: null,
     });
   }
@@ -804,7 +927,7 @@ export async function loadStudentBatchHome(
     });
   }
 
-  // 8.1 DPP PDFs (Only after submission)
+  // 8.1 DPP PDFs
   for (const d of dppItems) {
     if (!d.pdfUrl) continue;
     allPdfs.push({
@@ -822,7 +945,7 @@ export async function loadStudentBatchHome(
     });
   }
 
-  // 8.2 Test PDFs (Only after submission and scheduled test window ends)
+  // 8.2 Test PDFs
   for (const t of testItems) {
     if (t.questionPdfUrl) {
       allPdfs.push({
@@ -849,7 +972,7 @@ export async function loadStudentBatchHome(
         chapter: t.chapter,
         fileUrl: t.solutionPdfUrl,
         fileName: `${t.name}-Solutions.pdf`,
-        sizeBytes: 350000,
+        sizeBytes: 300000,
         allowDownload: true,
         createdAt: t.openTime || new Date().toISOString(),
         sourceType: "TEST_PDF",
@@ -857,114 +980,109 @@ export async function loadStudentBatchHome(
     }
   }
 
-  // 8.3 Modules & Notes
-  const moduleItems: BatchModuleItem[] = modules.map((m) => {
-    const exportFile = m.exportHistory[0];
-    const fileUrl = exportFile?.fileUrl || m.originalFileUrl;
-    const fileName = exportFile?.fileName || m.originalFileName || `${m.code}.pdf`;
-
-    allPdfs.push({
-      id: `pdf_mod_${m.id}`,
-      title: `${m.title} (Module)`,
-      category: "MODULES",
-      subject: m.subject || "All Subjects",
-      chapter: m.chapter || null,
-      fileUrl,
-      fileName,
-      sizeBytes: exportFile?.fileSize || m.originalFileSize || 1000000,
-      allowDownload: true,
-      createdAt: m.createdAt.toISOString(),
-      sourceType: "MODULE",
-    });
-
-    return {
-      id: m.id,
-      code: m.code,
-      title: m.title,
-      subject: m.subject || "General",
-      chapter: m.chapter || null,
-      facultyName: m.facultyName || null,
-      pageCount: m.pageCount || 1,
-      fileUrl,
-      fileName,
-      allowDownload: true,
-      createdAt: m.createdAt.toISOString(),
-    };
-  });
-
-  // 8.4 Batch Folder Files (Syllabus, Brochure, Class Notes)
-  for (const f of folders) {
-    const isSyllabus = /syllabus|schedule|brochure|planner/i.test(f.name);
-    for (const file of f.files) {
-      allPdfs.push({
-        id: `pdf_file_${file.id}`,
-        title: file.title || file.fileName,
-        category: isSyllabus ? "SYLLABUS" : "CLASS_NOTES",
-        subject: f.name,
-        chapter: null,
-        fileUrl: `/api/batch-materials/${file.id}?inline=1`,
-        fileName: file.fileName,
-        sizeBytes: file.sizeBytes,
+  // 8.3 Module PDFs
+  const moduleItems: BatchModuleItem[] = [];
+  for (const m of modules) {
+    const exp = m.exportHistory[0];
+    if (exp?.fileUrl) {
+      moduleItems.push({
+        id: m.id,
+        code: m.code,
+        title: m.title,
+        subject: m.subject || "Academic Resource",
+        chapter: m.chapter || null,
+        facultyName: m.facultyName || null,
+        pageCount: 1,
+        fileUrl: exp.fileUrl,
+        fileName: exp.fileName || `${m.title}.pdf`,
         allowDownload: true,
-        createdAt: new Date().toISOString(),
-        sourceType: "BATCH_FILE",
+        createdAt: m.createdAt.toISOString(),
+      });
+
+      allPdfs.push({
+        id: `pdf_mod_${m.id}`,
+        title: `${m.title} (Module)`,
+        category: "MODULES",
+        subject: m.subject || "Study Material",
+        chapter: m.chapter || null,
+        fileUrl: exp.fileUrl,
+        fileName: exp.fileName || `${m.title}.pdf`,
+        sizeBytes: exp.fileSize || 500000,
+        allowDownload: true,
+        createdAt: m.createdAt.toISOString(),
+        sourceType: "MODULE",
       });
     }
   }
 
-  // 9. Transform Doubt Slots & Bookings
-  const doubtSlotItems: BatchDoubtSlotItem[] = doubtSlots.map((s) => ({
-    id: s.id,
-    teacherId: s.teacherId,
-    teacherName: s.teacher.displayName || s.teacher.user.name,
-    teacherPhotoUrl: s.teacher.user.photoUrl ?? null,
-    subject: s.teacher.subjects[0] || "Academic Doubt",
-    startsAt: s.startTime.toISOString(),
-    endsAt: s.endTime.toISOString(),
-    durationMinutes: Math.round((s.endTime.getTime() - s.startTime.getTime()) / 60000) || 15,
-    isBooked: s.status === "BOOKED",
+  // 9. Transform Teachers
+  const teacherCards: BatchTeacherCard[] = batch.teachers.map((t) => ({
+    id: t.teacher.id,
+    name: t.teacher.displayName || t.teacher.user.name,
+    photoUrl: t.teacher.user.photoUrl,
+    subjects: t.teacher.subjects || [],
+    experienceYears: t.teacher.experienceYears ? `${t.teacher.experienceYears} Years` : null,
+    bio: t.teacher.bio || null,
+    department: t.teacher.department || null,
   }));
 
-  const studentBookingItems: StudentDoubtBookingItem[] = studentBookings.map((b) => ({
+  // 10. Transform Mentorship Slots
+  const transformedDoubtSlots: BatchDoubtSlotItem[] = doubtSlots.map((slot) => {
+    const durationMinutes = Math.round((slot.endTime.getTime() - slot.startTime.getTime()) / 60000) || 15;
+    return {
+      id: slot.id,
+      teacherId: slot.teacherId,
+      teacherName: slot.teacher.displayName || slot.teacher.user.name,
+      teacherPhotoUrl: slot.teacher.user.photoUrl,
+      subject: (slot.teacher.subjects && slot.teacher.subjects[0]) || "Academic Mentorship",
+      startsAt: slot.startTime.toISOString(),
+      endsAt: slot.endTime.toISOString(),
+      durationMinutes,
+      status: slot.status as any,
+      isBooked: slot.status === "BOOKED",
+    };
+  });
+
+  // 11. Transform Student Doubt Bookings
+  const transformedBookings: StudentDoubtBookingItem[] = studentBookings.map((b) => ({
     id: b.id,
     teacherName: b.teacher.displayName || b.teacher.user.name,
-    topic: b.topic || "1-to-1 Academic Doubt Session",
+    topic: b.topic || "Academic Mentorship",
     startsAt: b.slot.startTime.toISOString(),
     endsAt: b.slot.endTime.toISOString(),
     status: b.status,
-    meetingUrl: `/api/doubt-booking/bookings/${b.id}/join`,
+    meetingUrl: b.status === "CONFIRMED" ? `/api/doubt-booking/bookings/${b.id}/join` : null,
+    createdAt: b.createdAt.toISOString(),
   }));
 
-  // 10. Transform Notices
-  const seenNotices = new Set<string>();
-  const notices: BatchNotice[] = [];
-  for (const n of [
-    ...broadcasts.map((b) => ({ id: `b_${b.id}`, title: b.title, body: b.body, createdAt: b.createdAt, deepLink: null as string | null })),
-    ...notifications.map((n) => ({ id: n.id, title: n.title, body: n.body, createdAt: n.createdAt, deepLink: n.deepLink })),
-  ]) {
-    const key = `${n.title}|${n.body}`;
-    if (seenNotices.has(key)) continue;
-    seenNotices.add(key);
-    notices.push({ ...n, createdAt: n.createdAt.toISOString() });
-  }
-  notices.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  // 12. Transform Notices
+  const notices: BatchNotice[] = [
+    ...notifications.map((n) => ({
+      id: n.id,
+      title: n.title,
+      body: n.body,
+      createdAt: n.createdAt.toISOString(),
+      deepLink: n.deepLink,
+    })),
+    ...broadcasts.map((b) => ({
+      id: b.id,
+      title: b.title,
+      body: b.body,
+      createdAt: b.createdAt.toISOString(),
+      deepLink: null,
+    })),
+  ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   return {
     batch: {
       id: batch.id,
       name: batch.name,
       code: batch.code,
-      exam: batch.targetExam ?? null,
-      thumbnailUrl: batch.thumbnailUrl ?? null,
-      teachers: batch.teachers.map((t) => t.teacher.user.name).filter(Boolean),
-      teacherCards: batch.teachers.map(({ teacher: t }) => ({
-        id: t.id,
-        name: t.displayName || t.user.name,
-        photoUrl: t.user.photoUrl ?? null,
-        subjects: t.subjects,
-        experienceYears: t.experienceYears ?? null,
-        bio: t.bio ?? null,
-      })),
+      exam: batch.targetExam,
+      description: batch.description,
+      thumbnailUrl: batch.thumbnailUrl,
+      teachers: teacherCards.map((t) => t.name),
+      teacherCards,
     },
     timelineEvents,
     classes: classItems,
@@ -973,9 +1091,9 @@ export async function loadStudentBatchHome(
     dpps: dppItems,
     allPdfs,
     modules: moduleItems,
-    doubtSlots: doubtSlotItems,
-    studentBookings: studentBookingItems,
-    folders: folders.map((f) => ({ id: f.id, parentId: f.parentId, name: f.name, files: f.files })),
-    notices: notices.slice(0, 40),
+    doubtSlots: transformedDoubtSlots,
+    studentBookings: transformedBookings,
+    folders,
+    notices,
   };
 }

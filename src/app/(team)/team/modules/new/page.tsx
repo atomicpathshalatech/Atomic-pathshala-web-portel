@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/db";
 import { ModuleUploadForm } from "@/components/team-portal/ModuleUploadForm";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = { title: "Upload Module" };
 
 export default async function NewModulePage() {

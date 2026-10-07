@@ -1158,46 +1158,35 @@ export function QuestionManagementTable({
 
                         {/* Review 1 Action */}
                         {canVerify && q.status === "REVIEW_1" && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setReviewModalQuestion({ question: q, stage: "REVIEW_1" });
-                              setReviewAction("APPROVE");
-                              setReviewNotes("");
-                            }}
+                          <Link
+                            href={`/team/questions/${q.id}/review`}
                             className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-[11px] shadow-sm transition flex items-center gap-1"
                           >
                             <UserCheck className="w-3 h-3" />
                             <span>Review 1</span>
-                          </button>
+                          </Link>
                         )}
 
                         {/* Review 2 Action */}
                         {canVerify && q.status === "REVIEW_2" && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setReviewModalQuestion({ question: q, stage: "REVIEW_2" });
-                              setReviewAction("APPROVE");
-                              setReviewNotes("");
-                            }}
+                          <Link
+                            href={`/team/questions/${q.id}/review`}
                             className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-[11px] shadow-sm transition flex items-center gap-1"
                           >
                             <ShieldCheck className="w-3 h-3" />
                             <span>Review 2</span>
-                          </button>
+                          </Link>
                         )}
 
-                        {/* Inline AI Quality & Accuracy Verification */}
-                        <button
-                          type="button"
-                          onClick={() => setStandaloneReviewQuestion(q)}
-                          className="px-2 py-1 rounded-lg border border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold transition flex items-center gap-1 shadow-2xs"
-                          title="Run Live AI Verification"
+                        {/* Full Review & AI Quality Workspace */}
+                        <Link
+                          href={`/team/questions/${q.id}/review`}
+                          className="px-2 py-1 rounded-lg border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-900 font-bold transition flex items-center gap-1 shadow-2xs"
+                          title="Open Full AI Review & Audit Workspace"
                         >
-                          <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                          <span className="text-[11px] font-bold">AI</span>
-                        </button>
+                          <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                          <span className="text-[11px] font-bold">Review</span>
+                        </Link>
 
                         {/* View Question in Student CBT Interface */}
                         <button
