@@ -33,11 +33,11 @@ export async function POST(request: NextRequest) {
     const targetExam = (formData.get("targetExam") as string) || "NEET (UG)";
     const facultyName = (formData.get("facultyName") as string) || "Atomic Pathshala Faculty";
 
-    // 1. Process MAIN PDF
+    // 1. Process MAIN PDF with AI Multimodal / Structuring Engine
     const mainPdfBuffer = Buffer.from(await mainPdfFile.arrayBuffer());
     const mainSummary = await executeParallelPdfExtraction(mainPdfBuffer, {
-      mode: "FAST_EDITABLE",
-      concurrency: 8,
+      mode: "AI_ENHANCE",
+      concurrency: 6,
     });
 
     // Flatten pages into full AST

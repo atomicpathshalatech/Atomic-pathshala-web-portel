@@ -54,9 +54,44 @@ export interface ParallelExtractionSummary {
   totalDurationMs: number;
 }
 
-const AI_STRUCTURING_PROMPT = `You structure raw text extracted from an educational study module page into learning blocks.
-Return JSON: {"blocks":[{"type":"HEADING|SUBHEADING|PARAGRAPH|BULLETS|CALLOUT|TABLE|EQUATION|QUESTION|OPTION|SOLUTION","text":"...","variant":"NOTE|CONCEPT|FORMULA|EXAMPLE|TIP","label":"..."}]}
-Keep Hindi as Hindi and English as English verbatim.`;
+const AI_STRUCTURING_PROMPT = `You are the Master Academic Document Structuring & OCR Decoder for Indian NEET/JEE modules (Atomic Pathshala).
+The input text contains educational content extracted from a coaching module that uses DevLys 010 / Kruti Dev legacy font for Hindi mixed with English chemistry formulas, question labels, and mathematical equations.
+
+CRITICAL INSTRUCTIONS:
+1. HINDI DECODING TO STANDARD UNICODE (NOTO SANS DEVANAGARI):
+   - Decode all DevLys 010 / Kruti Dev encoded Hindi characters into 100% accurate standard Unicode Devanagari Hindi.
+   - Examples of Devlys to Unicode:
+     * "jlk;u foKku" -> "रसायन विज्ञान"
+     * "d qN vk/kkjHkwr fl)kar rFkk rduhdsa : oxhZdj.k ,oa ukedj.k" -> "कुछ आधारभूत सिद्धांत तथा तकनीकें : वर्गीकरण एवं नामकरण"
+     * "[Vk syqbZu]" -> "[टोलुईन]"
+     * "letkrh; Js.kh" -> "समजातीय श्रेणी"
+     * "fØ;kRed lewg" -> "क्रियात्मक समूह"
+     * "ewy dkcZu J\`a[kyk" -> "मूल कार्बन श्रृंखला"
+     * "çfrLFkkih" -> "प्रतिस्थापी"
+     * "lefer / vlefer" -> "सममित / असममित"
+     * "vkblksçksikby" -> "आइसोप्रोपाइल"
+     * "r\`rh;d C;wVkby" -> "तृतीयक ब्यूटाइल"
+
+2. PRESERVE ENGLISH, CHEMISTRY FORMULAS & MATH NOTATION EXACTLY:
+   - "HC ≡ C – CH = CH – CH3" -> $\\text{HC}\\equiv\\text{C}-\\text{CH}=\\text{CH}-\\text{CH}_3$
+   - "sp, sp2, sp3, dsp2" -> "sp, sp^2, sp^3, dsp^2"
+   - "1°, 2°, 3°, 4°" -> "1°, 2°, 3°, 4°"
+   - "Q.1", "Q.2", "Que. 1", "(1)", "(2)", "(3)", "(4)" -> maintain exact question & option tags.
+   - "C6H14", "CH3", "OH", "COOH", "NO2", "Cl", "Br" -> keep clean chemical formulas.
+   - Keep numbers, commas, colons, and exam tags [NEET 2024], [AIPMT 2008] intact.
+
+3. STRUCTURE INTO OUTPUT JSON BLOCKS:
+Return JSON:
+{
+  "blocks": [
+    {
+      "type": "HEADING | SUBHEADING | PARAGRAPH | QUESTION | OPTION | TABLE | CALLOUT | EQUATION | SOLUTION",
+      "text": "Exact decoded Hindi/English content with math/formulas in LaTeX $...$",
+      "label": "Optional label like 'Note', 'Example', 'Rule', 'Subrule (i)'",
+      "variant": "NOTE | CONCEPT | FORMULA | EXAMPLE | TIP"
+    }
+  ]
+}`;
 
 async function aiStructurePage(text: string): Promise<any[]> {
   const raw = await executeGeminiWithFailover(async (client, modelName) => {
@@ -71,7 +106,7 @@ async function aiStructurePage(text: string): Promise<any[]> {
     });
     const res = await model.generateContent([
       AI_STRUCTURING_PROMPT,
-      `PAGE TEXT:\n${text.slice(0, 15000)}`,
+      `RAW PAGE TEXT TO DECODE AND STRUCTURE:\n${text.slice(0, 20000)}`,
     ]);
     return res.response?.text() || "";
   });
