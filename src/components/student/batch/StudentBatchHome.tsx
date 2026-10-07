@@ -152,7 +152,7 @@ export function StudentBatchHome({
           <div className="hidden sm:flex items-center gap-2">
             <span className="px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-500/30 text-emerald-700 dark:text-emerald-400 text-xs font-bold flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Active Workspace
+              Live Batch
             </span>
           </div>
         </div>
@@ -318,7 +318,7 @@ function TimelineTab({
       map.get(ev.dateKey)!.push(ev);
     }
 
-    const sortedDates = Array.from(map.keys()).sort();
+    const sortedDates = Array.from(map.keys()).sort((a, b) => b.localeCompare(a));
     for (const d of sortedDates) {
       groups.push({
         dateKey: d,

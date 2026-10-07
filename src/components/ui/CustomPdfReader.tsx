@@ -133,8 +133,19 @@ export function CustomPdfReader({
           </button>
         </div>
 
-        {/* Right: Actions (Download if permitted, Fullscreen, Close) */}
+        {/* Right: Actions (Open New Tab, Download if permitted, Fullscreen, Close) */}
         <div className="flex items-center gap-2 shrink-0">
+          <a
+            href={pdfUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-bold transition flex items-center gap-1.5 border border-slate-700/60"
+            title="Open in new browser tab"
+          >
+            <span className="material-symbols-outlined text-base">open_in_new</span>
+            <span className="hidden sm:inline">Open in Tab</span>
+          </a>
+
           {allowDownload ? (
             <a
               href={pdfUrl}
@@ -193,12 +204,43 @@ export function CustomPdfReader({
             transformOrigin: "top center",
           }}
         >
-          <iframe
-            src={formattedUrl}
-            title={title}
-            className="w-full h-full border-0 rounded-2xl"
+          <object
+            data={formattedUrl}
+            type="application/pdf"
+            className="w-full h-full rounded-2xl"
             onLoad={() => setLoading(false)}
-          />
+          >
+            <iframe
+              src={formattedUrl}
+              title={title}
+              className="w-full h-full border-0 rounded-2xl"
+              onLoad={() => setLoading(false)}
+            >
+              <div className="p-8 text-center text-slate-800 flex flex-col items-center justify-center gap-4">
+                <span className="material-symbols-outlined text-5xl text-blue-600">picture_as_pdf</span>
+                <p className="font-bold text-base">{title}</p>
+                <div className="flex items-center gap-3">
+                  <a
+                    href={pdfUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold shadow"
+                  >
+                    Open PDF in New Tab
+                  </a>
+                  {allowDownload && (
+                    <a
+                      href={pdfUrl}
+                      download={fileName || "document.pdf"}
+                      className="px-4 py-2 bg-slate-100 text-slate-800 rounded-xl text-sm font-bold border border-slate-300"
+                    >
+                      Download PDF
+                    </a>
+                  )}
+                </div>
+              </div>
+            </iframe>
+          </object>
         </div>
       </main>
 

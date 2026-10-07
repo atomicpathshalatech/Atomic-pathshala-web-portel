@@ -207,7 +207,7 @@ export async function loadStudentBatchHome(
 ): Promise<StudentBatchHomeData | null> {
   const now = new Date();
 
-  // 1. Fetch Batch with Course & Teachers
+  // 1. Fetch Batch with Course, Teachers, TestSeries, and Schedules
   const batch = await prisma.batch.findUnique({
     where: { id: batchId },
     select: {
@@ -217,6 +217,7 @@ export async function loadStudentBatchHome(
       targetExam: true,
       thumbnailUrl: true,
       courseId: true,
+      testSeries: { select: { testSeriesId: true } },
       teachers: {
         select: {
           teacher: {
@@ -236,9 +237,10 @@ export async function loadStudentBatchHome(
   if (!batch) return null;
 
   const teacherIds = batch.teachers.map((t) => t.teacher.id);
+  const testSeriesIds = (batch.testSeries || []).map((ts) => ts.testSeriesId);
 
-  // 2. Fetch Assigned Chapters & Course Chapters
-  const [assignedChapters, courseChapters] = await Promise.all([
+  // 2. Fetch Assigned Chapters, Course Chapters, & Batch Schedules in parallel
+  const [assignedChapters, courseChapters, schedules, dppSchedules] = await Promise.all([
     prisma.batchChapter.findMany({
       where: { batchId },
       select: {
@@ -267,57 +269,15 @@ export async function loadStudentBatchHome(
           },
         })
       : Promise.resolve([]),
-  ]);
-
-  const chapterMap = new Map<string, BatchChapterItem & { order: number }>();
-  for (const c of [...assignedChapters.map((a) => a.chapter), ...courseChapters]) {
-    if (!c || chapterMap.has(c.id)) continue;
-    chapterMap.set(c.id, {
-      id: c.id,
-      title: c.title,
-      subjectId: c.subject.id,
-      subject: c.subject.title,
-      lectures: c._count.lectures,
-      dpps: c._count.dpps,
-      tests: c._count.tests,
-      order: c.order ?? 0,
-    });
-  }
-
-  const chapters = [...chapterMap.values()]
-    .sort((a, b) => a.subject.localeCompare(b.subject) || a.order - b.order || a.title.localeCompare(b.title))
-    .map(({ order: _order, ...c }) => c);
-
-  const chapterIds: string[] = Array.from(chapterMap.keys());
-  const chapterTitles: string[] = Array.from(chapterMap.values()).map((c) => c.title);
-  const subjectTitles: string[] = Array.from(new Set(Array.from(chapterMap.values()).map((c) => c.subject)));
-
-  // 3. Parallel Queries for Batch Schedules, DPPs, Tests, Folders, Modules, Doubts & Notifications
-  const [
-    schedules,
-    dppSchedules,
-    chapterDpps,
-    batchTestSeries,
-    rawTests,
-    folders,
-    modules,
-    doubtSlots,
-    studentBookings,
-    notifications,
-    broadcasts,
-  ] = await Promise.all([
-    // Live & Recorded Classes
     prisma.batchSchedule.findMany({
       where: { batchId, type: "LIVE_CLASS" },
-      orderBy: { startsAt: "asc" },
+      orderBy: { startsAt: "desc" },
       include: {
         teacher: { select: { user: { select: { name: true } } } },
         liveWhiteboardSession: { select: { id: true, status: true, livePhase: true, youtubeVideoId: true } },
         chapter: { select: { id: true, title: true, subject: { select: { title: true } } } },
       },
     }),
-
-    // DPPs in Schedule
     prisma.batchSchedule.findMany({
       where: { batchId, type: "DPP", status: { not: "CANCELLED" } },
       orderBy: { startsAt: "desc" },
@@ -337,7 +297,95 @@ export async function loadStudentBatchHome(
         },
       },
     }),
+  ]);
 
+  const chapterMap = new Map<string, BatchChapterItem & { order: number }>();
+  for (const c of [...assignedChapters.map((a) => a.chapter), ...courseChapters]) {
+    if (!c || chapterMap.has(c.id)) continue;
+    chapterMap.set(c.id, {
+      id: c.id,
+      title: c.title,
+      subjectId: c.subject.id,
+      subject: c.subject.title,
+      lectures: c._count.lectures,
+      dpps: c._count.dpps,
+      tests: c._count.tests,
+      order: c.order ?? 0,
+    });
+  }
+
+  const rawChapterIds = new Set<string>(chapterMap.keys());
+  const rawChapterTitles = new Set<string>(Array.from(chapterMap.values()).map((c) => c.title));
+  const rawSubjectTitles = new Set<string>(Array.from(chapterMap.values()).map((c) => c.subject));
+
+  // Extract chapter titles, topics, and subjects from schedules as well
+  for (const s of schedules) {
+    if (s.chapterId) rawChapterIds.add(s.chapterId);
+    if (s.subject) rawSubjectTitles.add(s.subject);
+    if (s.topic) rawChapterTitles.add(s.topic);
+    if (s.chapter?.title) rawChapterTitles.add(s.chapter.title);
+    if (s.chapter?.subject?.title) rawSubjectTitles.add(s.chapter.subject.title);
+    if (s.title.includes("—")) {
+      const parsed = s.title.split("—")[0]?.trim();
+      if (parsed) rawChapterTitles.add(parsed);
+    }
+  }
+
+  for (const ds of dppSchedules) {
+    if (ds.chapterId) rawChapterIds.add(ds.chapterId);
+    if (ds.subject) rawSubjectTitles.add(ds.subject);
+    if (ds.chapter?.title) rawChapterTitles.add(ds.chapter.title);
+    if (ds.chapter?.subject?.title) rawSubjectTitles.add(ds.chapter.subject.title);
+  }
+
+  // Find any chapters in DB matching these titles to ensure all chapter IDs are resolved
+  const matchedDbChapters = await prisma.chapter.findMany({
+    where: {
+      OR: [
+        ...(rawChapterIds.size ? [{ id: { in: Array.from(rawChapterIds) } }] : []),
+        ...(rawChapterTitles.size ? [{ title: { in: Array.from(rawChapterTitles) } }] : []),
+      ],
+    },
+    select: { id: true, title: true, subject: { select: { id: true, title: true } }, _count: { select: { lectures: true, dpps: true, tests: true } } },
+  });
+
+  for (const c of matchedDbChapters) {
+    rawChapterIds.add(c.id);
+    rawChapterTitles.add(c.title);
+    if (c.subject?.title) rawSubjectTitles.add(c.subject.title);
+    if (!chapterMap.has(c.id)) {
+      chapterMap.set(c.id, {
+        id: c.id,
+        title: c.title,
+        subjectId: c.subject.id,
+        subject: c.subject.title,
+        lectures: c._count.lectures,
+        dpps: c._count.dpps,
+        tests: c._count.tests,
+        order: 0,
+      });
+    }
+  }
+
+  const chapters = [...chapterMap.values()]
+    .sort((a, b) => a.subject.localeCompare(b.subject) || a.order - b.order || a.title.localeCompare(b.title))
+    .map(({ order: _order, ...c }) => c);
+
+  const chapterIds: string[] = Array.from(rawChapterIds);
+  const chapterTitles: string[] = Array.from(rawChapterTitles);
+  const subjectTitles: string[] = Array.from(rawSubjectTitles);
+
+  // 3. Parallel Queries for DPPs, Tests, Folders, Modules, Doubts & Notifications
+  const [
+    chapterDpps,
+    rawTests,
+    folders,
+    modules,
+    doubtSlots,
+    studentBookings,
+    notifications,
+    broadcasts,
+  ] = await Promise.all([
     // Direct Chapter DPPs (Multi-relationship matching)
     prisma.dpp.findMany({
       where: {
@@ -360,16 +408,15 @@ export async function loadStudentBatchHome(
       },
     }),
 
-    // Test Series Links
-    prisma.batchTestSeries.findMany({ where: { batchId }, select: { testSeriesId: true } }),
-
-    // Batch Tests
+    // Batch Tests (Assigned via test series, batch schedule, or chapters)
     prisma.test.findMany({
       where: {
         archived: false,
         OR: [
-          { batchSchedule: { batchId, type: { not: "DPP" } } },
+          { batchSchedule: { batchId } },
+          ...(testSeriesIds.length ? [{ testSeriesId: { in: testSeriesIds } }] : []),
           ...(chapterIds.length ? [{ chapterId: { in: chapterIds } }] : []),
+          ...(chapterTitles.length ? [{ chapter: { title: { in: chapterTitles } } }] : []),
           ...(batch.courseId ? [{ chapter: { subject: { courseId: batch.courseId } } }] : []),
         ],
       },
@@ -678,8 +725,8 @@ export async function loadStudentBatchHome(
     });
   }
 
-  // Sort timeline chronologically
-  timelineEvents.sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
+  // Sort timeline chronologically descending (newest on top, older below)
+  timelineEvents.sort((a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime());
 
   // 8. Build Centralized "All PDFs" Library
   const allPdfs: BatchPdfItem[] = [];
