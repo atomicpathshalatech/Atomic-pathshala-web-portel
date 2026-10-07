@@ -1,6 +1,7 @@
 import "server-only";
 import { loadServerPdfJs } from "@/lib/pdf/server-pdf";
 import { parsePageTextNatively } from "@/lib/module-studio/native-parser";
+import { convertKrutiDevToUnicode, isKrutiDevEncoded } from "@/lib/module-studio/krutidev-converter";
 import { executeGeminiWithFailover } from "@/lib/questions/gemini-engine";
 import { parseAiJson } from "@/lib/ai/latex-json";
 import { lightThinking } from "@/lib/ai/gemini-models";
@@ -168,7 +169,10 @@ export async function executeParallelPdfExtraction(
             });
           } else {
             // AI ENHANCE: Gemini Structuring
-            const rawBlocks = await aiStructurePage(layer.text);
+            const normalizedText = isKrutiDevEncoded(layer.text)
+              ? convertKrutiDevToUnicode(layer.text)
+              : layer.text;
+            const rawBlocks = await aiStructurePage(normalizedText);
             elements = rawBlocks.map((b, idx) => ({
               id: `p${pageNumber}-${idx}-${Math.random().toString(36).slice(2, 7)}`,
               order: idx,

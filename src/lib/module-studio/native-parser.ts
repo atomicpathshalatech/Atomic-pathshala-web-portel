@@ -1,6 +1,7 @@
 import "server-only";
 import type { ModuleElementInput } from "@/lib/validation/module";
 import { MODULE_CALLOUT_VARIANTS } from "@/lib/validation/module";
+import { convertKrutiDevToUnicode, isKrutiDevEncoded } from "./krutidev-converter";
 
 export interface NativeParseOptions {
   removeWords?: string[];
@@ -41,7 +42,7 @@ function applyRenames(text: string, renames: Record<string, string>): string {
 /**
  * Ultra-fast deterministic native rule parser that transforms raw PDF text
  * into structured educational blocks in < 1ms without calling AI APIs.
- * Preserves 100% Hindi Devanagari and English Unicode intact.
+ * Automatically detects and converts legacy Kruti Dev / Devlys 010 Hindi into standard UTF-8.
  */
 export function parsePageTextNatively(
   pageText: string,
@@ -51,9 +52,14 @@ export function parsePageTextNatively(
   const removeWords = options.removeWords ?? [];
   const renames = options.renames ?? {};
 
+  // Auto-normalize Kruti Dev / Devlys legacy Hindi text layers to clean UTF-8 Unicode
+  const normalizedPageText = isKrutiDevEncoded(pageText)
+    ? convertKrutiDevToUnicode(pageText)
+    : pageText;
+
   const clean = (t: string) => applyRenames(stripWords(t, removeWords), renames);
 
-  const rawLines = pageText
+  const rawLines = normalizedPageText
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter((l) => {
