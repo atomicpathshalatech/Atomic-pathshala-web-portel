@@ -42,9 +42,9 @@ const nextConfig = {
     // client bundles; per-icon / per-function import rewriting keeps route
     // chunks small.
     optimizePackageImports: ["lucide-react", "date-fns"],
-    // Headless Chromium for the test-PDF download (/api/tests/[id]/pdf):
-    // kept out of the bundle and its binary files traced into that route only.
-    serverComponentsExternalPackages: ["@sparticuz/chromium", "puppeteer-core"],
+    // Headless Chromium and pdf processing libraries:
+    // kept out of the bundle and traced into serverless functions properly.
+    serverComponentsExternalPackages: ["@sparticuz/chromium", "puppeteer-core", "pdf-lib"],
     serverActions: {
       bodySizeLimit: "10mb",
     },
