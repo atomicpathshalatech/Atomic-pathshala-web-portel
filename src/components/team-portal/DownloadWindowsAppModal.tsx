@@ -142,15 +142,14 @@ export function DownloadWindowsAppModal({
           >
             Cancel
           </button>
-          <button
-            type="button"
-            onClick={handleDownload}
-            disabled={downloading}
-            className="bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white rounded-full px-6 py-2.5 font-label-md text-label-sm font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-60"
+          <a
+            href="/api/desktop/download"
+            download
+            className="bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white rounded-full px-6 py-2.5 font-label-md text-label-sm font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-2"
           >
-            <span className="material-symbols-outlined text-lg">{downloading ? "sync" : "download"}</span>
-            <span>{downloading ? "Starting Download…" : "Download App (.exe)"}</span>
-          </button>
+            <span className="material-symbols-outlined text-lg">download</span>
+            <span>Download App (.exe)</span>
+          </a>
         </div>
       </div>
     </div>
