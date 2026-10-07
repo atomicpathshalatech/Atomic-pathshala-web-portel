@@ -56,6 +56,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         chapter: input.chapter,
         facultyName: input.facultyName,
         academicYear: input.academicYear,
+        layoutStyle: input.layoutStyle,
         ...(input.brandProfileId !== undefined && { brandProfileId: input.brandProfileId }),
       },
     });

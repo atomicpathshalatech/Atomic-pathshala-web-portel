@@ -32,7 +32,6 @@ type ElementRow = {
   label?: string;
 };
 
-// Colour of each kind of box (same as the premium PDF).
 const CALLOUT_COLORS: Record<string, string> = {
   CONCEPT: "#2563eb",
   NOTE: "#d97706",
@@ -51,6 +50,15 @@ const THEME_OPTIONS: { value: string; label: string; swatch: string }[] = [
   { value: "ROYAL", label: "Royal", swatch: "#6d28d9" },
 ];
 
+const LAYOUT_PRESETS = [
+  { id: "MODERN_ACADEMIC", label: "Modern Academic", desc: "Clean cards & NEET/JEE hierarchy", icon: "school" },
+  { id: "PREMIUM_EDTECH", label: "Premium EdTech", desc: "Vibrant section headers & cards", icon: "auto_awesome" },
+  { id: "EXAM_REVISION", label: "Exam Revision", desc: "High-density formula & insight cards", icon: "bolt" },
+  { id: "CONCEPT_MAP", label: "Concept Map", desc: "Relational definitions & examples", icon: "account_tree" },
+  { id: "NCERT_ACADEMIC", label: "NCERT Academic", desc: "Canonical textbook styling", icon: "menu_book" },
+  { id: "VISUAL_LEARNING", label: "Visual Learning", desc: "Diagram & mechanism focus", icon: "image" },
+] as const;
+
 const REBRAND_PRESETS = [
   { value: "ATOMIC_DEFAULT", label: "Atomic Default", desc: "Orange banner & navy headers", icon: "verified" },
   { value: "CHEMISTRY", label: "Chemistry Focus", desc: "Equations & structures preserve", icon: "science" },
@@ -60,7 +68,6 @@ const REBRAND_PRESETS = [
   { value: "TEACHER_CUSTOM", label: "Teacher Custom", desc: "Faculty & batch credentials", icon: "person" },
 ] as const;
 
-/** "Example => Illustration" (or "=", "→", ":") per line → { Example: "Illustration" }. */
 function parseRenames(text: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const line of text.split("\n")) {
@@ -81,8 +88,36 @@ type PageRow = {
   needsReview: boolean;
   warnings: string[];
 };
+
 type VersionRow = { id: string; label: string; createdAt: string };
 type ExportRow = { id: string; fileUrl: string; fileName: string; fileSize: number; createdAt: string; includedWatermark: boolean };
+
+type PageStatusItem = {
+  pageNumber: number;
+  status: "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED";
+  attempts: number;
+  error?: string | null;
+  elementsCount: number;
+  durationMs?: number;
+  isScanned: boolean;
+};
+
+type JobStatusData = {
+  jobId: string;
+  moduleId: string;
+  stage: string;
+  progress: number;
+  totalPages: number;
+  completedPages: number;
+  failedPages: number;
+  pageStatuses: Record<number, PageStatusItem>;
+  errorMessage: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+  pdfType: string;
+  isCached: boolean;
+};
+
 type ModuleDetail = {
   id: string;
   code: string;
@@ -94,6 +129,8 @@ type ModuleDetail = {
   chapter: string | null;
   facultyName: string | null;
   academicYear: string | null;
+  layoutStyle: string | null;
+  contentHash: string | null;
   pageCount: number | null;
   originalFileUrl: string;
   originalFileName: string;
@@ -122,12 +159,6 @@ const ELEMENT_TYPES = [
   "BULLETS",
 ];
 
-// Only the block types this editor gives a real, distinct authoring
-// experience to. DIAGRAM/CHEMICAL_STRUCTURE/CHEMICAL_EQUATION are still
-// selectable on an existing block (via the type dropdown, e.g. one the AI
-// extraction produced) and still export, they just don't get their own
-// "Add Block" button since there's no diagram canvas or structure editor
-// behind them yet — see the Roadmap panel.
 const ADD_PALETTE: { type: string; label: string; icon: string }[] = [
   { type: "HEADING", label: "Heading", icon: "title" },
   { type: "SUBHEADING", label: "Subheading", icon: "short_text" },
@@ -214,7 +245,6 @@ function elementCssStyle(el: ElementRow): CSSProperties {
 }
 
 function extractImgUrl(content: string): string | null {
-  // Alt text may carry a size hint ("![w=42mm](url)").
   const match = /!\[[^\]]*\]\((.+?)\)/.exec(content);
   return match?.[1] ?? null;
 }
@@ -237,6 +267,7 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
   const [data, setData] = useState<ModuleDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
+  const [jobStatus, setJobStatus] = useState<JobStatusData | null>(null);
   const [pageEdits, setPageEdits] = useState<Record<string, ElementRow[]>>({});
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
@@ -248,7 +279,20 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
   const [exportVersionId, setExportVersionId] = useState("");
   const [includeWatermark, setIncludeWatermark] = useState(false);
   const [exporting, setExporting] = useState(false);
-  // Premium redesign: what to drop / rename while reading the old PDF, and the export look.
+
+  // Edit Details Modal state
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editSubject, setEditSubject] = useState("");
+  const [editChapter, setEditChapter] = useState("");
+  const [editClass, setEditClass] = useState("");
+  const [editBatch, setEditBatch] = useState("");
+  const [editFaculty, setEditFaculty] = useState("");
+  const [editYear, setEditYear] = useState("");
+  const [savingDetails, setSavingDetails] = useState(false);
+
+  // Layout & Theme Options
+  const [selectedLayout, setSelectedLayout] = useState<string>("MODERN_ACADEMIC");
   const [removeWordsText, setRemoveWordsText] = useState("");
   const [renamesText, setRenamesText] = useState("Example => Illustration");
   const [fromPage, setFromPage] = useState("");
@@ -282,29 +326,80 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const pendingImageTargetRef = useRef<{ pageId: string; elId: string } | null>(null);
   const dragIndexRef = useRef<number | null>(null);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
-    const res = await fetch(`/api/team/modules/${moduleId}`);
-    const body = await res.json();
-    if (!body.success) {
-      setError(body.error ?? "Could not load this module.");
-      return;
+    try {
+      const res = await fetch(`/api/team/modules/${moduleId}`);
+      const body = await res.json();
+      if (!body.success) {
+        setError(body.error ?? "Could not load this module.");
+        return;
+      }
+      const m = body.data.module as ModuleDetail;
+      setData(m);
+      setSelectedLayout(m.layoutStyle || "MODERN_ACADEMIC");
+      setEditTitle(m.title);
+      setEditSubject(m.subject || "");
+      setEditChapter(m.chapter || "");
+      setEditClass(m.class || "");
+      setEditBatch(m.batch || "");
+      setEditFaculty(m.facultyName || "");
+      setEditYear(m.academicYear || "");
+
+      const edits: Record<string, ElementRow[]> = {};
+      for (const p of m.pages) {
+        edits[p.id] = p.elements;
+        savedSnapshotRef.current[p.id] = JSON.stringify(p.elements);
+        historyRef.current[p.id] = { stack: [p.elements], index: 0 };
+      }
+      setPageEdits(edits);
+      setSelectedPageId((prev) => (prev && m.pages.some((p) => p.id === prev) ? prev : (m.pages[0]?.id ?? null)));
+
+      if (m.status === "PROCESSING") {
+        setProcessing(true);
+      }
+    } catch {
+      setError("Failed to connect to module service.");
     }
-    const m = body.data.module as ModuleDetail;
-    setData(m);
-    const edits: Record<string, ElementRow[]> = {};
-    for (const p of m.pages) {
-      edits[p.id] = p.elements;
-      savedSnapshotRef.current[p.id] = JSON.stringify(p.elements);
-      historyRef.current[p.id] = { stack: [p.elements], index: 0 };
-    }
-    setPageEdits(edits);
-    setSelectedPageId((prev) => (prev && m.pages.some((p) => p.id === prev) ? prev : (m.pages[0]?.id ?? null)));
   }, [moduleId]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  // Polling for live asynchronous job progress
+  useEffect(() => {
+    if (!processing) {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+      return;
+    }
+
+    const pollJob = async () => {
+      try {
+        const res = await fetch(`/api/team/modules/${moduleId}/process`);
+        const body = await res.json();
+        if (body.success && body.data.job) {
+          const job = body.data.job as JobStatusData;
+          setJobStatus(job);
+          if (job.stage === "READY_FOR_REVIEW" || job.finishedAt || job.stage === "FAILED") {
+            setProcessing(false);
+            if (pollingRef.current) clearInterval(pollingRef.current);
+            await load();
+          }
+        }
+      } catch {
+        // Transient network drop during poll — don't crash, will retry on next tick
+      }
+    };
+
+    pollJob();
+    pollingRef.current = setInterval(pollJob, 1600);
+
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, [processing, moduleId, load]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -322,7 +417,6 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPageId]);
 
   function pushHistory(pageId: string, snapshot: ElementRow[]) {
@@ -358,13 +452,9 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
       const current = pageEditsRef.current[pid] ?? [];
       if (JSON.stringify(current) === savedSnapshotRef.current[pid]) return;
       savePage(pid, { silent: true });
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, AUTOSAVE_DELAY_MS);
   }
 
-  // Immediate, history-tracked mutation — for structural edits (add/remove/
-  // reorder/type change/style change) that should be individually
-  // undo-able and don't spam history on every keystroke.
   function updateElement(pageId: string, elId: string, patch: Partial<ElementRow>) {
     setPageEdits((prev) => {
       const next = (prev[pageId] ?? []).map((el) => (el.id === elId ? { ...el, ...patch } : el));
@@ -374,10 +464,6 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
     scheduleAutosave();
   }
 
-  // Live, non-history mutation — for keystroke-by-keystroke text edits.
-  // commitHistorySnapshot() below folds the accumulated typing into one
-  // history entry once the field loses focus, so undo steps back a whole
-  // edit rather than one keystroke.
   function updateElementLive(pageId: string, elId: string, patch: Partial<ElementRow>) {
     setPageEdits((prev) => ({
       ...prev,
@@ -452,14 +538,74 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
       });
       const body = await res.json();
       if (!body.success) {
-        setError(body.error ?? "Processing failed.");
+        setError(body.error ?? "Failed to initiate extraction job.");
+        setProcessing(false);
       } else {
+        if (body.data.isCached) {
+          setProcessing(false);
+          await load();
+        }
+      }
+    } catch {
+      setError("Unable to connect to server. Please check your connection.");
+      setProcessing(false);
+    }
+  }
+
+  async function cancelCurrentJob() {
+    try {
+      await fetch(`/api/team/modules/${moduleId}/process?action=cancel`, { method: "POST" });
+      setProcessing(false);
+      await load();
+    } catch {
+      setError("Failed to cancel job.");
+    }
+  }
+
+  async function saveDetails(e: React.FormEvent) {
+    e.preventDefault();
+    setSavingDetails(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/team/modules/${moduleId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: editTitle,
+          subject: editSubject || undefined,
+          chapter: editChapter || undefined,
+          class: editClass || undefined,
+          batch: editBatch || undefined,
+          facultyName: editFaculty || undefined,
+          academicYear: editYear || undefined,
+          layoutStyle: selectedLayout,
+        }),
+      });
+      const body = await res.json();
+      if (!body.success) {
+        setError(body.error ?? "Could not update module details.");
+      } else {
+        setShowEditModal(false);
         await load();
       }
     } catch {
       setError("Network connection error. Please try again.");
     } finally {
-      setProcessing(false);
+      setSavingDetails(false);
+    }
+  }
+
+  async function updateLayoutStyle(newLayout: string) {
+    setSelectedLayout(newLayout);
+    try {
+      await fetch(`/api/team/modules/${moduleId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ layoutStyle: newLayout }),
+      });
+      setData((prev) => (prev ? { ...prev, layoutStyle: newLayout } : prev));
+    } catch {
+      // Best effort background sync
     }
   }
 
@@ -524,7 +670,7 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
       }
       updateElement(target.pageId, target.elId, { content: `![](${body.data.url})` });
     } catch {
-      setError("Network connection error while uploading the image.");
+      setError("Network error while uploading image.");
     } finally {
       setUploadingImageFor(null);
     }
@@ -634,66 +780,188 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
   const canUndo = !!history && history.index > 0;
   const canRedo = !!history && history.index < history.stack.length - 1;
 
+  const currentStageLabel = (stage?: string) => {
+    switch (stage) {
+      case "ANALYZING":
+        return "Analyzing PDF layout and language layers…";
+      case "EXTRACTING":
+        return "Extracting text and isolating scanned pages…";
+      case "OCR_PROCESSING":
+        return "Processing pages in parallel with Gemini AI…";
+      case "RECONSTRUCTING_LAYOUT":
+        return "Structuring formulas, callouts, and questions…";
+      case "GENERATING_PREVIEW":
+        return "Generating academic layout and preview…";
+      case "READY_FOR_REVIEW":
+        return "Module Ready for Review";
+      case "FAILED":
+        return "Processing Encountered Issues";
+      default:
+        return "Processing Module…";
+    }
+  };
+
   return (
     <div className="space-y-stack-lg">
       <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={onImageFileChosen} />
 
+      {/* Header & Quick Metadata Editor */}
       <div>
         <Link href="/team/modules" className="text-label-sm text-primary hover:underline flex items-center gap-1 mb-2 w-fit">
           <span className="material-symbols-outlined text-sm">arrow_back</span>
           Module Studio
         </Link>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="font-headline-lg text-headline-lg text-on-surface">{data.title}</h1>
-            <p className="text-label-sm text-on-surface-variant">
-              {data.code} · {data.subject ?? "—"} · {data.chapter ?? "—"}
-              {data.brandProfile ? ` · Brand: ${data.brandProfile.name}` : " · No brand profile"}
+        <div className="flex flex-wrap items-center justify-between gap-4 glass-card p-5 rounded-2xl">
+          <div className="space-y-1">
+            <div className="flex items-center gap-3">
+              <h1 className="font-headline-lg text-headline-lg text-on-surface font-extrabold">{data.title}</h1>
+              <button
+                type="button"
+                onClick={() => setShowEditModal(true)}
+                title="Edit module name and academic metadata"
+                className="text-primary hover:bg-primary/10 p-1.5 rounded-lg transition-colors flex items-center gap-1 text-label-sm"
+              >
+                <span className="material-symbols-outlined text-base">edit</span>
+                <span className="text-xs font-semibold">Edit Info</span>
+              </button>
+            </div>
+            <p className="text-label-sm text-on-surface-variant flex flex-wrap items-center gap-2">
+              <span className="font-mono font-bold text-primary">{data.code}</span>
+              <span>·</span>
+              <span className="font-semibold text-on-surface">{data.subject ?? "No Subject"}</span>
+              <span>·</span>
+              <span>{data.chapter ?? "No Chapter"}</span>
+              {data.facultyName && (
+                <>
+                  <span>·</span>
+                  <span className="text-primary font-medium">Faculty: {data.facultyName}</span>
+                </>
+              )}
+              {data.batch && (
+                <>
+                  <span>·</span>
+                  <span className="bg-surface-container px-2 py-0.5 rounded text-xs">Batch: {data.batch}</span>
+                </>
+              )}
             </p>
           </div>
-          <span className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${STATUS_STYLE[data.status] ?? ""}`}>
-            {data.status.replace(/_/g, " ")}
-          </span>
+          <div className="flex items-center gap-3">
+            <span className={`px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider ${STATUS_STYLE[data.status] ?? ""}`}>
+              {data.status.replace(/_/g, " ")}
+            </span>
+          </div>
         </div>
       </div>
 
-      {error && <p className="text-label-sm text-error">{error}</p>}
-
-      <section className="glass-card rounded-2xl p-6 space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="font-headline-md text-headline-md text-on-surface">Extraction</h2>
-            <p className="text-label-sm text-on-surface-variant">
-              {data.pageCount ? `${data.pageCount} pages processed.` : "Not processed yet."}
-              {latestJob?.errorMessage && <span className="text-red-500"> {latestJob.errorMessage}</span>}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={runProcess}
-            disabled={processing}
-            className="bg-primary text-on-primary rounded-full px-5 py-2.5 font-label-md text-label-md disabled:opacity-60 hover:opacity-90 transition-opacity"
-          >
-            {processing ? "Reading pages… (about 15 sec per page)" : data.pageCount ? "Reprocess" : "Run Extraction"}
+      {error && (
+        <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-700 dark:text-red-400 text-label-sm flex items-center justify-between">
+          <span>{error}</span>
+          <button type="button" onClick={() => setError(null)} className="font-bold text-xs uppercase hover:underline">
+            Dismiss
           </button>
         </div>
-        <details className="rounded-xl border border-outline-variant/30 p-3" open={!data.pageCount}>
-          <summary className="cursor-pointer text-label-sm font-label-md text-on-surface select-none">
-            Premium redesign options — words to remove, labels to rename, pages
+      )}
+
+      {/* Real-time Asynchronous Extraction Console */}
+      <section className="glass-card rounded-2xl p-6 space-y-4 border border-outline-variant/30">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-primary text-2xl">electric_bolt</span>
+              <h2 className="font-headline-md text-headline-md text-on-surface">Parallel Extraction Engine</h2>
+            </div>
+            <p className="text-label-sm text-on-surface-variant mt-0.5">
+              High-speed parallel text extraction with AI block structuring and per-page fault tolerance.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {processing && (
+              <button
+                type="button"
+                onClick={cancelCurrentJob}
+                className="rounded-full border border-red-500/40 text-red-600 px-4 py-2 font-label-md text-label-sm hover:bg-red-500/10 transition-colors"
+              >
+                Cancel Extraction
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={runProcess}
+              disabled={processing}
+              className="bg-primary text-on-primary rounded-full px-6 py-2.5 font-label-md text-label-md disabled:opacity-60 hover:opacity-90 transition-all shadow-sm flex items-center gap-2"
+            >
+              <span className="material-symbols-outlined text-lg">{processing ? "sync" : "play_arrow"}</span>
+              {processing ? "Extracting in background…" : data.pageCount ? "Reprocess Module" : "Run Extraction"}
+            </button>
+          </div>
+        </div>
+
+        {/* Live Progress Bar if Processing or Status Available */}
+        {(processing || jobStatus) && (
+          <div className="space-y-3 p-4 rounded-xl bg-surface-container-lowest border border-outline-variant/30">
+            <div className="flex items-center justify-between text-label-sm">
+              <span className="font-semibold text-primary flex items-center gap-2">
+                {processing && <span className="inline-block w-2 h-2 rounded-full bg-primary animate-ping" />}
+                {currentStageLabel(jobStatus?.stage || latestJob?.stage)}
+              </span>
+              <span className="font-bold text-on-surface">
+                {jobStatus?.progress ?? latestJob?.progress ?? 0}%
+                {jobStatus && jobStatus.totalPages > 0 ? ` (${jobStatus.completedPages} / ${jobStatus.totalPages} pages)` : ""}
+              </span>
+            </div>
+
+            <div className="w-full bg-surface-container-high rounded-full h-3 overflow-hidden">
+              <div
+                className="bg-gradient-to-r from-primary to-secondary h-full rounded-full transition-all duration-300 ease-out"
+                style={{ width: `${Math.max(4, jobStatus?.progress ?? latestJob?.progress ?? 0)}%` }}
+              />
+            </div>
+
+            {/* Page matrix visualizer */}
+            {jobStatus && Object.keys(jobStatus.pageStatuses).length > 0 && (
+              <div className="pt-2">
+                <p className="text-[11px] uppercase font-bold text-on-surface-variant mb-2">Page-Level Status Matrix</p>
+                <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-2 bg-surface-container-high/30 rounded-lg">
+                  {Object.values(jobStatus.pageStatuses).map((p) => {
+                    const bg =
+                      p.status === "COMPLETED"
+                        ? "bg-green-500 text-white"
+                        : p.status === "FAILED"
+                        ? "bg-red-500 text-white"
+                        : p.status === "PROCESSING"
+                        ? "bg-primary text-white animate-pulse"
+                        : "bg-surface-container-high text-on-surface-variant";
+
+                    return (
+                      <div
+                        key={p.pageNumber}
+                        title={`Page ${p.pageNumber}: ${p.status}${p.error ? ` - ${p.error}` : ""}${p.durationMs ? ` (${p.durationMs}ms)` : ""}`}
+                        className={`px-2 py-1 rounded text-[10px] font-mono font-bold cursor-default ${bg}`}
+                      >
+                        P{p.pageNumber}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Options accordion */}
+        <details className="rounded-xl border border-outline-variant/30 p-3 bg-surface-container-lowest" open={!data.pageCount}>
+          <summary className="cursor-pointer text-label-sm font-label-md text-on-surface select-none flex items-center justify-between">
+            <span>Redesign & Extraction Fine-Tuning Options</span>
+            <span className="text-xs text-primary font-normal">Click to toggle</span>
           </summary>
-          <p className="text-label-sm text-on-surface-variant mt-2">
-            Each page is read by AI with its layout: headings, paragraphs, lists, boxes (Concept / Note / Example / Tip…), tables,
-            formulas and questions become editable blocks; every diagram and structure is cropped from the page exactly as printed.
-            Running headers, footers and page numbers are dropped automatically.
-          </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
             <label className="block">
               <span className="text-label-sm text-on-surface-variant block mb-1">Words / lines to remove (one per line)</span>
               <textarea
                 value={removeWordsText}
                 onChange={(e) => setRemoveWordsText(e.target.value)}
-                rows={4}
-                placeholder={"Old institute name\nOld website"}
+                rows={3}
+                placeholder={"Old coaching institute name\nOld website or copyright footer"}
                 className="w-full rounded-lg border border-outline-variant/40 px-3 py-2 text-label-sm bg-surface-container-lowest"
               />
             </label>
@@ -702,30 +970,82 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
               <textarea
                 value={renamesText}
                 onChange={(e) => setRenamesText(e.target.value)}
-                rows={4}
+                rows={3}
                 placeholder={"Example => Illustration\nKey Point => Atomic Insight"}
                 className="w-full rounded-lg border border-outline-variant/40 px-3 py-2 text-label-sm bg-surface-container-lowest font-mono"
               />
             </label>
           </div>
           <div className="flex flex-wrap items-center gap-2 mt-3 text-label-sm text-on-surface-variant">
-            <span>Pages</span>
-            <input value={fromPage} onChange={(e) => setFromPage(e.target.value.replace(/\D/g, ""))} placeholder="from" className="w-16 rounded-lg border border-outline-variant/40 px-2 py-1 bg-surface-container-lowest" />
+            <span>Pages: from</span>
+            <input
+              value={fromPage}
+              onChange={(e) => setFromPage(e.target.value.replace(/\D/g, ""))}
+              placeholder="1"
+              className="w-16 rounded-lg border border-outline-variant/40 px-2 py-1 bg-surface-container-lowest"
+            />
             <span>to</span>
-            <input value={toPage} onChange={(e) => setToPage(e.target.value.replace(/\D/g, ""))} placeholder="to" className="w-16 rounded-lg border border-outline-variant/40 px-2 py-1 bg-surface-container-lowest" />
-            <span>(leave empty for all; a big book can be done 15–20 pages at a time)</span>
+            <input
+              value={toPage}
+              onChange={(e) => setToPage(e.target.value.replace(/\D/g, ""))}
+              placeholder="all"
+              className="w-16 rounded-lg border border-outline-variant/40 px-2 py-1 bg-surface-container-lowest"
+            />
+            <span className="text-xs opacity-75">(Leave blank to extract entire document in parallel)</span>
           </div>
         </details>
-        <div className="flex items-center gap-4 pt-2">
+
+        <div className="flex items-center gap-4 pt-1">
           <a
             href={data.originalFileUrl}
             target="_blank"
             rel="noreferrer"
-            className="text-label-sm text-primary hover:underline inline-flex items-center gap-1"
+            className="text-label-sm text-primary hover:underline inline-flex items-center gap-1.5"
           >
-            <span className="material-symbols-outlined text-sm">description</span>
-            View original PDF ({data.originalFileName})
+            <span className="material-symbols-outlined text-base">picture_as_pdf</span>
+            View original source PDF ({data.originalFileName})
           </a>
+        </div>
+      </section>
+
+      {/* Academic Layout Engine Selector */}
+      <section className="glass-card rounded-2xl p-6 space-y-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-primary text-2xl">style</span>
+            <h2 className="font-headline-md text-headline-md text-on-surface">Academic Layout System</h2>
+          </div>
+          <p className="text-label-sm text-on-surface-variant mt-0.5">
+            Select a pedagogical presentation layout tailored for NEET, JEE, or Board revision.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {LAYOUT_PRESETS.map((layout) => {
+            const active = selectedLayout === layout.id;
+            return (
+              <button
+                key={layout.id}
+                type="button"
+                onClick={() => updateLayoutStyle(layout.id)}
+                className={`p-3.5 rounded-xl border text-left transition-all flex flex-col justify-between gap-2 ${
+                  active
+                    ? "border-primary bg-primary/10 ring-2 ring-primary/30"
+                    : "border-outline-variant/30 bg-surface-container-lowest hover:border-outline-variant/60"
+                }`}
+              >
+                <div className="flex items-center gap-1.5">
+                  <span className={`material-symbols-outlined text-lg ${active ? "text-primary" : "text-on-surface-variant"}`}>
+                    {layout.icon}
+                  </span>
+                  <span className={`font-label-md text-label-sm line-clamp-1 ${active ? "text-primary font-bold" : "text-on-surface font-semibold"}`}>
+                    {layout.label}
+                  </span>
+                </div>
+                <span className="text-[11px] text-on-surface-variant line-clamp-2 leading-tight">{layout.desc}</span>
+              </button>
+            );
+          })}
         </div>
       </section>
 
@@ -873,92 +1193,11 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
         </details>
       </section>
 
-      {/* Verification & Preservation Report Modal */}
-      {showReportModal && verificationReport && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-surface rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl border border-outline-variant/30">
-            {/* Modal Header */}
-            <div className="p-5 border-b border-outline-variant/30 flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <span className="material-symbols-outlined text-green-600 text-2xl">verified</span>
-                <div>
-                  <h3 className="font-headline-sm text-headline-sm text-on-surface">Module Verification & Preservation Audit</h3>
-                  <p className="text-label-sm text-on-surface-variant">Code: {verificationReport.moduleCode} • {verificationReport.originalFileName}</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowReportModal(false)}
-                className="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high"
-              >
-                <span className="material-symbols-outlined text-lg">close</span>
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div className="p-5 space-y-4 overflow-y-auto">
-              {/* Overall Score Banner */}
-              <div className="rounded-xl p-4 bg-green-500/10 border border-green-500/30 flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-label-sm font-bold uppercase tracking-wider text-green-700 dark:text-green-400">
-                      {verificationReport.overallStatus === "SAFE_TO_PUBLISH" ? "✓ Safe to Publish" : verificationReport.overallStatus}
-                    </span>
-                  </div>
-                  <p className="text-label-sm text-on-surface-variant mt-1">{verificationReport.recommendation}</p>
-                </div>
-                <div className="text-right">
-                  <div className="text-3xl font-extrabold text-green-600">{verificationReport.overallScore}%</div>
-                  <div className="text-[11px] text-on-surface-variant">Fidelity Score</div>
-                </div>
-              </div>
-
-              {/* Metrics Grid */}
-              <div className="space-y-2">
-                <h4 className="text-label-sm font-bold uppercase tracking-wider text-on-surface-variant">Fidelity Audit Metrics</h4>
-                <div className="grid grid-cols-1 gap-2">
-                  {verificationReport.metrics.map((m: any, idx: number) => (
-                    <div key={idx} className="rounded-lg border border-outline-variant/30 p-3 bg-surface-container-lowest flex items-start justify-between gap-3">
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="material-symbols-outlined text-sm text-green-600">check_circle</span>
-                          <span className="font-semibold text-label-sm text-on-surface">{m.name}</span>
-                        </div>
-                        <p className="text-label-sm text-on-surface-variant mt-0.5">{m.details}</p>
-                      </div>
-                      <span className="text-xs font-bold text-green-600 shrink-0">{m.score}%</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="p-4 border-t border-outline-variant/30 flex items-center justify-between gap-3 bg-surface-container-lowest rounded-b-2xl">
-              <a
-                href={`/api/team/modules/${moduleId}/report?format=md`}
-                download
-                className="text-label-sm text-primary hover:underline flex items-center gap-1"
-              >
-                <span className="material-symbols-outlined text-sm">download</span>
-                Download Audit Report (.md)
-              </a>
-              <button
-                type="button"
-                onClick={() => setShowReportModal(false)}
-                className="bg-primary text-on-primary rounded-full px-5 py-2 font-label-md text-label-sm hover:opacity-90"
-              >
-                Done
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
+      {/* Note Studio / Canvas Workspace */}
       {data.pages.length > 0 && selectedPage && (
         <section className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="font-headline-md text-headline-md text-on-surface">Note Studio</h2>
+            <h2 className="font-headline-md text-headline-md text-on-surface font-bold">Note Studio Workspace</h2>
             <div className="flex items-center gap-2 flex-wrap">
               <button
                 type="button"
@@ -981,18 +1220,18 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
               <button
                 type="button"
                 onClick={() => setPreviewMode((v) => !v)}
-                className={`px-3 py-1.5 rounded-full text-label-sm flex items-center gap-1.5 ${previewMode ? "bg-primary text-on-primary" : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest"}`}
+                className={`px-3 py-1.5 rounded-full text-label-sm flex items-center gap-1.5 ${previewMode ? "bg-primary text-on-primary font-semibold" : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest"}`}
                 title="Toggle a read-only preview that renders math (KaTeX) and images the way the export will"
               >
                 <span className="material-symbols-outlined text-base">visibility</span>
-                {previewMode ? "Editing" : "Preview"}
+                {previewMode ? "Live Editing" : "Formatted Preview"}
               </button>
               <SaveStatusPill status={saveStatus} />
               {selectedPage.needsReview && (
                 <button
                   type="button"
                   onClick={() => selectedPageId && savePage(selectedPageId, { markReviewed: true })}
-                  className="px-3 py-1.5 rounded-full text-label-sm bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 flex items-center gap-1.5"
+                  className="px-3 py-1.5 rounded-full text-label-sm bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 flex items-center gap-1.5 font-medium"
                 >
                   <span className="material-symbols-outlined text-base">task_alt</span>
                   Mark Reviewed
@@ -1011,7 +1250,7 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
                   setSelectedElementId(null);
                 }}
                 className={`shrink-0 px-3 py-1.5 rounded-full text-label-sm flex items-center gap-1.5 transition-colors ${
-                  selectedPageId === p.id ? "bg-primary text-on-primary" : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest"
+                  selectedPageId === p.id ? "bg-primary text-on-primary font-bold shadow-sm" : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest"
                 }`}
               >
                 Page {p.pageNumber}
@@ -1023,7 +1262,7 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
           {selectedPage.warnings.length > 0 && <p className="text-label-sm text-amber-600">{selectedPage.warnings.join(" ")}</p>}
 
           <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr_280px] gap-3 items-start">
-            {/* Elements outline / add-block palette */}
+            {/* Blocks Outline */}
             <div className="glass-card rounded-xl p-3 space-y-3 lg:sticky lg:top-4">
               <div>
                 <p className="text-label-sm font-label-sm text-on-surface-variant uppercase tracking-wide mb-1.5">Blocks</p>
@@ -1092,7 +1331,7 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
             {/* Canvas */}
             <div className="glass-card rounded-xl p-2 overflow-x-auto">
               <div
-                className="bg-white mx-auto shadow-sm border border-outline-variant/20 rounded"
+                className="bg-white mx-auto shadow-sm border border-outline-variant/20 rounded-xl"
                 style={{ width: "100%", maxWidth: 700, aspectRatio: "210 / 297", padding: "5% 7%", overflowY: "auto" }}
               >
                 {currentElements.length === 0 ? (
@@ -1141,6 +1380,7 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
         </section>
       )}
 
+      {/* Export & Versions Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-gutter">
         <section className="glass-card rounded-2xl p-6 space-y-3">
           <h2 className="font-headline-md text-headline-md text-on-surface">Versions</h2>
@@ -1156,7 +1396,7 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
               type="button"
               onClick={createVersion}
               disabled={creatingVersion || !versionLabel.trim()}
-              className="bg-primary/10 text-primary rounded-full px-4 py-2 font-label-sm text-label-sm disabled:opacity-60 hover:bg-primary/20 transition-colors shrink-0"
+              className="bg-primary/10 text-primary rounded-full px-4 py-2 font-label-sm text-label-sm disabled:opacity-60 hover:bg-primary/20 transition-colors shrink-0 font-medium"
             >
               Save Version
             </button>
@@ -1176,7 +1416,7 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
         </section>
 
         <section className="glass-card rounded-2xl p-6 space-y-3">
-          <h2 className="font-headline-md text-headline-md text-on-surface">Export</h2>
+          <h2 className="font-headline-md text-headline-md text-on-surface">Export Module</h2>
           <div className="space-y-2">
             <select
               value={exportVersionId}
@@ -1198,7 +1438,7 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
                   onClick={() => setExportDesign(d)}
                   className={`flex-1 rounded-lg border px-3 py-1.5 ${exportDesign === d ? "border-primary bg-primary/10 text-primary font-semibold" : "border-outline-variant/40 text-on-surface-variant"}`}
                 >
-                  {d === "premium" ? "Premium colourful" : "Classic"}
+                  {d === "premium" ? "Premium Colourful" : "Classic"}
                 </button>
               ))}
             </div>
@@ -1228,7 +1468,7 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
                 rel="noreferrer"
                 className="block text-center w-full rounded-full border border-primary text-primary px-4 py-2 font-label-md text-label-md hover:bg-primary/5"
               >
-                Preview premium design
+                Preview Premium Typeset Document
               </a>
             )}
             <button
@@ -1237,7 +1477,7 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
               disabled={exporting || data.pages.length === 0}
               className="w-full bg-primary text-on-primary rounded-full px-4 py-2.5 font-label-md text-label-md disabled:opacity-60 hover:opacity-90 transition-opacity"
             >
-              {exporting ? "Creating PDF… (up to a minute)" : exportDesign === "premium" ? "Export Premium PDF" : "Export Branded PDF"}
+              {exporting ? "Creating PDF…" : exportDesign === "premium" ? "Export Premium PDF" : "Export Branded PDF"}
             </button>
           </div>
           {data.exportHistory.length > 0 && (
@@ -1255,21 +1495,196 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
         </section>
       </div>
 
-      <details className="glass-card rounded-2xl p-6">
-        <summary className="cursor-pointer font-headline-md text-headline-md text-on-surface select-none">
-          Roadmap — coming soon to Note Studio
-        </summary>
-        <ul className="mt-3 space-y-2 text-label-sm text-on-surface-variant list-disc pl-5">
-          <li>Freeform absolute-position canvas and a real pagination/layout engine (this build lays out blocks as a flowing document, top to bottom, not drag-anywhere).</li>
-          <li>Typesetting formulas (KaTeX) into the exported PDF itself — they render correctly on screen here, but export as styled LaTeX source text until a PDF-side math renderer is wired in.</li>
-          <li>Real font embedding for Hindi/Devanagari and other non-Latin scripts in the exported PDF — the editor displays them correctly, but export is limited to jsPDF's built-in Helvetica/Times/Courier.</li>
-          <li>OCR for scanned pages (this pipeline extracts real text layers only).</li>
-          <li>A drawing/structure editor behind the Diagram and Chemical Structure block types — today they're styled text placeholders.</li>
-          <li>AI-assisted layout redesign, a design-token/theme system, and a master-page/header-footer designer beyond the existing Brand Profile.</li>
-          <li>A pre-flight validation checklist gating Publish, and a version compare/restore UI (versions save and list today; diffing and one-click restore aren't built yet).</li>
-          <li>Multi-user real-time collaborative editing (autosave here is per-editor, not shared live between two people on the same page at once).</li>
-        </ul>
-      </details>
+      {/* Edit Details Modal */}
+      {showEditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-surface rounded-2xl max-w-xl w-full flex flex-col shadow-2xl border border-outline-variant/30 overflow-hidden">
+            <div className="p-5 border-b border-outline-variant/30 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary text-2xl">edit_note</span>
+                <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold">Edit Module Metadata</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowEditModal(false)}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high"
+              >
+                <span className="material-symbols-outlined text-lg">close</span>
+              </button>
+            </div>
+
+            <form onSubmit={saveDetails} className="p-6 space-y-4">
+              <div>
+                <label className="text-label-sm text-on-surface-variant block mb-1">Module Title *</label>
+                <input
+                  type="text"
+                  required
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  className="w-full rounded-lg border border-outline-variant/40 px-3 py-2 text-label-md bg-surface-container-lowest font-semibold"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-label-sm text-on-surface-variant block mb-1">Subject</label>
+                  <input
+                    type="text"
+                    value={editSubject}
+                    onChange={(e) => setEditSubject(e.target.value)}
+                    placeholder="e.g. Chemistry"
+                    className="w-full rounded-lg border border-outline-variant/40 px-3 py-2 text-label-sm bg-surface-container-lowest"
+                  />
+                </div>
+                <div>
+                  <label className="text-label-sm text-on-surface-variant block mb-1">Chapter</label>
+                  <input
+                    type="text"
+                    value={editChapter}
+                    onChange={(e) => setEditChapter(e.target.value)}
+                    placeholder="e.g. Mole Concept"
+                    className="w-full rounded-lg border border-outline-variant/40 px-3 py-2 text-label-sm bg-surface-container-lowest"
+                  />
+                </div>
+                <div>
+                  <label className="text-label-sm text-on-surface-variant block mb-1">Class</label>
+                  <input
+                    type="text"
+                    value={editClass}
+                    onChange={(e) => setEditClass(e.target.value)}
+                    placeholder="11 or 12"
+                    className="w-full rounded-lg border border-outline-variant/40 px-3 py-2 text-label-sm bg-surface-container-lowest"
+                  />
+                </div>
+                <div>
+                  <label className="text-label-sm text-on-surface-variant block mb-1">Batch</label>
+                  <input
+                    type="text"
+                    value={editBatch}
+                    onChange={(e) => setEditBatch(e.target.value)}
+                    placeholder="Selection Pro Batch"
+                    className="w-full rounded-lg border border-outline-variant/40 px-3 py-2 text-label-sm bg-surface-container-lowest"
+                  />
+                </div>
+                <div>
+                  <label className="text-label-sm text-on-surface-variant block mb-1">Faculty Name</label>
+                  <input
+                    type="text"
+                    value={editFaculty}
+                    onChange={(e) => setEditFaculty(e.target.value)}
+                    placeholder="e.g. Firoz Sir"
+                    className="w-full rounded-lg border border-outline-variant/40 px-3 py-2 text-label-sm bg-surface-container-lowest"
+                  />
+                </div>
+                <div>
+                  <label className="text-label-sm text-on-surface-variant block mb-1">Academic Year</label>
+                  <input
+                    type="text"
+                    value={editYear}
+                    onChange={(e) => setEditYear(e.target.value)}
+                    placeholder="2026-27"
+                    className="w-full rounded-lg border border-outline-variant/40 px-3 py-2 text-label-sm bg-surface-container-lowest"
+                  />
+                </div>
+              </div>
+
+              <div className="p-4 border-t border-outline-variant/30 flex items-center justify-end gap-3 -mx-6 -mb-6 bg-surface-container-lowest">
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="px-4 py-2 rounded-full border border-outline-variant/40 text-label-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingDetails}
+                  className="bg-primary text-on-primary rounded-full px-6 py-2 font-label-md text-label-sm hover:opacity-90 disabled:opacity-60"
+                >
+                  {savingDetails ? "Saving…" : "Save Changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Verification & Preservation Report Modal */}
+      {showReportModal && verificationReport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-surface rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl border border-outline-variant/30">
+            <div className="p-5 border-b border-outline-variant/30 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <span className="material-symbols-outlined text-green-600 text-2xl">verified</span>
+                <div>
+                  <h3 className="font-headline-sm text-headline-sm text-on-surface">Module Verification & Preservation Audit</h3>
+                  <p className="text-label-sm text-on-surface-variant">Code: {verificationReport.moduleCode} • {verificationReport.originalFileName}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowReportModal(false)}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high"
+              >
+                <span className="material-symbols-outlined text-lg">close</span>
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 overflow-y-auto">
+              <div className="rounded-xl p-4 bg-green-500/10 border border-green-500/30 flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-label-sm font-bold uppercase tracking-wider text-green-700 dark:text-green-400">
+                      {verificationReport.overallStatus === "SAFE_TO_PUBLISH" ? "✓ Safe to Publish" : verificationReport.overallStatus}
+                    </span>
+                  </div>
+                  <p className="text-label-sm text-on-surface-variant mt-1">{verificationReport.recommendation}</p>
+                </div>
+                <div className="text-right">
+                  <div className="text-3xl font-extrabold text-green-600">{verificationReport.overallScore}%</div>
+                  <div className="text-[11px] text-on-surface-variant">Fidelity Score</div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="text-label-sm font-bold uppercase tracking-wider text-on-surface-variant">Fidelity Audit Metrics</h4>
+                <div className="grid grid-cols-1 gap-2">
+                  {verificationReport.metrics.map((m: any, idx: number) => (
+                    <div key={idx} className="rounded-lg border border-outline-variant/30 p-3 bg-surface-container-lowest flex items-start justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="material-symbols-outlined text-sm text-green-600">check_circle</span>
+                          <span className="font-semibold text-label-sm text-on-surface">{m.name}</span>
+                        </div>
+                        <p className="text-label-sm text-on-surface-variant mt-0.5">{m.details}</p>
+                      </div>
+                      <span className="text-xs font-bold text-green-600 shrink-0">{m.score}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-outline-variant/30 flex items-center justify-between gap-3 bg-surface-container-lowest rounded-b-2xl">
+              <a
+                href={`/api/team/modules/${moduleId}/report?format=md`}
+                download
+                className="text-label-sm text-primary hover:underline flex items-center gap-1"
+              >
+                <span className="material-symbols-outlined text-sm">download</span>
+                Download Audit Report (.md)
+              </a>
+              <button
+                type="button"
+                onClick={() => setShowReportModal(false)}
+                className="bg-primary text-on-primary rounded-full px-5 py-2 font-label-md text-label-sm hover:opacity-90"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1612,13 +2027,13 @@ function PropertiesPanel({
           type="button"
           onClick={onUploadImage}
           disabled={uploading}
-          className="w-full bg-primary/10 text-primary rounded-lg px-3 py-2 text-label-sm hover:bg-primary/20 disabled:opacity-60"
+          className="w-full bg-primary/10 text-primary rounded-lg px-3 py-2 text-label-sm hover:bg-primary/20 disabled:opacity-60 font-medium"
         >
           {uploading ? "Uploading…" : extractImgUrl(el.content) ? "Replace image" : "Upload image"}
         </button>
       )}
 
-      <button type="button" onClick={onDelete} className="w-full text-red-500 border border-red-500/30 rounded-lg px-3 py-2 text-label-sm hover:bg-red-500/5 flex items-center justify-center gap-1.5">
+      <button type="button" onClick={onDelete} className="w-full text-red-500 border border-red-500/30 rounded-lg px-3 py-2 text-label-sm hover:bg-red-500/5 flex items-center justify-center gap-1.5 font-medium">
         <span className="material-symbols-outlined text-base">delete</span>
         Delete block
       </button>

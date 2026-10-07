@@ -37,6 +37,7 @@ export const moduleCreateSchema = z.object({
   chapter: z.string().optional(),
   facultyName: z.string().optional(),
   academicYear: z.string().optional(),
+  layoutStyle: z.string().optional(),
   brandProfileId: z.string().optional(),
 });
 export type ModuleCreateInput = z.infer<typeof moduleCreateSchema>;
@@ -49,6 +50,7 @@ export const moduleUpdateSchema = z.object({
   chapter: z.string().optional(),
   facultyName: z.string().optional(),
   academicYear: z.string().optional(),
+  layoutStyle: z.string().optional(),
   brandProfileId: z.string().nullable().optional(),
 });
 export type ModuleUpdateInput = z.infer<typeof moduleUpdateSchema>;

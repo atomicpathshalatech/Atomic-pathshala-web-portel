@@ -4134,6 +4134,8 @@ model Module {
   chapter      String?
   facultyName  String?
   academicYear String?
+  layoutStyle  String?       @default("MODERN_ACADEMIC")
+  contentHash  String?
   status       ModuleStatus  @default(DRAFT)
   pdfType      ModulePdfType @default(UNKNOWN)
 
@@ -4161,6 +4163,7 @@ model Module {
   processingJobs ProcessingJob[]
   exportHistory  ModuleExport[]
 
+  @@index([contentHash])
   @@map("modules")
 }
 
@@ -4238,17 +4241,24 @@ model BrandProfile {
 }
 
 model ProcessingJob {
-  id           String          @id @default(cuid())
-  moduleId     String
-  stage        ProcessingStage @default(UPLOADING)
-  progress     Int             @default(0)
-  errorMessage String?
-  startedAt    DateTime        @default(now())
-  finishedAt   DateTime?
+  id             String          @id @default(cuid())
+  moduleId       String
+  stage          ProcessingStage @default(UPLOADING)
+  progress       Int             @default(0)
+  totalPages     Int             @default(0)
+  completedPages Int             @default(0)
+  failedPages    Int             @default(0)
+  contentHash    String?
+  pageStatuses   Json            @default("{}")
+  metadata       Json            @default("{}")
+  errorMessage   String?
+  startedAt      DateTime        @default(now())
+  finishedAt     DateTime?
 
   module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
 
   @@index([moduleId])
+  @@index([contentHash])
   @@map("processing_jobs")
 }
 
