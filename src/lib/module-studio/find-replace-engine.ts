@@ -1,4 +1,3 @@
-import "server-only";
 import type { ModuleElementInput } from "@/lib/validation/module";
 
 export interface ReplacementRule {

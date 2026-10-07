@@ -1,5 +1,3 @@
-import "server-only";
-
 export type ModuleSubject = "CHEMISTRY" | "PHYSICS" | "BIOLOGY";
 
 export interface SubjectTheme {
