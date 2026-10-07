@@ -18,7 +18,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 
-type CategoryType = "NEET_PYQ" | "JEE_MAINS_PYQ" | "JEE_ADVANCED_PYQ" | "GENERAL";
+type CategoryType = "NEET_PYQ" | "JEE_MAINS_PYQ" | "JEE_ADVANCED_PYQ" | "BOARD_EXAM" | "GENERAL";
 
 const YEARS = Array.from({ length: 20 }, (_, i) => String(2026 - i));
 
@@ -28,8 +28,11 @@ export default function QuestionExtractUploadPage() {
 
   // Category & PYQ State
   const [categoryType, setCategoryType] = useState<CategoryType>("NEET_PYQ");
+  const [sourceType, setSourceType] = useState<"PYQ" | "PRACTICE" | "TEST_SERIES" | "MODULE">("PYQ");
   const [pyqYear, setPyqYear] = useState<string>("2025");
   const [pyqMonth, setPyqMonth] = useState<"January" | "April">("January");
+  const [classLevel, setClassLevel] = useState<string>("Class 12");
+  const [language, setLanguage] = useState<"English" | "Hindi" | "Bilingual">("English");
 
   // General Source State
   const [sourceName, setSourceName] = useState("ALLEN");
@@ -53,17 +56,26 @@ export default function QuestionExtractUploadPage() {
       setStartNumber(1);
       setEndNumber(200);
       setSubject("Auto Detect");
+      setSourceType("PYQ");
     } else if (cat === "JEE_MAINS_PYQ") {
       setStartNumber(1);
       setEndNumber(90);
       setSubject("Auto Detect");
+      setSourceType("PYQ");
     } else if (cat === "JEE_ADVANCED_PYQ") {
       setStartNumber(1);
       setEndNumber(54);
       setSubject("Auto Detect");
+      setSourceType("PYQ");
+    } else if (cat === "BOARD_EXAM") {
+      setStartNumber(1);
+      setEndNumber(40);
+      setSubject("Auto Detect");
+      setSourceType("PYQ");
     } else {
       setStartNumber(1);
       setEndNumber(180);
+      setSourceType("PRACTICE");
     }
   };
 
@@ -77,6 +89,8 @@ export default function QuestionExtractUploadPage() {
       ? "JEE Main"
       : categoryType === "JEE_ADVANCED_PYQ"
       ? "JEE Advanced"
+      : categoryType === "BOARD_EXAM"
+      ? "CBSE Board"
       : sourceName === "CUSTOM"
       ? customSource.trim()
       : sourceName;
@@ -88,6 +102,8 @@ export default function QuestionExtractUploadPage() {
       ? `JEE Main ${pyqYear} (${pyqMonth}) Paper`
       : categoryType === "JEE_ADVANCED_PYQ"
       ? `JEE Advanced ${pyqYear} Official Paper`
+      : categoryType === "BOARD_EXAM"
+      ? `CBSE Board ${pyqYear} Class 12 Exam`
       : examName;
 
   const expectedCount = Math.max(1, endNumber - startNumber + 1);
@@ -242,7 +258,7 @@ export default function QuestionExtractUploadPage() {
           </div>
 
           {/* Category Tabs */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
             <button
               type="button"
               onClick={() => handleCategoryChange("NEET_PYQ")}
@@ -258,7 +274,7 @@ export default function QuestionExtractUploadPage() {
               </div>
               <div>
                 <p className="font-bold text-xs text-slate-900 dark:text-white">NEET PYQs</p>
-                <p className="text-[10px] text-slate-400">Official Past Year Papers</p>
+                <p className="text-[10px] text-slate-400">Past Year Papers</p>
               </div>
             </button>
 
@@ -276,8 +292,8 @@ export default function QuestionExtractUploadPage() {
                 {categoryType === "JEE_MAINS_PYQ" && <CheckCircle2 className="w-4 h-4 text-amber-600" />}
               </div>
               <div>
-                <p className="font-bold text-xs text-slate-900 dark:text-white">JEE Mains PYQs</p>
-                <p className="text-[10px] text-slate-400">Jan &amp; Apr Sessions</p>
+                <p className="font-bold text-xs text-slate-900 dark:text-white">JEE Mains</p>
+                <p className="text-[10px] text-slate-400">Jan &amp; Apr Papers</p>
               </div>
             </button>
 
@@ -295,8 +311,27 @@ export default function QuestionExtractUploadPage() {
                 {categoryType === "JEE_ADVANCED_PYQ" && <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
               </div>
               <div>
-                <p className="font-bold text-xs text-slate-900 dark:text-white">JEE Advanced PYQs</p>
-                <p className="text-[10px] text-slate-400">Official IIT Papers</p>
+                <p className="font-bold text-xs text-slate-900 dark:text-white">JEE Adv</p>
+                <p className="text-[10px] text-slate-400">IIT Papers</p>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleCategoryChange("BOARD_EXAM")}
+              className={`p-3.5 rounded-2xl border text-left transition flex flex-col justify-between gap-2 ${
+                categoryType === "BOARD_EXAM"
+                  ? "bg-rose-50/80 dark:bg-rose-950/40 border-rose-500 ring-2 ring-rose-500/20 shadow-sm"
+                  : "bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 hover:border-slate-300"
+              }`}
+            >
+              <div className="flex items-center justify-between w-full">
+                <span className="text-xs font-black text-rose-600 dark:text-rose-400 uppercase">Boards</span>
+                {categoryType === "BOARD_EXAM" && <CheckCircle2 className="w-4 h-4 text-rose-600" />}
+              </div>
+              <div>
+                <p className="font-bold text-xs text-slate-900 dark:text-white">Board Exam</p>
+                <p className="text-[10px] text-slate-400">CBSE &amp; State</p>
               </div>
             </button>
 
@@ -314,8 +349,8 @@ export default function QuestionExtractUploadPage() {
                 {categoryType === "GENERAL" && <CheckCircle2 className="w-4 h-4 text-purple-600" />}
               </div>
               <div>
-                <p className="font-bold text-xs text-slate-900 dark:text-white">General / Coaching</p>
-                <p className="text-[10px] text-slate-400">ALLEN, NCERT, RACE...</p>
+                <p className="font-bold text-xs text-slate-900 dark:text-white">Coaching</p>
+                <p className="text-[10px] text-slate-400">ALLEN, RACE...</p>
               </div>
             </button>
           </div>

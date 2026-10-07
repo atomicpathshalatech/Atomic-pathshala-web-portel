@@ -81,7 +81,14 @@ export default async function ExtractionJobDetailPage({
         <span>Back to All Extraction Jobs</span>
       </Link>
 
-      {job.status === "PROCESSING" && <ExtractionJobProgress progress={job.progress} step={job.currentStep} />}
+      {/* Extraction Progress Component */}
+      <ExtractionJobProgress
+        jobId={job.id}
+        progress={job.progress}
+        step={job.currentStep}
+        reportJson={job.reportJson}
+        status={job.status}
+      />
 
       {/* 1. Job Header Card */}
       <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -110,6 +117,16 @@ export default async function ExtractionJobDetailPage({
 
         {/* Action CTAs */}
         <div className="flex items-center gap-2 flex-wrap">
+          <a
+            href={`/api/team/question-extract/jobs/${job.id}/report`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs shadow-sm transition flex items-center gap-1.5"
+          >
+            <Download className="w-4 h-4" />
+            <span>Audit Report</span>
+          </a>
+
           {job.reviewCount > 0 && (
             <Link
               href={`/team/question-extract/${job.id}/review`}
