@@ -292,6 +292,7 @@ model Student {
   ncertChapterProgress NcertStudentChapterProgress[]
   ncertPageProgress    NcertStudentPageProgress[]
   mistakeResolutions   MistakeResolution[]
+  whatsappInboundMessages WhatsAppInboundMessage[]
 
   @@index([city, state])
   @@index([targetExam])
@@ -6430,6 +6431,7 @@ model WhatsAppContact {
   student         Student?              @relation(fields: [studentId], references: [id], onDelete: SetNull)
   batch           Batch?                @relation(fields: [batchId], references: [id], onDelete: SetNull)
   campaignRecipients WhatsAppCampaignRecipient[]
+  inboundMessages WhatsAppInboundMessage[]
 
   @@unique([phone])
   @@index([cleanPhone])
@@ -6571,4 +6573,41 @@ model WhatsAppCampaignRecipient {
   @@index([campaignId, status])
   @@index([contactId])
   @@map("whatsapp_campaign_recipients")
+}
+
+enum WhatsAppInboundStatus {
+  RECEIVED
+  PROCESSED
+  FAILED
+  IGNORED
+}
+
+model WhatsAppInboundMessage {
+  id              String                @id @default(cuid())
+  wamId           String                @unique
+  fromPhone       String
+  senderName      String?
+  messageType     String
+  bodyText        String?
+  contextWamId    String?
+  mediaUrl        String?
+  rawPayload      Json
+  status          WhatsAppInboundStatus @default(RECEIVED)
+  detectedIntent  String?
+  processedAt     DateTime?
+  contactId       String?
+  studentId       String?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  contact         WhatsAppContact?      @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  student         Student?              @relation(fields: [studentId], references: [id], onDelete: SetNull)
+
+  @@index([fromPhone])
+  @@index([status])
+  @@index([detectedIntent])
+  @@index([contactId])
+  @@index([studentId])
+  @@index([createdAt])
+  @@map("whatsapp_inbound_messages")
 }

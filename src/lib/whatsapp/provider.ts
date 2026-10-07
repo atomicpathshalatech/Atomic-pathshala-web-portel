@@ -130,7 +130,94 @@ export async function sendWhatsAppMessage(params: WhatsAppSendParams): Promise<W
     }
   }
 
-  // 3. AISENSY / META / GUPSHUP PROVIDER FALLBACK
+  // 3. META CLOUD API DIRECT PROVIDER
+  if (provider === "META") {
+    try {
+      const phoneNumberId = settings.phoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID;
+      const accessToken = settings.apiKey || process.env.WHATSAPP_ACCESS_TOKEN;
+
+      if (!phoneNumberId || !accessToken) {
+        return {
+          success: false,
+          status: "FAILED",
+          provider: "META",
+          error: "Missing WHATSAPP_PHONE_NUMBER_ID or WHATSAPP_ACCESS_TOKEN in settings/env",
+        };
+      }
+
+      const metaTo = destinationNumber.replace(/\D/g, "");
+      const endpoint = `https://graph.facebook.com/v20.0/${phoneNumberId}/messages`;
+      
+      const payload: any = {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: metaTo,
+      };
+
+      if (params.templateName) {
+        payload.type = "template";
+        payload.template = {
+          name: params.templateName,
+          language: { code: "en" },
+          components: params.templateParams
+            ? [
+                {
+                  type: "body",
+                  parameters: Object.values(params.templateParams).map((val) => ({
+                    type: "text",
+                    text: String(val),
+                  })),
+                },
+              ]
+            : [],
+        };
+      } else {
+        payload.type = "text";
+        payload.text = {
+          preview_url: false,
+          body: params.bodyText,
+        };
+      }
+
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const resJson = await response.json().catch(() => ({}));
+      if (!response.ok || resJson.error) {
+        return {
+          success: false,
+          status: "FAILED",
+          provider: "META",
+          error: resJson.error?.message || `Meta Cloud API error (HTTP ${response.status})`,
+          rawResponse: resJson,
+        };
+      }
+
+      const messageId = resJson.messages?.[0]?.id || `meta_${Date.now()}`;
+      return {
+        success: true,
+        messageId,
+        status: "SENT",
+        provider: "META",
+        rawResponse: resJson,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        status: "FAILED",
+        provider: "META",
+        error: err.message || "Meta Cloud API network exception",
+      };
+    }
+  }
+
+  // 4. AISENSY / GUPSHUP PROVIDER FALLBACK
   try {
     console.log(`[WHATSAPP_DISPATCH] Provider: ${provider} to ${destinationNumber}`);
     return {
