@@ -53,6 +53,7 @@ const NAV_SECTIONS: { title?: string; items: { href: string; label: string; icon
   {
     title: "Content Studio",
     items: [
+      { href: "/team/modules/redesign", label: "Module Redesign Studio", icon: "auto_fix_high", permission: PERMISSIONS.MODULE_READ },
       { href: "/team/modules", label: "Module Studio", icon: "picture_as_pdf", permission: PERMISSIONS.MODULE_READ },
       { href: "/team/brand-profiles", label: "Brand Profiles", icon: "palette", permission: PERMISSIONS.MODULE_BRAND_PROFILE_MANAGE },
     ],

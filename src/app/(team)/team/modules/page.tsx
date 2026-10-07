@@ -33,6 +33,13 @@ export default async function ModuleStudioListPage() {
         </div>
         <div className="flex items-center gap-2">
           <Link
+            href="/team/modules/redesign"
+            className="bg-gradient-to-r from-teal-600 to-emerald-600 text-white rounded-full px-5 py-2.5 font-label-md text-label-md font-bold flex items-center gap-1.5 shadow-md hover:shadow-lg transition-all"
+          >
+            <span className="material-symbols-outlined text-lg">auto_fix_high</span>
+            Module Redesign Studio
+          </Link>
+          <Link
             href="/team/brand-profiles"
             className="text-label-md text-label-md text-primary hover:underline flex items-center gap-1"
           >
@@ -41,10 +48,10 @@ export default async function ModuleStudioListPage() {
           </Link>
           <Link
             href="/team/modules/new"
-            className="bg-primary text-on-primary rounded-full px-5 py-2.5 font-label-md text-label-md flex items-center gap-1.5 hover:opacity-90 transition-opacity"
+            className="bg-surface-container-high text-on-surface rounded-full px-4 py-2.5 font-label-md text-label-md flex items-center gap-1.5 hover:bg-surface-container-highest transition-colors border border-outline-variant/30"
           >
             <span className="material-symbols-outlined text-lg">upload_file</span>
-            Upload Module
+            Raw Upload
           </Link>
         </div>
       </div>
