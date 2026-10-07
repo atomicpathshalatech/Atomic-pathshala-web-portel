@@ -319,10 +319,10 @@ export function StudentBatchHome({
       </div>
 
       {/* ========================================================================= */}
-      {/* 3. SCHEDULE TAB — COMPACT 1/3 CARDS + TEACHER PHOTO (Req 8, 9, 10, 11, 12)*/}
+      {/* 3. SCHEDULE TAB — SLIM 1/3 CARDS CONNECTED VIA VERTICAL TIMELINE LINE    */}
       {/* ========================================================================= */}
       {tab === "schedule" && (
-        <div className="space-y-3.5 animate-in fade-in duration-150">
+        <div className="space-y-4 animate-in fade-in duration-150">
           {groupedTimeline.length === 0 ? (
             <div className="p-10 text-center bg-[#fff8f9] dark:bg-[#181215] rounded-2xl border border-pink-200/70 dark:border-pink-900/40">
               <span className="material-symbols-outlined text-3xl text-pink-300 dark:text-pink-600 mb-1">
@@ -334,113 +334,125 @@ export function StudentBatchHome({
             </div>
           ) : (
             groupedTimeline.map(([dKey, events]) => (
-              <div key={dKey} className="space-y-1.5">
+              <div key={dKey} className="space-y-2">
                 {/* Date Header Badge */}
                 <div className="flex items-center gap-2 px-1">
-                  <span className="px-2 py-0.5 rounded-md bg-pink-100/80 dark:bg-pink-950/70 text-[10px] font-bold text-pink-800 dark:text-pink-300 uppercase tracking-wider">
+                  <span className="px-2.5 py-0.5 rounded-full bg-pink-100/90 dark:bg-pink-950/80 text-[10.5px] font-bold text-pink-800 dark:text-pink-300 uppercase tracking-wider flex items-center gap-1.5 shadow-2xs">
+                    <span className="w-1.5 h-1.5 rounded-full bg-pink-500" />
                     {getDateHeading(dKey, todayKey, tomorrowKey)}
                   </span>
                   <div className="flex-1 h-px bg-pink-200/60 dark:bg-pink-950" />
+                  <span className="text-[10px] text-slate-400 font-medium">
+                    {events.length} {events.length === 1 ? "class" : "classes"}
+                  </span>
                 </div>
 
-                {/* Compact Schedule Cards Grid (Horizontally Efficient) */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                {/* Vertical Timeline Container Connecting All Classes of this Day */}
+                <div className="relative pl-6 sm:pl-7 space-y-2 before:absolute before:left-[11px] sm:before:left-[13px] before:top-3 before:bottom-3 before:w-[2px] before:bg-pink-200/90 dark:before:bg-pink-900/60 before:rounded-full">
                   {events.map((ev) => {
                     const isLive = ev.status === "LIVE_NOW";
                     const isTest = ev.type === "TEST";
                     const isCompleted = ev.status === "COMPLETED" || ev.status === "SUBMITTED";
 
                     return (
-                      <div
-                        key={ev.id}
-                        className={`p-3 rounded-xl border transition-all flex flex-col justify-between bg-[#fff9fa] dark:bg-[#1a1215] ${
-                          isLive
-                            ? "border-red-400 dark:border-red-800 ring-1 ring-red-400/30 shadow-xs"
-                            : isTest
-                            ? "border-purple-200 dark:border-purple-900/50 hover:border-purple-300"
-                            : "border-pink-200/70 dark:border-pink-900/40 hover:border-pink-300 shadow-xs"
-                        }`}
-                      >
-                        <div>
-                          {/* Top Row: Subject Tag + Status Badge */}
-                          <div className="flex items-center justify-between gap-2 mb-1.5">
-                            <span className="px-1.5 py-0.2 rounded text-[9.5px] font-bold uppercase tracking-wider bg-pink-100/70 dark:bg-pink-950/60 text-pink-700 dark:text-pink-300 truncate max-w-[65%]">
+                      <div key={ev.id} className="relative group">
+                        {/* Timeline Node / Dot on the vertical line */}
+                        <div
+                          className={`absolute -left-6 sm:-left-7 top-1/2 -translate-y-1/2 w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center border-2 bg-[#fff9fa] dark:bg-[#1a1215] z-10 transition-all ${
+                            isLive
+                              ? "border-red-500 text-red-600 ring-2 ring-red-200 dark:ring-red-950 animate-pulse"
+                              : isTest
+                              ? "border-purple-500 text-purple-600"
+                              : isCompleted
+                              ? "border-pink-400 text-pink-600 dark:border-pink-700"
+                              : "border-pink-300 text-slate-400 dark:border-pink-800"
+                          }`}
+                        >
+                          <span className="material-symbols-outlined text-[12px] sm:text-[13px]">
+                            {isLive ? "sensors" : isTest ? "quiz" : isCompleted ? "check" : "schedule"}
+                          </span>
+                        </div>
+
+                        {/* Slim 1/3 Thickness Schedule Card */}
+                        <div
+                          className={`px-3 py-2 sm:py-2.5 rounded-xl border transition-all flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-[#fff9fa] dark:bg-[#1a1215] ${
+                            isLive
+                              ? "border-red-400 dark:border-red-800/80 ring-1 ring-red-400/30 shadow-xs"
+                              : isTest
+                              ? "border-purple-200 dark:border-purple-900/50 hover:border-purple-300 shadow-2xs"
+                              : "border-pink-200/70 dark:border-pink-900/40 hover:border-pink-300 shadow-2xs"
+                          }`}
+                        >
+                          {/* Left: Subject Badge + Title + Faculty Avatar & Name */}
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            {/* Subject Badge */}
+                            <span className="px-2 py-0.5 rounded text-[9.5px] font-extrabold uppercase tracking-wider bg-pink-100/80 dark:bg-pink-950/70 text-pink-700 dark:text-pink-300 shrink-0">
                               {ev.subject}
                             </span>
 
-                            {isLive ? (
-                              <span className="px-1.5 py-0.2 rounded-full bg-red-500 text-white text-[9px] font-black uppercase tracking-wider flex items-center gap-1 animate-pulse">
-                                <span className="w-1.5 h-1.5 rounded-full bg-white" />
-                                LIVE
-                              </span>
-                            ) : isTest ? (
-                              <span className="px-1.5 py-0.2 rounded-full bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 text-[9px] font-bold uppercase">
-                                Test
-                              </span>
-                            ) : (
-                              <span
-                                className={`text-[9.5px] font-semibold ${
-                                  isCompleted ? "text-slate-400" : "text-pink-600 dark:text-pink-400"
+                            {/* Class Title & Faculty */}
+                            <div className="min-w-0 flex-1 flex flex-col sm:flex-row sm:items-center sm:gap-2">
+                              <h4 className="text-xs sm:text-[13px] font-bold text-slate-900 dark:text-white truncate leading-snug">
+                                {ev.title}
+                              </h4>
+
+                              {/* Teacher Pill */}
+                              <div className="flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-400 shrink-0 mt-0.5 sm:mt-0">
+                                <span className="hidden sm:inline opacity-30">•</span>
+                                {ev.teacherPhotoUrl ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                    src={ev.teacherPhotoUrl}
+                                    alt=""
+                                    className="w-4 h-4 rounded-full object-cover shrink-0 border border-pink-200/80"
+                                  />
+                                ) : (
+                                  <div className="w-4 h-4 rounded-full bg-pink-200 dark:bg-pink-900/60 text-pink-800 dark:text-pink-200 text-[8.5px] font-bold flex items-center justify-center shrink-0">
+                                    {(ev.teacherName || "F").charAt(0)}
+                                  </div>
+                                )}
+                                <span className="truncate max-w-[120px] font-medium text-slate-600 dark:text-slate-300">
+                                  {ev.teacherName || "Faculty"}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Right: Time + Play Class Action Button */}
+                          <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-pink-100/60 dark:border-pink-950/50">
+                            {/* Time */}
+                            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1">
+                              <span className="material-symbols-outlined text-[13px] text-pink-500">schedule</span>
+                              {timeFmt(ev.startsAt)}
+                            </span>
+
+                            {/* Action Button */}
+                            {ev.actionHref ? (
+                              <Link
+                                href={ev.actionHref}
+                                className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-2xs shrink-0 ${
+                                  isLive
+                                    ? "bg-red-600 hover:bg-red-700 text-white animate-pulse"
+                                    : isTest
+                                    ? "bg-purple-600 hover:bg-purple-700 text-white"
+                                    : isCompleted
+                                    ? "bg-pink-100 dark:bg-pink-950/60 text-pink-800 dark:text-pink-200 hover:bg-pink-200"
+                                    : "bg-pink-600 hover:bg-pink-700 text-white"
                                 }`}
                               >
-                                {isCompleted ? "Completed" : timeFmt(ev.startsAt)}
+                                <span className="material-symbols-outlined text-[14px]">play_arrow</span>
+                                <span>{ev.actionLabel}</span>
+                              </Link>
+                            ) : (
+                              <span
+                                className={`text-[10.5px] font-semibold px-2 py-0.5 rounded ${
+                                  isCompleted ? "text-slate-400 bg-slate-100 dark:bg-slate-800" : "text-pink-600 dark:text-pink-400 bg-pink-50 dark:bg-pink-950/50"
+                                }`}
+                              >
+                                {isCompleted ? "Completed" : ev.actionLabel}
                               </span>
                             )}
                           </div>
-
-                          {/* Class Title */}
-                          <h4 className="text-[13px] font-bold text-slate-900 dark:text-white line-clamp-1 leading-snug">
-                            {ev.title}
-                          </h4>
-
-                          {/* Teacher Photo (Restored) + Teacher Name */}
-                          <div className="flex items-center gap-2 mt-2">
-                            {ev.teacherPhotoUrl ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={ev.teacherPhotoUrl}
-                                alt=""
-                                className="w-6 h-6 rounded-full object-cover shrink-0 border border-pink-200/80"
-                              />
-                            ) : (
-                              <div className="w-6 h-6 rounded-full bg-pink-200 dark:bg-pink-900/60 text-pink-800 dark:text-pink-200 text-[10px] font-bold flex items-center justify-center shrink-0">
-                                {(ev.teacherName || "F").charAt(0)}
-                              </div>
-                            )}
-                            <p className="text-[11px] text-slate-600 dark:text-slate-400 truncate">
-                              {ev.teacherName || "Senior Faculty"}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Bottom Row: Time & Play Class Action */}
-                        <div className="flex items-center justify-between pt-2 mt-2 border-t border-pink-100/80 dark:border-pink-950/60">
-                          <span className="text-[10px] text-slate-400 flex items-center gap-1">
-                            <span className="material-symbols-outlined text-[13px]">schedule</span>
-                            {timeFmt(ev.startsAt)}
-                          </span>
-
-                          {ev.actionHref ? (
-                            <Link
-                              href={ev.actionHref}
-                              className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
-                                isLive
-                                  ? "bg-red-600 hover:bg-red-700 text-white shadow-xs"
-                                  : isTest
-                                  ? "bg-purple-600 hover:bg-purple-700 text-white shadow-xs"
-                                  : isCompleted
-                                  ? "bg-pink-100 dark:bg-pink-950/60 text-pink-800 dark:text-pink-200 hover:bg-pink-200"
-                                  : "bg-pink-600 hover:bg-pink-700 text-white shadow-xs"
-                              }`}
-                            >
-                              <span className="material-symbols-outlined text-xs">play_arrow</span>
-                              {ev.actionLabel}
-                            </Link>
-                          ) : (
-                            <span className="text-[10.5px] text-slate-400 italic font-medium">
-                              {ev.actionLabel}
-                            </span>
-                          )}
                         </div>
                       </div>
                     );
