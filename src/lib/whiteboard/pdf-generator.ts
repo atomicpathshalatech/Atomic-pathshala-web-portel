@@ -474,69 +474,279 @@ function renderText(doc: jsPDF, textObj: any, scale: number) {
   });
 }
 
+/**
+ * Creates a fully-featured Canvas2D context adapter that maps canvas drawing
+ * operations directly to vector jsPDF instructions, preserving all scientific
+ * shapes (bonds, rings, circuits, lenses, biological cells, polygons).
+ */
+function createJsPdfCanvasContext(doc: jsPDF, scale: number): CanvasRenderingContext2D {
+  let currentPath: Array<{ type: "M" | "L" | "Z"; x: number; y: number }> = [];
+  let curX = 0;
+  let curY = 0;
+  let strokeStyle = "#1A1A1A";
+  let fillStyle = "#1A1A1A";
+  let lineWidth = 1;
+  let lineDash: number[] = [];
+  const stateStack: any[] = [];
+  let matrix = { a: scale, b: 0, c: 0, d: scale, e: 0, f: 0 };
+
+  const transformPoint = (x: number, y: number) => {
+    return {
+      x: matrix.a * x + matrix.c * y + matrix.e,
+      y: matrix.b * x + matrix.d * y + matrix.f,
+    };
+  };
+
+  const ctx: any = {
+    get strokeStyle() {
+      return strokeStyle;
+    },
+    set strokeStyle(val: string) {
+      strokeStyle = val;
+    },
+    get fillStyle() {
+      return fillStyle;
+    },
+    set fillStyle(val: string) {
+      fillStyle = val;
+    },
+    get lineWidth() {
+      return lineWidth;
+    },
+    set lineWidth(val: number) {
+      lineWidth = val;
+    },
+
+    save() {
+      stateStack.push({
+        strokeStyle,
+        fillStyle,
+        lineWidth,
+        lineDash: [...lineDash],
+        matrix: { ...matrix },
+      });
+    },
+    restore() {
+      if (stateStack.length) {
+        const state = stateStack.pop();
+        strokeStyle = state.strokeStyle;
+        fillStyle = state.fillStyle;
+        lineWidth = state.lineWidth;
+        lineDash = state.lineDash;
+        matrix = state.matrix;
+      }
+    },
+    translate(x: number, y: number) {
+      matrix.e += matrix.a * x + matrix.c * y;
+      matrix.f += matrix.b * x + matrix.d * y;
+    },
+    rotate(angle: number) {
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
+      const a = matrix.a * cos + matrix.c * sin;
+      const c = -matrix.a * sin + matrix.c * cos;
+      const b = matrix.b * cos + matrix.d * sin;
+      const d = -matrix.b * sin + matrix.d * cos;
+      matrix.a = a;
+      matrix.c = c;
+      matrix.b = b;
+      matrix.d = d;
+    },
+    scale(sx: number, sy: number) {
+      matrix.a *= sx;
+      matrix.c *= sx;
+      matrix.b *= sy;
+      matrix.d *= sy;
+    },
+    setLineDash(dash: number[]) {
+      lineDash = dash || [];
+    },
+    getLineDash() {
+      return lineDash;
+    },
+    beginPath() {
+      currentPath = [];
+    },
+    closePath() {
+      if (currentPath.length > 0) {
+        const first = currentPath[0]!;
+        currentPath.push({ type: "Z", x: first.x, y: first.y });
+      }
+    },
+    moveTo(x: number, y: number) {
+      const pt = transformPoint(x, y);
+      curX = pt.x;
+      curY = pt.y;
+      currentPath.push({ type: "M", x: pt.x, y: pt.y });
+    },
+    lineTo(x: number, y: number) {
+      const pt = transformPoint(x, y);
+      curX = pt.x;
+      curY = pt.y;
+      currentPath.push({ type: "L", x: pt.x, y: pt.y });
+    },
+    arc(
+      x: number,
+      y: number,
+      radius: number,
+      startAngle: number = 0,
+      endAngle: number = Math.PI * 2
+    ) {
+      const steps = 36;
+      const span = endAngle - startAngle;
+      for (let i = 0; i <= steps; i++) {
+        const theta = startAngle + (span * i) / steps;
+        const px = x + radius * Math.cos(theta);
+        const py = y + radius * Math.sin(theta);
+        const pt = transformPoint(px, py);
+        if (i === 0 && currentPath.length === 0) {
+          currentPath.push({ type: "M", x: pt.x, y: pt.y });
+        } else {
+          currentPath.push({ type: "L", x: pt.x, y: pt.y });
+        }
+      }
+    },
+    ellipse(
+      x: number,
+      y: number,
+      rx: number,
+      ry: number,
+      rotation: number = 0,
+      startAngle: number = 0,
+      endAngle: number = Math.PI * 2
+    ) {
+      const steps = 36;
+      const span = endAngle - startAngle;
+      const cosR = Math.cos(rotation);
+      const sinR = Math.sin(rotation);
+      for (let i = 0; i <= steps; i++) {
+        const theta = startAngle + (span * i) / steps;
+        const ex = rx * Math.cos(theta);
+        const ey = ry * Math.sin(theta);
+        const px = x + ex * cosR - ey * sinR;
+        const py = y + ex * sinR + ey * cosR;
+        const pt = transformPoint(px, py);
+        if (i === 0 && currentPath.length === 0) {
+          currentPath.push({ type: "M", x: pt.x, y: pt.y });
+        } else {
+          currentPath.push({ type: "L", x: pt.x, y: pt.y });
+        }
+      }
+    },
+    rect(x: number, y: number, w: number, h: number) {
+      this.moveTo(x, y);
+      this.lineTo(x + w, y);
+      this.lineTo(x + w, y + h);
+      this.lineTo(x, y + h);
+      this.closePath();
+    },
+    roundRect(x: number, y: number, w: number, h: number, r: number = 8) {
+      const radius = Math.min(r, Math.abs(w) / 2, Math.abs(h) / 2);
+      this.moveTo(x + radius, y);
+      this.lineTo(x + w - radius, y);
+      this.arc(x + w - radius, y + radius, radius, -Math.PI / 2, 0);
+      this.lineTo(x + w, y + h - radius);
+      this.arc(x + w - radius, y + h - radius, radius, 0, Math.PI / 2);
+      this.lineTo(x + radius, y + h);
+      this.arc(x + radius, y + h - radius, radius, Math.PI / 2, Math.PI);
+      this.lineTo(x, y + radius);
+      this.arc(x + radius, y + radius, radius, Math.PI, (3 * Math.PI) / 2);
+      this.closePath();
+    },
+    stroke() {
+      if (!currentPath.length) return;
+      const rgb = hexToRgb(strokeStyle);
+      doc.setDrawColor(rgb.r, rgb.g, rgb.b);
+      doc.setLineWidth(Math.max(0.5, lineWidth * scale));
+
+      let startX = 0;
+      let startY = 0;
+      let lastX = 0;
+      let lastY = 0;
+
+      for (let i = 0; i < currentPath.length; i++) {
+        const seg = currentPath[i]!;
+        if (seg.type === "M") {
+          startX = seg.x;
+          startY = seg.y;
+          lastX = seg.x;
+          lastY = seg.y;
+        } else if (seg.type === "L") {
+          doc.line(lastX, lastY, seg.x, seg.y);
+          lastX = seg.x;
+          lastY = seg.y;
+        } else if (seg.type === "Z") {
+          doc.line(lastX, lastY, startX, startY);
+          lastX = startX;
+          lastY = startY;
+        }
+      }
+    },
+    fill() {
+      if (!currentPath.length) return;
+      const rgb = hexToRgb(fillStyle);
+      doc.setFillColor(rgb.r, rgb.g, rgb.b);
+
+      const points: Array<[number, number]> = [];
+      for (const seg of currentPath) {
+        if (seg.type === "M" || seg.type === "L") {
+          points.push([seg.x, seg.y]);
+        }
+      }
+      if (points.length >= 3) {
+        const origin = points[0]!;
+        for (let i = 1; i < points.length - 1; i++) {
+          doc.triangle(
+            origin[0],
+            origin[1],
+            points[i]![0],
+            points[i]![1],
+            points[i + 1]![0],
+            points[i + 1]![1],
+            "F"
+          );
+        }
+      }
+    },
+    fillText(text: string, x: number, y: number) {
+      const pt = transformPoint(x, y);
+      const rgb = hexToRgb(fillStyle);
+      doc.setTextColor(rgb.r, rgb.g, rgb.b);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(Math.max(4, 14 * scale));
+      doc.text(String(text), pt.x, pt.y);
+    },
+    measureText(text: string) {
+      return { width: String(text).length * 8 * scale };
+    },
+  };
+
+  return ctx as CanvasRenderingContext2D;
+}
+
 function renderShape(doc: jsPDF, shapeObj: any, scale: number) {
   const { shape, color, size, start, end, fill } = shapeObj;
   if (!start || !end) return;
 
   const renderer = SHAPE_RENDERERS[shape];
-  if (renderer && doc.context2d) {
-    const ctx = doc.context2d as any;
-    ctx.save();
-    // Provide shims for missing context2d methods on jsPDF
-    if (!ctx.roundRect) {
-      ctx.roundRect = function (x: number, y: number, w: number, h: number, r: number = 8) {
-        const radius = Math.min(r, Math.abs(w) / 2, Math.abs(h) / 2);
-        this.beginPath();
-        this.moveTo(x + radius, y);
-        this.lineTo(x + w - radius, y);
-        this.quadraticCurveTo(x + w, y, x + w, y + radius);
-        this.lineTo(x + w, y + h - radius);
-        this.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
-        this.lineTo(x + radius, y + h);
-        this.quadraticCurveTo(x, y + h, x, y + h - radius);
-        this.lineTo(x, y + radius);
-        this.quadraticCurveTo(x, y, x + radius, y);
-        this.closePath();
-      };
-    }
-    if (!ctx.ellipse) {
-      ctx.ellipse = function (
-        x: number,
-        y: number,
-        rx: number,
-        ry: number,
-        rotation: number = 0,
-        startAngle: number = 0,
-        endAngle: number = 2 * Math.PI
-      ) {
-        this.save();
-        this.translate(x, y);
-        this.rotate(rotation);
-        this.scale(rx, ry);
-        this.arc(0, 0, 1, startAngle, endAngle);
-        this.restore();
-      };
-    }
-
-    ctx.scale(scale, scale);
+  if (renderer) {
     try {
+      const ctx = createJsPdfCanvasContext(doc, scale);
       renderer({
-        ctx: ctx as unknown as CanvasRenderingContext2D,
+        ctx,
         start,
         end,
         color: color || "#1A1A1A",
         size: Math.max(0.5, size || 3),
         fill,
       });
+      return;
     } catch (err) {
-      console.warn("[PDF Generator] Shape render error:", shape, err);
-    } finally {
-      ctx.restore();
+      console.warn("[PDF Generator] Shape renderer error:", shape, err);
     }
-    return;
   }
 
-  // Fallback vector primitives if no renderer or context2d
+  // Fallback vector primitives
   const { r, g, b } = hexToRgb(color || "#1A1A1A");
   doc.setDrawColor(r, g, b);
   if (fill) {
