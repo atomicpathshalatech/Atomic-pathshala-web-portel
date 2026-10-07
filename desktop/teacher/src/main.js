@@ -80,6 +80,7 @@ function createWindow() {
     minHeight: 700,
     show: !SMOKE || SMOKE_MINIMIZE,
     title: "Atomic Pathshala Teacher",
+    icon: path.join(__dirname, "icon.png"),
     backgroundColor: "#0b0d14",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),

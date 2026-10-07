@@ -9,6 +9,7 @@ import { OpsBackButton } from "@/components/common/OpsBackButton";
 import { GlobalSearchBar } from "@/components/search/GlobalSearchBar";
 import { NotificationBell } from "@/components/student/NotificationBell";
 import { NotificationPopupLayer } from "@/components/common/NotificationPopupLayer";
+import { DownloadWindowsAppModal } from "@/components/team-portal/DownloadWindowsAppModal";
 
 export type TeamNavItem = { href: string; label: string; icon: string };
 export type TeamNavSection = { title?: string; items: TeamNavItem[] };
@@ -39,6 +40,7 @@ export function TeamShell({
   children: React.ReactNode;
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [downloadAppOpen, setDownloadAppOpen] = useState(false);
   const pathname = usePathname();
   const isRootTeam = pathname === "/team";
   const isLiveStudio =
@@ -99,7 +101,7 @@ export function TeamShell({
       <div className="flex">
         {/* Tablet icon rail (md) -> full sidebar (lg+) */}
         <aside className="hidden md:block w-[4.5rem] lg:w-[var(--sidebar-w)] shrink-0 border-r border-primary-dark/40 bg-primary text-white sticky top-[var(--header-h)] h-below-header overflow-y-auto overflow-x-hidden transition-[width] duration-200">
-          <SidebarNav sections={sections} collapsible />
+          <SidebarNav sections={sections} onOpenDownloadApp={() => setDownloadAppOpen(true)} collapsible />
         </aside>
 
         {/* Mobile drawer */}
@@ -118,7 +120,14 @@ export function TeamShell({
                   <span className="material-symbols-outlined text-2xl">close</span>
                 </button>
               </div>
-              <SidebarNav sections={sections} onNavigate={() => setDrawerOpen(false)} />
+              <SidebarNav
+                sections={sections}
+                onNavigate={() => setDrawerOpen(false)}
+                onOpenDownloadApp={() => {
+                  setDrawerOpen(false);
+                  setDownloadAppOpen(true);
+                }}
+              />
             </aside>
           </div>
         )}
@@ -136,6 +145,7 @@ export function TeamShell({
       </div>
 
       <NotificationPopupLayer />
+      <DownloadWindowsAppModal isOpen={downloadAppOpen} onClose={() => setDownloadAppOpen(false)} />
     </div>
   );
 }
@@ -143,10 +153,12 @@ export function TeamShell({
 function SidebarNav({
   sections,
   onNavigate,
+  onOpenDownloadApp,
   collapsible = false,
 }: {
   sections: TeamNavSection[];
   onNavigate?: () => void;
+  onOpenDownloadApp?: () => void;
   /**
    * Renders as an icon-only rail below `lg` and expands to the full labelled
    * sidebar at `lg` and above. Used by the persistent sidebar so tablets get
@@ -159,47 +171,77 @@ function SidebarNav({
   const isActive = (href: string) => (href === "/team" ? pathname === "/team" : pathname === href || pathname.startsWith(`${href}/`));
 
   return (
-    <nav className={`py-4 space-y-5 ${collapsible ? "px-2 lg:px-3" : "px-3"}`}>
-      {sections.map((section, i) => (
-        <div key={section.title ?? i}>
-          {section.title && (
-            <p
-              className={`px-3 mb-1.5 text-[11px] font-bold uppercase tracking-wide text-white/55 ${
-                collapsible ? "hidden lg:block" : ""
-              }`}
-            >
-              {section.title}
-            </p>
-          )}
-          <div className="space-y-0.5">
-            {section.items.map((item) => {
-              const active = isActive(item.href);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={onNavigate}
-                  title={item.label}
-                  className={`relative flex items-center gap-3 py-2 rounded-lg font-label-md text-label-md transition-colors ${
-                    collapsible ? "justify-center lg:justify-start px-2 lg:px-3" : "px-3"
-                  } ${
-                    active
-                      ? "bg-white/[0.16] text-white font-bold before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-1 before:rounded-full before:bg-white"
-                      : "text-white/85 hover:bg-white/10 hover:text-white"
-                  }`}
-                >
-                  <span className="material-symbols-outlined text-lg shrink-0">{item.icon}</span>
-                  <span className={collapsible ? "hidden lg:block truncate" : "truncate"}>{item.label}</span>
-                </Link>
-              );
-            })}
+    <nav className={`py-4 space-y-5 flex flex-col justify-between min-h-full ${collapsible ? "px-2 lg:px-3" : "px-3"}`}>
+      <div className="space-y-5">
+        {sections.map((section, i) => (
+          <div key={section.title ?? i}>
+            {section.title && (
+              <p
+                className={`px-3 mb-1.5 text-[11px] font-bold uppercase tracking-wide text-white/55 ${
+                  collapsible ? "hidden lg:block" : ""
+                }`}
+              >
+                {section.title}
+              </p>
+            )}
+            <div className="space-y-0.5">
+              {section.items.map((item) => {
+                const active = isActive(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={onNavigate}
+                    title={item.label}
+                    className={`relative flex items-center gap-3 py-2 rounded-lg font-label-md text-label-md transition-colors ${
+                      collapsible ? "justify-center lg:justify-start px-2 lg:px-3" : "px-3"
+                    } ${
+                      active
+                        ? "bg-white/[0.16] text-white font-bold before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-1 before:rounded-full before:bg-white"
+                        : "text-white/85 hover:bg-white/10 hover:text-white"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-lg shrink-0">{item.icon}</span>
+                    <span className={collapsible ? "hidden lg:block truncate" : "truncate"}>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
 
-      <div className="md:hidden px-3 pt-3 border-t border-white/15 [&_button]:!text-white/80 [&_button:hover]:!text-white">
-        <LogoutButton />
+      {/* Bottom Download App & Logout Section */}
+      <div className="space-y-2 pt-3 border-t border-white/15">
+        {onOpenDownloadApp && (
+          <button
+            type="button"
+            onClick={onOpenDownloadApp}
+            title="Download Atomic Pathshala Windows Desktop App"
+            className={`w-full flex items-center gap-2.5 py-2 rounded-xl bg-gradient-to-r from-orange-500/20 to-amber-500/10 hover:from-orange-500/30 hover:to-amber-500/20 text-white text-xs font-bold transition-all border border-orange-400/30 shadow-xs group text-left ${
+              collapsible ? "justify-center lg:justify-start px-2 lg:px-3" : "px-3"
+            }`}
+          >
+            <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center shrink-0 shadow-xs group-hover:scale-105 transition-transform">
+              <span className="material-symbols-outlined text-[15px] text-white">desktop_windows</span>
+            </div>
+            <div className={collapsible ? "hidden lg:block truncate min-w-0" : "truncate min-w-0"}>
+              <div className="flex items-center gap-1.5">
+                <span className="truncate">Windows App</span>
+                <span className="px-1 py-0.2 rounded bg-orange-500 text-[8.5px] font-black uppercase text-white">
+                  v0.1.0
+                </span>
+              </div>
+              <p className="text-[10px] text-white/70 font-normal truncate">Download Studio</p>
+            </div>
+          </button>
+        )}
+
+        <div className="md:hidden px-1 pt-1 [&_button]:!text-white/80 [&_button:hover]:!text-white">
+          <LogoutButton />
+        </div>
       </div>
     </nav>
   );
 }
+
