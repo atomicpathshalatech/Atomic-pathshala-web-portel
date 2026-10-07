@@ -51,6 +51,15 @@ const THEME_OPTIONS: { value: string; label: string; swatch: string }[] = [
   { value: "ROYAL", label: "Royal", swatch: "#6d28d9" },
 ];
 
+const REBRAND_PRESETS = [
+  { value: "ATOMIC_DEFAULT", label: "Atomic Default", desc: "Orange banner & navy headers", icon: "verified" },
+  { value: "CHEMISTRY", label: "Chemistry Focus", desc: "Equations & structures preserve", icon: "science" },
+  { value: "PHYSICS", label: "Physics Precision", desc: "Formulas & notation preserve", icon: "bolt" },
+  { value: "BIOLOGY", label: "Biology Standard", desc: "Diagrams & tables preserve", icon: "psychology" },
+  { value: "MINIMAL", label: "Minimal Clean", desc: "Ultra-light accent borders", icon: "format_paint" },
+  { value: "TEACHER_CUSTOM", label: "Teacher Custom", desc: "Faculty & batch credentials", icon: "person" },
+] as const;
+
 /** "Example => Illustration" (or "=", "→", ":") per line → { Example: "Illustration" }. */
 function parseRenames(text: string): Record<string, string> {
   const out: Record<string, string> = {};
@@ -246,6 +255,21 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
   const [toPage, setToPage] = useState("");
   const [exportDesign, setExportDesign] = useState<"premium" | "classic">("premium");
   const [exportTheme, setExportTheme] = useState("ATOMIC_BLUE");
+
+  // High-Fidelity Vector Rebranding & Document Preservation Studio
+  const [rebrandPreset, setRebrandPreset] = useState<string>("ATOMIC_DEFAULT");
+  const [teacherNameOverride, setTeacherNameOverride] = useState("");
+  const [batchNameOverride, setBatchNameOverride] = useState("");
+  const [chapterNameOverride, setChapterNameOverride] = useState("");
+  const [removeOldHeader, setRemoveOldHeader] = useState(true);
+  const [removeOldFooter, setRemoveOldFooter] = useState(true);
+  const [oldHeaderHeight, setOldHeaderHeight] = useState(34);
+  const [oldFooterHeight, setOldFooterHeight] = useState(26);
+  const [rebrandWatermark, setRebrandWatermark] = useState(true);
+  const [watermarkCustomText, setWatermarkCustomText] = useState("ATOMIC PATHSHALA");
+  const [rebranding, setRebranding] = useState(false);
+  const [verificationReport, setVerificationReport] = useState<any | null>(null);
+  const [showReportModal, setShowReportModal] = useState(false);
 
   const pageEditsRef = useRef(pageEdits);
   useEffect(() => {
@@ -558,6 +582,43 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
     }
   }
 
+  async function runRebrand() {
+    if (!data) return;
+    setRebranding(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/team/modules/${moduleId}/rebrand`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          preset: rebrandPreset,
+          teacherName: teacherNameOverride || data.facultyName || undefined,
+          batchName: batchNameOverride || data.batch || undefined,
+          chapterName: chapterNameOverride || data.chapter || data.title,
+          subject: data.subject || undefined,
+          removeOldHeader,
+          removeOldFooter,
+          oldHeaderHeightPt: oldHeaderHeight,
+          oldFooterHeightPt: oldFooterHeight,
+          includeWatermark: rebrandWatermark,
+          watermarkText: watermarkCustomText || undefined,
+        }),
+      });
+      const body = await res.json();
+      if (!body.success) {
+        setError(body.error ?? "Rebranding failed.");
+        return;
+      }
+      setVerificationReport(body.data.report);
+      setShowReportModal(true);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Rebranding failed.");
+    } finally {
+      setRebranding(false);
+    }
+  }
+
   if (error && !data) {
     return <p className="text-label-md text-error">{error}</p>;
   }
@@ -655,16 +716,244 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
             <span>(leave empty for all; a big book can be done 15–20 pages at a time)</span>
           </div>
         </details>
-        <a
-          href={data.originalFileUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="text-label-sm text-primary hover:underline inline-flex items-center gap-1"
-        >
-          <span className="material-symbols-outlined text-sm">description</span>
-          View original PDF ({data.originalFileName})
-        </a>
+        <div className="flex items-center gap-4 pt-2">
+          <a
+            href={data.originalFileUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="text-label-sm text-primary hover:underline inline-flex items-center gap-1"
+          >
+            <span className="material-symbols-outlined text-sm">description</span>
+            View original PDF ({data.originalFileName})
+          </a>
+        </div>
       </section>
+
+      {/* High-Precision Preservation & Vector Rebranding Studio */}
+      <section className="glass-card rounded-2xl p-6 space-y-4 border border-primary/20 bg-primary/[0.02]">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-primary text-xl">auto_fix_high</span>
+              <h2 className="font-headline-md text-headline-md text-on-surface">Vector Rebranding & Preservation Engine</h2>
+            </div>
+            <p className="text-label-sm text-on-surface-variant mt-0.5">
+              100% preservation of Hindi text, chemistry equations, reaction mechanisms, math notation, and diagrams with zero OCR data loss.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {verificationReport && (
+              <button
+                type="button"
+                onClick={() => setShowReportModal(true)}
+                className="rounded-full border border-green-600/40 bg-green-500/10 text-green-700 dark:text-green-400 px-4 py-2 font-label-md text-label-md hover:bg-green-500/20 flex items-center gap-1.5 transition-colors"
+              >
+                <span className="material-symbols-outlined text-base">verified</span>
+                Audit Report ({verificationReport.overallScore}%)
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={runRebrand}
+              disabled={rebranding}
+              className="bg-primary text-on-primary rounded-full px-5 py-2.5 font-label-md text-label-md disabled:opacity-60 hover:opacity-90 transition-all shadow-sm flex items-center gap-2"
+            >
+              <span className="material-symbols-outlined text-base">{rebranding ? "sync" : "verified"}</span>
+              {rebranding ? "Rebranding & Verifying…" : "1-Click Rebrand & Verify"}
+            </button>
+          </div>
+        </div>
+
+        {/* Preset Selection Grid */}
+        <div>
+          <label className="text-label-sm font-semibold text-on-surface block mb-2">Rebranding Design Preset</label>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+            {REBRAND_PRESETS.map((p) => {
+              const active = rebrandPreset === p.value;
+              return (
+                <button
+                  key={p.value}
+                  type="button"
+                  onClick={() => setRebrandPreset(p.value)}
+                  className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between gap-1.5 ${
+                    active
+                      ? "border-primary bg-primary/10 ring-2 ring-primary/30"
+                      : "border-outline-variant/30 bg-surface-container-lowest hover:border-outline-variant/60"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span className={`material-symbols-outlined text-base ${active ? "text-primary" : "text-on-surface-variant"}`}>
+                      {p.icon}
+                    </span>
+                    <span className={`font-label-md text-label-sm line-clamp-1 ${active ? "text-primary font-bold" : "text-on-surface"}`}>
+                      {p.label}
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-on-surface-variant line-clamp-1">{p.desc}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Rebranding Customization Options */}
+        <details className="rounded-xl border border-outline-variant/30 p-4 bg-surface-container-lowest" open>
+          <summary className="cursor-pointer text-label-sm font-semibold text-on-surface select-none flex items-center justify-between">
+            <span>Faculty Metadata & Masking Controls</span>
+            <span className="text-[11px] text-primary font-normal">Click to toggle</span>
+          </summary>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
+            <div>
+              <label className="text-label-sm text-on-surface-variant block mb-1">Faculty Name</label>
+              <input
+                value={teacherNameOverride}
+                onChange={(e) => setTeacherNameOverride(e.target.value)}
+                placeholder={data.facultyName || "Atomic Pathshala Faculty"}
+                className="w-full rounded-lg border border-outline-variant/40 px-3 py-2 text-label-sm bg-surface-container-lowest"
+              />
+            </div>
+            <div>
+              <label className="text-label-sm text-on-surface-variant block mb-1">Batch Name</label>
+              <input
+                value={batchNameOverride}
+                onChange={(e) => setBatchNameOverride(e.target.value)}
+                placeholder={data.batch || "NEET Accelerated Batch"}
+                className="w-full rounded-lg border border-outline-variant/40 px-3 py-2 text-label-sm bg-surface-container-lowest"
+              />
+            </div>
+            <div>
+              <label className="text-label-sm text-on-surface-variant block mb-1">Chapter / Subject Scope</label>
+              <input
+                value={chapterNameOverride}
+                onChange={(e) => setChapterNameOverride(e.target.value)}
+                placeholder={data.chapter || data.title}
+                className="w-full rounded-lg border border-outline-variant/40 px-3 py-2 text-label-sm bg-surface-container-lowest"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4 pt-3 border-t border-outline-variant/20">
+            <label className="flex items-center gap-2 text-label-sm text-on-surface cursor-pointer">
+              <input
+                type="checkbox"
+                checked={removeOldHeader}
+                onChange={(e) => setRemoveOldHeader(e.target.checked)}
+                className="rounded text-primary focus:ring-primary"
+              />
+              <span>Mask Old Running Header</span>
+            </label>
+            <label className="flex items-center gap-2 text-label-sm text-on-surface cursor-pointer">
+              <input
+                type="checkbox"
+                checked={removeOldFooter}
+                onChange={(e) => setRemoveOldFooter(e.target.checked)}
+                className="rounded text-primary focus:ring-primary"
+              />
+              <span>Mask Old Running Footer</span>
+            </label>
+            <label className="flex items-center gap-2 text-label-sm text-on-surface cursor-pointer">
+              <input
+                type="checkbox"
+                checked={rebrandWatermark}
+                onChange={(e) => setRebrandWatermark(e.target.checked)}
+                className="rounded text-primary focus:ring-primary"
+              />
+              <span>Include Watermark Overlay</span>
+            </label>
+            <div>
+              <input
+                value={watermarkCustomText}
+                onChange={(e) => setWatermarkCustomText(e.target.value)}
+                placeholder="Watermark text"
+                disabled={!rebrandWatermark}
+                className="w-full rounded-lg border border-outline-variant/40 px-2.5 py-1.5 text-label-sm bg-surface-container-lowest disabled:opacity-40"
+              />
+            </div>
+          </div>
+        </details>
+      </section>
+
+      {/* Verification & Preservation Report Modal */}
+      {showReportModal && verificationReport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-surface rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl border border-outline-variant/30">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-outline-variant/30 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <span className="material-symbols-outlined text-green-600 text-2xl">verified</span>
+                <div>
+                  <h3 className="font-headline-sm text-headline-sm text-on-surface">Module Verification & Preservation Audit</h3>
+                  <p className="text-label-sm text-on-surface-variant">Code: {verificationReport.moduleCode} • {verificationReport.originalFileName}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowReportModal(false)}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high"
+              >
+                <span className="material-symbols-outlined text-lg">close</span>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 space-y-4 overflow-y-auto">
+              {/* Overall Score Banner */}
+              <div className="rounded-xl p-4 bg-green-500/10 border border-green-500/30 flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-label-sm font-bold uppercase tracking-wider text-green-700 dark:text-green-400">
+                      {verificationReport.overallStatus === "SAFE_TO_PUBLISH" ? "✓ Safe to Publish" : verificationReport.overallStatus}
+                    </span>
+                  </div>
+                  <p className="text-label-sm text-on-surface-variant mt-1">{verificationReport.recommendation}</p>
+                </div>
+                <div className="text-right">
+                  <div className="text-3xl font-extrabold text-green-600">{verificationReport.overallScore}%</div>
+                  <div className="text-[11px] text-on-surface-variant">Fidelity Score</div>
+                </div>
+              </div>
+
+              {/* Metrics Grid */}
+              <div className="space-y-2">
+                <h4 className="text-label-sm font-bold uppercase tracking-wider text-on-surface-variant">Fidelity Audit Metrics</h4>
+                <div className="grid grid-cols-1 gap-2">
+                  {verificationReport.metrics.map((m: any, idx: number) => (
+                    <div key={idx} className="rounded-lg border border-outline-variant/30 p-3 bg-surface-container-lowest flex items-start justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="material-symbols-outlined text-sm text-green-600">check_circle</span>
+                          <span className="font-semibold text-label-sm text-on-surface">{m.name}</span>
+                        </div>
+                        <p className="text-label-sm text-on-surface-variant mt-0.5">{m.details}</p>
+                      </div>
+                      <span className="text-xs font-bold text-green-600 shrink-0">{m.score}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-outline-variant/30 flex items-center justify-between gap-3 bg-surface-container-lowest rounded-b-2xl">
+              <a
+                href={`/api/team/modules/${moduleId}/report?format=md`}
+                download
+                className="text-label-sm text-primary hover:underline flex items-center gap-1"
+              >
+                <span className="material-symbols-outlined text-sm">download</span>
+                Download Audit Report (.md)
+              </a>
+              <button
+                type="button"
+                onClick={() => setShowReportModal(false)}
+                className="bg-primary text-on-primary rounded-full px-5 py-2 font-label-md text-label-sm hover:opacity-90"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {data.pages.length > 0 && selectedPage && (
         <section className="space-y-3">
