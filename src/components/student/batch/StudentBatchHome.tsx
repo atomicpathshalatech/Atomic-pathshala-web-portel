@@ -3,19 +3,12 @@
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { canStudentJoinClass, getEffectiveScheduleStatus } from "@/lib/schedule/access-rules";
 import type {
   StudentBatchHomeData,
-  BatchClassItem,
   BatchChapterItem,
-  BatchTestItem,
-  BatchDppItem,
-  AcademicEvent,
-  BatchPdfItem,
   BatchPdfCategory,
-  BatchModuleItem,
   BatchDoubtSlotItem,
-  StudentDoubtBookingItem,
+  AcademicEvent,
 } from "@/lib/batch/student-batch-home";
 import { CustomPdfReader } from "@/components/ui/CustomPdfReader";
 
@@ -77,7 +70,7 @@ export function StudentBatchHome({
   // Nested Navigation States (Synchronized with browser history for native back)
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
   const [selectedChapterId, setSelectedChapterId] = useState<string | null>(null);
-  const [selectedPdfCategory, setSelectedPdfCategory] = useState<BatchPdfCategory>("ALL");
+  const [selectedPdfCategory, setSelectedPdfCategory] = useState<BatchPdfCategory | null>(null);
 
   // Mentorship booking modal state
   const [bookingSlot, setBookingSlot] = useState<BatchDoubtSlotItem | null>(null);
@@ -99,24 +92,27 @@ export function StudentBatchHome({
   }, []);
 
   // Update browser history for native back button support
-  const pushNavState = useCallback((newTab: BatchTab, subjectId?: string | null, chapterId?: string | null, pdfCat?: BatchPdfCategory) => {
-    try {
-      const url = new URL(window.location.href);
-      url.searchParams.set("tab", newTab);
-      if (subjectId) url.searchParams.set("subject", subjectId);
-      else url.searchParams.delete("subject");
-      if (chapterId) url.searchParams.set("chapter", chapterId);
-      else url.searchParams.delete("chapter");
-      if (pdfCat && pdfCat !== "ALL") url.searchParams.set("category", pdfCat);
-      else url.searchParams.delete("category");
+  const pushNavState = useCallback(
+    (newTab: BatchTab, subjectId?: string | null, chapterId?: string | null, pdfCat?: BatchPdfCategory | null) => {
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.set("tab", newTab);
+        if (subjectId) url.searchParams.set("subject", subjectId);
+        else url.searchParams.delete("subject");
+        if (chapterId) url.searchParams.set("chapter", chapterId);
+        else url.searchParams.delete("chapter");
+        if (pdfCat) url.searchParams.set("category", pdfCat);
+        else url.searchParams.delete("category");
 
-      window.history.pushState(
-        { tab: newTab, subjectId: subjectId || null, chapterId: chapterId || null, category: pdfCat || "ALL" },
-        "",
-        url.toString()
-      );
-    } catch {}
-  }, []);
+        window.history.pushState(
+          { tab: newTab, subjectId: subjectId || null, chapterId: chapterId || null, category: pdfCat || null },
+          "",
+          url.toString()
+        );
+      } catch {}
+    },
+    []
+  );
 
   // Listen to popstate (browser/mobile native back button)
   useEffect(() => {
@@ -135,15 +131,14 @@ export function StudentBatchHome({
         if (state.tab) setTab(state.tab);
         setSelectedSubjectId(state.subjectId || null);
         setSelectedChapterId(state.chapterId || null);
-        setSelectedPdfCategory(state.category || "ALL");
+        setSelectedPdfCategory(state.category || null);
       } else {
-        // Parse from current URL
         const u = new URL(window.location.href);
         const t = u.searchParams.get("tab") as BatchTab | null;
         if (t) setTab(t);
         setSelectedSubjectId(u.searchParams.get("subject") || null);
         setSelectedChapterId(u.searchParams.get("chapter") || null);
-        setSelectedPdfCategory((u.searchParams.get("category") as BatchPdfCategory) || "ALL");
+        setSelectedPdfCategory((u.searchParams.get("category") as BatchPdfCategory) || null);
       }
     };
 
@@ -156,7 +151,8 @@ export function StudentBatchHome({
     setTab(newTab);
     setSelectedSubjectId(null);
     setSelectedChapterId(null);
-    pushNavState(newTab, null, null, selectedPdfCategory);
+    setSelectedPdfCategory(null);
+    pushNavState(newTab, null, null, null);
   };
 
   // Group Subjects for Recorded Classes
@@ -181,7 +177,7 @@ export function StudentBatchHome({
     [selectedSubject, selectedChapterId]
   );
 
-  // Group Timeline Events by Date for Schedule
+  // Group Timeline Events by Date for Schedule (TODAY first, then TOMORROW, then upcoming ascending, then past descending)
   const todayKey = dayKey(now);
   const tomorrowKey = dayKey(new Date(now.getTime() + 86_400_000));
 
@@ -191,18 +187,43 @@ export function StudentBatchHome({
       if (!map.has(ev.dateKey)) map.set(ev.dateKey, []);
       map.get(ev.dateKey)!.push(ev);
     }
-    return Array.from(map.entries()).sort(
-      ([a], [b]) => new Date(b).getTime() - new Date(a).getTime()
-    );
-  }, [data.timelineEvents]);
+
+    // Sort events inside each date ascending by scheduled time
+    for (const [, list] of map.entries()) {
+      list.sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
+    }
+
+    const todayEntries: [string, AcademicEvent[]][] = [];
+    const tomorrowEntries: [string, AcademicEvent[]][] = [];
+    const upcomingEntries: [string, AcademicEvent[]][] = [];
+    const pastEntries: [string, AcademicEvent[]][] = [];
+
+    for (const entry of map.entries()) {
+      const dKey = entry[0];
+      if (dKey === todayKey) {
+        todayEntries.push(entry);
+      } else if (dKey === tomorrowKey) {
+        tomorrowEntries.push(entry);
+      } else if (dKey > todayKey) {
+        upcomingEntries.push(entry);
+      } else {
+        pastEntries.push(entry);
+      }
+    }
+
+    upcomingEntries.sort(([a], [b]) => new Date(a).getTime() - new Date(b).getTime());
+    pastEntries.sort(([a], [b]) => new Date(b).getTime() - new Date(a).getTime());
+
+    return [...todayEntries, ...tomorrowEntries, ...upcomingEntries, ...pastEntries];
+  }, [data.timelineEvents, todayKey, tomorrowKey]);
 
   // Filtered PDFs by category
   const filteredPdfs = useMemo(() => {
-    if (selectedPdfCategory === "ALL") return data.allPdfs;
+    if (!selectedPdfCategory || selectedPdfCategory === "ALL") return data.allPdfs;
     return data.allPdfs.filter((p) => p.category === selectedPdfCategory);
   }, [data.allPdfs, selectedPdfCategory]);
 
-  // Book Mentorship Slot Handler
+  // Mentorship Booking Handler
   const handleConfirmBooking = async () => {
     if (!bookingSlot) return;
     setIsSubmittingBooking(true);
@@ -228,47 +249,44 @@ export function StudentBatchHome({
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-2 sm:px-4 py-2 sm:py-4 space-y-3">
+    <div className="max-w-6xl mx-auto px-2 sm:px-4 py-2 sm:py-3 space-y-3">
       {/* ========================================================================= */}
-      {/* 1. MINIMAL THIN BATCH HEADER (Requirements 1 & 2)                         */}
+      {/* 1. MINIMAL THIN BATCH HEADER (Requirements 4 & 52)                        */}
       {/* ========================================================================= */}
-      <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#111b21] shadow-xs px-3 sm:px-4 py-2.5 flex items-center justify-between gap-3">
+      <div className="rounded-2xl border border-pink-200/70 dark:border-pink-900/40 bg-[#fff9fa] dark:bg-[#181215] shadow-xs px-3 sm:px-4 py-2 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
           {data.batch.thumbnailUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={data.batch.thumbnailUrl}
               alt=""
-              className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl object-cover shrink-0 border border-slate-200/80 dark:border-slate-700"
+              className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl object-cover shrink-0 border border-pink-200/80 dark:border-pink-800"
             />
           ) : (
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white flex items-center justify-center text-sm font-black shrink-0 shadow-inner">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-pink-500 to-rose-600 text-white flex items-center justify-center text-xs font-black shrink-0 shadow-xs">
               {data.batch.name.charAt(0)}
             </div>
           )}
 
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 min-w-0">
-              <h1 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white truncate">
+              <h1 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">
                 {data.batch.name}
               </h1>
               {data.batch.exam && (
-                <span className="hidden sm:inline-block px-2 py-0.2 rounded-md bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold text-[10px]">
+                <span className="px-1.5 py-0.2 rounded bg-pink-100 dark:bg-pink-950/60 text-pink-700 dark:text-pink-300 font-bold text-[9.5px]">
                   {data.batch.exam}
                 </span>
               )}
             </div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-              {data.batch.code} {data.batch.teachers.length > 0 && `• ${data.batch.teachers[0]}`}
-            </p>
           </div>
         </div>
 
-        {/* Desktop Minimal Navigation Link */}
-        <div className="hidden sm:flex items-center gap-2 text-xs font-semibold">
+        {/* Desktop Minimal Back / Navigation Link */}
+        <div className="hidden sm:flex items-center gap-2 text-xs font-medium">
           <Link
             href="/courses"
-            className="text-slate-500 hover:text-emerald-600 transition flex items-center gap-1"
+            className="text-slate-500 hover:text-pink-600 dark:hover:text-pink-400 transition flex items-center gap-1"
           >
             <span className="material-symbols-outlined text-sm">arrow_back</span>
             <span>All Batches</span>
@@ -277,9 +295,9 @@ export function StudentBatchHome({
       </div>
 
       {/* ========================================================================= */}
-      {/* 2. TAB NAVIGATION BAR (Requirement 3: "Live" Tab Removed)                 */}
+      {/* 2. TAB BOXES / ENTRY POINTS (Light Pink Themed, Requirements 5, 6, 7, 50) */}
       {/* ========================================================================= */}
-      <div className="flex items-center gap-1 p-1 bg-white dark:bg-[#111b21] rounded-2xl border border-slate-200/80 dark:border-slate-800 overflow-x-auto no-scrollbar shadow-xs">
+      <div className="flex items-center gap-1.5 p-1.5 bg-[#fff8f9] dark:bg-[#181215] rounded-2xl border border-pink-200/70 dark:border-pink-900/40 overflow-x-auto no-scrollbar shadow-xs">
         {TABS.map((t) => {
           const isActive = tab === t.id;
           return (
@@ -287,13 +305,13 @@ export function StudentBatchHome({
               key={t.id}
               type="button"
               onClick={() => switchTab(t.id)}
-              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all shrink-0 ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all shrink-0 ${
                 isActive
-                  ? "bg-emerald-600 text-white shadow-sm font-bold"
-                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                  ? "bg-pink-600 text-white shadow-xs font-bold"
+                  : "bg-white/80 dark:bg-[#20161a] text-slate-700 dark:text-slate-300 border border-pink-100 dark:border-pink-950/60 hover:bg-pink-100/50"
               }`}
             >
-              <span className="material-symbols-outlined text-[17px]">{t.icon}</span>
+              <span className="material-symbols-outlined text-[16px]">{t.icon}</span>
               <span>{t.label}</span>
             </button>
           );
@@ -301,32 +319,32 @@ export function StudentBatchHome({
       </div>
 
       {/* ========================================================================= */}
-      {/* 3. SCHEDULE TAB — COMPACT CLASS CARDS + UPCOMING TESTS (Req 4, 5, 10)     */}
+      {/* 3. SCHEDULE TAB — COMPACT 1/3 CARDS + TEACHER PHOTO (Req 8, 9, 10, 11, 12)*/}
       {/* ========================================================================= */}
       {tab === "schedule" && (
-        <div className="space-y-4 animate-in fade-in duration-150">
+        <div className="space-y-3.5 animate-in fade-in duration-150">
           {groupedTimeline.length === 0 ? (
-            <div className="p-12 text-center bg-white dark:bg-[#111b21] rounded-2xl border border-slate-200 dark:border-slate-800">
-              <span className="material-symbols-outlined text-4xl text-slate-300 dark:text-slate-600 mb-2">
+            <div className="p-10 text-center bg-[#fff8f9] dark:bg-[#181215] rounded-2xl border border-pink-200/70 dark:border-pink-900/40">
+              <span className="material-symbols-outlined text-3xl text-pink-300 dark:text-pink-600 mb-1">
                 event_busy
               </span>
-              <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                No scheduled classes or tests yet
+              <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                No scheduled classes or tests found
               </p>
             </div>
           ) : (
             groupedTimeline.map(([dKey, events]) => (
-              <div key={dKey} className="space-y-2">
+              <div key={dKey} className="space-y-1.5">
                 {/* Date Header Badge */}
                 <div className="flex items-center gap-2 px-1">
-                  <span className="px-2.5 py-0.5 rounded-md bg-slate-200/80 dark:bg-slate-800 text-[10.5px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                  <span className="px-2 py-0.5 rounded-md bg-pink-100/80 dark:bg-pink-950/70 text-[10px] font-bold text-pink-800 dark:text-pink-300 uppercase tracking-wider">
                     {getDateHeading(dKey, todayKey, tomorrowKey)}
                   </span>
-                  <div className="flex-1 h-px bg-slate-200/60 dark:border-slate-800" />
+                  <div className="flex-1 h-px bg-pink-200/60 dark:bg-pink-950" />
                 </div>
 
-                {/* Compact 1/3-width Grid Layout (Requirement 4) */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                {/* Compact Schedule Cards Grid (Horizontally Efficient) */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                   {events.map((ev) => {
                     const isLive = ev.status === "LIVE_NOW";
                     const isTest = ev.type === "TEST";
@@ -335,34 +353,34 @@ export function StudentBatchHome({
                     return (
                       <div
                         key={ev.id}
-                        className={`p-3 rounded-xl border transition-all flex flex-col justify-between bg-white dark:bg-[#111b21] ${
+                        className={`p-3 rounded-xl border transition-all flex flex-col justify-between bg-[#fff9fa] dark:bg-[#1a1215] ${
                           isLive
-                            ? "border-red-400 dark:border-red-800/80 ring-2 ring-red-500/20 shadow-sm"
+                            ? "border-red-400 dark:border-red-800 ring-1 ring-red-400/30 shadow-xs"
                             : isTest
-                            ? "border-purple-200 dark:border-purple-900/60 hover:border-purple-300"
-                            : "border-slate-200/80 dark:border-slate-800 hover:border-slate-300"
+                            ? "border-purple-200 dark:border-purple-900/50 hover:border-purple-300"
+                            : "border-pink-200/70 dark:border-pink-900/40 hover:border-pink-300 shadow-xs"
                         }`}
                       >
                         <div>
                           {/* Top Row: Subject Tag + Status Badge */}
                           <div className="flex items-center justify-between gap-2 mb-1.5">
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 truncate max-w-[60%]">
+                            <span className="px-1.5 py-0.2 rounded text-[9.5px] font-bold uppercase tracking-wider bg-pink-100/70 dark:bg-pink-950/60 text-pink-700 dark:text-pink-300 truncate max-w-[65%]">
                               {ev.subject}
                             </span>
 
                             {isLive ? (
-                              <span className="px-2 py-0.5 rounded-full bg-red-500 text-white text-[9.5px] font-black uppercase tracking-wider flex items-center gap-1 animate-pulse">
+                              <span className="px-1.5 py-0.2 rounded-full bg-red-500 text-white text-[9px] font-black uppercase tracking-wider flex items-center gap-1 animate-pulse">
                                 <span className="w-1.5 h-1.5 rounded-full bg-white" />
                                 LIVE
                               </span>
                             ) : isTest ? (
-                              <span className="px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 text-[9.5px] font-bold uppercase">
-                                Scheduled Test
+                              <span className="px-1.5 py-0.2 rounded-full bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 text-[9px] font-bold uppercase">
+                                Test
                               </span>
                             ) : (
                               <span
-                                className={`text-[10px] font-semibold ${
-                                  isCompleted ? "text-slate-400" : "text-emerald-600 dark:text-emerald-400"
+                                className={`text-[9.5px] font-semibold ${
+                                  isCompleted ? "text-slate-400" : "text-pink-600 dark:text-pink-400"
                                 }`}
                               >
                                 {isCompleted ? "Completed" : timeFmt(ev.startsAt)}
@@ -370,41 +388,56 @@ export function StudentBatchHome({
                             )}
                           </div>
 
-                          {/* Title */}
-                          <h4 className="text-[13.5px] font-bold text-slate-900 dark:text-white line-clamp-1 leading-snug">
+                          {/* Class Title */}
+                          <h4 className="text-[13px] font-bold text-slate-900 dark:text-white line-clamp-1 leading-snug">
                             {ev.title}
                           </h4>
 
-                          {/* Faculty & Chapter */}
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
-                            {ev.teacherName || ev.chapter || "Academic Session"}
-                          </p>
+                          {/* Teacher Photo (Restored) + Teacher Name */}
+                          <div className="flex items-center gap-2 mt-2">
+                            {ev.teacherPhotoUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={ev.teacherPhotoUrl}
+                                alt=""
+                                className="w-6 h-6 rounded-full object-cover shrink-0 border border-pink-200/80"
+                              />
+                            ) : (
+                              <div className="w-6 h-6 rounded-full bg-pink-200 dark:bg-pink-900/60 text-pink-800 dark:text-pink-200 text-[10px] font-bold flex items-center justify-center shrink-0">
+                                {(ev.teacherName || "F").charAt(0)}
+                              </div>
+                            )}
+                            <p className="text-[11px] text-slate-600 dark:text-slate-400 truncate">
+                              {ev.teacherName || "Senior Faculty"}
+                            </p>
+                          </div>
                         </div>
 
-                        {/* Bottom Row: Time & Action Button */}
-                        <div className="flex items-center justify-between pt-2 mt-2 border-t border-slate-100 dark:border-slate-800/80">
-                          <span className="text-[10.5px] text-slate-400 flex items-center gap-1">
-                            <span className="material-symbols-outlined text-xs">schedule</span>
+                        {/* Bottom Row: Time & Play Class Action */}
+                        <div className="flex items-center justify-between pt-2 mt-2 border-t border-pink-100/80 dark:border-pink-950/60">
+                          <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                            <span className="material-symbols-outlined text-[13px]">schedule</span>
                             {timeFmt(ev.startsAt)}
                           </span>
 
                           {ev.actionHref ? (
                             <Link
                               href={ev.actionHref}
-                              className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+                              className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
                                 isLive
-                                  ? "bg-red-600 hover:bg-red-700 text-white shadow-sm"
+                                  ? "bg-red-600 hover:bg-red-700 text-white shadow-xs"
                                   : isTest
-                                  ? "bg-purple-600 hover:bg-purple-700 text-white shadow-sm"
+                                  ? "bg-purple-600 hover:bg-purple-700 text-white shadow-xs"
                                   : isCompleted
-                                  ? "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200"
-                                  : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                                  ? "bg-pink-100 dark:bg-pink-950/60 text-pink-800 dark:text-pink-200 hover:bg-pink-200"
+                                  : "bg-pink-600 hover:bg-pink-700 text-white shadow-xs"
                               }`}
                             >
+                              <span className="material-symbols-outlined text-xs">play_arrow</span>
                               {ev.actionLabel}
                             </Link>
                           ) : (
-                            <span className="text-[11px] text-slate-400 italic font-medium">
+                            <span className="text-[10.5px] text-slate-400 italic font-medium">
                               {ev.actionLabel}
                             </span>
                           )}
@@ -420,7 +453,7 @@ export function StudentBatchHome({
       )}
 
       {/* ========================================================================= */}
-      {/* 4. RECORDED CLASS NAVIGATION (Requirement 6)                              */}
+      {/* 4. RECORDED CLASSES TAB (Requirements 13, 14, 15)                         */}
       {/* ========================================================================= */}
       {tab === "recorded" && (
         <div className="space-y-3 animate-in fade-in duration-150">
@@ -430,7 +463,7 @@ export function StudentBatchHome({
               <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 px-1">
                 Select Subject
               </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
                 {subjectGroups.map((subj) => {
                   const totalLectures = subj.chapters.reduce((s, c) => s + c.lectures, 0);
                   return (
@@ -441,17 +474,19 @@ export function StudentBatchHome({
                         setSelectedSubjectId(subj.id);
                         pushNavState("recorded", subj.id, null);
                       }}
-                      className="p-4 rounded-2xl bg-white dark:bg-[#111b21] border border-slate-200/80 dark:border-slate-800 hover:border-emerald-500 dark:hover:border-emerald-500 text-left transition group shadow-xs"
+                      className="p-3.5 rounded-2xl bg-[#fff9fa] dark:bg-[#1a1215] border border-pink-200/70 dark:border-pink-900/40 hover:border-pink-400 text-left transition group shadow-xs flex items-center gap-3"
                     >
-                      <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 flex items-center justify-center font-bold text-base mb-3 group-hover:scale-105 transition">
+                      <div className="w-9 h-9 rounded-xl bg-pink-100 dark:bg-pink-950/60 text-pink-700 dark:text-pink-300 flex items-center justify-center font-bold text-sm shrink-0 group-hover:scale-105 transition">
                         {subj.title.charAt(0)}
                       </div>
-                      <h4 className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-emerald-600 transition">
-                        {subj.title}
-                      </h4>
-                      <p className="text-xs text-slate-500 mt-1">
-                        {subj.chapters.length} Chapters • {totalLectures} Lectures
-                      </p>
+                      <div className="min-w-0">
+                        <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate group-hover:text-pink-600 transition">
+                          {subj.title}
+                        </h4>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          {subj.chapters.length} Chapters • {totalLectures} Lectures
+                        </p>
+                      </div>
                     </button>
                   );
                 })}
@@ -463,14 +498,14 @@ export function StudentBatchHome({
           {selectedSubjectId && !selectedChapterId && selectedSubject && (
             <div>
               {/* Breadcrumb Header */}
-              <div className="flex items-center gap-2 mb-3 px-1 text-xs">
+              <div className="flex items-center gap-2 mb-2.5 px-1 text-xs">
                 <button
                   type="button"
                   onClick={() => {
                     setSelectedSubjectId(null);
                     pushNavState("recorded", null, null);
                   }}
-                  className="font-bold text-emerald-600 hover:underline flex items-center gap-1"
+                  className="font-bold text-pink-600 hover:underline flex items-center gap-0.5"
                 >
                   <span className="material-symbols-outlined text-sm">arrow_back</span>
                   Subjects
@@ -481,7 +516,7 @@ export function StudentBatchHome({
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {selectedSubject.chapters.map((ch, idx) => (
                   <button
                     key={ch.id}
@@ -490,22 +525,22 @@ export function StudentBatchHome({
                       setSelectedChapterId(ch.id);
                       pushNavState("recorded", selectedSubjectId, ch.id);
                     }}
-                    className="p-3.5 rounded-xl bg-white dark:bg-[#111b21] border border-slate-200/80 dark:border-slate-800 hover:border-emerald-500 text-left transition flex items-center justify-between group shadow-xs"
+                    className="p-3 rounded-xl bg-[#fff9fa] dark:bg-[#1a1215] border border-pink-200/70 dark:border-pink-900/40 hover:border-pink-400 text-left transition flex items-center justify-between group shadow-xs"
                   >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center justify-center shrink-0">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="w-6 h-6 rounded-lg bg-pink-100/80 dark:bg-pink-950/60 text-pink-700 dark:text-pink-300 text-[11px] font-bold flex items-center justify-center shrink-0">
                         {idx + 1}
                       </span>
                       <div className="truncate">
-                        <h4 className="text-sm font-bold text-slate-900 dark:text-white truncate group-hover:text-emerald-600 transition">
+                        <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate group-hover:text-pink-600 transition">
                           {ch.title}
                         </h4>
-                        <p className="text-[11px] text-slate-400 mt-0.5">
+                        <p className="text-[10.5px] text-slate-400 mt-0.5">
                           {ch.lectures} Lectures • {ch.dpps} DPPs • {ch.tests} Tests
                         </p>
                       </div>
                     </div>
-                    <span className="material-symbols-outlined text-slate-400 group-hover:text-emerald-600 group-hover:translate-x-1 transition">
+                    <span className="material-symbols-outlined text-pink-400 group-hover:text-pink-600 group-hover:translate-x-1 transition text-lg">
                       chevron_right
                     </span>
                   </button>
@@ -518,14 +553,14 @@ export function StudentBatchHome({
           {selectedSubjectId && selectedChapterId && selectedChapter && (
             <div>
               {/* Breadcrumb Header */}
-              <div className="flex items-center gap-2 mb-3 px-1 text-xs">
+              <div className="flex items-center gap-2 mb-2.5 px-1 text-xs">
                 <button
                   type="button"
                   onClick={() => {
                     setSelectedChapterId(null);
                     pushNavState("recorded", selectedSubjectId, null);
                   }}
-                  className="font-bold text-emerald-600 hover:underline flex items-center gap-1"
+                  className="font-bold text-pink-600 hover:underline flex items-center gap-0.5"
                 >
                   <span className="material-symbols-outlined text-sm">arrow_back</span>
                   {selectedSubject?.title}
@@ -541,17 +576,17 @@ export function StudentBatchHome({
                   {selectedChapter.lectureList.map((lec, lIdx) => (
                     <div
                       key={lec.id}
-                      className="p-3.5 rounded-xl bg-white dark:bg-[#111b21] border border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3 shadow-xs"
+                      className="p-3 rounded-xl bg-[#fff9fa] dark:bg-[#1a1215] border border-pink-200/70 dark:border-pink-900/40 flex items-center justify-between gap-2.5 shadow-xs"
                     >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <span className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-xs font-black flex items-center justify-center shrink-0">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="w-7 h-7 rounded-lg bg-pink-100/80 dark:bg-pink-950/60 text-pink-700 dark:text-pink-300 text-xs font-black flex items-center justify-center shrink-0">
                           {lIdx + 1}
                         </span>
                         <div className="min-w-0">
-                          <h4 className="text-sm font-bold text-slate-900 dark:text-white truncate">
+                          <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">
                             {lec.title}
                           </h4>
-                          <p className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-2">
+                          <p className="text-[10.5px] text-slate-400 mt-0.5 flex items-center gap-2">
                             <span>{lec.duration || 45} mins</span>
                             {lec.slidesUrl && (
                               <button
@@ -563,7 +598,7 @@ export function StudentBatchHome({
                                     fileName: `${lec.title}-Notes.pdf`,
                                   })
                                 }
-                                className="text-emerald-600 font-bold hover:underline flex items-center gap-0.5"
+                                className="text-pink-600 font-bold hover:underline flex items-center gap-0.5"
                               >
                                 <span className="material-symbols-outlined text-xs">picture_as_pdf</span>
                                 Class Notes
@@ -575,16 +610,16 @@ export function StudentBatchHome({
 
                       <Link
                         href={`/watch/${lec.id}`}
-                        className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition flex items-center gap-1 shrink-0"
+                        className="px-3 py-1 rounded-lg bg-pink-600 hover:bg-pink-700 text-white text-xs font-bold shadow-xs transition flex items-center gap-1 shrink-0"
                       >
-                        <span className="material-symbols-outlined text-sm">play_arrow</span>
+                        <span className="material-symbols-outlined text-xs">play_arrow</span>
                         Play
                       </Link>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="p-8 text-center bg-white dark:bg-[#111b21] rounded-xl border border-slate-200 dark:border-slate-800">
+                <div className="p-8 text-center bg-[#fff8f9] dark:bg-[#181215] rounded-xl border border-pink-200/70 dark:border-pink-900/40">
                   <p className="text-xs text-slate-500">No lectures uploaded for this chapter yet</p>
                 </div>
               )}
@@ -594,67 +629,63 @@ export function StudentBatchHome({
       )}
 
       {/* ========================================================================= */}
-      {/* 5. DPP TAB — ATTEMPTED DATA PRESERVED + 1/3 WIDTH CARDS (Req 7 & 8)       */}
+      {/* 5. DPP TAB — ATTEMPTED STATE & COMPACT CARDS (Req 16, 17, 18, 19, 20)     */}
       {/* ========================================================================= */}
       {tab === "dpp" && (
         <div className="space-y-3 animate-in fade-in duration-150">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
             {data.dpps.map((dpp) => {
               const isAttempted = dpp.isAttempted;
               return (
                 <div
                   key={dpp.id}
-                  className={`p-3 rounded-xl border transition-all flex flex-col justify-between bg-white dark:bg-[#111b21] ${
-                    isAttempted
-                      ? "border-emerald-300 dark:border-emerald-900/60"
-                      : "border-slate-200/80 dark:border-slate-800"
-                  }`}
+                  className="p-3 rounded-xl border border-pink-200/70 dark:border-pink-900/40 bg-[#fff9fa] dark:bg-[#1a1215] shadow-xs flex flex-col justify-between"
                 >
                   <div>
                     {/* Top Status & Code */}
                     <div className="flex items-center justify-between gap-1 mb-1.5">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 truncate">
+                      <span className="px-1.5 py-0.2 rounded text-[9.5px] font-bold uppercase tracking-wider bg-pink-100/70 dark:bg-pink-950/60 text-pink-700 dark:text-pink-300 truncate">
                         {dpp.subject}
                       </span>
 
                       {isAttempted ? (
-                        <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 text-[9.5px] font-extrabold uppercase tracking-wide flex items-center gap-1">
-                          <span className="material-symbols-outlined text-[13px]">check_circle</span>
+                        <span className="px-1.5 py-0.2 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 text-[9px] font-extrabold uppercase tracking-wide flex items-center gap-0.5">
+                          <span className="material-symbols-outlined text-[11px]">check_circle</span>
                           Attempted
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[9.5px] font-semibold uppercase">
+                        <span className="px-1.5 py-0.2 rounded-full bg-pink-100/60 dark:bg-pink-950/40 text-pink-700 dark:text-pink-300 text-[9px] font-semibold uppercase">
                           Available
                         </span>
                       )}
                     </div>
 
                     {/* Title & Chapter */}
-                    <h4 className="text-[13.5px] font-bold text-slate-900 dark:text-white line-clamp-1">
+                    <h4 className="text-[13px] font-bold text-slate-900 dark:text-white line-clamp-1">
                       {dpp.title}
                     </h4>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                    <p className="text-[10.5px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
                       {dpp.chapter} • {dpp.questionCount} Questions
                     </p>
 
-                    {/* Attempted Stats Banner (Requirement 7) */}
+                    {/* Attempted Stats Display (Requirement 16 & 17) */}
                     {isAttempted && (
-                      <div className="mt-2 p-2 rounded-lg bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/40 grid grid-cols-3 gap-1 text-center">
+                      <div className="mt-2 p-1.5 rounded-lg bg-pink-50/60 dark:bg-pink-950/20 border border-pink-100 dark:border-pink-900/30 grid grid-cols-3 gap-1 text-center">
                         <div>
-                          <p className="text-[10px] text-slate-500">Score</p>
-                          <p className="text-xs font-black text-emerald-700 dark:text-emerald-300">
+                          <p className="text-[9.5px] text-slate-500">Score</p>
+                          <p className="text-xs font-black text-pink-700 dark:text-pink-300">
                             {dpp.score ?? 0}
                           </p>
                         </div>
                         <div>
-                          <p className="text-[10px] text-slate-500">Correct</p>
-                          <p className="text-xs font-black text-emerald-700 dark:text-emerald-300">
+                          <p className="text-[9.5px] text-slate-500">Correct</p>
+                          <p className="text-xs font-black text-pink-700 dark:text-pink-300">
                             {dpp.correctCount ?? 0}/{dpp.questionCount}
                           </p>
                         </div>
                         <div>
-                          <p className="text-[10px] text-slate-500">Accuracy</p>
-                          <p className="text-xs font-black text-emerald-700 dark:text-emerald-300">
+                          <p className="text-[9.5px] text-slate-500">Accuracy</p>
+                          <p className="text-xs font-black text-pink-700 dark:text-pink-300">
                             {dpp.accuracy ?? 0}%
                           </p>
                         </div>
@@ -663,8 +694,8 @@ export function StudentBatchHome({
                   </div>
 
                   {/* Bottom Action */}
-                  <div className="flex items-center justify-between pt-2 mt-2 border-t border-slate-100 dark:border-slate-800/80">
-                    <span className="text-[10.5px] text-slate-400">
+                  <div className="flex items-center justify-between pt-2 mt-2 border-t border-pink-100/80 dark:border-pink-950/60">
+                    <span className="text-[10px] text-slate-400">
                       {dpp.durationMin} mins
                     </span>
 
@@ -672,8 +703,8 @@ export function StudentBatchHome({
                       href={dpp.href || `/dpp/${dpp.id}/attempt`}
                       className={`px-3 py-1 rounded-lg text-xs font-bold transition shadow-xs ${
                         isAttempted
-                          ? "bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:bg-slate-200"
-                          : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                          ? "bg-pink-100 dark:bg-pink-950/60 text-pink-800 dark:text-pink-200 hover:bg-pink-200"
+                          : "bg-pink-600 hover:bg-pink-700 text-white"
                       }`}
                     >
                       {dpp.actionLabel}
@@ -687,11 +718,11 @@ export function StudentBatchHome({
       )}
 
       {/* ========================================================================= */}
-      {/* 6. TEST TAB — COMPLETED & UPCOMING TESTS (Req 9 & 10)                     */}
+      {/* 6. TEST TAB — UPCOMING & COMPLETED (Requirements 23, 24, 25, 26, 27)      */}
       {/* ========================================================================= */}
       {tab === "tests" && (
-        <div className="space-y-4 animate-in fade-in duration-150">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
+        <div className="space-y-3 animate-in fade-in duration-150">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
             {data.tests.map((test) => {
               const isSubmitted = test.attemptStatus === "SUBMITTED";
               const isUpcoming = test.isUpcoming;
@@ -699,56 +730,50 @@ export function StudentBatchHome({
               return (
                 <div
                   key={test.id}
-                  className={`p-3.5 rounded-xl border transition-all flex flex-col justify-between bg-white dark:bg-[#111b21] ${
-                    isSubmitted
-                      ? "border-emerald-300 dark:border-emerald-900/60"
-                      : isUpcoming
-                      ? "border-purple-200 dark:border-purple-900/60"
-                      : "border-slate-200/80 dark:border-slate-800"
-                  }`}
+                  className="p-3 rounded-xl border border-pink-200/70 dark:border-pink-900/40 bg-[#fff9fa] dark:bg-[#1a1215] shadow-xs flex flex-col justify-between"
                 >
                   <div>
                     {/* Status Pill */}
                     <div className="flex items-center justify-between gap-1 mb-1.5">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 truncate">
+                      <span className="px-1.5 py-0.2 rounded text-[9.5px] font-bold uppercase tracking-wider bg-pink-100/70 dark:bg-pink-950/60 text-pink-700 dark:text-pink-300 truncate">
                         {test.subject}
                       </span>
 
                       {isSubmitted ? (
-                        <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 text-[9.5px] font-extrabold uppercase">
+                        <span className="px-1.5 py-0.2 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 text-[9px] font-extrabold uppercase">
                           Completed
                         </span>
                       ) : isUpcoming ? (
-                        <span className="px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 text-[9.5px] font-bold uppercase">
+                        <span className="px-1.5 py-0.2 rounded-full bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 text-[9px] font-bold uppercase">
                           Upcoming
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[9.5px] font-bold uppercase">
+                        <span className="px-1.5 py-0.2 rounded-full bg-pink-600 text-white text-[9px] font-bold uppercase">
                           Live Now
                         </span>
                       )}
                     </div>
 
-                    <h4 className="text-[13.5px] font-bold text-slate-900 dark:text-white line-clamp-1">
+                    <h4 className="text-[13px] font-bold text-slate-900 dark:text-white line-clamp-1">
                       {test.name}
                     </h4>
 
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    <p className="text-[10.5px] text-slate-500 dark:text-slate-400 mt-0.5">
                       {test.durationMin} mins • {test.totalMarks} Marks
                     </p>
 
                     {/* Attempt Results if Completed */}
                     {isSubmitted && (
-                      <div className="mt-2 p-2 rounded-lg bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/40 grid grid-cols-2 gap-1 text-center">
+                      <div className="mt-2 p-1.5 rounded-lg bg-pink-50/60 dark:bg-pink-950/20 border border-pink-100 dark:border-pink-900/30 grid grid-cols-2 gap-1 text-center">
                         <div>
-                          <p className="text-[10px] text-slate-500">Score</p>
-                          <p className="text-xs font-black text-emerald-700 dark:text-emerald-300">
+                          <p className="text-[9.5px] text-slate-500">Score</p>
+                          <p className="text-xs font-black text-pink-700 dark:text-pink-300">
                             {test.score ?? 0} / {test.maxScore}
                           </p>
                         </div>
                         <div>
-                          <p className="text-[10px] text-slate-500">Accuracy</p>
-                          <p className="text-xs font-black text-emerald-700 dark:text-emerald-300">
+                          <p className="text-[9.5px] text-slate-500">Accuracy</p>
+                          <p className="text-xs font-black text-pink-700 dark:text-pink-300">
                             {test.accuracy ?? 0}%
                           </p>
                         </div>
@@ -757,8 +782,8 @@ export function StudentBatchHome({
                   </div>
 
                   {/* Action */}
-                  <div className="flex items-center justify-between pt-2 mt-2 border-t border-slate-100 dark:border-slate-800/80">
-                    <span className="text-[10.5px] text-slate-400">
+                  <div className="flex items-center justify-between pt-2 mt-2 border-t border-pink-100/80 dark:border-pink-950/60">
+                    <span className="text-[10px] text-slate-400">
                       {test.openTime ? dateFmt(test.openTime) : "Test"}
                     </span>
 
@@ -767,14 +792,14 @@ export function StudentBatchHome({
                         href={test.actionHref}
                         className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
                           isSubmitted
-                            ? "bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:bg-slate-200"
-                            : "bg-purple-600 hover:bg-purple-700 text-white shadow-xs"
+                            ? "bg-pink-100 dark:bg-pink-950/60 text-pink-800 dark:text-pink-200 hover:bg-pink-200"
+                            : "bg-pink-600 hover:bg-pink-700 text-white shadow-xs"
                         }`}
                       >
                         {test.actionLabel}
                       </Link>
                     ) : (
-                      <span className="text-[11px] text-slate-400 italic font-medium">
+                      <span className="text-[10.5px] text-slate-400 italic font-medium">
                         {test.actionLabel}
                       </span>
                     )}
@@ -787,127 +812,156 @@ export function StudentBatchHome({
       )}
 
       {/* ========================================================================= */}
-      {/* 7. PDF / STUDY MATERIAL TAB — CATEGORY SELECTOR FIRST (Req 11 & 12)       */}
+      {/* 7. PDF / MATERIAL TAB (Requirements 28, 29, 30, 31, 32, 33, 34)           */}
       {/* ========================================================================= */}
       {tab === "materials" && (
-        <div className="space-y-4 animate-in fade-in duration-150">
-          {/* Category Filter Pills on Top */}
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
-            {[
-              { id: "ALL", label: "All PDF" },
-              { id: "CLASS_NOTES", label: "Class Notes" },
-              { id: "DPP", label: "DPP Sheets" },
-              { id: "TESTS", label: "Test Papers" },
-              { id: "MODULES", label: "Module Notes" },
-              { id: "SYLLABUS", label: "Syllabus" },
-              { id: "PLANNER", label: "Planner" },
-            ].map((cat) => {
-              const isSel = selectedPdfCategory === cat.id;
-              return (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => {
-                    setSelectedPdfCategory(cat.id as BatchPdfCategory);
-                    pushNavState("materials", null, null, cat.id as BatchPdfCategory);
-                  }}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition ${
-                    isSel
-                      ? "bg-emerald-600 text-white shadow-xs font-bold"
-                      : "bg-white dark:bg-[#111b21] border border-slate-200/80 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50"
-                  }`}
-                >
-                  {cat.label}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Filtered File Grid */}
-          {filteredPdfs.length === 0 ? (
-            <div className="p-12 text-center bg-white dark:bg-[#111b21] rounded-2xl border border-slate-200 dark:border-slate-800">
-              <span className="material-symbols-outlined text-4xl text-slate-300 mb-2">description</span>
-              <p className="text-xs text-slate-500">No documents in this category</p>
+        <div className="space-y-3 animate-in fade-in duration-150">
+          {/* Level 1: Category Selector Boxes (Requirement 28) */}
+          {!selectedPdfCategory ? (
+            <div>
+              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 px-1">
+                Select Material Category
+              </h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                {[
+                  { id: "ALL", label: "All PDF", icon: "folder", count: data.allPdfs.length },
+                  { id: "CLASS_NOTES", label: "Class Notes", icon: "description", count: data.allPdfs.filter((p) => p.category === "CLASS_NOTES").length },
+                  { id: "DPP", label: "DPP Sheets", icon: "assignment", count: data.allPdfs.filter((p) => p.category === "DPP").length },
+                  { id: "TESTS", label: "Test Papers", icon: "quiz", count: data.allPdfs.filter((p) => p.category === "TESTS").length },
+                  { id: "MODULES", label: "Module Notes", icon: "menu_book", count: data.allPdfs.filter((p) => p.category === "MODULES").length },
+                  { id: "SYLLABUS", label: "Syllabus", icon: "list_alt", count: data.allPdfs.filter((p) => p.category === "SYLLABUS").length },
+                  { id: "PLANNER", label: "Planner", icon: "calendar_today", count: data.allPdfs.filter((p) => p.category === "PLANNER").length },
+                ].map((cat) => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedPdfCategory(cat.id as BatchPdfCategory);
+                      pushNavState("materials", null, null, cat.id as BatchPdfCategory);
+                    }}
+                    className="p-3 rounded-xl bg-[#fff9fa] dark:bg-[#1a1215] border border-pink-200/70 dark:border-pink-900/40 hover:border-pink-400 text-left transition flex flex-col justify-between gap-2 shadow-xs group"
+                  >
+                    <span className="material-symbols-outlined text-pink-600 text-xl group-hover:scale-105 transition">
+                      {cat.icon}
+                    </span>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-pink-600 transition">
+                        {cat.label}
+                      </h4>
+                      <p className="text-[10px] text-slate-400 mt-0.5">{cat.count} Files</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-              {filteredPdfs.map((pdf) => (
-                <div
-                  key={pdf.id}
-                  className="p-3.5 rounded-xl bg-white dark:bg-[#111b21] border border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3 shadow-xs hover:border-slate-300 transition"
+            <div>
+              {/* Category Breadcrumb */}
+              <div className="flex items-center gap-2 mb-2.5 px-1 text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedPdfCategory(null);
+                    pushNavState("materials", null, null, null);
+                  }}
+                  className="font-bold text-pink-600 hover:underline flex items-center gap-0.5"
                 >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="w-10 h-10 rounded-xl bg-red-50 dark:bg-red-950/50 text-red-600 flex items-center justify-center shrink-0">
-                      <span className="material-symbols-outlined text-2xl">picture_as_pdf</span>
-                    </span>
-                    <div className="min-w-0">
-                      <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">
-                        {pdf.title}
-                      </h4>
-                      <p className="text-[11px] text-slate-400 mt-0.5 truncate">
-                        {pdf.subject} {pdf.chapter && `• ${pdf.chapter}`} • {sizeFmt(pdf.sizeBytes)}
-                      </p>
-                    </div>
-                  </div>
+                  <span className="material-symbols-outlined text-sm">arrow_back</span>
+                  Categories
+                </button>
+                <span className="text-slate-400">/</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200 uppercase">
+                  {selectedPdfCategory.replace("_", " ")}
+                </span>
+              </div>
 
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setActivePdf({
-                          title: pdf.title,
-                          pdfUrl: pdf.fileUrl,
-                          fileName: pdf.fileName,
-                        })
-                      }
-                      className="px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 text-xs font-bold transition"
-                    >
-                      View
-                    </button>
-
-                    <a
-                      href={pdf.fileUrl}
-                      download={pdf.fileName}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="w-8 h-8 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 flex items-center justify-center transition"
-                      title="Download"
-                    >
-                      <span className="material-symbols-outlined text-base">download</span>
-                    </a>
-                  </div>
+              {/* Filtered File Grid */}
+              {filteredPdfs.length === 0 ? (
+                <div className="p-10 text-center bg-[#fff8f9] dark:bg-[#181215] rounded-2xl border border-pink-200/70 dark:border-pink-900/40">
+                  <span className="material-symbols-outlined text-3xl text-pink-300 mb-1">description</span>
+                  <p className="text-xs text-slate-500">No documents available in this category</p>
                 </div>
-              ))}
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {filteredPdfs.map((pdf) => (
+                    <div
+                      key={pdf.id}
+                      className="p-3 rounded-xl bg-[#fff9fa] dark:bg-[#1a1215] border border-pink-200/70 dark:border-pink-900/40 flex items-center justify-between gap-2.5 shadow-xs"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="w-8 h-8 rounded-lg bg-pink-100 dark:bg-pink-950/60 text-pink-600 flex items-center justify-center shrink-0">
+                          <span className="material-symbols-outlined text-lg">picture_as_pdf</span>
+                        </span>
+                        <div className="min-w-0">
+                          <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">
+                            {pdf.title}
+                          </h4>
+                          <p className="text-[10px] text-slate-400 mt-0.5 truncate">
+                            {pdf.subject} {pdf.chapter && `• ${pdf.chapter}`} • {sizeFmt(pdf.sizeBytes)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setActivePdf({
+                              title: pdf.title,
+                              pdfUrl: pdf.fileUrl,
+                              fileName: pdf.fileName,
+                            })
+                          }
+                          className="px-2.5 py-1 rounded-lg bg-pink-100 dark:bg-pink-950/60 hover:bg-pink-200 text-pink-700 dark:text-pink-300 text-xs font-bold transition"
+                        >
+                          View
+                        </button>
+
+                        <a
+                          href={pdf.fileUrl}
+                          download={pdf.fileName}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="w-7 h-7 rounded-lg hover:bg-pink-100 text-slate-500 flex items-center justify-center transition"
+                          title="Download"
+                        >
+                          <span className="material-symbols-outlined text-sm">download</span>
+                        </a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
       )}
 
       {/* ========================================================================= */}
-      {/* 8. ONE-TO-ONE MENTORSHIP SESSION TAB (Requirement 13)                     */}
+      {/* 8. MENTORSHIP TAB (Requirement 35)                                        */}
       {/* ========================================================================= */}
       {tab === "mentorship" && (
-        <div className="space-y-4 animate-in fade-in duration-150">
+        <div className="space-y-3 animate-in fade-in duration-150">
           {/* Active Bookings Banner if any */}
           {data.studentBookings.length > 0 && (
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-1">
                 Your Booked Mentorship Sessions
               </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {data.studentBookings.map((bk) => (
                   <div
                     key={bk.id}
-                    className="p-3.5 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 flex items-center justify-between gap-3 shadow-xs"
+                    className="p-3 rounded-xl bg-pink-50/70 dark:bg-pink-950/30 border border-pink-200 dark:border-pink-800/60 flex items-center justify-between gap-2 shadow-xs"
                   >
                     <div>
-                      <span className="px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[9.5px] font-bold uppercase">
+                      <span className="px-1.5 py-0.2 rounded-full bg-pink-600 text-white text-[9px] font-bold uppercase">
                         {bk.status}
                       </span>
-                      <h4 className="text-sm font-bold text-slate-900 dark:text-white mt-1">
+                      <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white mt-1">
                         Mentor: {bk.teacherName}
                       </h4>
-                      <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
+                      <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5">
                         {dateFmt(bk.startsAt)} at {timeFmt(bk.startsAt)}
                       </p>
                     </div>
@@ -915,9 +969,9 @@ export function StudentBatchHome({
                     {bk.meetingUrl && (
                       <Link
                         href={bk.meetingUrl}
-                        className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition"
+                        className="px-3 py-1 rounded-lg bg-pink-600 hover:bg-pink-700 text-white text-xs font-bold shadow-xs transition shrink-0"
                       >
-                        Join Room
+                        Join
                       </Link>
                     )}
                   </div>
@@ -932,51 +986,50 @@ export function StudentBatchHome({
               Available Mentorship Slots
             </h3>
             {data.doubtSlots.length === 0 ? (
-              <div className="p-10 text-center bg-white dark:bg-[#111b21] rounded-2xl border border-slate-200 dark:border-slate-800">
-                <span className="material-symbols-outlined text-4xl text-slate-300 mb-2">
+              <div className="p-8 text-center bg-[#fff8f9] dark:bg-[#181215] rounded-2xl border border-pink-200/70 dark:border-pink-900/40">
+                <span className="material-symbols-outlined text-3xl text-pink-300 mb-1">
                   calendar_today
                 </span>
                 <p className="text-xs text-slate-500">No open mentorship slots available today</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
                 {data.doubtSlots.map((slot) => (
                   <div
                     key={slot.id}
-                    className="p-3.5 rounded-xl bg-white dark:bg-[#111b21] border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between shadow-xs"
+                    className="p-3 rounded-xl bg-[#fff9fa] dark:bg-[#1a1215] border border-pink-200/70 dark:border-pink-900/40 flex flex-col justify-between shadow-xs"
                   >
                     <div>
-                      <div className="flex items-center gap-2.5 mb-2">
+                      <div className="flex items-center gap-2 mb-1.5">
                         {slot.teacherPhotoUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
                             src={slot.teacherPhotoUrl}
                             alt=""
-                            className="w-8 h-8 rounded-full object-cover"
+                            className="w-7 h-7 rounded-full object-cover shrink-0"
                           />
                         ) : (
-                          <div className="w-8 h-8 rounded-full bg-purple-600 text-white flex items-center justify-center text-xs font-bold">
+                          <div className="w-7 h-7 rounded-full bg-pink-600 text-white flex items-center justify-center text-[11px] font-bold shrink-0">
                             {slot.teacherName.charAt(0)}
                           </div>
                         )}
                         <div className="min-w-0">
-                          <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">
+                          <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">
                             {slot.teacherName}
                           </h4>
-                          <p className="text-[10.5px] text-slate-400">{slot.subject}</p>
+                          <p className="text-[10px] text-pink-600">{slot.subject}</p>
                         </div>
                       </div>
 
-                      <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      <p className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">
                         {dateFmt(slot.startsAt)} • {timeFmt(slot.startsAt)}
                       </p>
-                      <p className="text-[11px] text-slate-400">Duration: {slot.durationMinutes} mins</p>
                     </div>
 
                     <button
                       type="button"
                       onClick={() => setBookingSlot(slot)}
-                      className="mt-3 w-full py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition shadow-xs"
+                      className="mt-2.5 w-full py-1 rounded-lg bg-pink-600 hover:bg-pink-700 text-white text-xs font-bold transition shadow-xs"
                     >
                       Book 1-on-1 Session
                     </button>
@@ -989,29 +1042,29 @@ export function StudentBatchHome({
       )}
 
       {/* ========================================================================= */}
-      {/* 9. NOTICES TAB (Requirement 14)                                           */}
+      {/* 9. NOTICES TAB (Requirement 36)                                           */}
       {/* ========================================================================= */}
       {tab === "notices" && (
-        <div className="space-y-2.5 animate-in fade-in duration-150">
+        <div className="space-y-2 animate-in fade-in duration-150">
           {data.notices.length === 0 ? (
-            <div className="p-10 text-center bg-white dark:bg-[#111b21] rounded-2xl border border-slate-200 dark:border-slate-800">
-              <span className="material-symbols-outlined text-4xl text-slate-300 mb-2">campaign</span>
+            <div className="p-8 text-center bg-[#fff8f9] dark:bg-[#181215] rounded-2xl border border-pink-200/70 dark:border-pink-900/40">
+              <span className="material-symbols-outlined text-3xl text-pink-300 mb-1">campaign</span>
               <p className="text-xs text-slate-500">No notices posted yet</p>
             </div>
           ) : (
             data.notices.map((nt) => (
               <div
                 key={nt.id}
-                className="p-4 rounded-xl bg-white dark:bg-[#111b21] border border-slate-200/80 dark:border-slate-800 shadow-xs"
+                className="p-3.5 rounded-xl bg-[#fff9fa] dark:bg-[#1a1215] border border-pink-200/70 dark:border-pink-900/40 shadow-xs"
               >
-                <div className="flex items-center justify-between text-[11px] text-slate-400 mb-1">
-                  <span className="font-bold text-emerald-600 uppercase tracking-wider">
+                <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1">
+                  <span className="font-bold text-pink-600 uppercase tracking-wider">
                     Official Notice
                   </span>
                   <span>{new Date(nt.createdAt).toLocaleDateString("en-IN", { timeZone: IST })}</span>
                 </div>
-                <h4 className="text-sm font-bold text-slate-900 dark:text-white mb-1">{nt.title}</h4>
-                <p className="text-xs text-slate-600 dark:text-slate-300 whitespace-pre-line">{nt.body}</p>
+                <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white mb-1">{nt.title}</h4>
+                <p className="text-xs text-slate-600 dark:text-slate-300 whitespace-pre-line leading-relaxed">{nt.body}</p>
               </div>
             ))
           )}
@@ -1019,76 +1072,76 @@ export function StudentBatchHome({
       )}
 
       {/* ========================================================================= */}
-      {/* 10. BATCH INFO TAB — CLEAN TEXT + NO AI VISUAL ICONS (Req 15, 16 & 17)    */}
+      {/* 10. BATCH INFO TAB (Requirement 37)                                       */}
       {/* ========================================================================= */}
       {tab === "info" && (
-        <div className="space-y-4 animate-in fade-in duration-150">
+        <div className="space-y-3 animate-in fade-in duration-150">
           {/* Overview & Description */}
-          <div className="p-5 rounded-2xl bg-white dark:bg-[#111b21] border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-3">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-              Batch Overview & Curriculum
+          <div className="p-4 rounded-2xl bg-[#fff9fa] dark:bg-[#1a1215] border border-pink-200/70 dark:border-pink-900/40 shadow-xs space-y-2.5">
+            <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+              Batch Overview
             </h3>
-            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
               {data.batch.description ||
                 `${data.batch.name} is a comprehensive preparatory program designed for ${
                   data.batch.exam || "competitive examinations"
                 }. The program features structured live lectures, curated DPP practice sets, full syllabus mock tests, class notes, and one-to-one faculty mentorship.`}
             </p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-pink-100/80 dark:border-pink-950/60">
               <div>
-                <p className="text-[11px] text-slate-400 font-medium">Batch Code</p>
+                <p className="text-[10px] text-slate-400 font-medium">Batch Code</p>
                 <p className="text-xs font-bold text-slate-800 dark:text-slate-200 font-mono">
                   {data.batch.code}
                 </p>
               </div>
               <div>
-                <p className="text-[11px] text-slate-400 font-medium">Target Examination</p>
+                <p className="text-[10px] text-slate-400 font-medium">Target Exam</p>
                 <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                  {data.batch.exam || "National Level"}
+                  {data.batch.exam || "NEET / JEE"}
                 </p>
               </div>
               <div>
-                <p className="text-[11px] text-slate-400 font-medium">Access Status</p>
-                <p className="text-xs font-bold text-emerald-600">Active & Enrolled</p>
+                <p className="text-[10px] text-slate-400 font-medium">Status</p>
+                <p className="text-xs font-bold text-pink-600">Active & Enrolled</p>
               </div>
             </div>
           </div>
 
-          {/* Assigned Educators & Faculty (Dynamically Resolved) */}
-          <div className="p-5 rounded-2xl bg-white dark:bg-[#111b21] border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-3">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-              Assigned Educators
+          {/* Assigned Educators & Faculty */}
+          <div className="p-4 rounded-2xl bg-[#fff9fa] dark:bg-[#1a1215] border border-pink-200/70 dark:border-pink-900/40 shadow-xs space-y-2.5">
+            <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+              Assigned Faculty
             </h3>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
               {data.batch.teacherCards.map((t) => (
                 <div
                   key={t.id}
-                  className="p-3.5 rounded-xl border border-slate-200/60 dark:border-slate-800 flex items-center gap-3 bg-slate-50/50 dark:bg-slate-900/40"
+                  className="p-3 rounded-xl border border-pink-100 dark:border-pink-950 flex items-center gap-2.5 bg-white/70 dark:bg-slate-900/40"
                 >
                   {t.photoUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={t.photoUrl}
                       alt=""
-                      className="w-11 h-11 rounded-full object-cover shrink-0"
+                      className="w-9 h-9 rounded-full object-cover shrink-0 border border-pink-200"
                     />
                   ) : (
-                    <div className="w-11 h-11 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shrink-0">
+                    <div className="w-9 h-9 rounded-full bg-pink-600 text-white flex items-center justify-center font-bold text-xs shrink-0">
                       {t.name.charAt(0)}
                     </div>
                   )}
 
                   <div className="min-w-0">
-                    <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">
+                    <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">
                       {t.name}
                     </h4>
-                    <p className="text-[11px] text-emerald-600 font-semibold truncate">
+                    <p className="text-[10.5px] text-pink-600 font-medium truncate">
                       {t.subjects.join(", ") || t.department || "Faculty"}
                     </p>
                     {t.experienceYears && (
-                      <p className="text-[10px] text-slate-400">{t.experienceYears} Experience</p>
+                      <p className="text-[9.5px] text-slate-400">{t.experienceYears} Exp</p>
                     )}
                   </div>
                 </div>
@@ -1099,7 +1152,7 @@ export function StudentBatchHome({
       )}
 
       {/* ========================================================================= */}
-      {/* 11. MODALS (Mentorship Booking & PDF Viewer)                              */}
+      {/* 11. MODALS (Mentorship Booking & Custom PDF Viewer)                       */}
       {/* ========================================================================= */}
 
       {/* Mentorship Booking Modal */}
@@ -1139,7 +1192,7 @@ export function StudentBatchHome({
                 value={bookingTopic}
                 onChange={(e) => setBookingTopic(e.target.value)}
                 placeholder="What topics or questions would you like guidance on?"
-                className="w-full text-xs p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                className="w-full text-xs p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-500"
               />
             </div>
 
@@ -1155,7 +1208,7 @@ export function StudentBatchHome({
                 type="button"
                 disabled={isSubmittingBooking}
                 onClick={handleConfirmBooking}
-                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-600/50 text-white text-xs font-bold shadow transition flex items-center gap-1.5"
+                className="px-5 py-2 rounded-xl bg-pink-600 hover:bg-pink-700 disabled:bg-pink-600/50 text-white text-xs font-bold shadow transition flex items-center gap-1.5"
               >
                 <span className={`material-symbols-outlined text-sm ${isSubmittingBooking ? "animate-spin" : ""}`}>
                   {isSubmittingBooking ? "progress_activity" : "check"}

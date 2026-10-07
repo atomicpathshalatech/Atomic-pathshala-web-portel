@@ -66,11 +66,14 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       await uploadBufferToR2({ key, buffer: pdf, contentType: "application/pdf" });
     }
 
+    const isDownload = request.nextUrl.searchParams.get("download") === "1";
+    const dispositionType = isDownload ? "attachment" : "inline";
+
     const url = await createPresignedDownloadUrl({
       key,
       expiresInSeconds: 600,
       contentType: "application/pdf",
-      contentDisposition: `attachment; filename="${encodeURIComponent(filename)}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+      contentDisposition: `${dispositionType}; filename="${encodeURIComponent(filename)}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
     });
     return NextResponse.redirect(url, 302);
   } catch (error) {

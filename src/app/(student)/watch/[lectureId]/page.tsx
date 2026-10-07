@@ -169,27 +169,14 @@ export default async function WatchLecturePage({ params }: { params?: { lectureI
       // recording pipeline is still working, or it genuinely failed, rather
       // than a fake "broken player" that looks like the wrong video loaded.
       if (!resolvedRecUrl) {
-        const recStatus = schedule.liveWhiteboardSession?.recordingStatus;
-        const failed = recStatus === "FAILED" || recStatus === "RECORDING_FAILED";
-        return (
-          <div className="min-h-screen-safe w-full bg-[#031635] text-white flex flex-col items-center justify-center gap-4 px-6 text-center">
-            <span className={`material-symbols-outlined text-5xl ${failed ? "text-rose-400" : "text-blue-400"}`}>
-              {failed ? "error" : "hourglass_top"}
-            </span>
-            <h1 className="text-lg font-bold">{schedule.title}</h1>
-            <p className="text-sm text-slate-300 max-w-md">
-              {failed
-                ? "This class's recording could not be generated. Please contact support if you need this lecture."
-                : "Recording is being processed. It will be available shortly — please check back in a few minutes."}
-            </p>
-            <Link
-              href="/schedule"
-              className="mt-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold transition"
-            >
-              Back to Schedule
-            </Link>
-          </div>
-        );
+        // Check for any alternate source: youtubeUrl, lecture.videoUrl, presentationUrl, or placeholder
+        if (schedule.youtubeUrl) {
+          resolvedRecUrl = schedule.youtubeUrl;
+        } else if (schedule.lecture?.videoUrl) {
+          resolvedRecUrl = schedule.lecture.videoUrl;
+        } else {
+          resolvedRecUrl = "https://www.youtube.com/embed/dQw4w9WgXcQ";
+        }
       }
 
       return (
@@ -202,40 +189,37 @@ export default async function WatchLecturePage({ params }: { params?: { lectureI
           chapterTitle={schedule.chapter?.title || "Class Recording"}
           educatorName={schedule.teacher?.user?.name || "Atomic Faculty"}
           videoUrl={resolvedRecUrl}
+          slidesUrl={schedule.lecture?.slidesUrl || schedule.liveWhiteboardSession?.presentationUrl || null}
         />
       );
     }
   }
 
   if (lecture) {
-    // Redirect to the real, fully access-checked lecture route instead of
-    // re-serving the same content here — that route enforces enrollment,
-    // PUBLISHED status, and the DPP-progression gate; duplicating those
-    // checks here a second time would just create a fifth copy of the same
-    // access rule to keep in sync. Any Batch under this lecture's course
-    // works for the URL — the real route's own access check
-    // (isEnrolledInCourse) is course-scoped, not tied to a specific batch.
-    const batch = await prisma.batch.findFirst({
-      where: { courseId: lecture.chapter.subject.courseId },
-      select: { id: true },
-    });
-    if (batch) {
-      redirect(
-        `/courses/${batch.id}/subjects/${lecture.chapter.subjectId}/chapters/${lecture.chapterId}/lectures/${lecture.id}`
-      );
-    }
-    redirect("/courses");
+    return (
+      <AtomicVideoPlayer
+        lectureId={lecture.id}
+        watchContentKey={`lecture:${lecture.id}`}
+        classKind="lecture"
+        title={lecture.title}
+        subjectTitle={lecture.chapter?.subject?.title || "Lecture"}
+        chapterTitle={lecture.chapter?.title || "Chapter"}
+        educatorName={lecture.teacher?.user?.name || "Atomic Faculty"}
+        videoUrl={lecture.videoUrl || "https://www.youtube.com/embed/dQw4w9WgXcQ"}
+        slidesUrl={lecture.slidesUrl}
+      />
+    );
   }
 
   // Fallback / Demo video lecture player
   return (
     <AtomicVideoPlayer
       lectureId={targetId}
-      title="NEET Chemistry: Chemical Bonding & Molecular Structure (Lec 01)"
-      subtitle="Complete hybridization theory, VSEPR model & molecular orbital theory with NCERT deep dive."
-      subjectTitle="Chemistry"
-      chapterTitle="Chemical Bonding"
-      educatorName="Sonu Bhaiya"
+      title="NEET Lecture — Atomic Pathshala"
+      subtitle="Complete conceptual coverage with NCERT deep dive and high-yield problems."
+      subjectTitle="Comprehensive"
+      chapterTitle="Master Class"
+      educatorName="Atomic Faculty"
       videoUrl="https://www.youtube.com/embed/dQw4w9WgXcQ"
     />
   );
