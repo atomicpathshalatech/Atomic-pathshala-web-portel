@@ -49,8 +49,8 @@ export async function studentPaperBlockReason(
     }
     return null;
   }
-  if (!areResultsReleased(dbTest)) {
-    return `The test paper and solutions open for everyone after the test time is over (${resultsReleaseAt(dbTest)?.toISOString()}).`;
+  if (withSolution && !areResultsReleased(dbTest)) {
+    return `The test solutions open for everyone after the test time is over (${resultsReleaseAt(dbTest)?.toISOString()}).`;
   }
   return null;
 }

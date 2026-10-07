@@ -555,7 +555,7 @@ export async function loadStudentBatchHome(
       incorrectCount: null,
       accuracy: null,
       opensAt: null,
-      pdfUrl: `/api/team/dpp/${d.id}/pdf`,
+      pdfUrl: `/api/dpp/${d.id}/pdf`,
       href: status === "COMPLETED" ? `/practice?dppId=${d.id}&result=1` : `/practice?dppId=${d.id}`,
     });
   }
@@ -594,7 +594,7 @@ export async function loadStudentBatchHome(
       incorrectCount: null,
       accuracy: null,
       opensAt: d.startsAt.toISOString(),
-      pdfUrl: null,
+      pdfUrl: t ? `/api/tests/${t.id}/pdf` : null,
       href: status === "UPCOMING" || !t ? null : status === "COMPLETED" ? `/tests/${t.id}/result` : `/tests/${t.id}/attempt`,
     });
   }
@@ -620,8 +620,8 @@ export async function loadStudentBatchHome(
       accuracy: null,
       correctCount: null,
       incorrectCount: null,
-      questionPdfUrl: `/api/team/tests/${t.id}/pdf`,
-      solutionPdfUrl: attemptStatus === "SUBMITTED" ? `/api/team/tests/${t.id}/solution-pdf` : null,
+      questionPdfUrl: `/api/tests/${t.id}/pdf`,
+      solutionPdfUrl: `/api/tests/${t.id}/pdf?type=solutions`,
     };
   });
 
@@ -739,7 +739,7 @@ export async function loadStudentBatchHome(
       category: "DPP",
       subject: d.subject,
       chapter: d.chapter,
-      fileUrl: d.pdfUrl || `/api/team/dpp/${d.id}/pdf`,
+      fileUrl: d.pdfUrl || `/api/dpp/${d.id}/pdf`,
       fileName: `${d.code || "DPP"}.pdf`,
       sizeBytes: 150000,
       allowDownload: true,
@@ -756,7 +756,7 @@ export async function loadStudentBatchHome(
       category: "TESTS",
       subject: t.subject,
       chapter: t.chapter,
-      fileUrl: t.questionPdfUrl || `/api/team/tests/${t.id}/pdf`,
+      fileUrl: t.questionPdfUrl || `/api/tests/${t.id}/pdf`,
       fileName: `${t.name}.pdf`,
       sizeBytes: 250000,
       allowDownload: true,
