@@ -1,6 +1,7 @@
 import "server-only";
 import { loadServerPdfJs } from "@/lib/pdf/server-pdf";
 import { parsePageTextNatively } from "@/lib/module-studio/native-parser";
+import { groupTextItemsIntoSpatialLines } from "@/lib/module-studio/spatial-pdf-parser";
 import { convertKrutiDevToUnicode, isKrutiDevEncoded } from "@/lib/module-studio/krutidev-converter";
 import { executeGeminiWithFailover } from "@/lib/questions/gemini-engine";
 import { parseAiJson } from "@/lib/ai/latex-json";
@@ -108,17 +109,16 @@ export async function executeParallelPdfExtraction(
 
   const mode = options.mode || "FAST_EDITABLE";
 
-  // 1. Inspect text layers
+  // 1. Inspect text layers with spatial line grouping
   const textLayers: Record<number, { text: string; width: number; height: number; isScanned: boolean }> = {};
   for (const pNum of pageNumbers) {
     const page = await doc.getPage(pNum);
     const viewport = page.getViewport({ scale: 1 });
     const content = await page.getTextContent();
-    const text = content.items
-      .map((item: any) => ("str" in item ? item.str : ""))
-      .join(" ")
-      .replace(/\s+/g, " ")
-      .trim();
+    
+    // Group spatially into accurate lines
+    const spatialLines = groupTextItemsIntoSpatialLines(content.items);
+    const text = spatialLines.map((l) => l.text).join("\n").trim();
 
     const isScanned = text.length < 20;
     textLayers[pNum] = { text, width: viewport.width, height: viewport.height, isScanned };

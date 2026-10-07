@@ -1,6 +1,5 @@
 import "server-only";
 import type { ModuleElementInput } from "@/lib/validation/module";
-import { MODULE_CALLOUT_VARIANTS } from "@/lib/validation/module";
 import { convertKrutiDevToUnicode, isKrutiDevEncoded } from "./krutidev-converter";
 
 export interface NativeParseOptions {
@@ -10,13 +9,14 @@ export interface NativeParseOptions {
 
 const CALLOUT_KEYWORDS: { re: RegExp; variant: string; label: string }[] = [
   { re: /^(?:note|नोट|विशेष)[\s\:\-\–—]+/i, variant: "NOTE", label: "Note" },
-  { re: /^(?:important|महत्वपूर्ण|caution|warning|सावधानी)[\s\:\-\–—]+/i, variant: "CAUTION", label: "Caution" },
+  { re: /^(?:important|महत्वपूर्ण|caution|warning|सावधानी)[\s\:\-\–—]+/i, variant: "CAUTION", label: "Important" },
   { re: /^(?:remember|याद\s*रखें|ध्यान\s*दें)[\s\:\-\–—]+/i, variant: "REMEMBER", label: "Remember" },
-  { re: /^(?:tip|trick|key\s*point|ट्रिक|सुझाव)[\s\:\-\–—]+/i, variant: "TIP", label: "Tip" },
+  { re: /^(?:tip|trick|key\s*point|key\s*points|मुख्य\s*बिंदु|ट्रिक|सुझाव)[\s\:\-\–—]+/i, variant: "TIP", label: "Key Points" },
   { re: /^(?:example|illustration|उदाहरण|उदा\.)[\s\:\-\–—]+/i, variant: "EXAMPLE", label: "Example" },
   { re: /^(?:formula|सूत्र|equation)[\s\:\-\–—]+/i, variant: "FORMULA", label: "Formula" },
-  { re: /^(?:summary|quick\s*revision|सारांश|निष्कर्ष)[\s\:\-\–—]+/i, variant: "SUMMARY", label: "Summary" },
+  { re: /^(?:summary|quick\s*revision|quick\s*rivision|सारांश|निष्कर्ष)[\s\:\-\–—]+/i, variant: "SUMMARY", label: "Quick Revision" },
   { re: /^(?:concept|key\s*concept|संकल्पना)[\s\:\-\–—]+/i, variant: "CONCEPT", label: "Concept" },
+  { re: /^(?:focus\s*point|फोकस\s*पॉइंट)[\s\:\-\–—]+/i, variant: "TIP", label: "Focus Point" },
 ];
 
 function stripWords(text: string, words: string[]): string {
@@ -40,9 +40,9 @@ function applyRenames(text: string, renames: Record<string, string>): string {
 }
 
 /**
- * Ultra-fast deterministic native rule parser that transforms raw PDF text
- * into structured educational blocks in < 1ms without calling AI APIs.
- * Automatically detects and converts legacy Kruti Dev / Devlys 010 Hindi into standard UTF-8.
+ * Ultra-fast deterministic spatial line parser that converts extracted PDF lines
+ * into structured academic elements while preserving exact line-to-line Hindi Devanagari,
+ * chemical equations, questions, option grids, and tables.
  */
 export function parsePageTextNatively(
   pageText: string,
@@ -63,8 +63,10 @@ export function parsePageTextNatively(
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter((l) => {
-      // Filter out pure standalone page numbers or headers
-      if (/^(?:page\s*)?\d+\s*(?:of\s*\d+)?$/i.test(l)) return false;
+      if (/^Page\s*\|\s*\d+$/i.test(l)) return false;
+      if (/^CAREERWILL$/i.test(l)) return false;
+      if (/^NEET\s+DIVISION$/i.test(l)) return false;
+      if (/^Medium\s*:\s*Hindi$/i.test(l)) return false;
       return l.length > 0;
     });
 
@@ -93,29 +95,55 @@ export function parsePageTextNatively(
   for (let i = 0; i < rawLines.length; i++) {
     const line = rawLines[i]!;
 
-    // 1. Chapter or Major Title Heading
+    // 1. Major Section Banners (Booster Section, Topic Wise Questions, Rank Booster, NEET PYQ, Answer Key)
     if (
-      /^(?:chapter|अध्याय|unit|इकाई)\s*[\d\.\:\-\–—]+\s*.*$/i.test(line) ||
-      (/^\d+\.\d+\s+[A-Z\u0900-\u097F]/.test(line) && line.length < 80) ||
-      (/^[A-Z\u0900-\u097F\s]{4,60}$/.test(line) && !/[.,;:!?]$/.test(line) && line.length < 50)
+      /^(?:booster\s*section|topic\s*wise\s*questions|rank\s*booster\s*question|neet\s*pyq|answer\s*key|quick\s*revision|quick\s*rivision)/i.test(line) ||
+      /^(?:बूस्टर\s*सेक्शन|टॉपिक\s*वाइज|रैंक\s*बूस्टर|उत्तर\s*कुंजी|क्विक\s*रिवीजन)/i.test(line)
     ) {
       flushParagraph();
       push({ type: "HEADING", content: clean(line) });
       continue;
     }
 
-    // 2. Subheading / Topic Title
-    if (
-      /^(?:topic|विषय|section|भाग)\s*[\d\.\:\-\–—]+\s*.*$/i.test(line) ||
-      (/^\([A-Z0-9ivx]+\)\s+[A-Z\u0900-\u097F]/i.test(line) && line.length < 90) ||
-      (/^[A-Z\u0900-\u097F][A-Za-z0-9\s\u0900-\u097F\-\–—]{3,70}:$/.test(line))
-    ) {
+    // 2. Numbered Section Titles (1.1, 1.2, 1.3, 1.4...)
+    if (/^\d+\.\d+\s+[A-Za-z\u0900-\u097F]/.test(line) && line.length < 90) {
       flushParagraph();
-      push({ type: "SUBHEADING", content: clean(line.replace(/:$/, "")) });
+      push({ type: "HEADING", content: clean(line) });
       continue;
     }
 
-    // 3. Callout / Box Detection (Note, Formula, Example, Caution, Tip)
+    // 3. Subrules: Subrule (i), Subrule (ii), (a), (b), A), B)
+    if (
+      /^(?:subrule|उप\s*नियम|नियम|mifu;e|fu;e)\s*[\(\d\wivx\)]+/i.test(line) ||
+      /^(?:[A-Z]\)|\([a-z0-9ivx]+\))\s+[A-Za-z\u0900-\u097F]/.test(line)
+    ) {
+      flushParagraph();
+      push({ type: "SUBHEADING", content: clean(line) });
+      continue;
+    }
+
+    // 4. Questions: Q.1, Q.2, Q.3, प्रश्न 1, Que. 1
+    if (/^(?:q(?:uestion|\.)?\s*\d+|प्रश्न\s*\d+|que\.\s*\d+)/i.test(line)) {
+      flushParagraph();
+      push({ type: "QUESTION", content: clean(line) });
+      continue;
+    }
+
+    // 5. Multiple Choice Options: (1), (2), (3), (4), (A), (B), (C), (D)
+    if (/^(?:\([1-4a-dA-D]\)|\[[1-4a-dA-D]\]|[1-4a-dA-D]\.)\s+/.test(line)) {
+      flushParagraph();
+      push({ type: "OPTION", content: clean(line) });
+      continue;
+    }
+
+    // 6. Solved Example & Solution Steps
+    if (/^(?:solution|answer|ans|hint|हल|उत्तर)[\s\:\-\–—]+/i.test(line)) {
+      flushParagraph();
+      push({ type: "SOLUTION", content: clean(line) });
+      continue;
+    }
+
+    // 7. Callouts & Boxes (Key Points, Important, Formula, Example, Note)
     let matchedCallout = false;
     for (const kw of CALLOUT_KEYWORDS) {
       if (kw.re.test(line)) {
@@ -134,48 +162,19 @@ export function parsePageTextNatively(
     }
     if (matchedCallout) continue;
 
-    // 4. Questions & Practice Items (Q.1, Q1, Question 1, प्रश्न 1)
-    if (/^(?:q(?:uestion)?|प्रश्न|prashna)\s*[\.\d]+[\s\:\-\)]+/i.test(line)) {
-      flushParagraph();
-      push({ type: "QUESTION", content: clean(line) });
-      continue;
-    }
-
-    // 5. Multiple Choice Options ((1), (2), (A), (B), [A], [B])
-    if (/^(?:\([1-4a-dA-D]\)|\[[1-4a-dA-D]\]|[1-4a-dA-D]\.)\s+/i.test(line)) {
-      flushParagraph();
-      push({ type: "OPTION", content: clean(line) });
-      continue;
-    }
-
-    // 6. Solution / Answer Block
-    if (/^(?:solution|answer|ans|hint|हल|उत्तर)[\s\:\-\–—]+/i.test(line)) {
-      flushParagraph();
-      push({ type: "SOLUTION", content: clean(line) });
-      continue;
-    }
-
-    // 7. Bullet / List Items
-    if (/^(?:[\•\-\*\▪\▫\–—]|\([i|v|x]+\))\s+/i.test(line)) {
-      flushParagraph();
-      const bulletText = clean(line.replace(/^(?:[\•\-\*\▪\▫\–—]|\([i|v|x]+\))\s+/, ""));
-      push({ type: "BULLETS", content: bulletText });
-      continue;
-    }
-
-    // 8. Math / Chemical Equations
+    // 8. Standalone Formula or Chemical Notation (HC ≡ C - CH = CH - CH3, etc.)
     if (
-      (line.includes("=") || line.includes("\\to") || line.includes("→") || line.includes("\\Delta")) &&
+      (line.includes("≡") || line.includes("=") || line.includes("→") || line.includes("–") || line.includes("-")) &&
       !line.endsWith(".") &&
-      line.length < 120 &&
-      /[\+\-\*\/\^_\{\}\(\)\[\]\\α-ωΑ-Ω]/.test(line)
+      line.length < 100 &&
+      /CH[0-9]?|COOH|OH|NH2|Cl|Br|NO2|SO3H|sp[123]?/i.test(line)
     ) {
       flushParagraph();
-      push({ type: "EQUATION", content: clean(line) });
+      push({ type: "CHEMICAL_EQUATION", content: clean(line) });
       continue;
     }
 
-    // 9. Table Row Detection (Tab-separated or pipe-separated)
+    // 9. Table Row Detection (Tab or pipe separated)
     if (line.includes("\t") || (line.includes("|") && line.split("|").length >= 3)) {
       flushParagraph();
       const cols = line

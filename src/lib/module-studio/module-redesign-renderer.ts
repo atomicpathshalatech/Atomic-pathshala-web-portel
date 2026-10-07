@@ -10,6 +10,7 @@ import {
   generateModuleWatermarkHtml,
   RenderHeaderFooterParams,
 } from "./subject-design-system";
+import { renderChemDrawSvg } from "./chemdraw-renderer";
 
 export interface RedesignRenderOptions {
   subject: ModuleSubject;
@@ -182,6 +183,7 @@ function renderElementHtml(el: ModuleElementInput, subject: ModuleSubject): stri
 
     case "QUESTION": {
       const qNum = globalQuestionCounter++;
+      const chemSvg = renderChemDrawSvg(el.content || "");
       return `
         <div class="element-practice-question-box" style="
           background: #ffffff;
@@ -214,6 +216,7 @@ function renderElementHtml(el: ModuleElementInput, subject: ModuleSubject): stri
           <div style="font-size: 13px; font-weight: 700; color: ${theme.darkText}; line-height: 1.6;">
             <b>Q.${qNum}</b> ${contentWithMath}
           </div>
+          ${chemSvg || ""}
         </div>
       `;
     }
