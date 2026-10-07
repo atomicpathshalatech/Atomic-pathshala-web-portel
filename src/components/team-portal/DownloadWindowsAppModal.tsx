@@ -10,20 +10,14 @@ export function DownloadWindowsAppModal({
   onClose: () => void;
 }) {
   const [downloading, setDownloading] = useState(false);
-  const [showCliInstructions, setShowCliInstructions] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleDownload = async () => {
+  const handleDownload = () => {
     setDownloading(true);
-    try {
-      // Trigger download endpoint
-      window.location.href = "/api/desktop/download";
-    } catch {
-      // Best effort
-    } finally {
-      setTimeout(() => setDownloading(false), 2000);
-    }
+    // Direct trigger to download Windows installer .exe
+    window.location.href = "/api/desktop/download";
+    setTimeout(() => setDownloading(false), 3000);
   };
 
   return (
@@ -42,14 +36,14 @@ export function DownloadWindowsAppModal({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-headline-sm text-headline-sm text-on-surface font-extrabold">
-                  Atomic Pathshala Desktop
+                  Atomic Pathshala Teacher
                 </h3>
                 <span className="px-2 py-0.5 rounded-full bg-orange-500/15 text-orange-600 text-[10px] font-black uppercase tracking-wider">
-                  v0.1.0
+                  Windows App
                 </span>
               </div>
               <p className="text-label-sm text-on-surface-variant mt-0.5">
-                Teacher Classroom &amp; Live Broadcast Studio for Windows
+                Dedicated Classroom &amp; Live Streaming Studio for Faculty
               </p>
             </div>
           </div>
@@ -64,15 +58,16 @@ export function DownloadWindowsAppModal({
 
         {/* Body */}
         <div className="p-6 space-y-4 text-on-surface">
+          {/* Key Advantages */}
           <div className="grid grid-cols-2 gap-3">
             <div className="p-3 rounded-2xl bg-surface-container-lowest border border-outline-variant/20 flex items-start gap-2.5">
               <span className="material-symbols-outlined text-orange-500 text-xl shrink-0 mt-0.5">
                 youtube_activity
               </span>
               <div>
-                <h4 className="text-xs font-bold">Built-in Encoder</h4>
+                <h4 className="text-xs font-bold">1-Click YouTube Live</h4>
                 <p className="text-[11px] text-on-surface-variant mt-0.5 leading-snug">
-                  Streams direct to YouTube. Zero OBS setup or stream keys needed.
+                  OBS या स्ट्रीम-की की जरूरत नहीं, ऐप से सीधे यूट्यूब लाइव जाएं।
                 </p>
               </div>
             </div>
@@ -82,93 +77,83 @@ export function DownloadWindowsAppModal({
                 draw
               </span>
               <div>
-                <h4 className="text-xs font-bold">Hardware Whiteboard</h4>
+                <h4 className="text-xs font-bold">Ultra-Smooth Whiteboard</h4>
                 <p className="text-[11px] text-on-surface-variant mt-0.5 leading-snug">
-                  Ultra-low latency pen tablet drawing with dual-display support.
-                </p>
-              </div>
-            </div>
-
-            <div className="p-3 rounded-2xl bg-surface-container-lowest border border-outline-variant/20 flex items-start gap-2.5">
-              <span className="material-symbols-outlined text-green-600 text-xl shrink-0 mt-0.5">
-                speed
-              </span>
-              <div>
-                <h4 className="text-xs font-bold">Low Latency</h4>
-                <p className="text-[11px] text-on-surface-variant mt-0.5 leading-snug">
-                  Smooth 1080p 60fps streaming powered by native FFmpeg.
-                </p>
-              </div>
-            </div>
-
-            <div className="p-3 rounded-2xl bg-surface-container-lowest border border-outline-variant/20 flex items-start gap-2.5">
-              <span className="material-symbols-outlined text-purple-600 text-xl shrink-0 mt-0.5">
-                security
-              </span>
-              <div>
-                <h4 className="text-xs font-bold">Locked Down</h4>
-                <p className="text-[11px] text-on-surface-variant mt-0.5 leading-snug">
-                  Sandboxed environment with strict origin isolation.
+                  पेन टैबलेट (Graphic Tablet) के साथ ज़ीरो लैग और स्मूथ राइटिंग।
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="p-3.5 rounded-2xl bg-surface-container-high/40 border border-outline-variant/20 flex items-center justify-between text-xs">
+          {/* 3 Simple Steps */}
+          <div className="p-4 rounded-2xl bg-surface-container-lowest border border-outline-variant/25 space-y-2.5">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-on-surface-variant flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-base text-primary">verified</span>
+              ऐप इनस्टॉल करने के 3 आसान स्टेप्स:
+            </h4>
+            <div className="space-y-2 text-xs">
+              <div className="flex items-start gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-orange-500/15 text-orange-600 font-bold flex items-center justify-center text-[11px] shrink-0 mt-0.5">
+                  1
+                </span>
+                <p className="text-on-surface">
+                  नीचे दिए गए <strong>"Download App (.exe)"</strong> बटन पर क्लिक करके फाइल डाउनलोड करें।
+                </p>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-orange-500/15 text-orange-600 font-bold flex items-center justify-center text-[11px] shrink-0 mt-0.5">
+                  2
+                </span>
+                <p className="text-on-surface">
+                  डाउनलोड हुई फाइल पर डबल-क्लिक करके <strong>Install</strong> करें।
+                </p>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-orange-500/15 text-orange-600 font-bold flex items-center justify-center text-[11px] shrink-0 mt-0.5">
+                  3
+                </span>
+                <p className="text-on-surface">
+                  ऐप खोलें, अपने <strong>Teacher आईडी/पासवर्ड</strong> से लॉगिन करें और लाइव पढ़ाना शुरू करें।
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* System Info */}
+          <div className="p-3 rounded-2xl bg-surface-container-high/40 border border-outline-variant/20 flex items-center justify-between text-xs">
             <div className="flex items-center gap-2">
               <span className="material-symbols-outlined text-lg text-on-surface-variant">
                 laptop_windows
               </span>
-              <span className="font-semibold text-on-surface">System Requirements:</span>
-              <span className="text-on-surface-variant">Windows 10 / 11 (64-bit)</span>
+              <span className="text-on-surface-variant">Windows 10 / 11 (64-bit Compatible)</span>
             </div>
             <span className="text-[11px] font-bold text-green-600 dark:text-green-400 bg-green-500/10 px-2 py-0.5 rounded-full">
-              Compatible
+              Ready to Install
             </span>
           </div>
-
-          {showCliInstructions && (
-            <div className="p-3.5 rounded-2xl bg-slate-950 text-slate-200 text-xs font-mono space-y-1.5 border border-slate-800">
-              <p className="text-slate-400 text-[11px] font-sans font-semibold">Local Run / Build Commands:</p>
-              <p className="text-orange-400">cd desktop/teacher</p>
-              <p className="text-green-400">npm install &amp;&amp; npm run fetch-ffmpeg</p>
-              <p className="text-cyan-400">npm start</p>
-              <p className="text-slate-400 text-[10px] font-sans pt-1">To generate standalone installer: <code className="text-white">npm run dist</code></p>
-            </div>
-          )}
         </div>
 
         {/* Footer Actions */}
-        <div className="p-5 border-t border-outline-variant/20 bg-surface-container-lowest flex items-center justify-between gap-3">
+        <div className="p-5 border-t border-outline-variant/20 bg-surface-container-lowest flex items-center justify-end gap-3">
           <button
             type="button"
-            onClick={() => setShowCliInstructions((prev) => !prev)}
-            className="text-xs text-primary font-semibold hover:underline flex items-center gap-1"
+            onClick={onClose}
+            className="px-4 py-2 rounded-full border border-outline-variant/30 text-label-sm font-semibold text-on-surface-variant hover:bg-surface-container-high transition-colors"
           >
-            <span className="material-symbols-outlined text-base">terminal</span>
-            <span>{showCliInstructions ? "Hide Developer Instructions" : "Developer Run Instructions"}</span>
+            Cancel
           </button>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-full border border-outline-variant/30 text-label-sm font-semibold text-on-surface-variant hover:bg-surface-container-high transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleDownload}
-              disabled={downloading}
-              className="bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white rounded-full px-6 py-2.5 font-label-md text-label-sm font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-60"
-            >
-              <span className="material-symbols-outlined text-lg">{downloading ? "sync" : "download"}</span>
-              <span>{downloading ? "Starting Download…" : "Download Windows App (.exe)"}</span>
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={handleDownload}
+            disabled={downloading}
+            className="bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white rounded-full px-6 py-2.5 font-label-md text-label-sm font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-60"
+          >
+            <span className="material-symbols-outlined text-lg">{downloading ? "sync" : "download"}</span>
+            <span>{downloading ? "Starting Download…" : "Download App (.exe)"}</span>
+          </button>
         </div>
       </div>
     </div>
   );
 }
+
