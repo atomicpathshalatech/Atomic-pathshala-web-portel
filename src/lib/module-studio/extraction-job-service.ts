@@ -155,6 +155,7 @@ export async function startExtractionJob(
       const extraction = await executeParallelPdfExtraction(buffer, {
         fromPage: options.fromPage,
         toPage: options.toPage,
+        mode: options.mode || "FAST_EDITABLE",
         removeWords: options.removeWords,
         renames: options.renames,
         shouldCancel: () => activeCancellations.get(job.id) === true,

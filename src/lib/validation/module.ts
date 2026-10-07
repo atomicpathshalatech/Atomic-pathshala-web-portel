@@ -167,6 +167,8 @@ export const moduleProcessSchema = z.object({
   // Pages to process (1-based, inclusive). Big books go in parts.
   fromPage: z.number().int().min(1).optional(),
   toPage: z.number().int().min(1).optional(),
+  // Extraction mode: FAST_EDITABLE (default native parser <1ms) or AI_ENHANCE (Gemini LLM)
+  mode: z.enum(["FAST_EDITABLE", "AI_ENHANCE"]).optional(),
 });
 export type ModuleProcessInput = z.infer<typeof moduleProcessSchema>;
 

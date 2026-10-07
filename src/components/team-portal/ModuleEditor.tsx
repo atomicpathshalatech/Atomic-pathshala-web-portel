@@ -300,6 +300,44 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
   const [exportDesign, setExportDesign] = useState<"premium" | "classic">("premium");
   const [exportTheme, setExportTheme] = useState("ATOMIC_BLUE");
 
+  // Fast Extraction & Pre-flight Analysis State
+  const [extractionMode, setExtractionMode] = useState<"FAST_EDITABLE" | "AI_ENHANCE">("FAST_EDITABLE");
+  const [analyzingPdf, setAnalyzingPdf] = useState(false);
+  const [analysisReport, setAnalysisReport] = useState<{
+    totalPages: number;
+    textPagesCount: number;
+    scannedPagesCount: number;
+    recommendedMode: "FAST_EDITABLE" | "AI_ENHANCE";
+    pdfType: "DIGITAL" | "SCANNED" | "HYBRID";
+  } | null>(null);
+
+  // Targeted AI Natural-Language Edit Studio State
+  const [showAiModal, setShowAiModal] = useState(false);
+  const [aiInstruction, setAiInstruction] = useState("");
+  const [aiTargetScope, setAiTargetScope] = useState<"CURRENT" | "ALL">("CURRENT");
+  const [planningAi, setPlanningAi] = useState(false);
+  const [applyingAi, setApplyingAi] = useState(false);
+  const [aiPlan, setAiPlan] = useState<{
+    summary: string;
+    totalOperations: number;
+    operations: Array<{
+      id: string;
+      type: string;
+      pageNumber: number;
+      targetElementId: string;
+      description: string;
+      oldContent?: string;
+      newContent?: string;
+      newType?: string;
+      newLabel?: string;
+      newVariant?: string;
+      status: "PROPOSED" | "ACCEPTED" | "REJECTED";
+    }>;
+    affectedPages: number[];
+  } | null>(null);
+  const [selectedOpIds, setSelectedOpIds] = useState<string[]>([]);
+  const [aiSuccessMsg, setAiSuccessMsg] = useState<string | null>(null);
+
   // High-Fidelity Vector Rebranding & Document Preservation Studio
   const [rebrandPreset, setRebrandPreset] = useState<string>("ATOMIC_DEFAULT");
   const [teacherNameOverride, setTeacherNameOverride] = useState("");
@@ -518,6 +556,27 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
     scheduleAutosave();
   }
 
+  async function runAnalyzePdf() {
+    setAnalyzingPdf(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/team/modules/${moduleId}/analyze`, { method: "POST" });
+      const body = await res.json();
+      if (!body.success) {
+        setError(body.error ?? "Failed to analyze PDF.");
+      } else {
+        setAnalysisReport(body.data);
+        if (body.data.recommendedMode) {
+          setExtractionMode(body.data.recommendedMode);
+        }
+      }
+    } catch {
+      setError("Failed to run PDF pre-flight analysis.");
+    } finally {
+      setAnalyzingPdf(false);
+    }
+  }
+
   async function runProcess() {
     setProcessing(true);
     setError(null);
@@ -530,6 +589,7 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          mode: extractionMode,
           removeWords,
           renames: parseRenames(renamesText),
           fromPage: Number(fromPage) || undefined,
@@ -560,6 +620,81 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
     } catch {
       setError("Failed to cancel job.");
     }
+  }
+
+  async function runPlanAiEdit() {
+    if (!aiInstruction.trim()) return;
+    setPlanningAi(true);
+    setAiSuccessMsg(null);
+    setError(null);
+    try {
+      const activePageNum = data?.pages.find((p) => p.id === selectedPageId)?.pageNumber;
+      const targetPage = aiTargetScope === "CURRENT" ? activePageNum : undefined;
+
+      const res = await fetch(`/api/team/modules/${moduleId}/ai-edit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "plan",
+          instruction: aiInstruction.trim(),
+          targetPage,
+        }),
+      });
+      const body = await res.json();
+      if (!body.success) {
+        setError(body.error ?? "AI editing planning failed.");
+      } else {
+        setAiPlan(body.data);
+        setSelectedOpIds(body.data.operations.map((o: any) => o.id));
+      }
+    } catch {
+      setError("Network error while communicating with AI edit engine.");
+    } finally {
+      setPlanningAi(false);
+    }
+  }
+
+  async function runApplyAiEdits() {
+    if (!aiPlan || selectedOpIds.length === 0) return;
+    setApplyingAi(true);
+    setError(null);
+    try {
+      const acceptedOps = aiPlan.operations.filter((o) => selectedOpIds.includes(o.id));
+      const res = await fetch(`/api/team/modules/${moduleId}/ai-edit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "apply",
+          acceptedOps,
+        }),
+      });
+      const body = await res.json();
+      if (!body.success) {
+        setError(body.error ?? "Failed to apply AI edits.");
+      } else {
+        setAiSuccessMsg(`Successfully applied ${body.data.appliedCount} changes!`);
+        setAiPlan(null);
+        setAiInstruction("");
+        await load();
+      }
+    } catch {
+      setError("Network error while saving AI modifications.");
+    } finally {
+      setApplyingAi(false);
+    }
+  }
+
+  function toggleOpSelection(id: string) {
+    setSelectedOpIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+
+  function selectAllOps() {
+    if (!aiPlan) return;
+    setSelectedOpIds(aiPlan.operations.map((o) => o.id));
+  }
+
+  function deselectAllOps() {
+    setSelectedOpIds([]);
   }
 
   async function saveDetails(e: React.FormEvent) {
@@ -871,10 +1006,19 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
               <h2 className="font-headline-md text-headline-md text-on-surface">Parallel Extraction Engine</h2>
             </div>
             <p className="text-label-sm text-on-surface-variant mt-0.5">
-              High-speed parallel text extraction with AI block structuring and per-page fault tolerance.
+              Ultra-fast deterministic text-first rule extraction with 100% Hindi/English preservation and AI structuring.
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={runAnalyzePdf}
+              disabled={analyzingPdf || processing}
+              className="rounded-full border border-primary/40 text-primary px-4 py-2 font-label-md text-label-sm hover:bg-primary/10 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+            >
+              <span className="material-symbols-outlined text-base">{analyzingPdf ? "sync" : "analytics"}</span>
+              {analyzingPdf ? "Analyzing PDF…" : "Pre-flight Analyze"}
+            </button>
             {processing && (
               <button
                 type="button"
@@ -895,6 +1039,75 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
             </button>
           </div>
         </div>
+
+        {/* Extraction Mode Switcher */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-3.5 bg-surface-container-lowest rounded-xl border border-outline-variant/30">
+          <button
+            type="button"
+            onClick={() => setExtractionMode("FAST_EDITABLE")}
+            className={`p-3 rounded-lg border text-left transition-all flex items-start gap-3 ${
+              extractionMode === "FAST_EDITABLE"
+                ? "border-primary bg-primary/10 ring-2 ring-primary/30"
+                : "border-outline-variant/30 hover:border-outline-variant/60"
+            }`}
+          >
+            <span className="material-symbols-outlined text-primary text-2xl shrink-0 mt-0.5">bolt</span>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-label-md font-bold text-on-surface">Fast Editable Mode</span>
+                <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-green-500/15 text-green-700 dark:text-green-400">RECOMMENDED</span>
+              </div>
+              <p className="text-xs text-on-surface-variant mt-0.5">
+                Instant native text parser (&lt; 1ms/page). Preserves 100% Hindi Devanagari text, equations, and images without AI rate limits or lag.
+              </p>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setExtractionMode("AI_ENHANCE")}
+            className={`p-3 rounded-lg border text-left transition-all flex items-start gap-3 ${
+              extractionMode === "AI_ENHANCE"
+                ? "border-primary bg-primary/10 ring-2 ring-primary/30"
+                : "border-outline-variant/30 hover:border-outline-variant/60"
+            }`}
+          >
+            <span className="material-symbols-outlined text-secondary text-2xl shrink-0 mt-0.5">auto_awesome</span>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-label-md font-bold text-on-surface">AI Enhanced Mode</span>
+                <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-secondary/15 text-secondary">DEEP SYNTHESIS</span>
+              </div>
+              <p className="text-xs text-on-surface-variant mt-0.5">
+                Full parallel LLM analysis. Useful for complex unstructured multi-column layouts or handwritten scan OCR.
+              </p>
+            </div>
+          </button>
+        </div>
+
+        {/* Pre-flight Analysis Report Card if available */}
+        {analysisReport && (
+          <div className="p-4 rounded-xl bg-primary/5 border border-primary/20 flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                analysisReport.pdfType === "DIGITAL" ? "bg-green-500/20 text-green-700 dark:text-green-300" :
+                analysisReport.pdfType === "HYBRID" ? "bg-blue-500/20 text-blue-700 dark:text-blue-300" : "bg-amber-500/20 text-amber-700 dark:text-amber-300"
+              }`}>
+                {analysisReport.pdfType} PDF
+              </span>
+              <div className="text-label-sm text-on-surface">
+                <span className="font-bold">{analysisReport.totalPages}</span> Total Pages
+                <span className="mx-2 opacity-40">•</span>
+                <span className="text-green-600 font-semibold">{analysisReport.textPagesCount} Digital Text</span>
+                <span className="mx-2 opacity-40">•</span>
+                <span className="text-amber-600 font-semibold">{analysisReport.scannedPagesCount} Scanned / Low-Text</span>
+              </div>
+            </div>
+            <div className="text-xs text-on-surface-variant">
+              Optimal extraction mode: <span className="font-bold text-primary">{analysisReport.recommendedMode.replace("_", " ")}</span>
+            </div>
+          </div>
+        )}
 
         {/* Live Progress Bar if Processing or Status Available */}
         {(processing || jobStatus) && (
@@ -1216,6 +1429,19 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
                 className="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant disabled:opacity-30 hover:bg-surface-container-high"
               >
                 <span className="material-symbols-outlined text-lg">redo</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAiPlan(null);
+                  setAiSuccessMsg(null);
+                  setShowAiModal(true);
+                }}
+                className="px-3.5 py-1.5 rounded-full text-label-sm bg-gradient-to-r from-primary to-secondary text-on-primary font-bold shadow-sm hover:opacity-90 flex items-center gap-1.5 transition-all"
+                title="Open AI Natural Language Edit Studio"
+              >
+                <span className="material-symbols-outlined text-base">auto_awesome</span>
+                AI Edit Assistant
               </button>
               <button
                 type="button"
@@ -1681,6 +1907,246 @@ export function ModuleEditor({ moduleId }: { moduleId: string }) {
               >
                 Done
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Targeted AI Natural Language Edit Studio Modal */}
+      {showAiModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-surface rounded-2xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-outline-variant/30 overflow-hidden">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-outline-variant/30 flex items-center justify-between bg-surface-container-lowest">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-primary to-secondary flex items-center justify-center text-on-primary shadow-sm">
+                  <span className="material-symbols-outlined text-2xl">auto_awesome</span>
+                </div>
+                <div>
+                  <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold">Targeted AI Edit Engine</h3>
+                  <p className="text-label-sm text-on-surface-variant">
+                    Precision natural language edits with structured diff review &amp; per-change acceptance.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAiModal(false);
+                  setAiPlan(null);
+                  setAiSuccessMsg(null);
+                }}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high"
+              >
+                <span className="material-symbols-outlined text-lg">close</span>
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 space-y-5 overflow-y-auto flex-1">
+              {aiSuccessMsg && (
+                <div className="p-4 rounded-xl bg-green-500/10 border border-green-500/30 text-green-700 dark:text-green-400 text-label-sm flex items-center gap-2 font-semibold">
+                  <span className="material-symbols-outlined text-lg">check_circle</span>
+                  {aiSuccessMsg}
+                </div>
+              )}
+
+              {/* Scope & Fast Chips */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-label-sm font-bold text-on-surface uppercase tracking-wide">Target Scope</span>
+                  <div className="flex items-center gap-1.5 p-1 bg-surface-container-high rounded-full text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setAiTargetScope("CURRENT")}
+                      className={`px-3 py-1 rounded-full font-medium transition-all ${
+                        aiTargetScope === "CURRENT" ? "bg-surface text-primary shadow-sm font-bold" : "text-on-surface-variant"
+                      }`}
+                    >
+                      Active Page (Page {data.pages.find((p) => p.id === selectedPageId)?.pageNumber ?? 1})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAiTargetScope("ALL")}
+                      className={`px-3 py-1 rounded-full font-medium transition-all ${
+                        aiTargetScope === "ALL" ? "bg-surface text-primary shadow-sm font-bold" : "text-on-surface-variant"
+                      }`}
+                    >
+                      Entire Module ({data.pages.length} Pages)
+                    </button>
+                  </div>
+                </div>
+
+                {/* Quick Instruction Chips */}
+                <div>
+                  <span className="text-[11px] font-semibold text-on-surface-variant block mb-1.5">Quick Actions</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      "Format chemistry equations with subscript & superscript",
+                      "Convert questions and answers to standard NEET MCQ format",
+                      "Highlight key concepts & laws in Atomic Insight callouts",
+                      "Standardize mathematical formulas in LaTeX format",
+                      "Fix Hindi/English bilingual formatting & spacing",
+                    ].map((chip) => (
+                      <button
+                        key={chip}
+                        type="button"
+                        onClick={() => setAiInstruction(chip)}
+                        className="px-2.5 py-1 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-[11px] text-on-surface transition-colors"
+                      >
+                        {chip}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Instruction Input */}
+                <div>
+                  <label className="text-label-sm font-semibold text-on-surface block mb-1">
+                    Editing Instruction (English / Hindi / Hinglish)
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={aiInstruction}
+                    onChange={(e) => setAiInstruction(e.target.value)}
+                    placeholder="e.g. Replace 'Example' with 'Atomic Illustration' across page 1 and make all reaction formulas bold"
+                    className="w-full rounded-xl border border-outline-variant/40 px-3 py-2 text-label-sm bg-surface-container-lowest focus:ring-2 focus:ring-primary/30 outline-none"
+                  />
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={runPlanAiEdit}
+                    disabled={planningAi || !aiInstruction.trim()}
+                    className="bg-primary text-on-primary rounded-full px-5 py-2 font-label-md text-label-sm hover:opacity-90 disabled:opacity-50 transition-all flex items-center gap-2 shadow-sm"
+                  >
+                    <span className="material-symbols-outlined text-base">{planningAi ? "sync" : "auto_awesome"}</span>
+                    {planningAi ? "Analyzing & Planning Changes…" : "Generate AI Edit Plan"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Plan Diff Review Box */}
+              {aiPlan && (
+                <div className="space-y-4 pt-4 border-t border-outline-variant/30">
+                  <div className="p-4 rounded-xl bg-surface-container-lowest border border-outline-variant/30 space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-primary text-xl">fact_check</span>
+                        <h4 className="font-bold text-label-md text-on-surface">Proposed Edit Plan</h4>
+                        <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-primary/10 text-primary">
+                          {aiPlan.totalOperations} Operations
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        <button
+                          type="button"
+                          onClick={selectAllOps}
+                          className="text-primary hover:underline font-semibold"
+                        >
+                          Select All
+                        </button>
+                        <span>•</span>
+                        <button
+                          type="button"
+                          onClick={deselectAllOps}
+                          className="text-on-surface-variant hover:underline"
+                        >
+                          Deselect All
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-label-sm text-on-surface-variant">{aiPlan.summary}</p>
+                  </div>
+
+                  {/* Discrete Operations List */}
+                  <div className="space-y-3">
+                    {aiPlan.operations.map((op) => {
+                      const isSelected = selectedOpIds.includes(op.id);
+                      return (
+                        <div
+                          key={op.id}
+                          className={`rounded-xl border p-3.5 transition-all space-y-2 ${
+                            isSelected
+                              ? "border-primary/40 bg-primary/[0.02] shadow-sm"
+                              : "border-outline-variant/30 bg-surface-container-lowest opacity-60"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <label className="flex items-start gap-3 cursor-pointer flex-1">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => toggleOpSelection(op.id)}
+                                className="mt-1 rounded text-primary focus:ring-primary"
+                              />
+                              <div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-surface-container-high text-on-surface">
+                                    Page {op.pageNumber}
+                                  </span>
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-secondary/10 text-secondary">
+                                    {op.type.replace(/_/g, " ")}
+                                  </span>
+                                  {op.newType && (
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-primary/10 text-primary">
+                                      Type: {op.newType}
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-label-sm text-on-surface font-medium mt-1">{op.description}</p>
+                              </div>
+                            </label>
+                          </div>
+
+                          {/* Diff representation */}
+                          {(op.oldContent || op.newContent) && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs pt-1">
+                              {op.oldContent && (
+                                <div className="p-2.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-900 dark:text-red-300 font-mono line-through overflow-x-auto">
+                                  {op.oldContent}
+                                </div>
+                              )}
+                              {op.newContent && (
+                                <div className="p-2.5 rounded-lg bg-green-500/10 border border-green-500/20 text-green-900 dark:text-green-300 font-mono overflow-x-auto">
+                                  {op.newContent}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-outline-variant/30 flex items-center justify-between gap-3 bg-surface-container-lowest">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAiModal(false);
+                  setAiPlan(null);
+                  setAiSuccessMsg(null);
+                }}
+                className="px-4 py-2 rounded-full border border-outline-variant/40 text-label-sm"
+              >
+                Close
+              </button>
+              {aiPlan && (
+                <button
+                  type="button"
+                  onClick={runApplyAiEdits}
+                  disabled={applyingAi || selectedOpIds.length === 0}
+                  className="bg-primary text-on-primary rounded-full px-6 py-2 font-label-md text-label-sm hover:opacity-90 disabled:opacity-50 transition-all flex items-center gap-2 shadow-sm"
+                >
+                  <span className="material-symbols-outlined text-base">{applyingAi ? "sync" : "task_alt"}</span>
+                  {applyingAi ? "Applying Changes…" : `Apply ${selectedOpIds.length} Accepted Changes`}
+                </button>
+              )}
             </div>
           </div>
         </div>
