@@ -26,6 +26,7 @@ export type AcademicEvent = {
   subject: string;
   chapter: string | null;
   teacherName: string | null;
+  teacherPhotoUrl: string | null;
   dateKey: string; // YYYY-MM-DD
   startsAt: string;
   endsAt: string | null;
@@ -36,6 +37,7 @@ export type AcademicEvent = {
   durationMin: number | null;
   questionCount: number | null;
   pdfUrl: string | null;
+  notesPdfUrl: string | null;
 };
 
 export type BatchClassItem = {
@@ -43,6 +45,7 @@ export type BatchClassItem = {
   title: string;
   subject: string | null;
   teacherName: string | null;
+  teacherPhotoUrl: string | null;
   startsAt: string;
   endsAt: string;
   status: string;
@@ -274,9 +277,24 @@ export async function loadStudentBatchHome(
       where: { batchId, type: "LIVE_CLASS" },
       orderBy: { startsAt: "desc" },
       include: {
-        teacher: { select: { user: { select: { name: true } } } },
-        liveWhiteboardSession: { select: { id: true, status: true, livePhase: true, youtubeVideoId: true } },
+        teacher: {
+          select: {
+            displayName: true,
+            user: { select: { name: true, photoUrl: true } },
+          },
+        },
+        liveWhiteboardSession: {
+          select: {
+            id: true,
+            status: true,
+            livePhase: true,
+            youtubeVideoId: true,
+            presentationUrl: true,
+            pdfStatus: true,
+          },
+        },
         chapter: { select: { id: true, title: true, subject: { select: { title: true } } } },
+        lecture: { select: { id: true, slidesUrl: true } },
       },
     }),
     prisma.batchSchedule.findMany({
@@ -644,21 +662,34 @@ export async function loadStudentBatchHome(
   });
 
   // 6. Transform Classes
-  const classItems: BatchClassItem[] = schedules.map((s) => ({
-    id: s.id,
-    title: s.title,
-    subject: s.subject,
-    teacherName: s.teacher?.user.name ?? null,
-    startsAt: s.startsAt.toISOString(),
-    endsAt: s.endsAt.toISOString(),
-    status: s.status,
-    type: s.type,
-    liveWhiteboardSession: s.liveWhiteboardSession,
-    chapterId: s.chapter?.id ?? null,
-    chapterTitle: s.chapter?.title ?? null,
-    subjectName: s.chapter?.subject.title ?? s.subject ?? "General",
-    notesPdfUrl: null,
-  }));
+  const classItems: BatchClassItem[] = schedules.map((s) => {
+    const teacherName = s.teacher?.displayName || s.teacher?.user.name || null;
+    const teacherPhotoUrl = s.teacher?.user.photoUrl || null;
+    const notesPdfUrl =
+      s.lecture?.slidesUrl ||
+      (s.liveWhiteboardSession?.pdfStatus === "READY" && s.liveWhiteboardSession?.id
+        ? `/api/whiteboard/sessions/${s.liveWhiteboardSession.id}/slides?format=pdf`
+        : null) ||
+      s.liveWhiteboardSession?.presentationUrl ||
+      null;
+
+    return {
+      id: s.id,
+      title: s.title,
+      subject: s.subject,
+      teacherName,
+      teacherPhotoUrl,
+      startsAt: s.startsAt.toISOString(),
+      endsAt: s.endsAt.toISOString(),
+      status: s.status,
+      type: s.type,
+      liveWhiteboardSession: s.liveWhiteboardSession,
+      chapterId: s.chapter?.id ?? null,
+      chapterTitle: s.chapter?.title ?? null,
+      subjectName: s.chapter?.subject.title ?? s.subject ?? "General",
+      notesPdfUrl,
+    };
+  });
 
   // 7. Build Unified Academic Events for Batch Timeline (Today & Upcoming)
   const timelineEvents: AcademicEvent[] = [];
@@ -678,16 +709,18 @@ export async function loadStudentBatchHome(
       subject: c.subjectName,
       chapter: c.chapterTitle,
       teacherName: c.teacherName,
+      teacherPhotoUrl: c.teacherPhotoUrl,
       dateKey: dayKey(c.startsAt),
       startsAt: c.startsAt,
       endsAt: c.endsAt,
       status: isLive ? "LIVE_NOW" : isCompleted ? "COMPLETED" : isCancelled ? "CANCELLED" : "UPCOMING",
-      actionLabel: isLive ? "Join Live" : isCompleted ? "Watch Recording" : joinRule.allowed ? "Enter Class" : timeFmt(c.startsAt),
+      actionLabel: isLive ? "Join Live Class" : isCompleted ? "Play Class" : joinRule.allowed ? "Enter Class" : timeFmt(c.startsAt),
       actionHref: isCompleted ? `/watch/${c.id}` : `/live-class/${c.id}`,
       score: null,
       durationMin: Math.round((new Date(c.endsAt).getTime() - new Date(c.startsAt).getTime()) / 60000) || 60,
       questionCount: null,
-      pdfUrl: null,
+      pdfUrl: c.notesPdfUrl ?? null,
+      notesPdfUrl: c.notesPdfUrl ?? null,
     });
   }
 
@@ -704,6 +737,7 @@ export async function loadStudentBatchHome(
       subject: t.subject,
       chapter: t.chapter,
       teacherName: "Examination Cell",
+      teacherPhotoUrl: null,
       dateKey: dayKey(testDate),
       startsAt: testDate,
       endsAt: t.closeTime,
@@ -714,6 +748,7 @@ export async function loadStudentBatchHome(
       durationMin: t.durationMin,
       questionCount: null,
       pdfUrl: t.questionPdfUrl,
+      notesPdfUrl: null,
     });
   }
 
@@ -730,6 +765,7 @@ export async function loadStudentBatchHome(
       subject: d.subject,
       chapter: d.chapter,
       teacherName: null,
+      teacherPhotoUrl: null,
       dateKey: dayKey(dppDate),
       startsAt: dppDate,
       endsAt: null,
@@ -740,6 +776,7 @@ export async function loadStudentBatchHome(
       durationMin: d.durationMin,
       questionCount: d.questionCount,
       pdfUrl: d.pdfUrl,
+      notesPdfUrl: null,
     });
   }
 
@@ -748,6 +785,24 @@ export async function loadStudentBatchHome(
 
   // 8. Build Centralized "All PDFs" Library
   const allPdfs: BatchPdfItem[] = [];
+
+  // 8.0 Class Notes PDFs
+  for (const c of classItems) {
+    if (!c.notesPdfUrl) continue;
+    allPdfs.push({
+      id: `pdf_notes_${c.id}`,
+      title: `${c.title} (Class Notes)`,
+      category: "CLASS_NOTES",
+      subject: c.subjectName,
+      chapter: c.chapterTitle,
+      fileUrl: c.notesPdfUrl,
+      fileName: `${c.title}-Notes.pdf`,
+      sizeBytes: 150000,
+      allowDownload: true,
+      createdAt: c.startsAt,
+      sourceType: "CLASS_ATTACHMENT",
+    });
+  }
 
   // 8.1 DPP PDFs (Only after submission)
   for (const d of dppItems) {

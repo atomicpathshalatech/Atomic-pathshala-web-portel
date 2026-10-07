@@ -217,8 +217,8 @@ export function StudentBatchHome({
       {tab === "timeline" && (
         <TimelineTab events={data.timelineEvents} now={now} onOpenPdf={(p) => setActivePdf(p)} />
       )}
-      {tab === "classes" && <ClassesTab data={data} now={now} />}
-      {tab === "recorded" && <RecordedTab data={data} now={now} />}
+      {tab === "classes" && <ClassesTab data={data} now={now} onOpenPdf={(p) => setActivePdf(p)} />}
+      {tab === "recorded" && <RecordedTab data={data} now={now} onOpenPdf={(p) => setActivePdf(p)} />}
       {tab === "dpp" && (
         <DppTab dpps={data.dpps} chapters={data.chapters} onOpenPdf={(p) => setActivePdf(p)} />
       )}
@@ -376,35 +376,49 @@ function TimelineEventCard({
   const isTest = ev.type === "TEST";
   const isDpp = ev.type === "DPP";
 
-  const icon = isClass ? "sensors" : isTest ? "quiz" : "assignment";
-  const typeBadgeColor = isLive
-    ? "bg-rose-600 text-white animate-pulse"
-    : isClass
-    ? "bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300"
-    : isTest
-    ? "bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300"
-    : "bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300";
+  const isCompletedClass = isClass && ev.status === "COMPLETED";
 
   return (
     <div
-      className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 sm:p-4 rounded-2xl bg-white dark:bg-slate-900 border transition-all ${
+      className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 p-3.5 sm:p-4 rounded-2xl bg-white dark:bg-slate-900 border transition-all ${
         isLive
           ? "border-rose-500 shadow-md shadow-rose-500/10 ring-1 ring-rose-500/30"
           : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
       }`}
     >
-      <div className="flex items-start gap-3 min-w-0">
-        <div className="w-12 text-center shrink-0 pt-0.5">
-          <span className="text-[10px] font-bold text-slate-500 block uppercase">
+      <div className="flex items-start gap-3.5 min-w-0">
+        {/* Left: Time & Educator Photo / Type Icon */}
+        <div className="text-center shrink-0 pt-0.5 flex flex-col items-center">
+          <span className="text-[10px] font-bold text-slate-500 block uppercase mb-1">
             {timeFmt(ev.startsAt)}
           </span>
-          <span
-            className={`mt-1 w-8 h-8 mx-auto rounded-xl flex items-center justify-center font-bold text-xs ${typeBadgeColor}`}
-          >
-            <span className="material-symbols-outlined text-base">{icon}</span>
-          </span>
+
+          {isClass ? (
+            ev.teacherPhotoUrl ? (
+              <img
+                src={ev.teacherPhotoUrl}
+                alt={ev.teacherName || "Educator"}
+                className="w-12 h-12 rounded-2xl object-cover border border-slate-200 dark:border-slate-700 shadow-xs"
+              />
+            ) : (
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white font-black text-base flex items-center justify-center shadow-xs">
+                {(ev.teacherName || "E").charAt(0)}
+              </div>
+            )
+          ) : (
+            <span
+              className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs ${
+                isTest
+                  ? "bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300"
+                  : "bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300"
+              }`}
+            >
+              <span className="material-symbols-outlined text-xl">{isTest ? "quiz" : "assignment"}</span>
+            </span>
+          )}
         </div>
 
+        {/* Center: Metadata, Title, Educator info */}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
@@ -414,6 +428,11 @@ function TimelineEventCard({
               <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-rose-600 text-white flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
                 Live Now
+              </span>
+            )}
+            {isCompletedClass && (
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400">
+                Completed
               </span>
             )}
             {ev.score != null && (
@@ -428,16 +447,40 @@ function TimelineEventCard({
           </h3>
 
           <p className="text-[11px] text-slate-500 truncate mt-0.5">
-            {[ev.chapter, ev.teacherName, ev.durationMin ? `${ev.durationMin} mins` : null]
+            {[
+              ev.teacherName ? `${ev.teacherName}` : null,
+              ev.chapter,
+              ev.durationMin ? `${ev.durationMin} mins` : null,
+            ]
               .filter(Boolean)
               .join(" · ")}
           </p>
         </div>
       </div>
 
-      {/* Action Buttons */}
+      {/* Right: Class Notes & Action Buttons */}
       <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
-        {ev.pdfUrl && (
+        {/* Class Notes PDF button */}
+        {(ev.notesPdfUrl || (isClass && ev.pdfUrl)) && (
+          <button
+            type="button"
+            onClick={() =>
+              onOpenPdf({
+                title: `${ev.title} (Class Notes)`,
+                pdfUrl: (ev.notesPdfUrl || ev.pdfUrl)!,
+                fileName: `${ev.title}-Notes.pdf`,
+              })
+            }
+            className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
+            title="Open Class Notes PDF"
+          >
+            <span className="material-symbols-outlined text-base text-rose-500">description</span>
+            <span>Class Notes</span>
+          </button>
+        )}
+
+        {/* Non-class PDFs (DPP/Test) */}
+        {!isClass && ev.pdfUrl && (
           <button
             type="button"
             onClick={() => onOpenPdf({ title: ev.title, pdfUrl: ev.pdfUrl! })}
@@ -455,12 +498,26 @@ function TimelineEventCard({
             className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm ${
               isLive
                 ? "bg-rose-600 hover:bg-rose-500 text-white"
+                : isCompletedClass
+                ? "bg-blue-600 hover:bg-blue-500 text-white"
                 : ev.status === "SUBMITTED" || ev.status === "COMPLETED"
                 ? "bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100"
                 : "bg-blue-600 hover:bg-blue-500 text-white"
             }`}
           >
-            {ev.actionLabel}
+            {isLive ? (
+              <>
+                <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                <span>Join Live Class</span>
+              </>
+            ) : isCompletedClass ? (
+              <>
+                <span className="material-symbols-outlined text-sm">play_arrow</span>
+                <span>Play Class</span>
+              </>
+            ) : (
+              ev.actionLabel
+            )}
           </Link>
         ) : (
           <span className="text-xs font-semibold text-slate-500 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800">
@@ -476,7 +533,15 @@ function TimelineEventCard({
 // 2. LIVE & UPCOMING CLASSES TAB
 // ----------------------------------------------------------------------------
 
-function ClassesTab({ data, now }: { data: StudentBatchHomeData; now: Date }) {
+function ClassesTab({
+  data,
+  now,
+  onOpenPdf,
+}: {
+  data: StudentBatchHomeData;
+  now: Date;
+  onOpenPdf: (pdf: { title: string; pdfUrl: string; fileName?: string; allowDownload?: boolean }) => void;
+}) {
   const today = dayKey(now);
   const weekAhead = now.getTime() + 7 * 86_400_000;
   const todays = data.classes.filter((c) => dayKey(c.startsAt) === today);
@@ -490,7 +555,7 @@ function ClassesTab({ data, now }: { data: StudentBatchHomeData; now: Date }) {
         {todays.length ? (
           <div className="space-y-2">
             {todays.map((c) => (
-              <ClassRow key={c.id} c={c} now={now} />
+              <ClassRow key={c.id} c={c} now={now} onOpenPdf={onOpenPdf} />
             ))}
           </div>
         ) : (
@@ -502,7 +567,7 @@ function ClassesTab({ data, now }: { data: StudentBatchHomeData; now: Date }) {
         {upcoming.length ? (
           <div className="space-y-2">
             {upcoming.map((c) => (
-              <ClassRow key={c.id} c={c} now={now} />
+              <ClassRow key={c.id} c={c} now={now} onOpenPdf={onOpenPdf} />
             ))}
           </div>
         ) : (
@@ -513,7 +578,15 @@ function ClassesTab({ data, now }: { data: StudentBatchHomeData; now: Date }) {
   );
 }
 
-function ClassRow({ c, now }: { c: BatchClassItem; now: Date }) {
+function ClassRow({
+  c,
+  now,
+  onOpenPdf,
+}: {
+  c: BatchClassItem;
+  now: Date;
+  onOpenPdf?: (pdf: { title: string; pdfUrl: string; fileName?: string; allowDownload?: boolean }) => void;
+}) {
   const status = getEffectiveScheduleStatus(c, now);
   const join = canStudentJoinClass(c, now);
 
@@ -522,20 +595,20 @@ function ClassRow({ c, now }: { c: BatchClassItem; now: Date }) {
     action = (
       <Link
         href={`/live-class/${c.id}`}
-        className="px-3.5 py-1.5 rounded-xl bg-rose-600 text-white text-xs font-bold flex items-center gap-1 shadow-sm"
+        className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
       >
         <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
-        Join Live
+        <span>Join Live Class</span>
       </Link>
     );
   } else if (status === "COMPLETED") {
     action = (
       <Link
         href={`/watch/${c.id}`}
-        className="px-3 py-1.5 rounded-xl bg-blue-600 text-white text-xs font-bold flex items-center gap-1"
+        className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
       >
         <span className="material-symbols-outlined text-sm">play_arrow</span>
-        Play
+        <span>Play Class</span>
       </Link>
     );
   } else if (status === "CANCELLED") {
@@ -544,7 +617,7 @@ function ClassRow({ c, now }: { c: BatchClassItem; now: Date }) {
     action = (
       <Link
         href={`/live-class/${c.id}`}
-        className="px-3.5 py-1.5 rounded-xl bg-blue-600 text-white text-xs font-bold"
+        className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold"
       >
         Enter Class
       </Link>
@@ -554,22 +627,66 @@ function ClassRow({ c, now }: { c: BatchClassItem; now: Date }) {
   }
 
   return (
-    <div className="flex items-center gap-3 p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-      <div className="w-12 text-center shrink-0">
-        <p className="text-[10px] font-bold text-slate-500 uppercase">
-          {new Date(c.startsAt).toLocaleDateString("en-IN", { timeZone: IST, month: "short" })}
-        </p>
-        <p className="text-lg font-black text-slate-900 dark:text-white leading-none">
-          {new Date(c.startsAt).toLocaleDateString("en-IN", { timeZone: IST, day: "2-digit" })}
-        </p>
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 sm:p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 transition">
+      <div className="flex items-center gap-3.5 min-w-0">
+        {/* Left: Educator Photo / Avatar */}
+        {c.teacherPhotoUrl ? (
+          <img
+            src={c.teacherPhotoUrl}
+            alt={c.teacherName || "Educator"}
+            className="w-12 h-12 rounded-2xl object-cover border border-slate-200 dark:border-slate-700 shrink-0 shadow-xs"
+          />
+        ) : (
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white font-black text-base flex items-center justify-center shrink-0 shadow-xs">
+            {(c.teacherName || "E").charAt(0)}
+          </div>
+        )}
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+              {c.subjectName}
+            </span>
+            {status === "LIVE" && (
+              <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-rose-600 text-white flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                Live Now
+              </span>
+            )}
+            {status === "COMPLETED" && (
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400">
+                Completed
+              </span>
+            )}
+          </div>
+
+          <p className="text-sm font-bold text-slate-900 dark:text-white truncate mt-0.5">{c.title}</p>
+          <p className="text-[11px] text-slate-500 truncate mt-0.5">
+            {[c.teacherName, `${timeFmt(c.startsAt)} – ${timeFmt(c.endsAt)}`].filter(Boolean).join(" · ")}
+          </p>
+        </div>
       </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{c.title}</p>
-        <p className="text-[11px] text-slate-500 truncate">
-          {[c.subject, c.teacherName, `${timeFmt(c.startsAt)} – ${timeFmt(c.endsAt)}`].filter(Boolean).join(" · ")}
-        </p>
+
+      <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+        {c.notesPdfUrl && onOpenPdf && (
+          <button
+            type="button"
+            onClick={() =>
+              onOpenPdf({
+                title: `${c.title} (Class Notes)`,
+                pdfUrl: c.notesPdfUrl!,
+                fileName: `${c.title}-Notes.pdf`,
+              })
+            }
+            className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
+            title="Open Class Notes PDF"
+          >
+            <span className="material-symbols-outlined text-base text-rose-500">description</span>
+            <span>Class Notes</span>
+          </button>
+        )}
+        {action}
       </div>
-      <div className="shrink-0">{action}</div>
     </div>
   );
 }
@@ -578,7 +695,15 @@ function ClassRow({ c, now }: { c: BatchClassItem; now: Date }) {
 // 3. RECORDED LECTURES (SUBJECT -> CHAPTER HIERARCHY)
 // ----------------------------------------------------------------------------
 
-function RecordedTab({ data, now }: { data: StudentBatchHomeData; now: Date }) {
+function RecordedTab({
+  data,
+  now,
+  onOpenPdf,
+}: {
+  data: StudentBatchHomeData;
+  now: Date;
+  onOpenPdf: (pdf: { title: string; pdfUrl: string; fileName?: string; allowDownload?: boolean }) => void;
+}) {
   const [subject, setSubject] = useState<string | null>(null);
   const [chapter, setChapter] = useState<string | null>(null);
 
@@ -702,7 +827,7 @@ function RecordedTab({ data, now }: { data: StudentBatchHomeData; now: Date }) {
       {list.length ? (
         <div className="space-y-2">
           {list.map((c) => (
-            <ClassRow key={c.id} c={c} now={now} />
+            <ClassRow key={c.id} c={c} now={now} onOpenPdf={onOpenPdf} />
           ))}
         </div>
       ) : (
