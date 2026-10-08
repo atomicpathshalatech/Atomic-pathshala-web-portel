@@ -196,7 +196,7 @@ export async function applyBatchRescheduleToLecture(scheduleId: string, lectureI
   for (const o of others) {
     if (o.startsAt.getTime() === startsAt.getTime() && o.endsAt.getTime() === endsAt.getTime()) continue;
     if (rescheduleBlockReason(o)) continue;
-    await prisma.batchSchedule.update({ where: { id: o.id }, data: { startsAt, endsAt } });
+    await prisma.batchSchedule.update({ where: { id: o.id }, data: { startsAt, endsAt, rescheduledAt: new Date() } });
     await prisma.whiteboardSession.updateMany({ where: { batchScheduleId: o.id }, data: { scheduledStart: startsAt, scheduledEnd: endsAt } });
     await rescheduleOpenLiveSession(o.id, startsAt, endsAt);
   }

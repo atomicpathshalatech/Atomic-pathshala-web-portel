@@ -109,7 +109,8 @@ export async function PATCH(
           where: { id: s.id },
           data: {
             title: updated.title,
-            ...(timingChanged && { startsAt, endsAt }),
+            // rescheduledAt marks a moved class as a new run (clean board).
+            ...(timingChanged && { startsAt, endsAt, rescheduledAt: new Date() }),
             ...(isPastCompletedClass && { status: "COMPLETED" }),
           },
         });

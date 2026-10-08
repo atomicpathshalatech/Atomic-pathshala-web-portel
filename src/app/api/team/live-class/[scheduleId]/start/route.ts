@@ -189,7 +189,12 @@ export async function POST(
     // two branches below ("brand new session" and "isNewOccurrence" reset)
     // are the only places `pages: { create: ... } }` appears; reconnecting
     // to an already-live session touches no pages at all.
-    const willCreatePage1 = !existingSession || isNewOccurrence;
+    // The same class started again keeps its board; only a class moved to a
+    // later time begins with a clean one (see isSameClassRestart).
+    const { isSameClassRestart } = await import("@/lib/whiteboard/occurrence");
+    const existingPageCount = existingSession ? await prisma.whiteboardPage.count({ where: { sessionId: existingSession.id } }) : 0;
+    const resetBoard = isNewOccurrence && !(existingPageCount > 0 && isSameClassRestart(schedule, existingSession!));
+    const willCreatePage1 = !existingSession || resetBoard || (isNewOccurrence && existingPageCount === 0);
     let startSlideUrl: string | null = null;
     if (willCreatePage1) {
       try {
@@ -207,7 +212,7 @@ export async function POST(
         data: { status: "LIVE" },
       }),
     ];
-    if (isNewOccurrence) {
+    if (resetBoard) {
       transactionOps.push(
         prisma.whiteboardPage.deleteMany({ where: { sessionId: existingSession!.id } })
       );
@@ -269,7 +274,7 @@ export async function POST(
             scheduledEnd,
             totalExtendedMinutes: 0,
             extensionHistory: Prisma.JsonNull,
-            pages: { create: { pageNumber: 1, objects: [], ...(startSlideUrl && { background: startSlideUrl }) } },
+            ...(willCreatePage1 && { pages: { create: { pageNumber: 1, objects: [], ...(startSlideUrl && { background: startSlideUrl }) } } }),
           }),
         },
         create: {

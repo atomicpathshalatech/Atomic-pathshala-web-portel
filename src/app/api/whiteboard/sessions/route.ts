@@ -89,14 +89,18 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      await prisma.whiteboardPage.deleteMany({ where: { sessionId: existing.id } });
+      // The same class started again keeps its board (see isSameClassRestart);
+      // only a class moved to a later time begins with a clean one.
+      const { isSameClassRestart } = await import("@/lib/whiteboard/occurrence");
+      const keepBoard = existing.pages.length > 0 && isSameClassRestart(existing.batchSchedule, existing);
+      if (!keepBoard) await prisma.whiteboardPage.deleteMany({ where: { sessionId: existing.id } });
 
       // Auto-generated first slide (chapter name, lecture number, the
       // teacher's own profile photo — never manually uploaded) — page 1 is
       // about to be recreated below for this new occurrence, so bake it in
       // directly rather than leaving a window where page 1 is blank.
       let startSlideUrl: string | null = null;
-      try {
+      if (!keepBoard) try {
         const { generateCreative } = await import("@/lib/creative/engine");
         const result = await generateCreative("LECTURE_START_SLIDE", input.batchScheduleId);
         if (result.ok) startSlideUrl = result.assetUrl;
@@ -111,7 +115,7 @@ export async function POST(request: NextRequest) {
           endedAt: null,
           actualEndedAt: null,
           livePhase: "PREPARING",
-          activePageNumber: 1,
+          ...(!keepBoard && { activePageNumber: 1 }),
           recordingStatus: "NONE",
           recordingStorageKey: null,
           recordingEgressId: null,
@@ -154,7 +158,7 @@ export async function POST(request: NextRequest) {
           scheduledEnd: existing.batchSchedule.endsAt,
           totalExtendedMinutes: 0,
           extensionHistory: Prisma.JsonNull,
-          pages: { create: { pageNumber: 1, objects: [], ...(startSlideUrl && { background: startSlideUrl }) } },
+          ...(!keepBoard && { pages: { create: { pageNumber: 1, objects: [], ...(startSlideUrl && { background: startSlideUrl }) } } }),
         },
         include: { pages: { orderBy: { pageNumber: "asc" } } },
       });
