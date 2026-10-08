@@ -609,6 +609,15 @@ export function floodFillImageData(
 const INK_SMOOTHING = 0.52;
 /** Points closer than this (virtual px) to the previous one are dropped. */
 const INK_MIN_STEP = 0.2;
+/**
+ * Smoothing factor for one pointer step (1 = raw point, lower = smoother):
+ * from INK_SMOOTHING for a barely-moving pen up to 0.9 for a fast one. `step`
+ * is the distance from the last ink point to the pointer, in virtual px.
+ */
+export function inkSmoothingFor(step: number): number {
+  const t = Math.min(1, Math.max(0, (step - 2) / 26));
+  return INK_SMOOTHING + (0.9 - INK_SMOOTHING) * t;
+}
 
 export class CanvasEngine {
   private baseCanvas: HTMLCanvasElement;
@@ -959,8 +968,12 @@ export class CanvasEngine {
           this.activePoints.push(pt);
           continue;
         }
-        const x = last.x + (pt.x - last.x) * INK_SMOOTHING;
-        const y = last.y + (pt.y - last.y) * INK_SMOOTHING;
+        // Velocity-aware: a slow, careful stroke (where hand jitter shows) is
+        // eased more; a fast stroke follows the pen closely so the line never
+        // lags behind the nib.
+        const k = inkSmoothingFor(Math.hypot(pt.x - last.x, pt.y - last.y));
+        const x = last.x + (pt.x - last.x) * k;
+        const y = last.y + (pt.y - last.y) * k;
         if (Math.hypot(x - last.x, y - last.y) < INK_MIN_STEP) continue;
         const lp = last.pressure ?? 0.5;
         this.activePoints.push({ x, y, pressure: lp + ((pt.pressure ?? 0.5) - lp) * 0.3 });

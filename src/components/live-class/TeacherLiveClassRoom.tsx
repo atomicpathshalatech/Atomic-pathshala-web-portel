@@ -739,6 +739,8 @@ export function TeacherLiveClassRoom({
   const [shapeSubjectTab, setShapeSubjectTab] = useState<ShapeCategory>("general");
   const [chemSubcategory, setChemSubcategory] = useState<ChemSubcategory>("bonds");
   const [pollOpen, setPollOpen] = useState(false);
+  // "Class Status": everything that must be working, in one place.
+  const [statusOpen, setStatusOpen] = useState(false);
   // The leaderboard the teacher just published — the teacher sees the same popup as the students.
   const [shownLeaderboard, setShownLeaderboard] = useState<PublishedLeaderboard | null>(null);
   const [pollModalTab, setPollModalTab] = useState<"quiz" | "ranks">("quiz");
@@ -3456,6 +3458,129 @@ export function TeacherLiveClassRoom({
               {youtubeSimulcastWarning}
             </div>
           )}
+          {(() => {
+            const yt = wbSession.videoTransport === "YOUTUBE" || wbSession.videoTransport === "BOTH";
+            const streaming = desktopStream?.state === "streaming";
+            const fps = desktopStream?.fps ?? null;
+            const low = desktopStream?.quality === "480p" || desktopStream?.quality === "360p";
+            // Stream health from what the encoder really sends (and YouTube's own verdict when known).
+            const health: "Excellent" | "Good" | "Poor" | "Disconnected" | null = !yt
+              ? null
+              : !desktopStream
+              ? youtubeGate?.streamStatus === "active"
+                ? youtubeGate.healthStatus === "bad" || youtubeGate.healthStatus === "noData"
+                  ? "Poor"
+                  : "Good"
+                : isClassLive && wbSession.youtubeVideoId && !youtubeGateActive
+                ? "Good"
+                : "Disconnected"
+              : !streaming
+              ? "Disconnected"
+              : low || (fps !== null && fps < 15) || youtubeGate?.healthStatus === "bad"
+              ? "Poor"
+              : desktopStream.networkLimited || (fps !== null && fps < 24)
+              ? "Good"
+              : "Excellent";
+            const healthTone = health === "Excellent" || health === "Good" ? "text-emerald-400" : health === "Poor" ? "text-amber-400" : "text-rose-400";
+            const problem = saveState === "offline" || (yt && isClassLive && health === "Disconnected") || health === "Poor";
+            const rows: { icon: string; label: string; value: string; ok: boolean }[] = [
+              { icon: "videocam", label: "Camera", value: cameraHidden ? "OFF" : "ON", ok: !cameraHidden },
+              { icon: "mic", label: "Microphone", value: streamMicMuted ? "MUTED" : "ON", ok: !streamMicMuted },
+              {
+                icon: "draw",
+                label: "Whiteboard",
+                value: saveState === "offline" ? "NOT SAVING" : saveState === "saving" ? "SAVING…" : `READY · ${wbSession.pages.length} slides`,
+                ok: saveState !== "offline",
+              },
+              { icon: "chat", label: "Chat", value: wbSession.chatEnabled ? "LIVE" : "OFF", ok: wbSession.chatEnabled },
+              { icon: "equalizer", label: "Poll", value: activeQuiz && activeQuiz.status !== "CLOSED" ? "LIVE" : "READY", ok: true },
+            ];
+            return (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setStatusOpen((o) => !o)}
+                  className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold transition ${
+                    problem
+                      ? "bg-amber-500/15 border-amber-500/50 text-amber-200"
+                      : isClassLive
+                      ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-200"
+                      : "bg-slate-500/15 border-slate-500/40 text-slate-200"
+                  }`}
+                  title="Class status — camera, mic, board, chat, poll, YouTube"
+                >
+                  <span className={`w-2 h-2 rounded-full ${problem ? "bg-amber-400" : isClassLive ? "bg-emerald-400 animate-pulse" : "bg-slate-400"}`} />
+                  {isClassLive ? "CLASS LIVE" : youtubeGateActive ? "CONNECTING" : "NOT STARTED"}
+                  <span className="material-symbols-outlined text-sm">expand_more</span>
+                </button>
+                {statusOpen && (
+                  <div className="absolute right-0 top-full mt-2 z-[60] w-72 rounded-2xl border border-[#2d2e3b] bg-[#12131c] p-3 shadow-2xl text-white">
+                    <div className="flex items-center justify-between pb-2 border-b border-[#252836]">
+                      <span className="text-xs font-black">
+                        CLASS: {isClassLive ? "LIVE" : youtubeGateActive ? "CONNECTING" : wbSession.status === "ENDED" ? "ENDED" : "NOT STARTED"}
+                      </span>
+                      <button type="button" onClick={() => setStatusOpen(false)} className="text-gray-400 hover:text-white">
+                        <span className="material-symbols-outlined text-base">close</span>
+                      </button>
+                    </div>
+                    <ul className="py-2 space-y-1.5">
+                      {rows.map((r) => (
+                        <li key={r.label} className="flex items-center justify-between text-xs">
+                          <span className="flex items-center gap-2 text-gray-300">
+                            <span className="material-symbols-outlined text-sm">{r.icon}</span>
+                            {r.label}
+                          </span>
+                          <span className={`font-bold ${r.ok ? "text-emerald-400" : "text-amber-400"}`}>{r.value}</span>
+                        </li>
+                      ))}
+                      {yt && (
+                        <li className="pt-1.5 mt-1.5 border-t border-[#252836] space-y-1 text-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="flex items-center gap-2 text-gray-300">
+                              <span className="material-symbols-outlined text-sm">smart_display</span>
+                              YouTube
+                            </span>
+                            <span className={`font-bold ${healthTone}`}>
+                              {health === "Disconnected" ? (youtubeGateActive ? "CONNECTING…" : "NOT CONNECTED") : isClassLive ? "LIVE ✓" : "CONNECTED ✓"}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-400 pl-6">Stream health</span>
+                            <span className={`font-bold ${healthTone}`}>{health}</span>
+                          </div>
+                          {desktopStream && (
+                            <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 pl-6 text-[11px] text-gray-400">
+                              <span>Bitrate</span>
+                              <span className="text-right text-gray-200 tabular-nums">{Math.round(desktopStream.bitrateKbps ?? 0)} kbps</span>
+                              <span>FPS</span>
+                              <span className="text-right text-gray-200 tabular-nums">{fps !== null ? Math.round(fps) : "—"}</span>
+                              <span>Resolution</span>
+                              <span className="text-right text-gray-200">{(desktopStream.quality ?? "—").replace("-low", "")}</span>
+                              <span>Dropped frames</span>
+                              <span className="text-right text-gray-200 tabular-nums">{desktopStream.droppedFrames ?? 0}</span>
+                            </div>
+                          )}
+                          {desktopStream?.networkLimited && <p className="pl-6 text-[11px] text-amber-300">Slow internet — quality lowered so the class keeps playing.</p>}
+                        </li>
+                      )}
+                    </ul>
+                    {isClassLive && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStatusOpen(false);
+                          endClass();
+                        }}
+                        className="w-full h-9 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-black"
+                      >
+                        END CLASS
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
           {(desktopStream || desktopStreamError) && (
             <span
               className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold ${
