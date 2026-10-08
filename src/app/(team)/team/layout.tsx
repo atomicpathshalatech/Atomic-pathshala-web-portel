@@ -96,6 +96,7 @@ const NAV_SECTIONS: { title?: string; items: { href: string; label: string; icon
       { href: "/team/subscriptions", label: "Subscriptions", icon: "workspace_premium", permission: PERMISSIONS.FINANCE_READ },
       { href: "/team/analytics", label: "Analytics", icon: "analytics", permission: PERMISSIONS.ANALYTICS_VIEW },
       { href: "/team/performance", label: "Performance Boards", icon: "monitoring", permission: PERMISSIONS.TEAM_PORTAL_ACCESS, superAdminOnly: true },
+      { href: "/team/live-diagnostics", label: "Live Class Diagnostics", icon: "monitor_heart", permission: PERMISSIONS.TEAM_PORTAL_ACCESS, superAdminOnly: true },
       { href: "/team/security", label: "Security Center", icon: "security", permission: PERMISSIONS.SECURITY_CONFIG_MANAGE },
       { href: "/team/predictor", label: "Rank/College Predictor", icon: "insights", permission: PERMISSIONS.PREDICTOR_DATA_MANAGE },
     ],

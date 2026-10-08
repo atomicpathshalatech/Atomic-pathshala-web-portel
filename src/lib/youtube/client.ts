@@ -11,6 +11,8 @@ import {
   getYoutubeChannelAccessToken,
 } from "@/lib/youtube/channels";
 
+import { recordYoutubeCall } from "@/lib/youtube/usage";
+
 const YOUTUBE_API_BASE = "https://www.googleapis.com/youtube/v3";
 
 export interface YoutubeApiRequest {
@@ -89,6 +91,8 @@ export async function youtubeApi<T>(channel: YoutubeChannelKey, path: string, re
     }
 
     if (res.ok) {
+      // Every request that reached YouTube is counted against the daily quota.
+      recordYoutubeCall({ channel, operation, method, path, ok: true, status: res.status });
       if (res.status === 204) return undefined as T;
       const text = await res.text();
       return (text ? JSON.parse(text) : undefined) as T;
@@ -103,6 +107,7 @@ export async function youtubeApi<T>(channel: YoutubeChannelKey, path: string, re
       operation,
       detail: text,
     });
+    recordYoutubeCall({ channel, operation, method, path, ok: false, status: res.status, kind: error.kind, reason });
 
     if (error.kind === "AUTH_EXPIRED" && !refreshedAuth) {
       refreshedAuth = true;
