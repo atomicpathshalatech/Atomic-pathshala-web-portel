@@ -10,7 +10,6 @@ import {
   generateModuleWatermarkHtml,
   RenderHeaderFooterParams,
 } from "./subject-design-system";
-import { renderChemDrawSvg } from "./chemdraw-renderer";
 
 export interface RedesignRenderOptions {
   subject: ModuleSubject;
@@ -49,14 +48,13 @@ function renderLatexInText(text: string): string {
   return processed;
 }
 
-let globalExampleCounter = 1;
 let globalQuestionCounter = 1;
 let globalSectionCounter = 1;
 
 /**
  * Converts an individual AST element into exact subject-themed HTML blocks
  */
-function renderElementHtml(el: ModuleElementInput, subject: ModuleSubject): string {
+function renderSingleElementHtml(el: ModuleElementInput, subject: ModuleSubject): string {
   const theme = SUBJECT_THEMES[subject] || SUBJECT_THEMES.CHEMISTRY;
   const contentWithMath = renderLatexInText(el.content || "");
 
@@ -64,12 +62,12 @@ function renderElementHtml(el: ModuleElementInput, subject: ModuleSubject): stri
     case "HEADING": {
       const sectionNum = `1.${globalSectionCounter++}`;
       return `
-        <div class="element-heading" style="margin: 28px 0 14px 0; page-break-after: avoid; display: flex; align-items: center; gap: 10px;">
+        <div class="element-heading" style="margin: 28px 0 14px 0; page-break-after: avoid; display: flex; align-items: center; gap: 10px; width: 100%;">
           <div style="
             background: ${theme.primaryColor};
             color: #ffffff;
             font-size: 13px;
-            font-weight: 900;
+            font-weight: 800;
             padding: 4px 12px;
             border-radius: 8px;
             letter-spacing: 0.5px;
@@ -77,7 +75,7 @@ function renderElementHtml(el: ModuleElementInput, subject: ModuleSubject): stri
           ">
             ${sectionNum}
           </div>
-          <h2 style="font-size: 17px; font-weight: 900; color: ${theme.darkText}; margin: 0; letter-spacing: -0.3px;">
+          <h2 style="font-size: 17px; font-weight: 800; color: ${theme.darkText}; margin: 0; letter-spacing: -0.3px;">
             ${contentWithMath}
           </h2>
         </div>
@@ -86,8 +84,8 @@ function renderElementHtml(el: ModuleElementInput, subject: ModuleSubject): stri
 
     case "SUBHEADING":
       return `
-        <div class="element-subheading" style="margin: 20px 0 10px 0; page-break-after: avoid;">
-          <h3 style="font-size: 14.5px; font-weight: 800; color: ${theme.darkText}; margin: 0; letter-spacing: -0.2px;">
+        <div class="element-subheading" style="margin: 20px 0 10px 0; page-break-after: avoid; width: 100%;">
+          <h3 style="font-size: 14.5px; font-weight: 700; color: ${theme.darkText}; margin: 0; letter-spacing: -0.2px;">
             ${contentWithMath}
           </h3>
         </div>
@@ -95,18 +93,20 @@ function renderElementHtml(el: ModuleElementInput, subject: ModuleSubject): stri
 
     case "PARAGRAPH":
       return `
-        <p class="element-paragraph" style="font-size: 13px; line-height: 1.68; color: ${theme.darkText}; margin: 0 0 12px 0; text-align: justify;">
+        <p class="element-paragraph" style="font-size: 13px; font-weight: 400; line-height: 1.75; color: ${theme.darkText}; margin: 0 0 12px 0; text-align: justify; width: 100%;">
           ${contentWithMath}
         </p>
       `;
 
     case "CALLOUT": {
       const variant = el.variant || "NOTE";
-      const isNcert = variant === "NCERT_INSIGHT";
-      const isImportant = variant === "CAUTION" || variant === "IMPORTANT" || el.label?.toLowerCase().includes("important") || el.label?.toLowerCase().includes("महत्वपूर्ण");
+      const isImportant =
+        variant === "CAUTION" ||
+        variant === "IMPORTANT" ||
+        el.label?.toLowerCase().includes("important") ||
+        el.label?.toLowerCase().includes("महत्वपूर्ण");
 
       if (isImportant) {
-        // Red/Peach Important Box from Reference
         return `
           <div class="element-important-box" style="
             background: #FEF2F2;
@@ -115,12 +115,13 @@ function renderElementHtml(el: ModuleElementInput, subject: ModuleSubject): stri
             padding: 14px 18px;
             margin: 16px 0;
             page-break-inside: avoid;
+            width: 100%;
           ">
-            <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 900; color: #DC2626; text-transform: uppercase; margin-bottom: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 800; color: #DC2626; text-transform: uppercase; margin-bottom: 6px;">
               <span style="font-size: 14px;">★</span>
-              <span>Important</span>
+              <span>Important Point</span>
             </div>
-            <div style="font-size: 12.5px; line-height: 1.65; color: #7F1D1D;">
+            <div style="font-size: 12.5px; font-weight: 400; line-height: 1.7; color: #7F1D1D;">
               ${contentWithMath}
             </div>
           </div>
@@ -128,7 +129,6 @@ function renderElementHtml(el: ModuleElementInput, subject: ModuleSubject): stri
       }
 
       if (variant === "FORMULA") {
-        // Formula Box from Reference
         return `
           <div class="element-formula-box" style="
             background: ${theme.softBg};
@@ -137,19 +137,18 @@ function renderElementHtml(el: ModuleElementInput, subject: ModuleSubject): stri
             padding: 14px 18px;
             margin: 16px 0;
             page-break-inside: avoid;
+            width: 100%;
           ">
-            <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 900; color: ${theme.primaryColor}; text-transform: uppercase; margin-bottom: 8px;">
-              <span class="material-symbols-outlined" style="font-size: 16px;">functions</span>
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 800; color: ${theme.primaryColor}; text-transform: uppercase; margin-bottom: 6px;">
               <span>Formula</span>
             </div>
-            <div style="font-size: 13px; line-height: 1.65; color: ${theme.darkText}; text-align: center; font-weight: 600;">
+            <div style="font-size: 13px; font-weight: 500; line-height: 1.7; color: ${theme.darkText}; text-align: center;">
               ${contentWithMath}
             </div>
           </div>
         `;
       }
 
-      // Default Key Points Box from Reference
       return `
         <div class="element-keypoints-box" style="
           background: ${theme.lightBg};
@@ -157,6 +156,7 @@ function renderElementHtml(el: ModuleElementInput, subject: ModuleSubject): stri
           padding: 14px 18px;
           margin: 16px 0;
           page-break-inside: avoid;
+          width: 100%;
         ">
           <div style="
             display: inline-flex;
@@ -167,89 +167,19 @@ function renderElementHtml(el: ModuleElementInput, subject: ModuleSubject): stri
             padding: 3px 12px;
             border-radius: 6px;
             font-size: 11px;
-            font-weight: 800;
+            font-weight: 700;
             letter-spacing: 0.5px;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
           ">
             <span>✦</span>
-            <span>${el.label || (isNcert ? "NCERT Key Points" : "Key Points")}</span>
+            <span>${el.label || "Key Points"}</span>
           </div>
-          <div style="font-size: 12.5px; line-height: 1.65; color: ${theme.darkText};">
+          <div style="font-size: 12.5px; font-weight: 400; line-height: 1.7; color: ${theme.darkText};">
             ${contentWithMath}
           </div>
         </div>
       `;
     }
-
-    case "QUESTION": {
-      const qNum = globalQuestionCounter++;
-      const chemSvg = renderChemDrawSvg(el.content || "");
-      return `
-        <div class="element-practice-question-box" style="
-          background: #ffffff;
-          border: 1.5px solid ${theme.primaryColor}50;
-          border-radius: 12px;
-          padding: 16px 18px;
-          margin: 18px 0 8px 0;
-          page-break-inside: avoid;
-          position: relative;
-        ">
-          <!-- Practice Question Top Badge -->
-          <div style="
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            background: ${theme.lightBg};
-            color: ${theme.primaryColor};
-            border: 1px solid ${theme.primaryColor}40;
-            padding: 2px 10px;
-            border-radius: 6px;
-            font-size: 11px;
-            font-weight: 900;
-            text-transform: uppercase;
-            margin-bottom: 10px;
-          ">
-            <span>✎</span>
-            <span>Practice Question</span>
-          </div>
-
-          <div style="font-size: 13px; font-weight: 700; color: ${theme.darkText}; line-height: 1.6;">
-            <b>Q.${qNum}</b> ${contentWithMath}
-          </div>
-          ${chemSvg || ""}
-        </div>
-      `;
-    }
-
-    case "OPTION":
-      return `
-        <div class="element-option" style="
-          margin: 4px 0 4px 18px;
-          font-size: 12.5px;
-          font-weight: 600;
-          color: ${theme.darkText};
-          line-height: 1.5;
-          page-break-inside: avoid;
-        ">
-          ${contentWithMath}
-        </div>
-      `;
-
-    case "SOLUTION":
-      return `
-        <div class="element-solution-box" style="
-          margin: 6px 0 16px 18px;
-          font-size: 12px;
-          color: #475569;
-          line-height: 1.6;
-          page-break-inside: avoid;
-        ">
-          <div style="font-size: 11px; font-weight: 800; color: ${theme.primaryColor}; margin-bottom: 2px;">
-            Solution :
-          </div>
-          <div>${contentWithMath}</div>
-        </div>
-      `;
 
     case "EQUATION":
     case "CHEMICAL_EQUATION":
@@ -263,8 +193,11 @@ function renderElementHtml(el: ModuleElementInput, subject: ModuleSubject): stri
           margin: 12px 0;
           text-align: center;
           font-family: 'Fira Code', monospace;
+          font-size: 13px;
+          font-weight: 500;
           color: ${theme.darkText};
           page-break-inside: avoid;
+          width: 100%;
         ">
           ${contentWithMath}
         </div>
@@ -282,6 +215,7 @@ function renderElementHtml(el: ModuleElementInput, subject: ModuleSubject): stri
           border: 1.5px solid #e2e8f0;
           border-radius: 12px;
           page-break-inside: avoid;
+          width: 100%;
         ">
           <div style="
             display: inline-flex;
@@ -292,23 +226,23 @@ function renderElementHtml(el: ModuleElementInput, subject: ModuleSubject): stri
             padding: 2px 10px;
             border-radius: 6px;
             font-size: 10.5px;
-            font-weight: 900;
+            font-weight: 800;
             text-transform: uppercase;
             margin-bottom: 8px;
           ">
             <span>⬚</span>
-            <span>Diagram / Illustration</span>
+            <span>Diagram / Figure</span>
           </div>
 
           ${
             mediaUrl
               ? `<img src="${mediaUrl}" alt="${el.label || "Academic Diagram"}" style="max-width: 100%; max-height: 320px; object-fit: contain; border-radius: 8px; display: block; margin: 0 auto;" />`
-              : `<div style="font-size: 12px; color: #64748b; padding: 16px;">[Diagram: ${el.label || el.content}]</div>`
+              : `<div style="font-size: 12px; color: #64748b; padding: 16px;">[Figure: ${el.label || el.content}]</div>`
           }
 
           ${
             el.label
-              ? `<div style="font-size: 11px; font-weight: 700; color: ${theme.primaryColor}; margin-top: 6px;">
+              ? `<div style="font-size: 11px; font-weight: 600; color: ${theme.primaryColor}; margin-top: 6px;">
                   Figure: ${el.label}
                  </div>`
               : ""
@@ -325,8 +259,8 @@ function renderElementHtml(el: ModuleElementInput, subject: ModuleSubject): stri
             const cellsHtml = row
               .map((cell) =>
                 isHeader
-                  ? `<th style="background: ${theme.primaryColor}; color: #ffffff; padding: 7px 10px; font-size: 11.5px; font-weight: 800; border: 1px solid ${theme.primaryColor};">${renderLatexInText(cell)}</th>`
-                  : `<td style="padding: 7px 10px; font-size: 11.5px; color: ${theme.darkText}; border: 1px solid #e2e8f0; background: ${rIdx % 2 === 0 ? "#ffffff" : theme.softBg};">${renderLatexInText(cell)}</td>`
+                  ? `<th style="background: ${theme.primaryColor}; color: #ffffff; padding: 6px 8px; font-size: 11px; font-weight: 700; border: 1px solid ${theme.primaryColor}; text-align: center;">${renderLatexInText(cell)}</th>`
+                  : `<td style="padding: 6px 8px; font-size: 11px; font-weight: 400; color: ${theme.darkText}; border: 1px solid #e2e8f0; background: ${rIdx % 2 === 0 ? "#ffffff" : theme.softBg}; text-align: center;">${renderLatexInText(cell)}</td>`
               )
               .join("");
             return `<tr>${cellsHtml}</tr>`;
@@ -334,8 +268,8 @@ function renderElementHtml(el: ModuleElementInput, subject: ModuleSubject): stri
           .join("");
 
         return `
-          <div class="element-table-wrapper" style="margin: 16px 0; overflow-x: auto; page-break-inside: avoid;">
-            <table style="width: 100%; border-collapse: collapse; text-align: left; border-radius: 8px; overflow: hidden;">
+          <div class="element-table-wrapper" style="margin: 16px 0; overflow-x: auto; page-break-inside: avoid; width: 100%;">
+            <table style="width: 100%; border-collapse: collapse; text-align: center; border-radius: 8px; overflow: hidden;">
               ${rowsHtml}
             </table>
           </div>
@@ -345,11 +279,109 @@ function renderElementHtml(el: ModuleElementInput, subject: ModuleSubject): stri
 
     default:
       return `
-        <div class="element-general" style="font-size: 13px; line-height: 1.65; color: ${theme.darkText}; margin-bottom: 10px;">
+        <div class="element-general" style="font-size: 13px; font-weight: 400; line-height: 1.7; color: ${theme.darkText}; margin-bottom: 10px; width: 100%;">
           ${contentWithMath}
         </div>
       `;
   }
+}
+
+/**
+ * Renders structured items with automatic Dual-Column grid wrapping for consecutive Questions
+ */
+function renderElementsWithDualColumnLayout(elements: ModuleElementInput[], subject: ModuleSubject): string {
+  const theme = SUBJECT_THEMES[subject] || SUBJECT_THEMES.CHEMISTRY;
+  const renderedSections: string[] = [];
+
+  let currentQuestionGroup: ModuleElementInput[] = [];
+
+  const flushQuestionGroup = () => {
+    if (currentQuestionGroup.length === 0) return;
+
+    // Build question cards by grouping each QUESTION with its following OPTIONs and SOLUTION
+    const questionCards: Array<{ question: ModuleElementInput; options: ModuleElementInput[]; solution?: ModuleElementInput }> = [];
+    let currentCard: { question: ModuleElementInput; options: ModuleElementInput[]; solution?: ModuleElementInput } | null = null;
+
+    for (const item of currentQuestionGroup) {
+      if (item.type === "QUESTION") {
+        if (currentCard) questionCards.push(currentCard);
+        currentCard = { question: item, options: [] };
+      } else if (item.type === "OPTION") {
+        if (currentCard) {
+          currentCard.options.push(item);
+        } else {
+          // Fallback if option appears without preceding question
+          currentCard = { question: { type: "QUESTION", content: "" } as any, options: [item] };
+        }
+      } else if (item.type === "SOLUTION") {
+        if (currentCard) currentCard.solution = item;
+      }
+    }
+    if (currentCard) questionCards.push(currentCard);
+
+    // Render 2-Column Grid of Question Cards
+    const cardsHtml = questionCards
+      .map((card) => {
+        const qNum = globalQuestionCounter++;
+        const qText = renderLatexInText(card.question.content || "");
+        const optionsHtml = card.options
+          .map((opt) => {
+            const optText = renderLatexInText(opt.content || "");
+            return `<div class="option-line" style="margin: 3px 0 3px 12px; font-size: 12px; font-weight: 400; color: ${theme.darkText}; line-height: 1.5;">${optText}</div>`;
+          })
+          .join("");
+
+        const solutionHtml = card.solution
+          ? `<div class="solution-box" style="margin-top: 6px; padding: 6px 10px; background: ${theme.softBg}; border-radius: 6px; font-size: 11.5px; color: #475569; line-height: 1.5;">
+              <span style="font-weight: 700; color: ${theme.primaryColor};">Sol: </span>${renderLatexInText(card.solution.content || "")}
+             </div>`
+          : "";
+
+        return `
+          <div class="question-card" style="
+            background: #ffffff;
+            border: 1.5px solid ${theme.primaryColor}35;
+            border-radius: 10px;
+            padding: 12px 14px;
+            margin-bottom: 14px;
+            break-inside: avoid;
+            page-break-inside: avoid;
+          ">
+            <div style="font-size: 12.5px; line-height: 1.6; color: ${theme.darkText}; font-weight: 400;">
+              <span style="font-weight: 700; color: ${theme.primaryColor}; margin-right: 4px;">Q.${qNum}</span> ${qText}
+            </div>
+            ${optionsHtml ? `<div style="margin-top: 6px;">${optionsHtml}</div>` : ""}
+            ${solutionHtml}
+          </div>
+        `;
+      })
+      .join("\n");
+
+    renderedSections.push(`
+      <div class="questions-dual-column-container" style="
+        column-count: 2;
+        column-gap: 20px;
+        margin: 16px 0;
+        width: 100%;
+      ">
+        ${cardsHtml}
+      </div>
+    `);
+
+    currentQuestionGroup = [];
+  };
+
+  for (const el of elements) {
+    if (el.type === "QUESTION" || el.type === "OPTION" || el.type === "SOLUTION") {
+      currentQuestionGroup.push(el);
+    } else {
+      flushQuestionGroup();
+      renderedSections.push(renderSingleElementHtml(el, subject));
+    }
+  }
+
+  flushQuestionGroup();
+  return renderedSections.join("\n");
 }
 
 /**
@@ -359,8 +391,6 @@ export function buildRedesignedModuleHtml(
   elements: ModuleElementInput[],
   options: RedesignRenderOptions
 ): string {
-  // Reset counters per document render
-  globalExampleCounter = 1;
   globalQuestionCounter = 1;
   globalSectionCounter = 1;
 
@@ -381,8 +411,8 @@ export function buildRedesignedModuleHtml(
   const runningFooterHtml = generateModuleRunningFooterHtml({ ...headerParams, pageNumber: 1, totalPages: 1 });
   const watermarkHtml = generateModuleWatermarkHtml(isPrintMode);
 
-  // Render elements in order
-  const elementsHtml = elements.map((el) => renderElementHtml(el, options.subject)).join("\n");
+  // Render elements in order with Dual-Column support for questions
+  const elementsHtml = renderElementsWithDualColumnLayout(elements, options.subject);
 
   return `
 <!DOCTYPE html>
@@ -395,13 +425,17 @@ export function buildRedesignedModuleHtml(
   <!-- Google Fonts: Poppins, Noto Sans Devanagari & Fira Code -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Noto+Sans+Devanagari:wght@400;500;600;700;800;900&family=Poppins:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Noto+Sans+Devanagari:wght@400;500;600;700;800&family=Poppins:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,600&display=swap" rel="stylesheet" />
 
-  <!-- KaTeX Math Styles -->
+  <!-- KaTeX Math CSS -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css" />
 
   <style>
+    @page {
+      size: A4;
+      margin: 18mm 14mm 16mm 14mm;
+    }
+
     * {
       box-sizing: border-box;
       -webkit-print-color-adjust: exact !important;
@@ -411,55 +445,54 @@ export function buildRedesignedModuleHtml(
     body {
       margin: 0;
       padding: 0;
-      background: ${isPrintMode ? "#ffffff" : "#0f172a"};
-      color: #1f2937;
-      font-family: 'Poppins', 'Noto Sans Devanagari', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-family: 'Noto Sans Devanagari', 'Poppins', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       font-size: 13px;
-      line-height: 1.65;
+      line-height: 1.75;
+      color: #0f172a;
+      background: #ffffff;
+      font-feature-settings: "kern" 1;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
     }
 
     .module-container {
-      width: 210mm;
-      min-height: 297mm;
-      margin: ${isPrintMode ? "0" : "20px auto"};
-      background: #ffffff;
-      position: relative;
-      box-shadow: ${isPrintMode ? "none" : "0 10px 40px rgba(0,0,0,0.5)"};
+      max-width: 210mm;
+      margin: 0 auto;
+      padding: 16px 20px;
     }
 
-    .content-body {
-      padding: 24px 32px 32px 32px;
-      position: relative;
-      z-index: 2;
+    .katex {
+      font-size: 1.05em !important;
+    }
+
+    .katex-display {
+      margin: 10px 0 !important;
     }
 
     @media print {
       body {
-        background: #ffffff !important;
+        background: transparent;
       }
       .module-container {
-        width: 100% !important;
-        box-shadow: none !important;
-        margin: 0 !important;
-        padding: 0 !important;
+        max-width: 100%;
+        padding: 0;
       }
-      @page {
-        size: A4 portrait;
-        margin: 0;
+      .page-break {
+        page-break-before: always;
       }
     }
   </style>
 </head>
 <body>
+  ${watermarkHtml}
+  ${coverHtml}
+  
   <div class="module-container">
-    ${watermarkHtml}
-    ${coverHtml}
-
-    <div class="content-body">
-      ${runningHeaderHtml}
+    ${runningHeaderHtml}
+    <main style="margin-top: 10px;">
       ${elementsHtml}
-      ${runningFooterHtml}
-    </div>
+    </main>
+    ${runningFooterHtml}
   </div>
 </body>
 </html>

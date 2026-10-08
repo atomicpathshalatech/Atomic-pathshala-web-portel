@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import Link from "next/link";
 import { SUBJECT_THEMES, ModuleSubject } from "@/lib/module-studio/subject-design-system";
 import type { ModuleElementInput } from "@/lib/validation/module";
 import { ReplacementRule } from "@/lib/module-studio/find-replace-engine";
@@ -26,6 +27,7 @@ export function ModuleRedesignStudio({ userRole }: { userRole?: string }) {
   const [targetExam, setTargetExam] = useState<string>("NEET (UG)");
   const [facultyName, setFacultyName] = useState<string>("Firoz Sir");
   const [batchName, setBatchName] = useState<string>("NEET Accelerated Batch");
+  const [createdModuleId, setCreatedModuleId] = useState<string | null>(null);
 
   // Vector Rebranding Options
   const [includeCover, setIncludeCover] = useState<boolean>(true);
@@ -169,6 +171,10 @@ export function ModuleRedesignStudio({ userRole }: { userRole?: string }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to process PDF");
 
+      if (data.data.moduleId) {
+        setCreatedModuleId(data.data.moduleId);
+      }
+
       setAst(data.data.ast);
       setStats({
         totalPages: data.data.totalPages,
@@ -177,7 +183,7 @@ export function ModuleRedesignStudio({ userRole }: { userRole?: string }) {
       });
 
       toast.success(
-        `Extracted ${data.data.totalElements} elements across ${data.data.totalPages} pages with ${data.data.referenceInsightsInserted} reference insights!`,
+        `Extracted ${data.data.totalElements} elements across ${data.data.totalPages} pages and saved to database!`,
         { id: toastId }
       );
 
@@ -932,13 +938,22 @@ export function ModuleRedesignStudio({ userRole }: { userRole?: string }) {
                 </div>
               </div>
 
-              {/* 1-Click Bilingual Buttons */}
+              {/* 1-Click Bilingual Buttons & Foxit Editor Link */}
               <div className="flex items-center gap-2">
+                {createdModuleId && (
+                  <Link
+                    href={`/team/modules/${createdModuleId}`}
+                    className="px-3.5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
+                  >
+                    <span className="material-symbols-outlined text-sm">edit_document</span>
+                    <span>Foxit PDF Editor</span>
+                  </Link>
+                )}
                 <button
                   type="button"
                   disabled={isTranslating}
                   onClick={() => handleTranslate("HINDI")}
-                  className="px-3.5 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
+                  className="px-3.5 py-2 rounded-xl bg-orange-500/20 hover:bg-orange-500/30 text-orange-700 dark:text-orange-300 text-xs font-bold flex items-center gap-1.5 border border-orange-500/30"
                 >
                   <span className="material-symbols-outlined text-sm">translate</span>
                   <span>Translate to Hindi (हिंदी)</span>
@@ -947,7 +962,7 @@ export function ModuleRedesignStudio({ userRole }: { userRole?: string }) {
                   type="button"
                   disabled={isTranslating}
                   onClick={() => handleTranslate("ENGLISH")}
-                  className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
+                  className="px-3.5 py-2 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-700 dark:text-indigo-300 text-xs font-bold flex items-center gap-1.5 border border-indigo-600/30"
                 >
                   <span className="material-symbols-outlined text-sm">translate</span>
                   <span>Translate to English</span>
@@ -1075,6 +1090,16 @@ export function ModuleRedesignStudio({ userRole }: { userRole?: string }) {
             </div>
 
             <div className="flex items-center gap-3">
+              {createdModuleId && (
+                <Link
+                  href={`/team/modules/${createdModuleId}`}
+                  className="px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
+                >
+                  <span className="material-symbols-outlined text-sm">edit_document</span>
+                  <span>Open in Foxit PDF Editor</span>
+                </Link>
+              )}
+
               {/* Digital Download */}
               <button
                 type="button"

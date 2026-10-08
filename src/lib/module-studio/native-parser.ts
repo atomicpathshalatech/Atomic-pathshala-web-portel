@@ -40,9 +40,23 @@ function applyRenames(text: string, renames: Record<string, string>): string {
 }
 
 /**
+ * Checks if a line contains answer key mappings like:
+ * "1. (2)  2. (3)  3. (1)  4. (4)" or "1-(b), 2-(c), 3-(a)" or "Q.1 - (3), Q.2 - (1)"
+ */
+function parseAnswerKeyPairs(text: string): Array<{ qNum: string; ans: string }> {
+  const pairs: Array<{ qNum: string; ans: string }> = [];
+  const regex = /(?:Q\.?)?\s*(\d+)[\s\.\:\-\–—]+\(?\s*([1-4A-Da-d])\s*\)?/g;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(text)) !== null) {
+    pairs.push({ qNum: match[1]!, ans: `(${match[2]!.toUpperCase()})` });
+  }
+  return pairs;
+}
+
+/**
  * Ultra-fast deterministic spatial line parser that converts extracted PDF lines
  * into structured academic elements while preserving exact line-to-line Hindi Devanagari,
- * chemical equations, questions, option grids, and tables.
+ * chemical formulas, dual-column question grids, and compact answer keys.
  */
 export function parsePageTextNatively(
   pageText: string,
@@ -73,6 +87,9 @@ export function parsePageTextNatively(
   if (rawLines.length === 0) return [];
 
   const elements: ModuleElementInput[] = [];
+  let isInsideAnswerKey = false;
+  let answerKeyEntries: Array<{ qNum: string; ans: string }> = [];
+
   const push = (el: Omit<ModuleElementInput, "id" | "order">) => {
     elements.push({
       id: `p${pageNumber}-${elements.length}-${Math.random().toString(36).slice(2, 7)}`,
@@ -92,13 +109,60 @@ export function parsePageTextNatively(
     currentParagraphLines = [];
   };
 
+  const flushAnswerKey = () => {
+    if (answerKeyEntries.length === 0) return;
+    // Build 5-column compact matrix table
+    const tableData: string[][] = [["Q.No", "Ans", "Q.No", "Ans", "Q.No", "Ans", "Q.No", "Ans", "Q.No", "Ans"]];
+    for (let idx = 0; idx < answerKeyEntries.length; idx += 5) {
+      const row: string[] = [];
+      for (let col = 0; col < 5; col++) {
+        const item = answerKeyEntries[idx + col];
+        if (item) {
+          row.push(`Q.${item.qNum}`, item.ans);
+        } else {
+          row.push("-", "-");
+        }
+      }
+      tableData.push(row);
+    }
+
+    push({
+      type: "TABLE",
+      content: "Answer Key",
+      label: "Answer Key Grid",
+      tableData,
+    });
+
+    answerKeyEntries = [];
+    isInsideAnswerKey = false;
+  };
+
   for (let i = 0; i < rawLines.length; i++) {
     const line = rawLines[i]!;
 
-    // 1. Major Section Banners (Booster Section, Topic Wise Questions, Rank Booster, NEET PYQ, Answer Key)
+    // 0. Answer Key Detection & Gathering
+    if (/^(?:answer\s*key|उत्तर\s*कुंजी|ans\s*key)/i.test(line)) {
+      flushParagraph();
+      isInsideAnswerKey = true;
+      push({ type: "HEADING", content: clean(line) });
+      continue;
+    }
+
+    if (isInsideAnswerKey) {
+      const pairs = parseAnswerKeyPairs(line);
+      if (pairs.length > 0) {
+        answerKeyEntries.push(...pairs);
+        continue;
+      } else if (line.length > 0 && !/^\d+/.test(line)) {
+        // Exited answer key block
+        flushAnswerKey();
+      }
+    }
+
+    // 1. Major Section Banners (Booster Section, Topic Wise Questions, Rank Booster, NEET PYQ)
     if (
-      /^(?:booster\s*section|topic\s*wise\s*questions|rank\s*booster\s*question|neet\s*pyq|answer\s*key|quick\s*revision|quick\s*rivision)/i.test(line) ||
-      /^(?:बूस्टर\s*सेक्शन|टॉपिक\s*वाइज|रैंक\s*बूस्टर|उत्तर\s*कुंजी|क्विक\s*रिवीजन)/i.test(line)
+      /^(?:booster\s*section|topic\s*wise\s*questions|rank\s*booster\s*question|neet\s*pyq|quick\s*revision|quick\s*rivision)/i.test(line) ||
+      /^(?:बूस्टर\s*सेक्शन|टॉपिक\s*वाइज|रैंक\s*बूस्टर|क्विक\s*रिवीजन)/i.test(line)
     ) {
       flushParagraph();
       push({ type: "HEADING", content: clean(line) });
@@ -192,5 +256,6 @@ export function parsePageTextNatively(
   }
 
   flushParagraph();
+  flushAnswerKey();
   return elements;
 }

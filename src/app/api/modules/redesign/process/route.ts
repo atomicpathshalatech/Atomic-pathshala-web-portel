@@ -1,9 +1,12 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/db";
 import { apiError, apiSuccess } from "@/lib/api/response";
 import { requirePermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
+import { uploadFile } from "@/lib/storage";
+import { computePdfHash } from "@/lib/module-studio/pdf-hash";
 import { executeParallelPdfExtraction } from "@/lib/module-studio/parallel-extraction-engine";
 import { extractReferenceInsights, enrichMainASTWithReferences, ReferenceSource } from "@/lib/module-studio/reference-merger";
 import { ModuleSubject } from "@/lib/module-studio/subject-design-system";
@@ -33,17 +36,66 @@ export async function POST(request: NextRequest) {
     const targetExam = (formData.get("targetExam") as string) || "NEET (UG)";
     const facultyName = (formData.get("facultyName") as string) || "Atomic Pathshala Faculty";
 
-    // 1. Process MAIN PDF with AI Multimodal / Structuring Engine
+    // 1. Process MAIN PDF with High-Speed Deterministic Spatial Engine
     const mainPdfBuffer = Buffer.from(await mainPdfFile.arrayBuffer());
+    const contentHash = computePdfHash(mainPdfBuffer);
+
     const mainSummary = await executeParallelPdfExtraction(mainPdfBuffer, {
-      mode: "AI_ENHANCE",
-      concurrency: 6,
+      mode: "FAST_EDITABLE",
+      concurrency: 10,
     });
 
-    // Flatten pages into full AST
+    // 2. Upload source PDF to R2
+    const storageKey = `modules/sources/${Date.now()}-${mainPdfFile.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    const originalFileUrl = await uploadFile({
+      key: storageKey,
+      body: mainPdfBuffer,
+      contentType: "application/pdf",
+    });
+
+    // 3. Upsert Module record in DB
+    const moduleCode = `${subject.slice(0, 4).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
+    const moduleRow = await prisma.module.create({
+      data: {
+        code: moduleCode,
+        title: `${moduleNumber}: ${chapterName}`,
+        subject,
+        chapter: chapterName,
+        facultyName,
+        status: "READY",
+        pdfType: mainSummary.pdfType,
+        originalFileUrl,
+        originalFileName: mainPdfFile.name,
+        originalFileSize: mainPdfFile.size,
+        pageCount: mainSummary.totalPages,
+        contentHash,
+        createdById: session.user.id,
+      },
+    });
+
+    // 4. Persist extracted pages to DB in a transaction
+    await prisma.$transaction(
+      mainSummary.pages.map((p) =>
+        prisma.modulePage.create({
+          data: {
+            moduleId: moduleRow.id,
+            pageNumber: p.pageNumber,
+            width: p.width,
+            height: p.height,
+            pdfType: p.pdfType,
+            elements: p.elements as any,
+            ocrConfidence: p.ocrConfidence,
+            needsReview: p.needsReview,
+            warnings: p.warnings as any,
+          },
+        })
+      )
+    );
+
+    // 5. Flatten pages into full AST
     let mainAst = mainSummary.pages.flatMap((p) => p.elements);
 
-    // 2. Process REFERENCE PDFs if any
+    // 6. Process REFERENCE PDFs if any
     const referenceFiles = formData.getAll("referencePdfs") as File[];
     const referenceSources: ReferenceSource[] = [];
 
@@ -68,6 +120,8 @@ export async function POST(request: NextRequest) {
 
     return apiSuccess({
       success: true,
+      moduleId: moduleRow.id,
+      moduleCode: moduleRow.code,
       subject,
       moduleNumber,
       chapterName,
