@@ -79,10 +79,12 @@ export interface HeaderFooterConfig {
   headerImageBase64?: string;
   headerImageHeight?: number;
   headerImagePosition?: "left" | "center" | "right";
+  headerTopOffsetPt?: number;
   footerImageUrl?: string;
   footerImageBase64?: string;
   footerImageHeight?: number;
   footerImagePosition?: "left" | "center" | "right";
+  footerBottomOffsetPt?: number;
   removeOldHeader?: boolean;
   removeOldFooter?: boolean;
   oldHeaderHeightPt?: number;
@@ -628,8 +630,9 @@ export async function processNativePdfEdits(
 
       // H. Running Header & Footer
       if (headerFooter?.enabled && isPageInRange(pageNum, headerFooter.pageRange, headerFooter.customPages, headerFooter.excludeFirstPage)) {
+        const topOffset = headerFooter.headerTopOffsetPt || 0;
         const hHeight = headerFooter.headerImageHeight || 28;
-        const bannerY = height - hHeight;
+        const bannerY = height - hHeight - topOffset;
         const accentCol = headerFooter.accentColor ? hexToRgb(headerFooter.accentColor) : rgb(0.917, 0.345, 0.047);
         const navyText = rgb(0.06, 0.09, 0.16);
         const slateText = rgb(0.4, 0.45, 0.52);
@@ -693,10 +696,13 @@ export async function processNativePdfEdits(
         }
 
         // Running Footer
+        const bottomOffset = headerFooter.footerBottomOffsetPt || 0;
         const footerH = headerFooter.footerImageHeight || 22;
+        const footerY = bottomOffset;
+
         page.drawRectangle({
           x: 20,
-          y: footerH,
+          y: footerY + footerH,
           width: width - 40,
           height: 0.5,
           color: rgb(0.88, 0.9, 0.94),
@@ -712,7 +718,7 @@ export async function processNativePdfEdits(
 
           page.drawImage(footerImgEmbed, {
             x: imgX,
-            y: 3,
+            y: footerY + 3,
             width: imgW,
             height: imgH,
           });
@@ -722,11 +728,11 @@ export async function processNativePdfEdits(
         const rightF = replaceVariables(headerFooter.footerRight || "Page {page} of {totalPages}", vars);
 
         if (!footerImgEmbed || headerFooter.footerImagePosition !== "left") {
-          page.drawText(leftF, { x: 24, y: 7, size: 7.5, font: helveticaFont, color: slateText });
+          page.drawText(leftF, { x: 24, y: footerY + 7, size: 7.5, font: helveticaFont, color: slateText });
         }
         const pgW = helveticaBold.widthOfTextAtSize(rightF, 8);
         if (!footerImgEmbed || headerFooter.footerImagePosition !== "right") {
-          page.drawText(rightF, { x: width - pgW - 24, y: 7, size: 8, font: helveticaBold, color: accentCol });
+          page.drawText(rightF, { x: width - pgW - 24, y: footerY + 7, size: 8, font: helveticaBold, color: accentCol });
         }
       }
 

@@ -89,6 +89,7 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
   const [deletedPages, setDeletedPages] = useState<number[]>([]);
   const [pageRotations, setPageRotations] = useState<Record<number, number>>({});
   const [pageOrder, setPageOrder] = useState<number[]>([]);
+  const [viewMode, setViewMode] = useState<"continuous" | "single">("continuous");
 
   // 4. Global Overlays & Configurations
   const [background, setBackground] = useState<BackgroundConfig>({
@@ -105,11 +106,15 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
     headerRight: "{teacher}",
     footerLeft: "Atomic Pathshala | India's Leading NEET Accelerator",
     footerRight: "Page {page} of {totalPages}",
+    headerTopOffsetPt: 0,
+    footerBottomOffsetPt: 0,
+    headerImageHeight: 36,
+    footerImageHeight: 24,
     removeOldHeader: true,
     removeOldFooter: true,
     oldHeaderHeightPt: 42,
     oldFooterHeightPt: 32,
-    accentColor: "#0B7A43",
+    accentColor: "#059669",
     excludeFirstPage: true,
     pageRange: "ALL",
   });
@@ -850,6 +855,85 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
     });
   };
 
+  // Scroll to page in continuous view mode
+  const handleSelectPage = useCallback((pNum: number) => {
+    if (deletedPages.includes(pNum)) return;
+    setCurrentPage(pNum);
+    if (viewMode === "continuous") {
+      const el = document.getElementById(`pdf-page-${pNum}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }
+  }, [deletedPages, viewMode]);
+
+  // Continuous Scroll Sync: update currentPage when user scrolls viewport
+  useEffect(() => {
+    if (viewMode !== "continuous") return;
+    const container = canvasContainerRef.current;
+    if (!container) return;
+
+    let timeoutId: any = null;
+    const handleScroll = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        const pageElements = container.querySelectorAll<HTMLElement>("[data-page]");
+        const scrollPos = container.scrollTop + 140;
+
+        for (let i = 0; i < pageElements.length; i++) {
+          const el = pageElements[i];
+          const pNum = Number(el.getAttribute("data-page"));
+          const top = el.offsetTop;
+          const bottom = top + el.offsetHeight;
+          if (scrollPos >= top && scrollPos <= bottom) {
+            setCurrentPage((curr) => (curr !== pNum ? pNum : curr));
+            break;
+          }
+        }
+      }, 50);
+    };
+
+    container.addEventListener("scroll", handleScroll, { passive: true });
+    return () => {
+      container.removeEventListener("scroll", handleScroll);
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [viewMode]);
+
+  // 1-Click Subject Theme & Heading Styling
+  const applySubjectTheme = (subject: "CHEMISTRY" | "PHYSICS" | "BIOLOGY" | "ORANGE") => {
+    let accentCol = "#059669";
+    let bgCol = "#f0fdf4";
+    let name = "Chemistry Green";
+
+    if (subject === "PHYSICS") {
+      accentCol = "#0284c7";
+      bgCol = "#f0f9ff";
+      name = "Physics Blue";
+    } else if (subject === "BIOLOGY") {
+      accentCol = "#7c3aed";
+      bgCol = "#faf5ff";
+      name = "Biology Purple";
+    } else if (subject === "ORANGE") {
+      accentCol = "#ea580c";
+      bgCol = "#fff7ed";
+      name = "Atomic Orange";
+    }
+
+    setBackground({ enabled: true, color: bgCol, opacity: 0.85, pageRange: "ALL" });
+    setHeaderFooter((prev) => ({ ...prev, enabled: true, accentColor: accentCol }));
+    setCoverPage((prev) => ({ ...prev, subject }));
+    setHasUnsavedChanges(true);
+
+    if (selectedObjectId) {
+      setTextEdits((prev) =>
+        prev.map((t) => (t.id === selectedObjectId ? { ...t, color: accentCol, isBold: true } : t))
+      );
+    }
+
+    toast.success(`Applied ${name} Theme to Header, Background Tint & Accents!`);
+  };
+
   // Selected Object Properties
   const selectedTextObj = useMemo(() => textEdits.find((t) => t.id === selectedObjectId), [textEdits, selectedObjectId]);
   const selectedWhiteoutObj = useMemo(() => whiteouts.find((w) => w.id === selectedObjectId), [whiteouts, selectedObjectId]);
@@ -1447,6 +1531,50 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
             </button>
           </div>
 
+          {/* Tool Group 3.5: Subject Theme 1-Click Filters */}
+          <div className="flex items-center gap-1 bg-slate-950/60 p-1 rounded-xl border border-slate-800 shrink-0">
+            <span className="text-[10px] font-bold text-slate-400 px-1">Theme:</span>
+            <button
+              type="button"
+              onClick={() => applySubjectTheme("CHEMISTRY")}
+              className={`px-2 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+                headerFooter.accentColor === "#059669"
+                  ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                  : "text-slate-400 hover:text-emerald-400 hover:bg-slate-800"
+              }`}
+              title="Apply Chemistry Theme & Accents"
+            >
+              <span>🧪</span>
+              <span className="hidden xl:inline">Chemistry</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => applySubjectTheme("PHYSICS")}
+              className={`px-2 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+                headerFooter.accentColor === "#0284c7"
+                  ? "bg-sky-500/20 text-sky-300 border border-sky-500/40"
+                  : "text-slate-400 hover:text-sky-400 hover:bg-slate-800"
+              }`}
+              title="Apply Physics Theme & Accents"
+            >
+              <span>⚡</span>
+              <span className="hidden xl:inline">Physics</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => applySubjectTheme("BIOLOGY")}
+              className={`px-2 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+                headerFooter.accentColor === "#7c3aed"
+                  ? "bg-purple-500/20 text-purple-300 border border-purple-500/40"
+                  : "text-slate-400 hover:text-purple-400 hover:bg-slate-800"
+              }`}
+              title="Apply Biology Theme & Accents"
+            >
+              <span>🧬</span>
+              <span className="hidden xl:inline">Biology</span>
+            </button>
+          </div>
+
           {/* Tool Group 4: Undo/Redo & Zoom Navigation */}
           <div className="flex items-center gap-2 shrink-0 ml-auto">
             <div className="flex items-center gap-0.5 bg-slate-950/60 p-1 rounded-xl border border-slate-800">
@@ -1470,11 +1598,28 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
               </button>
             </div>
 
+            {/* View Mode Toggle */}
+            <button
+              type="button"
+              onClick={() => setViewMode((m) => (m === "continuous" ? "single" : "continuous"))}
+              className={`p-1.5 rounded-xl border flex items-center gap-1 font-bold text-xs transition-all ${
+                viewMode === "continuous"
+                  ? "bg-orange-500/20 text-orange-300 border-orange-500/30"
+                  : "bg-slate-950/60 text-slate-400 border-slate-800 hover:text-white"
+              }`}
+              title={viewMode === "continuous" ? "Continuous Vertical Scroll (Click for Single Page)" : "Single Page Mode (Click for Continuous Scroll)"}
+            >
+              <span className="material-symbols-outlined text-sm">
+                {viewMode === "continuous" ? "view_stream" : "crop_portrait"}
+              </span>
+              <span className="hidden sm:inline">{viewMode === "continuous" ? "Scroll" : "Single"}</span>
+            </button>
+
             {/* Page Navigator */}
             <div className="flex items-center gap-1.5 bg-slate-950/60 px-2 py-1 rounded-xl border border-slate-800 text-xs">
               <button
                 type="button"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                onClick={() => handleSelectPage(Math.max(1, currentPage - 1))}
                 disabled={currentPage <= 1}
                 className="text-slate-400 hover:text-white disabled:opacity-30"
               >
@@ -1485,7 +1630,7 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
               </span>
               <button
                 type="button"
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                onClick={() => handleSelectPage(Math.min(totalPages, currentPage + 1))}
                 disabled={currentPage >= totalPages}
                 className="text-slate-400 hover:text-white disabled:opacity-30"
               >
@@ -1576,7 +1721,7 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                   return (
                     <div
                       key={pNum}
-                      onClick={() => !isDeleted && setCurrentPage(pNum)}
+                      onClick={() => !isDeleted && handleSelectPage(pNum)}
                       className={`p-2.5 rounded-2xl border transition-all cursor-pointer relative ${
                         isCurrent
                           ? "border-orange-500 bg-orange-500/10 shadow-md"
@@ -1818,9 +1963,101 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
               </span>
               <p className="font-bold text-sm text-slate-300">Loading Native PDF...</p>
             </div>
+          ) : viewMode === "continuous" ? (
+            <div className="space-y-8 flex flex-col items-center w-full pb-16">
+              {pageOrder
+                .filter((p) => !deletedPages.includes(p))
+                .map((pNum) => (
+                  <div
+                    key={pNum}
+                    id={`pdf-page-${pNum}`}
+                    data-page={pNum}
+                    className="flex flex-col items-center relative"
+                  >
+                    <div className="text-[10px] font-bold text-slate-400 mb-1 flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400">
+                        Page {pNum} of {totalPages}
+                      </span>
+                    </div>
+                    <NativePdfPageView
+                      pdfDocProxy={pdfDocProxy}
+                      pageNumber={pNum}
+                      totalPages={totalPages}
+                      zoom={zoom}
+                      rotation={pageRotations[pNum] || 0}
+                      activeTool={activeTool}
+                      textEdits={textEdits.filter((t) => t.pageNumber === pNum)}
+                      whiteouts={whiteouts.filter((w) => w.pageNumber === pNum)}
+                      images={images.filter((img) => img.pageNumber === pNum)}
+                      shapes={shapes.filter((s) => s.pageNumber === pNum)}
+                      globalRemovals={globalRemovals}
+                      globalReplacements={globalReplacements}
+                      selectedObjectId={selectedObjectId}
+                      onSelectObject={(id, type) => {
+                        setSelectedObjectId(id);
+                        setSelectedObjectType(type);
+                        setCurrentPage(pNum);
+                      }}
+                      onAddTextEdit={(newEdit) => {
+                        setTextEdits((prev) => [...prev, newEdit]);
+                        setSelectedObjectId(newEdit.id);
+                        setSelectedObjectType("text");
+                        setCurrentPage(pNum);
+                        pushHistory({
+                          textEdits: [...textEdits, newEdit],
+                          whiteouts,
+                          images,
+                          shapes,
+                          globalRemovals,
+                          globalReplacements,
+                          deletedPages,
+                          pageRotations,
+                        });
+                      }}
+                      onUpdateTextEdit={(updated) => {
+                        setTextEdits((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+                        setHasUnsavedChanges(true);
+                      }}
+                      onUpdateImage={(updated) => {
+                        setImages((prev) => prev.map((img) => (img.id === updated.id ? updated : img)));
+                        setHasUnsavedChanges(true);
+                      }}
+                      onAddWhiteout={(newWhiteout) => {
+                        setWhiteouts((prev) => [...prev, newWhiteout]);
+                        setSelectedObjectId(newWhiteout.id);
+                        setSelectedObjectType("whiteout");
+                        setCurrentPage(pNum);
+                        pushHistory({
+                          textEdits,
+                          whiteouts: [...whiteouts, newWhiteout],
+                          images,
+                          shapes,
+                          globalRemovals,
+                          globalReplacements,
+                          deletedPages,
+                          pageRotations,
+                        });
+                      }}
+                      onTargetBoxSelected={(box) => {
+                        setPendingTargetBox(box);
+                        setCurrentPage(pNum);
+                        if (activeTool === "REMOVE_OBJECT") {
+                          setShowRemoveModal(true);
+                        } else if (activeTool === "REPLACE_OBJECT") {
+                          setShowReplaceModal(true);
+                        }
+                      }}
+                      headerFooter={headerFooter}
+                      watermark={watermark}
+                      background={background}
+                      coverPage={coverPage}
+                      moduleData={moduleData}
+                    />
+                  </div>
+                ))}
+            </div>
           ) : (
             <div className="space-y-8 flex flex-col items-center">
-              {/* Active Page Canvas Container */}
               <NativePdfPageView
                 pdfDocProxy={pdfDocProxy}
                 pageNumber={currentPage}
@@ -1997,6 +2234,74 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                     }}
                     className="w-8 h-8 rounded border border-slate-800 cursor-pointer bg-transparent"
                   />
+                </div>
+              </div>
+
+              {/* Quick Subject Theme Heading Colors */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">
+                  Subject Heading Colors
+                </label>
+                <div className="grid grid-cols-4 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const updated = { ...selectedTextObj, color: "#059669", isBold: true };
+                      setTextEdits((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+                      setHasUnsavedChanges(true);
+                      toast.success("Applied Chemistry Heading Style");
+                    }}
+                    className="p-1.5 rounded-lg border border-emerald-500/40 bg-emerald-950/40 hover:bg-emerald-900/50 flex flex-col items-center gap-0.5"
+                    title="Chemistry Green"
+                  >
+                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                    <span className="text-[9px] font-bold text-emerald-400">Chem</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const updated = { ...selectedTextObj, color: "#0284c7", isBold: true };
+                      setTextEdits((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+                      setHasUnsavedChanges(true);
+                      toast.success("Applied Physics Heading Style");
+                    }}
+                    className="p-1.5 rounded-lg border border-sky-500/40 bg-sky-950/40 hover:bg-sky-900/50 flex flex-col items-center gap-0.5"
+                    title="Physics Blue"
+                  >
+                    <div className="w-2.5 h-2.5 rounded-full bg-sky-500" />
+                    <span className="text-[9px] font-bold text-sky-400">Phys</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const updated = { ...selectedTextObj, color: "#7c3aed", isBold: true };
+                      setTextEdits((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+                      setHasUnsavedChanges(true);
+                      toast.success("Applied Biology Heading Style");
+                    }}
+                    className="p-1.5 rounded-lg border border-purple-500/40 bg-purple-950/40 hover:bg-purple-900/50 flex flex-col items-center gap-0.5"
+                    title="Biology Purple"
+                  >
+                    <div className="w-2.5 h-2.5 rounded-full bg-purple-500" />
+                    <span className="text-[9px] font-bold text-purple-400">Bio</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const updated = { ...selectedTextObj, color: "#ea580c", isBold: true };
+                      setTextEdits((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+                      setHasUnsavedChanges(true);
+                      toast.success("Applied Orange Accent Style");
+                    }}
+                    className="p-1.5 rounded-lg border border-orange-500/40 bg-orange-950/40 hover:bg-orange-900/50 flex flex-col items-center gap-0.5"
+                    title="Orange Accent"
+                  >
+                    <div className="w-2.5 h-2.5 rounded-full bg-orange-500" />
+                    <span className="text-[9px] font-bold text-orange-400">Orange</span>
+                  </button>
                 </div>
               </div>
 
@@ -2757,6 +3062,22 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                     className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-200"
                   />
                 </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">
+                    Header Top Offset: {headerFooter.headerTopOffsetPt || 0}pt
+                  </label>
+                  <input
+                    type="range"
+                    min={0}
+                    max={40}
+                    step={1}
+                    value={headerFooter.headerTopOffsetPt || 0}
+                    onChange={(e) => setHeaderFooter((p) => ({ ...p, headerTopOffsetPt: Number(e.target.value) }))}
+                    className="w-full accent-orange-500"
+                  />
+                  <div className="text-[10px] text-slate-500">Distance from top edge</div>
+                </div>
                 <div>
                   <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">
                     Header Height: {headerFooter.headerImageHeight || 36}pt
@@ -2770,6 +3091,7 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                     onChange={(e) => setHeaderFooter((p) => ({ ...p, headerImageHeight: Number(e.target.value) }))}
                     className="w-full accent-orange-500"
                   />
+                  <div className="text-[10px] text-slate-500">Height of header banner</div>
                 </div>
               </div>
 
@@ -2793,6 +3115,39 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                     placeholder="Page {page} of {totalPages}"
                     className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-200"
                   />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">
+                    Footer Bottom Offset: {headerFooter.footerBottomOffsetPt || 0}pt
+                  </label>
+                  <input
+                    type="range"
+                    min={0}
+                    max={40}
+                    step={1}
+                    value={headerFooter.footerBottomOffsetPt || 0}
+                    onChange={(e) => setHeaderFooter((p) => ({ ...p, footerBottomOffsetPt: Number(e.target.value) }))}
+                    className="w-full accent-orange-500"
+                  />
+                  <div className="text-[10px] text-slate-500">Distance from bottom edge</div>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">
+                    Footer Height: {headerFooter.footerImageHeight || 24}pt
+                  </label>
+                  <input
+                    type="range"
+                    min={16}
+                    max={40}
+                    step={2}
+                    value={headerFooter.footerImageHeight || 24}
+                    onChange={(e) => setHeaderFooter((p) => ({ ...p, footerImageHeight: Number(e.target.value) }))}
+                    className="w-full accent-orange-500"
+                  />
+                  <div className="text-[10px] text-slate-500">Height of footer banner</div>
                 </div>
               </div>
 
@@ -3525,8 +3880,9 @@ function NativePdfPageView({
           className="absolute inset-0 pointer-events-none"
           style={{
             backgroundColor: background?.color || "#ffffff",
-            opacity: background?.opacity ?? 1,
-            zIndex: 1,
+            opacity: background?.opacity ?? 0.85,
+            mixBlendMode: "multiply",
+            zIndex: 5,
           }}
         >
           {background?.base64Data && (
@@ -3601,21 +3957,22 @@ function NativePdfPageView({
       {headerFooter?.removeOldHeader && isPageInRange(pageNumber, headerFooter.pageRange, headerFooter.customPages, headerFooter.excludeFirstPage) && (
         <div
           className="absolute top-0 left-0 right-0 bg-white z-10 pointer-events-none"
-          style={{ height: `${(headerFooter.oldHeaderHeightPt || 42) * scale}px` }}
+          style={{ height: `${((headerFooter.oldHeaderHeightPt || 42) + (headerFooter.headerTopOffsetPt || 0)) * scale}px` }}
         />
       )}
       {headerFooter?.removeOldFooter && isPageInRange(pageNumber, headerFooter.pageRange, headerFooter.customPages, headerFooter.excludeFirstPage) && (
         <div
           className="absolute bottom-0 left-0 right-0 bg-white z-10 pointer-events-none"
-          style={{ height: `${(headerFooter.oldFooterHeightPt || 32) * scale}px` }}
+          style={{ height: `${((headerFooter.oldFooterHeightPt || 32) + (headerFooter.footerBottomOffsetPt || 0)) * scale}px` }}
         />
       )}
 
       {/* 4. RUNNING HEADER LIVE PREVIEW */}
       {showHeader && !isCoverActive && (
         <div
-          className="absolute top-0 left-0 right-0 bg-white z-15 flex items-center justify-between px-4 border-b pointer-events-none"
+          className="absolute left-0 right-0 bg-white z-15 flex items-center justify-between px-4 border-b pointer-events-none"
           style={{
+            top: `${(headerFooter?.headerTopOffsetPt || 0) * scale}px`,
             height: `${headerHeightPt * scale}px`,
             borderBottomColor: headerAccent,
             borderBottomWidth: `${2.5 * scale}px`,
@@ -3656,8 +4013,9 @@ function NativePdfPageView({
       {/* 5. RUNNING FOOTER LIVE PREVIEW */}
       {showHeader && !isCoverActive && (
         <div
-          className="absolute bottom-0 left-0 right-0 bg-white z-15 flex items-center justify-between px-4 border-t border-slate-200 pointer-events-none"
+          className="absolute left-0 right-0 bg-white z-15 flex items-center justify-between px-4 border-t border-slate-200 pointer-events-none"
           style={{
+            bottom: `${(headerFooter?.footerBottomOffsetPt || 0) * scale}px`,
             height: `${footerHeightPt * scale}px`,
             zIndex: 15,
           }}
@@ -3744,11 +4102,11 @@ function NativePdfPageView({
           />
         )}
 
-        {/* Global Removals Masks (Solid 100% Opaque Whiteout to prevent overlap) */}
+        {/* Global Removals Masks (Solid 100% Opaque Pure Whiteout without red outlines) */}
         {globalRemovals.map((g) => (
           <div
             key={g.id}
-            className="absolute bg-white border border-red-400/40 pointer-events-none z-10"
+            className="absolute bg-white pointer-events-none z-10"
             style={{
               left: `${g.x * scale}px`,
               top: `${g.y * scale}px`,
@@ -3762,7 +4120,7 @@ function NativePdfPageView({
         {globalReplacements.map((r) => (
           <div
             key={r.id}
-            className="absolute bg-white border border-cyan-400/40 overflow-hidden pointer-events-none z-10 flex items-center justify-center"
+            className="absolute bg-white overflow-hidden pointer-events-none z-10 flex items-center justify-center"
             style={{
               left: `${r.x * scale}px`,
               top: `${r.y * scale}px`,
