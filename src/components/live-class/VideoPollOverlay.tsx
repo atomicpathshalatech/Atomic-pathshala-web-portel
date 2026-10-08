@@ -25,6 +25,15 @@ export type VideoPollOverlayProps = {
   onVote: (optionKey: string) => Promise<void> | void;
   onDismiss?: () => void;
   voting?: boolean;
+  /**
+   * The student room's single poll layer: fixed to the screen (a sheet at the
+   * bottom on a phone, a card at the bottom-centre on a desktop), not placed
+   * inside the video — so it is in the same, clearly visible place in every
+   * class mode and can never be drawn twice.
+   */
+  fixedLayer?: boolean;
+  /** Shown under the options (e.g. "Could not submit your answer"). */
+  error?: string | null;
 };
 
 export function VideoPollOverlay({
@@ -32,6 +41,8 @@ export function VideoPollOverlay({
   onVote,
   onDismiss,
   voting = false,
+  fixedLayer = false,
+  error = null,
 }: VideoPollOverlayProps) {
   const [isMinimized, setIsMinimized] = useState(false);
   const [remainingSec, setRemainingSec] = useState<number>(0);
@@ -93,7 +104,7 @@ export function VideoPollOverlay({
   // Minimized pill state
   if (isMinimized) {
     return (
-      <div className="absolute bottom-14 right-4 z-40 pointer-events-auto">
+      <div className={fixedLayer ? "fixed right-3 bottom-24 z-[70] pointer-events-auto" : "absolute bottom-14 right-4 z-40 pointer-events-auto"} data-poll-id={poll.id}>
         <button
           type="button"
           onClick={() => setIsMinimized(false)}
@@ -114,8 +125,19 @@ export function VideoPollOverlay({
   }
 
   return (
-    <div className="absolute inset-0 z-40 pointer-events-none flex items-center justify-center p-3 sm:p-6 bg-black/40 backdrop-blur-[2px] transition-all">
-      <div className="pointer-events-auto w-full max-w-md bg-[#0e111d]/95 text-white border-2 border-indigo-500/80 rounded-2xl shadow-2xl p-4 sm:p-5 flex flex-col gap-3.5 animate-in zoom-in-95 fade-in duration-200 backdrop-blur-xl">
+    <div
+      data-poll-id={poll.id}
+      className={
+        fixedLayer
+          ? "fixed inset-x-0 bottom-0 z-[70] pointer-events-none flex justify-center px-2 pt-2 sm:px-4 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:pb-5"
+          : "absolute inset-0 z-40 pointer-events-none flex items-center justify-center p-3 sm:p-6 bg-black/40 backdrop-blur-[2px] transition-all"
+      }
+    >
+      <div
+        className={`pointer-events-auto w-full max-w-md bg-[#0e111d]/95 text-white border-2 border-indigo-500/80 rounded-2xl shadow-2xl p-4 sm:p-5 flex flex-col gap-3.5 animate-in fade-in duration-200 backdrop-blur-xl ${
+          fixedLayer ? "max-h-[72dvh] overflow-y-auto slide-in-from-bottom-4" : "zoom-in-95"
+        }`}
+      >
         {/* Header */}
         <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
           <div className="flex items-center gap-2 min-w-0">
@@ -288,6 +310,7 @@ export function VideoPollOverlay({
             </span>
           )}
         </div>
+        {error && <p className="text-[11px] font-semibold text-rose-400">{error}</p>}
       </div>
     </div>
   );

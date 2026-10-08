@@ -252,17 +252,16 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
       if (!sessionWithPages) return apiError("Session not found", 404);
 
-      const { generateWhiteboardPdf } = await import("@/lib/whiteboard/pdf-generator");
+      const { generateWhiteboardPdfExact } = await import("@/lib/whiteboard/pdf-generator");
       const pagesData = sessionWithPages.pages.map((p) => ({
         pageNumber: p.pageNumber,
         background: p.background,
         objects: (p.objects as any) || [],
       }));
 
-      const pdfBuffer = await generateWhiteboardPdf(
-        pagesData,
-        sessionWithPages.title || "Class Notes"
-      );
+      const { pdf: pdfBuffer } = await generateWhiteboardPdfExact(pagesData, sessionWithPages.title || "Class Notes", {
+        baseUrl: request.nextUrl.origin,
+      });
 
       const filename = `${encodeURIComponent(
         (sessionWithPages.title || "Class_Notes") + "_Whiteboard"

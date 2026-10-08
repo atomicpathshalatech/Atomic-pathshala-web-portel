@@ -123,22 +123,104 @@ export function MessagesPanel({
   const [togglingChat, setTogglingChat] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
 
+  // The newest message this panel has from the server (ids starting "opt_" /
+  // "yt_" are local or YouTube rows, never a cursor).
+  const lastServerIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const id = messages[i]!.id;
+      if (!id.startsWith("opt_") && !id.startsWith("yt_")) {
+        lastServerIdRef.current = id;
+        return;
+      }
+    }
+    lastServerIdRef.current = null;
+  }, [messages]);
+
+  // Chat history comes from the server — on open, and again every time the
+  // connection may have missed something: the phone woke up, the app came
+  // back to the front, the network returned, the realtime socket reconnected.
+  // After the first load only the messages after the last one seen are asked
+  // for (?after=lastMessageId), and they are merged by id.
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    let inFlight = false;
+
+    const mergeIn = (incoming: ChatMessage[]) =>
+      setMessages((prev) => {
+        if (incoming.length === 0) return prev;
+        const byId = new Map(prev.map((m) => [m.id, m] as const));
+        let changed = false;
+        for (const m of incoming) {
+          if (byId.has(m.id)) continue;
+          // An optimistic copy of my own message is replaced by the stored one.
+          const optimistic = prev.find((x) => x.id.startsWith("opt_") && x.authorUserId === m.authorUserId && x.body === m.body && byId.has(x.id));
+          if (optimistic) byId.delete(optimistic.id);
+          byId.set(m.id, m);
+          changed = true;
+        }
+        if (!changed) return prev;
+        return Array.from(byId.values()).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      });
+
+    const sync = async (initial: boolean) => {
+      if (cancelled || inFlight) return;
+      if (!initial && typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      inFlight = true;
       try {
-        const data = await getJson(`/api/whiteboard/sessions/${whiteboardSessionId}/messages`);
+        const cursor = initial ? null : lastServerIdRef.current;
+        const data = await getJson(
+          `/api/whiteboard/sessions/${whiteboardSessionId}/messages${cursor ? `?after=${encodeURIComponent(cursor)}` : ""}`
+        );
         if (cancelled) return;
-        setMessages(data.messages);
         setChatEnabled(data.chatEnabled);
+        if (!cursor) {
+          // Full (latest) history: keep anything newer that arrived live meanwhile.
+          setMessages((prev) => {
+            const ids = new Set((data.messages as ChatMessage[]).map((m) => m.id));
+            const extra = prev.filter((m) => !ids.has(m.id) && (m.id.startsWith("yt_") || m.id.startsWith("opt_")));
+            return [...(data.messages as ChatMessage[]), ...extra].sort(
+              (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+            );
+          });
+        } else if (data.cursorValid === false) {
+          lastServerIdRef.current = null;
+          inFlight = false;
+          return sync(true);
+        } else {
+          mergeIn(data.messages as ChatMessage[]);
+        }
+        setError(null);
       } catch {
-        if (!cancelled) setError("Could not load chat history.");
+        if (!cancelled && initial) setError("Could not load chat history.");
       } finally {
-        if (!cancelled) setLoading(false);
+        inFlight = false;
+        if (!cancelled && initial) setLoading(false);
       }
-    })();
+    };
+
+    sync(true);
+
+    const catchUp = () => sync(false);
+    const client = getPusherClient();
+    const onState = (st: { current: string; previous: string }) => {
+      if (st.current === "connected" && st.previous !== "connected") catchUp();
+    };
+    client.connection.bind("state_change", onState);
+    document.addEventListener("visibilitychange", catchUp);
+    window.addEventListener("online", catchUp);
+    window.addEventListener("focus", catchUp);
+    // Safety net for a socket that looks connected but silently stopped
+    // delivering: a cheap "anything after my last message?" every 20 s.
+    const timer = setInterval(catchUp, 20_000);
+
     return () => {
       cancelled = true;
+      clearInterval(timer);
+      client.connection.unbind("state_change", onState);
+      document.removeEventListener("visibilitychange", catchUp);
+      window.removeEventListener("online", catchUp);
+      window.removeEventListener("focus", catchUp);
     };
   }, [whiteboardSessionId]);
 

@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 ﻿import "server-only";
 import { prisma } from "@/lib/db";
 import { uploadBufferToR2, createPresignedDownloadUrl } from "@/lib/storage/r2-client";
-import { generateWhiteboardPdf, PageDataForExport } from "./pdf-generator";
+import { generateWhiteboardPdfExact, PageDataForExport } from "./pdf-generator";
 import { generateWhiteboardPptx } from "./pptx-generator";
 import { pusherServer, sessionChannel, teacherChannel, WB_EVENTS } from "@/lib/realtime/pusher-server";
 
@@ -100,7 +100,7 @@ export async function finalizeWhiteboardSlides(sessionId: string): Promise<void>
   let pdfFinalStatus: "READY" | "FAILED" = "FAILED";
 
   try {
-    const pdfBuffer = await generateWhiteboardPdf(pagesData, sessionTitle);
+    const { pdf: pdfBuffer } = await generateWhiteboardPdfExact(pagesData, sessionTitle);
     pdfKey = `classes/${sessionId}/slides/final.pdf`;
 
     await uploadBufferToR2({

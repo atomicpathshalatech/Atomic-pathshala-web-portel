@@ -285,79 +285,9 @@ function StudentEngagementPanel({
 }) {
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      {/* Live poll — inline card, visible regardless of active tab */}
-      {quiz && !quizDismissed && (
-        <div className="m-2.5 mb-0 bg-[#13172b] border-2 border-blue-500 rounded-2xl p-3.5 shadow-xl space-y-2.5 shrink-0 animate-in fade-in slide-in-from-top-1 duration-200">
-          <div className="flex items-center justify-between pb-1 border-b border-blue-900/60">
-            <h3 className="text-xs font-black text-white flex items-center gap-1.5 min-w-0">
-              <span className="w-2 h-2 rounded-full bg-blue-400 animate-ping shrink-0" />
-              <span className="truncate">{quiz.questionText || "Live Class Poll"}</span>
-            </h3>
-            <div className="flex items-center gap-1.5 shrink-0">
-              {quiz.status === "ACTIVE" ? (
-                <span className="text-[11px] font-mono font-black text-slate-950 bg-amber-400 border border-amber-300 px-2 py-0.5 rounded-full">
-                  {remainingSec}s
-                </span>
-              ) : (
-                <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-500/50 px-2 py-0.5 rounded-full">
-                  {quiz.status === "REVEALED" ? "Revealed" : "Closed"}
-                </span>
-              )}
-              <button
-                type="button"
-                onClick={() => setQuizDismissed(true)}
-                className="text-slate-400 hover:text-white p-0.5 rounded hover:bg-slate-800 transition"
-                title="Dismiss"
-              >
-                <span className="material-symbols-outlined text-base">close</span>
-              </button>
-            </div>
-          </div>
-          {quizError && <p className="text-[11px] text-rose-400 font-medium">{quizError}</p>}
-          {quiz.status === "REVEALED" && (
-            <div
-              className={`text-[11px] font-bold px-2.5 py-1.5 rounded-lg animate-in fade-in duration-200 flex items-center gap-1.5 ${
-                mySelection === quiz.correctOption
-                  ? "bg-emerald-500/20 text-emerald-300"
-                  : mySelection
-                  ? "bg-rose-500/20 text-rose-300"
-                  : "bg-blue-500/20 text-blue-300"
-              }`}
-            >
-              {mySelection === quiz.correctOption ? "🎉 Correct!" : mySelection ? "❌ Incorrect." : "Poll ended."} Correct option: {quiz.correctOption}
-            </div>
-          )}
-          <div className="grid grid-cols-2 gap-2">
-            {quiz.options.map((o) => {
-              const selected = mySelection === o.key;
-              const revealed = quiz.status === "REVEALED";
-              const isCorrect = revealed && quiz.correctOption === o.key;
-              const isWrong = revealed && selected && quiz.correctOption !== o.key;
-              return (
-                <button
-                  key={o.key}
-                  type="button"
-                  disabled={Boolean(mySelection) || quiz.status !== "ACTIVE" || submittingAnswer}
-                  onClick={() => submitAnswer(o.key)}
-                  className={`text-left px-2.5 py-2 rounded-lg border-2 text-[11px] font-bold transition active:scale-[0.98] touch-manipulation ${
-                    isCorrect
-                      ? "border-emerald-400 bg-emerald-600 text-white"
-                      : isWrong
-                      ? "border-rose-500 bg-rose-950/80 text-rose-200"
-                      : selected
-                      ? "border-white bg-blue-600 text-white"
-                      : "bg-[#1a2038] hover:bg-[#252d4e] border-[#333d6b] text-white"
-                  } disabled:cursor-default`}
-                >
-                  <span className="font-mono font-black mr-1.5">{o.key}.</span>
-                  <span className="truncate">{o.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
+      {/* The live poll is NOT drawn here: the room has one poll layer (see the
+          VideoPollOverlay at the end of StudentLiveClassRoom). A copy here put
+          the same poll on screen twice. */}
       {/* Tab bar — exactly two tabs */}
       <div className="flex border-b border-slate-800 px-2 pt-2 shrink-0 bg-[#0a0b12] gap-1">
         <button
@@ -616,6 +546,8 @@ export function StudentLiveClassRoom({
   const [remainingSec, setRemainingSec] = useState(0);
   const [quizError, setQuizError] = useState<string | null>(null);
   const [quizDismissed, setQuizDismissed] = useState(false);
+  // The poll currently on screen, by id (see the QUIZ_LAUNCHED handler).
+  const activePollIdRef = useRef<string | null>(null);
 
   // Quiz leaderboard published by the teacher (the popup closes itself).
   const [publishedLeaderboard, setPublishedLeaderboard] = useState<PublishedLeaderboard | null>(null);
@@ -1009,6 +941,7 @@ export function StudentLiveClassRoom({
     const channelId = wbSession?.id || batchScheduleId;
     if (!channelId) return;
     const client = getPusherClient();
+    let cleanupPollResync: () => void = () => {};
     const channel = client.subscribe(sessionChannel(channelId));
     const secondaryChannel =
       wbSession?.id && wbSession.id !== batchScheduleId
@@ -1110,6 +1043,10 @@ export function StudentLiveClassRoom({
     );
 
     channel.bind(WB_EVENTS.QUIZ_LAUNCHED, (data: LiveQuiz) => {
+      // One poll = one id. The same launch delivered twice (reconnect, two
+      // channels) must not show a second poll or wipe the answer already given.
+      if (activePollIdRef.current === data.id) return;
+      activePollIdRef.current = data.id;
       setQuiz({ ...data, status: "ACTIVE" });
       setMySelection(null);
       setQuizError(null);
@@ -1139,6 +1076,40 @@ export function StudentLiveClassRoom({
     channel.bind(WB_EVENTS.QUIZ_CLOSED, (data: { id: string }) => {
       setQuiz((prev) => (prev && prev.id === data.id ? null : prev));
     });
+
+    // Poll resync: whatever was missed while the phone slept / the network
+    // dropped (a launch, a reveal, a close) is read from the server again.
+    const resyncPoll = () => {
+      if (!wbSession?.id || document.visibilityState === "hidden") return;
+      fetch(`/api/whiteboard/sessions/${wbSession.id}/quiz`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((j) => {
+          if (!j?.success) return;
+          const q = j.data?.quiz;
+          if (q && q.status !== "CLOSED") {
+            if (activePollIdRef.current !== q.id) {
+              activePollIdRef.current = q.id;
+              setQuizDismissed(false);
+            }
+            setQuiz(q);
+            setMySelection(j.data.mySelection ?? null);
+          } else {
+            setQuiz((prev) => (prev && (!q || prev.id === q.id) ? null : prev));
+          }
+        })
+        .catch(() => {});
+    };
+    const onPusherState = (st: { current: string; previous: string }) => {
+      if (st.current === "connected" && st.previous !== "connected") resyncPoll();
+    };
+    client.connection.bind("state_change", onPusherState);
+    document.addEventListener("visibilitychange", resyncPoll);
+    window.addEventListener("online", resyncPoll);
+    cleanupPollResync = () => {
+      client.connection.unbind("state_change", onPusherState);
+      document.removeEventListener("visibilitychange", resyncPoll);
+      window.removeEventListener("online", resyncPoll);
+    };
 
     // Bound on both channels: the teacher publishes on the whiteboard
     // session id, which a student who joined early may only know as the
@@ -1208,6 +1179,7 @@ export function StudentLiveClassRoom({
         .then((r) => r.json())
         .then((j) => {
           if (j.success && j.data?.quiz && j.data.quiz.status !== "CLOSED") {
+            activePollIdRef.current = j.data.quiz.id;
             setQuiz(j.data.quiz);
             setMySelection(j.data.mySelection ?? null);
           }
@@ -1216,6 +1188,7 @@ export function StudentLiveClassRoom({
     }
 
     return () => {
+      cleanupPollResync();
       client.unsubscribe(sessionChannel(channelId));
       if (secondaryChannel) {
         client.unsubscribe(sessionChannel(batchScheduleId));
@@ -1745,12 +1718,6 @@ export function StudentLiveClassRoom({
                   scheduledStart={wbSession?.scheduledStart || scheduleTimes?.startTime}
                   livePhase={isLive ? "LIVE" : "PREPARING"}
                 >
-                  <VideoPollOverlay
-                    poll={videoPollData}
-                    onVote={submitAnswer}
-                    onDismiss={() => setQuizDismissed(true)}
-                    voting={submittingAnswer}
-                  />
                 </YouTubeLivePlayer>
               </div>
             ) : isDesktopViewport ? (
@@ -1886,12 +1853,6 @@ export function StudentLiveClassRoom({
                 scheduledStart={wbSession?.scheduledStart || scheduleTimes?.startTime}
                 livePhase={isLive ? "LIVE" : "PREPARING"}
               >
-                <VideoPollOverlay
-                  poll={videoPollData}
-                  onVote={submitAnswer}
-                  onDismiss={() => setQuizDismissed(true)}
-                  voting={submittingAnswer}
-                />
               </YouTubeLivePlayer>
 
               {/* Teacher's camera is already baked into the YouTube video via
@@ -2055,6 +2016,18 @@ export function StudentLiveClassRoom({
         </div>
       </div>
       )}
+
+      {/* THE poll layer — the only place a live poll is drawn on the student
+          screen, in every class mode: fixed to the screen, deduplicated by
+          poll id (videoPollData is one poll at most). */}
+      <VideoPollOverlay
+        fixedLayer
+        poll={videoPollData}
+        onVote={submitAnswer}
+        onDismiss={() => setQuizDismissed(true)}
+        voting={submittingAnswer}
+        error={quizError}
+      />
 
       {/* Quiz leaderboard published by the teacher */}
       {publishedLeaderboard && (

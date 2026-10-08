@@ -81,8 +81,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }
     }
 
-    const { generateWhiteboardPdf } = await import("@/lib/whiteboard/pdf-generator");
-    const pdfBuffer = await generateWhiteboardPdf(pages, title);
+    const { generateWhiteboardPdfExact } = await import("@/lib/whiteboard/pdf-generator");
+    const { pdf: pdfBuffer, exact } = await generateWhiteboardPdfExact(pages, title, { baseUrl: request.nextUrl.origin });
 
     const filename = `${(title || "Class_Notes").replace(/[^a-zA-Z0-9_-]/g, "_")}.pdf`;
 
@@ -97,7 +97,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         contentType: "application/pdf",
         contentDisposition: `attachment; filename="${filename}"`,
       });
-      return Response.json({ success: true, data: { url, filename, pages: pages.length } });
+      return Response.json({ success: true, data: { url, filename, pages: pages.length, exact } });
     } catch (storageErr) {
       console.warn("[whiteboard_export_storage_fallback]", storageErr);
     }

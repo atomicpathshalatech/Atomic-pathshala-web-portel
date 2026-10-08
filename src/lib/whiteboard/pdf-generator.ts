@@ -13,9 +13,37 @@ export interface PageDataForExport {
  * Generates an authoritative 16:9 PDF vector document with all whiteboard pages,
  * strokes, shapes, and the official Atomic Pathshala watermark.
  */
+/**
+ * The PDF of a board, exactly as it was drawn: the ink of every slide is
+ * rendered by the live board's own engine (see ink-renderer.ts) and laid over
+ * the slide background. If that renderer cannot run, the older vector
+ * drawing below is used so an export never fails outright.
+ */
+export async function generateWhiteboardPdfExact(
+  pages: PageDataForExport[],
+  sessionTitle: string = "Class Notes",
+  opts: { baseUrl?: string | null } = {}
+): Promise<{ pdf: Buffer; exact: boolean; objectsPerPage: number[] }> {
+  const { renderInkLayers, boardRenderBaseUrl, exportableObjects } = await import("@/lib/whiteboard/ink-renderer");
+  const ordered = [...pages].sort((a, b) => a.pageNumber - b.pageNumber);
+  const objectsPerPage = ordered.map((pg) => exportableObjects(pg.objects).length);
+  try {
+    const layers = await renderInkLayers(ordered, { baseUrl: boardRenderBaseUrl(opts.baseUrl) });
+    // Every slide must come back with exactly its own objects.
+    if (layers.length !== ordered.length || layers.some((l, i) => l.objects !== objectsPerPage[i])) {
+      throw new Error("ink layers do not match the slides");
+    }
+    return { pdf: await generateWhiteboardPdf(ordered, sessionTitle, layers), exact: true, objectsPerPage };
+  } catch (err) {
+    console.error("[whiteboard_pdf_exact_render_failed] falling back to vector drawing:", err);
+    return { pdf: await generateWhiteboardPdf(ordered, sessionTitle), exact: false, objectsPerPage };
+  }
+}
+
 export async function generateWhiteboardPdf(
   pages: PageDataForExport[],
-  sessionTitle: string = "Class Notes"
+  sessionTitle: string = "Class Notes",
+  inkLayers?: { png: string | null; objects: number }[]
 ): Promise<Buffer> {
   // 16:9 standard slide in points: 960pt x 540pt (landscape)
   const doc = new jsPDF({
@@ -45,7 +73,18 @@ export async function generateWhiteboardPdf(
     // 1. Draw Background (Includes PPT Background Image, Official Header Template & Branding)
     await drawSlideBackground(doc, p.background, pdfWidth, pdfHeight, sessionTitle, logoBase64);
 
-    // 2. Render all strokes, shapes, text, and rasters
+    // 2. The slide's ink. Preferred: the layer drawn by the board's own
+    // engine (exactly what was on screen). Otherwise the vector drawing.
+    const layer = inkLayers?.[i];
+    if (layer) {
+      if (layer.png) {
+        try {
+          doc.addImage(layer.png, "PNG", 0, 0, pdfWidth, pdfHeight, undefined, "FAST");
+        } catch (err) {
+          console.warn("[PDF Generator] Ink layer addImage error:", err);
+        }
+      }
+    } else
     for (const obj of p.objects || []) {
       if (obj.type === "stroke") {
         renderStroke(doc, obj, scale);
@@ -421,7 +460,13 @@ async function drawSlideBackground(
 
 function renderStroke(doc: jsPDF, stroke: any, scale: number) {
   const points = stroke.points;
-  if (!points || points.length < 2) return;
+  if (!points || points.length === 0) return;
+  if (points.length === 1) {
+    const dot = hexToRgb(stroke.color || "#1A1A1A");
+    doc.setFillColor(dot.r, dot.g, dot.b);
+    doc.circle(points[0].x * scale, points[0].y * scale, Math.max(0.5, ((stroke.size || 3) * 1.3 * scale) / 2), "F");
+    return;
+  }
 
   const isHighlighter = stroke.tool === "highlighter" || stroke.tool === "highlighter-fade";
   const { r, g, b } = hexToRgb(stroke.color || "#1A1A1A");

@@ -11,9 +11,10 @@ import {
   useMediaDeviceSelect,
   useTracks,
   useConnectionState,
+  useAudioPlayback,
   ConnectionQualityIndicator,
 } from "@livekit/components-react";
-import { Track, ConnectionState, VideoQuality, Participant, VideoPresets } from "livekit-client";
+import { Track, ConnectionState, VideoQuality, Participant, VideoPresets, DefaultReconnectPolicy } from "livekit-client";
 import type { RoomOptions } from "livekit-client";
 import { LiveVideoCallModal, type TeacherConnectedStudent } from "@/components/live-class/LiveVideoCallModal";
 
@@ -23,18 +24,68 @@ import { LiveVideoCallModal, type TeacherConnectedStudent } from "@/components/l
 // publish. That's the "sometimes buffers" complaint: with no simulcast, a
 // participant on a weaker connection just stalls waiting for the single
 // full-quality stream instead of falling back to a lower layer.
+// Audio first: when the line is weak the video drops to a lower simulcast
+// layer / resolution, the voice does not. Three video tiers (Low 180p,
+// Medium 360p, High 720p) are published and each viewer is given the one
+// their own connection can carry (adaptiveStream + dynacast).
 const ROOM_OPTIONS: RoomOptions = {
   adaptiveStream: true,
   dynacast: true,
   videoCaptureDefaults: {
     resolution: VideoPresets.h720.resolution,
   },
+  audioCaptureDefaults: {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+  },
   publishDefaults: {
     simulcast: true,
     videoSimulcastLayers: [VideoPresets.h180, VideoPresets.h360, VideoPresets.h720],
-    degradationPreference: "balanced",
+    // Under pressure give up sharpness, never smooth motion or the voice.
+    degradationPreference: "maintain-framerate",
+    videoEncoding: { maxBitrate: 1_200_000, maxFramerate: 24 },
+    // Voice survives packet loss (redundant audio) and silence costs nothing.
+    red: true,
+    dtx: true,
   },
+  // A 2–3 hour class must ride out a long network blip: keep retrying for
+  // about two minutes before giving up (the default stops much sooner).
+  reconnectPolicy: new DefaultReconnectPolicy([0, 300, 1200, 2700, 4800, 7000, 7000, 7000, 7000, 7000, 7000, 7000, 7000, 7000, 7000, 7000, 7000, 7000, 7000, 7000]),
 };
+
+/**
+ * Browsers do not play sound until the person has touched the page. Without
+ * this the room connected, the teacher was speaking, and the student heard
+ * nothing — with no hint why. The first tap anywhere turns the sound on; if
+ * it is still blocked a clear button says so.
+ */
+function AudioUnlock({ role }: { role: "TEACHER" | "STUDENT" }) {
+  const { canPlayAudio, startAudio } = useAudioPlayback();
+  useEffect(() => {
+    if (canPlayAudio) return;
+    const unlock = () => {
+      startAudio().catch(() => undefined);
+    };
+    window.addEventListener("pointerdown", unlock, { passive: true });
+    window.addEventListener("keydown", unlock);
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, [canPlayAudio, startAudio]);
+  if (canPlayAudio) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => startAudio().catch(() => undefined)}
+      className="absolute inset-x-2 bottom-2 z-50 flex items-center justify-center gap-2 rounded-xl bg-amber-400 px-3 py-2.5 text-xs font-black text-slate-950 shadow-2xl animate-pulse"
+    >
+      <span className="material-symbols-outlined text-base">volume_off</span>
+      {role === "STUDENT" ? "Tap to turn on the teacher's sound" : "Tap to turn on sound"}
+    </button>
+  );
+}
 
 export interface VideoStripProps {
   whiteboardSessionId: string;
@@ -554,6 +605,7 @@ function VideoStripInner({
     >
       {/* Authoritative LiveKit Audio Renderer (controlled by volume & isMuted state) */}
       <RoomAudioRenderer volume={isMuted ? 0 : volume} />
+      <AudioUnlock role="STUDENT" />
 
       {/* Main Video Stream — plain black tile when there's no camera track
           yet, deliberately no icon/name/caption placeholder on top of it.

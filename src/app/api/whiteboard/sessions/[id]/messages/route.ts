@@ -8,13 +8,17 @@ import { messageCreateSchema } from "@/lib/validation/whiteboard";
 import { pushMessage } from "@/lib/whiteboard/messages";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
 
-// Recent-history cap for GET — chat is meant to be read live via Pusher;
-// this endpoint exists so a viewer who joins mid-class (or reconnects) isn't
-// starting from a blank panel. Not paginated on purpose: a single live class
-// realistically won't produce more than a few hundred messages.
+// Chat lives in the database, never only in a browser. Two reads:
+//   GET                      → the LATEST messages of the class (join, reopen, refresh,
+//                              another device). It used to return the OLDEST 300, so in a
+//                              busy class a student who reopened the app saw old chat and
+//                              none of the recent messages.
+//   GET ?after=<messageId>   → only what was sent after that message (reconnect: a
+//                              student who had 1–500 fetches 501–530, not everything).
 const HISTORY_LIMIT = 300;
+const CATCH_UP_LIMIT = 500;
 
-export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) throw new UnauthorizedError();
@@ -28,11 +32,31 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     });
     if (!wbSession) return apiError("Whiteboard session not found", 404);
 
-    const messages = await prisma.whiteboardMessage.findMany({
-      where: { whiteboardSessionId: params.id },
-      orderBy: { createdAt: "asc" },
-      take: HISTORY_LIMIT,
-    });
+    const after = request.nextUrl.searchParams.get("after");
+    const anchor = after
+      ? await prisma.whiteboardMessage.findFirst({
+          where: { id: after, whiteboardSessionId: params.id },
+          select: { createdAt: true },
+        })
+      : null;
+
+    let messages;
+    if (anchor) {
+      // From the anchor's own instant on (the client drops ids it already has),
+      // so two messages saved in the same millisecond are never skipped.
+      messages = await prisma.whiteboardMessage.findMany({
+        where: { whiteboardSessionId: params.id, deletedAt: null, createdAt: { gte: anchor.createdAt }, NOT: { id: after! } },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        take: CATCH_UP_LIMIT,
+      });
+    } else {
+      const latest = await prisma.whiteboardMessage.findMany({
+        where: { whiteboardSessionId: params.id, deletedAt: null },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        take: HISTORY_LIMIT,
+      });
+      messages = latest.reverse();
+    }
 
     const userIds = Array.from(new Set(messages.map((m) => m.authorUserId)));
     const users = userIds.length > 0
@@ -48,7 +72,14 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
       authorPhotoUrl: photoMap.get(m.authorUserId) || null,
     }));
 
-    return apiSuccess({ messages: enrichedMessages, chatEnabled: wbSession.chatEnabled, role: access.role });
+    return apiSuccess({
+      messages: enrichedMessages,
+      chatEnabled: wbSession.chatEnabled,
+      role: access.role,
+      // false = an "after" request for a message this class doesn't have (the
+      // client then reloads the latest history instead of trusting its cursor).
+      cursorValid: after ? Boolean(anchor) : true,
+    });
   } catch (error) {
     return handleApiError(error);
   }

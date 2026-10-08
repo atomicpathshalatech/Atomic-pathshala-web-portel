@@ -87,6 +87,13 @@ const nextConfig = {
     outputFileTracingIncludes: {
       "*": ["public/brand/logo.png", "public/atomic-logo.png"],
       "/api/tests/[id]/pdf": ["node_modules/@sparticuz/chromium/bin/**"],
+      // Whiteboard PDFs draw their ink with the board engine in headless Chromium.
+      "/api/whiteboard/sessions/[id]/export-pdf": ["node_modules/@sparticuz/chromium/bin/**"],
+      "/api/whiteboard/sessions/[id]/slides": ["node_modules/@sparticuz/chromium/bin/**"],
+      "/api/whiteboard/sessions/[id]/end": ["node_modules/@sparticuz/chromium/bin/**"],
+      "/api/whiteboard/sessions/[id]/finalize": ["node_modules/@sparticuz/chromium/bin/**"],
+      "/api/cron/whiteboard/finalize-stale-sessions": ["node_modules/@sparticuz/chromium/bin/**"],
+      "/api/team/live-class/[scheduleId]/end": ["node_modules/@sparticuz/chromium/bin/**"],
       "/api/batches/[id]/schedule-pdf": ["node_modules/@sparticuz/chromium/bin/**"],
       "/api/team/question-extract/upload": [
         "node_modules/@sparticuz/chromium/bin/**",

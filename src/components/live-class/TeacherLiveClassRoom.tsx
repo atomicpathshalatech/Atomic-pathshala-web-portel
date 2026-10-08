@@ -171,6 +171,13 @@ export const PEN_STYLES = [
 
 export type PenStyleId = typeof PEN_STYLES[number]["id"];
 
+/** Highlighter presets — Small / Medium / Large / Extra Large (stroke size; the drawn band is ~3.5× this). */
+const HIGHLIGHTER_SIZES = [
+  { label: "Small", size: 4 },
+  { label: "Medium", size: 8 },
+  { label: "Large", size: 14 },
+  { label: "Extra Large", size: 22 },
+];
 const HIGHLIGHT_COLORS = ["#facc15", "#4ade80", "#60a5fa", "#f87171", "#c084fc", "#fb923c"];
 export const LEFT_BAR_COLORS = [
   "#000000", "#ef4444", "#f97316", "#eab308",
@@ -398,7 +405,7 @@ export function TeacherLiveClassRoom({
   // tool's size) silently changed the pen.
   const inkMemoryRef = useRef<{ pen: { color: string; size: number }; highlighter: { color: string; size: number } }>({
     pen: { color: PEN_PALETTE_COLORS[0] ?? "#ef4444", size: 0.8 },
-    highlighter: { color: HIGHLIGHT_COLORS[0] ?? "#fde047", size: 5 },
+    highlighter: { color: "#eab308", size: 8 },
   });
   const prevInkGroupRef = useRef<"pen" | "highlighter" | null>("pen");
   // Cursor-following pen-dot / eraser-size-circle overlay (Live Board spec
@@ -4441,6 +4448,37 @@ export function TeacherLiveClassRoom({
                       title={c}
                     />
                   ))}
+                </div>
+                {/* Highlighter thickness: four presets + any width in between.
+                    The ink stays translucent at every size (see strokePath). */}
+                <div className="flex flex-col gap-1.5 pt-1 border-t border-[#2d2e3b]">
+                  <div className="flex items-center gap-1.5">
+                    {HIGHLIGHTER_SIZES.map((h) => (
+                      <button
+                        key={h.label}
+                        type="button"
+                        onClick={() => setSize(h.size)}
+                        title={`${h.label} highlighter`}
+                        className={`flex-1 h-9 rounded-lg border flex items-center justify-center transition ${
+                          size === h.size ? "border-blue-500 bg-blue-600/20" : "border-[#2d2e3b] hover:border-gray-500"
+                        }`}
+                      >
+                        <span className="block rounded-full" style={{ width: 26, height: Math.max(3, Math.round(h.size * 0.9)), backgroundColor: color, opacity: 0.55 }} />
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-gray-400 w-12">Thickness</span>
+                    <input
+                      type="range"
+                      min={2}
+                      max={30}
+                      value={size}
+                      onChange={(e) => setSize(Number(e.target.value))}
+                      className="flex-1 accent-blue-500 h-1.5 bg-gray-700 rounded-lg cursor-pointer"
+                    />
+                    <span className="text-[10px] font-mono text-gray-300 w-6 text-right">{size}</span>
+                  </div>
                 </div>
               </div>
             )}
