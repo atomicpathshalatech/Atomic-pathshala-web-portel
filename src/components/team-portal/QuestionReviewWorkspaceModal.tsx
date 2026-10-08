@@ -20,6 +20,7 @@ import {
   Brain,
   HelpCircle,
   ExternalLink,
+  ChevronLeft,
   ChevronRight,
 } from "lucide-react";
 import { FormulaText } from "@/components/test-portal/FormulaText";
@@ -56,6 +57,12 @@ interface QuestionReviewWorkspaceModalProps {
   onClose: () => void;
   onSuccess: () => void;
   userRole?: string;
+  onPrev?: () => void;
+  onNext?: () => void;
+  hasPrev?: boolean;
+  hasNext?: boolean;
+  currentIndex?: number;
+  totalCount?: number;
 }
 
 export function QuestionReviewWorkspaceModal({
@@ -63,9 +70,17 @@ export function QuestionReviewWorkspaceModal({
   onClose,
   onSuccess,
   userRole = "REVIEWER",
+  onPrev,
+  onNext,
+  hasPrev = false,
+  hasNext = false,
+  currentIndex,
+  totalCount,
 }: QuestionReviewWorkspaceModalProps) {
-  const [activeTab, setActiveTab] = useState<"review" | "ai-intelligence" | "history">("review");
+  const [activeTab, setActiveTab] = useState<"review" | "cbt-preview" | "ai-intelligence" | "history">("review");
   const [selectedLanguage, setSelectedLanguage] = useState<string>("ENGLISH");
+  const [cbtSelectedOption, setCbtSelectedOption] = useState<string | null>(null);
+  const [cbtShowSolution, setCbtShowSolution] = useState(false);
 
   const [reviewAction, setReviewAction] = useState<"APPROVE" | "REQUEST_CHANGES" | "REJECT">("APPROVE");
   const [reviewNotes, setReviewNotes] = useState("");
@@ -196,10 +211,44 @@ export function QuestionReviewWorkspaceModal({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Sequential Navigator if in list mode */}
+            {(onPrev || onNext) && (
+              <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl p-0.5 border border-slate-200 dark:border-slate-700">
+                <button
+                  type="button"
+                  disabled={!hasPrev}
+                  onClick={onPrev}
+                  className="px-2.5 py-1 rounded-lg font-bold text-xs flex items-center gap-0.5 transition disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200"
+                  title="Previous Question"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <span>Prev</span>
+                </button>
+
+                {currentIndex && totalCount && (
+                  <span className="px-2 text-[11px] font-black text-slate-600 dark:text-slate-300">
+                    {currentIndex}/{totalCount}
+                  </span>
+                )}
+
+                <button
+                  type="button"
+                  disabled={!hasNext}
+                  onClick={onNext}
+                  className="px-2.5 py-1 rounded-lg font-bold text-xs flex items-center gap-0.5 transition disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200"
+                  title="Next Question"
+                >
+                  <span>Next</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
             <div className="flex rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 text-xs font-bold">
               {([
                 ["review", "Review & Elements"],
+                ["cbt-preview", "Preview (CBT)"],
                 ["ai-intelligence", "AI Quality (100-pt)"],
               ] as const).map(([tab, label]) => (
                 <button
@@ -440,6 +489,103 @@ export function QuestionReviewWorkspaceModal({
                     {submittingDecision ? "Saving Decision..." : "Submit Review Decision"}
                   </button>
                 </form>
+              </div>
+            </div>
+          ) : activeTab === "cbt-preview" ? (
+            /* CBT Student Test Format Preview Tab */
+            <div className="space-y-5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Interactive Student View Simulator
+                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-500">Language:</span>
+                  <select
+                    value={selectedLanguage}
+                    onChange={(e) => setSelectedLanguage(e.target.value)}
+                    className="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold"
+                  >
+                    <option value="ENGLISH">English</option>
+                    <option value="HINDI">हिंदी (Hindi)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Statement in student player card */}
+              <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3">
+                <FormulaText
+                  text={statement || "No statement text available."}
+                  className="text-sm sm:text-base font-bold text-slate-900 dark:text-white leading-relaxed block"
+                />
+              </div>
+
+              {/* Options */}
+              <div className="space-y-2.5">
+                {["A", "B", "C", "D", "E"].map((key) => {
+                  const optVal = optionsMap[key];
+                  if (!optVal && !["A", "B", "C", "D"].includes(key)) return null;
+                  if (!optVal && !optionsMap[key] && !optionsMap["A"]) return null;
+                  const isSelected = cbtSelectedOption === key;
+                  const isCorrect = correctOption.includes(key);
+
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setCbtSelectedOption(key)}
+                      className={`w-full p-3.5 rounded-2xl border text-left transition flex items-start gap-3 cursor-pointer ${
+                        isSelected
+                          ? "bg-blue-50 dark:bg-blue-950/40 border-blue-500 ring-2 ring-blue-500/20"
+                          : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300"
+                      }`}
+                    >
+                      <div
+                        className={`w-7 h-7 rounded-xl flex items-center justify-center font-black text-xs shrink-0 ${
+                          isSelected
+                            ? "bg-blue-600 text-white shadow-xs"
+                            : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200"
+                        }`}
+                      >
+                        {key}
+                      </div>
+
+                      <div className="flex-1 text-sm text-slate-900 dark:text-white pt-0.5">
+                        <FormulaText text={optVal || `Option ${key}`} />
+                      </div>
+
+                      {cbtShowSolution && isCorrect && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 shrink-0">
+                          CORRECT
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Solution Toggle */}
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setCbtShowSolution((prev) => !prev)}
+                  className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1.5 cursor-pointer"
+                >
+                  <BookOpen className="w-3.5 h-3.5" />
+                  <span>{cbtShowSolution ? "Hide Answer Key & Solution" : "Reveal Answer Key & Solution"}</span>
+                </button>
+
+                {cbtShowSolution && (
+                  <div className="mt-3 p-4 rounded-2xl bg-emerald-50/40 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/60 space-y-2 animate-in fade-in">
+                    <div className="flex items-center gap-2 text-xs font-black text-emerald-800 dark:text-emerald-300">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      <span>Correct Answer: {correctOption}</span>
+                    </div>
+                    <FormulaText
+                      text={solution || "No detailed step-by-step solution provided."}
+                      className="text-xs sm:text-sm text-slate-800 dark:text-slate-200 leading-relaxed block"
+                    />
+                  </div>
+                )}
               </div>
             </div>
           ) : (

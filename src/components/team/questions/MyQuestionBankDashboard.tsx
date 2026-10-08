@@ -703,16 +703,16 @@ export function MyQuestionBankDashboard({
                         </div>
                       </div>
 
-                      {/* Action: Open FULL REVIEW SCREEN (NO POPUP!) */}
-                      <div className="flex items-center gap-2 shrink-0">
-                        <Link
-                          href={`/team/questions/${q.id}/review`}
-                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition flex items-center gap-1.5"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          <span>Review &amp; Audit</span>
-                        </Link>
-                      </div>
+                        {/* Action: Open FULL REVIEW SCREEN (WITH NEXT/PREV & PREVIEW SUPPORT) */}
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Link
+                            href={`/team/questions/${q.id}/review?subject=${encodeURIComponent(selectedChapterAssignment.subject)}&chapter=${encodeURIComponent(selectedChapterAssignment.chapter)}`}
+                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition flex items-center gap-1.5"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>Review &amp; Audit</span>
+                          </Link>
+                        </div>
                     </div>
                   </div>
                 );

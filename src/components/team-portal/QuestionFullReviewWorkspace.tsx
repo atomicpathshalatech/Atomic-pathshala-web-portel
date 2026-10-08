@@ -16,12 +16,14 @@ import {
   Edit3,
   Languages,
   Layers,
+  ChevronLeft,
   ChevronRight,
   BookOpen,
   Check,
   X,
   RefreshCw,
   Eye,
+  EyeOff,
   Sliders,
   Award,
   Hash,
@@ -31,9 +33,26 @@ import {
   Send,
   HelpCircle,
   ExternalLink,
+  MonitorPlay,
+  CheckSquare,
+  ListOrdered,
 } from "lucide-react";
 import { FormulaText } from "@/components/test-portal/FormulaText";
 import type { MultiDimensionalAuditResult } from "@/lib/questions/ai-audit-engine";
+
+export interface SiblingQuestionSummary {
+  id: string;
+  questionCode: string | null;
+  subject: string;
+  chapter: string | null;
+  topic?: string | null;
+  difficulty: string;
+  type: string;
+  status: string;
+  aiVerified?: boolean;
+  aiAuditScore?: number | null;
+  statementSnippet?: string;
+}
 
 export interface QuestionFullReviewProps {
   question: {
@@ -85,6 +104,12 @@ export interface QuestionFullReviewProps {
   };
   currentUserId?: string;
   userRole?: string;
+  currentIndex?: number;
+  totalCount?: number;
+  prevQuestionId?: string | null;
+  nextQuestionId?: string | null;
+  siblingQuestions?: SiblingQuestionSummary[];
+  queryParamsString?: string;
 }
 
 const QUESTION_TYPES = [
@@ -123,7 +148,15 @@ const EXAM_LEVELS = [
 
 const DIFFICULTY_LEVELS = ["EASY", "MODERATE", "DIFFICULT", "VERY_DIFFICULT"];
 
-export function QuestionFullReviewWorkspace({ question: initialQuestion }: QuestionFullReviewProps) {
+export function QuestionFullReviewWorkspace({
+  question: initialQuestion,
+  currentIndex = 1,
+  totalCount = 1,
+  prevQuestionId = null,
+  nextQuestionId = null,
+  siblingQuestions = [],
+  queryParamsString = "",
+}: QuestionFullReviewProps) {
   const router = useRouter();
   const [question, setQuestion] = useState(initialQuestion);
   const [selectedLanguage, setSelectedLanguage] = useState<string>("ENGLISH");
@@ -131,6 +164,13 @@ export function QuestionFullReviewWorkspace({ question: initialQuestion }: Quest
   const [savingEdit, setSavingEdit] = useState(false);
   const [runningAiAudit, setRunningAiAudit] = useState(false);
   const [activeInspectorTab, setActiveInspectorTab] = useState<"ai_audit" | "metadata" | "history">("ai_audit");
+
+  // CBT Preview Modal State
+  const [showCbtPreviewModal, setShowCbtPreviewModal] = useState(false);
+  const [cbtPreviewLang, setCbtPreviewLang] = useState<"ENGLISH" | "HINDI">("ENGLISH");
+  const [cbtPreviewSelectedOption, setCbtPreviewSelectedOption] = useState<string | null>(null);
+  const [cbtPreviewShowSolution, setCbtPreviewShowSolution] = useState(false);
+  const [showAllQuestionsDrawer, setShowAllQuestionsDrawer] = useState(false);
 
   // Workflow Decision State
   const [workflowAction, setWorkflowAction] = useState<"APPROVE" | "REQUEST_CHANGES" | "REWORK">("APPROVE");
@@ -275,9 +315,48 @@ export function QuestionFullReviewWorkspace({ question: initialQuestion }: Quest
     }
   };
 
+  // Navigation Handlers
+  const navigateTo = (targetId: string) => {
+    const query = queryParamsString ? `?${queryParamsString}` : "";
+    router.push(`/team/questions/${targetId}/review${query}`);
+  };
+
+  const handlePrev = () => {
+    if (prevQuestionId) navigateTo(prevQuestionId);
+  };
+
+  const handleNext = () => {
+    if (nextQuestionId) navigateTo(nextQuestionId);
+  };
+
+  // Keyboard Navigation: Alt + Left / Alt + Right / Alt + P
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if user is actively typing in an input or textarea
+      const target = e.target as HTMLElement;
+      if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable) {
+        return;
+      }
+
+      if ((e.altKey || e.ctrlKey) && e.key === "ArrowLeft") {
+        e.preventDefault();
+        if (prevQuestionId) navigateTo(prevQuestionId);
+      } else if ((e.altKey || e.ctrlKey) && e.key === "ArrowRight") {
+        e.preventDefault();
+        if (nextQuestionId) navigateTo(nextQuestionId);
+      } else if ((e.altKey || e.ctrlKey) && (e.key === "p" || e.key === "P")) {
+        e.preventDefault();
+        setShowCbtPreviewModal((prev) => !prev);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [prevQuestionId, nextQuestionId, queryParamsString]);
+
   // Submit Review Workflow Decision
-  const handleWorkflowDecision = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleWorkflowDecision = async (e?: React.FormEvent, autoAdvance = false) => {
+    if (e) e.preventDefault();
     if (workflowAction !== "APPROVE" && !workflowNotes.trim()) {
       toast.error("Review comments are required when requesting changes or rework");
       return;
@@ -306,7 +385,13 @@ export function QuestionFullReviewWorkspace({ question: initialQuestion }: Quest
           ...prev,
           status: stage === "REVIEW_1" && status === "APPROVED" ? "REVIEW_2" : stage === "REVIEW_2" && status === "APPROVED" ? "PUBLISHED" : "REJECTED",
         }));
-        router.refresh();
+        
+        if (autoAdvance && nextQuestionId) {
+          toast.info("Moving to next question in queue...");
+          navigateTo(nextQuestionId);
+        } else {
+          router.refresh();
+        }
       } else {
         toast.error(data.error?.message || "Failed to record decision");
       }
@@ -319,12 +404,20 @@ export function QuestionFullReviewWorkspace({ question: initialQuestion }: Quest
 
   const canonicalCode = question.questionCode || `Q-${question.id.slice(0, 8)}`;
 
+  // Find adjacent siblings for the carousel navigator (up to 3 before, current, up to 4 after)
+  const currentSiblingIdx = siblingQuestions.findIndex((s) => s.id === question.id);
+  const visibleSiblings = siblingQuestions.slice(
+    Math.max(0, currentSiblingIdx - 3),
+    Math.min(siblingQuestions.length, currentSiblingIdx + 5)
+  );
+
   return (
-    <div className="min-h-screen space-y-6 pb-20">
-      {/* 1. TOP HEADER & BREADCRUMBS BAR */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+    <div className="min-h-screen space-y-6 pb-28">
+      {/* 1. TOP HEADER & BREADCRUMBS BAR WITH INTEGRATED NEXT / PREVIOUS / PREVIEW */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-sm space-y-4">
+        {/* Row 1: Breadcrumbs & Next/Prev Controls */}
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <div className="flex items-center gap-2 text-xs text-slate-500 flex-wrap">
               <Link
                 href="/team/my-question-bank"
@@ -334,30 +427,29 @@ export function QuestionFullReviewWorkspace({ question: initialQuestion }: Quest
                 <span>My Question Bank</span>
               </Link>
               <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-              <span className="font-bold text-slate-800 dark:text-slate-200">{question.subject}</span>
+              <Link
+                href="/team/questions"
+                className="font-medium text-slate-600 hover:text-blue-600 dark:text-slate-400"
+              >
+                Questions
+              </Link>
               <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-              <span className="font-medium text-slate-700 dark:text-slate-300">{question.chapter || "Chapter"}</span>
+              <span className="font-bold text-slate-800 dark:text-slate-200">{question.subject}</span>
+              {question.chapter && (
+                <>
+                  <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                  <span className="font-medium text-slate-700 dark:text-slate-300">{question.chapter}</span>
+                </>
+              )}
               {question.topic && (
                 <>
                   <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
                   <span className="text-slate-600 dark:text-slate-400">{question.topic}</span>
                 </>
               )}
-              {question.subTopic && (
-                <>
-                  <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-                  <span className="text-slate-500">{question.subTopic}</span>
-                </>
-              )}
-              {question.microConcept && (
-                <>
-                  <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-                  <span className="text-purple-600 font-medium">{question.microConcept}</span>
-                </>
-              )}
             </div>
 
-            <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-3 flex-wrap pt-1">
               <span className="font-mono text-base font-extrabold text-blue-600 dark:text-blue-400 px-3 py-1 bg-blue-50 dark:bg-blue-950/60 rounded-xl border border-blue-200 dark:border-blue-800">
                 {canonicalCode}
               </span>
@@ -400,8 +492,51 @@ export function QuestionFullReviewWorkspace({ question: initialQuestion }: Quest
             </div>
           </div>
 
-          {/* Right Action Bar: Language Switcher & Edit Mode */}
-          <div className="flex items-center gap-3 flex-wrap">
+          {/* Right Action Bar: Navigation Controls (Prev / Next), Preview CBT, Language Switcher & Edit Mode */}
+          <div className="flex items-center gap-2.5 flex-wrap justify-end">
+            {/* Sequential Navigator Group */}
+            <div className="flex items-center bg-slate-100 dark:bg-slate-800/80 rounded-2xl p-1 border border-slate-200 dark:border-slate-700">
+              <button
+                type="button"
+                disabled={!prevQuestionId}
+                onClick={handlePrev}
+                title="Previous Question (Alt + ←)"
+                className="px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1 transition disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 shadow-2xs"
+              >
+                <ChevronLeft className="w-4 h-4 text-blue-600" />
+                <span>Prev</span>
+              </button>
+
+              <span className="px-3 py-1 text-xs font-black text-slate-700 dark:text-slate-300 border-x border-slate-200 dark:border-slate-700">
+                {currentIndex} / {totalCount}
+              </span>
+
+              <button
+                type="button"
+                disabled={!nextQuestionId}
+                onClick={handleNext}
+                title="Next Question (Alt + →)"
+                className="px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1 transition disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 shadow-2xs"
+              >
+                <span>Next</span>
+                <ChevronRight className="w-4 h-4 text-blue-600" />
+              </button>
+            </div>
+
+            {/* CBT Preview Button */}
+            <button
+              type="button"
+              onClick={() => {
+                setCbtPreviewLang(selectedLanguage === "HINDI" ? "HINDI" : "ENGLISH");
+                setShowCbtPreviewModal(true);
+              }}
+              className="px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-bold rounded-xl shadow-md shadow-blue-500/20 active:scale-95 transition flex items-center gap-1.5 cursor-pointer"
+              title="Preview in Student CBT Test Player (Alt + P)"
+            >
+              <Eye className="w-4 h-4 text-cyan-200" />
+              <span>Preview (CBT)</span>
+            </button>
+
             {/* Language Switcher */}
             <div className="inline-flex rounded-xl border border-slate-200 dark:border-slate-800 p-1 bg-slate-50 dark:bg-slate-800/80">
               <button
@@ -424,7 +559,7 @@ export function QuestionFullReviewWorkspace({ question: initialQuestion }: Quest
                     : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
                 }`}
               >
-                हिंदी (Hindi)
+                हिंदी
               </button>
             </div>
 
@@ -455,6 +590,105 @@ export function QuestionFullReviewWorkspace({ question: initialQuestion }: Quest
             </button>
           </div>
         </div>
+
+        {/* Row 2: Sequential Questions Quick Strip / Carousel */}
+        {siblingQuestions.length > 1 && (
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 overflow-x-auto">
+            <div className="flex items-center gap-2 text-xs text-slate-500 font-bold shrink-0">
+              <ListOrdered className="w-3.5 h-3.5 text-blue-600" />
+              <span>Queue:</span>
+            </div>
+
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 flex-1">
+              {visibleSiblings.map((s, idx) => {
+                const isCurrent = s.id === question.id;
+                const sNumber = siblingQuestions.findIndex((item) => item.id === s.id) + 1;
+                const code = s.questionCode || `Q${sNumber}`;
+
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => navigateTo(s.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer border ${
+                      isCurrent
+                        ? "bg-blue-600 text-white border-blue-600 shadow-sm ring-2 ring-blue-400/40"
+                        : "bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-blue-50 dark:hover:bg-slate-700"
+                    }`}
+                    title={s.statementSnippet || `${s.subject} - ${s.chapter}`}
+                  >
+                    <span className={`w-2 h-2 rounded-full ${
+                      s.status === "PUBLISHED"
+                        ? "bg-emerald-400"
+                        : s.status === "REVIEW_2"
+                        ? "bg-indigo-400"
+                        : s.status === "REVIEW_1"
+                        ? "bg-amber-400"
+                        : s.status === "REJECTED"
+                        ? "bg-rose-400"
+                        : "bg-slate-400"
+                    }`} />
+                    <span>#{sNumber} {code}</span>
+                    {s.aiAuditScore && (
+                      <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
+                        isCurrent ? "bg-blue-700 text-blue-100" : "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300"
+                      }`}>
+                        {s.aiAuditScore}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowAllQuestionsDrawer((prev) => !prev)}
+              className="text-xs font-bold text-blue-600 hover:text-blue-700 whitespace-nowrap shrink-0 px-2 py-1 rounded-lg hover:bg-blue-50 dark:hover:bg-slate-800 transition"
+            >
+              {showAllQuestionsDrawer ? "Hide All" : `View All (${totalCount})`}
+            </button>
+          </div>
+        )}
+
+        {/* Expanded All Questions Grid Drawer */}
+        {showAllQuestionsDrawer && siblingQuestions.length > 0 && (
+          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-3 animate-in fade-in">
+            <div className="flex items-center justify-between text-xs font-bold text-slate-600 dark:text-slate-300">
+              <span>All {totalCount} Questions in Current Review Queue</span>
+              <span className="text-[11px] text-slate-400">Click any question to switch</span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2 max-h-52 overflow-y-auto p-1">
+              {siblingQuestions.map((s, idx) => {
+                const isCurrent = s.id === question.id;
+                const sNumber = idx + 1;
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => {
+                      navigateTo(s.id);
+                      setShowAllQuestionsDrawer(false);
+                    }}
+                    className={`p-2 rounded-xl text-left text-xs transition border flex flex-col justify-between gap-1 cursor-pointer ${
+                      isCurrent
+                        ? "bg-blue-600 text-white border-blue-600 font-black shadow-sm"
+                        : "bg-white dark:bg-slate-850 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-blue-400"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-[11px] font-bold">Q#{sNumber}</span>
+                      <span className={`w-2 h-2 rounded-full ${
+                        s.status === "PUBLISHED" ? "bg-emerald-400" : s.status === "REVIEW_2" ? "bg-indigo-400" : "bg-amber-400"
+                      }`} />
+                    </div>
+                    <span className="text-[10px] truncate opacity-80">{s.type}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 2. MAIN 2-COLUMN FULL REVIEW WORKSPACE */}
@@ -1182,6 +1416,285 @@ export function QuestionFullReviewWorkspace({ question: initialQuestion }: Quest
           </div>
         </div>
       </div>
+
+      {/* 3. STICKY BOTTOM ACTION & SEQUENTIAL NAVIGATION DOCK */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 px-4 sm:px-8 py-3.5 shadow-2xl">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+          {/* Left: Previous Navigation */}
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-start">
+            <button
+              type="button"
+              disabled={!prevQuestionId}
+              onClick={handlePrev}
+              className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed font-bold text-xs text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition shadow-2xs cursor-pointer"
+              title="Previous Question (Alt + ←)"
+            >
+              <ChevronLeft className="w-4 h-4 text-blue-600" />
+              <span>Previous Question</span>
+            </button>
+
+            <span className="text-xs font-black text-slate-500 dark:text-slate-400 sm:hidden">
+              {currentIndex} / {totalCount}
+            </span>
+          </div>
+
+          {/* Center: Position Indicator & CBT Preview Button */}
+          <div className="hidden sm:flex items-center gap-3">
+            <span className="text-xs font-black px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-lg text-slate-700 dark:text-slate-300">
+              Question {currentIndex} of {totalCount}
+            </span>
+
+            <button
+              type="button"
+              onClick={() => {
+                setCbtPreviewLang(selectedLanguage === "HINDI" ? "HINDI" : "ENGLISH");
+                setShowCbtPreviewModal(true);
+              }}
+              className="px-4 py-2 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-bold text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+            >
+              <Eye className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+              <span>Preview CBT Player</span>
+            </button>
+          </div>
+
+          {/* Right: Approve & Next / Next Question Buttons */}
+          <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+            {nextQuestionId && (
+              <button
+                type="button"
+                disabled={submittingWorkflow}
+                onClick={() => handleWorkflowDecision(undefined, true)}
+                className="flex-1 sm:flex-initial px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md shadow-emerald-500/20 active:scale-95 transition flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                title="Approve current question and advance immediately to next"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>Approve &amp; Next</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              disabled={!nextQuestionId}
+              onClick={handleNext}
+              className="flex-1 sm:flex-initial px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-blue-600 hover:bg-blue-700 text-white disabled:bg-slate-200 disabled:dark:bg-slate-800 disabled:text-slate-400 disabled:border-transparent disabled:cursor-not-allowed font-bold text-xs flex items-center justify-center gap-1.5 transition shadow-2xs cursor-pointer"
+              title="Next Question (Alt + →)"
+            >
+              <span>Next Question</span>
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 4. INTERACTIVE CBT STUDENT TEST PREVIEW MODAL */}
+      {showCbtPreviewModal && (() => {
+        const transEn = question.translations.find((t) => t.language === "ENGLISH");
+        const transHi = question.translations.find((t) => t.language === "HINDI");
+        const activeTrans = cbtPreviewLang === "HINDI" && transHi ? transHi : (transEn || question.translations[0]);
+        const stmt = activeTrans?.statement || "";
+        const optionsObj: Record<string, string> =
+          typeof activeTrans?.options === "object" && activeTrans?.options !== null
+            ? (activeTrans.options as Record<string, string>)
+            : {};
+        const correctOptionIds: string[] = Array.isArray(activeTrans?.correctOptionIds)
+          ? activeTrans.correctOptionIds
+          : [String(activeTrans?.correctOptionIds || "A")];
+        const hasHi = Boolean(transHi);
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-3 sm:p-6 backdrop-blur-sm overflow-y-auto">
+            <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-4xl w-full shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95">
+              {/* CBT Preview Title Bar */}
+              <div className="px-6 py-4 bg-white dark:bg-slate-850 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="px-3 py-1 rounded-full bg-blue-600 text-white font-black text-xs shadow-xs">
+                    Question {currentIndex} of {totalCount}
+                  </span>
+
+                  <span className="font-mono font-bold text-xs text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-0.5 rounded-lg border border-blue-200 dark:border-blue-800">
+                    {canonicalCode}
+                  </span>
+
+                  <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                    {question.subject} {question.chapter ? `• ${question.chapter}` : ""}
+                  </span>
+
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                    {question.difficulty}
+                  </span>
+
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                    {question.type.replace("_", " ")}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  {hasHi && (
+                    <button
+                      type="button"
+                      onClick={() => setCbtPreviewLang((prev) => (prev === "ENGLISH" ? "HINDI" : "ENGLISH"))}
+                      className="px-3 py-1 rounded-full text-xs font-bold bg-slate-100 dark:bg-slate-800 hover:bg-blue-50 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition cursor-pointer"
+                    >
+                      {cbtPreviewLang === "HINDI" ? "🌐 Switch to English" : "🌐 हिंदी में देखें"}
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setShowCbtPreviewModal(false)}
+                    className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* CBT Preview Body: Student Test Player Simulator */}
+              <div className="p-6 sm:p-8 overflow-y-auto space-y-6 flex-1 bg-white dark:bg-slate-900">
+                {/* Statement Card */}
+                <div className="p-5 sm:p-6 rounded-2xl bg-slate-50/70 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/80 space-y-3">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-500 pb-1 border-b border-slate-200/60 dark:border-slate-700">
+                    <span className="text-blue-600 dark:text-blue-400 uppercase tracking-wider">
+                      Question Statement ({cbtPreviewLang})
+                    </span>
+                    {question.topic && <span>Topic: {question.topic}</span>}
+                  </div>
+
+                  <FormulaText
+                    text={stmt || "No statement text available."}
+                    className="text-sm sm:text-base font-bold text-slate-900 dark:text-white leading-relaxed block"
+                  />
+
+                  {question.imageUrl && (
+                    <div className="pt-2">
+                      <img
+                        src={question.imageUrl}
+                        alt="Question Diagram"
+                        className="max-h-72 max-w-full rounded-xl object-contain border border-slate-200 dark:border-slate-700 shadow-sm bg-white"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Multiple-Choice Options Grid */}
+                <div className="space-y-3">
+                  <span className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block">
+                    Select Your Answer (Interactive Preview)
+                  </span>
+
+                  <div className="grid grid-cols-1 gap-2.5">
+                    {["A", "B", "C", "D", "E"].map((key) => {
+                      const optText = optionsObj[key];
+                      if (!optText && !["A", "B", "C", "D"].includes(key)) return null;
+                      if (!optText && !optionsObj[key] && !optionsObj["A"]) return null;
+
+                      const isSelected = cbtPreviewSelectedOption === key;
+                      const isCorrect = correctOptionIds.includes(key);
+
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => setCbtPreviewSelectedOption(key)}
+                          className={`w-full p-4 rounded-2xl border text-left transition-all flex items-start gap-3.5 cursor-pointer ${
+                            isSelected
+                              ? "bg-blue-50/90 dark:bg-blue-950/40 border-blue-500 ring-2 ring-blue-500/20"
+                              : "bg-slate-50/40 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 hover:border-slate-300"
+                          }`}
+                        >
+                          <div
+                            className={`w-7 h-7 rounded-xl flex items-center justify-center font-black text-xs shrink-0 transition ${
+                              isSelected
+                                ? "bg-blue-600 text-white shadow-xs"
+                                : "bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200"
+                            }`}
+                          >
+                            {key}
+                          </div>
+
+                          <div className="flex-1 text-sm text-slate-900 dark:text-white pt-0.5">
+                            <FormulaText text={optText || `Option ${key}`} />
+                          </div>
+
+                          {cbtPreviewShowSolution && isCorrect && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 shrink-0">
+                              CORRECT
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Solution Toggle Box */}
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setCbtPreviewShowSolution((prev) => !prev)}
+                    className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <BookOpen className="w-3.5 h-3.5" />
+                    <span>{cbtPreviewShowSolution ? "Hide Solution & Answer Key" : "Reveal Solution & Answer Key"}</span>
+                  </button>
+
+                  {cbtPreviewShowSolution && (
+                    <div className="mt-3 p-4 rounded-2xl bg-emerald-50/40 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/60 space-y-2 animate-in fade-in">
+                      <div className="flex items-center gap-2 text-xs font-black text-emerald-800 dark:text-emerald-300">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                        <span>Correct Answer Key: {correctOptionIds.join(", ")}</span>
+                      </div>
+                      <FormulaText
+                        text={activeTrans?.solution || "No detailed step-by-step solution provided."}
+                        className="text-xs sm:text-sm text-slate-800 dark:text-slate-200 leading-relaxed block"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* CBT Preview Footer: Sequential Navigation */}
+              <div className="px-6 py-4 bg-slate-50 dark:bg-slate-850 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 shrink-0">
+                <button
+                  type="button"
+                  disabled={!prevQuestionId}
+                  onClick={() => {
+                    handlePrev();
+                    setCbtPreviewSelectedOption(null);
+                    setCbtPreviewShowSolution(false);
+                  }}
+                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed font-bold text-xs text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition cursor-pointer"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  <span>Previous</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowCbtPreviewModal(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs hover:bg-slate-100 transition cursor-pointer"
+                >
+                  Close Preview
+                </button>
+
+                <button
+                  type="button"
+                  disabled={!nextQuestionId}
+                  onClick={() => {
+                    handleNext();
+                    setCbtPreviewSelectedOption(null);
+                    setCbtPreviewShowSolution(false);
+                  }}
+                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed font-bold text-xs text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition cursor-pointer"
+                >
+                  <span>Next</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
