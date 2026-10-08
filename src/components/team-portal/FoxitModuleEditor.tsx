@@ -238,7 +238,11 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
         const res = await fetch(`/api/team/modules/${moduleId}`);
         if (!res.ok) throw new Error("Module not found");
         const json = await res.json();
-        const data = json.data as ModuleData;
+        const data = (json.data?.module || json.data) as ModuleData;
+
+        if (!data || !data.originalFileUrl) {
+          throw new Error("Module PDF file URL is missing or not yet uploaded.");
+        }
 
         if (!isMounted) return;
         setModuleData(data);
