@@ -227,7 +227,8 @@ export async function POST(
           youtubeVideoId: requestedYouTubeId,
           actualStartedAt: schedule.liveWhiteboardSession?.actualStartedAt || now,
           startedAt: schedule.liveWhiteboardSession?.startedAt || now,
-          activePageNumber: 1,
+          // A restarted class resumes on the slide it stopped on.
+          ...(!(isNewOccurrence && !resetBoard) && { activePageNumber: 1 }),
           // First start of a room that was opened earlier (e.g. before a
           // reschedule): its clock must follow the schedule as it is NOW,
           // or the room auto-ends the class against a stale end time.

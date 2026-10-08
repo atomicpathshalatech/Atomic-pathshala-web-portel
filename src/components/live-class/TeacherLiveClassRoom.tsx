@@ -11,6 +11,7 @@ import {
   VIRTUAL_HEIGHT,
   ERASER_SIZES,
 } from "@/lib/canvas/canvas-engine";
+import { BoardSaveQueue } from "@/lib/whiteboard/board-save-queue";
 import {
   SHAPE_DEFS,
   CHEM_SUBCATEGORY_LABELS,
@@ -362,14 +363,10 @@ export function TeacherLiveClassRoom({
   // The slide whose objects are in the canvas engine right now.
   const enginePageIdRef = useRef<string | null>(null);
   const currentPageIdRef = useRef<string | null>(null);
-  const boardSaveRef = useRef<{
-    inFlight: boolean;
-    again: boolean;
-    conflictRetries: number;
-    versions: Record<string, number>;
-    lastSavedObjects: StrokeObject[] | null;
-    lastSavedPageId: string | null;
-  }>({ inFlight: false, again: false, conflictRetries: 0, versions: {}, lastSavedObjects: null, lastSavedPageId: null });
+  // Every slide with unsaved ink, and the one save request in flight
+  // (src/lib/whiteboard/board-save-queue.ts).
+  const saveQueueRef = useRef<BoardSaveQueue<StrokeObject> | null>(null);
+  const latestPagesRef = useRef<WhiteboardPage[]>([]);
   const activeQuizIdRef = useRef<string | null>(null);
   // The canvas engine (and its onCommit closure) is created once per
   // session and persists across page switches — it must always call the
@@ -1149,6 +1146,7 @@ export function TeacherLiveClassRoom({
         pendingObjectsRef.current = objects;
         const targetPageId = enginePageIdRef.current ?? currentPageIdRef.current;
         pendingPageIdRef.current = targetPageId;
+        if (targetPageId) saveQueueRef.current?.markDirty(targetPageId, objects);
         if (typeof window !== "undefined" && wbSession?.id && targetPageId) {
           try {
             localStorage.setItem(`atomic_wb_backup_${wbSession.id}_${targetPageId}`, JSON.stringify(objects));
@@ -1281,76 +1279,58 @@ export function TeacherLiveClassRoom({
     if (engineRef.current) engineRef.current.eraserRadius = eraserRadius;
   }, [eraserRadius]);
 
-  // Board saves are single-flight and versioned: at most one save request
-  // is in flight; strokes drawn meanwhile are sent by the next save (with
-  // the newest objects), and every save carries the page version it was
-  // built on. Before this, two overlapping saves could land out of order and
-  // an older one overwrote newer strokes (for students and the recording).
-  // A 409 means the page moved on elsewhere (e.g. a second tab): adopt the
-  // server version and resend what this teacher is actually looking at.
+  // Board saves: one request at a time, each slide saved to itself, every
+  // stroke counted, failed saves retried (see BoardSaveQueue). A 409 means
+  // the slide moved on elsewhere (e.g. a second tab): the queue adopts the
+  // server version and resends what this teacher is actually looking at.
+  latestPagesRef.current = wbSession?.pages ?? latestPagesRef.current;
+  const wbSessionId = wbSession?.id ?? null;
+  useEffect(() => {
+    if (!wbSessionId) return;
+    const queue = new BoardSaveQueue<StrokeObject>({
+      send: async (pageId, objects, baseVersion) => {
+        const body = JSON.stringify({ objects, ...(baseVersion !== undefined && { baseVersion }) });
+        try {
+          localStorage.setItem(`atomic_wb_backup_${wbSessionId}_${pageId}`, JSON.stringify(objects));
+        } catch {}
+        const res = await fetch(`/api/whiteboard/sessions/${wbSessionId}/pages/${pageId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body,
+          // keepalive lets the last save outlive a closing tab, but the browser
+          // REJECTS any keepalive request whose body is over 64 KB — a slide
+          // passes that after about a minute of writing, and from then on every
+          // save of it failed ("Failed to fetch"). So only a small slide uses it
+          // (20,000 characters is under 64 KB even as 3-byte text).
+          keepalive: body.length < 20_000,
+        });
+        const json = await res.json().catch(() => null);
+        if (res.ok && json?.success) return { ok: true, version: json.data.page.version };
+        if (res.status === 409 && json?.details?.currentVersion != null) return { ok: false, conflictVersion: json.details.currentVersion };
+        if (res.status === 404) return { ok: false, gone: true };
+        if (res.status >= 500) throw new Error("save failed");
+        return { ok: false };
+      },
+      onSaved: (pageId, objects, version) =>
+        setWbSession((prev) =>
+          prev ? { ...prev, pages: prev.pages.map((pg) => (pg.id === pageId ? { ...pg, objects, version } : pg)) } : prev
+        ),
+      onState: setSaveState,
+      baseVersionOf: (pageId) => latestPagesRef.current.find((pg) => pg.id === pageId)?.version,
+    });
+    saveQueueRef.current = queue;
+    const onOnline = () => void queue.flush();
+    window.addEventListener("online", onOnline);
+    return () => {
+      window.removeEventListener("online", onOnline);
+      queue.dispose();
+      if (saveQueueRef.current === queue) saveQueueRef.current = null;
+    };
+  }, [wbSessionId]);
+
   const flushAutosave = useCallback(async () => {
-    if (!wbSession || !pendingObjectsRef.current) return;
-    const sync = boardSaveRef.current;
-    if (sync.inFlight) {
-      sync.again = true;
-      return;
-    }
-    // Only ever the slide the strokes were drawn on.
-    const targetPage: WhiteboardPage | null = pendingPageIdRef.current
-      ? wbSession.pages.find((pg) => pg.id === pendingPageIdRef.current) ?? null
-      : null;
-    if (!targetPage) return;
-
-    const objects = pendingObjectsRef.current;
-    if (sync.lastSavedObjects === objects && sync.lastSavedPageId === targetPage.id) return;
-    const baseVersion = sync.versions[targetPage.id] ?? targetPage.version;
-
-    sync.inFlight = true;
-    if (typeof window !== "undefined" && wbSession?.id && targetPage?.id) {
-      try {
-        localStorage.setItem(`atomic_wb_backup_${wbSession.id}_${targetPage.id}`, JSON.stringify(objects));
-      } catch {}
-    }
-    try {
-      const res = await fetch(`/api/whiteboard/sessions/${wbSession.id}/pages/${targetPage.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ objects, ...(baseVersion !== undefined && { baseVersion }) }),
-        keepalive: true,
-      });
-      const json = await res.json().catch(() => null);
-      if (res.status === 409 && json?.details?.currentVersion != null && sync.conflictRetries < 3) {
-        sync.versions[targetPage.id] = json.details.currentVersion;
-        sync.conflictRetries++;
-        sync.again = true;
-        return;
-      }
-      if (!res.ok || !json?.success) throw new Error(json?.error || "save failed");
-      sync.conflictRetries = 0;
-      sync.versions[targetPage.id] = json.data.page.version;
-      sync.lastSavedObjects = objects;
-      sync.lastSavedPageId = targetPage.id;
-      if (pendingObjectsRef.current === objects) setSaveState("saved");
-      setWbSession((prev) =>
-        prev
-          ? {
-              ...prev,
-              pages: prev.pages.map((p) =>
-                p.id === targetPage!.id ? { ...p, objects, version: json.data.page.version } : p
-              ),
-            }
-          : prev
-      );
-    } catch {
-      setSaveState("offline");
-    } finally {
-      sync.inFlight = false;
-      if (sync.again) {
-        sync.again = false;
-        setTimeout(() => flushAutosaveRef.current(), 0);
-      }
-    }
-  }, [wbSession, currentPage]);
+    await saveQueueRef.current?.flush();
+  }, []);
 
   useEffect(() => {
     flushAutosaveRef.current = flushAutosave;
