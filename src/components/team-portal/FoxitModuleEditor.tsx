@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { loadServerPdfJs } from "@/lib/pdf/server-pdf";
@@ -279,20 +279,65 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
         setTotalPages(docProxy.numPages);
         setPageOrder(Array.from({ length: docProxy.numPages }, (_, i) => i + 1));
 
+        // Check for existing saved version snapshot to restore full state
+        const latestVersion = data.versions && data.versions.length > 0 ? data.versions[0] : null;
+        const snap = latestVersion?.snapshot;
+
+        const initTextEdits = snap?.textEdits || [];
+        const initWhiteouts = snap?.whiteouts || [];
+        const initImages = snap?.images || [];
+        const initShapes = snap?.shapes || [];
+        const initGlobalRemovals = snap?.globalRemovals || [];
+        const initGlobalReplacements = snap?.globalReplacements || [];
+        const initPageRotations = snap?.pageRotations || {};
+        const initDeletedPages = snap?.deletedPages || [];
+        const initPageOrder = snap?.pageOrder || Array.from({ length: docProxy.numPages }, (_, i) => i + 1);
+
+        if (snap?.textEdits) setTextEdits(snap.textEdits);
+        if (snap?.whiteouts) setWhiteouts(snap.whiteouts);
+        if (snap?.images) setImages(snap.images);
+        if (snap?.shapes) setShapes(snap.shapes);
+        if (snap?.globalRemovals) setGlobalRemovals(snap.globalRemovals);
+        if (snap?.globalReplacements) setGlobalReplacements(snap.globalReplacements);
+        if (snap?.pageRotations) setPageRotations(snap.pageRotations);
+        if (snap?.deletedPages) setDeletedPages(snap.deletedPages);
+        if (snap?.pageOrder) setPageOrder(snap.pageOrder);
+        if (snap?.background) setBackground(snap.background);
+        if (snap?.headerFooter) setHeaderFooter(snap.headerFooter);
+        if (snap?.watermark) setWatermark(snap.watermark);
+        if (snap?.coverPage) setCoverPage(snap.coverPage);
+        if (snap?.fileUrl) setLatestExportUrl(snap.fileUrl);
+
+        // Auto-detect subject theme from module data if not explicitly set
+        const sub = (data.subject || "").toUpperCase();
+        let detectedThemeColor = "#ea580c";
+        if (sub.includes("CHEM")) detectedThemeColor = "#059669";
+        else if (sub.includes("PHYS")) detectedThemeColor = "#0284c7";
+        else if (sub.includes("BIO")) detectedThemeColor = "#7c3aed";
+
+        if (!snap?.headerFooter?.accentColor) {
+          setHeaderFooter((prev) => ({
+            ...prev,
+            accentColor: detectedThemeColor,
+            headerCenter: prev.headerCenter || `| ${data.subject || "NEET PREP"} - ${data.chapter || data.title || "Module"}`,
+            headerRight: prev.headerRight || data.facultyName || "Firoz Sir",
+          }));
+        }
+
         setDiagnosticsData((d) => ({ ...d, loadTimeMs: Date.now() - loadStart }));
         setLoading(false);
 
-        // Initialize history stack
+        // Initialize history stack with restored state
         setHistory([
           {
-            textEdits: [],
-            whiteouts: [],
-            images: [],
-            shapes: [],
-            globalRemovals: [],
-            globalReplacements: [],
-            deletedPages: [],
-            pageRotations: {},
+            textEdits: initTextEdits,
+            whiteouts: initWhiteouts,
+            images: initImages,
+            shapes: initShapes,
+            globalRemovals: initGlobalRemovals,
+            globalReplacements: initGlobalReplacements,
+            deletedPages: initDeletedPages,
+            pageRotations: initPageRotations,
           },
         ]);
         setHistoryIndex(0);
@@ -1779,6 +1824,7 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
               <NativePdfPageView
                 pdfDocProxy={pdfDocProxy}
                 pageNumber={currentPage}
+                totalPages={totalPages}
                 zoom={zoom}
                 rotation={pageRotations[currentPage] || 0}
                 activeTool={activeTool}
@@ -1812,6 +1858,10 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                   setTextEdits((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
                   setHasUnsavedChanges(true);
                 }}
+                onUpdateImage={(updated) => {
+                  setImages((prev) => prev.map((img) => (img.id === updated.id ? updated : img)));
+                  setHasUnsavedChanges(true);
+                }}
                 onAddWhiteout={(newWhiteout) => {
                   setWhiteouts((prev) => [...prev, newWhiteout]);
                   setSelectedObjectId(newWhiteout.id);
@@ -1838,6 +1888,8 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                 headerFooter={headerFooter}
                 watermark={watermark}
                 background={background}
+                coverPage={coverPage}
+                moduleData={moduleData}
               />
             </div>
           )}
@@ -1981,6 +2033,35 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-2">
                 <div>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">X Position</label>
+                  <input
+                    type="number"
+                    value={Math.round(selectedImageObj.x)}
+                    onChange={(e) => {
+                      const updated = { ...selectedImageObj, x: Number(e.target.value) };
+                      setImages((prev) => prev.map((img) => (img.id === updated.id ? updated : img)));
+                      setHasUnsavedChanges(true);
+                    }}
+                    className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-200 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Y Position</label>
+                  <input
+                    type="number"
+                    value={Math.round(selectedImageObj.y)}
+                    onChange={(e) => {
+                      const updated = { ...selectedImageObj, y: Number(e.target.value) };
+                      setImages((prev) => prev.map((img) => (img.id === updated.id ? updated : img)));
+                      setHasUnsavedChanges(true);
+                    }}
+                    className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-200 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
                   <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Width (pt)</label>
                   <input
                     type="number"
@@ -1988,8 +2069,9 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                     onChange={(e) => {
                       const updated = { ...selectedImageObj, width: Number(e.target.value) };
                       setImages((prev) => prev.map((img) => (img.id === updated.id ? updated : img)));
+                      setHasUnsavedChanges(true);
                     }}
-                    className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-200"
+                    className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-200 text-xs"
                   />
                 </div>
                 <div>
@@ -2000,10 +2082,30 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                     onChange={(e) => {
                       const updated = { ...selectedImageObj, height: Number(e.target.value) };
                       setImages((prev) => prev.map((img) => (img.id === updated.id ? updated : img)));
+                      setHasUnsavedChanges(true);
                     }}
-                    className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-200"
+                    className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-200 text-xs"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">
+                  Rotation: {selectedImageObj.rotation ?? 0}°
+                </label>
+                <input
+                  type="range"
+                  min={-180}
+                  max={180}
+                  step={5}
+                  value={selectedImageObj.rotation ?? 0}
+                  onChange={(e) => {
+                    const updated = { ...selectedImageObj, rotation: Number(e.target.value) };
+                    setImages((prev) => prev.map((img) => (img.id === updated.id ? updated : img)));
+                    setHasUnsavedChanges(true);
+                  }}
+                  className="w-full accent-orange-500"
+                />
               </div>
 
               <div>
@@ -2019,8 +2121,31 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                   onChange={(e) => {
                     const updated = { ...selectedImageObj, opacity: Number(e.target.value) };
                     setImages((prev) => prev.map((img) => (img.id === updated.id ? updated : img)));
+                    setHasUnsavedChanges(true);
                   }}
                   className="w-full accent-orange-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Replace Image</label>
+                <input
+                  type="file"
+                  accept="image/png, image/jpeg, image/webp"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) {
+                      const reader = new FileReader();
+                      reader.onload = (evt) => {
+                        const updated = { ...selectedImageObj, base64Data: evt.target?.result as string };
+                        setImages((prev) => prev.map((img) => (img.id === updated.id ? updated : img)));
+                        setHasUnsavedChanges(true);
+                        toast.success("Image replaced successfully!");
+                      };
+                      reader.readAsDataURL(f);
+                    }
+                  }}
+                  className="w-full text-xs text-slate-400 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:bg-slate-800 file:text-slate-200"
                 />
               </div>
 
@@ -2392,25 +2517,66 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Subject</label>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Subject Theme</label>
                   <select
                     value={coverPage.subject}
-                    onChange={(e) => setCoverPage((p) => ({ ...p, subject: e.target.value }))}
+                    onChange={(e) => {
+                      const sub = e.target.value;
+                      setCoverPage((p) => ({ ...p, subject: sub }));
+                      // Also auto-sync header accent color
+                      let col = "#ea580c";
+                      if (sub === "CHEMISTRY") col = "#059669";
+                      if (sub === "PHYSICS") col = "#0284c7";
+                      if (sub === "BIOLOGY") col = "#7c3aed";
+                      setHeaderFooter((h) => ({ ...h, accentColor: col }));
+                    }}
                     className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-200"
                   >
-                    <option value="CHEMISTRY">Chemistry (Green)</option>
-                    <option value="PHYSICS">Physics (Blue)</option>
-                    <option value="BIOLOGY">Biology (Purple)</option>
+                    <option value="CHEMISTRY">🧪 Chemistry (Emerald Green)</option>
+                    <option value="PHYSICS">⚡ Physics (Cyan / Blue)</option>
+                    <option value="BIOLOGY">🧬 Biology (Purple / Violet)</option>
+                    <option value="GENERAL">🟧 General / Atomic Orange</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Module Number</label>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Module Code</label>
                   <input
                     type="text"
                     value={coverPage.moduleNumber}
                     onChange={(e) => setCoverPage((p) => ({ ...p, moduleNumber: e.target.value }))}
+                    placeholder="e.g. Module 01"
                     className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-200"
                   />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Action</label>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setCoverPage((p) => ({ ...p, action: "REPLACE_FIRST" }))}
+                    className={`py-2 px-3 rounded-xl border font-bold text-left transition-all ${
+                      coverPage.action === "REPLACE_FIRST"
+                        ? "border-orange-500 bg-orange-500/20 text-orange-300"
+                        : "border-slate-800 bg-slate-950/60 text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    <div>Replace Page 1</div>
+                    <div className="text-[10px] font-normal text-slate-400">Replaces old cover</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCoverPage((p) => ({ ...p, action: "PREPEND" }))}
+                    className={`py-2 px-3 rounded-xl border font-bold text-left transition-all ${
+                      coverPage.action === "PREPEND"
+                        ? "border-orange-500 bg-orange-500/20 text-orange-300"
+                        : "border-slate-800 bg-slate-950/60 text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    <div>Prepend as Page 1</div>
+                    <div className="text-[10px] font-normal text-slate-400">Inserts at front</div>
+                  </button>
                 </div>
               </div>
 
@@ -2420,7 +2586,7 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                   type="text"
                   value={coverPage.chapter}
                   onChange={(e) => setCoverPage((p) => ({ ...p, chapter: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-200"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 font-semibold"
                 />
               </div>
 
@@ -2449,7 +2615,11 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
             <div className="flex justify-end pt-3 border-t border-slate-800">
               <button
                 type="button"
-                onClick={() => setShowCoverDialog(false)}
+                onClick={() => {
+                  setShowCoverDialog(false);
+                  setHasUnsavedChanges(true);
+                  toast.success("Front Page configuration applied!");
+                }}
                 className="px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs"
               >
                 Apply Cover Settings
@@ -2462,15 +2632,72 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
       {/* 7. HEADER & FOOTER CONFIG MODAL */}
       {showHeaderFooterDialog && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl max-w-lg w-full space-y-4 shadow-2xl">
+          <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl max-w-lg w-full space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="font-bold text-base text-slate-100 flex items-center gap-2">
                 <span className="material-symbols-outlined text-teal-400">view_headline</span>
-                <span>Running Header &amp; Footer Overlays</span>
+                <span>Running Header &amp; Footer Styling</span>
               </h3>
               <button onClick={() => setShowHeaderFooterDialog(false)} className="text-slate-400 hover:text-white">
                 <span className="material-symbols-outlined">close</span>
               </button>
+            </div>
+
+            {/* Quick Subject Theme Presets */}
+            <div>
+              <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1.5">
+                Subject Theme Color Preset
+              </label>
+              <div className="grid grid-cols-4 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setHeaderFooter((p) => ({ ...p, accentColor: "#059669" }))}
+                  className={`p-2 rounded-xl border text-center transition-all ${
+                    headerFooter.accentColor === "#059669"
+                      ? "border-emerald-500 bg-emerald-500/20 text-emerald-300"
+                      : "border-slate-800 bg-slate-950 text-slate-400 hover:text-white"
+                  }`}
+                >
+                  <div className="w-3 h-3 rounded-full bg-emerald-500 mx-auto mb-1" />
+                  <div className="text-[10px] font-bold">Chemistry</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHeaderFooter((p) => ({ ...p, accentColor: "#0284c7" }))}
+                  className={`p-2 rounded-xl border text-center transition-all ${
+                    headerFooter.accentColor === "#0284c7"
+                      ? "border-sky-500 bg-sky-500/20 text-sky-300"
+                      : "border-slate-800 bg-slate-950 text-slate-400 hover:text-white"
+                  }`}
+                >
+                  <div className="w-3 h-3 rounded-full bg-sky-500 mx-auto mb-1" />
+                  <div className="text-[10px] font-bold">Physics</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHeaderFooter((p) => ({ ...p, accentColor: "#7c3aed" }))}
+                  className={`p-2 rounded-xl border text-center transition-all ${
+                    headerFooter.accentColor === "#7c3aed"
+                      ? "border-purple-500 bg-purple-500/20 text-purple-300"
+                      : "border-slate-800 bg-slate-950 text-slate-400 hover:text-white"
+                  }`}
+                >
+                  <div className="w-3 h-3 rounded-full bg-purple-500 mx-auto mb-1" />
+                  <div className="text-[10px] font-bold">Biology</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHeaderFooter((p) => ({ ...p, accentColor: "#ea580c" }))}
+                  className={`p-2 rounded-xl border text-center transition-all ${
+                    headerFooter.accentColor === "#ea580c"
+                      ? "border-orange-500 bg-orange-500/20 text-orange-300"
+                      : "border-slate-800 bg-slate-950 text-slate-400 hover:text-white"
+                  }`}
+                >
+                  <div className="w-3 h-3 rounded-full bg-orange-500 mx-auto mb-1" />
+                  <div className="text-[10px] font-bold">Orange</div>
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -2496,34 +2723,77 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
             </div>
 
             <div className="space-y-3 text-xs">
-              <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Header Left</label>
-                <input
-                  type="text"
-                  value={headerFooter.headerLeft || ""}
-                  onChange={(e) => setHeaderFooter((p) => ({ ...p, headerLeft: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-200"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Header Left</label>
+                  <input
+                    type="text"
+                    value={headerFooter.headerLeft || ""}
+                    onChange={(e) => setHeaderFooter((p) => ({ ...p, headerLeft: e.target.value }))}
+                    placeholder="ATOMIC PATHSHALA"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-200"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Header Center</label>
+                  <input
+                    type="text"
+                    value={headerFooter.headerCenter || ""}
+                    onChange={(e) => setHeaderFooter((p) => ({ ...p, headerCenter: e.target.value }))}
+                    placeholder="| {subject} - {chapter}"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-200"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Header Center</label>
-                <input
-                  type="text"
-                  value={headerFooter.headerCenter || ""}
-                  onChange={(e) => setHeaderFooter((p) => ({ ...p, headerCenter: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-200"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Header Right</label>
+                  <input
+                    type="text"
+                    value={headerFooter.headerRight || ""}
+                    onChange={(e) => setHeaderFooter((p) => ({ ...p, headerRight: e.target.value }))}
+                    placeholder="{teacher}"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-200"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">
+                    Header Height: {headerFooter.headerImageHeight || 36}pt
+                  </label>
+                  <input
+                    type="range"
+                    min={28}
+                    max={50}
+                    step={2}
+                    value={headerFooter.headerImageHeight || 36}
+                    onChange={(e) => setHeaderFooter((p) => ({ ...p, headerImageHeight: Number(e.target.value) }))}
+                    className="w-full accent-orange-500"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Footer Left</label>
-                <input
-                  type="text"
-                  value={headerFooter.footerLeft || ""}
-                  onChange={(e) => setHeaderFooter((p) => ({ ...p, footerLeft: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-200"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Footer Left</label>
+                  <input
+                    type="text"
+                    value={headerFooter.footerLeft || ""}
+                    onChange={(e) => setHeaderFooter((p) => ({ ...p, footerLeft: e.target.value }))}
+                    placeholder="Atomic Pathshala | NEET Accelerator"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-200"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Footer Right</label>
+                  <input
+                    type="text"
+                    value={headerFooter.footerRight || ""}
+                    onChange={(e) => setHeaderFooter((p) => ({ ...p, footerRight: e.target.value }))}
+                    placeholder="Page {page} of {totalPages}"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-200"
+                  />
+                </div>
               </div>
 
               <div>
@@ -2545,12 +2815,26 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                   className="w-full text-xs text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-slate-800 file:text-slate-200"
                 />
               </div>
+
+              <label className="flex items-center gap-2 cursor-pointer pt-1 text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={headerFooter.excludeFirstPage ?? true}
+                  onChange={(e) => setHeaderFooter((p) => ({ ...p, excludeFirstPage: e.target.checked }))}
+                  className="rounded text-orange-500"
+                />
+                <span>Exclude Header / Footer from First Page (Cover)</span>
+              </label>
             </div>
 
             <div className="flex justify-end pt-3 border-t border-slate-800">
               <button
                 type="button"
-                onClick={() => setShowHeaderFooterDialog(false)}
+                onClick={() => {
+                  setShowHeaderFooterDialog(false);
+                  setHasUnsavedChanges(true);
+                  toast.success("Header & Footer applied across pages!");
+                }}
                 className="px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs"
               >
                 Apply Header / Footer
@@ -2563,11 +2847,11 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
       {/* 8. WATERMARK CONFIG MODAL */}
       {showWatermarkDialog && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl max-w-sm w-full space-y-4 shadow-2xl">
+          <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl max-w-md w-full space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="font-bold text-base text-slate-100 flex items-center gap-2">
                 <span className="material-symbols-outlined text-blue-400">branding_watermark</span>
-                <span>Watermark Overlay</span>
+                <span>Watermark Configuration</span>
               </h3>
               <button onClick={() => setShowWatermarkDialog(false)} className="text-slate-400 hover:text-white">
                 <span className="material-symbols-outlined">close</span>
@@ -2584,37 +2868,131 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
               <span className="font-bold text-slate-200">Enable Diagonal Watermark</span>
             </label>
 
+            {/* Type Tab: Text vs Image */}
+            <div className="grid grid-cols-2 gap-2 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+              <button
+                type="button"
+                onClick={() => setWatermark((p) => ({ ...p, type: "text" }))}
+                className={`py-1.5 rounded-lg font-bold transition-all ${
+                  watermark.type !== "image" ? "bg-blue-600 text-white shadow-sm" : "text-slate-400 hover:text-white"
+                }`}
+              >
+                Text Watermark
+              </button>
+              <button
+                type="button"
+                onClick={() => setWatermark((p) => ({ ...p, type: "image" }))}
+                className={`py-1.5 rounded-lg font-bold transition-all ${
+                  watermark.type === "image" ? "bg-blue-600 text-white shadow-sm" : "text-slate-400 hover:text-white"
+                }`}
+              >
+                Image Watermark
+              </button>
+            </div>
+
             <div className="space-y-3 text-xs">
-              <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Watermark Text</label>
-                <input
-                  type="text"
-                  value={watermark.text || ""}
-                  onChange={(e) => setWatermark((p) => ({ ...p, text: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 text-xs"
-                />
+              {watermark.type === "image" ? (
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">
+                    Upload Watermark Logo / Image
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/png, image/jpeg, image/webp"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) {
+                        const reader = new FileReader();
+                        reader.onload = (evt) =>
+                          setWatermark((p) => ({ ...p, base64Data: evt.target?.result as string }));
+                        reader.readAsDataURL(f);
+                      }
+                    }}
+                    className="w-full text-xs text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-slate-800 file:text-slate-200"
+                  />
+                  {watermark.base64Data && (
+                    <div className="mt-2 p-2 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-between">
+                      <img src={watermark.base64Data} alt="Preview" className="h-10 object-contain" />
+                      <span className="text-[10px] text-emerald-400 font-bold">Image Loaded ✓</span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Watermark Text</label>
+                  <input
+                    type="text"
+                    value={watermark.text || ""}
+                    onChange={(e) => setWatermark((p) => ({ ...p, text: e.target.value }))}
+                    placeholder="ATOMIC PATHSHALA"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-200"
+                  />
+                  <div className="flex gap-1.5 mt-1.5 flex-wrap">
+                    {["ATOMIC PATHSHALA", "CONFIDENTIAL", "NEET ACCELERATOR", "SAMPLE ONLY"].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setWatermark((p) => ({ ...p, text: preset }))}
+                        className="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-[10px] text-slate-300 font-medium"
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">
+                    Opacity: {Math.round((watermark.opacity ?? 0.08) * 100)}%
+                  </label>
+                  <input
+                    type="range"
+                    min={0.02}
+                    max={0.35}
+                    step={0.01}
+                    value={watermark.opacity ?? 0.08}
+                    onChange={(e) => setWatermark((p) => ({ ...p, opacity: Number(e.target.value) }))}
+                    className="w-full accent-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">
+                    Rotation: {watermark.rotation ?? -30}°
+                  </label>
+                  <input
+                    type="range"
+                    min={-90}
+                    max={90}
+                    step={5}
+                    value={watermark.rotation ?? -30}
+                    onChange={(e) => setWatermark((p) => ({ ...p, rotation: Number(e.target.value) }))}
+                    className="w-full accent-blue-500"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">
-                  Opacity: {Math.round((watermark.opacity ?? 0.05) * 100)}%
-                </label>
+              <label className="flex items-center gap-2 cursor-pointer text-slate-300">
                 <input
-                  type="range"
-                  min={0.02}
-                  max={0.3}
-                  step={0.01}
-                  value={watermark.opacity ?? 0.05}
-                  onChange={(e) => setWatermark((p) => ({ ...p, opacity: Number(e.target.value) }))}
-                  className="w-full accent-orange-500"
+                  type="checkbox"
+                  checked={watermark.excludeFirstPage ?? true}
+                  onChange={(e) => setWatermark((p) => ({ ...p, excludeFirstPage: e.target.checked }))}
+                  className="rounded text-orange-500"
                 />
-              </div>
+                <span>Exclude Watermark from First Page (Cover)</span>
+              </label>
             </div>
 
             <div className="flex justify-end pt-3 border-t border-slate-800">
               <button
                 type="button"
-                onClick={() => setShowWatermarkDialog(false)}
+                onClick={() => {
+                  setShowWatermarkDialog(false);
+                  setHasUnsavedChanges(true);
+                  toast.success("Watermark applied!");
+                }}
                 className="px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs"
               >
                 Apply Watermark
@@ -2624,33 +3002,109 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
         </div>
       )}
 
-      {/* 9. BACKGROUND CONFIG MODAL */}
+      {/* 9. BACKGROUND & SUBJECT THEME CONFIG MODAL */}
       {showBackgroundDialog && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl max-w-sm w-full space-y-4 shadow-2xl">
+          <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl max-w-md w-full space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="font-bold text-base text-slate-100 flex items-center gap-2">
-                <span className="material-symbols-outlined text-purple-400">wallpaper</span>
-                <span>Page Background Settings</span>
+                <span className="material-symbols-outlined text-purple-400">palette</span>
+                <span>Subject Theme &amp; Background</span>
               </h3>
               <button onClick={() => setShowBackgroundDialog(false)} className="text-slate-400 hover:text-white">
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
 
-            <label className="flex items-center gap-2 cursor-pointer p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs">
-              <input
-                type="checkbox"
-                checked={background.enabled}
-                onChange={(e) => setBackground((p) => ({ ...p, enabled: e.target.checked }))}
-                className="rounded text-orange-500"
-              />
-              <span className="font-bold text-slate-200">Enable Custom Background</span>
-            </label>
+            {/* 1-Click Subject Theme Presets */}
+            <div>
+              <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1.5">
+                Apply Complete Subject Theme
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBackground({ enabled: true, color: "#f0fdf4", opacity: 0.95, pageRange: "ALL" });
+                    setHeaderFooter((h) => ({ ...h, enabled: true, accentColor: "#059669" }));
+                    setCoverPage((c) => ({ ...c, subject: "CHEMISTRY" }));
+                    toast.success("🧪 Applied Chemistry Green Theme!");
+                  }}
+                  className="p-3 rounded-2xl border border-emerald-500/40 bg-emerald-950/30 hover:bg-emerald-900/40 text-left transition-all"
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-base">🧪</span>
+                    <span className="font-bold text-emerald-400 text-xs">Chemistry Theme</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400">Mint background tint + Emerald green accents</div>
+                </button>
 
-            <div className="space-y-3 text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBackground({ enabled: true, color: "#f0f9ff", opacity: 0.95, pageRange: "ALL" });
+                    setHeaderFooter((h) => ({ ...h, enabled: true, accentColor: "#0284c7" }));
+                    setCoverPage((c) => ({ ...c, subject: "PHYSICS" }));
+                    toast.success("⚡ Applied Physics Blue Theme!");
+                  }}
+                  className="p-3 rounded-2xl border border-sky-500/40 bg-sky-950/30 hover:bg-sky-900/40 text-left transition-all"
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-base">⚡</span>
+                    <span className="font-bold text-sky-400 text-xs">Physics Theme</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400">Ice blue background tint + Cyan/Royal Blue accents</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBackground({ enabled: true, color: "#faf5ff", opacity: 0.95, pageRange: "ALL" });
+                    setHeaderFooter((h) => ({ ...h, enabled: true, accentColor: "#7c3aed" }));
+                    setCoverPage((c) => ({ ...c, subject: "BIOLOGY" }));
+                    toast.success("🧬 Applied Biology Purple Theme!");
+                  }}
+                  className="p-3 rounded-2xl border border-purple-500/40 bg-purple-950/30 hover:bg-purple-900/40 text-left transition-all"
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-base">🧬</span>
+                    <span className="font-bold text-purple-400 text-xs">Biology Theme</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400">Lavender background tint + Violet accents</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBackground({ enabled: true, color: "#ffffff", opacity: 1, pageRange: "ALL" });
+                    setHeaderFooter((h) => ({ ...h, enabled: true, accentColor: "#ea580c" }));
+                    setCoverPage((c) => ({ ...c, subject: "GENERAL" }));
+                    toast.success("🟧 Applied Atomic Classic Theme!");
+                  }}
+                  className="p-3 rounded-2xl border border-orange-500/40 bg-orange-950/30 hover:bg-orange-900/40 text-left transition-all"
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-base">🟧</span>
+                    <span className="font-bold text-orange-400 text-xs">Atomic Classic</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400">Clean white background + Signature Orange accents</div>
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs pt-2 border-t border-slate-800">
+              <label className="flex items-center gap-2 cursor-pointer p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs">
+                <input
+                  type="checkbox"
+                  checked={background.enabled}
+                  onChange={(e) => setBackground((p) => ({ ...p, enabled: e.target.checked }))}
+                  className="rounded text-orange-500"
+                />
+                <span className="font-bold text-slate-200">Custom Background Enabled</span>
+              </label>
+
               <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Background Color</label>
+                <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Custom Tint / Color</label>
                 <div className="flex items-center gap-2">
                   <input
                     type="color"
@@ -2658,13 +3112,18 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                     onChange={(e) => setBackground((p) => ({ ...p, color: e.target.value }))}
                     className="w-10 h-10 rounded border border-slate-800 cursor-pointer bg-transparent"
                   />
-                  <span className="text-slate-300 font-mono">{background.color || "#ffffff"}</span>
+                  <input
+                    type="text"
+                    value={background.color || "#ffffff"}
+                    onChange={(e) => setBackground((p) => ({ ...p, color: e.target.value }))}
+                    className="flex-1 px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 font-mono"
+                  />
                 </div>
               </div>
 
               <div>
                 <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">
-                  Background Image (Optional)
+                  Background Watermark Image (Optional)
                 </label>
                 <input
                   type="file"
@@ -2686,10 +3145,14 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
             <div className="flex justify-end pt-3 border-t border-slate-800">
               <button
                 type="button"
-                onClick={() => setShowBackgroundDialog(false)}
+                onClick={() => {
+                  setShowBackgroundDialog(false);
+                  setHasUnsavedChanges(true);
+                  toast.success("Background settings applied!");
+                }}
                 className="px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs"
               >
-                Apply Background
+                Apply Theme &amp; Background
               </button>
             </div>
           </div>
@@ -2734,12 +3197,55 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
   );
 }
 
+// Helper function to check if a page is in the active range
+function isPageInRange(
+  pageNumber: number,
+  range?: "ALL" | "ODD" | "EVEN" | "CUSTOM",
+  customPages?: number[],
+  excludeFirstPage?: boolean
+): boolean {
+  if (excludeFirstPage && pageNumber === 1) return false;
+  if (!range || range === "ALL") return true;
+  if (range === "ODD") return pageNumber % 2 !== 0;
+  if (range === "EVEN") return pageNumber % 2 === 0;
+  if (range === "CUSTOM") {
+    return Array.isArray(customPages) && customPages.includes(pageNumber);
+  }
+  return true;
+}
+
+// Helper function to interpolate header/footer template variables
+function replaceVariables(
+  template: string,
+  vars: {
+    page: number;
+    totalPages: number;
+    subject: string;
+    chapter: string;
+    teacher: string;
+    date: string;
+    moduleNumber: string;
+  }
+): string {
+  let res = template;
+  res = res.replace(/\{page\}/gi, String(vars.page));
+  res = res.replace(/\{totalPages\}/gi, String(vars.totalPages));
+  res = res.replace(/\{subject\}/gi, vars.subject);
+  res = res.replace(/\{chapter\}/gi, vars.chapter);
+  res = res.replace(/\{teacher\}/gi, vars.teacher);
+  res = res.replace(/\{date\}/gi, vars.date);
+  res = res.replace(/\{moduleNumber\}/gi, vars.moduleNumber);
+  return res;
+}
+
 /**
- * High-Resolution Native PDF Page View with Interactive In-Place Edit Overlays
+ * High-Resolution Native PDF Page View with Interactive In-Place Edit Overlays,
+ * Live Running Header & Footer, Watermark, Subject Theme, and Front Page Previews
  */
 interface NativePdfPageViewProps {
   pdfDocProxy: any;
   pageNumber: number;
+  totalPages: number;
   zoom: number;
   rotation: number;
   activeTool: EditorTool;
@@ -2753,16 +3259,20 @@ interface NativePdfPageViewProps {
   onSelectObject: (id: string, type: "text" | "whiteout" | "image" | "shape") => void;
   onAddTextEdit: (edit: TextEditItem) => void;
   onUpdateTextEdit: (edit: TextEditItem) => void;
+  onUpdateImage: (edit: ImageEditItem) => void;
   onAddWhiteout: (whiteout: WhiteoutItem) => void;
   onTargetBoxSelected: (box: { x: number; y: number; width: number; height: number }) => void;
   headerFooter?: HeaderFooterConfig;
   watermark?: WatermarkConfig;
   background?: BackgroundConfig;
+  coverPage?: CoverPageConfig;
+  moduleData?: ModuleData | null;
 }
 
 function NativePdfPageView({
   pdfDocProxy,
   pageNumber,
+  totalPages,
   zoom,
   rotation,
   activeTool,
@@ -2776,11 +3286,14 @@ function NativePdfPageView({
   onSelectObject,
   onAddTextEdit,
   onUpdateTextEdit,
+  onUpdateImage,
   onAddWhiteout,
   onTargetBoxSelected,
   headerFooter,
   watermark,
   background,
+  coverPage,
+  moduleData,
 }: NativePdfPageViewProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
@@ -2790,6 +3303,8 @@ function NativePdfPageView({
   >([]);
   const [isSelectingBox, setIsSelectingBox] = useState<boolean>(false);
   const [drawBox, setDrawBox] = useState<{ startX: number; startY: number; currX: number; currY: number } | null>(null);
+  const [resizingImgId, setResizingImgId] = useState<string | null>(null);
+  const [resizeStart, setResizeStart] = useState<{ startW: number; startH: number; startX: number; startY: number } | null>(null);
 
   // Render PDF.js Canvas on Page Change or Zoom Change
   useEffect(() => {
@@ -2867,6 +3382,8 @@ function NativePdfPageView({
 
   // Handle Dragging / Box Selection for Whiteout, Add Text, Remove Object, Replace Object
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (resizingImgId) return;
+
     if (
       activeTool !== "WHITEOUT" &&
       activeTool !== "ADD_TEXT" &&
@@ -2886,11 +3403,27 @@ function NativePdfPageView({
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isSelectingBox || !drawBox) return;
     const rect = overlayRef.current?.getBoundingClientRect();
     if (!rect) return;
-
     const scale = zoom;
+
+    // Handle Image Corner Resize
+    if (resizingImgId && resizeStart) {
+      const currX = (e.clientX - rect.left) / scale;
+      const currY = (e.clientY - rect.top) / scale;
+      const deltaX = currX - resizeStart.startX;
+      const deltaY = currY - resizeStart.startY;
+      const newWidth = Math.max(20, resizeStart.startW + deltaX);
+      const newHeight = Math.max(20, resizeStart.startH + deltaY);
+
+      const targetImg = images.find((img) => img.id === resizingImgId);
+      if (targetImg) {
+        onUpdateImage({ ...targetImg, width: newWidth, height: newHeight });
+      }
+      return;
+    }
+
+    if (!isSelectingBox || !drawBox) return;
     const x = (e.clientX - rect.left) / scale;
     const y = (e.clientY - rect.top) / scale;
 
@@ -2898,6 +3431,12 @@ function NativePdfPageView({
   };
 
   const handleMouseUp = () => {
+    if (resizingImgId) {
+      setResizingImgId(null);
+      setResizeStart(null);
+      return;
+    }
+
     if (!isSelectingBox || !drawBox) return;
     setIsSelectingBox(false);
 
@@ -2940,6 +3479,38 @@ function NativePdfPageView({
 
   const scale = zoom;
 
+  // Variables interpolation dictionary
+  const vars = {
+    page: pageNumber,
+    totalPages: totalPages || 1,
+    subject: coverPage?.subject || moduleData?.subject || "NEET PREP",
+    chapter: coverPage?.chapter || moduleData?.chapter || moduleData?.title || "Academic Module",
+    teacher: coverPage?.teacher || moduleData?.facultyName || "Firoz Sir",
+    date: new Date().toLocaleDateString("en-IN"),
+    moduleNumber: coverPage?.moduleNumber || moduleData?.code || "Module 01",
+  };
+
+  const isCoverActive =
+    coverPage?.enabled &&
+    pageNumber === 1 &&
+    (coverPage.action === "REPLACE_FIRST" || coverPage.action === "PREPEND");
+
+  const showHeader =
+    headerFooter?.enabled &&
+    isPageInRange(pageNumber, headerFooter.pageRange, headerFooter.customPages, headerFooter.excludeFirstPage);
+
+  const showWatermark =
+    watermark?.enabled &&
+    isPageInRange(pageNumber, watermark.pageRange, watermark.customPages, watermark.excludeFirstPage);
+
+  const showBackground =
+    background?.enabled &&
+    isPageInRange(pageNumber, background.pageRange, background.customPages);
+
+  const headerAccent = headerFooter?.accentColor || "#ea580c";
+  const headerHeightPt = headerFooter?.headerImageHeight || 36;
+  const footerHeightPt = headerFooter?.footerImageHeight || 24;
+
   return (
     <div
       className="relative shadow-2xl border border-slate-800 bg-white select-none transition-transform"
@@ -2948,16 +3519,203 @@ function NativePdfPageView({
         height: `${pageSize.height * scale}px`,
       }}
     >
-      {/* 1. Underlying High-Res PDF.js Render Canvas */}
-      <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none" />
+      {/* 0. Subject Background Theme Tint Layer */}
+      {showBackground && (
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            backgroundColor: background?.color || "#ffffff",
+            opacity: background?.opacity ?? 1,
+            zIndex: 1,
+          }}
+        >
+          {background?.base64Data && (
+            <img
+              src={background.base64Data}
+              alt="Page Background Pattern"
+              className="w-full h-full object-cover pointer-events-none opacity-20"
+            />
+          )}
+        </div>
+      )}
 
-      {/* 2. Interactive Editing Overlay */}
+      {/* 1. Underlying High-Res PDF.js Render Canvas */}
+      {!isCoverActive && (
+        <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none z-[2]" />
+      )}
+
+      {/* 2. ATOMIC PATHSHALA FRONT PAGE LIVE PREVIEW (if page 1 and cover active) */}
+      {isCoverActive && (
+        <div
+          className="absolute inset-0 z-20 flex flex-col justify-between p-8 text-white select-none pointer-events-none overflow-hidden"
+          style={{
+            background:
+              coverPage?.subject === "CHEMISTRY"
+                ? "linear-gradient(145deg, #064e3b 0%, #022c22 60%, #065f46 100%)"
+                : coverPage?.subject === "PHYSICS"
+                ? "linear-gradient(145deg, #0c4a6e 0%, #082f49 60%, #0369a1 100%)"
+                : coverPage?.subject === "BIOLOGY"
+                ? "linear-gradient(145deg, #4a044e 0%, #2e1065 60%, #6b21a8 100%)"
+                : "linear-gradient(145deg, #7c2d12 0%, #431407 60%, #9a3412 100%)",
+          }}
+        >
+          {/* Top Branding Banner */}
+          <div className="flex items-center justify-between border-b border-white/20 pb-4">
+            <div className="flex items-center gap-2">
+              <span className="text-xl font-black tracking-wider text-white">ATOMIC PATHSHALA</span>
+              <span className="px-2 py-0.5 rounded-full bg-white/10 text-[10px] font-bold tracking-widest uppercase border border-white/20">
+                Academy
+              </span>
+            </div>
+            <div className="px-3 py-1 rounded-full bg-white/15 text-xs font-bold tracking-wide uppercase backdrop-blur-sm">
+              {coverPage?.targetExam || "NEET (UG)"} Accelerator
+            </div>
+          </div>
+
+          {/* Center Title Hero */}
+          <div className="space-y-4 my-auto">
+            <div className="inline-block px-3.5 py-1 rounded-lg bg-white/20 text-xs font-extrabold tracking-widest uppercase text-white shadow-sm">
+              {coverPage?.subject || "CHEMISTRY"} • {coverPage?.moduleNumber || "MODULE 01"}
+            </div>
+            <h1 className="text-3xl font-black tracking-tight leading-tight max-w-lg text-white drop-shadow-md">
+              {coverPage?.chapter || "Academic Chapter Title"}
+            </h1>
+            <p className="text-xs text-white/80 font-medium">Comprehensive NEET Theory, Solved Examples &amp; Question Bank</p>
+          </div>
+
+          {/* Bottom Faculty & Batch Card */}
+          <div className="border-t border-white/20 pt-4 flex items-center justify-between">
+            <div>
+              <div className="text-[10px] text-white/60 uppercase font-bold tracking-wider">Course Faculty</div>
+              <div className="text-sm font-bold text-white">{coverPage?.teacher || "Firoz Sir"}</div>
+            </div>
+            <div className="text-right">
+              <div className="text-[10px] text-white/60 uppercase font-bold tracking-wider">Target Academic Batch</div>
+              <div className="text-xs font-bold text-white">{coverPage?.batch || "NEET Accelerated Batch"}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Old Header / Footer Masking Layers */}
+      {headerFooter?.removeOldHeader && isPageInRange(pageNumber, headerFooter.pageRange, headerFooter.customPages, headerFooter.excludeFirstPage) && (
+        <div
+          className="absolute top-0 left-0 right-0 bg-white z-10 pointer-events-none"
+          style={{ height: `${(headerFooter.oldHeaderHeightPt || 42) * scale}px` }}
+        />
+      )}
+      {headerFooter?.removeOldFooter && isPageInRange(pageNumber, headerFooter.pageRange, headerFooter.customPages, headerFooter.excludeFirstPage) && (
+        <div
+          className="absolute bottom-0 left-0 right-0 bg-white z-10 pointer-events-none"
+          style={{ height: `${(headerFooter.oldFooterHeightPt || 32) * scale}px` }}
+        />
+      )}
+
+      {/* 4. RUNNING HEADER LIVE PREVIEW */}
+      {showHeader && !isCoverActive && (
+        <div
+          className="absolute top-0 left-0 right-0 bg-white z-15 flex items-center justify-between px-4 border-b pointer-events-none"
+          style={{
+            height: `${headerHeightPt * scale}px`,
+            borderBottomColor: headerAccent,
+            borderBottomWidth: `${2.5 * scale}px`,
+            zIndex: 15,
+          }}
+        >
+          {headerFooter?.headerImageBase64 ? (
+            <img
+              src={headerFooter.headerImageBase64}
+              alt="Header Logo"
+              className="h-[80%] object-contain"
+            />
+          ) : (
+            <span
+              className="font-bold uppercase tracking-wider"
+              style={{ color: headerAccent, fontSize: `${(headerFooter?.fontSize || 9) * scale}px` }}
+            >
+              {replaceVariables(headerFooter?.headerLeft || "ATOMIC PATHSHALA", vars)}
+            </span>
+          )}
+
+          <span
+            className="text-slate-800 font-semibold truncate px-2"
+            style={{ fontSize: `${((headerFooter?.fontSize || 9) - 0.5) * scale}px` }}
+          >
+            {replaceVariables(headerFooter?.headerCenter || "| {subject} - {chapter}", vars)}
+          </span>
+
+          <span
+            className="text-slate-500 font-medium truncate"
+            style={{ fontSize: `${((headerFooter?.fontSize || 9) - 1) * scale}px` }}
+          >
+            {replaceVariables(headerFooter?.headerRight || "{teacher}", vars)}
+          </span>
+        </div>
+      )}
+
+      {/* 5. RUNNING FOOTER LIVE PREVIEW */}
+      {showHeader && !isCoverActive && (
+        <div
+          className="absolute bottom-0 left-0 right-0 bg-white z-15 flex items-center justify-between px-4 border-t border-slate-200 pointer-events-none"
+          style={{
+            height: `${footerHeightPt * scale}px`,
+            zIndex: 15,
+          }}
+        >
+          <span className="text-slate-500 font-medium" style={{ fontSize: `${7.5 * scale}px` }}>
+            {replaceVariables(headerFooter?.footerLeft || "Atomic Pathshala | NEET Accelerator", vars)}
+          </span>
+          <span
+            className="font-bold uppercase"
+            style={{ color: headerAccent, fontSize: `${8 * scale}px` }}
+          >
+            {replaceVariables(headerFooter?.footerRight || "Page {page} of {totalPages}", vars)}
+          </span>
+        </div>
+      )}
+
+      {/* 6. WATERMARK LIVE OVERLAY */}
+      {showWatermark && !isCoverActive && (
+        <div
+          className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden"
+          style={{ zIndex: 12 }}
+        >
+          {watermark?.type === "image" && (watermark.base64Data || watermark.imageUrl) ? (
+            <img
+              src={watermark.base64Data || watermark.imageUrl}
+              alt="Watermark Overlay"
+              className="pointer-events-none select-none"
+              style={{
+                width: `${(watermark.imageWidth || 320) * scale}px`,
+                opacity: watermark.opacity ?? 0.08,
+                transform: `rotate(${watermark.rotation ?? -30}deg)`,
+                transformOrigin: "center",
+              }}
+            />
+          ) : (
+            <div
+              className="font-black uppercase tracking-widest text-center select-none"
+              style={{
+                fontSize: `${(watermark?.fontSize || 38) * scale}px`,
+                color: watermark?.color || "#000000",
+                opacity: watermark?.opacity ?? 0.08,
+                transform: `rotate(${watermark?.rotation ?? -30}deg)`,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {watermark?.text || "ATOMIC PATHSHALA"}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 7. Interactive Editing Overlay (Text, Whiteouts, Images, Global Masks) */}
       <div
         ref={overlayRef}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
-        className={`absolute inset-0 overflow-hidden ${
+        className={`absolute inset-0 overflow-hidden z-20 ${
           activeTool === "WHITEOUT" ||
           activeTool === "ADD_TEXT" ||
           activeTool === "REMOVE_OBJECT" ||
@@ -2966,7 +3724,7 @@ function NativePdfPageView({
             : "cursor-default"
         }`}
       >
-        {/* Draw Temporary Box during drag */}
+        {/* Draw Temporary Selection Box during drag */}
         {drawBox && (
           <div
             className={`absolute border-2 ${
@@ -2981,15 +3739,16 @@ function NativePdfPageView({
               top: `${Math.min(drawBox.startY, drawBox.currY) * scale}px`,
               width: `${Math.abs(drawBox.currX - drawBox.startX) * scale}px`,
               height: `${Math.abs(drawBox.currY - drawBox.startY) * scale}px`,
+              zIndex: 50,
             }}
           />
         )}
 
-        {/* Global Removals Masks */}
+        {/* Global Removals Masks (Solid 100% Opaque Whiteout to prevent overlap) */}
         {globalRemovals.map((g) => (
           <div
             key={g.id}
-            className="absolute bg-white border border-red-400/30 pointer-events-none z-10"
+            className="absolute bg-white border border-red-400/40 pointer-events-none z-10"
             style={{
               left: `${g.x * scale}px`,
               top: `${g.y * scale}px`,
@@ -2999,11 +3758,11 @@ function NativePdfPageView({
           />
         ))}
 
-        {/* Global Replacements */}
+        {/* Global Replacements (Masks underlying old object completely, then renders new object) */}
         {globalReplacements.map((r) => (
           <div
             key={r.id}
-            className="absolute bg-white border border-cyan-400/30 overflow-hidden pointer-events-none z-10 flex items-center"
+            className="absolute bg-white border border-cyan-400/40 overflow-hidden pointer-events-none z-10 flex items-center justify-center"
             style={{
               left: `${r.x * scale}px`,
               top: `${r.y * scale}px`,
@@ -3045,7 +3804,7 @@ function NativePdfPageView({
                 });
                 toast.success(`Editing: "${span.text.slice(0, 20)}..."`);
               }}
-              className="absolute border border-transparent hover:border-emerald-500 hover:bg-emerald-500/20 cursor-text transition-colors rounded"
+              className="absolute border border-transparent hover:border-emerald-500 hover:bg-emerald-500/20 cursor-text transition-colors rounded z-30"
               style={{
                 left: `${span.x * scale}px`,
                 top: `${span.y * scale}px`,
@@ -3064,7 +3823,7 @@ function NativePdfPageView({
               e.stopPropagation();
               onSelectObject(w.id, "whiteout");
             }}
-            className={`absolute transition-all cursor-pointer ${
+            className={`absolute transition-all cursor-pointer z-10 ${
               selectedObjectId === w.id ? "ring-2 ring-red-500" : ""
             }`}
             style={{
@@ -3077,89 +3836,127 @@ function NativePdfPageView({
           />
         ))}
 
-        {/* Applied Text Edits & Text Boxes */}
+        {/* Applied Text Edits (with 100% Solid Underneath Mask to PREVENT OVERLAPS) */}
         {textEdits.map((t) => {
           const isSelected = selectedObjectId === t.id;
           return (
-            <div
-              key={t.id}
-              onClick={(e) => {
-                e.stopPropagation();
-                onSelectObject(t.id, "text");
-              }}
-              className={`absolute flex flex-col cursor-move ${
-                isSelected ? "ring-2 ring-emerald-500 z-30" : "z-20"
-              }`}
-              style={{
-                left: `${t.x * scale}px`,
-                top: `${t.y * scale}px`,
-                width: `${t.width * scale}px`,
-                minHeight: `${t.height * scale}px`,
-                backgroundColor: t.hideOriginal ? t.backgroundColor || "#ffffff" : "transparent",
-              }}
-            >
-              {isSelected ? (
-                <textarea
-                  value={t.newText}
-                  autoFocus
-                  onChange={(e) => onUpdateTextEdit({ ...t, newText: e.target.value })}
-                  className="w-full h-full p-1 bg-white text-slate-900 border-0 outline-none resize-none"
+            <React.Fragment key={t.id}>
+              {/* Opaque solid white mask covering old text underneath */}
+              {t.hideOriginal !== false && (
+                <div
+                  className="absolute bg-white pointer-events-none z-15"
                   style={{
-                    fontSize: `${t.fontSize * scale}px`,
-                    fontFamily:
-                      t.fontFamily === "times" ? "serif" : t.fontFamily === "courier" ? "monospace" : "sans-serif",
-                    fontWeight: t.isBold ? "bold" : "normal",
-                    fontStyle: t.isItalic ? "italic" : "normal",
-                    color: t.color || "#000000",
-                    textAlign: t.align || "left",
+                    left: `${(t.x - 2) * scale}px`,
+                    top: `${(t.y - 2) * scale}px`,
+                    width: `${(t.width + 4) * scale}px`,
+                    height: `${(t.height + 4) * scale}px`,
+                    backgroundColor: t.backgroundColor || "#ffffff",
                   }}
                 />
-              ) : (
+              )}
+
+              {/* Editable Text Box */}
+              <div
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectObject(t.id, "text");
+                }}
+                className={`absolute flex flex-col cursor-move z-25 ${
+                  isSelected ? "ring-2 ring-emerald-500 z-35" : ""
+                }`}
+                style={{
+                  left: `${t.x * scale}px`,
+                  top: `${t.y * scale}px`,
+                  width: `${t.width * scale}px`,
+                  minHeight: `${t.height * scale}px`,
+                }}
+              >
+                {isSelected ? (
+                  <textarea
+                    value={t.newText}
+                    autoFocus
+                    onChange={(e) => onUpdateTextEdit({ ...t, newText: e.target.value })}
+                    className="w-full h-full p-1 bg-white text-slate-900 border-0 outline-none resize-none shadow-sm"
+                    style={{
+                      fontSize: `${t.fontSize * scale}px`,
+                      fontFamily:
+                        t.fontFamily === "times" ? "serif" : t.fontFamily === "courier" ? "monospace" : "sans-serif",
+                      fontWeight: t.isBold ? "bold" : "normal",
+                      fontStyle: t.isItalic ? "italic" : "normal",
+                      color: t.color || "#000000",
+                      textAlign: t.align || "left",
+                    }}
+                  />
+                ) : (
+                  <div
+                    className="w-full h-full p-0.5 whitespace-pre-wrap select-text text-slate-900"
+                    style={{
+                      fontSize: `${t.fontSize * scale}px`,
+                      fontFamily:
+                        t.fontFamily === "times" ? "serif" : t.fontFamily === "courier" ? "monospace" : "sans-serif",
+                      fontWeight: t.isBold ? "bold" : "normal",
+                      fontStyle: t.isItalic ? "italic" : "normal",
+                      color: t.color || "#000000",
+                      textAlign: t.align || "left",
+                    }}
+                  >
+                    {t.newText}
+                  </div>
+                )}
+              </div>
+            </React.Fragment>
+          );
+        })}
+
+        {/* Inserted Images (with Move, Corner Resize, Rotation, and Delete Handles) */}
+        {images.map((img) => {
+          const isSelected = selectedObjectId === img.id;
+          return (
+            <div
+              key={img.id}
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelectObject(img.id, "image");
+              }}
+              className={`absolute cursor-move z-25 group ${
+                isSelected ? "ring-2 ring-indigo-500 z-35" : ""
+              }`}
+              style={{
+                left: `${img.x * scale}px`,
+                top: `${img.y * scale}px`,
+                width: `${img.width * scale}px`,
+                height: `${img.height * scale}px`,
+                opacity: img.opacity ?? 1,
+                transform: `rotate(${img.rotation ?? 0}deg)`,
+                transformOrigin: "center",
+              }}
+            >
+              <img
+                src={img.base64Data || img.imageUrl}
+                alt="Embedded PDF graphic"
+                className="w-full h-full object-contain pointer-events-none select-none"
+              />
+
+              {/* Corner Resize Handle on bottom-right */}
+              {isSelected && (
                 <div
-                  className="w-full h-full p-0.5 whitespace-pre-wrap select-text text-slate-900"
-                  style={{
-                    fontSize: `${t.fontSize * scale}px`,
-                    fontFamily:
-                      t.fontFamily === "times" ? "serif" : t.fontFamily === "courier" ? "monospace" : "sans-serif",
-                    fontWeight: t.isBold ? "bold" : "normal",
-                    fontStyle: t.isItalic ? "italic" : "normal",
-                    color: t.color || "#000000",
-                    textAlign: t.align || "left",
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    setResizingImgId(img.id);
+                    setResizeStart({
+                      startW: img.width,
+                      startH: img.height,
+                      startX: (e.clientX - (overlayRef.current?.getBoundingClientRect().left || 0)) / scale,
+                      startY: (e.clientY - (overlayRef.current?.getBoundingClientRect().top || 0)) / scale,
+                    });
                   }}
-                >
-                  {t.newText}
-                </div>
+                  className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-indigo-600 rounded-tl border border-white cursor-nwse-resize shadow-md"
+                  title="Drag to resize image"
+                />
               )}
             </div>
           );
         })}
-
-        {/* Inserted Images */}
-        {images.map((img) => (
-          <div
-            key={img.id}
-            onClick={(e) => {
-              e.stopPropagation();
-              onSelectObject(img.id, "image");
-            }}
-            className={`absolute cursor-move overflow-hidden ${
-              selectedObjectId === img.id ? "ring-2 ring-indigo-500 z-30" : "z-20"
-            }`}
-            style={{
-              left: `${img.x * scale}px`,
-              top: `${img.y * scale}px`,
-              width: `${img.width * scale}px`,
-              height: `${img.height * scale}px`,
-              opacity: img.opacity ?? 1,
-            }}
-          >
-            <img
-              src={img.base64Data || img.imageUrl}
-              alt="Embedded PDF graphic"
-              className="w-full h-full object-contain pointer-events-none"
-            />
-          </div>
-        ))}
       </div>
     </div>
   );

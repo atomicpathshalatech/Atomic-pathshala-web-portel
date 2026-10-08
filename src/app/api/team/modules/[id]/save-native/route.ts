@@ -108,12 +108,25 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       contentType: "application/pdf",
     });
 
-    // 4. Save ModuleVersion record
+    // 4. Save ModuleVersion record with full state arrays for lossless reload
     const versionRecord = await prisma.moduleVersion.create({
       data: {
         moduleId: moduleRow.id,
         label: isAutosave ? `Autosave (${new Date().toLocaleTimeString("en-IN")})` : changeSummary,
         snapshot: {
+          textEdits,
+          whiteouts,
+          images,
+          shapes,
+          globalRemovals,
+          globalReplacements,
+          background,
+          headerFooter,
+          watermark,
+          coverPage,
+          pageRotations,
+          deletedPages,
+          pageOrder,
           textEditsCount: textEdits.length,
           whiteoutsCount: whiteouts.length,
           imagesCount: images.length,
@@ -123,10 +136,6 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           pageCount: result.pageCount,
           fileSizeBytes: result.fileSizeBytes,
           fileUrl,
-          background,
-          headerFooter,
-          watermark,
-          coverPage,
         } as any,
         createdById: session.user.id,
       },
