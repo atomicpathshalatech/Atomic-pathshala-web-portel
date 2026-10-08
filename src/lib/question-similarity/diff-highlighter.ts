@@ -1,4 +1,3 @@
-// src/question-similarity/diff-highlighter.ts
 import { DiffToken, HighlightedComparison } from "./types";
 import { TextNormalizer } from "./text-normalizer";
 
@@ -22,8 +21,8 @@ export class DiffHighlighter {
     const newNormalizedWords = newWords.map((w) => TextNormalizer.clean(w));
 
     // Build word set from new text
-    const newWordSet = new Set(newNormalizedWords.filter((w) => w.length > 2));
-    const origWordSet = new Set(origNormalizedWords.filter((w) => w.length > 2));
+    const newWordSet = new Set(newNormalizedWords.filter((w) => w && w.length > 2));
+    const origWordSet = new Set(origNormalizedWords.filter((w) => w && w.length > 2));
 
     // Identify matching bigrams and trigrams
     const matchedPhrases: string[] = [];
@@ -37,7 +36,7 @@ export class DiffHighlighter {
     });
 
     const originalTokens: DiffToken[] = origWords.map((word, idx) => {
-      const norm = origNormalizedWords[idx];
+      const norm = origNormalizedWords[idx] || "";
       const isNum = /\d/.test(word);
       const isMatch = (norm.length > 2 && newWordSet.has(norm)) || (isNum && newText.includes(word));
       return {
@@ -48,7 +47,7 @@ export class DiffHighlighter {
     });
 
     const newTokens: DiffToken[] = newWords.map((word, idx) => {
-      const norm = newNormalizedWords[idx];
+      const norm = newNormalizedWords[idx] || "";
       const isNum = /\d/.test(word);
       const isMatch = (norm.length > 2 && origWordSet.has(norm)) || (isNum && originalText.includes(word));
       return {

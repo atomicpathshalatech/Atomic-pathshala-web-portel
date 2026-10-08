@@ -131,41 +131,37 @@ export type ModuleEditorObject = TextObject | ImageObject | ShapeObject | Redact
  * Header and Footer Configuration
  */
 export interface HeaderFooterConfig {
-  enabled: boolean;
-  // Header Slots
-  headerLeft: string;
-  headerCenter: string;
-  headerRight: string;
-  headerHeightPt: number;        // Default 36pt
-  headerTopOffsetPt: number;     // Margin from top of page (default 0pt)
+  enabled?: boolean;
+  headerLeft?: string;
+  headerCenter?: string;
+  headerRight?: string;
+  headerHeightPt?: number;        // Default 36pt
+  headerTopOffsetPt?: number;     // Margin from top of page (default 0pt)
   headerImageBase64?: string;
   headerImageUrl?: string;
   headerImagePosition?: "left" | "center" | "right";
   headerImageHeight?: number;
 
-  // Footer Slots
-  footerLeft: string;
-  footerCenter: string;
-  footerRight: string;
-  footerHeightPt: number;        // Default 28pt
-  footerBottomOffsetPt: number;  // Margin from bottom of page (default 0pt)
+  footerLeft?: string;
+  footerCenter?: string;
+  footerRight?: string;
+  footerHeightPt?: number;        // Default 28pt
+  footerBottomOffsetPt?: number;  // Margin from bottom of page (default 0pt)
   footerImageBase64?: string;
   footerImageUrl?: string;
   footerImagePosition?: "left" | "center" | "right";
   footerImageHeight?: number;
 
-  // Old Header / Footer Removal
-  removeOldHeader: boolean;
-  removeOldFooter: boolean;
-  oldHeaderHeightPt: number;     // Height of old header area to clear
-  oldFooterHeightPt: number;     // Height of old footer area to clear
+  removeOldHeader?: boolean;
+  removeOldFooter?: boolean;
+  oldHeaderHeightPt?: number;     // Height of old header area to clear
+  oldFooterHeightPt?: number;     // Height of old footer area to clear
 
-  // Styling & Page Range
-  fontSize: number;
-  fontFamily: "helvetica" | "times" | "courier";
+  fontSize?: number;
+  fontFamily?: "helvetica" | "times" | "courier";
   accentColor?: string;
-  excludeFirstPage: boolean;
-  pageRange: PageRangeType;
+  excludeFirstPage?: boolean;
+  pageRange?: PageRangeType;
   customPages?: number[];
 }
 
@@ -173,24 +169,26 @@ export interface HeaderFooterConfig {
  * Watermark Configuration
  */
 export interface WatermarkConfig {
-  enabled: boolean;
-  type: "text" | "image";
+  enabled?: boolean;
+  type?: "text" | "image";
   text?: string;
   imageUrl?: string;
   base64Data?: string;
   width?: number;
   height?: number;
+  imageWidth?: number;
+  imageHeight?: number;
   scale?: number;
-  opacity: number;               // Default 0.08 (8%)
-  rotation: number;              // Degrees (0 = strictly normal unrotated orientation)
-  position: "CENTER" | "TOP" | "BOTTOM" | "CUSTOM";
+  opacity?: number;               // Default 0.08 (8%)
+  rotation?: number;              // Degrees (0 = strictly normal unrotated orientation)
+  position?: "CENTER" | "TOP" | "BOTTOM" | "CUSTOM";
   customX?: number;
   customY?: number;
-  layer: "BEHIND_CONTENT" | "ABOVE_CONTENT";
+  layer?: "BEHIND_CONTENT" | "ABOVE_CONTENT";
   fontSize?: number;
   color?: string;
-  excludeFirstPage: boolean;
-  pageRange: PageRangeType;
+  excludeFirstPage?: boolean;
+  pageRange?: PageRangeType;
   customPages?: number[];
 }
 
@@ -199,11 +197,11 @@ export interface WatermarkConfig {
  */
 export interface CoverPageConfig {
   enabled: boolean;
-  action: "PREPEND" | "REPLACE_FIRST" | "DELETE_FIRST" | "NONE";
+  action?: "PREPEND" | "REPLACE_FIRST" | "DELETE_FIRST" | "NONE";
   subject: string;
   chapter: string;
   moduleNumber: string;
-  teacher: string;
+  teacher?: string;
   batch?: string;
   targetExam?: string;
   academicYear?: string;

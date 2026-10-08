@@ -95,12 +95,16 @@ export class LayerEngine {
       case "BRING_FORWARD": {
         if (currentIndex < samePageLayerObjs.length - 1) {
           const nextObj = samePageLayerObjs[currentIndex + 1];
-          const nextInUpdated = updated.find((o) => o.id === nextObj.id)!;
-          const tempZ = targetInUpdated.zIndex;
-          targetInUpdated.zIndex = nextInUpdated.zIndex;
-          nextInUpdated.zIndex = tempZ;
-          if (targetInUpdated.zIndex === nextInUpdated.zIndex) {
-            targetInUpdated.zIndex += 1;
+          if (nextObj) {
+            const nextInUpdated = updated.find((o) => o.id === nextObj.id);
+            if (nextInUpdated) {
+              const tempZ = targetInUpdated.zIndex;
+              targetInUpdated.zIndex = nextInUpdated.zIndex;
+              nextInUpdated.zIndex = tempZ;
+              if (targetInUpdated.zIndex === nextInUpdated.zIndex) {
+                targetInUpdated.zIndex += 1;
+              }
+            }
           }
         }
         break;
@@ -108,12 +112,16 @@ export class LayerEngine {
       case "SEND_BACKWARD": {
         if (currentIndex > 0) {
           const prevObj = samePageLayerObjs[currentIndex - 1];
-          const prevInUpdated = updated.find((o) => o.id === prevObj.id)!;
-          const tempZ = targetInUpdated.zIndex;
-          targetInUpdated.zIndex = prevInUpdated.zIndex;
-          prevInUpdated.zIndex = tempZ;
-          if (targetInUpdated.zIndex === prevInUpdated.zIndex) {
-            prevInUpdated.zIndex += 1;
+          if (prevObj) {
+            const prevInUpdated = updated.find((o) => o.id === prevObj.id);
+            if (prevInUpdated) {
+              const tempZ = targetInUpdated.zIndex;
+              targetInUpdated.zIndex = prevInUpdated.zIndex;
+              prevInUpdated.zIndex = tempZ;
+              if (targetInUpdated.zIndex === prevInUpdated.zIndex) {
+                prevInUpdated.zIndex += 1;
+              }
+            }
           }
         }
         break;

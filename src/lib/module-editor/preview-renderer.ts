@@ -6,6 +6,7 @@ import {
   BoundingBox,
   Transform,
   ModuleEditorObject,
+  PageRangeType,
 } from "./types";
 import { CoordinateEngine, DEFAULT_PAGE_SIZE } from "./coordinate-engine";
 import { ThemeEngine } from "./theme-engine";
@@ -70,7 +71,7 @@ export class PreviewRenderer {
   /**
    * Replace template tokens like {page}, {subject}, {teacher}
    */
-  public static interpolateVariables(template: string, vars: ModuleVariables): string {
+  public static interpolateVariables(template: string = "", vars: ModuleVariables): string {
     if (!template) return "";
     let res = template;
     res = res.replace(/\{page\}/gi, String(vars.page));
@@ -89,7 +90,7 @@ export class PreviewRenderer {
    */
   public static isPageActive(
     pageNumber: number,
-    range: "ALL" | "ODD" | "EVEN" | "CUSTOM",
+    range?: PageRangeType,
     customPages?: number[],
     excludeFirstPage: boolean = false
   ): boolean {
@@ -113,7 +114,7 @@ export class PreviewRenderer {
     pageWidth: number = DEFAULT_PAGE_SIZE.width,
     pageHeight: number = DEFAULT_PAGE_SIZE.height
   ): HeaderFooterRenderModel {
-    const isVisible = config.enabled && this.isPageActive(vars.page, config.pageRange, config.customPages, config.excludeFirstPage);
+    const isVisible = !!config.enabled && this.isPageActive(vars.page, config.pageRange, config.customPages, config.excludeFirstPage);
 
     if (!isVisible) {
       return {
@@ -191,9 +192,9 @@ export class PreviewRenderer {
         backgroundColor: headerStyle.backgroundColor,
         borderBottomColor: config.accentColor || headerStyle.borderBottomColor,
         borderBottomWidth: theme.headerBorderThickness,
-        leftText: this.interpolateVariables(config.headerLeft, vars),
-        centerText: this.interpolateVariables(config.headerCenter, vars),
-        rightText: this.interpolateVariables(config.headerRight, vars),
+        leftText: this.interpolateVariables(config.headerLeft || "", vars),
+        centerText: this.interpolateVariables(config.headerCenter || "", vars),
+        rightText: this.interpolateVariables(config.headerRight || "", vars),
         fontFamily: config.fontFamily || "helvetica",
         fontSize: config.fontSize || 9,
         image: headerImageModel,
@@ -203,9 +204,9 @@ export class PreviewRenderer {
         bounds: footerBounds,
         borderTopColor: footerStyle.borderTopColor,
         borderTopWidth: theme.structuralDividerThickness,
-        leftText: this.interpolateVariables(config.footerLeft, vars),
-        centerText: this.interpolateVariables(config.footerCenter, vars),
-        rightText: this.interpolateVariables(config.footerRight, vars),
+        leftText: this.interpolateVariables(config.footerLeft || "", vars),
+        centerText: this.interpolateVariables(config.footerCenter || "", vars),
+        rightText: this.interpolateVariables(config.footerRight || "", vars),
         fontFamily: config.fontFamily || "helvetica",
         fontSize: Math.max(7, (config.fontSize || 9) - 1.5),
         image: footerImageModel,
@@ -223,7 +224,7 @@ export class PreviewRenderer {
     pageWidth: number = DEFAULT_PAGE_SIZE.width,
     pageHeight: number = DEFAULT_PAGE_SIZE.height
   ): WatermarkRenderModel {
-    const isVisible = config.enabled && this.isPageActive(pageNumber, config.pageRange, config.customPages, config.excludeFirstPage);
+    const isVisible = !!config.enabled && this.isPageActive(pageNumber, config.pageRange, config.customPages, config.excludeFirstPage);
 
     if (!isVisible) {
       return {
@@ -258,7 +259,7 @@ export class PreviewRenderer {
 
     return {
       visible: true,
-      type: config.type,
+      type: config.type || "text",
       layer: config.layer || "BEHIND_CONTENT",
       bounds: { x, y, width: scaledWidth, height: scaledHeight },
       opacity: Math.max(0.01, Math.min(1.0, config.opacity !== undefined ? config.opacity : 0.08)),

@@ -1300,18 +1300,20 @@ export function QuestionManagementTable({
         const hasPrev = currentIdx > 0;
         const hasNext = currentIdx >= 0 && currentIdx < questions.length - 1;
         const handlePrevModal = () => {
-          if (hasPrev) {
+          const prevQ = questions[currentIdx - 1];
+          if (hasPrev && prevQ) {
             setReviewModalQuestion({
               ...reviewModalQuestion,
-              question: questions[currentIdx - 1],
+              question: prevQ,
             });
           }
         };
         const handleNextModal = () => {
-          if (hasNext) {
+          const nextQ = questions[currentIdx + 1];
+          if (hasNext && nextQ) {
             setReviewModalQuestion({
               ...reviewModalQuestion,
-              question: questions[currentIdx + 1],
+              question: nextQ,
             });
           }
         };
@@ -1340,13 +1342,15 @@ export function QuestionManagementTable({
         const hasPrev = currentIdx > 0;
         const hasNext = currentIdx >= 0 && currentIdx < questions.length - 1;
         const handlePrevModal = () => {
-          if (hasPrev) {
-            setStandaloneReviewQuestion(questions[currentIdx - 1]);
+          const prevQ = questions[currentIdx - 1];
+          if (hasPrev && prevQ) {
+            setStandaloneReviewQuestion(prevQ);
           }
         };
         const handleNextModal = () => {
-          if (hasNext) {
-            setStandaloneReviewQuestion(questions[currentIdx + 1]);
+          const nextQ = questions[currentIdx + 1];
+          if (hasNext && nextQ) {
+            setStandaloneReviewQuestion(nextQ);
           }
         };
 

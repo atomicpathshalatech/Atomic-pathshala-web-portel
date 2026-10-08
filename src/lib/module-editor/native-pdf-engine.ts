@@ -17,11 +17,16 @@ import {
   ModuleVariables,
   VisualLayer,
   ModuleTheme,
+  HeaderFooterConfig,
+  WatermarkConfig,
+  CoverPageConfig,
 } from "./types";
 import { CoordinateEngine, DEFAULT_PAGE_SIZE } from "./coordinate-engine";
 import { ThemeEngine, SUBJECT_THEMES } from "./theme-engine";
 import { LayerEngine } from "./layer-engine";
 import { PreviewRenderer } from "./preview-renderer";
+
+export type { HeaderFooterConfig, WatermarkConfig, CoverPageConfig };
 
 // -------------------------------------------------------------
 // Compatibility Interfaces for FoxitModuleEditor & save-native API
@@ -121,69 +126,6 @@ export interface BackgroundConfig {
   customPages?: number[];
 }
 
-export interface HeaderFooterConfig {
-  enabled?: boolean;
-  headerLeft?: string;
-  headerCenter?: string;
-  headerRight?: string;
-  footerLeft?: string;
-  footerCenter?: string;
-  footerRight?: string;
-  headerImageUrl?: string;
-  headerImageBase64?: string;
-  headerImageHeight?: number;
-  headerImagePosition?: "left" | "center" | "right";
-  headerTopOffsetPt?: number;
-  footerImageUrl?: string;
-  footerImageBase64?: string;
-  footerImageHeight?: number;
-  footerImagePosition?: "left" | "center" | "right";
-  footerBottomOffsetPt?: number;
-  removeOldHeader?: boolean;
-  removeOldFooter?: boolean;
-  oldHeaderHeightPt?: number;
-  oldFooterHeightPt?: number;
-  fontSize?: number;
-  accentColor?: string;
-  excludeFirstPage?: boolean;
-  pageRange?: "ALL" | "ODD" | "EVEN" | "CUSTOM";
-  customPages?: number[];
-}
-
-export interface WatermarkConfig {
-  enabled?: boolean;
-  type?: "text" | "image";
-  text?: string;
-  imageUrl?: string;
-  base64Data?: string;
-  imageWidth?: number;
-  imageHeight?: number;
-  scale?: number;
-  position?: "CENTER" | "TOP" | "BOTTOM" | "CUSTOM";
-  customX?: number;
-  customY?: number;
-  layer?: "BEHIND_CONTENT" | "ABOVE_CONTENT";
-  opacity?: number;
-  rotation?: number;
-  fontSize?: number;
-  color?: string;
-  excludeFirstPage?: boolean;
-  pageRange?: "ALL" | "ODD" | "EVEN" | "CUSTOM";
-  customPages?: number[];
-}
-
-export interface CoverPageConfig {
-  enabled: boolean;
-  action?: "PREPEND" | "REPLACE_FIRST" | "DELETE_FIRST" | "NONE";
-  subject: string;
-  moduleNumber: string;
-  chapter: string;
-  teacher?: string;
-  batch?: string;
-  targetExam?: string;
-  academicYear?: string;
-}
-
 export interface NativePdfEditPayload {
   originalPdfBuffer: Buffer | Uint8Array;
   textEdits?: TextEditItem[];
@@ -256,7 +198,7 @@ async function embedImageBuffer(doc: PDFDocument, base64OrUrl: string): Promise<
 }
 
 function replaceVariables(
-  template: string,
+  template: string = "",
   vars: {
     page: number;
     totalPages: number;
@@ -385,7 +327,9 @@ export async function processNativePdfEdits(
     for (const pNum of pageOrder) {
       if (pNum >= 1 && pNum <= originalPageCount && !deletedSet.has(pNum)) {
         const [copied] = await reorderedDoc.copyPages(pdfDoc, [pNum - 1]);
-        reorderedDoc.addPage(copied);
+        if (copied) {
+          reorderedDoc.addPage(copied);
+        }
       }
     }
     workingDoc = reorderedDoc;
@@ -405,7 +349,10 @@ export async function processNativePdfEdits(
   for (const [pNumStr, rotDeg] of Object.entries(pageRotations)) {
     const pNum = Number(pNumStr);
     if (pNum >= 1 && pNum <= pages.length) {
-      pages[pNum - 1].setRotation(degrees(Number(rotDeg)));
+      const pageToRotate = pages[pNum - 1];
+      if (pageToRotate) {
+        pageToRotate.setRotation(degrees(Number(rotDeg)));
+      }
     }
   }
 
@@ -413,6 +360,7 @@ export async function processNativePdfEdits(
   for (let pIdx = 0; pIdx < pages.length; pIdx++) {
     const pageNum = pIdx + 1;
     const page = pages[pIdx];
+    if (!page) continue;
     const { width, height } = page.getSize();
 
     const vars = {
