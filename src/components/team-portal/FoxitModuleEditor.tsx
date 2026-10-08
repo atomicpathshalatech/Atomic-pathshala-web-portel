@@ -170,6 +170,9 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
   const [activeSidebarTab, setActiveSidebarTab] = useState<"thumbnails" | "layers" | "versions" | "diagnostics">("thumbnails");
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
+  const [downloadDropdownOpen, setDownloadDropdownOpen] = useState<boolean>(false);
+  const [isExporting, setIsExporting] = useState<boolean>(false);
+  const [latestExportUrl, setLatestExportUrl] = useState<string | null>(null);
   const [diagnosticsData, setDiagnosticsData] = useState<{ renderTimeMs: number; loadTimeMs: number }>({ renderTimeMs: 0, loadTimeMs: 0 });
 
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
@@ -591,7 +594,7 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
   };
 
   // 5. Save Document Handler (with In-Place Native PDF Engine)
-  const handleSaveDocument = async (isAutosave = false) => {
+  const handleSaveDocument = async (isAutosave = false): Promise<string | null> => {
     try {
       setSaveStatus("saving");
       const res = await fetch(`/api/team/modules/${moduleId}/save-native`, {
@@ -622,6 +625,11 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
       }
 
       const result = await res.json();
+      const returnedFileUrl = result.data?.fileUrl || null;
+      if (returnedFileUrl) {
+        setLatestExportUrl(returnedFileUrl);
+      }
+
       setSaveStatus("saved");
       setHasUnsavedChanges(false);
 
@@ -640,6 +648,7 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                     snapshot: {
                       textEditsCount: textEdits.length,
                       pageCount: result.data.pageCount,
+                      fileUrl: returnedFileUrl,
                     },
                   },
                   ...(prev.versions || []),
@@ -650,12 +659,77 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
       }
 
       setTimeout(() => setSaveStatus("idle"), 4000);
+      return returnedFileUrl;
     } catch (err: any) {
       console.error("Save error:", err);
       setSaveStatus("error");
       toast.error("Failed to save: " + (err.message || "Unknown error"));
+      return null;
     }
   };
+
+  // Helper to trigger browser file download
+  const triggerBrowserDownload = (url: string, fileName: string) => {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    a.target = "_blank";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  // Export & Download Edited PDF Handler
+  const handleExportAndDownload = async () => {
+    setIsExporting(true);
+    const toastId = toast.loading("Generating edited PDF for download...");
+    try {
+      let fileUrl = latestExportUrl;
+      // If there are unsaved changes or we haven't saved yet, perform a fresh save
+      if (hasUnsavedChanges || !fileUrl) {
+        fileUrl = await handleSaveDocument(false);
+      }
+
+      if (!fileUrl) {
+        throw new Error("Could not generate edited PDF download URL.");
+      }
+
+      const safeTitle = (moduleData?.title || moduleData?.code || "Atomic_Module")
+        .replace(/[^a-zA-Z0-9_-]/g, "_");
+      const downloadFileName = `${safeTitle}_Edited.pdf`;
+
+      triggerBrowserDownload(fileUrl, downloadFileName);
+      toast.success("🎉 PDF Downloaded Successfully!", { id: toastId });
+    } catch (err: any) {
+      console.error("Export download error:", err);
+      toast.error(err.message || "Failed to download edited PDF", { id: toastId });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  // Direct Print PDF Handler
+  const handlePrintDocument = () => {
+    const printUrl = latestExportUrl || moduleData?.originalFileUrl;
+    if (printUrl) {
+      const win = window.open(printUrl, "_blank");
+      if (win) {
+        win.focus();
+      }
+    } else {
+      window.print();
+    }
+  };
+
+  // Window Click Listener to Close Menus
+  useEffect(() => {
+    const handleWindowClick = () => {
+      setActiveMenu(null);
+      setDownloadDropdownOpen(false);
+    };
+    window.addEventListener("click", handleWindowClick);
+    return () => window.removeEventListener("click", handleWindowClick);
+  }, []);
 
   // Keyboard Shortcuts Listener
   useEffect(() => {
@@ -664,6 +738,16 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
         e.preventDefault();
         handleSaveDocument(false);
+      }
+      // Ctrl+E / Cmd+E -> Export & Download
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "e") {
+        e.preventDefault();
+        handleExportAndDownload();
+      }
+      // Ctrl+P / Cmd+P -> Print
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        handlePrintDocument();
       }
       // Ctrl+Z
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !e.shiftKey) {
@@ -698,7 +782,7 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedObjectId, historyIndex, history, textEdits, whiteouts, images, shapes, globalRemovals, globalReplacements]);
+  }, [selectedObjectId, historyIndex, history, textEdits, whiteouts, images, shapes, globalRemovals, globalReplacements, latestExportUrl, hasUnsavedChanges, moduleData]);
 
   // Delete Active Selected Object
   const handleDeleteSelectedObject = () => {
@@ -771,36 +855,81 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                   File
                 </button>
                 {activeMenu === "file" && (
-                  <div className="absolute left-0 top-full mt-1 w-52 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl py-1 z-50 text-xs">
+                  <div className="absolute left-0 top-full mt-1 w-56 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl py-1 z-50 text-xs">
                     <button
-                      onClick={() => handleSaveDocument(false)}
+                      type="button"
+                      onClick={() => {
+                        setActiveMenu(null);
+                        handleSaveDocument(false);
+                      }}
                       className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-slate-800 text-slate-200"
                     >
                       <span className="flex items-center gap-2">
-                        <span className="material-symbols-outlined text-sm text-orange-400">save</span> Save
+                        <span className="material-symbols-outlined text-sm text-orange-400">save</span> Save Changes
                       </span>
                       <span className="text-[10px] text-slate-500">Ctrl+S</span>
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveMenu(null);
+                        handleExportAndDownload();
+                      }}
+                      className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-slate-800 text-slate-200"
+                    >
+                      <span className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-sm text-emerald-400">download</span> Export & Download
+                      </span>
+                      <span className="text-[10px] text-slate-500">Ctrl+E</span>
+                    </button>
                     {moduleData?.originalFileUrl && (
-                      <a
-                        href={moduleData.originalFileUrl}
-                        download={moduleData.originalFileName}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveMenu(null);
+                          triggerBrowserDownload(
+                            moduleData.originalFileUrl,
+                            moduleData.originalFileName || "Original_Module.pdf"
+                          );
+                          toast.success("Downloading original PDF...");
+                        }}
                         className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-slate-800 text-slate-200"
                       >
                         <span className="flex items-center gap-2">
-                          <span className="material-symbols-outlined text-sm text-indigo-400">download</span> Download Original
+                          <span className="material-symbols-outlined text-sm text-indigo-400">history_edu</span> Download Original
                         </span>
-                      </a>
+                      </button>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveMenu(null);
+                        handlePrintDocument();
+                      }}
+                      className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-slate-800 text-slate-200"
+                    >
+                      <span className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-sm text-slate-400">print</span> Print
+                      </span>
+                      <span className="text-[10px] text-slate-500">Ctrl+P</span>
+                    </button>
                     <div className="my-1 border-t border-slate-800" />
                     <button
-                      onClick={() => setActiveSidebarTab("versions")}
+                      type="button"
+                      onClick={() => {
+                        setActiveMenu(null);
+                        setActiveSidebarTab("versions");
+                      }}
                       className="w-full px-3 py-1.5 flex items-center gap-2 hover:bg-slate-800 text-slate-200"
                     >
                       <span className="material-symbols-outlined text-sm text-teal-400">history</span> Version History
                     </button>
                     <button
-                      onClick={() => setShowPagePropsDialog(true)}
+                      type="button"
+                      onClick={() => {
+                        setActiveMenu(null);
+                        setShowPagePropsDialog(true);
+                      }}
                       className="w-full px-3 py-1.5 flex items-center gap-2 hover:bg-slate-800 text-slate-200"
                     >
                       <span className="material-symbols-outlined text-sm text-slate-400">info</span> Document Properties
@@ -975,15 +1104,102 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
               )}
             </div>
 
-            {/* Save & Export Buttons */}
+            {/* Save & Export / Download Action Buttons */}
             <button
               type="button"
               onClick={() => handleSaveDocument(false)}
-              className="px-3.5 py-1 rounded-lg bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all"
+              className="px-3.5 py-1 rounded-lg bg-orange-600 hover:bg-orange-500 active:scale-95 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+              title="Save Changes (Ctrl+S)"
             >
               <span className="material-symbols-outlined text-sm">save</span>
               <span>Save (Ctrl+S)</span>
             </button>
+
+            {/* Prominent Download PDF Button with Options Dropdown */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDownloadDropdownOpen((prev) => !prev);
+                }}
+                disabled={isExporting}
+                className="px-3.5 py-1 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
+                title="Download / Export PDF (Ctrl+E)"
+              >
+                {isExporting ? (
+                  <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
+                ) : (
+                  <span className="material-symbols-outlined text-sm">download</span>
+                )}
+                <span>{isExporting ? "Generating..." : "Download PDF"}</span>
+                <span className="material-symbols-outlined text-xs">arrow_drop_down</span>
+              </button>
+
+              {downloadDropdownOpen && (
+                <div
+                  className="absolute right-0 top-full mt-1.5 w-64 bg-slate-900 border border-slate-700/80 rounded-xl shadow-2xl py-1.5 z-50 text-xs animate-in fade-in slide-in-from-top-2 duration-150"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Export & Download
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDownloadDropdownOpen(false);
+                      handleExportAndDownload();
+                    }}
+                    className="w-full px-3 py-2 flex items-center gap-2.5 hover:bg-slate-800 text-left transition-colors text-slate-200"
+                  >
+                    <span className="material-symbols-outlined text-emerald-400 text-lg">download_done</span>
+                    <div>
+                      <div className="font-bold text-slate-100 flex items-center gap-1">
+                        Download Edited PDF
+                        <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1 rounded font-normal">Latest</span>
+                      </div>
+                      <div className="text-[10px] text-slate-400">Includes all text, images & edits (Ctrl+E)</div>
+                    </div>
+                  </button>
+
+                  {moduleData?.originalFileUrl && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDownloadDropdownOpen(false);
+                        triggerBrowserDownload(
+                          moduleData.originalFileUrl,
+                          moduleData.originalFileName || "Original_Module.pdf"
+                        );
+                        toast.success("Downloading original PDF...");
+                      }}
+                      className="w-full px-3 py-2 flex items-center gap-2.5 hover:bg-slate-800 text-left transition-colors text-slate-200"
+                    >
+                      <span className="material-symbols-outlined text-indigo-400 text-lg">history_edu</span>
+                      <div>
+                        <div className="font-bold text-slate-200">Download Original PDF</div>
+                        <div className="text-[10px] text-slate-400">Unedited source document</div>
+                      </div>
+                    </button>
+                  )}
+
+                  <div className="my-1 border-t border-slate-800" />
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDownloadDropdownOpen(false);
+                      handlePrintDocument();
+                    }}
+                    className="w-full px-3 py-1.5 flex items-center gap-2 hover:bg-slate-800 text-slate-300 text-left transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-sm text-slate-400">print</span>
+                    <span>Print PDF (Ctrl+P)</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -1498,19 +1714,43 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
             {/* VERSIONS TAB */}
             {activeSidebarTab === "versions" && (
               <div className="space-y-3 text-xs">
-                <h4 className="font-bold text-slate-400 uppercase text-[10px] tracking-wider mb-2">
-                  Revision History
-                </h4>
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-bold text-slate-400 uppercase text-[10px] tracking-wider">
+                    Revision History
+                  </h4>
+                  <span className="text-[10px] text-slate-500 font-medium">
+                    {moduleData?.versions?.length || 0} saved
+                  </span>
+                </div>
                 {moduleData?.versions && moduleData.versions.length > 0 ? (
                   moduleData.versions.map((v) => (
-                    <div key={v.id} className="p-2.5 rounded-xl border border-slate-800 bg-slate-950/40 space-y-1">
+                    <div key={v.id} className="p-2.5 rounded-xl border border-slate-800 bg-slate-950/60 space-y-2 hover:border-slate-700 transition-colors">
                       <div className="flex items-center justify-between">
-                        <span className="font-bold text-slate-200">{v.label}</span>
-                        <span className="text-[10px] text-slate-500">{new Date(v.createdAt).toLocaleTimeString()}</span>
+                        <span className="font-bold text-slate-200 truncate pr-2">{v.label}</span>
+                        <span className="text-[10px] text-slate-500 shrink-0">{new Date(v.createdAt).toLocaleTimeString()}</span>
                       </div>
-                      <p className="text-[11px] text-slate-400">
-                        {v.snapshot?.textEditsCount ?? 0} Text Edits • {v.snapshot?.pageCount ?? 0} Pages
-                      </p>
+                      <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-900">
+                        <span>
+                          {v.snapshot?.textEditsCount ?? 0} edits • {v.snapshot?.pageCount ?? 0} pages
+                        </span>
+                        {v.snapshot?.fileUrl ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              triggerBrowserDownload(
+                                v.snapshot.fileUrl,
+                                `${(moduleData.code || "Module")}_${v.label.replace(/[^a-zA-Z0-9_-]/g, "_")}.pdf`
+                              );
+                              toast.success("Downloading revision PDF...");
+                            }}
+                            className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center gap-1 font-semibold text-[10px] transition-colors cursor-pointer"
+                            title="Download this version"
+                          >
+                            <span className="material-symbols-outlined text-xs text-emerald-400">download</span>
+                            Download
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                   ))
                 ) : (
