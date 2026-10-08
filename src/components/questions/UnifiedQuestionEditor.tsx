@@ -632,7 +632,49 @@ export function UnifiedQuestionEditor({
     fetchTopics();
   }, [subject, chapter]);
 
-  // D. Global Paste (Ctrl+V) handler for automatic extraction
+  // Helper: Solution Image Paste & Upload (Strictly for Solution area)
+  const handlePasteSolutionImage = async (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select or paste an image file (PNG, JPG, WebP) for the solution.");
+      return;
+    }
+
+    setIsUploadingSolImg(true);
+    const toastId = toast.loading("Uploading solution reference figure...");
+    try {
+      const url = await uploadImageFile(file);
+      if (url) {
+        setSolutionImageUrl(url);
+        toast.success("Solution Reference Image attached to Solution area!", { id: toastId });
+      } else {
+        toast.error("Could not obtain image URL.", { id: toastId });
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to upload solution image.", { id: toastId });
+    } finally {
+      setIsUploadingSolImg(false);
+    }
+  };
+
+  const handlePasteSolutionFromClipboardButton = async () => {
+    try {
+      const clipboardItems = await navigator.clipboard.read();
+      for (const item of clipboardItems) {
+        const imageType = item.types.find((t) => t.startsWith("image/"));
+        if (imageType) {
+          const blob = await item.getType(imageType);
+          const file = new File([blob], "solution_screenshot.png", { type: imageType });
+          await handlePasteSolutionImage(file);
+          return;
+        }
+      }
+      toast.info("No image found in clipboard. Please copy a screenshot first or click Browse.");
+    } catch {
+      toast.error("Clipboard access not allowed. You can press Ctrl+V directly or use Browse.");
+    }
+  };
+
+  // D. Global Paste (Ctrl+V) handler with strict Section Context Awareness
   useEffect(() => {
     const handleGlobalPaste = (e: ClipboardEvent) => {
       // If user is focused inside an input or textarea, let the field handle image pasting or normal typing
@@ -643,6 +685,13 @@ export function UnifiedQuestionEditor({
       const items = e.clipboardData?.items;
       if (!items) return;
 
+      // Detect if user is interacting with / focused on / hovering over the Solution section
+      const isSolutionTarget = Boolean(
+        activeEl?.closest?.('[data-section="solution"]') ||
+        (activeEl as HTMLElement)?.dataset?.section === "solution" ||
+        document.querySelector('[data-section="solution"]:hover')
+      );
+
       // 1. Check for image in clipboard
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
@@ -650,17 +699,23 @@ export function UnifiedQuestionEditor({
           e.preventDefault();
           const file = item.getAsFile();
           if (file) {
-            handleImageUploadAndExtract(file);
+            if (isSolutionTarget) {
+              handlePasteSolutionImage(file);
+            } else {
+              handleImageUploadAndExtract(file);
+            }
           }
           return;
         }
       }
 
-      // 2. Check for text in clipboard
-      const text = e.clipboardData.getData("text");
-      if (text && text.trim().length > 30) {
-        e.preventDefault();
-        handleTextAutoExtract(text.trim());
+      // 2. Check for text in clipboard (only for Question section, not solution)
+      if (!isSolutionTarget) {
+        const text = e.clipboardData.getData("text");
+        if (text && text.trim().length > 30) {
+          e.preventDefault();
+          handleTextAutoExtract(text.trim());
+        }
       }
     };
 
@@ -1319,6 +1374,7 @@ export function UnifiedQuestionEditor({
 
       {/* 3. AUTO-EXTRACT DROP & PASTE ZONE (Section 4 — No Manual Click Needed) */}
       <div
+        data-section="question"
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => {
           e.preventDefault();
@@ -1947,7 +2003,10 @@ export function UnifiedQuestionEditor({
       </div>
 
       {/* 5. DEDICATED BILINGUAL SOLUTION STUDIO (Inbuilt AI Assistant & Regenerator) */}
-      <div className="bg-white border border-blue-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-4">
+      <div
+        data-section="solution"
+        className="bg-white border border-blue-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-4"
+      >
         {/* Solution Header & Regenerate Button */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
           <div className="space-y-0.5">
@@ -1961,7 +2020,7 @@ export function UnifiedQuestionEditor({
               </span>
             </div>
             <p className="text-[11px] text-slate-500">
-              Authoritative step-by-step solution. Inbuilt AI regenerator available below.
+              Authoritative step-by-step solution. Inbuilt AI regenerator &amp; separate solution reference available below.
             </p>
           </div>
 
@@ -2045,21 +2104,64 @@ export function UnifiedQuestionEditor({
           </div>
         )}
 
-        {/* DEDICATED SOLUTION DIAGRAM / FIGURE DOCK */}
-        <div className="bg-slate-50 border border-slate-200/90 rounded-xl p-3 space-y-2">
+        {/* DEDICATED SOLUTION DIAGRAM / FIGURE DOCK (Strictly Separated from Question Reference) */}
+        <div
+          data-section="solution"
+          tabIndex={0}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            const file = e.dataTransfer.files?.[0];
+            if (file) handlePasteSolutionImage(file);
+          }}
+          onPaste={(e) => {
+            const items = e.clipboardData?.items;
+            if (!items) return;
+            for (let i = 0; i < items.length; i++) {
+              const item = items[i];
+              if (item && item.type.startsWith("image/")) {
+                e.preventDefault();
+                e.stopPropagation();
+                const file = item.getAsFile();
+                if (file) handlePasteSolutionImage(file);
+                return;
+              }
+            }
+          }}
+          className="bg-slate-50 hover:bg-slate-50/90 border-2 border-dashed border-blue-200/90 focus:border-blue-500 rounded-xl p-3.5 space-y-2.5 transition outline-none"
+        >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <span className="p-1.5 rounded-lg bg-blue-100 text-blue-700">
                 <ImageIcon className="w-3.5 h-3.5" />
               </span>
               <div>
-                <h4 className="text-xs font-bold text-slate-800">
-                  Solution Figure / Working Diagram
-                </h4>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide">
+                    Solution Reference / Working Diagram
+                  </h4>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-100 text-blue-900 font-bold">
+                    Solution Only
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-500">
+                  Separated from Question screenshot. Paste (Ctrl+V), drop or browse image for Solution only.
+                </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button
+                type="button"
+                onClick={handlePasteSolutionFromClipboardButton}
+                disabled={isUploadingSolImg}
+                className="inline-flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-slate-100 text-blue-700 border border-blue-300 rounded-lg text-xs font-bold transition shadow-2xs cursor-pointer disabled:opacity-50"
+                title="Paste screenshot directly from clipboard into solution"
+              >
+                <Sparkles className="w-3 h-3 text-blue-600" />
+                <span>Paste Screenshot</span>
+              </button>
+
               <input
                 type="file"
                 ref={solutionFileInputRef}
@@ -2068,20 +2170,8 @@ export function UnifiedQuestionEditor({
                 onChange={async (e) => {
                   const file = e.target.files?.[0];
                   if (file) {
-                    setIsUploadingSolImg(true);
-                    const toastId = toast.loading("Uploading solution figure...");
-                    try {
-                      const url = await uploadImageFile(file);
-                      if (url) {
-                        setSolutionImageUrl(url);
-                        toast.success("Solution diagram uploaded!", { id: toastId });
-                      }
-                    } catch (err: any) {
-                      toast.error(err.message || "Failed to upload solution image.", { id: toastId });
-                    } finally {
-                      setIsUploadingSolImg(false);
-                      if (solutionFileInputRef.current) solutionFileInputRef.current.value = "";
-                    }
+                    await handlePasteSolutionImage(file);
+                    if (solutionFileInputRef.current) solutionFileInputRef.current.value = "";
                   }
                 }}
               />
@@ -2097,7 +2187,7 @@ export function UnifiedQuestionEditor({
                     ? "Uploading..."
                     : solutionImageUrl
                     ? "Replace Figure"
-                    : "Upload / Paste Figure"}
+                    : "Browse Figure"}
                 </span>
               </button>
 

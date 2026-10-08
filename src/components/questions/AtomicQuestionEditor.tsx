@@ -208,32 +208,66 @@ export function AtomicQuestionEditor({
     figureUrl,
   ]);
 
+  // Process Solution Image Upload / Paste exclusively without touching Question statement or OCR
+  const handleProcessSolutionFile = async (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please provide an image file for the solution.");
+      return;
+    }
+    setSolutionImageFile(file);
+    const toastId = toast.loading("Uploading solution reference image...");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const uploadRes = await fetch("/api/upload", { method: "POST", body: formData });
+      const uploadJson = await uploadRes.json();
+      if (uploadJson.success && uploadJson.data?.url) {
+        setSolutionImagePreview(uploadJson.data.url);
+        toast.success("Solution reference image attached to Solution area!", { id: toastId });
+      } else {
+        throw new Error(uploadJson.error || "Upload failed");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to upload solution image", { id: toastId });
+    }
+  };
+
   // Global Clipboard Paste (Ctrl+V) handler for Images
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
+      const activeEl = document.activeElement;
+      const isInput = activeEl?.tagName === "INPUT" || activeEl?.tagName === "TEXTAREA";
+      if (isInput) return;
+
       const items = e.clipboardData?.items;
       if (!items) return;
+
+      const isSolutionTarget = Boolean(
+        activeEl?.closest?.('[data-section="solution"]') ||
+        (activeEl as HTMLElement)?.dataset?.section === "solution" ||
+        document.querySelector('[data-section="solution"]:hover')
+      );
 
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
         if (item && item.type.indexOf("image") !== -1) {
           const file = item.getAsFile();
           if (file) {
-            const reader = new FileReader();
-            reader.onload = () => {
-              const base64 = reader.result as string;
-              if (!questionImagePreview) {
+            e.preventDefault();
+            if (isSolutionTarget) {
+              handleProcessSolutionFile(file);
+            } else {
+              const reader = new FileReader();
+              reader.onload = () => {
+                const base64 = reader.result as string;
                 setQuestionImagePreview(base64);
                 setQuestionImageFile(file);
-                toast.success("Question Image pasted from clipboard! Running AI OCR...");
+                toast.success("Question image pasted from clipboard! Running AI OCR...");
                 triggerOcrExtraction(base64, file.type);
-              } else if (!solutionImagePreview) {
-                setSolutionImagePreview(base64);
-                setSolutionImageFile(file);
-                toast.success("Solution Image pasted from clipboard!");
-              }
-            };
-            reader.readAsDataURL(file);
+              };
+              reader.readAsDataURL(file);
+            }
+            return;
           }
         }
       }
@@ -241,7 +275,7 @@ export function AtomicQuestionEditor({
 
     window.addEventListener("paste", handlePaste);
     return () => window.removeEventListener("paste", handlePaste);
-  }, [questionImagePreview, solutionImagePreview]);
+  }, []);
 
   // Auto trigger debounced similarity check when statement changes
   useEffect(() => {
@@ -1014,7 +1048,43 @@ export function AtomicQuestionEditor({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Question Image Dropzone */}
           <div
+            data-section="question"
+            tabIndex={0}
             onClick={() => questionInputRef.current?.click()}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const file = e.dataTransfer.files?.[0];
+              if (file) {
+                const syntheticEvent = { target: { files: [file] } } as any;
+                handleQuestionFileSelect(syntheticEvent);
+              }
+            }}
+            onPaste={(e) => {
+              const items = e.clipboardData?.items;
+              if (!items) return;
+              for (let i = 0; i < items.length; i++) {
+                const item = items[i];
+                if (item && item.type.indexOf("image") !== -1) {
+                  const file = item.getAsFile();
+                  if (file) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                      const base64 = reader.result as string;
+                      setQuestionImagePreview(base64);
+                      setQuestionImageFile(file);
+                      toast.success("Question image attached! Running AI OCR...");
+                      triggerOcrExtraction(base64, file.type);
+                    };
+                    reader.readAsDataURL(file);
+                    return;
+                  }
+                }
+              }
+            }}
             className={`border-2 border-dashed rounded-2xl p-5 text-center cursor-pointer transition relative group ${
               questionImagePreview
                 ? "border-blue-500 bg-blue-50/20 dark:bg-blue-950/20"
@@ -1096,7 +1166,32 @@ export function AtomicQuestionEditor({
 
           {/* Solution Image Dropzone */}
           <div
+            data-section="solution"
+            tabIndex={0}
             onClick={() => solutionInputRef.current?.click()}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const file = e.dataTransfer.files?.[0];
+              if (file) handleProcessSolutionFile(file);
+            }}
+            onPaste={(e) => {
+              const items = e.clipboardData?.items;
+              if (!items) return;
+              for (let i = 0; i < items.length; i++) {
+                const item = items[i];
+                if (item && item.type.indexOf("image") !== -1) {
+                  const file = item.getAsFile();
+                  if (file) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleProcessSolutionFile(file);
+                    return;
+                  }
+                }
+              }
+            }}
             className={`border-2 border-dashed rounded-2xl p-5 text-center cursor-pointer transition relative group ${
               solutionImagePreview
                 ? "border-blue-500 bg-blue-50/20 dark:bg-blue-950/20"

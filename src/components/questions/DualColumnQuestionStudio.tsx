@@ -33,6 +33,7 @@ export interface QuestionEntry {
   solutionEn: string;
   imageUrl?: string;
   referenceImageUrl?: string;
+  solutionImageUrl?: string;
   camDrawData?: any;
   isSaved?: boolean;
 }
@@ -305,6 +306,8 @@ export function DualColumnQuestionStudio({
           solutionHi: trHi?.solution || "",
           solutionEn: trEn?.solution || "",
           imageUrl: question.figureUrl || question.referenceImageUrl || undefined,
+          referenceImageUrl: question.referenceImageUrl || undefined,
+          solutionImageUrl: question.solutionImageUrl || question.assets?.find((a: any) => a.type === "SOLUTION")?.publicUrl || undefined,
           isSaved: true,
         },
       }));

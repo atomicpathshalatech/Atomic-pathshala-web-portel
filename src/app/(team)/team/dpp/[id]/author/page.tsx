@@ -71,6 +71,7 @@ export default async function DppAuthorPage({ params }: { params: { id: string }
       solutionEn: trEn?.solution || "",
       imageUrl: q.imageUrl || undefined,
       referenceImageUrl: (q as any).referenceImageUrl || undefined,
+      solutionImageUrl: (q as any).solutionImageUrl || undefined,
       camDrawData: (q as any).camDrawData || undefined,
       isSaved: true,
     });

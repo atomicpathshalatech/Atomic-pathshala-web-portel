@@ -105,6 +105,7 @@ export default async function TestAuthorPage({ params }: { params: { id: string 
         solutionEn: trEn?.solution || "",
         imageUrl: resolvedImg,
         referenceImageUrl: (q as any).referenceImageUrl || undefined,
+        solutionImageUrl: (q as any).solutionImageUrl || (q.assets?.find((a: any) => a.type === "SOLUTION")?.publicUrl) || undefined,
         camDrawData: (q as any).camDrawData || undefined,
         isSaved: true,
       });
