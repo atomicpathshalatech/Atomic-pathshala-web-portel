@@ -9,22 +9,19 @@ import { Skeleton } from "@/components/ui/Skeleton";
  * shell + route paint immediately. `ssr: false` because it's fully
  * interactive/browser-only.
  */
-const ModuleEditor = dynamic(
-  () => import("./ModuleEditor").then((m) => m.ModuleEditor),
+const FoxitModuleEditor = dynamic(
+  () => import("./FoxitModuleEditor").then((m) => m.FoxitModuleEditor),
   {
     ssr: false,
     loading: () => (
-      <div className="space-y-4">
-        <Skeleton className="h-9 w-64" />
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[260px_1fr]">
-          <Skeleton className="h-[70vh] w-full" />
-          <Skeleton className="h-[70vh] w-full" />
-        </div>
+      <div className="flex flex-col items-center justify-center h-[calc(100vh-120px)] gap-4 bg-slate-950 text-slate-200">
+        <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
+        <p className="font-bold text-sm">Opening Native Foxit-Style PDF Editor...</p>
       </div>
     ),
   }
 );
 
-export function ModuleEditorClient({ moduleId }: { moduleId: string }) {
-  return <ModuleEditor moduleId={moduleId} />;
+export function ModuleEditorClient({ moduleId, userRole }: { moduleId: string; userRole?: string }) {
+  return <FoxitModuleEditor moduleId={moduleId} userRole={userRole} />;
 }
