@@ -175,7 +175,7 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
   const isAdmin = userRole === "SUPER_ADMIN" || userRole === "ADMIN";
 
-  // Push state to Undo/Redo stack
+  // Push state to Undo/Redo stack (Stable reference with zero re-trigger loops)
   const pushHistory = useCallback(
     (newState: {
       textEdits: TextEditItem[];
@@ -188,14 +188,19 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
       pageRotations: Record<number, number>;
     }) => {
       setHistory((prev) => {
-        const updated = prev.slice(0, historyIndex + 1);
+        const nextIndex = historyIndexRef.current + 1;
+        historyIndexRef.current = nextIndex;
+        setHistoryIndex(nextIndex);
+        const updated = prev.slice(0, nextIndex);
         return [...updated, newState].slice(-50);
       });
-      setHistoryIndex((prev) => prev + 1);
       setHasUnsavedChanges(true);
     },
-    [historyIndex]
+    []
   );
+
+  const historyIndexRef = useRef<number>(historyIndex);
+  historyIndexRef.current = historyIndex;
 
   const handleUndo = () => {
     if (historyIndex > 0) {
@@ -227,7 +232,7 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
     }
   };
 
-  // 1. Initial Load of Module Details & PDF Document
+  // 1. Initial Load of Module Details & PDF Document (Runs strictly once per moduleId)
   useEffect(() => {
     let isMounted = true;
     const loadStart = Date.now();
@@ -274,17 +279,21 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
         setDiagnosticsData((d) => ({ ...d, loadTimeMs: Date.now() - loadStart }));
         setLoading(false);
 
-        // Push initial state to history
-        pushHistory({
-          textEdits: [],
-          whiteouts: [],
-          images: [],
-          shapes: [],
-          globalRemovals: [],
-          globalReplacements: [],
-          deletedPages: [],
-          pageRotations: {},
-        });
+        // Initialize history stack
+        setHistory([
+          {
+            textEdits: [],
+            whiteouts: [],
+            images: [],
+            shapes: [],
+            globalRemovals: [],
+            globalReplacements: [],
+            deletedPages: [],
+            pageRotations: {},
+          },
+        ]);
+        setHistoryIndex(0);
+        historyIndexRef.current = 0;
       } catch (err: any) {
         console.error("Failed to load PDF document:", err);
         toast.error("Failed to load PDF: " + (err.message || "Unknown error"));
@@ -296,7 +305,7 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
     return () => {
       isMounted = false;
     };
-  }, [moduleId, pushHistory]);
+  }, [moduleId]);
 
   // 2. Perform Global Search Across All Pages
   const performSearch = useCallback(async () => {
@@ -2545,15 +2554,16 @@ function NativePdfPageView({
   // Render PDF.js Canvas on Page Change or Zoom Change
   useEffect(() => {
     let isCancelled = false;
+    let renderTask: any = null;
 
     async function renderPage() {
       if (!pdfDocProxy || pageNumber < 1 || pageNumber > pdfDocProxy.numPages) return;
 
       try {
         const page = await pdfDocProxy.getPage(pageNumber);
-        const viewport = page.getViewport({ scale: zoom * 1.5, rotation });
-
         if (isCancelled) return;
+
+        const viewport = page.getViewport({ scale: zoom * 1.5, rotation });
         setPageSize({ width: viewport.width / (zoom * 1.5), height: viewport.height / (zoom * 1.5) });
 
         const canvas = canvasRef.current;
@@ -2569,9 +2579,12 @@ function NativePdfPageView({
               canvasContext: ctx,
               viewport,
             };
-            await page.render(renderContext).promise;
+            renderTask = page.render(renderContext);
+            await renderTask.promise;
           }
         }
+
+        if (isCancelled) return;
 
         // Extract Text Geometry Spans for Direct In-Place Text Editing
         const textContent = await page.getTextContent();
@@ -2594,14 +2607,21 @@ function NativePdfPageView({
           }
         }
         setTextSpans(spans);
-      } catch (err) {
-        console.warn("[NativePdfPageView] Render error:", err);
+      } catch (err: any) {
+        if (err?.name !== "RenderingCancelledException") {
+          console.warn("[NativePdfPageView] Render error:", err);
+        }
       }
     }
 
     renderPage();
     return () => {
       isCancelled = true;
+      if (renderTask) {
+        try {
+          renderTask.cancel();
+        } catch {}
+      }
     };
   }, [pdfDocProxy, pageNumber, zoom, rotation]);
 
