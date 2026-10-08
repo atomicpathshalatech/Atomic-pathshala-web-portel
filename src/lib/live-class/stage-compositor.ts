@@ -519,26 +519,43 @@ export class StageCompositor {
     }
 
     if (media.microphone && navigator.mediaDevices?.getUserMedia) {
+      let mic: MediaStream | null = null;
       try {
-        const mic = await navigator.mediaDevices.getUserMedia({
+        mic = await navigator.mediaDevices.getUserMedia({
           audio: {
             ...MIC_CONSTRAINTS,
             ...(media.microphoneDeviceId ? { deviceId: { exact: media.microphoneDeviceId } } : {}),
           },
           video: false,
         });
+      } catch (err) {
+        // Fallback to standard audio constraints if strict constraints fail on the device
+        try {
+          mic = await navigator.mediaDevices.getUserMedia({
+            audio: media.microphoneDeviceId ? { deviceId: { exact: media.microphoneDeviceId } } : true,
+            video: false,
+          });
+        } catch (fallbackErr) {
+          this.warnings.push(`Microphone unavailable: ${fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr)}`);
+        }
+      }
+
+      if (mic) {
         this.mediaStreams.push(mic);
         // Voice filter: rumble/hiss filters, close-talk noise gate, compressor.
         const raw = mic.getAudioTracks()[0];
         if (raw) {
-          const vf = await createVoiceFilter(raw);
-          this.stopVoiceFilter = vf.stop;
-          if (!vf.filtered) this.warnings.push("Voice filter unavailable — sending the microphone unfiltered.");
-          else if (!vf.rnnoise) this.warnings.push("AI noise suppression unavailable — using the basic voice filter.");
-          output.addTrack(vf.track);
+          try {
+            const vf = await createVoiceFilter(raw);
+            this.stopVoiceFilter = vf.stop;
+            if (!vf.filtered) this.warnings.push("Voice filter unavailable — sending the microphone unfiltered.");
+            else if (!vf.rnnoise) this.warnings.push("AI noise suppression unavailable — using the basic voice filter.");
+            output.addTrack(vf.track);
+          } catch {
+            // Guarantee audio is never lost if filtering fails
+            output.addTrack(raw);
+          }
         }
-      } catch (err) {
-        this.warnings.push(`Microphone unavailable: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
 

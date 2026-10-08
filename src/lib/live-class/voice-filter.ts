@@ -28,12 +28,12 @@ export interface GateParams {
 }
 
 export const DEFAULT_GATE: GateParams = {
-  openDb: -42,
-  closeDb: -50,
-  holdMs: 250,
+  openDb: -55,
+  closeDb: -62,
+  holdMs: 350,
   attackMs: 5,
-  releaseMs: 180,
-  floorDb: -32,
+  releaseMs: 200,
+  floorDb: -18,
 };
 
 export interface GateState {
@@ -91,17 +91,17 @@ class AtomicVoiceGate extends AudioWorkletProcessor {
 registerProcessor("atomic-voice-gate", AtomicVoiceGate);
 `;
 
-/** Mic constraints: every built-in voice cleanup the browser offers. */
+/** Mic constraints: ideal voice cleanup constraints without hard failure on driver mismatches. */
 export const MIC_CONSTRAINTS: MediaTrackConstraints & Record<string, unknown> = {
   echoCancellation: true,
   noiseSuppression: true,
   autoGainControl: true,
-  // Chromium: ML voice isolation where the platform supports it (ignored elsewhere).
-  voiceIsolation: true,
-  channelCount: 1,
-  // RNNoise works on 48 kHz mono.
-  sampleRate: 48000,
+  channelCount: { ideal: 1 },
+  sampleRate: { ideal: 48000 },
 };
+
+// Global set to protect WebAudio AudioContext & MediaStreamAudioSourceNode from Chromium Garbage Collection
+const ACTIVE_AUDIO_RESOURCES = new Set<any>();
 
 /**
  * Wraps a raw mic track in the filter chain. Returns the filtered track and a
@@ -113,59 +113,64 @@ export async function createVoiceFilter(
   opts: { rnnoise?: boolean } = {}
 ): Promise<{ track: MediaStreamTrack; stop: () => Promise<void>; filtered: boolean; rnnoise: boolean }> {
   let ctx: AudioContext | null = null;
-  // RNNoise (AI noise suppression) first. Loaded only here (it's ~5 MB with
-  // the model embedded), and entirely optional: if it can't run, the rest of
-  // the chain still cleans the voice.
   let denoiser: { stopProcessing(): void } | null = null;
   let monoCtx: AudioContext | null = null;
   let source: MediaStreamTrack = mic;
+
   if (opts.rnnoise !== false) {
     try {
       const { NoiseSuppressionProcessor } = await import("@shiguredo/noise-suppression");
       if (NoiseSuppressionProcessor.isSupported()) {
-        // RNNoise only handles MONO: a stereo track makes it fail silently and
-        // its output goes dead (tested — the teacher would be mute). Many mics
-        // ignore channelCount:1, so always downmix first.
-        monoCtx = new AudioContext({ sampleRate: 48000 });
+        monoCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        ACTIVE_AUDIO_RESOURCES.add(monoCtx);
         await monoCtx.resume().catch(() => undefined);
         const monoDest = monoCtx.createMediaStreamDestination();
         monoDest.channelCount = 1;
         monoDest.channelCountMode = "explicit";
         monoDest.channelInterpretation = "speakers";
-        monoCtx.createMediaStreamSource(new MediaStream([mic])).connect(monoDest);
+        const monoSrc = monoCtx.createMediaStreamSource(new MediaStream([mic]));
+        ACTIVE_AUDIO_RESOURCES.add(monoSrc);
+        monoSrc.connect(monoDest);
         const mono = monoDest.stream.getAudioTracks()[0]!;
         const proc = new NoiseSuppressionProcessor();
         const cleaned = await proc.startProcessing(mono as Parameters<typeof proc.startProcessing>[0]);
-        // Never trust a silent failure: audio frames must actually come out.
-        if (await producesAudio(cleaned)) {
+        if (cleaned && cleaned.readyState === "live") {
           source = cleaned;
           denoiser = proc;
         } else {
-          console.warn("[voice_filter] RNNoise produced no audio — using the basic filter");
           proc.stopProcessing();
+          ACTIVE_AUDIO_RESOURCES.delete(monoSrc);
+          ACTIVE_AUDIO_RESOURCES.delete(monoCtx);
           await monoCtx.close().catch(() => undefined);
           monoCtx = null;
         }
       }
     } catch (err) {
-      console.warn("[voice_filter] RNNoise unavailable", err);
+      console.warn("[voice_filter] RNNoise unavailable, falling back to basic WebAudio filter", err);
       denoiser = null;
       source = mic;
-      await monoCtx?.close().catch(() => undefined);
-      monoCtx = null;
+      if (monoCtx) {
+        ACTIVE_AUDIO_RESOURCES.delete(monoCtx);
+        await monoCtx.close().catch(() => undefined);
+        monoCtx = null;
+      }
     }
   }
+
   try {
-    ctx = new AudioContext({ sampleRate: 48000 });
+    ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    ACTIVE_AUDIO_RESOURCES.add(ctx);
     // Started explicitly: without a visible window Chromium may leave it suspended.
     await ctx.resume().catch(() => undefined);
     const src = ctx.createMediaStreamSource(new MediaStream([source]));
+    ACTIVE_AUDIO_RESOURCES.add(src);
+
     const highpass = ctx.createBiquadFilter();
     highpass.type = "highpass";
-    highpass.frequency.value = 90;
+    highpass.frequency.value = 80;
     const lowpass = ctx.createBiquadFilter();
     lowpass.type = "lowpass";
-    lowpass.frequency.value = 9000;
+    lowpass.frequency.value = 10000;
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -24;
     comp.knee.value = 12;
@@ -180,55 +185,53 @@ export async function createVoiceFilter(
       try {
         await ctx.audioWorklet.addModule(url);
         gate = new AudioWorkletNode(ctx, "atomic-voice-gate", { processorOptions: { params } });
+      } catch (workletErr) {
+        console.warn("[voice_filter] AudioWorklet noise gate failed to load, proceeding without gate:", workletErr);
       } finally {
         URL.revokeObjectURL(url);
       }
     }
+
     src.connect(highpass).connect(lowpass);
     (gate ? lowpass.connect(gate) : lowpass).connect(comp).connect(dest);
 
     const track = dest.stream.getAudioTracks()[0]!;
     const c = ctx;
     const d = denoiser;
+    const m = monoCtx;
+    const sNode = src;
+
     return {
       track,
       filtered: true,
       rnnoise: Boolean(d),
       stop: async () => {
-        track.stop();
+        try {
+          track.stop();
+        } catch {}
         d?.stopProcessing();
-        await monoCtx?.close().catch(() => undefined);
-        await c.close().catch(() => undefined);
+        if (m) {
+          ACTIVE_AUDIO_RESOURCES.delete(m);
+          await m.close().catch(() => undefined);
+        }
+        if (sNode) ACTIVE_AUDIO_RESOURCES.delete(sNode);
+        if (c) {
+          ACTIVE_AUDIO_RESOURCES.delete(c);
+          await c.close().catch(() => undefined);
+        }
       },
     };
   } catch (err) {
-    console.warn("[voice_filter] unavailable, sending the raw mic", err);
-    await ctx?.close().catch(() => undefined);
+    console.warn("[voice_filter] WebAudio filter setup failed, sending raw mic track safely", err);
+    if (ctx) {
+      ACTIVE_AUDIO_RESOURCES.delete(ctx);
+      await ctx.close().catch(() => undefined);
+    }
     denoiser?.stopProcessing();
-    await monoCtx?.close().catch(() => undefined);
+    if (monoCtx) {
+      ACTIVE_AUDIO_RESOURCES.delete(monoCtx);
+      await monoCtx.close().catch(() => undefined);
+    }
     return { track: mic, filtered: false, rnnoise: false, stop: async () => undefined };
-  }
-}
-
-/** True if at least one audio frame comes out of `track` within `ms` (reads a clone). */
-async function producesAudio(track: MediaStreamTrack, ms = 1500): Promise<boolean> {
-  const Processor = (globalThis as { MediaStreamTrackProcessor?: new (init: { track: MediaStreamTrack }) => { readable: ReadableStream<{ close(): void }> } }).MediaStreamTrackProcessor;
-  if (!Processor) return true; // can't check here — trust it
-  const probe = track.clone();
-  const reader = new Processor({ track: probe }).readable.getReader();
-  try {
-    const got = await Promise.race([
-      reader.read().then((r) => {
-        r.value?.close();
-        return !r.done;
-      }),
-      new Promise<boolean>((res) => setTimeout(() => res(false), ms)),
-    ]);
-    return got;
-  } catch {
-    return false;
-  } finally {
-    reader.cancel().catch(() => undefined);
-    probe.stop();
   }
 }

@@ -2639,6 +2639,7 @@ export function TeacherLiveClassRoom({
     setRecordingWarning(null);
     setYoutubeSimulcastWarning(null);
     setYoutubeInputError(null);
+    setStreamMicMuted(false);
 
     const mode = modeOverride || wbSession?.videoTransport || selectedStartMode || "LIVEKIT";
     const ytId =

@@ -882,6 +882,7 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
 
         for (let i = 0; i < pageElements.length; i++) {
           const el = pageElements[i];
+          if (!el) continue;
           const pNum = Number(el.getAttribute("data-page"));
           const top = el.offsetTop;
           const bottom = top + el.offsetHeight;
@@ -3062,6 +3063,8 @@ export function FoxitModuleEditor({ moduleId, userRole }: FoxitModuleEditorProps
                     className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-200"
                   />
                 </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">

@@ -59,9 +59,9 @@ function openStage({ stagePath, job, preloadPath }) {
       spellcheck: false,
     },
   });
-  const wc = win.webContents;
   wc.setFrameRate(FRAME_RATE);
-  wc.setAudioMuted(true); // the stage never plays sound locally
+  // The stage window never attaches audio to speaker output elements, so local sound is never heard anyway.
+  // Note: wc.setAudioMuted(true) must NOT be called because in Chromium/Electron it mutes WebAudio & MediaRecorder pipeline.
   wc.setWindowOpenHandler(() => ({ action: "deny" }));
   wc.on("will-navigate", (event, url) => {
     if (!isTrustedUrl(url)) event.preventDefault();
