@@ -3,7 +3,7 @@ import { PDFDocument, rgb, degrees, StandardFonts, PDFPage, PDFFont, Color } fro
 export interface TextEditItem {
   id: string;
   pageNumber: number; // 1-indexed
-  x: number; // PDF points from bottom-left (or top-left normalized)
+  x: number; // Points from top-left (UI coords)
   y: number;
   width: number;
   height: number;
@@ -57,6 +57,16 @@ export interface ShapeEditItem {
   opacity?: number;
 }
 
+export interface BackgroundConfig {
+  enabled?: boolean;
+  color?: string;
+  imageUrl?: string;
+  base64Data?: string;
+  opacity?: number;
+  pageRange?: "ALL" | "ODD" | "EVEN" | "CUSTOM";
+  customPages?: number[];
+}
+
 export interface HeaderFooterConfig {
   enabled?: boolean;
   headerLeft?: string;
@@ -65,26 +75,46 @@ export interface HeaderFooterConfig {
   footerLeft?: string;
   footerCenter?: string;
   footerRight?: string;
+  headerImageUrl?: string;
+  headerImageBase64?: string;
+  headerImageHeight?: number;
+  headerImagePosition?: "left" | "center" | "right";
+  footerImageUrl?: string;
+  footerImageBase64?: string;
+  footerImageHeight?: number;
+  footerImagePosition?: "left" | "center" | "right";
   removeOldHeader?: boolean;
   removeOldFooter?: boolean;
   oldHeaderHeightPt?: number;
   oldFooterHeightPt?: number;
   fontSize?: number;
   accentColor?: string;
-  showOnCover?: boolean;
+  excludeFirstPage?: boolean;
+  pageRange?: "ALL" | "ODD" | "EVEN" | "CUSTOM";
+  customPages?: number[];
 }
 
 export interface WatermarkConfig {
   enabled?: boolean;
+  type?: "text" | "image";
   text?: string;
+  imageUrl?: string;
+  base64Data?: string;
+  imageWidth?: number;
+  imageHeight?: number;
+  position?: "CENTER" | "TOP" | "BOTTOM" | "CUSTOM";
   opacity?: number;
   rotation?: number;
   fontSize?: number;
   color?: string;
+  excludeFirstPage?: boolean;
+  pageRange?: "ALL" | "ODD" | "EVEN" | "CUSTOM";
+  customPages?: number[];
 }
 
 export interface CoverPageConfig {
   enabled: boolean;
+  action?: "PREPEND" | "REPLACE_FIRST" | "DELETE_FIRST" | "NONE";
   subject: string;
   moduleNumber: string;
   chapter: string;
@@ -94,12 +124,43 @@ export interface CoverPageConfig {
   academicYear?: string;
 }
 
+export interface GlobalRemovalItem {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  color?: string;
+  pageRange?: "ALL" | "ODD" | "EVEN" | "CUSTOM";
+  customPages?: number[];
+}
+
+export interface GlobalReplacementItem {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  replacementType: "image" | "text";
+  imageUrl?: string;
+  base64Data?: string;
+  newText?: string;
+  fontSize?: number;
+  fontFamily?: "helvetica" | "times" | "courier";
+  color?: string;
+  pageRange?: "ALL" | "ODD" | "EVEN" | "CUSTOM";
+  customPages?: number[];
+}
+
 export interface NativePdfEditPayload {
   originalPdfBuffer: Buffer | Uint8Array;
   textEdits?: TextEditItem[];
   whiteouts?: WhiteoutItem[];
   images?: ImageEditItem[];
   shapes?: ShapeEditItem[];
+  globalRemovals?: GlobalRemovalItem[];
+  globalReplacements?: GlobalReplacementItem[];
+  background?: BackgroundConfig;
   pageRotations?: Record<number, number>; // pageNumber -> degrees (0, 90, 180, 270)
   deletedPages?: number[]; // list of 1-indexed page numbers to delete
   pageOrder?: number[]; // new 1-indexed page order [1, 3, 2, 4]
@@ -153,13 +214,46 @@ function replaceVariables(
   res = res.replace(/\{teacher\}/gi, vars.teacher);
   res = res.replace(/\{date\}/gi, vars.date);
   res = res.replace(/\{moduleNumber\}/gi, vars.moduleNumber);
-  // Clean non-WinAnsi characters to prevent PDF font crashes
   return res.replace(/[^\x20-\x7E]/g, " ");
 }
 
+function isPageInRange(
+  pageNumber: number,
+  range?: "ALL" | "ODD" | "EVEN" | "CUSTOM",
+  customPages?: number[],
+  excludeFirstPage?: boolean
+): boolean {
+  if (excludeFirstPage && pageNumber === 1) return false;
+  if (!range || range === "ALL") return true;
+  if (range === "ODD") return pageNumber % 2 !== 0;
+  if (range === "EVEN") return pageNumber % 2 === 0;
+  if (range === "CUSTOM") {
+    return Array.isArray(customPages) && customPages.includes(pageNumber);
+  }
+  return true;
+}
+
+async function embedImageBuffer(doc: PDFDocument, base64OrUrl: string): Promise<any> {
+  if (base64OrUrl.startsWith("data:image/") || base64OrUrl.includes(";base64,")) {
+    const isPng = base64OrUrl.includes("image/png");
+    const clean = base64OrUrl.replace(/^data:image\/(png|jpeg|jpg|webp);base64,/, "");
+    const buf = Buffer.from(clean, "base64");
+    return isPng ? await doc.embedPng(buf) : await doc.embedJpg(buf);
+  } else if (base64OrUrl.startsWith("http://") || base64OrUrl.startsWith("https://")) {
+    const res = await fetch(base64OrUrl);
+    if (!res.ok) throw new Error(`Failed to fetch image: ${res.status}`);
+    const buf = Buffer.from(await res.arrayBuffer());
+    const isPng = base64OrUrl.toLowerCase().endsWith(".png");
+    return isPng ? await doc.embedPng(buf) : await doc.embedJpg(buf);
+  }
+  return null;
+}
+
 /**
- * High-Performance Native PDF Editing Engine for Atomic Pathshala.
- * Modifies existing PDF objects directly without destructively flattening to images.
+ * Advanced Foxit-Style Native PDF Editing Engine for Atomic Pathshala.
+ * Modifies existing PDF objects directly, supporting in-place text edits,
+ * global object removal/replacement across all pages, image headers/footers,
+ * watermarks, backgrounds, and front page replacement.
  */
 export async function processNativePdfEdits(
   payload: NativePdfEditPayload
@@ -170,6 +264,9 @@ export async function processNativePdfEdits(
     whiteouts = [],
     images = [],
     shapes = [],
+    globalRemovals = [],
+    globalReplacements = [],
+    background,
     pageRotations = {},
     deletedPages = [],
     pageOrder,
@@ -190,23 +287,72 @@ export async function processNativePdfEdits(
   const courierFont = await pdfDoc.embedFont(StandardFonts.Courier);
 
   const getFont = (family?: string, isBold?: boolean, isItalic?: boolean): PDFFont => {
-    if (family === "times") {
-      return isBold ? timesBold : timesFont;
-    }
-    if (family === "courier") {
-      return courierFont;
-    }
+    if (family === "times") return isBold ? timesBold : timesFont;
+    if (family === "courier") return courierFont;
     if (isBold && isItalic) return helveticaBoldItalic;
     if (isBold) return helveticaBold;
     if (isItalic) return helveticaItalic;
     return helveticaFont;
   };
 
-  // 1. Handle Page Reordering / Deletions
+  // 1. Handle Front Page Actions (Replace First / Delete First) & Deletions
   const originalPageCount = pdfDoc.getPageCount();
   const deletedSet = new Set(deletedPages);
 
-  // If custom page order is specified, reconstruct pages in order
+  if (coverPage?.action === "REPLACE_FIRST" || coverPage?.action === "DELETE_FIRST") {
+    deletedSet.add(1);
+  }
+
+  // Pre-embed Header/Footer/Watermark images if provided
+  let headerImgEmbed: any = null;
+  if (headerFooter?.headerImageBase64 || headerFooter?.headerImageUrl) {
+    try {
+      headerImgEmbed = await embedImageBuffer(
+        pdfDoc,
+        (headerFooter.headerImageBase64 || headerFooter.headerImageUrl)!
+      );
+    } catch (err) {
+      console.warn("[processNativePdfEdits] Header image embed failed:", err);
+    }
+  }
+
+  let footerImgEmbed: any = null;
+  if (headerFooter?.footerImageBase64 || headerFooter?.footerImageUrl) {
+    try {
+      footerImgEmbed = await embedImageBuffer(
+        pdfDoc,
+        (headerFooter.footerImageBase64 || headerFooter.footerImageUrl)!
+      );
+    } catch (err) {
+      console.warn("[processNativePdfEdits] Footer image embed failed:", err);
+    }
+  }
+
+  let watermarkImgEmbed: any = null;
+  if (watermark?.type === "image" && (watermark.base64Data || watermark.imageUrl)) {
+    try {
+      watermarkImgEmbed = await embedImageBuffer(
+        pdfDoc,
+        (watermark.base64Data || watermark.imageUrl)!
+      );
+    } catch (err) {
+      console.warn("[processNativePdfEdits] Watermark image embed failed:", err);
+    }
+  }
+
+  let bgImgEmbed: any = null;
+  if (background?.enabled && (background.base64Data || background.imageUrl)) {
+    try {
+      bgImgEmbed = await embedImageBuffer(
+        pdfDoc,
+        (background.base64Data || background.imageUrl)!
+      );
+    } catch (err) {
+      console.warn("[processNativePdfEdits] Background image embed failed:", err);
+    }
+  }
+
+  // Handle Page Reordering / Deletions
   if (pageOrder && pageOrder.length > 0) {
     const finalDoc = await PDFDocument.create();
     for (const pNum of pageOrder) {
@@ -215,11 +361,9 @@ export async function processNativePdfEdits(
         finalDoc.addPage(copiedPage);
       }
     }
-    // Continue operations on finalDoc
     return continueProcessing(finalDoc);
-  } else if (deletedPages.length > 0) {
-    // Delete in descending order so indices remain stable
-    const sortedDeletes = [...deletedPages].sort((a, b) => b - a);
+  } else if (deletedSet.size > 0) {
+    const sortedDeletes = Array.from(deletedSet).sort((a, b) => b - a);
     for (const pNum of sortedDeletes) {
       if (pNum >= 1 && pNum <= pdfDoc.getPageCount()) {
         pdfDoc.removePage(pNum - 1);
@@ -248,8 +392,31 @@ export async function processNativePdfEdits(
       const page = pages[pIdx]!;
       const { width, height } = page.getSize();
 
+      // 0. Apply Background Color / Image
+      if (background?.enabled && isPageInRange(pageNum, background.pageRange, background.customPages)) {
+        if (background.color) {
+          page.drawRectangle({
+            x: 0,
+            y: 0,
+            width,
+            height,
+            color: hexToRgb(background.color),
+            opacity: background.opacity ?? 1,
+          });
+        }
+        if (bgImgEmbed) {
+          page.drawImage(bgImgEmbed, {
+            x: 0,
+            y: 0,
+            width,
+            height,
+            opacity: background.opacity ?? 0.15,
+          });
+        }
+      }
+
       // A. Old Header / Footer Masking
-      if (headerFooter?.removeOldHeader) {
+      if (headerFooter?.removeOldHeader && isPageInRange(pageNum, headerFooter.pageRange, headerFooter.customPages, headerFooter.excludeFirstPage)) {
         const hHeight = headerFooter.oldHeaderHeightPt || 42;
         page.drawRectangle({
           x: 0,
@@ -260,7 +427,7 @@ export async function processNativePdfEdits(
         });
       }
 
-      if (headerFooter?.removeOldFooter) {
+      if (headerFooter?.removeOldFooter && isPageInRange(pageNum, headerFooter.pageRange, headerFooter.customPages, headerFooter.excludeFirstPage)) {
         const fHeight = headerFooter.oldFooterHeightPt || 32;
         page.drawRectangle({
           x: 0,
@@ -271,11 +438,65 @@ export async function processNativePdfEdits(
         });
       }
 
-      // B. Apply Whiteouts / Redactions (Solid vector rectangles)
+      // B. Apply Global Object Removals (e.g. Logo removed across entire PDF)
+      for (const removal of globalRemovals) {
+        if (isPageInRange(pageNum, removal.pageRange, removal.customPages)) {
+          const pdfY = height - removal.y - removal.height;
+          page.drawRectangle({
+            x: removal.x,
+            y: Math.max(0, pdfY),
+            width: removal.width,
+            height: removal.height,
+            color: removal.color ? hexToRgb(removal.color) : rgb(1, 1, 1),
+          });
+        }
+      }
+
+      // C. Apply Global Object Replacements (e.g. Old logo replaced with new logo across all pages)
+      for (const rep of globalReplacements) {
+        if (isPageInRange(pageNum, rep.pageRange, rep.customPages)) {
+          const pdfY = height - rep.y - rep.height;
+          // Mask underlying region first
+          page.drawRectangle({
+            x: rep.x,
+            y: Math.max(0, pdfY),
+            width: rep.width,
+            height: rep.height,
+            color: rgb(1, 1, 1),
+          });
+
+          if (rep.replacementType === "image" && (rep.base64Data || rep.imageUrl)) {
+            try {
+              const repImg = await embedImageBuffer(doc, (rep.base64Data || rep.imageUrl)!);
+              if (repImg) {
+                page.drawImage(repImg, {
+                  x: rep.x,
+                  y: Math.max(0, pdfY),
+                  width: rep.width,
+                  height: rep.height,
+                });
+              }
+            } catch (err) {
+              console.warn("[processNativePdfEdits] Global replacement image failed:", err);
+            }
+          } else if (rep.replacementType === "text" && rep.newText) {
+            const font = getFont(rep.fontFamily, false, false);
+            const fontSize = Math.max(6, rep.fontSize || 11);
+            page.drawText(rep.newText.replace(/[^\x20-\x7E]/g, " "), {
+              x: rep.x,
+              y: Math.max(4, pdfY + rep.height - fontSize),
+              size: fontSize,
+              font,
+              color: rep.color ? hexToRgb(rep.color) : rgb(0.1, 0.1, 0.1),
+            });
+          }
+        }
+      }
+
+      // D. Apply Page-Specific Whiteouts / Redactions
       const pageWhiteouts = whiteouts.filter((w) => w.pageNumber === pageNum);
       for (const w of pageWhiteouts) {
         const rectColor = w.color ? hexToRgb(w.color) : rgb(1, 1, 1);
-        // Normalize coordinates: UI top-left to PDF bottom-left
         const pdfY = height - w.y - w.height;
         page.drawRectangle({
           x: w.x,
@@ -286,12 +507,12 @@ export async function processNativePdfEdits(
         });
       }
 
-      // C. Apply Text Edits (with whiteout mask underneath + new text draw)
+      // E. Apply In-Place Text Edits (with whiteout mask + replacement text)
       const pageTextEdits = textEdits.filter((t) => t.pageNumber === pageNum);
       for (const t of pageTextEdits) {
         const pdfY = height - t.y - t.height;
 
-        // Mask original text area if requested
+        // Mask original text area
         if (t.hideOriginal !== false) {
           page.drawRectangle({
             x: t.x - 2,
@@ -335,29 +556,11 @@ export async function processNativePdfEdits(
         }
       }
 
-      // D. Apply Inserted Images
+      // F. Apply Inserted Images
       const pageImages = images.filter((img) => img.pageNumber === pageNum);
       for (const img of pageImages) {
         try {
-          let embeddedImg: any = null;
-          if (img.base64Data) {
-            const base64Clean = img.base64Data.replace(/^data:image\/(png|jpeg|jpg);base64,/, "");
-            const imgBuffer = Buffer.from(base64Clean, "base64");
-            if (img.base64Data.includes("image/png") || img.base64Data.startsWith("data:image/png")) {
-              embeddedImg = await doc.embedPng(imgBuffer);
-            } else {
-              embeddedImg = await doc.embedJpg(imgBuffer);
-            }
-          } else if (img.imageUrl) {
-            const fetchRes = await fetch(img.imageUrl);
-            if (fetchRes.ok) {
-              const buf = Buffer.from(await fetchRes.arrayBuffer());
-              embeddedImg = img.imageUrl.endsWith(".png")
-                ? await doc.embedPng(buf)
-                : await doc.embedJpg(buf);
-            }
-          }
-
+          const embeddedImg = await embedImageBuffer(doc, (img.base64Data || img.imageUrl)!);
           if (embeddedImg) {
             const pdfY = height - img.y - img.height;
             page.drawImage(embeddedImg, {
@@ -374,7 +577,7 @@ export async function processNativePdfEdits(
         }
       }
 
-      // E. Apply Shapes & Highlights
+      // G. Apply Shapes & Highlights
       const pageShapes = shapes.filter((s) => s.pageNumber === pageNum);
       for (const s of pageShapes) {
         const pdfY = height - s.y - s.height;
@@ -382,7 +585,6 @@ export async function processNativePdfEdits(
         const fillColor = s.fillColor ? hexToRgb(s.fillColor) : undefined;
 
         if (s.type === "highlight") {
-          // Semi-transparent yellow or custom highlight
           page.drawRectangle({
             x: s.x,
             y: Math.max(0, pdfY),
@@ -424,15 +626,15 @@ export async function processNativePdfEdits(
         }
       }
 
-      // F. Running Header & Footer
-      if (headerFooter?.enabled) {
-        const hHeight = 28;
+      // H. Running Header & Footer
+      if (headerFooter?.enabled && isPageInRange(pageNum, headerFooter.pageRange, headerFooter.customPages, headerFooter.excludeFirstPage)) {
+        const hHeight = headerFooter.headerImageHeight || 28;
         const bannerY = height - hHeight;
         const accentCol = headerFooter.accentColor ? hexToRgb(headerFooter.accentColor) : rgb(0.917, 0.345, 0.047);
         const navyText = rgb(0.06, 0.09, 0.16);
         const slateText = rgb(0.4, 0.45, 0.52);
 
-        // Draw header background banner
+        // Header Background Banner & Accent Line
         page.drawRectangle({
           x: 0,
           y: bannerY,
@@ -448,6 +650,22 @@ export async function processNativePdfEdits(
           color: accentCol,
         });
 
+        // If Image Header is configured
+        if (headerImgEmbed) {
+          const imgH = hHeight - 6;
+          const imgW = (headerImgEmbed.width / headerImgEmbed.height) * imgH;
+          let imgX = 24;
+          if (headerFooter.headerImagePosition === "center") imgX = (width - imgW) / 2;
+          if (headerFooter.headerImagePosition === "right") imgX = width - imgW - 24;
+
+          page.drawImage(headerImgEmbed, {
+            x: imgX,
+            y: bannerY + 3,
+            width: imgW,
+            height: imgH,
+          });
+        }
+
         const vars = {
           page: pageNum,
           totalPages: currentTotalPages,
@@ -462,16 +680,20 @@ export async function processNativePdfEdits(
         const centerH = replaceVariables(headerFooter.headerCenter || "| {subject} - {chapter}", vars);
         const rightH = replaceVariables(headerFooter.headerRight || "{teacher}", vars);
 
-        page.drawText(leftH, { x: 24, y: bannerY + 9, size: 9, font: helveticaBold, color: accentCol });
-        page.drawText(centerH, { x: 135, y: bannerY + 9, size: 8, font: helveticaFont, color: navyText });
+        if (!headerImgEmbed || headerFooter.headerImagePosition !== "left") {
+          page.drawText(leftH, { x: 24, y: bannerY + 9, size: 9, font: helveticaBold, color: accentCol });
+        }
+        if (!headerImgEmbed || headerFooter.headerImagePosition !== "center") {
+          page.drawText(centerH, { x: 140, y: bannerY + 9, size: 8, font: helveticaFont, color: navyText });
+        }
 
         const rightW = helveticaFont.widthOfTextAtSize(rightH, 8);
-        if (width - rightW - 24 > 280) {
+        if (width - rightW - 24 > 280 && (!headerImgEmbed || headerFooter.headerImagePosition !== "right")) {
           page.drawText(rightH, { x: width - rightW - 24, y: bannerY + 9, size: 8, font: helveticaFont, color: slateText });
         }
 
         // Running Footer
-        const footerH = 22;
+        const footerH = headerFooter.footerImageHeight || 22;
         page.drawRectangle({
           x: 20,
           y: footerH,
@@ -480,33 +702,78 @@ export async function processNativePdfEdits(
           color: rgb(0.88, 0.9, 0.94),
         });
 
+        // If Image Footer is configured
+        if (footerImgEmbed) {
+          const imgH = footerH - 4;
+          const imgW = (footerImgEmbed.width / footerImgEmbed.height) * imgH;
+          let imgX = (width - imgW) / 2;
+          if (headerFooter.footerImagePosition === "left") imgX = 24;
+          if (headerFooter.footerImagePosition === "right") imgX = width - imgW - 24;
+
+          page.drawImage(footerImgEmbed, {
+            x: imgX,
+            y: 3,
+            width: imgW,
+            height: imgH,
+          });
+        }
+
         const leftF = replaceVariables(headerFooter.footerLeft || "Atomic Pathshala | India's Leading NEET Accelerator", vars);
         const rightF = replaceVariables(headerFooter.footerRight || "Page {page} of {totalPages}", vars);
 
-        page.drawText(leftF, { x: 24, y: 7, size: 7.5, font: helveticaFont, color: slateText });
+        if (!footerImgEmbed || headerFooter.footerImagePosition !== "left") {
+          page.drawText(leftF, { x: 24, y: 7, size: 7.5, font: helveticaFont, color: slateText });
+        }
         const pgW = helveticaBold.widthOfTextAtSize(rightF, 8);
-        page.drawText(rightF, { x: width - pgW - 24, y: 7, size: 8, font: helveticaBold, color: accentCol });
+        if (!footerImgEmbed || headerFooter.footerImagePosition !== "right") {
+          page.drawText(rightF, { x: width - pgW - 24, y: 7, size: 8, font: helveticaBold, color: accentCol });
+        }
       }
 
-      // G. Watermark Overlay
-      if (watermark?.enabled && watermark.text) {
-        const wmClean = watermark.text.replace(/[^\x20-\x7E]/g, " ");
-        const wmSize = watermark.fontSize || Math.min(width, height) * 0.08;
-        const textWidth = helveticaBold.widthOfTextAtSize(wmClean, wmSize);
-        page.drawText(wmClean, {
-          x: width / 2 - textWidth / 2,
-          y: height / 2,
-          size: wmSize,
-          font: helveticaBold,
-          color: watermark.color ? hexToRgb(watermark.color) : rgb(0.917, 0.345, 0.047),
-          opacity: watermark.opacity ?? 0.05,
-          rotate: degrees(watermark.rotation ?? 35),
-        });
+      // I. Watermark Overlay (Text or Image)
+      if (watermark?.enabled && isPageInRange(pageNum, watermark.pageRange, watermark.customPages, watermark.excludeFirstPage)) {
+        if (watermark.type === "image" && watermarkImgEmbed) {
+          const wmWidth = watermark.imageWidth || width * 0.5;
+          const wmHeight = watermark.imageHeight || (watermarkImgEmbed.height / watermarkImgEmbed.width) * wmWidth;
+          let wmX = (width - wmWidth) / 2;
+          let wmY = (height - wmHeight) / 2;
+
+          if (watermark.position === "TOP") wmY = height - wmHeight - 60;
+          if (watermark.position === "BOTTOM") wmY = 60;
+
+          page.drawImage(watermarkImgEmbed, {
+            x: wmX,
+            y: wmY,
+            width: wmWidth,
+            height: wmHeight,
+            opacity: watermark.opacity ?? 0.08,
+            rotate: degrees(watermark.rotation ?? 0),
+          });
+        } else if (watermark.text) {
+          const wmClean = watermark.text.replace(/[^\x20-\x7E]/g, " ");
+          const wmSize = watermark.fontSize || Math.min(width, height) * 0.08;
+          const textWidth = helveticaBold.widthOfTextAtSize(wmClean, wmSize);
+          let wmX = width / 2 - textWidth / 2;
+          let wmY = height / 2;
+
+          if (watermark.position === "TOP") wmY = height - 120;
+          if (watermark.position === "BOTTOM") wmY = 120;
+
+          page.drawText(wmClean, {
+            x: wmX,
+            y: wmY,
+            size: wmSize,
+            font: helveticaBold,
+            color: watermark.color ? hexToRgb(watermark.color) : rgb(0.917, 0.345, 0.047),
+            opacity: watermark.opacity ?? 0.05,
+            rotate: degrees(watermark.rotation ?? 35),
+          });
+        }
       }
     }
 
-    // 2. Prepend Cover Page if enabled
-    if (coverPage?.enabled) {
+    // 2. Prepend Atomic Pathshala Front Cover Page if enabled
+    if (coverPage?.enabled && (coverPage.action === "PREPEND" || coverPage.action === "REPLACE_FIRST" || !coverPage.action)) {
       const cover = doc.insertPage(0, [595.28, 841.89]);
       const { width, height } = cover.getSize();
 

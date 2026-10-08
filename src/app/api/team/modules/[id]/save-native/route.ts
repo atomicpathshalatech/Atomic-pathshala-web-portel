@@ -12,6 +12,9 @@ import {
   type WhiteoutItem,
   type ImageEditItem,
   type ShapeEditItem,
+  type GlobalRemovalItem,
+  type GlobalReplacementItem,
+  type BackgroundConfig,
   type HeaderFooterConfig,
   type WatermarkConfig,
   type CoverPageConfig,
@@ -38,6 +41,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       whiteouts = [],
       images = [],
       shapes = [],
+      globalRemovals = [],
+      globalReplacements = [],
+      background,
       pageRotations = {},
       deletedPages = [],
       pageOrder,
@@ -51,6 +57,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       whiteouts?: WhiteoutItem[];
       images?: ImageEditItem[];
       shapes?: ShapeEditItem[];
+      globalRemovals?: GlobalRemovalItem[];
+      globalReplacements?: GlobalReplacementItem[];
+      background?: BackgroundConfig;
       pageRotations?: Record<number, number>;
       deletedPages?: number[];
       pageOrder?: number[];
@@ -75,6 +84,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       whiteouts,
       images,
       shapes,
+      globalRemovals,
+      globalReplacements,
+      background,
       pageRotations,
       deletedPages,
       pageOrder,
@@ -106,9 +118,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           whiteoutsCount: whiteouts.length,
           imagesCount: images.length,
           shapesCount: shapes.length,
+          globalRemovalsCount: globalRemovals.length,
+          globalReplacementsCount: globalReplacements.length,
           pageCount: result.pageCount,
           fileSizeBytes: result.fileSizeBytes,
           fileUrl,
+          background,
           headerFooter,
           watermark,
           coverPage,

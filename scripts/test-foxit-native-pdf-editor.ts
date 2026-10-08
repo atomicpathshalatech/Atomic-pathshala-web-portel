@@ -3,7 +3,7 @@ import { processNativePdfEdits } from "../src/lib/module-editor/native-pdf-engin
 
 async function runFoxitEditorIntegrationTests() {
   console.log("==========================================================");
-  console.log("🚀 FOXIT-STYLE NATIVE PDF EDITOR ENGINE INTEGRATION TESTS");
+  console.log("🚀 ADVANCED FOXIT-STYLE NATIVE PDF ENGINE INTEGRATION TESTS");
   console.log("==========================================================");
 
   let passed = 0;
@@ -40,9 +40,9 @@ async function runFoxitEditorIntegrationTests() {
       font: helvetica,
       color: rgb(0.1, 0.1, 0.1),
     });
-    page.drawText(`2. Unwanted old copyright text to be whited-out.`, {
+    page.drawText(`[OLD_COACHING_LOGO_PLACEHOLDER]`, {
       x: 50,
-      y: height - 200,
+      y: height - 30,
       size: 10,
       font: helvetica,
       color: rgb(0.5, 0.5, 0.5),
@@ -52,7 +52,7 @@ async function runFoxitEditorIntegrationTests() {
   const originalBytes = await testDoc.save();
   assert(originalBytes.length > 0, "Generated 5-page original source PDF");
 
-  // 2. Test In-Place Native Edits (Text edits, Whiteouts, Page Rotation, Page Deletion, Header/Footer, Cover)
+  // 2. Test In-Place Native Edits, Global Removals & Replacements, Backgrounds, Header/Footer
   console.log("\n--- Testing Native In-Place Object Modifications ---");
   const editResult = await processNativePdfEdits({
     originalPdfBuffer: originalBytes,
@@ -73,17 +73,35 @@ async function runFoxitEditorIntegrationTests() {
         hideOriginal: true,
       },
     ],
-    whiteouts: [
+    globalRemovals: [
       {
-        id: "wo-1",
-        pageNumber: 1,
-        x: 48,
-        y: 195,
-        width: 300,
+        id: "g-rem-1",
+        x: 50,
+        y: 20,
+        width: 200,
         height: 20,
-        color: "#ffffff",
+        pageRange: "ALL",
       },
     ],
+    globalReplacements: [
+      {
+        id: "g-rep-1",
+        x: 300,
+        y: 20,
+        width: 200,
+        height: 20,
+        replacementType: "text",
+        newText: "ATOMIC PATHSHALA OFFICIAL",
+        fontSize: 10,
+        pageRange: "ALL",
+      },
+    ],
+    background: {
+      enabled: true,
+      color: "#fcfdfe",
+      opacity: 1,
+      pageRange: "ALL",
+    },
     deletedPages: [5], // Delete page 5
     pageRotations: { 2: 90 }, // Rotate page 2 by 90°
     headerFooter: {
@@ -96,14 +114,19 @@ async function runFoxitEditorIntegrationTests() {
       removeOldHeader: true,
       removeOldFooter: true,
       accentColor: "#0B7A43",
+      excludeFirstPage: true,
     },
     watermark: {
       enabled: true,
+      type: "text",
       text: "ATOMIC PATHSHALA",
       opacity: 0.05,
+      position: "CENTER",
+      excludeFirstPage: true,
     },
     coverPage: {
       enabled: true,
+      action: "PREPEND",
       subject: "CHEMISTRY",
       moduleNumber: "Module 01",
       chapter: "Chemical Bonding",
@@ -123,8 +146,24 @@ async function runFoxitEditorIntegrationTests() {
   const finalDoc = await PDFDocument.load(editResult.pdfBytes);
   assert(finalDoc.getPageCount() === 5, "Loaded final PDF verifies 5 pages in document structure");
 
-  const finalPage2 = finalDoc.getPage(1); // Page 2 is cover page (index 0) + content page 1 (index 1)
+  const finalPage2 = finalDoc.getPage(1);
   assert(finalPage2.getSize().width > 0 && finalPage2.getSize().height > 0, "Page dimensions are valid A4");
+
+  // 4. Test REPLACE_FIRST front page action
+  console.log("\n--- Testing REPLACE_FIRST Front Page Action ---");
+  const replaceFirstResult = await processNativePdfEdits({
+    originalPdfBuffer: originalBytes,
+    coverPage: {
+      enabled: true,
+      action: "REPLACE_FIRST",
+      subject: "PHYSICS",
+      moduleNumber: "Module 02",
+      chapter: "Electrostatics",
+      teacher: "Physics Faculty",
+    },
+  });
+  // 5 original pages - 1 replaced page + 1 new cover page = 5 pages
+  assert(replaceFirstResult.pageCount === 5, `Expected 5 pages with REPLACE_FIRST, got ${replaceFirstResult.pageCount}`);
 
   console.log("\n==========================================================");
   console.log(`TEST RESULTS: ${passed} PASSED, ${failed} FAILED`);
