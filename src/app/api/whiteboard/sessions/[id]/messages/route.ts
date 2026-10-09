@@ -70,6 +70,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const enrichedMessages = messages.map((m) => ({
       ...m,
       authorPhotoUrl: photoMap.get(m.authorUserId) || null,
+      // Comments from the YouTube live chat are stored as chat rows too.
+      ...(m.authorRole === "YOUTUBE" && { source: "YOUTUBE" as const, authorRole: "STUDENT" }),
     }));
 
     return apiSuccess({

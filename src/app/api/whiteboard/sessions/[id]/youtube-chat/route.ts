@@ -10,6 +10,7 @@ import {
   getLiveChatIdForVideo,
   youtubeLiveConfigured,
 } from "@/lib/youtube/live-broadcast";
+import { saveYoutubeChat } from "@/lib/whiteboard/youtube-chat-store";
 
 type CachedChatResponse = {
   messages: ReturnType<typeof formatMessages>;
@@ -128,6 +129,12 @@ export async function GET(
 
     const chatData = await fetchLiveChatMessages(liveChatId, cached?.pageToken);
     const formattedMessages = formatMessages(chatData.messages);
+
+    // Stored as class chat and pushed to the room: students see YouTube
+    // comments too, and they survive a refresh or rejoin.
+    await saveYoutubeChat(params.id, chatData.messages).catch((err) =>
+      console.warn("[youtube_chat_store_warning]", err instanceof Error ? err.message : err)
+    );
 
     // Ingest YouTube votes if an active quiz exists
     const activeQuiz = await prisma.quizSession.findFirst({

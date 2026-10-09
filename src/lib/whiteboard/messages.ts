@@ -14,6 +14,8 @@ export type WhiteboardMessagePayload = {
   // optional/undefined is equivalent to false so existing callers that don't
   // pass it (the plain chat POST route) don't need to change.
   isSystemMessage?: boolean;
+  /** "YOUTUBE" for a comment typed in the YouTube live chat (see youtube-chat-store.ts). */
+  source?: "APP" | "YOUTUBE";
 };
 
 /**
