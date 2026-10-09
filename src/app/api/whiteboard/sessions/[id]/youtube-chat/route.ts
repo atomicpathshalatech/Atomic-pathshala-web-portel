@@ -91,11 +91,12 @@ export async function GET(
     if (!wbSession) return apiError("Whiteboard session not found", 404);
 
     if (Date.now() < quotaBlockedUntil) {
-      return apiSuccess({ messages: [], active: false, pollingIntervalMillis: 60_000 });
+      return apiSuccess({ messages: [], active: false, reason: "QUOTA", pollingIntervalMillis: 60_000 });
     }
 
     if (!youtubeLiveConfigured()) {
-      return apiSuccess({ messages: [], active: false });
+      console.warn("[youtube_chat_not_configured] the APP YouTube channel has no client id / secret / refresh token on this server");
+      return apiSuccess({ messages: [], active: false, reason: "NOT_CONFIGURED" });
     }
 
     let liveChatId = wbSession.youtubeLiveChatId;
@@ -113,7 +114,7 @@ export async function GET(
     }
 
     if (!liveChatId) {
-      return apiSuccess({ messages: [], active: false });
+      return apiSuccess({ messages: [], active: false, reason: wbSession.youtubeVideoId ? "NO_LIVE_CHAT" : "NO_VIDEO" });
     }
 
     // Server-owned cache/cursor — see the chatCache doc comment above. Every

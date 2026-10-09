@@ -510,8 +510,13 @@ export async function getLiveChatIdForVideo(
       operation: "videos.list",
       query: { part: "liveStreamingDetails", id: videoId },
     });
-    return json.items?.[0]?.liveStreamingDetails?.activeLiveChatId ?? null;
-  } catch {
+    const id = json.items?.[0]?.liveStreamingDetails?.activeLiveChatId ?? null;
+    if (!id) console.warn("[youtube_live_chat_id_missing]", videoId, json.items?.length ? "video found, but it has no active live chat" : "video not visible to this account");
+    return id;
+  } catch (err) {
+    // Was swallowed silently: an expired YouTube sign-in or a used-up quota
+    // looked exactly like "this video has no chat".
+    console.warn("[youtube_live_chat_id_error]", videoId, err instanceof Error ? err.message.slice(0, 300) : err);
     return null;
   }
 }
