@@ -88,6 +88,28 @@ export function markModelRetired(model: string) {
   retiredModels.set(model, Date.now() + RETIRED_MODEL_MS);
 }
 
+/**
+ * Quota is counted per key AND per model: a key that has used up its daily
+ * requests on one model still works on the others. Remembering the pair (not
+ * resting the whole key) keeps good keys in use and stops the same refused
+ * request being repeated on every attempt.
+ */
+const quotaOut = new Map<string, number>();
+const QUOTA_OUT_MS = 30 * 60 * 1000;
+
+export function isQuotaError(err: unknown): boolean {
+  const m = message(err);
+  return m.includes("429") || m.includes("quota") || m.includes("resourceexhausted") || m.includes("resource_exhausted");
+}
+
+export function markQuotaOut(key: string, model: string, ms: number = QUOTA_OUT_MS) {
+  quotaOut.set(`${key}|${model}`, Date.now() + Math.max(60_000, Math.min(ms, 6 * 60 * 60 * 1000)));
+}
+
+export function isQuotaOut(key: string, model: string): boolean {
+  return (quotaOut.get(`${key}|${model}`) ?? 0) > Date.now();
+}
+
 /** The model list without models already found to be retired. Never empty. */
 export function usableModels(models: readonly string[] = GEMINI_TEXT_MODELS): string[] {
   const now = Date.now();

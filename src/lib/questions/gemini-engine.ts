@@ -1,7 +1,8 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { parseAiJson } from "@/lib/ai/latex-json";
 import { geminiKeyManager, CostEstimateResult } from "@/lib/ai/gemini-key-manager";
-import { GEMINI_TEXT_MODELS, classifyGeminiFailure, usableModels } from "@/lib/ai/gemini-models";
+import { GEMINI_TEXT_MODELS, classifyGeminiFailure, usableModels, isQuotaError, isQuotaOut, markQuotaOut } from "@/lib/ai/gemini-models";
+import { hedge, rotated } from "@/lib/ai/hedge";
 
 export interface ExtractedQuestionData {
   /** Drawings in the pasted image, to be cropped by the caller (image extraction only). */
@@ -51,27 +52,77 @@ const GEMINI_MODELS = GEMINI_TEXT_MODELS;
  * cooldown on 429 errors, and fallback to Paid-Tier keys.
  */
 export async function executeGeminiWithFailover<T>(
-  task: (client: GoogleGenerativeAI, modelName: string, meta: { key: string; tier: "FREE" | "PAID"; index: number }) => Promise<T>
+  task: (client: GoogleGenerativeAI, modelName: string, meta: { key: string; tier: "FREE" | "PAID"; index: number }) => Promise<T>,
+  opts: { models?: readonly string[] } = {}
 ): Promise<T> {
   return geminiKeyManager.executeWithRotation(async (client, meta) => {
     let lastError: any = null;
-    for (const modelName of usableModels(GEMINI_MODELS)) {
+    let quotaError: any = null;
+    for (const modelName of usableModels(opts.models ?? GEMINI_MODELS)) {
+      // This key has no quota left on this model (found a moment ago): skip the pair.
+      if (isQuotaOut(meta.key, modelName)) continue;
       try {
         return await task(client, modelName, meta);
       } catch (err: any) {
-        lastError = err;
-        const msg = (err?.message || String(err)).toLowerCase();
         // A blocked/invalid key fails on every model — go straight to the next key.
         if (classifyGeminiFailure(err, meta.key, modelName) === "next-key") throw err;
-        // If it's a rate limit, throw out to allow key rotation
-        if (msg.includes("429") || msg.includes("quota") || msg.includes("resourceexhausted")) {
-          throw err;
+        // Out of quota on THIS model only: the same key may still work on the next one.
+        if (isQuotaError(err)) {
+          markQuotaOut(meta.key, modelName);
+          quotaError = err;
+          continue;
         }
+        lastError = err;
         // If model not found or transient model error, try next model in hierarchy
         console.warn(`[Gemini Engine] Model ${modelName} failed, trying fallback: ${err?.message || err}`);
       }
     }
-    throw lastError || new Error("All Gemini model fallbacks failed");
+    // Only quota refusals on every model: the key really is used up (it is rested).
+    throw lastError || quotaError || new Error("429 quota: this key has no quota left on any model");
+  });
+}
+
+/** No single request to the AI service may hang longer than this. */
+const INTERACTIVE_REQUEST_TIMEOUT_MS = 25_000;
+
+/**
+ * For work a person is waiting on at the screen (extracting one question,
+ * its solution, a translation check): the same failover, but a slow or busy
+ * model is not waited out — after 5 s a second attempt starts alongside on
+ * the fast model (then a third on another), and the first answer wins. See
+ * src/lib/ai/hedge.ts. Not for long batch jobs.
+ */
+export async function executeGeminiInteractive<T>(
+  task: (client: GoogleGenerativeAI, modelName: string, meta: { key: string; tier: "FREE" | "PAID"; index: number }) => Promise<T>
+): Promise<T> {
+  // Lane 0: the normal order (best model first; a healthy call answers in
+  // 4–11 s). Lane 1 begins with the fast last-resort model, which stays up when
+  // the main ones report "high demand"; lane 2 begins in the middle of the list.
+  const starts = [0, GEMINI_MODELS.length - 1, 3];
+  // One request that hangs counts as a failed attempt (the next model is tried).
+  const bounded: typeof task = (client, modelName, meta) =>
+    new Promise<T>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`${modelName} did not answer in ${INTERACTIVE_REQUEST_TIMEOUT_MS / 1000} s`)), INTERACTIVE_REQUEST_TIMEOUT_MS);
+      // The request itself is cancelled at the limit too, so a stalled one
+      // does not keep its connection busy behind the next attempt.
+      const limited = new Proxy(client, {
+        get(target, prop, receiver) {
+          if (prop === "getGenerativeModel") {
+            return (params: Parameters<GoogleGenerativeAI["getGenerativeModel"]>[0], options?: Parameters<GoogleGenerativeAI["getGenerativeModel"]>[1]) =>
+              target.getGenerativeModel(params, { ...options, timeout: INTERACTIVE_REQUEST_TIMEOUT_MS });
+          }
+          const value = Reflect.get(target, prop, receiver);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      task(limited, modelName, meta).then(
+        (v) => (clearTimeout(timer), resolve(v)),
+        (e) => (clearTimeout(timer), reject(e))
+      );
+    });
+  return hedge((lane) => executeGeminiWithFailover(bounded, { models: rotated(GEMINI_MODELS, starts[lane] ?? lane) }), {
+    lanes: starts.length,
+    hedgeAfterMs: 5000,
   });
 }
 
@@ -103,7 +154,7 @@ export async function extractBilingualQuestionFromImage({
     ? (imageBase64.split(";base64,")[1] ?? "").trim()
     : imageBase64.replace(/^data:image\/[a-zA-Z0-9+.-]+;base64,/, "").trim();
 
-  return executeGeminiWithFailover(async (client, modelName, meta) => {
+  return executeGeminiInteractive(async (client, modelName, meta) => {
     const model = client.getGenerativeModel({
       model: modelName,
       generationConfig: {
@@ -272,7 +323,7 @@ export async function extractBilingualQuestionFromText({
   topicContext?: string;
   difficultyContext?: string;
 }): Promise<ExtractedQuestionData> {
-  return executeGeminiWithFailover(async (client, modelName, meta) => {
+  return executeGeminiInteractive(async (client, modelName, meta) => {
     const model = client.getGenerativeModel({
       model: modelName,
       generationConfig: {
@@ -407,7 +458,7 @@ export async function generateSubjectAwareSolution({
   mismatchWarning?: string;
   costEstimate?: CostEstimateResult;
 }> {
-  return executeGeminiWithFailover(async (client, modelName, meta) => {
+  return executeGeminiInteractive(async (client, modelName, meta) => {
     const model = client.getGenerativeModel({
       model: modelName,
       generationConfig: { responseMimeType: "application/json" },
@@ -541,7 +592,7 @@ export async function checkAndTranslateQuestion({
   report: string;
   costEstimate?: CostEstimateResult;
 }> {
-  return executeGeminiWithFailover(async (client, modelName, meta) => {
+  return executeGeminiInteractive(async (client, modelName, meta) => {
     const model = client.getGenerativeModel({
       model: modelName,
       generationConfig: { responseMimeType: "application/json" },
