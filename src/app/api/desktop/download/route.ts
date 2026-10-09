@@ -18,6 +18,13 @@ export async function GET(request: NextRequest) {
 
     await requirePermission(session.user.id, PERMISSIONS.TEAM_PORTAL_ACCESS);
 
+    // The installer (≈150 MB) is not part of the deployment — it lives in file
+    // storage. (It used to be read from desktop/teacher/dist, a folder that is
+    // git-ignored, so on the live site this download always answered "not found".)
+    const { TEACHER_APP_INSTALLER_KEY } = await import("@/lib/desktop/release");
+    const base = (process.env.R2_PUBLIC_BASE_URL || process.env.STORAGE_PUBLIC_URL || "").replace(/\/+$/, "");
+    if (base) return NextResponse.redirect(`${base}/${TEACHER_APP_INSTALLER_KEY}`, 302);
+
     // Look for built desktop installer in desktop/teacher/dist
     const distDir = path.join(process.cwd(), "desktop", "teacher", "dist");
     let targetFile: string | null = null;
