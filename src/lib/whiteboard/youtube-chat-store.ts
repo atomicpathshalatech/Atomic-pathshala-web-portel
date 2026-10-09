@@ -48,8 +48,12 @@ export async function saveYoutubeChat(
   const fresh = usable.filter((m) => !have.has(youtubeChatRowId(m.id)));
   if (fresh.length === 0) return { stored: 0 };
 
-  const rows = fresh.map((m) => {
-    const at = new Date(m.publishedAt);
+  // Stamped with the moment they are stored (in YouTube order, 1 ms apart),
+  // not YouTube's own time: a viewer catching up asks for "everything after
+  // my last message", and a comment stamped 20 s in the past would be skipped.
+  const storedAt = Date.now();
+  const inOrder = [...fresh].sort((x, y) => new Date(x.publishedAt).getTime() - new Date(y.publishedAt).getTime());
+  const rows = inOrder.map((m, i) => {
     return {
       id: youtubeChatRowId(m.id),
       whiteboardSessionId,
@@ -57,7 +61,7 @@ export async function saveYoutubeChat(
       authorUserId: youtubeAuthorId(m.authorName),
       authorName: m.authorName.slice(0, 190),
       body: m.messageText.trim().slice(0, 2000),
-      createdAt: Number.isNaN(at.getTime()) ? new Date() : at,
+      createdAt: new Date(storedAt + i),
     };
   });
   const res = await prisma.whiteboardMessage.createMany({ data: rows, skipDuplicates: true });

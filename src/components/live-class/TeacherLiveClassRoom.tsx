@@ -25,6 +25,7 @@ import { VideoStrip } from "@/components/live-class/VideoStrip";
 import { LeaderboardPopup, YouTubeBadge, isPublishedLeaderboard, type PublishedLeaderboard } from "@/components/live-class/LeaderboardPopup";
 import type { TeacherConnectedStudent } from "@/components/live-class/LiveVideoCallModal";
 import { MessagesPanel } from "@/components/live-class/MessagesPanel";
+import { YoutubeChatPump } from "@/components/live-class/YoutubeChatPump";
 import { ParticipantsPanel } from "@/components/live-class/ParticipantsPanel";
 import { Simulation3DModal } from "@/components/live-class/Simulation3DModal";
 import { ScienceLabsModal } from "@/components/live-class/ScienceLabsModal";
@@ -5336,6 +5337,9 @@ export function TeacherLiveClassRoom({
       )}
 
       {/* OBS Studio Live Streaming Setup Modal */}
+      {/* YouTube comments are read the whole time this room is open (not only while the Chat tab is showing). */}
+      <YoutubeChatPump whiteboardSessionId={wbSession.id} active={wbSession.livePhase === "LIVE" && Boolean(wbSession.youtubeVideoId)} />
+
       {showObsStreamInfo && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
           <div

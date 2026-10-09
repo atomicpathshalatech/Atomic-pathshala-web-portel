@@ -266,60 +266,9 @@ export function MessagesPanel({
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [messages]);
 
-  // Periodic YouTube Live Chat polling & merger. The pagination cursor is
-  // now owned server-side (see the youtube-chat route's chatCache) so every
-  // client just re-fetches the current cache window — no pageToken to track
-  // here anymore. Self-schedules via setTimeout instead of a fixed
-  // setInterval so it can back off to whatever pollingIntervalMillis
-  // YouTube's API actually suggests (it raises this under quota pressure);
-  // a hardcoded 4s regardless of that suggestion, multiplied across every
-  // concurrent viewer independently polling, is what exhausted the daily
-  // YouTube API quota in production.
-  useEffect(() => {
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    // Only the teacher's room reads the YouTube chat, and rarely: each read
-    // costs 5 of the day's 10,000 YouTube quota units (see the route).
-    if (role !== "TEACHER") return;
-    const MIN_INTERVAL_MS = 20_000;
-    const FALLBACK_INTERVAL_MS = 30_000;
-
-    async function pollYouTube() {
-      let nextDelay = FALLBACK_INTERVAL_MS;
-      try {
-        const res = await fetch(`/api/whiteboard/sessions/${whiteboardSessionId}/youtube-chat`);
-        const json = await res.json();
-        if (cancelled) return;
-        if (json.success) {
-          if (typeof json.data?.pollingIntervalMillis === "number") {
-            nextDelay = Math.max(MIN_INTERVAL_MS, json.data.pollingIntervalMillis);
-          }
-          if (json.data?.messages?.length > 0) {
-            const newYtMsgs: ChatMessage[] = json.data.messages;
-            setMessages((prev) => {
-              const existingIds = new Set(prev.map((m) => m.id));
-              const fresh = newYtMsgs.filter((m) => !existingIds.has(m.id));
-              if (fresh.length === 0) return prev;
-              return [...prev, ...fresh].sort(
-                (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-              );
-            });
-          }
-        }
-      } catch {
-        // silent fallback
-      } finally {
-        if (!cancelled) timer = setTimeout(pollYouTube, nextDelay);
-      }
-    }
-
-    pollYouTube();
-
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-    };
-  }, [whiteboardSessionId, role]);
+  // YouTube comments arrive like any other chat message: the server stores
+  // them and pushes them to the room (see YoutubeChatPump and
+  // youtube-chat-store.ts). This panel no longer reads YouTube itself.
 
   async function handleSend() {
     const body = draft.trim();
