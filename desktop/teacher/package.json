@@ -1,7 +1,7 @@
 {
   "name": "atomic-teacher-desktop",
   "productName": "Atomic Pathshala Teacher",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Windows app for Atomic Pathshala teachers: the live classroom plus a built-in YouTube encoder.",
   "main": "src/main.js",
