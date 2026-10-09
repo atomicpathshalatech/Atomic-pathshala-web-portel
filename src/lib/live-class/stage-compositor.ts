@@ -647,26 +647,28 @@ export class StageCompositor {
           this.warnings.push("Chroma key needs WebGL, which isn't available here — camera shown without it.");
         }
       }
+      // Same look as the bubble on the teacher's board: the picture with a
+      // soft shadow, no frame around it — part of the board, not a sticker.
+      const outline = () => {
+        ctx.beginPath();
+        if (this.sources.cameraShape === "CIRCULAR") {
+          ctx.arc(box.x + box.w / 2, box.y + box.h / 2, box.w / 2, 0, Math.PI * 2);
+        } else {
+          ctx.roundRect(box.x, box.y, box.w, box.h, Math.round(box.w * 0.089));
+        }
+      };
       ctx.save();
-      ctx.beginPath();
-      if (this.sources.cameraShape === "CIRCULAR") {
-        ctx.arc(box.x + box.w / 2, box.y + box.h / 2, box.w / 2, 0, Math.PI * 2);
-      } else {
-        ctx.roundRect(box.x, box.y, box.w, box.h, Math.round(box.w * 0.08));
-      }
-      ctx.clip();
-      ctx.drawImage(video, crop.x, crop.y, crop.w, crop.h, box.x, box.y, box.w, box.h);
+      ctx.shadowColor = "rgba(0, 0, 0, 0.35)";
+      ctx.shadowBlur = Math.round(H * 0.022);
+      ctx.shadowOffsetY = Math.round(H * 0.008);
+      ctx.fillStyle = "#000000";
+      outline();
+      ctx.fill();
       ctx.restore();
       ctx.save();
-      ctx.lineWidth = 6;
-      ctx.strokeStyle = "rgba(255,255,255,0.9)";
-      ctx.beginPath();
-      if (this.sources.cameraShape === "CIRCULAR") {
-        ctx.arc(box.x + box.w / 2, box.y + box.h / 2, box.w / 2, 0, Math.PI * 2);
-      } else {
-        ctx.roundRect(box.x, box.y, box.w, box.h, Math.round(box.w * 0.08));
-      }
-      ctx.stroke();
+      outline();
+      ctx.clip();
+      ctx.drawImage(video, crop.x, crop.y, crop.w, crop.h, box.x, box.y, box.w, box.h);
       ctx.restore();
     }
 

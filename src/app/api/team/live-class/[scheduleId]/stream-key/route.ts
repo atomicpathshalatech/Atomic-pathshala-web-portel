@@ -46,11 +46,26 @@ export async function POST(
     // key and no key before Start. Each hand-out is recorded (EncoderSession).
     const wbSession = schedule.liveWhiteboardSession;
     const { encoderCredentialsForSchedule } = await import("@/lib/live-session/app-youtube");
-    const credentials = await encoderCredentialsForSchedule(schedule.id);
-    if (credentials) {
+    const leased = await encoderCredentialsForSchedule(schedule.id);
+    // Public class: the key the team entered for the stream they scheduled on
+    // YouTube themselves (stored sealed on this class's session at Start).
+    let manual: { serverUrl: string; streamKey: string } | null = null;
+    if (!leased && wbSession?.youtubeStreamKey && wbSession.livePhase === "LIVE") {
+      try {
+        const { openSecret } = await import("@/lib/crypto/secret-box");
+        manual = {
+          serverUrl: wbSession.youtubeIngestUrl || "rtmp://a.rtmp.youtube.com/live2",
+          streamKey: openSecret(wbSession.youtubeStreamKey),
+        };
+      } catch (err) {
+        console.error("[stream_key_manual_unreadable]", err);
+      }
+    }
+    const credentials = leased ?? (manual ? { ...manual, liveSessionId: null as string | null, state: "LIVE" } : null);
+    if (credentials?.liveSessionId) {
       await prisma.encoderSession.create({
         data: {
-          liveSessionId: credentials.liveSessionId,
+          liveSessionId: credentials.liveSessionId!,
           userId: session.user.id,
           credentialsExpireAt: new Date(Date.now() + 60_000),
           credentialsUsedAt: new Date(),
@@ -72,6 +87,7 @@ export async function POST(
       serverUrl: credentials?.serverUrl ?? null,
       streamKey: credentials?.streamKey ?? null,
       liveState: credentials?.state ?? null,
+      manualStreamKey: Boolean(manual),
       message: credentials ? null : "Click Start Class first — your class's stream key appears here once the class has a stream slot.",
       obsBroadcastUrl,
       youtubeVideoId: wbSession?.youtubeVideoId ?? null,

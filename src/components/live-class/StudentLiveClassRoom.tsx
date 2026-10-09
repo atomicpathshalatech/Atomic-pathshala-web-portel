@@ -1742,8 +1742,9 @@ export function StudentLiveClassRoom({
 
         {/* Right Fixed Sidebar (Teacher Video on Top + Live Chat Console on Bottom) */}
         <aside className="w-80 xl:w-88 h-full shrink-0 flex flex-col bg-[#10121d] rounded-2xl border border-slate-800/80 overflow-hidden shadow-2xl">
-          {/* Teacher Video in Sidebar for App / WebRTC Classes */}
-          {!isYouTube ? (
+          {/* Every class is a YouTube class now: there is no LiveKit class video. This
+              tile exists only while this student is on a call with the teacher. */}
+          {!isYouTube && (isApprovedSpeaker || teacherAudioConnected || teacherVideoConnected) ? (
             <div className="w-full shrink-0 border-b border-[#2d2e3b] p-3 bg-[#13151f]">
               <div className="relative w-full aspect-video rounded-xl overflow-hidden border border-slate-700/80 bg-black shadow-lg">
                 <VideoStrip
@@ -1913,8 +1914,8 @@ export function StudentLiveClassRoom({
                 isLive={isLive}
                 objects={boardObjects}
               />
-              {/* Mobile PiP Teacher Video (Corner Preview with switchable position) */}
-              {!isYouTube && (
+              {/* Only while this student is on a call with the teacher (no LiveKit class video). */}
+              {!isYouTube && (isApprovedSpeaker || teacherAudioConnected || teacherVideoConnected) && (
                 <div
                   className={`absolute ${
                     mobileCamCorner === "top-right"

@@ -9,8 +9,6 @@ import { syncLiveSessionOnStart } from "@/lib/live-session/service";
 import { announceClassLive } from "@/lib/live-session/announce";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { apiSuccess, apiError, handleApiError } from "@/lib/api/response";
-import { videoRoomName } from "@/lib/livekit/server";
-import { startRoomRecording, recordingStorageKey } from "@/lib/livekit/egress";
 import { canTeacherStartClass } from "@/lib/schedule/access-rules";
 import { extractYouTubeVideoId } from "@/lib/live-class/youtube";
 import { issueStageToken, stageUrl } from "@/lib/live-class/stage-session";
@@ -78,6 +76,18 @@ export async function POST(
     // broadcast.)
     const bodyYouTubeId = body?.youtubeVideoId ? extractYouTubeVideoId(String(body.youtubeVideoId)) : null;
     const requestedYouTubeId = bodyYouTubeId ?? (isNewOccurrence ? null : existingSession?.youtubeVideoId ?? null);
+
+    // Public class: the stream the team scheduled on YouTube themselves. Its
+    // stream key (from YouTube Studio) lets the Teacher app send the class to
+    // it with the same Start button. Stored sealed, like the pool keys.
+    const manualStreamKey = typeof body?.youtubeStreamKey === "string" ? body.youtubeStreamKey.trim() : "";
+    if (manualStreamKey && !/^[A-Za-z0-9_-]{8,200}$/.test(manualStreamKey)) {
+      return apiError("That doesn't look like a YouTube stream key. Copy it from YouTube Studio → Go live → Stream key.", 400, { code: "BAD_STREAM_KEY" });
+    }
+    const manualIngestUrl =
+      typeof body?.youtubeIngestUrl === "string" && /^rtmps?:\/\/[^\s]{4,300}$/i.test(body.youtubeIngestUrl.trim())
+        ? body.youtubeIngestUrl.trim()
+        : null;
 
     const now = new Date();
 
@@ -317,26 +327,6 @@ export async function POST(
     // below). The old implicit "same lectureId → LIVE" sync also left those
     // siblings stuck LIVE forever, since End Class never completed them.
 
-    // Late-start compliance penalty — only on the genuine first transition
-    // to LIVE for this occurrence (existingSession.actualStartedAt was
-    // unset going into this request; a reconnect/retry after that point
-    // would already have it set and must never re-penalize the same
-    // start). Compared against the schedule's own startsAt, not `now`
-    // twice, so this reflects server-authoritative clocks only.
-    if (!existingSession?.actualStartedAt && schedule.startsAt) {
-      await import("@/lib/batch/late-start-penalty")
-        .then(({ applyLateStartPenaltyIfDue }) =>
-          applyLateStartPenaltyIfDue({
-            scheduleId: schedule.id,
-            teacherId: teacher.id,
-            scheduledStartsAt: new Date(schedule.startsAt!),
-            actualStartedAt: now,
-            startedByUserId: session.user.id,
-          })
-        )
-        .catch((err) => console.error("[late_start_penalty_error]", err));
-    }
-
     // 4.5. Auto-create a YouTube broadcast when no manual youtubeVideoId was
     // supplied, for both YouTube-involving modes. BOTH and YOUTUBE now both
     // hand the teacher OBS credentials + an /obs-stage broadcast-page URL
@@ -364,26 +354,32 @@ export async function POST(
     // and only then do students see it live and get notified.
     let appYoutubeConnecting = false;
     if ((requestedTransport === "BOTH" || requestedTransport === "YOUTUBE") && !existingYtId) {
-      // An App Class whose YouTube broadcast cannot be created (quota used
-      // up, YouTube down) still has to run: it becomes an interactive App
-      // Class in the app's own room, instead of a class with no video.
-      const livekitReady = Boolean(process.env.LIVEKIT_URL && process.env.LIVEKIT_API_KEY && process.env.LIVEKIT_API_SECRET);
-      const fallBack = async (warning: string, toInteractive = false) => {
-        youtubeSimulcastWarning = warning;
-        if (requestedTransport === "BOTH" || (toInteractive && livekitReady)) {
-          effectiveTransport = "LIVEKIT";
-          await prisma.whiteboardSession.update({ where: { id: wbSession.id }, data: { videoTransport: "LIVEKIT" } }).catch(() => null);
-          wbSession.videoTransport = "LIVEKIT";
-        }
+      // An App class whose YouTube broadcast cannot be created (quota used
+      // up, no free stream slot, YouTube down) does NOT start: there is no
+      // other way to run a class. The start is undone so the teacher can
+      // press Start again, or enter a YouTube link + stream key instead.
+      const undoStart = async (reason: string) => {
+        const neverRan = !existingSession?.actualStartedAt || isNewOccurrence;
+        await prisma
+          .$transaction([
+            prisma.batchSchedule.update({ where: { id: schedule!.id }, data: { status: schedule!.status } }),
+            prisma.whiteboardSession.update({
+              where: { id: wbSession.id },
+              data: {
+                livePhase: "PREPARING",
+                ...(neverRan && { actualStartedAt: null }),
+              },
+            }),
+          ])
+          .catch((err) => console.error("[live_class_start_undo_error]", err));
+        return apiError(reason, 503, { code: "YOUTUBE_START_FAILED" });
       };
       try {
         const { youtubeLiveClassConfigured } = await import("@/lib/live-class/youtube-broadcast");
         const { appYoutubePoolConfigured, beginAppYoutubeStart } = await import("@/lib/live-session/app-youtube");
         if (!youtubeLiveClassConfigured() || !(await appYoutubePoolConfigured())) {
-          await fallBack(
-            requestedTransport === "YOUTUBE"
-              ? "YouTube class streaming isn't set up on this server yet (no stream slots). Paste your YouTube Live link in OBS Setup, or ask an admin to set up stream slots."
-              : "YouTube class streaming isn't set up on this server yet — class started on the interactive room only."
+          return await undoStart(
+            "The class could not start: YouTube class streaming isn't set up on this server (no stream slots). For a public class, enter the YouTube link and stream key, then press Start again."
           );
         } else {
           const teacherName = (await prisma.user.findFirst({ where: { teacher: { id: teacher.id } }, select: { name: true } }))?.name;
@@ -408,64 +404,43 @@ export async function POST(
         const { NoIngestCapacityError } = await import("@/lib/youtube/stream-pool");
         const reason =
           youtubeError instanceof NoIngestCapacityError ? youtubeError.message : describeYoutubeError(youtubeError);
-        await fallBack(
-          requestedTransport === "YOUTUBE" && !livekitReady
-            ? `Could not set up the YouTube broadcast. ${reason} You can paste your stream link in OBS Setup.`
-            : `Could not set up the YouTube broadcast. ${reason} Interactive App Class is active for all students.`,
-          true
+        return await undoStart(
+          `The class could not start: the YouTube broadcast could not be set up. ${reason} Press Start again in a moment — or, for a public class, enter the YouTube link and stream key.`
         );
       }
+    } else if (existingYtId && manualStreamKey) {
+      // Public class with the team's own stream key.
+      const { sealSecret } = await import("@/lib/crypto/secret-box");
+      await prisma.whiteboardSession.update({
+        where: { id: wbSession.id },
+        data: { youtubeStreamKey: sealSecret(manualStreamKey), youtubeIngestUrl: manualIngestUrl },
+      });
     }
 
-    // 5. Start Room Recording (Room Composite Egress -> R2) for LIVEKIT-only
-    // classes. BOTH and YOUTUBE both skip this now (see 4.5's comment) —
-    // YouTube's own live-stream auto-archive becomes the recording for
-    // those, exactly like the YOUTUBE-only branch already assumed below.
-    let recordingWarning: string | null = null;
-
-    if (requestedTransport === "LIVEKIT") {
-      const isAlreadyRecording =
-        wbSession.recordingStatus === "RECORDING" ||
-        wbSession.recordingStatus === "RECORDING_STARTING" ||
-        wbSession.recordingStatus === "STARTING" ||
-        Boolean(wbSession.recordingEgressId);
-
-      if (!isAlreadyRecording) {
-        try {
-          await prisma.whiteboardSession
-            .update({ where: { id: wbSession.id }, data: { recordingStatus: "RECORDING_STARTING" } })
-            .catch(() => null);
-
-          const storageKey = recordingStorageKey(wbSession.id);
-          const egress = await startRoomRecording(videoRoomName(wbSession.id), storageKey);
-          if (egress?.egressId) {
-            await prisma.whiteboardSession
-              .update({
-                where: { id: wbSession.id },
-                data: { recordingEgressId: egress.egressId, recordingStatus: "RECORDING" },
-              })
-              .catch(() => null);
-          } else {
-            recordingWarning = "Recording could not be confirmed as started. This class may not be recorded.";
-          }
-        } catch (recordingError) {
-          console.error("[live_class_recording_start_error]", recordingError);
-          // If this class has YouTube Live streaming active, YouTube automatically archives and records the video directly to YouTube as a live archive (VOD).
-          // Therefore, students WILL get the recorded video via YouTube, and we must NOT falsely alarm the teacher with RECORDING_FAILED.
-          if (requestedYouTubeId || wbSession.youtubeVideoId) {
-            await prisma.whiteboardSession
-              .update({ where: { id: wbSession.id }, data: { recordingStatus: "RECORDING" } })
-              .catch(() => null);
-            recordingWarning = null;
-          } else {
-            await prisma.whiteboardSession
-              .update({ where: { id: wbSession.id }, data: { recordingStatus: "RECORDING_FAILED" } })
-              .catch(() => null);
-            recordingWarning = "Recording failed to start for this class. Students will not get a recorded video for it.";
-          }
-        }
-      }
+    // Late-start compliance penalty — only on the genuine first transition
+    // to LIVE for this occurrence (existingSession.actualStartedAt was
+    // unset going into this request; a reconnect/retry after that point
+    // would already have it set and must never re-penalize the same
+    // start). Compared against the schedule's own startsAt, not `now`
+    // twice, so this reflects server-authoritative clocks only.
+    if (!existingSession?.actualStartedAt && schedule.startsAt) {
+      await import("@/lib/batch/late-start-penalty")
+        .then(({ applyLateStartPenaltyIfDue }) =>
+          applyLateStartPenaltyIfDue({
+            scheduleId: schedule.id,
+            teacherId: teacher.id,
+            scheduledStartsAt: new Date(schedule.startsAt!),
+            actualStartedAt: now,
+            startedByUserId: session.user.id,
+          })
+        )
+        .catch((err) => console.error("[late_start_penalty_error]", err));
     }
+
+
+    // 5. Recording: YouTube's own archive of the live stream. (The LiveKit
+    // room recording went away with the LiveKit class.)
+    const recordingWarning: string | null = null;
 
     // 5.5 + 6 + 7. Lifecycle row, realtime state, "Live Now" notification.
     // APP_YOUTUBE classes skip all three here: they are still connecting to
@@ -498,9 +473,12 @@ export async function POST(
       if (stageToken) obsBroadcastUrl = stageUrl(YOUTUBE_OAUTH_PRODUCTION_URL, schedule.id, stageToken);
     }
 
+    // Stream credentials never travel in this response (see the stream-key route).
+    const { youtubeStreamKey: _sk, youtubeIngestUrl: _iu, ...safeWbSession } = wbSession;
     return apiSuccess({
       message: "Class started successfully.",
-      whiteboardSession: wbSession,
+      whiteboardSession: safeWbSession,
+      hasManualStreamKey: Boolean(existingYtId && (manualStreamKey || wbSession.youtubeStreamKey)),
       schedule: updatedSchedule,
       serverTime: now.toISOString(),
       startSlideUrl,

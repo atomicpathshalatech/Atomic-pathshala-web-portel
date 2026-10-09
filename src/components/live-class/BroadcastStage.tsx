@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useImperativeHandle, forwardRef } from "react";
 import PusherClient from "pusher-js";
+import { openStageLink, STAGE_LINK_STALE_MS, type StageLinkMessage } from "@/lib/live-class/stage-link";
 import { CanvasEngine, type StrokeObject } from "@/lib/canvas/canvas-engine";
 import { sessionChannel, teacherChannel, WB_EVENTS } from "@/lib/realtime/events";
 import { BroadcastQuizCanvasOverlay, type BroadcastQuizData } from "@/components/live-class/BroadcastQuizCanvasOverlay";
@@ -424,6 +425,49 @@ export function BroadcastStage({ scheduleId, token }: { scheduleId: string; toke
   // the DOM camera overlay (and its LiveKit connection) is skipped.
   const [isDesktopStage] = useState(() => Boolean(getDesktopBridge()?.stage?.isStage));
 
+  // Desktop stage: the teacher's own window says what is on the board and
+  // where the camera is, the moment it changes (see stage-link.ts). While
+  // that link is alive it wins over the server copy below.
+  const [liveBoard, setLiveBoard] = useState<{ objects: StrokeObject[]; background: string | null } | null>(null);
+  const [liveCamera, setLiveCamera] = useState<{ position: string; shape: "SQUARE" | "CIRCULAR" } | null>(null);
+  const linkSessionId = data?.sessionId ?? null;
+  useEffect(() => {
+    if (!isDesktopStage || !linkSessionId) return;
+    const link = openStageLink(linkSessionId);
+    if (!link) return;
+    let lastHeard = 0;
+    link.onmessage = (event: MessageEvent<StageLinkMessage>) => {
+      const m = event.data;
+      if (!m || typeof m !== "object" || m.t === "hello") return;
+      lastHeard = Date.now();
+      if (m.t === "board" && Array.isArray(m.objects)) {
+        setLiveBoard({ objects: m.objects as StrokeObject[], background: typeof m.background === "string" ? m.background : null });
+      } else if (m.t === "camera" && typeof m.position === "string") {
+        setLiveCamera({ position: m.position, shape: m.shape === "CIRCULAR" ? "CIRCULAR" : "SQUARE" });
+      }
+    };
+    const hello = () => {
+      try {
+        link.postMessage({ t: "hello" } satisfies StageLinkMessage);
+      } catch {
+        // ignore
+      }
+    };
+    hello();
+    const timer = setInterval(() => {
+      const alive = lastHeard > 0 && Date.now() - lastHeard < STAGE_LINK_STALE_MS;
+      if (alive) return;
+      // Teacher's page gone (reload / closed): back to the server copy, and
+      // keep asking so the link picks up again when the page is back.
+      setLiveBoard(null);
+      hello();
+    }, 2000);
+    return () => {
+      clearInterval(timer);
+      link.close();
+    };
+  }, [isDesktopStage, linkSessionId]);
+
   const fetchStage = async () => {
     try {
       const res = await fetch(
@@ -565,8 +609,8 @@ export function BroadcastStage({ scheduleId, token }: { scheduleId: string; toke
       {/* Board & PPT Canvas */}
       <BoardMirror
         ref={mirrorRef}
-        objects={data.page?.objects ?? []}
-        background={data.page?.background ?? "blank"}
+        objects={liveBoard?.objects ?? data.page?.objects ?? []}
+        background={(liveBoard ? liveBoard.background : data.page?.background) ?? "blank"}
         classroomTheme={data.classroomTheme}
         onDimensionsChange={setStageDimensions}
       />
@@ -617,9 +661,10 @@ export function BroadcastStage({ scheduleId, token }: { scheduleId: string; toke
         <DesktopStageStreamer
           getBoard={() => mirrorRef.current?.getBoard() ?? { container: null, layers: [] }}
           look={{
-            background: data.page?.background || (data.classroomTheme === "DARK" ? "atomic_dark" : "atomic_white"),
-            cameraShape: data.cameraShape,
-            cameraPosition: data.cameraPosition,
+            background:
+              (liveBoard ? liveBoard.background : data.page?.background) || (data.classroomTheme === "DARK" ? "atomic_dark" : "atomic_white"),
+            cameraShape: liveCamera?.shape ?? data.cameraShape,
+            cameraPosition: liveCamera?.position ?? data.cameraPosition,
             poll: toStagePoll(data.activeQuiz, data.quizMetrics),
           }}
         />

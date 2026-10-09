@@ -17,7 +17,7 @@ export const whiteboardSessionPatchSchema = z
     livePhase: z.literal("LIVE").optional(),
     // Teacher's camera bubble as fractions of the board (see
     // parseFreeCameraLayout) — mirrored on the stage/YouTube video.
-    cameraLayout: z.string().regex(/^FREE:[01](.d{1,4})?,[01](.d{1,4})?,[01](.d{1,4})?$/).optional(),
+    cameraLayout: z.string().regex(/^FREE:[01](\.\d{1,4})?,[01](\.\d{1,4})?,[01](\.\d{1,4})?$/).optional(),
   })
   .refine(
     (d) =>

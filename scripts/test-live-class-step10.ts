@@ -23,12 +23,12 @@ const read = (p: string) => readFileSync(join(root, p), "utf8");
 
 // ---- 1. Transport choice (pure) -----------------------------------------------
 assert(pickVideoTransport("LIVEKIT", null, true) === "YOUTUBE", "LIVEKIT request becomes an App YouTube class once App YouTube is available");
-assert(pickVideoTransport("LIVEKIT", null, false) === "LIVEKIT", "LIVEKIT stays as the fallback when App YouTube isn't set up");
+assert(pickVideoTransport("LIVEKIT", null, false) === "YOUTUBE", "LiveKit is never a class transport, even when App YouTube is not set up");
 assert(pickVideoTransport(undefined, "LIVEKIT", true) === "YOUTUBE", "A stale stored LIVEKIT choice is upgraded too");
 assert(pickVideoTransport(undefined, undefined, true) === "YOUTUBE", "No choice at all → App YouTube when available");
-assert(pickVideoTransport(undefined, undefined, false) === "LIVEKIT", "No choice at all → LiveKit room when App YouTube is unavailable");
+assert(pickVideoTransport(undefined, undefined, false) === "YOUTUBE", "No choice at all → YouTube");
 assert(pickVideoTransport("YOUTUBE", "LIVEKIT", false) === "YOUTUBE", "An explicit YouTube choice is never downgraded");
-assert(pickVideoTransport("BOTH", null, true) === "BOTH", "BOTH is kept as-is");
+assert(pickVideoTransport("BOTH", null, true) === "YOUTUBE", "BOTH becomes a plain YouTube class");
 assert(pickVideoTransport("junk", "YOUTUBE", false) === "YOUTUBE", "Junk request falls back to the stored choice");
 
 // ---- 1b. Teacher camera layout reaches the class video ---------------------------
