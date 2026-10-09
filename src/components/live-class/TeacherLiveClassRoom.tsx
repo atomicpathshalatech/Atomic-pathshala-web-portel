@@ -3583,9 +3583,15 @@ export function TeacherLiveClassRoom({
             </div>
           )}
           {youtubeSimulcastWarning && (
-            <div className="flex items-center gap-1.5 rounded-lg bg-amber-500/15 border border-amber-500/40 px-3 py-1.5 text-xs font-semibold text-amber-300">
-              <span className="material-symbols-outlined text-sm">warning</span>
-              {youtubeSimulcastWarning}
+            <div
+              className="fixed left-1/2 top-16 z-[80] w-[min(92vw,720px)] -translate-x-1/2 flex items-start gap-2 rounded-xl bg-amber-950/95 border border-amber-500/60 px-4 py-3 text-xs font-semibold leading-snug text-amber-100 shadow-2xl"
+              role="alert"
+            >
+              <span className="material-symbols-outlined text-base text-amber-300">warning</span>
+              <span className="flex-1">{youtubeSimulcastWarning}</span>
+              <button type="button" onClick={() => setYoutubeSimulcastWarning(null)} className="text-amber-300 hover:text-white" title="Dismiss">
+                <span className="material-symbols-outlined text-base">close</span>
+              </button>
             </div>
           )}
           {(() => {

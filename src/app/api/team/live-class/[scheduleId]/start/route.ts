@@ -408,7 +408,14 @@ export async function POST(
           `The class could not start: the YouTube broadcast could not be set up. ${reason} Press Start again in a moment — or, for a public class, enter the YouTube link and stream key.`
         );
       }
-    } else if (existingYtId && manualStreamKey) {
+    }
+    // Public class: the team's own YouTube video must allow embedding, or
+    // students see "Video unavailable" in the app (no quota used for this check).
+    if (existingYtId && !wbSession.youtubeBroadcastId) {
+      const { youtubeEmbedAllowed, EMBED_OFF_WARNING } = await import("@/lib/youtube/embed-check");
+      if ((await youtubeEmbedAllowed(existingYtId)) === false) youtubeSimulcastWarning = EMBED_OFF_WARNING;
+    }
+    if (existingYtId && manualStreamKey) {
       // Public class with the team's own stream key.
       const { sealSecret } = await import("@/lib/crypto/secret-box");
       await prisma.whiteboardSession.update({

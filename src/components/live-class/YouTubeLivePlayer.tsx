@@ -612,7 +612,7 @@ export function YouTubeLivePlayer({
               setIsPlaying(true);
               setIsStreamLive(true);
             }}
-            className="absolute inset-0 z-15 flex flex-col items-center justify-center bg-black/40 backdrop-blur-xs cursor-pointer group transition-all"
+            className="absolute inset-0 z-[15] flex flex-col items-center justify-center bg-black/40 backdrop-blur-xs cursor-pointer group transition-all"
           >
             <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-red-600/95 group-hover:bg-red-500 text-white flex items-center justify-center shadow-2xl group-hover:scale-110 transition-transform duration-200 ring-4 ring-white/30 animate-pulse">
               <span className="material-symbols-outlined text-3xl sm:text-4xl ml-1">play_arrow</span>
@@ -626,7 +626,7 @@ export function YouTubeLivePlayer({
 
       {/* ----------------- 2. EMBED RESTRICTION FALLBACK CARD ----------------- */}
       {hasEmbedError && (
-        <div className="absolute inset-0 z-25 bg-gradient-to-br from-[#080b14] via-[#0d1222] to-[#060810] flex flex-col items-center justify-between p-5 sm:p-7 text-center select-none overflow-hidden animate-in fade-in duration-300">
+        <div className="absolute inset-0 z-[25] bg-gradient-to-br from-[#080b14] via-[#0d1222] to-[#060810] flex flex-col items-center justify-between p-5 sm:p-7 text-center select-none overflow-hidden animate-in fade-in duration-300">
           {/* Ambient Glow */}
           <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-rose-600/15 blur-3xl pointer-events-none" />
           <div className="absolute -bottom-16 -left-16 w-64 h-64 rounded-full bg-blue-600/15 blur-3xl pointer-events-none" />
