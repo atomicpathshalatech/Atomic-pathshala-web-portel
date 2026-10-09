@@ -82,6 +82,21 @@ export function VideoPollOverlay({
     }
   }, [poll?.id]);
 
+  // Calculate vote percentages if counts exist. This hook must stay ABOVE the
+  // early return below: the overlay is mounted before any poll exists, and a
+  // hook that only runs once a poll arrives crashes the student's whole
+  // room ("Rendered more hooks than during the previous render").
+  const totalVotes = poll?.totalVotes || 0;
+  const pollCounts = poll?.counts;
+  const optionPercentages = useMemo(() => {
+    const p: Record<string, number> = {};
+    if (!pollCounts || totalVotes === 0) return p;
+    for (const [key, count] of Object.entries(pollCounts)) {
+      p[key] = Math.round((count / totalVotes) * 100);
+    }
+    return p;
+  }, [pollCounts, totalVotes]);
+
   if (!poll || poll.status === "ENDED") {
     return null;
   }
@@ -89,17 +104,6 @@ export function VideoPollOverlay({
   const isRevealed = poll.status === "REVEALED";
   const mySelection = poll.mySelection;
   const isTimeUp = remainingSec <= 0 && poll.status === "ACTIVE";
-
-  // Calculate vote percentages if counts exist
-  const totalVotes = poll.totalVotes || 0;
-  const optionPercentages = useMemo(() => {
-    const p: Record<string, number> = {};
-    if (!poll.counts || totalVotes === 0) return p;
-    for (const [key, count] of Object.entries(poll.counts)) {
-      p[key] = Math.round((count / totalVotes) * 100);
-    }
-    return p;
-  }, [poll.counts, totalVotes]);
 
   // Minimized pill state
   if (isMinimized) {

@@ -1087,12 +1087,17 @@ export function StudentLiveClassRoom({
           if (!j?.success) return;
           const q = j.data?.quiz;
           if (q && q.status !== "CLOSED") {
-            if (activePollIdRef.current !== q.id) {
+            const samePoll = activePollIdRef.current === q.id;
+            if (!samePoll) {
               activePollIdRef.current = q.id;
               setQuizDismissed(false);
             }
             setQuiz(q);
-            setMySelection(j.data.mySelection ?? null);
+            // The server may not have this student's answer yet (it is still
+            // on its way): never wipe an answer just tapped on the same poll —
+            // the options came back, a second tap then failed with
+            // "You have already answered this quiz."
+            setMySelection((prev) => j.data.mySelection ?? (samePoll ? prev : null));
           } else {
             setQuiz((prev) => (prev && (!q || prev.id === q.id) ? null : prev));
           }
@@ -1348,8 +1353,11 @@ export function StudentLiveClassRoom({
         optionKey,
       });
     } catch (err: any) {
+      const message = err instanceof Error ? err.message : "Could not submit your answer.";
+      // "Already answered" means the first tap did reach the server: keep it.
+      if (/already answered/i.test(message)) return;
       setMySelection(null);
-      setQuizError(err instanceof Error ? err.message : "Could not submit your answer.");
+      setQuizError(message);
     } finally {
       setSubmittingAnswer(false);
     }
