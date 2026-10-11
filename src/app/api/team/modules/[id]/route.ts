@@ -79,7 +79,9 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
       return apiError("Unpublish this module before deleting it.", 409);
     }
 
-    await prisma.module.delete({ where: { id: params.id } });
+    // Rows and the module's files in storage (source PDF, page images, figures, exports).
+    const { deleteModuleWithFiles } = await import("@/lib/module-studio/delete-module");
+    const removed = await deleteModuleWithFiles(params.id);
 
     await prisma.auditLog.create({
       data: {
@@ -87,11 +89,11 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
         action: "MODULE_DELETED",
         entityType: "Module",
         entityId: params.id,
-        metadata: { code: existing.code, title: existing.title },
+        metadata: { code: existing.code, title: existing.title, filesDeleted: removed?.filesDeleted ?? 0, filesKept: removed?.filesKept ?? 0 },
       },
     });
 
-    return apiSuccess({ deleted: true });
+    return apiSuccess({ deleted: true, filesDeleted: removed?.filesDeleted ?? 0 });
   } catch (error) {
     return handleApiError(error);
   }

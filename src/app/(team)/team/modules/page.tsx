@@ -1,6 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { hasPermission } from "@/lib/rbac/guard";
+import { PERMISSIONS } from "@/lib/rbac/permissions";
+import { ModuleDeleteButton } from "@/components/team-portal/ModuleDeleteButton";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +22,8 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 export default async function ModuleStudioListPage() {
+  const session = await getServerSession(authOptions);
+  const canDelete = session?.user?.id ? await hasPermission(session.user.id, PERMISSIONS.MODULE_DELETE) : false;
   const modules = await prisma.module.findMany({
     include: { brandProfile: { select: { name: true } }, _count: { select: { pages: true, exportHistory: true } } },
     orderBy: { createdAt: "desc" },
@@ -63,10 +70,10 @@ export default async function ModuleStudioListPage() {
       ) : (
         <ul className="space-y-2">
           {modules.map((m) => (
-            <li key={m.id}>
+            <li key={m.id} className="flex items-center gap-2">
               <Link
                 href={`/team/modules/${m.id}`}
-                className="glass-card rounded-xl p-4 flex items-center gap-4 hover:shadow-md transition-all block"
+                className="glass-card rounded-xl p-4 flex items-center gap-4 hover:shadow-md transition-all flex-1 min-w-0"
               >
                 <span className="w-10 h-10 shrink-0 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
                   <span className="material-symbols-outlined">picture_as_pdf</span>
@@ -83,6 +90,7 @@ export default async function ModuleStudioListPage() {
                   {m.status.replace(/_/g, " ")}
                 </span>
               </Link>
+              {canDelete && <ModuleDeleteButton moduleId={m.id} title={m.title} published={m.status === "PUBLISHED"} />}
             </li>
           ))}
         </ul>
