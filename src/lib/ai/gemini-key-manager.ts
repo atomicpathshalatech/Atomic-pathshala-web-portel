@@ -195,6 +195,10 @@ export class GeminiKeyManager {
     if (isDeadKeyError(err)) {
       // Blocked project / invalid key: shared skip for every Gemini caller.
       markKeyDead(key);
+    } else if (msg.includes("402") || msg.includes("credits are depleted")) {
+      // The key's prepaid balance is finished: it stays that way until someone
+      // tops it up, so rest it for 30 minutes instead of trying it on every call.
+      this.cooldowns.set(key, Date.now() + 30 * 60 * 1000);
     } else if (isRateLimit) {
       // A free-tier key out of its daily quota says how long to wait (often
       // hours) — rest it that long (max 24 h) instead of retrying every minute.

@@ -2484,6 +2484,13 @@ model Question {
   lastHumanEditedById     String?
   needsReaudit            Boolean   @default(true)
 
+  // QC Expert + QC Director result for the CURRENT content (qcHash). Set only
+  // by the QC pipeline's decision rules — never from a model's own confidence.
+  // UNREVIEWED | EXPERT_DONE | VERIFIED | FAILED | NEEDS_HUMAN_REVIEW | ERROR
+  qcStatus                String?   @default("UNREVIEWED")
+  qcHash                  String?
+  qcReviewedAt            DateTime?
+
   createdBy             User?                 @relation("QuestionCreatedBy", fields: [createdById], references: [id])
   publishedBy           User?                 @relation("QuestionPublishedBy", fields: [publishedById], references: [id])
   review1By             User?                 @relation("QuestionReview1By", fields: [review1ById], references: [id])
@@ -2502,6 +2509,9 @@ model Question {
   assets                QuestionAsset[]
   revisionAttempts      RevisionQuestionAttempt[]
   auditLogs             QuestionAuditLog[]
+  qcReviews             QcReview[]
+  qcFindings            QcFinding[]
+  qcCorrections         QcCorrection[]
 
   @@index([subject])
   @@index([difficulty])
@@ -2511,6 +2521,7 @@ model Question {
   @@index([pyqExam, pyqYear])
   @@index([aiVerified])
   @@index([aiAuditStatus])
+  @@index([qcStatus])
   @@map("questions")
 }
 
@@ -6706,4 +6717,117 @@ model WhatsAppInboundMessage {
   @@index([studentId])
   @@index([createdAt])
   @@map("whatsapp_inbound_messages")
+}
+
+// ───────────────────────── QC Expert + QC Director ─────────────────────────
+// One row per agent pass over one version (contentHash) of a question. The
+// original question is never changed by a review: corrections are proposals
+// (QcCorrection) that a person approves.
+model QcReview {
+  id             String   @id @default(cuid())
+  questionId     String
+  agent          String // EXPERT | DIRECTOR
+  status         String // PASS | FAIL | NEEDS_HUMAN_REVIEW | ERROR
+  contentHash    String
+  provider       String   @default("gemini")
+  model          String
+  promptVersion  String
+  storedAnswer   String?
+  derivedAnswer  String?
+  answerMatches  Boolean?
+  // The validated structured output of the agent (see src/lib/qc/schema.ts).
+  result         Json
+  // Deterministic re-computation of the arithmetic the agent relied on.
+  calcChecks     Json?
+  // NCERT pages offered to the agent as evidence (document, page — from our database).
+  references     Json?
+  // The model's own confidence — recorded, never used to decide a status.
+  modelConfidence Float?
+  inputTokens    Int?
+  outputTokens   Int?
+  durationMs     Int?
+  errorMessage   String?
+  // DIRECTOR rows: the EXPERT review that was audited.
+  expertReviewId String?
+  runById        String?
+  createdAt      DateTime @default(now())
+
+  question Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  findings QcFinding[]
+
+  @@index([questionId, agent])
+  @@index([contentHash])
+  @@index([status])
+  @@map("qc_reviews")
+}
+
+model QcFinding {
+  id                 String   @id @default(cuid())
+  reviewId           String
+  questionId         String
+  source             String // EXPERT | DIRECTOR (a problem the Director found that the Expert missed)
+  category           String // ANSWER_KEY_MISMATCH | SOLUTION_ERROR | FORMULA_ERROR | CALCULATION_ERROR | UNIT_ERROR | ...
+  severity           String // CRITICAL | HIGH | MEDIUM | LOW
+  description        String
+  evidence           String?
+  proposedCorrection Json?
+  // The Director's verdict on an EXPERT finding.
+  directorDecision   String? // CONFIRMED | PARTIALLY_CONFIRMED | FALSE_POSITIVE | MISSED_CONTEXT | INCONCLUSIVE
+  directorReason     String?
+  finalAction        String?
+  createdAt          DateTime @default(now())
+
+  review      QcReview       @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  question    Question       @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  corrections QcCorrection[]
+
+  @@index([questionId])
+  @@index([reviewId])
+  @@index([category])
+  @@map("qc_findings")
+}
+
+model QcCorrection {
+  id             String    @id @default(cuid())
+  questionId     String
+  findingId      String?
+  contentHash    String
+  field          String // correctAnswer | solution | statement | options | topic | subTopic | microConcept | difficulty
+  language       String? // ENGLISH | HINDI for text fields
+  originalValue  String?
+  proposedValue  String
+  reason         String
+  evidence       String?
+  status         String    @default("PROPOSED") // PROPOSED | APPROVED | REJECTED | APPLIED | STALE
+  decidedById    String?
+  decidedAt      DateTime?
+  decisionNote   String?
+  appliedVersion Int?
+  createdAt      DateTime  @default(now())
+
+  question Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  finding  QcFinding? @relation(fields: [findingId], references: [id], onDelete: SetNull)
+
+  @@index([questionId])
+  @@index([status])
+  @@map("qc_corrections")
+}
+
+// Every model call the QC system makes: what it cost and whether it worked.
+model AiUsageLog {
+  id           String   @id @default(cuid())
+  feature      String // QC_EXPERT | QC_DIRECTOR_SOLVE | QC_DIRECTOR_AUDIT
+  provider     String
+  model        String
+  questionId   String?
+  inputTokens  Int?
+  outputTokens Int?
+  durationMs   Int?
+  ok           Boolean  @default(true)
+  error        String?
+  createdAt    DateTime @default(now())
+
+  @@index([feature, createdAt])
+  @@index([questionId])
+  @@map("ai_usage_logs")
 }
