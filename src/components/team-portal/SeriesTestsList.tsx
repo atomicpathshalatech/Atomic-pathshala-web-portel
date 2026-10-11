@@ -16,6 +16,7 @@ import {
   Share2,
 } from "lucide-react";
 import { RescheduleTestModal } from "@/components/team-portal/RescheduleTestModal";
+import { EditTestSyllabusModal } from "@/components/team-portal/EditTestSyllabusModal";
 import { ShareTestModal } from "@/components/test-portal/ShareTestModal";
 import { formatISTDate, formatISTTime } from "@/lib/date-utils";
 
@@ -45,6 +46,7 @@ export function SeriesTestsList({
   const router = useRouter();
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [rescheduleTest, setRescheduleTest] = useState<SeriesTestItem | null>(null);
+  const [syllabusTest, setSyllabusTest] = useState<SeriesTestItem | null>(null);
   const [recalculatingId, setRecalculatingId] = useState<string | null>(null);
   const [shareModalTest, setShareModalTest] = useState<SeriesTestItem | null>(null);
 
@@ -265,6 +267,19 @@ export function SeriesTestsList({
                       <span>Reschedule Test</span>
                     </button>
 
+                    {/* Edit Syllabus */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveMenuId(null);
+                        setSyllabusTest(t);
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-xl text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition text-left"
+                    >
+                      <span className="material-symbols-outlined text-base text-emerald-600">menu_book</span>
+                      <span>Edit Syllabus</span>
+                    </button>
+
                     {/* Reshuffle / Recalculate Scores */}
                     <button
                       type="button"
@@ -340,6 +355,11 @@ export function SeriesTestsList({
           isOpen={Boolean(rescheduleTest)}
           onClose={() => setRescheduleTest(null)}
         />
+      )}
+
+      {/* Edit Syllabus Modal */}
+      {syllabusTest && (
+        <EditTestSyllabusModal testId={syllabusTest.id} testName={syllabusTest.name} onClose={() => setSyllabusTest(null)} />
       )}
 
       {/* Share Test Modal */}
