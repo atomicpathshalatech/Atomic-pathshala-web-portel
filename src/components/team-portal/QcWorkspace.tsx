@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner";
 import { AlertTriangle, Check, CheckCircle2, ChevronLeft, ChevronRight, HelpCircle, Loader2, Play, RefreshCw, Search, ShieldCheck, Square, X, XCircle } from "lucide-react";
 import { FormulaText } from "@/components/test-portal/FormulaText";
+import { QcDuplicates } from "@/components/team-portal/QcDuplicates";
 
 type Overview = {
   total: number;
@@ -141,6 +142,7 @@ export function QcWorkspace({ canApply }: { canApply: boolean }) {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [tab, setTab] = useState<"review" | "duplicates">("review");
 
   // Batch run: the page calls the run endpoint again and again until nothing is left or it is stopped.
   const [running, setRunning] = useState(false);
@@ -266,6 +268,18 @@ export function QcWorkspace({ canApply }: { canApply: boolean }) {
         </button>
       </div>
 
+      <div className="flex gap-2">
+        {(["review", "duplicates"] as const).map((t) => (
+          <button key={t} onClick={() => setTab(t)} className={`rounded-xl px-4 py-2 text-xs font-semibold transition ${tab === t ? "bg-sky-600 text-white" : "border border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800"}`}>
+            {t === "review" ? "Answer and solution review" : "Duplicate questions"}
+          </button>
+        ))}
+      </div>
+
+      {tab === "duplicates" && <QcDuplicates subjects={subjects} />}
+
+      {tab === "review" && (
+      <>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         {STATUS_ORDER.map((key) => (
           <button
@@ -479,6 +493,9 @@ export function QcWorkspace({ canApply }: { canApply: boolean }) {
           </div>
         )}
       </div>
+
+      </>
+      )}
 
       {openId && (
         <QcDetailPanel

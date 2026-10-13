@@ -2512,6 +2512,8 @@ model Question {
   qcReviews             QcReview[]
   qcFindings            QcFinding[]
   qcCorrections         QcCorrection[]
+  duplicatesAsA         QuestionDuplicateCandidate[] @relation("DuplicateCandidateA")
+  duplicatesAsB         QuestionDuplicateCandidate[] @relation("DuplicateCandidateB")
 
   @@index([subject])
   @@index([difficulty])
@@ -6830,4 +6832,34 @@ model AiUsageLog {
   @@index([feature, createdAt])
   @@index([questionId])
   @@map("ai_usage_logs")
+}
+
+// A pair of Question Bank rows that look like the same question (see
+// src/lib/qc/duplicates.ts). A suggestion for a person to decide; nothing is
+// merged or removed because of it.
+model QuestionDuplicateCandidate {
+  id          String    @id @default(cuid())
+  // The pair is stored with questionAId < questionBId so it exists once.
+  questionAId String
+  questionBId String
+  category    String // EXACT_DUPLICATE | FORMAT_DUPLICATE | STRUCTURAL_VARIANT | NEEDS_MANUAL_REVIEW
+  score       Float
+  method      String
+  language    String
+  sameAnswer  Boolean?
+  note        String
+  status      String    @default("PENDING") // PENDING | CONFIRMED_DUPLICATE | NOT_DUPLICATE | KEEP_BOTH
+  decidedById String?
+  decidedAt   DateTime?
+  decisionNote String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  questionA Question @relation("DuplicateCandidateA", fields: [questionAId], references: [id], onDelete: Cascade)
+  questionB Question @relation("DuplicateCandidateB", fields: [questionBId], references: [id], onDelete: Cascade)
+
+  @@unique([questionAId, questionBId])
+  @@index([status, category])
+  @@index([questionBId])
+  @@map("question_duplicate_candidates")
 }
