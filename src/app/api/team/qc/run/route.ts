@@ -15,6 +15,9 @@ export const maxDuration = 300;
 // One request reviews a few questions (each needs three model calls and can
 // take a minute or more); the dashboard keeps calling until nothing is left.
 const MAX_PER_REQUEST = 3;
+// A review still running at this point is reported as not finished, so the
+// request answers before the platform's time limit cuts it off.
+const TIME_BUDGET_MS = 270_000;
 
 const bodySchema = z.object({
   questionIds: z.array(z.string().min(1)).max(MAX_PER_REQUEST).optional(),
@@ -50,7 +53,11 @@ export async function POST(req: NextRequest) {
       remaining = Math.max(0, count - ids.length);
     }
 
-    const settled = await Promise.allSettled(ids.map((id) => runQcForQuestion(id, userId, { force: body.force || body.include === "ERROR" })));
+    const slow = (id: string) =>
+      new Promise<QcRunResult>((resolve) =>
+        setTimeout(() => resolve({ questionId: id, status: "ERROR", reused: false, message: "The review took too long (the models are busy or out of quota). Nothing was saved for this question; try again later." }), TIME_BUDGET_MS)
+      );
+    const settled = await Promise.allSettled(ids.map((id) => Promise.race([runQcForQuestion(id, userId, { force: body.force || body.include === "ERROR" }), slow(id)])));
     const results: QcRunResult[] = settled.map((s, i) =>
       s.status === "fulfilled" ? s.value : { questionId: ids[i]!, status: "ERROR", reused: false, message: String(s.reason instanceof Error ? s.reason.message : s.reason).slice(0, 300) }
     );

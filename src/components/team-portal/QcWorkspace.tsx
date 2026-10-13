@@ -114,6 +114,8 @@ const SEVERITY_TONE: Record<string, string> = {
   LOW: "bg-slate-700/60 text-slate-300 border-slate-600",
 };
 
+const FIELD_LABEL: Record<string, string> = { correctAnswer: "Answer key", solution: "Solution", statement: "Question text", options: "Options", topic: "Topic", subTopic: "Sub-topic", microConcept: "Micro concept", difficulty: "Difficulty" };
+
 const words = (value: string) => value.replace(/_/g, " ").toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
 
 function StatusBadge({ status }: { status: string }) {
@@ -338,6 +340,10 @@ export function QcWorkspace({ canApply }: { canApply: boolean }) {
           <p className="text-[11px] text-slate-500">
             Scope: {scopeLabel}. Three questions are reviewed at a time and each takes about a minute or two, so a large run takes hours — keep this page open; you can stop any time and continue later (finished questions are not
             repeated).
+          </p>
+          <p className="text-[11px] text-amber-300/90">
+            Each question needs at least three model calls, from the same Gemini keys the rest of the app uses (AI Guru, question tools). Free keys allow only a few calls a day per model, so a big run can use up the day&apos;s
+            allowance. Run large batches when students are not using AI Guru, or add a paid key first.
           </p>
           {runLog && (
             <div className="rounded-xl border border-slate-800 bg-slate-950 p-3 text-xs text-slate-300">
@@ -739,13 +745,13 @@ function QcDetailPanel({ questionId, canApply, onClose, onReview, onChanged }: {
             {detail.corrections.map((c) => (
               <div key={c.id} className="space-y-2 rounded-2xl border border-slate-800 bg-slate-900/60 p-3 text-xs text-slate-300">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-semibold text-white">{words(c.field)}</span>
+                  <span className="font-semibold text-white">{FIELD_LABEL[c.field] ?? words(c.field)}</span>
                   {c.language && <span className="text-[11px] text-slate-500">{words(c.language)}</span>}
                   <span className="ml-auto rounded-lg border border-slate-700 px-2 py-0.5 text-[11px]">{words(c.status)}</span>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">
                   <div className="rounded-xl bg-slate-950 p-2">
-                    <div className="mb-1 text-[11px] text-slate-500">Now</div>
+                    <div className="mb-1 text-[11px] text-slate-500">{c.status === "PROPOSED" ? "Now" : "Before"}</div>
                     <FormulaText text={c.originalValue || "(empty)"} />
                   </div>
                   <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-2">

@@ -49,11 +49,18 @@ export async function GET(req: NextRequest) {
           status: true,
           qcStatus: true,
           qcReviewedAt: true,
+          qcHash: true,
           translations: { select: { language: true, statement: true }, take: 2 },
-          _count: { select: { qcFindings: true, qcCorrections: { where: { status: "PROPOSED" } } } },
+          _count: { select: { qcCorrections: { where: { status: "PROPOSED" } } } },
         },
       }),
     ]);
+
+    // Findings of the latest review only (older reviews stay in the history).
+    const findingRows = await prisma.qcFinding.findMany({ where: { questionId: { in: rows.map((r) => r.id) } }, select: { questionId: true, review: { select: { contentHash: true } } } });
+    const hashOf = new Map(rows.map((r) => [r.id, r.qcHash]));
+    const findingCount = new Map<string, number>();
+    for (const f of findingRows) if (f.review.contentHash === hashOf.get(f.questionId)) findingCount.set(f.questionId, (findingCount.get(f.questionId) ?? 0) + 1);
 
     return apiSuccess({
       total,
@@ -72,7 +79,7 @@ export async function GET(req: NextRequest) {
           qcStatus: q.qcStatus ?? "UNREVIEWED",
           qcReviewedAt: q.qcReviewedAt,
           preview: (t?.statement ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 180),
-          findings: q._count.qcFindings,
+          findings: findingCount.get(q.id) ?? 0,
           openCorrections: q._count.qcCorrections,
         };
       }),

@@ -222,5 +222,15 @@ check(
   "model confidence is not an input to any status"
 );
 
+// A picture the reviewers cannot see is our limit, not a fault in the question.
+{
+  const blind = { category: "QUESTION_MISSING_INFORMATION", severity: "CRITICAL", description: "cannot see the picture" };
+  const cannot = { optionKeys: [], outcome: "CANNOT_SOLVE", reasoning: "r" };
+  const withPicture = decide({ q: q({ hasImage: true }), e: expert({ derivedAnswer: cannot, findings: [blind] }), ds: { ...dsolve([], [blind]), derivedAnswer: d([], undefined, "CANNOT_SOLVE") }, a: audit(confirm1) });
+  check(withPicture.status === "NEEDS_HUMAN_REVIEW", "picture question the reviewers could not read → a person decides, not FAILED", withPicture);
+  const noPicture = decide({ e: expert({ derivedAnswer: cannot, findings: [blind] }), ds: { ...dsolve([], [blind]), derivedAnswer: d([], undefined, "CANNOT_SOLVE") }, a: audit(confirm1) });
+  check(noPicture.status === "FAILED", "information really missing (no picture involved) → FAILED", noPicture);
+}
+
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -142,6 +142,9 @@ export function finalDecision(args: {
 
   const failed: string[] = [];
   const review: string[] = [];
+  // "Information is missing" on a question with a picture means the reviewer could
+  // not see the picture — that is our limit, not a fault in the question.
+  const unseenPicture = (f: { category: string }) => q.hasImage && f.category === "QUESTION_MISSING_INFORMATION";
 
   if (structural.some((f) => blocking(f.severity))) failed.push("The stored record has a structural problem (see findings).");
   if (agree === true && expertVsStored === "MISMATCH" && directorVsStored === "MISMATCH") {
@@ -149,6 +152,7 @@ export function finalDecision(args: {
   }
 
   expert.findings.forEach((f, i) => {
+    if (unseenPicture(f)) return;
     const verdict = verdictOf(i);
     const confirmed = verdict === "CONFIRMED" || verdict === "PARTIALLY_CONFIRMED";
     if (blocking(f.severity)) {
@@ -161,7 +165,7 @@ export function finalDecision(args: {
   });
 
   for (const f of directorSolve.findings) {
-    if (!blocking(f.severity) && f.severity !== "MEDIUM") continue;
+    if (unseenPicture(f) || (!blocking(f.severity) && f.severity !== "MEDIUM")) continue;
     const alsoExpert = expert.findings.some((e) => e.category === f.category);
     if (blocking(f.severity) && alsoExpert) failed.push(`${f.category}: reported by both reviewers.`);
     else review.push(`${f.category}: found by the Director only.`);
