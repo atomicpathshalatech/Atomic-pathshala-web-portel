@@ -12,6 +12,55 @@ import { CLASS_NOTES_FOLDER, ensureFolder } from "@/lib/batch/past-classes";
  * Re-uploading replaces the earlier notes everywhere (player and Materials).
  */
 
+const OPEN_LINK = /^\/api\/files\/([^/]+)\/open$/;
+
+/**
+ * The notes PDF a teacher uploaded for this class, if any — the one PDF
+ * students get with the class. Uploaded notes are stored as
+ * /api/files/<id>/open on the chapter lecture (any upload) or on the class
+ * session (only a NOTES file: the session's link can also be the slides PDF
+ * prepared before class, which is not notes). The newest upload wins.
+ * Null: no uploaded notes — the board PDF made from the whiteboard is used.
+ */
+export async function currentClassNotes(args: { lectureSlidesUrl?: string | null; sessionPresentationUrl?: string | null }) {
+  const ids = new Map<string, "LECTURE" | "SESSION">();
+  const fromLecture = args.lectureSlidesUrl?.match(OPEN_LINK)?.[1];
+  const fromSession = args.sessionPresentationUrl?.match(OPEN_LINK)?.[1];
+  if (fromLecture) ids.set(fromLecture, "LECTURE");
+  if (fromSession && !ids.has(fromSession)) ids.set(fromSession, "SESSION");
+  if (ids.size === 0) return null;
+  const assets = await prisma.fileAsset.findMany({
+    where: { id: { in: [...ids.keys()] }, status: "ACTIVE" },
+    select: { id: true, fileType: true, originalFilename: true, storageKey: true, createdAt: true },
+  });
+  const usable = assets
+    .filter((a) => ids.get(a.id) === "LECTURE" || a.fileType === "NOTES")
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  const pick = usable[0];
+  return pick ? { fileAssetId: pick.id, url: `/api/files/${pick.id}/open`, filename: pick.originalFilename, storageKey: pick.storageKey } : null;
+}
+
+/** Every notes upload for a class, newest first, with what each one replaced (staff only). */
+export async function classNotesHistory(scheduleId: string) {
+  const logs = await prisma.auditLog.findMany({
+    where: { action: "CLASS_NOTES_ATTACHED", entityType: "BatchSchedule", entityId: scheduleId },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+    select: { createdAt: true, metadata: true, user: { select: { name: true } } },
+  });
+  return logs.map((l) => {
+    const m = (l.metadata ?? {}) as Record<string, unknown>;
+    return {
+      at: l.createdAt.toISOString(),
+      by: l.user?.name ?? null,
+      fileAssetId: String(m.fileAssetId ?? ""),
+      fileName: String(m.fileName ?? ""),
+      url: m.fileAssetId ? `/api/files/${m.fileAssetId}/open` : null,
+      replaced: (m.replaced ?? null) as { fileName?: string | null; url?: string | null } | null,
+    };
+  });
+}
+
 export class ClassNotesError extends Error {
   constructor(message: string, readonly status = 400) {
     super(message);
@@ -28,6 +77,7 @@ export async function attachClassNotes(scheduleId: string, fileAssetId: string, 
       subject: true,
       batchId: true,
       lectureId: true,
+      lecture: { select: { slidesUrl: true } },
       chapter: { select: { subject: { select: { title: true } } } },
       liveWhiteboardSession: { select: { id: true, presentationUrl: true } },
     },
@@ -50,12 +100,21 @@ export async function attachClassNotes(scheduleId: string, fileAssetId: string, 
   const openUrl = `/api/files/${asset.id}/open`;
   const subject = schedule.chapter?.subject.title ?? schedule.subject ?? "General";
 
+  // What students see now — recorded as "replaced" so the earlier PDF can be found again.
+  const previous = await currentClassNotes({ lectureSlidesUrl: schedule.lecture?.slidesUrl, sessionPresentationUrl: schedule.liveWhiteboardSession?.presentationUrl });
+
   return prisma.$transaction(async (tx) => {
     const rootId = await ensureFolder(tx as typeof prisma, schedule.batchId, null, ROOT_FOLDER_NAME, userId);
     const notesId = await ensureFolder(tx as typeof prisma, schedule.batchId, rootId, CLASS_NOTES_FOLDER, userId);
     const subjectId = await ensureFolder(tx as typeof prisma, schedule.batchId, notesId, subject, userId);
-    // A new upload replaces this class's earlier notes in Materials too.
-    await tx.batchFolderFile.deleteMany({ where: { folderId: subjectId, title: `${schedule.title} — Notes` } });
+    // A new upload replaces this class's earlier notes in Materials too. The
+    // earlier entry is kept (hidden from students, marked as replaced) so the
+    // old PDF can still be checked or brought back.
+    const stamp = new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric" });
+    const older = await tx.batchFolderFile.findMany({ where: { folderId: subjectId, title: `${schedule.title} — Notes` }, select: { id: true } });
+    for (const o of older) {
+      await tx.batchFolderFile.update({ where: { id: o.id }, data: { isPublished: false, title: `${schedule.title} — Notes (replaced ${stamp})` } });
+    }
     const file = await tx.batchFolderFile.create({
       data: {
         folderId: subjectId,
@@ -87,6 +146,23 @@ export async function attachClassNotes(scheduleId: string, fileAssetId: string, 
       });
       shownOn = "SESSION";
     }
+    await tx.auditLog.create({
+      data: {
+        userId,
+        action: "CLASS_NOTES_ATTACHED",
+        entityType: "BatchSchedule",
+        entityId: schedule.id,
+        metadata: {
+          fileAssetId: asset.id,
+          fileName: asset.originalFilename,
+          shownOn,
+          replaced: previous ? { fileAssetId: previous.fileAssetId, fileName: previous.filename, url: previous.url } : null,
+          // The class's slides link before this upload (it is overwritten when the class has no chapter lecture).
+          previousSessionPresentationUrl: schedule.liveWhiteboardSession?.presentationUrl ?? null,
+          hiddenMaterialFiles: older.map((o) => o.id),
+        },
+      },
+    });
     return { materialFileId: file.id, openUrl, shownOn, folder: `Class Notes → ${subject}` };
   });
 }

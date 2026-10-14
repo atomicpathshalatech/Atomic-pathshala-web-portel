@@ -8,6 +8,7 @@ import { hasPermission } from "@/lib/rbac/guard";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { reconcileRecordingStatus } from "@/lib/livekit/egress";
 import { createPresignedDownloadUrl } from "@/lib/storage/r2-client";
+import { currentClassNotes } from "@/lib/batch/class-notes";
 
 /**
  * Resolves original uploaded presentation download URL
@@ -288,19 +289,8 @@ export async function GET(
     // They can sit on the class session and on its chapter lecture; the most
     // recently uploaded one is the current notes (an older upload used to
     // keep showing after a new PDF went to the other place).
-    const UPLOADED = /^\/api\/files\/([^/]+)\/open$/;
-    const uploadedCandidates = [wbSession?.presentationUrl, schedule.lecture?.slidesUrl].filter(
-      (u): u is string => typeof u === "string" && UPLOADED.test(u)
-    );
-    let uploadedNotes = uploadedCandidates[0];
-    if (new Set(uploadedCandidates).size > 1) {
-      const assets = await prisma.fileAsset.findMany({
-        where: { id: { in: uploadedCandidates.map((u) => u.match(UPLOADED)![1]!) } },
-        select: { id: true, createdAt: true },
-      });
-      const newest = assets.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
-      if (newest) uploadedNotes = `/api/files/${newest.id}/open`;
-    }
+    // The slides PDF prepared before class is not notes (see currentClassNotes).
+    const uploadedNotes = (await currentClassNotes({ lectureSlidesUrl: schedule.lecture?.slidesUrl, sessionPresentationUrl: wbSession?.presentationUrl }))?.url;
 
     // Authoritative Single Notes Priority Rule:
     // 1. If teacher uploaded manual notes, show ONLY teacher notes (whiteboard is replaced/hidden).

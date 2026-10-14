@@ -134,10 +134,15 @@ export async function finalizeWhiteboardSlides(sessionId: string): Promise<void>
     pdfFileAssetId = fileAsset.id;
 
     // Attach to Lecture if BatchSchedule has an attached lecture
+    // Only when the lecture has no notes of its own: notes a teacher uploaded
+    // (or any other link set on the lecture) are never overwritten by the board PDF.
     if (session.batchSchedule.lectureId) {
-      await prisma.lecture.update({
-        where: { id: session.batchSchedule.lectureId },
-        data: { slidesUrl: `/api/whiteboard/sessions/${sessionId}/slides?format=pdf` },
+      await prisma.lecture.updateMany({
+        where: {
+          id: session.batchSchedule.lectureId,
+          OR: [{ slidesUrl: null }, { slidesUrl: "" }, { slidesUrl: { startsWith: "/api/whiteboard/sessions/" } }],
+        },
+        data: { slidesUrl: `/api/whiteboard/sessions/${sessionId}/slides?format=pdf&open=1` },
       });
     }
 

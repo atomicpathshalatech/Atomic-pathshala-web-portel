@@ -1,5 +1,6 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { storageKeyFromStoredUrl } from "@/lib/storage/stored-file-url";
+import { currentClassNotes } from "@/lib/batch/class-notes";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -92,6 +93,10 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
     const { searchParams } = new URL(request.url);
     const format = (searchParams.get("format") || "status").toLowerCase();
+    // Opened as a page, in an iframe or as a link (a lecture's notes link points here):
+    // go to the PDF itself instead of answering with JSON.
+    const dest = request.headers.get("sec-fetch-dest") || "";
+    const wantsFile = searchParams.get("open") === "1" || ["document", "iframe", "embed", "object"].includes(dest);
 
     const wbSession = await prisma.whiteboardSession.findUnique({
       where: { id: params.id },
@@ -211,8 +216,26 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       });
     }
 
-    // Format = pdf: Annotated Whiteboard Export (Available for TEACHER and STUDENTS)
+    // Format = pdf: the class's one notes PDF — the teacher's uploaded notes when
+    // there are any, otherwise the board PDF. board_pdf: always the board PDF.
     if (format === "pdf") {
+      const schedule = await prisma.batchSchedule.findFirst({
+        where: { liveWhiteboardSession: { id: params.id } },
+        select: { lecture: { select: { slidesUrl: true } } },
+      });
+      const notes = await currentClassNotes({ lectureSlidesUrl: schedule?.lecture?.slidesUrl, sessionPresentationUrl: wbSession.presentationUrl });
+      if (notes) {
+        const downloadUrl = await createPresignedDownloadUrl({
+          key: notes.storageKey,
+          expiresInSeconds: 900,
+          contentDisposition: `inline; filename="${encodeURIComponent(notes.filename)}"`,
+          contentType: "application/pdf",
+        });
+        if (wantsFile) return NextResponse.redirect(downloadUrl, 302);
+        return apiSuccess({ downloadUrl, filename: notes.filename, isTeacherNotes: true });
+      }
+    }
+    if (format === "pdf" || format === "board_pdf") {
       let activeStorageKey = wbSession.pdfStorageKey;
 
       if (!activeStorageKey || wbSession.pdfStatus !== "READY") {
@@ -241,6 +264,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
               (wbSession.title || "Class_Notes") + "_Whiteboard"
             )}.pdf"`,
           });
+          if (wantsFile) return NextResponse.redirect(downloadUrl, 302);
           return apiSuccess({
             downloadUrl,
             filename: `${(wbSession.title || "Class_Notes") + "_Whiteboard"}.pdf`,
