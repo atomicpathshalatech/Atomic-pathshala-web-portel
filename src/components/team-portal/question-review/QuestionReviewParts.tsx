@@ -161,3 +161,132 @@ export const humanize = (value: string | null | undefined) =>
 
 export const fmtDateTime = (d: string | Date | null | undefined) =>
   d ? new Date(d).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }) : "";
+
+type CollectionRow = { id: string; name: string; count: number; hasQuestion: boolean };
+
+/**
+ * "Add to collection": tick the collections this question belongs to, or make
+ * a new one. Only the collection list changes; the question is not edited.
+ */
+export function AddToCollectionButton({ questionId, onCountChange }: { questionId: string; onCountChange?: (count: number) => void }) {
+  const [open, setOpen] = React.useState(false);
+  const [rows, setRows] = React.useState<CollectionRow[] | null>(null);
+  const [busy, setBusy] = React.useState<string | null>(null);
+  const [newName, setNewName] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
+
+  const load = React.useCallback(async () => {
+    setError(null);
+    try {
+      const res = await fetch(`/api/team/question-collections?questionId=${encodeURIComponent(questionId)}`);
+      const body = await res.json();
+      if (!res.ok || !body.success) throw new Error(body.error || "Could not load collections");
+      const list: CollectionRow[] = body.data.collections;
+      setRows(list);
+      onCountChange?.(list.filter((c) => c.hasQuestion).length);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not load collections");
+    }
+  }, [questionId, onCountChange]);
+
+  const toggle = async (c: CollectionRow) => {
+    setBusy(c.id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/team/question-collections/${c.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ questionId, action: c.hasQuestion ? "remove" : "add" }),
+      });
+      const body = await res.json();
+      if (!res.ok || !body.success) throw new Error(body.error || "Could not save");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const create = async () => {
+    const name = newName.trim();
+    if (!name) return;
+    setBusy("new");
+    setError(null);
+    try {
+      const res = await fetch(`/api/team/question-collections`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, questionId }),
+      });
+      const body = await res.json();
+      if (!res.ok || !body.success) throw new Error(body.error || "Could not create the collection");
+      setNewName("");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not create the collection");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => {
+          const next = !open;
+          setOpen(next);
+          if (next) void load();
+        }}
+        className="px-4 py-2 rounded-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
+      >
+        📁 Add to collection
+      </button>
+      {open && (
+        <div className="absolute right-0 bottom-full mb-2 z-50 w-80 max-w-[90vw] rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl p-3 space-y-2 text-sm">
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-slate-800 dark:text-slate-100">Collections</span>
+            <button type="button" onClick={() => setOpen(false)} className="text-slate-400 hover:text-slate-700" aria-label="Close">✕</button>
+          </div>
+          {error && <p className="text-xs text-rose-600">{error}</p>}
+          {rows === null ? (
+            <p className="text-xs text-slate-400 py-2">Loading…</p>
+          ) : rows.length === 0 ? (
+            <p className="text-xs text-slate-400 py-1">No collections yet — make the first one below.</p>
+          ) : (
+            <ul className="max-h-60 overflow-y-auto space-y-1">
+              {rows.map((c) => (
+                <li key={c.id}>
+                  <label className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer">
+                    <input type="checkbox" checked={c.hasQuestion} disabled={busy !== null} onChange={() => void toggle(c)} className="accent-slate-900" />
+                    <span className="flex-1 truncate text-slate-800 dark:text-slate-200">{c.name}</span>
+                    <span className="text-[11px] text-slate-400 tabular-nums">{c.count}</span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="flex gap-2 pt-1 border-t border-slate-100 dark:border-slate-800">
+            <input
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void create();
+                }
+              }}
+              placeholder="New collection name"
+              className="flex-1 min-w-0 px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+            />
+            <button type="button" disabled={busy !== null || !newName.trim()} onClick={() => void create()} className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-bold disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900">
+              {busy === "new" ? "…" : "Create"}
+            </button>
+          </div>
+          <a href="/team/questions/collections" className="block text-center text-xs font-semibold text-blue-600 hover:underline">Open all collections</a>
+        </div>
+      )}
+    </div>
+  );
+}

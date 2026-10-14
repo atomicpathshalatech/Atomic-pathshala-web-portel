@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { BLOOM_LEVELS, IMPORTANCE_LEVELS, KEY_SKILLS, SOLVE_TIMES, pickChoice } from "@/lib/questions/classification-options";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -57,6 +58,20 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     if (body.difficulty) questionUpdateData.difficulty = body.difficulty;
     if (body.examLevel) questionUpdateData.examLevel = body.examLevel;
     if (body.imageUrl !== undefined) questionUpdateData.imageUrl = body.imageUrl;
+
+    // Teaching classification: one of the fixed choices, or empty to clear.
+    const choiceFields = [
+      ["bloomLevel", BLOOM_LEVELS],
+      ["importance", IMPORTANCE_LEVELS],
+      ["solveTime", SOLVE_TIMES],
+      ["keySkill", KEY_SKILLS],
+    ] as const;
+    for (const [field, options] of choiceFields) {
+      if (body[field] === undefined) continue;
+      const picked = pickChoice(options, body[field]);
+      if (!picked.ok) return apiError(`${field} must be one of: ${options.map((o) => o.value).join(", ")}`, 400);
+      questionUpdateData[field] = picked.value;
+    }
 
     // Translation level update
     if (body.statement || body.options || body.correctOptionIds || body.solution) {

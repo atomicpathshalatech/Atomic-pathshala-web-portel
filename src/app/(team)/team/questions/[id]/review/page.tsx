@@ -44,7 +44,7 @@ export default async function QuestionReviewPage({
       editedBy: { select: { name: true } },
       review1By: { select: { name: true } },
       review2By: { select: { name: true } },
-      _count: { select: { sectionLinks: true, dppLinks: true, reports: true, bookmarks: true, answers: true } },
+      _count: { select: { sectionLinks: true, dppLinks: true, reports: true, bookmarks: true, answers: true, collectionItems: true } },
       auditLogs: {
         orderBy: { createdAt: "desc" },
         take: 20,

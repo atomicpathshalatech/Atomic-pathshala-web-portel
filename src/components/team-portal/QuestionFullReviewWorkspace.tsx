@@ -39,7 +39,8 @@ import {
 } from "lucide-react";
 import { FormulaText } from "@/components/test-portal/FormulaText";
 import type { MultiDimensionalAuditResult } from "@/lib/questions/ai-audit-engine";
-import { ChipCard, LanguageQuestionCard, fmtDateTime, humanize, languageTag } from "@/components/team-portal/question-review/QuestionReviewParts";
+import { AddToCollectionButton, ChipCard, LanguageQuestionCard, fmtDateTime, humanize } from "@/components/team-portal/question-review/QuestionReviewParts";
+import { BLOOM_LEVELS, DIFFICULTIES, IMPORTANCE_LEVELS, KEY_SKILLS, QUESTION_TYPE_OPTIONS, SOLVE_TIMES, labelOf } from "@/lib/questions/classification-options";
 
 export interface SiblingQuestionSummary {
   id: string;
@@ -97,13 +98,17 @@ export interface QuestionFullReviewProps {
     ncertPage?: string | null;
     ncertSection?: string | null;
     usageCount?: number | null;
+    bloomLevel?: string | null;
+    importance?: string | null;
+    solveTime?: string | null;
+    keySkill?: string | null;
     qcStatus?: string | null;
     createdAt?: string | Date | null;
     editedAt?: string | Date | null;
     editedBy?: { name: string | null } | null;
     review1By?: { name: string | null } | null;
     review2By?: { name: string | null } | null;
-    _count?: { sectionLinks?: number; dppLinks?: number; reports?: number; bookmarks?: number; answers?: number };
+    _count?: { sectionLinks?: number; dppLinks?: number; reports?: number; bookmarks?: number; answers?: number; collectionItems?: number };
     assets?: Array<{ id: string; type: string; publicUrl: string; originalName: string }>;
     createdBy?: { id: string; name: string | null; email: string | null } | null;
     translations: Array<{
@@ -135,26 +140,9 @@ export interface QuestionFullReviewProps {
   similar?: Array<{ pairId: string; id: string; questionCode: string | null; questionStatus: string; category: string; score: number; sameAnswer: boolean | null; decision: string; note: string }>;
 }
 
-const QUESTION_TYPES = [
-  { id: "SINGLE_CORRECT", label: "Single Correct (MCQ)" },
-  { id: "MULTIPLE_CORRECT", label: "Multiple Correct" },
-  { id: "ASSERTION_REASON", label: "Assertion-Reason" },
-  { id: "STATEMENT_BASED", label: "Statement Based" },
-  { id: "MULTIPLE_STATEMENT", label: "Multiple Statement" },
-  { id: "TRUE_FALSE", label: "True / False" },
-  { id: "MATCH_THE_COLUMN", label: "Match the Column" },
-  { id: "INTEGER_NUMERICAL", label: "Integer / Numerical" },
-  { id: "DIAGRAM_BASED", label: "Diagram Based" },
-  { id: "IMAGE_BASED", label: "Image Based" },
-  { id: "SEQUENCE_ORDER", label: "Sequence / Order" },
-  { id: "CASE_BASED", label: "Case Based" },
-  { id: "PASSAGE_BASED", label: "Passage Based" },
-  { id: "EXPERIMENTAL", label: "Experimental" },
-  { id: "GRAPH_BASED", label: "Graph Based" },
-  { id: "CONCEPTUAL", label: "Conceptual" },
-  { id: "FACTUAL", label: "Factual" },
-  { id: "APPLICATION_BASED", label: "Application Based" },
-];
+// Only the types the database accepts (enum QuestionType); the old list offered
+// 18, and choosing one of the others made the save fail.
+const QUESTION_TYPES = QUESTION_TYPE_OPTIONS.map((o) => ({ id: o.value, label: o.label }));
 
 const EXAM_LEVELS = [
   "NEET",
@@ -169,7 +157,8 @@ const EXAM_LEVELS = [
   "OTHER",
 ];
 
-const DIFFICULTY_LEVELS = ["EASY", "MODERATE", "DIFFICULT", "VERY_DIFFICULT"];
+// enum Difficulty: EASY | MEDIUM | HARD (the old MODERATE / DIFFICULT / VERY_DIFFICULT could not be saved).
+const DIFFICULTY_LEVELS = DIFFICULTIES.map((o) => o.value);
 
 export function QuestionFullReviewWorkspace({
   question: initialQuestion,
@@ -222,7 +211,12 @@ export function QuestionFullReviewWorkspace({
     difficulty: question.difficulty || "MODERATE",
     examLevel: question.examLevel || "NEET",
     imageUrl: question.imageUrl || "",
+    bloomLevel: question.bloomLevel || "",
+    importance: question.importance || "",
+    solveTime: question.solveTime || "",
+    keySkill: question.keySkill || "",
   });
+  const [collectionCount, setCollectionCount] = useState<number>(initialQuestion._count?.collectionItems ?? 0);
 
   // Hierarchy dropdown helpers
   const [chaptersList, setChaptersList] = useState<any[]>([]);
@@ -300,7 +294,7 @@ export function QuestionFullReviewWorkspace({
       const data = await res.json();
       if (data.success) {
         toast.success(`Accepted AI recommendation for ${field}`);
-        setQuestion(data.data.question);
+        setQuestion((prev) => ({ ...prev, ...data.data.question }));
         router.refresh();
       } else {
         toast.error(data.error?.message || "Failed to accept suggestion");
@@ -327,7 +321,8 @@ export function QuestionFullReviewWorkspace({
       if (data.success) {
         toast.success("Question updated successfully! Marked for AI re-audit.");
         setIsEditing(false);
-        setQuestion(data.data.question);
+        // The save answers with the question row only: keep counts, people and files we already have.
+        setQuestion((prev) => ({ ...prev, ...data.data.question }));
         router.refresh();
       } else {
         toast.error(data.error?.message || "Failed to update question");
@@ -909,7 +904,7 @@ export function QuestionFullReviewWorkspace({
                   >
                     {DIFFICULTY_LEVELS.map((d) => (
                       <option key={d} value={d}>
-                        {d}
+                        {labelOf(DIFFICULTIES, d)}
                       </option>
                     ))}
                   </select>
@@ -931,6 +926,34 @@ export function QuestionFullReviewWorkspace({
                     ))}
                   </select>
                 </div>
+              </div>
+
+              {/* Teaching classification */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {(
+                  [
+                    ["bloomLevel", "Bloom's level", BLOOM_LEVELS],
+                    ["importance", "Importance", IMPORTANCE_LEVELS],
+                    ["solveTime", "Time", SOLVE_TIMES],
+                    ["keySkill", "Key skill", KEY_SKILLS],
+                  ] as const
+                ).map(([field, label, options]) => (
+                  <div key={field}>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">{label}</label>
+                    <select
+                      value={editForm[field]}
+                      onChange={(e) => setEditForm({ ...editForm, [field]: e.target.value })}
+                      className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
+                    >
+                      <option value="">— not set —</option>
+                      {options.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
               </div>
 
               {/* Form Action Buttons */}
@@ -1012,7 +1035,11 @@ export function QuestionFullReviewWorkspace({
                   {
                     heading: "Exam & difficulty",
                     chips: [
-                      { label: "Difficulty", value: humanize(question.difficulty) },
+                      { label: "Difficulty", value: labelOf(DIFFICULTIES, question.difficulty) },
+                      { label: "Importance", value: labelOf(IMPORTANCE_LEVELS, question.importance) },
+                      { label: "Time", value: labelOf(SOLVE_TIMES, question.solveTime).replace(/ \(.*\)$/, "") },
+                      { label: "Bloom's level", value: labelOf(BLOOM_LEVELS, question.bloomLevel) },
+                      { label: "Key skill", value: labelOf(KEY_SKILLS, question.keySkill) },
                       { label: "Exam", value: question.examLevel ? question.examLevel.replace(/_/g, " ") : "" },
                       { label: "Category", value: question.category },
                       { label: "Tags", value: question.tags },
@@ -1045,6 +1072,7 @@ export function QuestionFullReviewWorkspace({
                       { label: "DPPs", value: String(question._count?.dppLinks ?? 0) },
                       { label: "Student answers", value: String(question._count?.answers ?? 0) },
                       { label: "Bookmarks", value: String(question._count?.bookmarks ?? 0) },
+                      { label: "Collections", value: String(collectionCount) },
                       {
                         label: "Reports",
                         value: question._count?.reports ? (
@@ -1064,6 +1092,9 @@ export function QuestionFullReviewWorkspace({
                 {question.createdAt && <span>Created {fmtDateTime(question.createdAt)}{question.createdBy?.name ? ` by ${question.createdBy.name}` : ""}</span>}
                 {question.editedAt && <span>· Updated {fmtDateTime(question.editedAt)}{question.editedBy?.name ? ` by ${question.editedBy.name}` : ""}</span>}
                 <span>· Version {question.version}</span>
+              </div>
+              <div className="flex justify-end">
+                <AddToCollectionButton questionId={question.id} onCountChange={setCollectionCount} />
               </div>
             </div>
           )}

@@ -2494,6 +2494,12 @@ model Question {
   // QC Expert + QC Director result for the CURRENT content (qcHash). Set only
   // by the QC pipeline's decision rules — never from a model's own confidence.
   // UNREVIEWED | EXPERT_DONE | VERIFIED | FAILED | NEEDS_HUMAN_REVIEW | ERROR
+  // Teaching classification (src/lib/questions/classification-options.ts)
+  bloomLevel              String? // REMEMBER | UNDERSTAND | APPLY | ANALYZE | EVALUATE | CREATE
+  importance              String? // HIGH_YIELD | MEDIUM_YIELD | LOW_YIELD
+  solveTime               String? // QUICK | MODERATE | LENGTHY
+  keySkill                String? // CONCEPTUAL_UNDERSTANDING | NUMERICAL_CALCULATION | ...
+
   qcStatus                String?   @default("UNREVIEWED")
   qcHash                  String?
   qcReviewedAt            DateTime?
@@ -2519,6 +2525,7 @@ model Question {
   qcReviews             QcReview[]
   qcFindings            QcFinding[]
   qcCorrections         QcCorrection[]
+  collectionItems       QuestionCollectionItem[]
   duplicatesAsA         QuestionDuplicateCandidate[] @relation("DuplicateCandidateA")
   duplicatesAsB         QuestionDuplicateCandidate[] @relation("DuplicateCandidateB")
 
@@ -6907,4 +6914,33 @@ model LectureVideoMapping {
   @@index([scheduleId])
   @@index([createdAt])
   @@map("lecture_video_mappings")
+}
+
+// Named sets of questions the team keeps (e.g. "Mole concept — tricky", "Test 5 pool").
+model QuestionCollection {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items QuestionCollectionItem[]
+
+  @@index([name])
+  @@map("question_collections")
+}
+
+model QuestionCollectionItem {
+  collectionId String
+  questionId   String
+  addedById    String?
+  addedAt      DateTime @default(now())
+
+  collection QuestionCollection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  question   Question           @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@id([collectionId, questionId])
+  @@index([questionId])
+  @@map("question_collection_items")
 }
