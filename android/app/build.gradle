@@ -39,7 +39,13 @@ android {
         }
     }
     buildTypes {
+        debug {
+            // Local testing against an http dev server (emulator / LAN).
+            manifestPlaceholders = [usesCleartextTraffic: "true"]
+        }
         release {
+            // The Play Store app talks to the live site over https only.
+            manifestPlaceholders = [usesCleartextTraffic: "false"]
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
             if (keystorePropertiesFile.exists()) {

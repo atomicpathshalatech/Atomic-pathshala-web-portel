@@ -20,9 +20,9 @@
     <!-- File Storage & Downloads -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
-    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <!-- No READ_MEDIA_IMAGES / VIDEO / AUDIO: choosing a photo or PDF to upload goes
+         through the system file picker, which needs no permission, and Google Play
+         allows broad photo/video access only to apps built around a gallery. -->
 
     <application
         android:allowBackup="true"
@@ -30,7 +30,7 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:usesCleartextTraffic="true"
+        android:usesCleartextTraffic="${usesCleartextTraffic}"
         android:hardwareAccelerated="true"
         android:theme="@style/AppTheme">
 

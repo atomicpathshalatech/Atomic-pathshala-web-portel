@@ -16,6 +16,13 @@ const serverUrl =
   process.env.NEXT_PUBLIC_APP_URL ||
   'https://ap.atomicpathshala.in';
 
+// Local testing only (emulator / LAN dev server over http, Chrome DevTools on
+// the WebView). Set CAPACITOR_DEBUG=1 before `npx cap sync` for that. A
+// normal sync — the one used for the Play Store build — leaves all of it off.
+// (This used to follow NODE_ENV, which is not set during `cap sync`, so the
+// release app shipped with WebView debugging and plain-http traffic allowed.)
+const debugBuild = process.env.CAPACITOR_DEBUG === '1' || /^http:\/\//.test(serverUrl);
+
 const config: CapacitorConfig = {
   appId: 'com.atomicpathshala.app',
   appName: 'Atomic Pathshala',
@@ -23,7 +30,7 @@ const config: CapacitorConfig = {
   server: {
     // When packaging for native with dynamic SSR/NextAuth, point to the live server
     url: serverUrl,
-    cleartext: true, // Enables local HTTP testing on Android emulator (10.0.2.2) or LAN
+    cleartext: debugBuild, // plain http only for local testing (emulator 10.0.2.2 / LAN)
     allowNavigation: [
       'ap.atomicpathshala.in',
       '*.atomicpathshala.in',
@@ -37,15 +44,13 @@ const config: CapacitorConfig = {
       'accounts.google.com',
       'api.razorpay.com',
       'checkout.razorpay.com',
-      'localhost',
-      '10.0.2.2',
-      '127.0.0.1',
+      ...(debugBuild ? ['localhost', '10.0.2.2', '127.0.0.1'] : []),
     ],
   },
   android: {
-    allowMixedContent: true,
+    allowMixedContent: debugBuild,
     captureInput: true,
-    webContentsDebuggingEnabled: process.env.NODE_ENV !== 'production',
+    webContentsDebuggingEnabled: debugBuild,
     backgroundColor: '#090D16',
   },
   plugins: {
